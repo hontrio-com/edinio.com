@@ -1,0 +1,71 @@
+{
+  "nav": {
+    "courses": "Courses",
+    "about": "About",
+    "contact": "Contact",
+    "dashboard": "My Account",
+    "login": "Sign in",
+    "signup": "Try for free"
+  },
+  "home": {
+    "hero_title": "Master AI.",
+    "hero_subtitle": "Build the future.",
+    "hero_description": "Practical AI courses for creators, entrepreneurs and professionals. Learn through real projects.",
+    "cta_primary": "See courses",
+    "cta_secondary": "Try for free",
+    "courses_title": "Our courses",
+    "courses_subtitle": "Choose the right course for you"
+  },
+  "course": {
+    "enroll_now": "Enroll now",
+    "buy_now": "Buy now",
+    "price_label": "Price",
+    "lessons_label": "Lessons",
+    "duration_label": "Duration",
+    "students_label": "Students",
+    "curriculum": "Curriculum",
+    "about_instructor": "About the instructor",
+    "guarantee": "30-day guarantee",
+    "guarantee_desc": "If you're not satisfied, we'll refund you.",
+    "preview": "Preview",
+    "locked": "Locked"
+  },
+  "checkout": {
+    "title": "Complete your order",
+    "processing": "Processing...",
+    "secure_payment": "Secure payment via Stripe",
+    "redirect": "You will be redirected to the secure Stripe payment page."
+  },
+  "thank_you": {
+    "title": "Thank you for your purchase!",
+    "subtitle": "Your access has been activated.",
+    "go_to_dashboard": "Access course",
+    "special_offer": "Special offer — just for you!",
+    "offer_expires": "Offer expires in:"
+  },
+  "dashboard": {
+    "my_courses": "My courses",
+    "continue_learning": "Continue learning",
+    "completed": "Completed",
+    "in_progress": "In progress",
+    "not_started": "Not started",
+    "no_courses": "You haven't purchased any courses yet.",
+    "browse_courses": "Browse courses"
+  },
+  "auth": {
+    "login": "Sign in",
+    "signup": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "forgot_password": "Forgot password?",
+    "no_account": "Don't have an account?",
+    "have_account": "Already have an account?",
+    "or_continue_with": "or continue with",
+    "terms": "By creating an account, you agree to our Terms and Conditions."
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "not_found": "Page not found.",
+    "unauthorized": "You don't have access to this page."
+  }
+}

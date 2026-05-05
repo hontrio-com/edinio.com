@@ -1,0 +1,71 @@
+{
+  "nav": {
+    "courses": "Cursuri",
+    "about": "Despre",
+    "contact": "Contact",
+    "dashboard": "Cont",
+    "login": "Intră în cont",
+    "signup": "Încearcă gratuit"
+  },
+  "home": {
+    "hero_title": "Stăpânește AI-ul.",
+    "hero_subtitle": "Construiește viitorul.",
+    "hero_description": "Cursuri practice de AI pentru creatori, antreprenori și profesioniști. Învață prin proiecte reale.",
+    "cta_primary": "Vezi cursurile",
+    "cta_secondary": "Încearcă gratuit",
+    "courses_title": "Cursurile noastre",
+    "courses_subtitle": "Alege cursul potrivit pentru tine"
+  },
+  "course": {
+    "enroll_now": "Înscrie-te acum",
+    "buy_now": "Cumpără acum",
+    "price_label": "Preț",
+    "lessons_label": "Lecții",
+    "duration_label": "Durata",
+    "students_label": "Cursanți",
+    "curriculum": "Curriculum",
+    "about_instructor": "Despre instructor",
+    "guarantee": "Garanție 30 de zile",
+    "guarantee_desc": "Dacă nu ești mulțumit, îți returnăm banii.",
+    "preview": "Preview",
+    "locked": "Blocat"
+  },
+  "checkout": {
+    "title": "Finalizează comanda",
+    "processing": "Se procesează...",
+    "secure_payment": "Plată securizată prin Stripe",
+    "redirect": "Vei fi redirecționat la pagina de plată securizată Stripe."
+  },
+  "thank_you": {
+    "title": "Mulțumim pentru achiziție!",
+    "subtitle": "Accesul tău a fost activat.",
+    "go_to_dashboard": "Accesează cursul",
+    "special_offer": "Ofertă specială — doar pentru tine!",
+    "offer_expires": "Oferta expiră în:"
+  },
+  "dashboard": {
+    "my_courses": "Cursurile mele",
+    "continue_learning": "Continuă să înveți",
+    "completed": "Finalizat",
+    "in_progress": "În progres",
+    "not_started": "Neînceput",
+    "no_courses": "Nu ai niciun curs cumpărat încă.",
+    "browse_courses": "Explorează cursurile"
+  },
+  "auth": {
+    "login": "Autentificare",
+    "signup": "Creare cont",
+    "email": "Email",
+    "password": "Parolă",
+    "forgot_password": "Ai uitat parola?",
+    "no_account": "Nu ai cont?",
+    "have_account": "Ai deja cont?",
+    "or_continue_with": "sau continuă cu",
+    "terms": "Prin crearea contului, ești de acord cu Termenii și Condițiile."
+  },
+  "errors": {
+    "generic": "A apărut o eroare. Încearcă din nou.",
+    "not_found": "Pagina nu a fost găsită.",
+    "unauthorized": "Nu ai acces la această pagină."
+  }
+}

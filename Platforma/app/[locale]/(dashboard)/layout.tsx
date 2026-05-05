@@ -5,6 +5,7 @@ import { DashboardSidebar } from '@/components/dashboard/sidebar'
 import { DashboardHeader } from '@/components/dashboard/header'
 import { GeoProvider } from '@/lib/geo-context'
 import { parseGeoCookie, GEO_COOKIE } from '@/lib/geo'
+import { getUpsellOffers } from '@/lib/upsell'
 import type { GeoContext } from '@/lib/geo'
 import type { Database } from '@/types/database'
 
@@ -56,11 +57,11 @@ export default async function DashboardLayout({
   // All published courses
   const { data: allCoursesRaw } = await supabase
     .from('courses')
-    .select('id, slug, title_ro')
+    .select('id, slug, title_ro, title_en')
     .eq('is_published', true)
     .order('sort_order', { ascending: true })
 
-  const allCourses = (allCoursesRaw ?? []) as { id: string; slug: string; title_ro: string }[]
+  const allCourses = (allCoursesRaw ?? []) as { id: string; slug: string; title_ro: string; title_en: string | null }[]
 
   // Purchased course IDs
   const { data: purchasesRaw } = await supabase
@@ -73,16 +74,23 @@ export default async function DashboardLayout({
     (purchasesRaw ?? []).map((p) => (p as { course_id: string }).course_id)
   )
 
-  const purchasedCourses = allCourses.map((c) => ({
-    slug: c.slug,
-    title_ro: c.title_ro,
-    owned: purchasedIds.has(c.id),
-  }))
+  const purchasedCourses = allCourses
+    .filter((c) => purchasedIds.has(c.id))
+    .map((c) => ({ slug: c.slug, title_ro: c.title_ro, owned: true }))
+
+  const lockedCourses = allCourses
+    .filter((c) => !purchasedIds.has(c.id))
+    .slice(0, 3)
+    .map((c) => ({ id: c.id, slug: c.slug, title_ro: c.title_ro, title_en: c.title_en }))
 
   return (
     <GeoProvider initialGeo={effectiveGeo}>
       <div className="flex h-screen overflow-hidden bg-background">
-        <DashboardSidebar purchasedCourses={purchasedCourses} />
+        <DashboardSidebar
+          purchasedCourses={purchasedCourses}
+          lockedCourses={lockedCourses}
+          language={effectiveGeo.language}
+        />
         <div className="flex flex-col flex-1 overflow-hidden">
           <DashboardHeader user={profile} purchasedCourses={purchasedCourses} />
           <main className="flex-1 overflow-y-auto">

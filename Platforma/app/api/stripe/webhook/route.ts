@@ -3,6 +3,7 @@ import { stripe } from '@/lib/stripe/client'
 import { createClient } from '@supabase/supabase-js'
 import { sendCAPIEvent } from '@/lib/meta/capi'
 import { sendPurchaseConfirmationEmail } from '@/lib/resend/emails'
+import { scheduleUpsellEmails } from '@/lib/upsell'
 import type Stripe from 'stripe'
 
 // Lazy admin client — avoids build failure with placeholder env vars
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
         )
       }
     } else if (courseId) {
-      await db.from('purchases').insert({
+      const { data: newPurchase } = await db.from('purchases').insert({
         user_id: resolvedUserId,
         course_id: courseId,
         stripe_session_id: session.id,
@@ -137,7 +138,12 @@ export async function POST(req: NextRequest) {
         amount_paid: session.amount_total ?? 0,
         currency: session.currency ?? 'ron',
         status: 'completed',
-      })
+      }).select('id').single()
+
+      // Programează emailuri de upsell
+      if (newPurchase?.id) {
+        scheduleUpsellEmails(resolvedUserId, newPurchase.id, courseId).catch(console.error)
+      }
     }
 
     // Fire Meta CAPI + send email in parallel

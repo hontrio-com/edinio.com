@@ -10,7 +10,24 @@ type PurchaseRow = Database['public']['Tables']['purchases']['Row']
 const checkoutSchema = z.object({
   courseId: z.string().uuid(),
   currency: z.enum(['ron', 'eur']).default('ron'),
+  isUpsell: z.boolean().optional(),
+  discountPercent: z.number().min(1).max(99).optional(),
 })
+
+async function ensureCoupon(discountPercent: number) {
+  const couponId = `upsell_${discountPercent}pct`
+  try {
+    await stripe.coupons.retrieve(couponId)
+  } catch {
+    await stripe.coupons.create({
+      id: couponId,
+      percent_off: discountPercent,
+      duration: 'once',
+      name: `Upsell -${discountPercent}%`,
+    })
+  }
+  return couponId
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,11 +37,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    const { courseId, currency } = parsed.data
+    const { courseId, currency, isUpsell, discountPercent } = parsed.data
     const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
     const { data: courseData } = await supabase
       .from('courses')
@@ -37,7 +52,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 })
     }
 
-    // Duplicate purchase check for logged-in users
     if (user) {
       const { data: existingData } = await supabase
         .from('purchases')
@@ -60,6 +74,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Price not configured' }, { status: 400 })
     }
 
+    // Discount coupon pentru upsell
+    let discounts: { coupon: string }[] = []
+    if (isUpsell && discountPercent && discountPercent > 0) {
+      const couponId = await ensureCoupon(discountPercent)
+      discounts = [{ coupon: couponId }]
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -70,7 +91,10 @@ export async function POST(req: NextRequest) {
       customer_creation: 'always',
       billing_address_collection: 'required',
       locale: 'ro',
-      allow_promotion_codes: true,
+      ...(discounts.length > 0
+        ? { discounts }
+        : { allow_promotion_codes: true }
+      ),
       metadata: {
         courseId: course.id,
         courseSlug: course.slug,
@@ -78,9 +102,7 @@ export async function POST(req: NextRequest) {
         userId: user?.id ?? '',
       },
       custom_text: {
-        submit: {
-          message: 'Vei primi acces imediat după plată.',
-        },
+        submit: { message: 'Vei primi acces imediat după plată.' },
       },
     })
 

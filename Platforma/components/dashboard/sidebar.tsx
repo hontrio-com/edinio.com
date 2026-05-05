@@ -14,6 +14,7 @@ import {
   GraduationCap,
   ChevronDown,
   Lock,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -26,18 +27,30 @@ export interface PurchasedCourse {
   owned: boolean
 }
 
-interface DashboardSidebarProps {
-  purchasedCourses: PurchasedCourse[]
+interface LockedCourse {
+  id: string
+  slug: string
+  title_ro: string
+  title_en: string | null
 }
 
-export function DashboardSidebar({ purchasedCourses }: DashboardSidebarProps) {
+interface DashboardSidebarProps {
+  purchasedCourses: PurchasedCourse[]
+  lockedCourses?: LockedCourse[]
+  language?: 'ro' | 'en'
+}
+
+export function DashboardSidebar({ purchasedCourses, lockedCourses, language = 'ro' }: DashboardSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
 
+  // Doar cursurile cumpărate în secțiunea principală
+  const ownedCourses = purchasedCourses.filter((c) => c.owned)
+
   const [openCourses, setOpenCourses] = useState<Set<string>>(() => {
     const initial = new Set<string>()
-    for (const c of purchasedCourses) {
+    for (const c of ownedCourses) {
       if (pathname.includes(`/curs/${c.slug}`)) initial.add(c.slug)
     }
     return initial
@@ -74,9 +87,7 @@ export function DashboardSidebar({ purchasedCourses }: DashboardSidebarProps) {
           <Link
             href="/dashboard"
             className={cn(
-              buttonVariants({
-                variant: pathname === '/dashboard' ? 'secondary' : 'ghost',
-              }),
+              buttonVariants({ variant: pathname === '/dashboard' ? 'secondary' : 'ghost' }),
               'w-full justify-start gap-3 h-9',
               pathname === '/dashboard' ? 'font-medium' : 'font-normal'
             )}
@@ -85,52 +96,30 @@ export function DashboardSidebar({ purchasedCourses }: DashboardSidebarProps) {
             Acasă
           </Link>
 
-          {/* All courses */}
-          {purchasedCourses.length > 0 && (
+          {/* Cursuri cumpărate */}
+          {ownedCourses.length > 0 && (
             <div className="pt-3">
               <p className="px-3 pb-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                 Cursuri
               </p>
               <div className="space-y-0.5">
-                {purchasedCourses.map((course) => {
+                {ownedCourses.map((course) => {
                   const courseBase = `/curs/${course.slug}`
                   const isActive = pathname.includes(courseBase)
                   const isOpen = openCourses.has(course.slug) || isActive
-
-                  if (!course.owned) {
-                    return (
-                      <Link
-                        key={course.slug}
-                        href={`/cursuri/${course.slug}`}
-                        className={cn(
-                          buttonVariants({ variant: 'ghost' }),
-                          'w-full justify-start gap-3 h-9 font-normal opacity-60'
-                        )}
-                      >
-                        <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="flex-1 truncate text-left text-sm">
-                          {course.title_ro}
-                        </span>
-                      </Link>
-                    )
-                  }
 
                   return (
                     <div key={course.slug}>
                       <button
                         onClick={() => toggleCourse(course.slug)}
                         className={cn(
-                          buttonVariants({
-                            variant: isActive ? 'secondary' : 'ghost',
-                          }),
+                          buttonVariants({ variant: isActive ? 'secondary' : 'ghost' }),
                           'w-full justify-start gap-3 h-9',
                           isActive ? 'font-medium' : 'font-normal'
                         )}
                       >
                         <BookOpen className="h-4 w-4 shrink-0" />
-                        <span className="flex-1 truncate text-left text-sm">
-                          {course.title_ro}
-                        </span>
+                        <span className="flex-1 truncate text-left text-sm">{course.title_ro}</span>
                         <ChevronDown
                           className={cn(
                             'h-3.5 w-3.5 shrink-0 transition-transform duration-200 text-muted-foreground',
@@ -155,10 +144,7 @@ export function DashboardSidebar({ purchasedCourses }: DashboardSidebarProps) {
                                 key={sub.href}
                                 href={sub.href}
                                 className={cn(
-                                  buttonVariants({
-                                    variant: isSubActive ? 'secondary' : 'ghost',
-                                    size: 'sm',
-                                  }),
+                                  buttonVariants({ variant: isSubActive ? 'secondary' : 'ghost', size: 'sm' }),
                                   'w-full justify-start gap-2 h-8 text-xs',
                                   isSubActive ? 'font-medium' : 'font-normal'
                                 )}
@@ -177,20 +163,41 @@ export function DashboardSidebar({ purchasedCourses }: DashboardSidebarProps) {
             </div>
           )}
 
-          {/* Settings */}
+          {/* Cursuri blocate — Deblochează */}
+          {lockedCourses && lockedCourses.length > 0 && (
+            <div className="pt-3">
+              <p className="px-3 pb-1.5 text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                {language === 'ro' ? 'Deblochează' : 'Unlock'}
+              </p>
+              <div className="space-y-0.5">
+                {lockedCourses.map((course) => (
+                  <Link
+                    key={course.slug}
+                    href={`/cursuri/${course.slug}`}
+                    className={cn(
+                      buttonVariants({ variant: 'ghost' }),
+                      'w-full justify-start gap-3 h-9 font-normal text-muted-foreground/60 hover:text-muted-foreground'
+                    )}
+                  >
+                    <Lock className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+                    <span className="flex-1 text-left truncate text-[13px]">
+                      {language === 'ro' ? course.title_ro : (course.title_en ?? course.title_ro)}
+                    </span>
+                    <Sparkles className="h-3 w-3 text-primary/60 shrink-0" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Setări */}
           <div className="pt-3">
             <Link
               href="/dashboard/setari"
               className={cn(
-                buttonVariants({
-                  variant: pathname.startsWith('/dashboard/setari')
-                    ? 'secondary'
-                    : 'ghost',
-                }),
+                buttonVariants({ variant: pathname.startsWith('/dashboard/setari') ? 'secondary' : 'ghost' }),
                 'w-full justify-start gap-3 h-9',
-                pathname.startsWith('/dashboard/setari')
-                  ? 'font-medium'
-                  : 'font-normal'
+                pathname.startsWith('/dashboard/setari') ? 'font-medium' : 'font-normal'
               )}
             >
               <Settings className="h-4 w-4 shrink-0" />
@@ -203,10 +210,7 @@ export function DashboardSidebar({ purchasedCourses }: DashboardSidebarProps) {
       <div className="p-3 border-t space-y-0.5">
         <Link
           href="/contact"
-          className={cn(
-            buttonVariants({ variant: 'ghost' }),
-            'w-full justify-start gap-3 h-9 font-normal'
-          )}
+          className={cn(buttonVariants({ variant: 'ghost' }), 'w-full justify-start gap-3 h-9 font-normal')}
         >
           <HelpCircle className="h-4 w-4 shrink-0" />
           Ajutor

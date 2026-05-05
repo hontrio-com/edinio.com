@@ -159,7 +159,7 @@ export default async function AdminSalesPage({ searchParams }: Props) {
                   </td>
                   <td className="px-4 py-3.5 hidden md:table-cell">
                     <p className="text-xs text-zinc-500">
-                      {format(new Date(p.purchased_at), 'd MMM yyyy, HH:mm', { locale: ro })}
+                      {format(new Date(p.purchased_at ?? Date.now()), 'd MMM yyyy, HH:mm', { locale: ro })}
                     </p>
                   </td>
                   <td className="px-4 py-3.5 text-right">

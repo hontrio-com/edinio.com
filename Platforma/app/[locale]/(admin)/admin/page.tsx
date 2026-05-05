@@ -60,8 +60,8 @@ async function DashboardData({ searchParams }: Props) {
   const monthSales = monthPurchases?.length ?? 0
 
   const revenueByDay = new Map<string, number>()
-  allPurchases?.filter(p => p.purchased_at >= thirtyDaysAgo).forEach(p => {
-    const day = p.purchased_at.slice(0, 10)
+  allPurchases?.filter(p => (p.purchased_at ?? '') >= thirtyDaysAgo).forEach(p => {
+    const day = (p.purchased_at ?? '').slice(0, 10)
     revenueByDay.set(day, (revenueByDay.get(day) ?? 0) + p.amount_paid)
   })
   const revenueChartData = Array.from({ length: 30 }, (_, i) => {

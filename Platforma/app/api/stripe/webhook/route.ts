@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 import { sendCAPIEvent } from '@/lib/meta/capi'
 import { sendPurchaseConfirmationEmail } from '@/lib/resend/emails'
 import { scheduleUpsellEmails } from '@/lib/upsell'
+import { checkAndAwardBadges } from '@/lib/badges'
+import { processReferral } from '@/lib/referral'
 import type Stripe from 'stripe'
 
 // Lazy admin client — avoids build failure with placeholder env vars
@@ -140,10 +142,12 @@ export async function POST(req: NextRequest) {
         status: 'completed',
       }).select('id').single()
 
-      // Programează emailuri de upsell
+      // Programează emailuri de upsell + badges + referral
       if (newPurchase?.id) {
         scheduleUpsellEmails(resolvedUserId, newPurchase.id, courseId).catch(console.error)
+        processReferral(resolvedUserId, newPurchase.id, (session.currency ?? 'ron') as 'ron' | 'eur').catch(console.error)
       }
+      checkAndAwardBadges(resolvedUserId).catch(console.error)
     }
 
     // Fire Meta CAPI + send email in parallel

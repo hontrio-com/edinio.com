@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe/client'
 import { createClient } from '@/lib/supabase/server'
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
 import { z } from 'zod'
 import type { Database } from '@/types/database'
 
@@ -29,6 +30,9 @@ async function ensureCoupon(discountPercent: number) {
 }
 
 export async function POST(req: NextRequest) {
+  const { success, reset } = await rateLimit(req, 'checkout')
+  if (!success) return rateLimitResponse(reset)
+
   try {
     const body = await req.json()
     const parsed = schema.safeParse(body)

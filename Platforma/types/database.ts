@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      badge_definitions: {
+        Row: {
+          color: string
+          condition_type: string
+          created_at: string | null
+          description_en: string
+          description_ro: string
+          icon: string
+          id: string
+          name_en: string
+          name_ro: string
+          sort_order: number | null
+        }
+        Insert: {
+          color?: string
+          condition_type: string
+          created_at?: string | null
+          description_en: string
+          description_ro: string
+          icon: string
+          id: string
+          name_en: string
+          name_ro: string
+          sort_order?: number | null
+        }
+        Update: {
+          color?: string
+          condition_type?: string
+          created_at?: string | null
+          description_en?: string
+          description_ro?: string
+          icon?: string
+          id?: string
+          name_en?: string
+          name_ro?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       bundle_courses: {
         Row: {
           bundle_id: string
@@ -270,6 +309,45 @@ export type Database = {
           },
         ]
       }
+      payout_requests: {
+        Row: {
+          admin_note: string | null
+          amount: number
+          currency: string | null
+          iban: string | null
+          id: string
+          paypal_email: string | null
+          processed_at: string | null
+          requested_at: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          admin_note?: string | null
+          amount: number
+          currency?: string | null
+          iban?: string | null
+          id?: string
+          paypal_email?: string | null
+          processed_at?: string | null
+          requested_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          admin_note?: string | null
+          amount?: number
+          currency?: string | null
+          iban?: string | null
+          id?: string
+          paypal_email?: string | null
+          processed_at?: string | null
+          requested_at?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -312,7 +390,8 @@ export type Database = {
           course_id: string | null
           currency: string
           id: string
-          purchased_at: string
+          purchased_at: string | null
+          referral_code: string | null
           status: string
           stripe_payment_intent_id: string | null
           stripe_session_id: string | null
@@ -323,7 +402,8 @@ export type Database = {
           course_id?: string | null
           currency?: string
           id?: string
-          purchased_at?: string
+          purchased_at?: string | null
+          referral_code?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
@@ -334,7 +414,8 @@ export type Database = {
           course_id?: string | null
           currency?: string
           id?: string
-          purchased_at?: string
+          purchased_at?: string | null
+          referral_code?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
           stripe_session_id?: string | null
@@ -346,6 +427,242 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_balance: {
+        Row: {
+          available_balance: number | null
+          total_earned: number | null
+          total_paid_out: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          available_balance?: number | null
+          total_earned?: number | null
+          total_paid_out?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          available_balance?: number | null
+          total_earned?: number | null
+          total_paid_out?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      referral_conversions: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: string
+          paid_at: string | null
+          purchase_id: string | null
+          referred_id: string | null
+          referrer_id: string | null
+          reward_amount: number
+          reward_currency: string | null
+          status: string
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: string
+          paid_at?: string | null
+          purchase_id?: string | null
+          referred_id?: string | null
+          referrer_id?: string | null
+          reward_amount: number
+          reward_currency?: string | null
+          status?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: string
+          paid_at?: string | null
+          purchase_id?: string | null
+          referred_id?: string | null
+          referrer_id?: string | null
+          reward_amount?: number
+          reward_currency?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_conversions_purchase_id_fkey"
+            columns: ["purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_dismissals: {
+        Row: {
+          course_id: string | null
+          dismiss_type: string | null
+          dismissed_at: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          course_id?: string | null
+          dismiss_type?: string | null
+          dismissed_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          course_id?: string | null
+          dismiss_type?: string | null
+          dismissed_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_dismissals_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upsell_emails: {
+        Row: {
+          bundle_id: string | null
+          clicked_at: string | null
+          converted_at: string | null
+          course_id: string | null
+          created_at: string | null
+          email_step: number
+          id: string
+          is_sent: boolean | null
+          opened_at: string | null
+          scheduled_at: string
+          sent_at: string | null
+          trigger_purchase_id: string | null
+          upsell_course_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          bundle_id?: string | null
+          clicked_at?: string | null
+          converted_at?: string | null
+          course_id?: string | null
+          created_at?: string | null
+          email_step: number
+          id?: string
+          is_sent?: boolean | null
+          opened_at?: string | null
+          scheduled_at: string
+          sent_at?: string | null
+          trigger_purchase_id?: string | null
+          upsell_course_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          bundle_id?: string | null
+          clicked_at?: string | null
+          converted_at?: string | null
+          course_id?: string | null
+          created_at?: string | null
+          email_step?: number
+          id?: string
+          is_sent?: boolean | null
+          opened_at?: string | null
+          scheduled_at?: string
+          sent_at?: string | null
+          trigger_purchase_id?: string | null
+          upsell_course_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upsell_emails_bundle_id_fkey"
+            columns: ["bundle_id"]
+            isOneToOne: false
+            referencedRelation: "bundles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_emails_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_emails_trigger_purchase_id_fkey"
+            columns: ["trigger_purchase_id"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upsell_emails_upsell_course_id_fkey"
+            columns: ["upsell_course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_badges: {
+        Row: {
+          badge_id: string | null
+          earned_at: string | null
+          id: string
+          seen: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          badge_id?: string | null
+          earned_at?: string | null
+          id?: string
+          seen?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          badge_id?: string | null
+          earned_at?: string | null
+          id?: string
+          seen?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badge_definitions"
             referencedColumns: ["id"]
           },
         ]
@@ -382,8 +699,20 @@ export type Database = {
       }
     }
     Functions: {
+      increment_referral_balance: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
       increment_tool_views: { Args: { tool_id: string }; Returns: undefined }
-      is_admin: { Args: never; Returns: boolean }
+      is_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      mark_payout_complete: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      reserve_payout_balance: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       difficulty_level: "incepator" | "intermediar" | "avansat"

@@ -2,8 +2,11 @@ import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { parseGeoCookie, GEO_COOKIE } from '@/lib/geo'
+import { getUpsellOffers } from '@/lib/upsell'
 import { CourseCurriculum } from '@/components/dashboard/course-curriculum'
 import { CourseHeroPlayer } from '@/components/dashboard/course-hero-player'
+import { UpsellBanner } from '@/components/dashboard/upsell-banner'
+import { LockedCourseCard } from '@/components/dashboard/locked-course-card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
@@ -72,12 +75,18 @@ export default async function CoursePage({ params }: Props) {
 
   const lessons = (lessonsData ?? []) as LessonRow[]
 
-  // Fetch progress
-  const { data: progressData } = await supabase
-    .from('lesson_progress')
-    .select('lesson_id, completed, progress_seconds')
-    .eq('user_id', user.id)
-    .in('lesson_id', lessons.map((l: any) => l.id))
+  // Fetch progress + upsell offers in parallel
+  const [{ data: progressData }, upsellResult] = await Promise.all([
+    supabase
+      .from('lesson_progress')
+      .select('lesson_id, completed, progress_seconds')
+      .eq('user_id', user.id)
+      .in('lesson_id', lessons.map((l: any) => l.id)),
+    getUpsellOffers(user.id),
+  ])
+
+  const { nextCourse: nextCourseOffer, unpurchasedCourses } = upsellResult
+  const currency = geo?.currency ?? 'ron'
 
   const progress = (progressData ?? []) as Pick<
     ProgressRow,
@@ -141,6 +150,40 @@ export default async function CoursePage({ params }: Props) {
           />
         </div>
       </div>
+
+      {/* Upsell section */}
+      {(nextCourseOffer || unpurchasedCourses.length > 0) && (
+        <>
+          <Separator />
+          <div className="space-y-4">
+            {nextCourseOffer && (
+              <UpsellBanner
+                offer={nextCourseOffer}
+                currency={currency}
+                language={language}
+              />
+            )}
+            {unpurchasedCourses.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-muted-foreground">
+                  {language === 'ro' ? 'Mai ai de descoperit' : 'More to explore'}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {unpurchasedCourses.slice(0, 3).map((c) => (
+                    <LockedCourseCard
+                      key={c.id}
+                      course={c}
+                      currency={currency}
+                      language={language}
+                      discountPercent={20}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

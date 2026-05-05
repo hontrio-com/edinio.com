@@ -1,8 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
+import { getUpsellOffers } from '@/lib/upsell'
+import { parseGeoCookie, GEO_COOKIE } from '@/lib/geo'
 import { VideoPlayer } from '@/components/dashboard/video-player'
 import { LessonNavigation } from '@/components/dashboard/lesson-navigation'
 import { MarkCompleteButton } from '@/components/dashboard/mark-complete-button'
+import { UpsellBanner } from '@/components/dashboard/upsell-banner'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import type { Database } from '@/types/database'
@@ -30,6 +34,9 @@ export default async function LessonPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+
+  const cookieStore = await cookies()
+  const geo = parseGeoCookie(cookieStore.get(GEO_COOKIE)?.value)
 
   // Fetch lesson
   const { data: lessonData } = await supabase
@@ -78,18 +85,23 @@ export default async function LessonPage({ params }: Props) {
   const nextLesson =
     currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
 
-  // Get progress
-  const { data: progressData } = await supabase
-    .from('lesson_progress')
-    .select('completed, progress_seconds')
-    .eq('user_id', user.id)
-    .eq('lesson_id', lessonId)
-    .maybeSingle()
+  // Get progress + upsell in parallel
+  const [{ data: progressData }, { nextCourse: nextCourseOffer }] = await Promise.all([
+    supabase
+      .from('lesson_progress')
+      .select('completed, progress_seconds')
+      .eq('user_id', user.id)
+      .eq('lesson_id', lessonId)
+      .maybeSingle(),
+    getUpsellOffers(user.id),
+  ])
 
   const progress = progressData as Pick<
     ProgressRow,
     'completed' | 'progress_seconds'
   > | null
+
+  const currency = geo?.currency ?? 'ron'
 
   const lang = lesson.language ?? 'ro'
   const lessonTitle = lang === 'ro' ? lesson.title_ro : (lesson.title_en || lesson.title_ro)
@@ -137,6 +149,14 @@ export default async function LessonPage({ params }: Props) {
         prevLesson={prevLesson}
         nextLesson={nextLesson}
       />
+
+      {nextCourseOffer && (
+        <UpsellBanner
+          offer={nextCourseOffer}
+          currency={currency}
+          language={lang}
+        />
+      )}
     </div>
   )
 }

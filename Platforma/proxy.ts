@@ -62,6 +62,17 @@ export async function proxy(request: NextRequest) {
     intlResponse.cookies.set(name, value)
   })
 
+  // Capture referral code from ?ref=CODE (30 days)
+  const refCode = request.nextUrl.searchParams.get('ref')
+  if (refCode) {
+    intlResponse.cookies.set('edinio_ref', refCode, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30,
+      sameSite: 'lax',
+      httpOnly: false,
+    })
+  }
+
   // Geo detection — set once per 24h
   const existingCookie = request.cookies.get(GEO_COOKIE)?.value
   const existingGeo = parseGeoCookie(existingCookie)

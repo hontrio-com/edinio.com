@@ -132,10 +132,10 @@ async function DashboardContent() {
     }))
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Greeting */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Bună ziua! 👋</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Bună ziua! 👋</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           {hasCourses
             ? 'Continuă de unde ai rămas. Progresul tău este salvat.'
@@ -168,10 +168,10 @@ async function DashboardContent() {
 
       {/* Cursurile mele */}
       {hasCourses && (
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           <div className="space-y-4">
             <h2 className="text-base font-semibold">Cursurile mele</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {purchases.map((purchase, i) => {
                 const course = purchase.courses
                 if (!course) return null
@@ -217,7 +217,7 @@ async function DashboardContent() {
                 -20% reducere exclusivă
               </Badge>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {unpurchasedCourses.map((course) => (
                 <LockedCourseCard
                   key={course.id}

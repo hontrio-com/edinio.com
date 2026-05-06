@@ -128,21 +128,21 @@ export function ReferralSection({ balance, conversions, language }: ReferralSect
         {language === 'ro' ? 'Program de referral' : 'Referral program'}
       </h2>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {stats.map((stat) => {
           const Icon = stat.icon
           return (
             <motion.div
               key={stat.label}
               whileHover={{ y: -1 }}
-              className="flex items-center gap-3 p-3 bg-background border border-border/60 rounded-xl"
+              className="flex flex-col items-center text-center sm:flex-row sm:text-left sm:gap-3 p-2.5 sm:p-3 bg-background border border-border/60 rounded-xl"
             >
-              <div className={`p-2 rounded-lg ${stat.color} shrink-0`}>
-                <Icon className="h-4 w-4" />
+              <div className={`p-1.5 sm:p-2 rounded-lg ${stat.color} shrink-0 mb-1 sm:mb-0`}>
+                <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
-              <div>
-                <p className="text-base font-semibold">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
+              <div className="min-w-0">
+                <p className="text-sm sm:text-base font-semibold leading-none">{stat.value}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 leading-tight">{stat.label}</p>
               </div>
             </motion.div>
           )

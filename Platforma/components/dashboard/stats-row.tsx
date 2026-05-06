@@ -33,18 +33,18 @@ export function StatsRow({ totalCourses, completedLessons, streak }: StatsRowPro
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       {stats.map((stat) => {
         const Icon = stat.icon
         return (
           <Card key={stat.label}>
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${stat.bg} shrink-0`}>
-                <Icon className={`h-4 w-4 ${stat.color}`} />
+            <CardContent className="p-3 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:text-left sm:gap-3">
+              <div className={`p-1.5 sm:p-2 rounded-lg ${stat.bg} shrink-0 mb-1.5 sm:mb-0`}>
+                <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${stat.color}`} />
               </div>
               <div className="min-w-0">
-                <p className="text-xl font-semibold leading-none">{stat.value}</p>
-                <p className="text-xs text-muted-foreground mt-1 truncate">{stat.label}</p>
+                <p className="text-lg sm:text-xl font-bold leading-none">{stat.value}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 leading-tight">{stat.label}</p>
               </div>
             </CardContent>
           </Card>

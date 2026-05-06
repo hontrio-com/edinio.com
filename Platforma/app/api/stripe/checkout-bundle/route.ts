@@ -68,6 +68,8 @@ export async function POST(req: NextRequest) {
       discounts = [{ coupon: couponId }]
     }
 
+    const referralCode = req.cookies.get('edinio_ref')?.value ?? ''
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -87,6 +89,7 @@ export async function POST(req: NextRequest) {
         bundleSlug: bundle.slug,
         bundleTitleRo: bundle.title_ro,
         userId: user?.id ?? '',
+        referralCode,
       },
       custom_text: {
         submit: { message: 'Vei primi acces imediat la toate cursurile din pachet.' },

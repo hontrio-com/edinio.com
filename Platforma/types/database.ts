@@ -704,7 +704,7 @@ export type Database = {
         Returns: undefined
       }
       increment_tool_views: { Args: { tool_id: string }; Returns: undefined }
-      is_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      is_admin: { Args: never; Returns: boolean }
       mark_payout_complete: {
         Args: { p_amount: number; p_user_id: string }
         Returns: undefined

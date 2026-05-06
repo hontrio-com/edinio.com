@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
-    const { courseId, courseSlug, courseTitleRo, userId, bundleId } =
+    const { courseId, courseSlug, courseTitleRo, userId, bundleId, referralCode } =
       session.metadata ?? {}
 
     const db = getSupabaseAdmin()
@@ -140,12 +140,15 @@ export async function POST(req: NextRequest) {
         amount_paid: session.amount_total ?? 0,
         currency: session.currency ?? 'ron',
         status: 'completed',
+        referral_code: referralCode || null,
       }).select('id').single()
 
       // Programează emailuri de upsell + badges + referral
       if (newPurchase?.id) {
         scheduleUpsellEmails(resolvedUserId, newPurchase.id, courseId).catch(console.error)
-        processReferral(resolvedUserId, newPurchase.id, (session.currency ?? 'ron') as 'ron' | 'eur').catch(console.error)
+        if (referralCode) {
+          processReferral(resolvedUserId, newPurchase.id, (session.currency ?? 'ron') as 'ron' | 'eur', referralCode).catch(console.error)
+        }
       }
       checkAndAwardBadges(resolvedUserId).catch(console.error)
     }

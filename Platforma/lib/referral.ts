@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { customAlphabet } from 'nanoid'
+export { REFERRAL_REWARD_RON, REFERRAL_REWARD_EUR, MIN_PAYOUT_RON } from './referral-constants'
+import { REFERRAL_REWARD_RON, REFERRAL_REWARD_EUR } from './referral-constants'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -10,10 +12,6 @@ function getSupabaseAdmin() {
 }
 
 const nanoid = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6)
-
-export const REFERRAL_REWARD_RON = 5000  // 50 RON în bani
-export const REFERRAL_REWARD_EUR = 1000  // 10 EUR în cenți
-export const MIN_PAYOUT_RON = 10000      // 100 RON minim retragere
 
 export async function getOrCreateReferralCode(userId: string): Promise<string> {
   const db = getSupabaseAdmin()
@@ -42,18 +40,11 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
 export async function processReferral(
   referredUserId: string,
   purchaseId: string,
-  currency: 'ron' | 'eur'
+  currency: 'ron' | 'eur',
+  code: string
 ): Promise<void> {
-  const db = getSupabaseAdmin()
-
-  const { data: purchase } = await db
-    .from('purchases')
-    .select('referral_code')
-    .eq('id', purchaseId)
-    .maybeSingle()
-
-  const code = (purchase as any)?.referral_code
   if (!code) return
+  const db = getSupabaseAdmin()
 
   const { data: referralCode } = await db
     .from('referral_codes')

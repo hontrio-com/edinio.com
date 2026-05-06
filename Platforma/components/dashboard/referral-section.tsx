@@ -17,7 +17,7 @@ import {
 import { Copy, Check, Users, Wallet, ArrowDownToLine, Loader2, Gift } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { formatPrice } from '@/lib/utils'
-import { MIN_PAYOUT_RON, REFERRAL_REWARD_RON } from '@/lib/referral'
+import { MIN_PAYOUT_RON, REFERRAL_REWARD_RON } from '@/lib/referral-constants'
 
 interface Conversion {
   id: string

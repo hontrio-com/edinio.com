@@ -18,16 +18,28 @@ import {
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Sparkles } from 'lucide-react'
 import type { PurchasedCourse } from './sidebar'
+
+interface LockedCourse {
+  id: string
+  slug: string
+  title_ro: string
+  title_en: string | null
+}
 
 interface SidebarMobileProps {
   onSignOut: () => void
   purchasedCourses: PurchasedCourse[]
+  lockedCourses?: LockedCourse[]
+  language?: 'ro' | 'en'
 }
 
 export function DashboardSidebarMobile({
   onSignOut,
   purchasedCourses,
+  lockedCourses,
+  language = 'ro',
 }: SidebarMobileProps) {
   const pathname = usePathname()
 
@@ -160,6 +172,32 @@ export function DashboardSidebarMobile({
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {lockedCourses && lockedCourses.length > 0 && (
+            <div className="pt-3">
+              <p className="px-3 pb-1.5 text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                {language === 'ro' ? 'Deblochează' : 'Unlock'}
+              </p>
+              <div className="space-y-0.5">
+                {lockedCourses.map((course) => (
+                  <Link
+                    key={course.slug}
+                    href={`/cursuri/${course.slug}`}
+                    className={cn(
+                      buttonVariants({ variant: 'ghost' }),
+                      'w-full justify-start gap-3 h-9 font-normal text-muted-foreground/60 hover:text-muted-foreground'
+                    )}
+                  >
+                    <Lock className="h-4 w-4 shrink-0 text-muted-foreground/40" />
+                    <span className="flex-1 text-left truncate text-[13px]">
+                      {language === 'ro' ? course.title_ro : (course.title_en ?? course.title_ro)}
+                    </span>
+                    <Sparkles className="h-3 w-3 text-primary/60 shrink-0" />
+                  </Link>
+                ))}
               </div>
             </div>
           )}

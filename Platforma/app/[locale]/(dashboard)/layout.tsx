@@ -92,7 +92,7 @@ export default async function DashboardLayout({
           language={effectiveGeo.language}
         />
         <div className="flex flex-col flex-1 overflow-hidden">
-          <DashboardHeader user={profile} purchasedCourses={purchasedCourses} />
+          <DashboardHeader user={profile} purchasedCourses={purchasedCourses} lockedCourses={lockedCourses} language={effectiveGeo.language} />
           <main className="flex-1 overflow-y-auto">
             <div className="container max-w-6xl mx-auto px-4 py-8">
               {children}

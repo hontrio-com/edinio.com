@@ -2,11 +2,6 @@
 
 import Link from 'next/link'
 
-const BG = '#05100a'
-const TEXT_DIM = 'rgba(240,250,244,0.4)'
-const TEXT_MUTED = 'rgba(240,250,244,0.22)'
-const GREEN = '#4ade80'
-
 const columns = [
   {
     title: 'Curs',
@@ -47,9 +42,9 @@ export function Footer() {
   return (
     <footer
       style={{
-        backgroundColor: BG,
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        color: 'rgba(240,250,244,0.85)',
+        backgroundColor: '#f4f9f6',
+        borderTop: '1px solid rgba(0,0,0,0.07)',
+        color: '#0a1a0f',
       }}
     >
       <div className="container mx-auto px-4 pt-16 pb-10">
@@ -61,7 +56,7 @@ export function Footer() {
               href="/"
               className="font-bold text-2xl tracking-tight block mb-4"
               style={{
-                background: 'linear-gradient(135deg, #86efac 0%, #4ade80 50%, #22c55e 100%)',
+                background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 60%, #15803d 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
@@ -69,27 +64,27 @@ export function Footer() {
             >
               Edinio
             </Link>
-            <p className="text-sm leading-relaxed mb-6" style={{ color: TEXT_DIM }}>
+            <p
+              className="text-sm leading-relaxed mb-6"
+              style={{ color: 'rgba(10,26,15,0.55)' }}
+            >
               Invata sa creezi videoclipuri profesionale cu Inteligenta Artificiala. De la zero,
               in mai putin de 2 ore.
             </p>
             <div className="flex items-center gap-2">
-              <div
-                className="size-2 rounded-full"
-                style={{ backgroundColor: GREEN }}
-              />
-              <span className="text-xs font-medium" style={{ color: TEXT_DIM }}>
+              <div className="size-2 rounded-full bg-green-500" />
+              <span className="text-xs font-medium" style={{ color: 'rgba(10,26,15,0.45)' }}>
                 500+ cursanti activi
               </span>
             </div>
           </div>
 
-          {/* Nav columns */}
+          {/* Columns */}
           {columns.map((col) => (
             <div key={col.title}>
               <p
                 className="text-xs font-bold tracking-[0.15em] uppercase mb-5"
-                style={{ color: TEXT_MUTED }}
+                style={{ color: 'rgba(10,26,15,0.3)' }}
               >
                 {col.title}
               </p>
@@ -98,14 +93,8 @@ export function Footer() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm transition-all duration-150 hover:opacity-80"
-                      style={{ color: TEXT_DIM }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = 'rgba(240,250,244,0.8)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = TEXT_DIM
-                      }}
+                      className="text-sm transition-colors duration-150 hover:opacity-80"
+                      style={{ color: 'rgba(10,26,15,0.55)' }}
                     >
                       {link.label}
                     </Link>
@@ -117,38 +106,28 @@ export function Footer() {
         </div>
 
         {/* Divider */}
-        <div
-          className="h-px w-full mb-8"
-          style={{ background: 'rgba(255,255,255,0.06)' }}
-        />
+        <div className="h-px w-full mb-8" style={{ background: 'rgba(0,0,0,0.07)' }} />
 
         {/* Bottom row */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-xs" style={{ color: TEXT_MUTED }}>
+          <p className="text-xs" style={{ color: 'rgba(10,26,15,0.35)' }}>
             &copy; {new Date().getFullYear()} Edinio. Toate drepturile rezervate.
           </p>
           <div className="flex items-center gap-6">
-            <Link
-              href="/termeni"
-              className="text-xs transition-colors hover:opacity-70"
-              style={{ color: TEXT_MUTED }}
-            >
-              Termeni
-            </Link>
-            <Link
-              href="/confidentialitate"
-              className="text-xs transition-colors hover:opacity-70"
-              style={{ color: TEXT_MUTED }}
-            >
-              Confidentialitate
-            </Link>
-            <Link
-              href="/cookies"
-              className="text-xs transition-colors hover:opacity-70"
-              style={{ color: TEXT_MUTED }}
-            >
-              Cookies
-            </Link>
+            {[
+              { label: 'Termeni', href: '/termeni' },
+              { label: 'Confidentialitate', href: '/confidentialitate' },
+              { label: 'Cookies', href: '/cookies' },
+            ].map((link) => (
+              <Link
+                key={link.label}
+                href={link.href}
+                className="text-xs transition-colors hover:opacity-70"
+                style={{ color: 'rgba(10,26,15,0.35)' }}
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
         </div>
       </div>

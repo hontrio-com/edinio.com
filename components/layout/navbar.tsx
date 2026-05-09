@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
+import { Logo } from '@/components/ui/logo'
 
 const NAV_LINKS = [
   { label: 'Curriculum', href: '#curriculum' },
@@ -42,18 +43,7 @@ export function Navbar() {
     <header className="sticky top-0 z-50 transition-all duration-300" style={navStyle}>
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-6">
         {/* Logo */}
-        <Link
-          href="/"
-          className="font-bold text-xl tracking-tight shrink-0"
-          style={{
-            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 60%, #15803d 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}
-        >
-          Edinio
-        </Link>
+        <Logo size="sm" />
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">

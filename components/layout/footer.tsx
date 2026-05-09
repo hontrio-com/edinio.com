@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Logo } from '@/components/ui/logo'
 
 const columns = [
   {
@@ -52,18 +53,9 @@ export function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-10 mb-14">
           {/* Brand */}
           <div className="col-span-2">
-            <Link
-              href="/"
-              className="font-bold text-2xl tracking-tight block mb-4"
-              style={{
-                background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 60%, #15803d 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              Edinio
-            </Link>
+            <div className="mb-4">
+              <Logo size="md" />
+            </div>
             <p
               className="text-sm leading-relaxed mb-6"
               style={{ color: 'rgba(10,26,15,0.55)' }}

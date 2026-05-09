@@ -131,7 +131,7 @@ export function SubscriptionSection({ purchases }: { purchases: Purchase[] }) {
       <div className="mt-6 pt-5 border-t flex items-start gap-3">
         <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-medium">Garanție 30 de zile</p>
+          <p className="text-sm font-medium">Garantie 14 zile</p>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
             Nu ești mulțumit? Scrie-ne la{' '}
             <a

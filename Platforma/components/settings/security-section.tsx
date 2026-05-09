@@ -149,7 +149,7 @@ export function SecuritySection() {
     if (!user?.email) return
     await supabase.auth.signInWithOtp({
       email: user.email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${window.location.origin}/api/auth/callback` },
     })
     setMagicSent(true)
   }
@@ -186,7 +186,7 @@ export function SecuritySection() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Parolă nouă</Label>
             <PasswordInput

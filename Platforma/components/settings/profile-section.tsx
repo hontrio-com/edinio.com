@@ -121,7 +121,7 @@ export function ProfileSection({ profile, userId }: ProfileSectionProps) {
 
       {/* Form fields */}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Nume complet</Label>
             <Input

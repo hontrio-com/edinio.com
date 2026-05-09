@@ -89,35 +89,55 @@ export function SettingsLayout({ profile, purchases, userId, notifPrefs }: Setti
   }
 
   return (
-    <div className="flex gap-12">
-      {/* Sidebar navigare */}
-      <aside className="w-[200px] shrink-0">
-        <nav className="sticky top-6 space-y-0.5">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pb-2">
-            Navigare
-          </p>
-          {NAV_ITEMS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => scrollTo(id)}
-              className={cn(
-                'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left',
-                activeSection === id
-                  ? 'text-foreground font-medium bg-muted/60'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-              )}
-            >
-              <span className={cn(
-                'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
-                activeSection === id ? 'bg-foreground' : 'bg-border'
-              )} />
-              {label}
-            </button>
-          ))}
+    <div className="flex flex-col md:flex-row gap-6 md:gap-12">
+      {/* Navigare — orizontala pe mobil, verticala pe desktop */}
+      <aside className="md:w-[200px] md:shrink-0">
+        <nav className="md:sticky md:top-6">
+          {/* Mobile: scroll orizontal */}
+          <div className="flex md:hidden gap-1 overflow-x-auto pb-1 scrollbar-none">
+            {NAV_ITEMS.map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => scrollTo(id)}
+                className={cn(
+                  'shrink-0 px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap',
+                  activeSection === id
+                    ? 'bg-foreground text-background font-medium'
+                    : 'text-muted-foreground hover:text-foreground bg-muted/50'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* Desktop: vertical */}
+          <div className="hidden md:flex flex-col space-y-0.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 pb-2">
+              Navigare
+            </p>
+            {NAV_ITEMS.map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => scrollTo(id)}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left',
+                  activeSection === id
+                    ? 'text-foreground font-medium bg-muted/60'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                )}
+              >
+                <span className={cn(
+                  'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
+                  activeSection === id ? 'bg-foreground' : 'bg-border'
+                )} />
+                {label}
+              </button>
+            ))}
+          </div>
         </nav>
       </aside>
 
-      {/* Conținut secțiuni */}
+      {/* Continut sectiuni */}
       <div className="flex-1 min-w-0 space-y-14">
         <section ref={setRef('profil')} id="profil" className="scroll-mt-6">
           <ProfileSection profile={profile} userId={userId} />

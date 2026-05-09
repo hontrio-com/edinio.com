@@ -2,11 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { parseGeoCookie, GEO_COOKIE } from '@/lib/geo'
-import { getUpsellOffers } from '@/lib/upsell'
 import { CourseCurriculum } from '@/components/dashboard/course-curriculum'
 import { CourseHeroPlayer } from '@/components/dashboard/course-hero-player'
-import { UpsellBanner } from '@/components/dashboard/upsell-banner'
-import { LockedCourseCard } from '@/components/dashboard/locked-course-card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
@@ -29,7 +26,6 @@ export default async function CoursePage({ params }: Props) {
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // Determine language: profile preference > geo cookie > default 'ro'
   const cookieStore = await cookies()
   const geo = parseGeoCookie(cookieStore.get(GEO_COOKIE)?.value)
 
@@ -44,7 +40,6 @@ export default async function CoursePage({ params }: Props) {
     geo?.language ??
     'ro'
 
-  // Fetch course
   const { data: courseData } = await supabase
     .from('courses')
     .select('*')
@@ -54,7 +49,6 @@ export default async function CoursePage({ params }: Props) {
   const course = courseData as CourseRow | null
   if (!course) notFound()
 
-  // Verify purchase
   const { data: purchaseData } = await supabase
     .from('purchases')
     .select('id')
@@ -65,7 +59,6 @@ export default async function CoursePage({ params }: Props) {
 
   if (!purchaseData) redirect(`/cursuri/${slug}`)
 
-  // Fetch lessons filtered by language
   const { data: lessonsData } = await supabase
     .from('lessons')
     .select('*')
@@ -75,30 +68,21 @@ export default async function CoursePage({ params }: Props) {
 
   const lessons = (lessonsData ?? []) as LessonRow[]
 
-  // Fetch progress + upsell offers in parallel
-  const [{ data: progressData }, upsellResult] = await Promise.all([
-    supabase
-      .from('lesson_progress')
-      .select('lesson_id, completed, progress_seconds')
-      .eq('user_id', user.id)
-      .in('lesson_id', lessons.map((l: any) => l.id)),
-    getUpsellOffers(user.id),
-  ])
+  const { data: progressData } = await supabase
+    .from('lesson_progress')
+    .select('lesson_id, completed, progress_seconds')
+    .eq('user_id', user.id)
+    .in('lesson_id', lessons.map((l: any) => l.id))
 
-  const { nextCourse: nextCourseOffer, unpurchasedCourses } = upsellResult
-  const currency = geo?.currency ?? 'ron'
-
-  const progress = (progressData ?? []) as Pick<
-    ProgressRow,
-    'lesson_id' | 'completed' | 'progress_seconds'
-  >[]
-  const progressMap = new Map(progress.filter(p => p.lesson_id).map((p) => [p.lesson_id as string, { completed: p.completed ?? false, progress_seconds: p.progress_seconds ?? 0 }]))
+  const progress = (progressData ?? []) as Pick<ProgressRow, 'lesson_id' | 'completed' | 'progress_seconds'>[]
+  const progressMap = new Map(
+    progress
+      .filter((p) => p.lesson_id)
+      .map((p) => [p.lesson_id as string, { completed: p.completed ?? false, progress_seconds: p.progress_seconds ?? 0 }])
+  )
 
   const completedCount = progress.filter((p) => p.completed).length
-  const progressPercent =
-    lessons.length > 0
-      ? Math.round((completedCount / lessons.length) * 100)
-      : 0
+  const progressPercent = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0
 
   const firstIncompleteLessonId =
     lessons.find((l: any) => !progressMap.get(l.id)?.completed)?.id ??
@@ -110,21 +94,16 @@ export default async function CoursePage({ params }: Props) {
     <div className="space-y-6">
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">{courseTitle}</h1>
-          <div className="flex items-center gap-2 shrink-0">
-            {progressPercent === 100 && (
-              <Badge className="bg-green-100 text-green-700 border-green-200">
-                {language === 'ro' ? 'Finalizat' : 'Completed'}
-              </Badge>
-            )}
-          </div>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">{courseTitle}</h1>
+          {progressPercent === 100 && (
+            <Badge className="bg-green-100 text-green-700 border-green-200 shrink-0">
+              Finalizat
+            </Badge>
+          )}
         </div>
         <div className="space-y-1.5">
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>
-              {completedCount} {language === 'ro' ? 'din' : 'of'} {lessons.length}{' '}
-              {language === 'ro' ? 'lecții completate' : 'lessons completed'}
-            </span>
+            <span>{completedCount} din {lessons.length} lecții completate</span>
             <span className="font-medium">{progressPercent}%</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
@@ -150,40 +129,6 @@ export default async function CoursePage({ params }: Props) {
           />
         </div>
       </div>
-
-      {/* Upsell section */}
-      {(nextCourseOffer || unpurchasedCourses.length > 0) && (
-        <>
-          <Separator />
-          <div className="space-y-4">
-            {nextCourseOffer && (
-              <UpsellBanner
-                offer={nextCourseOffer}
-                currency={currency}
-                language={language}
-              />
-            )}
-            {unpurchasedCourses.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-muted-foreground">
-                  {language === 'ro' ? 'Mai ai de descoperit' : 'More to explore'}
-                </p>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {unpurchasedCourses.slice(0, 3).map((c) => (
-                    <LockedCourseCard
-                      key={c.id}
-                      course={c}
-                      currency={currency}
-                      language={language}
-                      discountPercent={20}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   )
 }

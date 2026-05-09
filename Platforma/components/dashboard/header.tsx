@@ -19,13 +19,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
-interface LockedCourse {
-  id: string
-  slug: string
-  title_ro: string
-  title_en: string | null
-}
-
 interface HeaderProps {
   user: {
     full_name: string | null
@@ -33,11 +26,9 @@ interface HeaderProps {
     avatar_url: string | null
   } | null
   purchasedCourses: PurchasedCourse[]
-  lockedCourses?: LockedCourse[]
-  language?: 'ro' | 'en'
 }
 
-export function DashboardHeader({ user, purchasedCourses, lockedCourses, language }: HeaderProps) {
+export function DashboardHeader({ user, purchasedCourses }: HeaderProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -73,7 +64,7 @@ export function DashboardHeader({ user, purchasedCourses, lockedCourses, languag
           <Menu className="h-5 w-5" />
         </SheetTrigger>
         <SheetContent side="left" className="p-0 w-60">
-          <DashboardSidebarMobile onSignOut={handleSignOut} purchasedCourses={purchasedCourses} lockedCourses={lockedCourses} language={language} />
+          <DashboardSidebarMobile onSignOut={handleSignOut} purchasedCourses={purchasedCourses} />
         </SheetContent>
       </Sheet>
 

@@ -29,8 +29,8 @@ export function Navbar() {
           <Link href="/auth/login" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }))}>
             {t('login')}
           </Link>
-          <Link href="/auth/signup" className={cn(buttonVariants({ size: 'sm' }))}>
-            {t('signup')}
+          <Link href="/checkout" className={cn(buttonVariants({ size: 'sm' }))}>
+            Vreau acces
           </Link>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import { motion, useInView, AnimatePresence } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   ArrowRight,
   Check,
@@ -15,6 +16,7 @@ import {
   BookOpen,
   Play,
   ShoppingCart,
+  Infinity,
 } from 'lucide-react'
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import { Footer } from '@/components/layout/footer'
@@ -322,7 +324,7 @@ export function LandingPage() {
             className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.08] tracking-tight mb-7"
             style={{ color: TEXT }}
           >
-            Creaza videoclipuri{' '}
+            Invata sa faci videoclipuri cu{' '}
             <span
               style={{
                 background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 60%, #15803d 100%)',
@@ -331,10 +333,8 @@ export function LandingPage() {
                 backgroundClip: 'text',
               }}
             >
-              profesionale
+              Inteligenta Artificiala
             </span>
-            <br />
-            cu Inteligenta Artificiala
           </motion.h1>
 
           {/* Subtitle */}
@@ -345,11 +345,10 @@ export function LandingPage() {
             className="text-xl max-w-2xl mx-auto mb-12 leading-relaxed"
             style={{ color: TEXT_DIM }}
           >
-            Transforma orice idee intr-un videoclip de calitate profesionala in cateva minute.
-            Fara studio, fara echipa, fara experienta anterioara.
+            Transforma o idee in videoclip profesional in mai putin de 2 ore. Fara camera, fara actor, fara studio. Doar AI si pasii pe care ti-i arat eu — pas cu pas, de la zero.
           </motion.p>
 
-          {/* Social proof */}
+          {/* Social proof avatars */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -357,15 +356,19 @@ export function LandingPage() {
             className="flex items-center justify-center gap-5 mb-12"
           >
             <div className="flex -space-x-2.5">
-              {['AM', 'DS', 'MT', 'EC', 'RI'].map((ini, i) => (
+              {[1, 2, 3, 4, 5, 6].map((n) => (
                 <div
-                  key={i}
-                  className="size-10 rounded-full border-[2px] border-white flex items-center justify-center text-[10px] font-bold text-white"
-                  style={{
-                    backgroundColor: ['#15803d', '#166534', '#14532d', '#16a34a', '#22c55e'][i],
-                  }}
+                  key={n}
+                  className="size-10 rounded-full border-[2.5px] border-white overflow-hidden"
+                  style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }}
                 >
-                  {ini}
+                  <Image
+                    src={`/testimoniale/r${n}.jpg`}
+                    alt={`Student ${n}`}
+                    width={40}
+                    height={40}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
               ))}
             </div>
@@ -405,16 +408,31 @@ export function LandingPage() {
             </Link>
           </motion.div>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+          {/* Lifetime access highlight */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.55, duration: 0.5 }}
-            className="mt-6 text-sm"
-            style={{ color: TEXT_MUTED }}
+            className="mt-8 inline-flex flex-col sm:flex-row items-center justify-center gap-3"
           >
-            Acces complet{' '}
-            <span style={{ color: TEXT, fontWeight: 700 }}>250 lei</span> · plata unica · acces pe viata
-          </motion.p>
+            <div
+              className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full"
+              style={{
+                background: 'linear-gradient(135deg, rgba(22,163,74,0.08) 0%, rgba(34,197,94,0.05) 100%)',
+                border: '1px solid rgba(22,163,74,0.2)',
+              }}
+            >
+              <Infinity className="size-4 shrink-0" style={{ color: GREEN }} />
+              <span className="text-sm font-semibold" style={{ color: GREEN }}>
+                Platesti o singura data
+              </span>
+              <span className="w-px h-3.5 bg-green-300" />
+              <span className="text-sm font-semibold" style={{ color: GREEN }}>
+                Acces pe viata
+              </span>
+            </div>
+            <span className="text-sm font-bold" style={{ color: TEXT }}>250 lei</span>
+          </motion.div>
         </div>
       </section>
 

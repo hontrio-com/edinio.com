@@ -277,14 +277,26 @@ function renderDesc(desc: Seg[]) {
 }
 
 const features = [
-  'Ghid pas cu pas, de la zero',
-  'Platforma KIE.AI explicata complet',
-  'Creare de avatare AI personalizate',
-  'Scene video cu Nano Banana Pro',
-  'Videoclipuri cu Google Veo 3.1',
-  'Comunitate privata de suport',
-  'Actualizari gratuite pe viata',
-  'Acces pe orice dispozitiv',
+  {
+    Icon: BookOpen,
+    title: 'Ghid pas cu pas, de la zero',
+    sub: 'De la prima notiune la primul videoclip publicat',
+  },
+  {
+    Icon: Users,
+    title: 'Creare de avatare AI personalizate',
+    sub: 'Avatar-ul tau, vocea ta, stilul tau - unic',
+  },
+  {
+    Icon: Play,
+    title: 'Videoclipuri cu Google Veo 3.1',
+    sub: 'Cel mai avansat model de generare video din lume',
+  },
+  {
+    Icon: BadgeCheck,
+    title: 'Acces pe orice dispozitiv',
+    sub: 'Laptop, telefon, tableta - oricand, oriunde',
+  },
 ]
 
 const lessons = [
@@ -292,7 +304,7 @@ const lessons = [
   { n: '02', title: 'Cu ce lucram?', dur: '15 min', desc: 'Prezentare completa a ecosistemului de unelte AI: ce face fiecare platforma, cum se conecteaza intre ele.' },
   { n: '03', title: 'Platforma KIE.AI', dur: '20 min', desc: 'Ghid complet KIE.AI: configurezi contul, inveti interfata si faci primele generari de continut AI.' },
   { n: '04', title: 'Creare avatar', dur: '25 min', desc: 'Creezi primul tau avatar AI personalizat, de la upload-ul imaginii sursa la ajustari fine pentru un rezultat profesional.' },
-  { n: '05', title: 'Creare scene cu Nano Banana Pro', dur: '30 min', desc: 'Inveti sa generezi scene video de calitate cinematografica cu Nano Banana Pro, cu prompturi si setari optime.' },
+  { n: '05', title: 'Creare imagini cu Nano Banana Pro', dur: '30 min', desc: 'Inveti sa generezi imagini de inalta calitate cu Nano Banana Pro, cu prompturi si setari optime pentru rezultate profesionale.' },
   { n: '06', title: 'Creare videoclipuri cu Google Veo 3.1', dur: '35 min', desc: 'Google Veo 3.1 este cel mai avansat model de generare video. Inveti sa il folosesti la potential maxim.' },
   { n: '07', title: 'Final', dur: '10 min', desc: 'Combini tot ce ai invatat pentru a produce un videoclip complet, de la concept la publicare.' },
 ]
@@ -627,21 +639,48 @@ export function LandingPage() {
             </motion.div>
           </div>
 
-          <motion.div variants={containerFast} className="space-y-2.5">
-            {features.map((f) => (
+          <motion.div variants={containerFast} className="grid grid-cols-2 gap-3">
+            {features.map(({ Icon, title, sub }) => (
               <motion.div
-                key={f}
+                key={title}
                 variants={item}
-                className="flex items-center gap-3 px-5 py-3.5 transition-all duration-200 hover:shadow-md"
-                style={glass}
+                whileHover={{ y: -5, scale: 1.025 }}
+                transition={{ duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+                className="relative p-5 overflow-hidden group cursor-default"
+                style={{
+                  ...glass,
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,1)',
+                }}
               >
+                {/* Ambient glow */}
                 <div
-                  className="flex-shrink-0 size-6 rounded-full flex items-center justify-center"
-                  style={{ background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.2)' }}
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-[1.25rem]"
+                  style={{
+                    background: 'radial-gradient(ellipse 90% 70% at 20% 0%, rgba(34,197,94,0.09) 0%, transparent 70%)',
+                  }}
+                />
+
+                {/* Icon */}
+                <motion.div
+                  className="size-11 rounded-xl flex items-center justify-center mb-4"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(34,197,94,0.15) 0%, rgba(22,163,74,0.07) 100%)',
+                    border: '1px solid rgba(22,163,74,0.22)',
+                  }}
+                  whileHover={{ scale: 1.15, rotate: -6 }}
+                  transition={{ duration: 0.22 }}
                 >
-                  <Check className="size-3.5" style={{ color: GREEN }} />
-                </div>
-                <span className="font-medium text-sm" style={{ color: TEXT }}>{f}</span>
+                  <Icon className="size-5" style={{ color: GREEN }} />
+                </motion.div>
+
+                <p className="font-bold text-sm mb-1.5 leading-snug" style={{ color: TEXT }}>{title}</p>
+                <p className="text-xs leading-relaxed" style={{ color: TEXT_MUTED }}>{sub}</p>
+
+                {/* Hover border glow */}
+                <div
+                  className="absolute inset-0 rounded-[1.25rem] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                  style={{ boxShadow: '0 0 0 1.5px rgba(22,163,74,0.25), 0 6px 24px rgba(22,163,74,0.07)' }}
+                />
               </motion.div>
             ))}
           </motion.div>

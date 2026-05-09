@@ -310,12 +310,12 @@ const lessons = [
 ]
 
 const testimonials = [
-  { name: 'Andrei M.', role: 'Creator de continut', rating: 5, text: 'Am reusit sa creez primul meu videoclip AI in mai putin de 2 ore. Explicatiile sunt clare, practice si la obiect.' },
-  { name: 'Diana S.', role: 'Antreprenoare', rating: 5, text: 'Nu credeam ca voi reusi fara experienta tehnica, dar cursul mi-a aratat pas cu pas cum sa folosesc instrumentele. Rezultatele sunt spectaculoase!' },
-  { name: 'Mihai T.', role: 'Marketing Manager', rating: 5, text: 'Valoare extraordinara. In alta parte ai plati mult mai mult pentru informatii similare. Recomand cu caldura oricarui om din marketing.' },
-  { name: 'Elena C.', role: 'Blogger', rating: 5, text: 'Cursul mi-a deschis o noua perspectiva. Instrumentele prezentate sunt uimitoare si accesibile oricarui incepator.' },
-  { name: 'Razvan I.', role: 'Freelancer', rating: 5, text: 'Foarte bine structurat, de la zero la rezultate vizibile. Platforma KIE.AI este extraordinara, nu stiam de ea pana la acest curs.' },
-  { name: 'Laura P.', role: 'Profesor', rating: 5, text: 'Am facut cursul impreuna cu fiica mea. Amandoua am reusit sa cream videoclipuri de care suntem mandre. Un curs pentru oricine.' },
+  { name: 'Andrei M.', photo: 1, role: 'Creator de continut', rating: 5, text: 'Am reusit sa creez primul meu videoclip AI in mai putin de 2 ore. Explicatiile sunt clare, practice si la obiect.' },
+  { name: 'Alex S.', photo: 2, role: 'Antreprenor', rating: 5, text: 'Nu credeam ca voi reusi fara experienta tehnica, dar cursul mi-a aratat pas cu pas cum sa folosesc instrumentele. Rezultatele sunt spectaculoase!' },
+  { name: 'Mihai T.', photo: 3, role: 'Marketing Manager', rating: 5, text: 'Valoare extraordinara. In alta parte ai plati mult mai mult pentru informatii similare. Recomand cu caldura oricarui om din marketing.' },
+  { name: 'Bogdan C.', photo: 4, role: 'Creator de continut', rating: 5, text: 'Cursul mi-a deschis o noua perspectiva. Instrumentele prezentate sunt uimitoare si accesibile oricarui incepator.' },
+  { name: 'Razvan I.', photo: 5, role: 'Freelancer', rating: 5, text: 'Foarte bine structurat, de la zero la rezultate vizibile. Platforma KIE.AI este extraordinara, nu stiam de ea pana la acest curs.' },
+  { name: 'Laura P.', photo: 6, role: 'Profesor', rating: 5, text: 'Am facut cursul impreuna cu fiica mea. Amandoua am reusit sa cream videoclipuri de care suntem mandre. Un curs pentru oricine.' },
 ]
 
 const faqs = [
@@ -323,8 +323,7 @@ const faqs = [
   { q: 'Cat timp am acces la curs?', a: 'Acces pe viata, inclusiv toate actualizarile viitoare. Platesti o singura data si ai acces oricand, pe orice dispozitiv.' },
   { q: 'Pot invata in ritmul meu?', a: 'Da. Toate lectiile sunt inregistrate video si disponibile 24/7. Poti incepe, pauza si relua oricand. Nu exista termene limita sau sesiuni live obligatorii.' },
   { q: 'Am nevoie de abonamente la platformele prezentate?', a: 'Unele platforme ofera planuri gratuite sau perioade de proba. In curs iti aratam exact ce plan ai nevoie si cum sa minimizezi costurile la inceput.' },
-  { q: 'Exista suport daca am intrebari?', a: 'Da. Ai acces la o comunitate privata de cursanti unde poti pune intrebari si primi feedback. Raspundem la toate intrebarile in maxim 24 de ore.' },
-  { q: 'Cat dureaza pana vad primele rezultate?', a: 'Dupa prima lectie esti deja functional pe KIE.AI. Dupa intregul curs, in mai putin de 2 ore, poti publica primul tau videoclip generat cu AI.' },
+  { q: 'Cat dureaza pana vad primele rezultate?', a: 'Exact dupa ce termini cursul vei stii sa faci videoclipuri cu AI de la zero. Cursul este construit sa te duca de la necunoscator la cineva care produce continut video profesional cu inteligenta artificiala.' },
 ]
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -720,7 +719,6 @@ export function LandingPage() {
                         {l.n}
                       </span>
                       <span className="flex-1 font-semibold text-sm">{l.title}</span>
-                      <span className="text-xs mr-1" style={{ color: TEXT_MUTED }}>{l.dur}</span>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-5">
@@ -762,12 +760,12 @@ export function LandingPage() {
                 &ldquo;{t.text}&rdquo;
               </p>
               <div className="flex items-center gap-3 pt-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                <div
-                  className="size-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                  style={{ background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.18)', color: GREEN }}
-                >
-                  {t.name.split(' ').map((n) => n[0]).join('')}
-                </div>
+                <img
+                  src={`/testimoniale/r${t.photo}.jpg`}
+                  alt={t.name}
+                  className="size-9 rounded-full object-cover flex-shrink-0"
+                  style={{ border: '1.5px solid rgba(22,163,74,0.2)' }}
+                />
                 <div>
                   <p className="font-semibold text-sm" style={{ color: TEXT }}>{t.name}</p>
                   <p className="text-xs" style={{ color: TEXT_MUTED }}>{t.role}</p>
@@ -813,10 +811,9 @@ export function LandingPage() {
 
             <div className="grid grid-cols-2 gap-3 mb-10">
               {[
-                '7 lectii video', 'Platforma KIE.AI',
-                'Avatare AI', 'Workflow complet',
-                'Comunitate privata', 'Actualizari gratuite',
-                'Orice dispozitiv', 'Acces pe viata',
+                '7 lectii video', 'Avatare AI personalizate',
+                'Google Veo 3.1', 'Nano Banana Pro',
+                'Actualizari gratuite', 'Acces pe viata',
               ].map((it) => (
                 <div key={it} className="flex items-center gap-2.5">
                   <div

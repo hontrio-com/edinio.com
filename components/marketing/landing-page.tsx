@@ -197,32 +197,84 @@ function StickyBuyButton() {
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
-const problems = [
+type Seg = string | { b: string } | { h: string }
+
+const problems: Array<{
+  Icon: React.ElementType
+  stat: string
+  title: string
+  desc: Seg[]
+}> = [
   {
     Icon: TrendingUp,
+    stat: '10x',
     title: 'Costurile s-au prabusit',
-    description:
-      'Productia video traditionala costa mii de euro. Cu AI obtii rezultate profesionale fara echipa, fara studio, fara experienta tehnica.',
+    desc: [
+      'Productia video traditionala costa ',
+      { b: 'mii de euro' },
+      '. Cu AI obtii rezultate profesionale ',
+      { h: 'fara echipa, fara studio' },
+      ', fara experienta tehnica.',
+    ],
   },
   {
     Icon: Clock,
+    stat: '24h',
     title: 'Viteza decide castigatorii',
-    description:
-      'Companiile care adopta AI acum au un avantaj imens. Fiecare zi in care astepti e o zi in care concurenta o ia inainte.',
+    desc: [
+      'Companiile care adopta AI ',
+      { b: 'acum' },
+      ' au un avantaj imens. ',
+      { h: 'Fiecare zi in care astepti' },
+      ' e o zi in care concurenta o ia inainte.',
+    ],
   },
   {
     Icon: Zap,
+    stat: '3x',
     title: 'Cererea de continut explodeaza',
-    description:
-      'TikTok, YouTube, Instagram cer continut constant. AI este singura modalitate scalabila de a tine pasul fara sa iti epuizezi bugetul.',
+    desc: [
+      'TikTok, YouTube, Instagram cer ',
+      { b: 'continut constant' },
+      '. AI este ',
+      { h: 'singura modalitate scalabila' },
+      ' de a tine pasul fara sa iti epuizezi bugetul.',
+    ],
   },
   {
     Icon: BadgeCheck,
+    stat: '01',
     title: 'Fara un sistem, pierzi',
-    description:
-      'Nu e suficient sa stii despre AI. Ai nevoie de un workflow complet, de la idee la videoclip final, gata de publicat.',
+    desc: [
+      'Nu e suficient sa stii despre AI. Ai nevoie de un ',
+      { h: 'workflow complet' },
+      ', de la idee la videoclip final, ',
+      { b: 'gata de publicat' },
+      '.',
+    ],
   },
 ]
+
+function renderDesc(desc: Seg[]) {
+  return desc.map((seg, i) => {
+    if (typeof seg === 'string') return <span key={i}>{seg}</span>
+    if ('b' in seg) return <strong key={i} style={{ color: TEXT, fontWeight: 700 }}>{seg.b}</strong>
+    return (
+      <span
+        key={i}
+        style={{
+          color: GREEN,
+          fontWeight: 600,
+          background: 'rgba(22,163,74,0.08)',
+          borderRadius: '0.25rem',
+          padding: '0 3px',
+        }}
+      >
+        {seg.h}
+      </span>
+    )
+  })
+}
 
 const features = [
   'Ghid pas cu pas, de la zero',
@@ -448,7 +500,7 @@ export function LandingPage() {
             Vei folosi cele mai avansate platforme AI
           </motion.p>
           <div className="flex flex-wrap items-center justify-center gap-12">
-            {['KIE.AI', 'Google Veo 3.1', 'Nano Banana Pro'].map((name, i) => (
+            {['KIE.AI', 'Google Veo 3.1', 'Nano Banana Pro', 'Kling 3.0'].map((name, i) => (
               <motion.span
                 key={name}
                 initial={{ opacity: 0, y: 8 }}
@@ -478,22 +530,69 @@ export function LandingPage() {
           </motion.p>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-4">
-          {problems.map(({ Icon, title, description }) => (
+        <div className="grid sm:grid-cols-2 gap-5">
+          {problems.map(({ Icon, stat, title, desc }) => (
             <motion.div
               key={title}
               variants={item}
-              className="p-7 transition-all duration-300 hover:scale-[1.015] hover:shadow-lg"
-              style={glass}
+              whileHover={{ y: -6, scale: 1.015 }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+              className="relative p-7 overflow-hidden group cursor-default"
+              style={{
+                ...glass,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,1)',
+              }}
             >
+              {/* Top accent line */}
               <div
-                className="size-12 rounded-xl flex items-center justify-center mb-5"
-                style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.15)' }}
+                className="absolute top-0 left-8 right-8 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                style={{ background: 'linear-gradient(90deg, transparent, #22c55e, transparent)' }}
+              />
+
+              {/* Ambient glow on hover */}
+              <div
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                style={{
+                  background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(34,197,94,0.07) 0%, transparent 70%)',
+                  borderRadius: '1.25rem',
+                }}
+              />
+
+              {/* Watermark stat */}
+              <div
+                className="absolute right-5 top-4 font-black select-none pointer-events-none transition-all duration-500 group-hover:opacity-20"
+                style={{
+                  fontSize: '3.5rem',
+                  lineHeight: 1,
+                  color: 'rgba(22,163,74,0.08)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
               >
-                <Icon className="size-5" style={{ color: GREEN }} />
+                {stat}
               </div>
-              <h3 className="font-bold text-lg mb-2" style={{ color: TEXT }}>{title}</h3>
-              <p className="leading-relaxed text-sm" style={{ color: TEXT_DIM }}>{description}</p>
+
+              <div className="relative z-10">
+                {/* Icon */}
+                <motion.div
+                  className="size-12 rounded-xl flex items-center justify-center mb-5"
+                  style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.15)' }}
+                  whileHover={{ scale: 1.12, rotate: -4 }}
+                  transition={{ duration: 0.22 }}
+                >
+                  <Icon className="size-5" style={{ color: GREEN }} />
+                </motion.div>
+
+                <h3 className="font-bold text-lg mb-3" style={{ color: TEXT }}>{title}</h3>
+                <p className="leading-relaxed text-sm" style={{ color: TEXT_DIM }}>
+                  {renderDesc(desc)}
+                </p>
+              </div>
+
+              {/* Bottom hover glow border */}
+              <div
+                className="absolute inset-0 rounded-[1.25rem] opacity-0 group-hover:opacity-100 transition-opacity duration-400 pointer-events-none"
+                style={{ boxShadow: '0 0 0 1px rgba(22,163,74,0.2), 0 8px 32px rgba(22,163,74,0.08)' }}
+              />
             </motion.div>
           ))}
         </div>

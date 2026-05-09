@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, BookOpen, Package,
   ShoppingBag, Users, GraduationCap,
-  ExternalLink, ChevronRight, Wallet,
+  ExternalLink, ChevronRight, Wallet, MessageSquare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ const NAV = [
   { href: '/admin/vanzari', label: 'Vânzări', icon: ShoppingBag, exact: false },
   { href: '/admin/utilizatori', label: 'Utilizatori', icon: Users, exact: false },
   { href: '/admin/referral', label: 'Referral & Payouts', icon: Wallet, exact: false },
+  { href: '/admin/mesaje', label: 'Mesaje', icon: MessageSquare, exact: false },
 ]
 
 export function AdminSidebar() {

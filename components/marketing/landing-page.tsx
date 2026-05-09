@@ -313,7 +313,7 @@ const testimonials = [
   { name: 'Andrei M.', photo: 1, role: 'Creator de continut', rating: 5, text: 'Am reusit sa creez primul meu videoclip AI in mai putin de 2 ore. Explicatiile sunt clare, practice si la obiect.' },
   { name: 'Alex S.', photo: 2, role: 'Antreprenor', rating: 5, text: 'Nu credeam ca voi reusi fara experienta tehnica, dar cursul mi-a aratat pas cu pas cum sa folosesc instrumentele. Rezultatele sunt spectaculoase!' },
   { name: 'Mihai T.', photo: 3, role: 'Marketing Manager', rating: 5, text: 'Valoare extraordinara. In alta parte ai plati mult mai mult pentru informatii similare. Recomand cu caldura oricarui om din marketing.' },
-  { name: 'Bogdan C.', photo: 4, role: 'Creator de continut', rating: 5, text: 'Cursul mi-a deschis o noua perspectiva. Instrumentele prezentate sunt uimitoare si accesibile oricarui incepator.' },
+  { name: 'Mircea H.', photo: 4, role: 'Creator de continut', rating: 5, text: 'Cursul mi-a deschis o noua perspectiva. Instrumentele prezentate sunt uimitoare si accesibile oricarui incepator.' },
   { name: 'Razvan I.', photo: 5, role: 'Freelancer', rating: 5, text: 'Foarte bine structurat, de la zero la rezultate vizibile. Platforma KIE.AI este extraordinara, nu stiam de ea pana la acest curs.' },
   { name: 'Laura P.', photo: 6, role: 'Profesor', rating: 5, text: 'Am facut cursul impreuna cu fiica mea. Amandoua am reusit sa cream videoclipuri de care suntem mandre. Un curs pentru oricine.' },
 ]
@@ -444,24 +444,19 @@ export function LandingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.4 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4"
+            className="flex flex-col items-center justify-center gap-2"
           >
             <Link
               href="/checkout"
-              className="inline-flex items-center gap-2.5 rounded-xl px-9 py-4 text-base transition-all duration-200 hover:scale-[1.02] hover:brightness-105 active:scale-[0.98]"
+              className="inline-flex items-center gap-2.5 rounded-xl px-14 py-4 text-base transition-all duration-200 hover:scale-[1.02] hover:brightness-105 active:scale-[0.98]"
               style={greenBtn}
             >
               Vreau acces acum
               <ArrowRight className="size-4" />
             </Link>
-            <Link
-              href="#curriculum"
-              className="inline-flex items-center gap-2 rounded-xl px-8 py-4 text-base transition-all duration-200 hover:bg-black/[0.06]"
-              style={ghostBtn}
-            >
-              <Play className="size-4" />
-              Vezi curriculum
-            </Link>
+            <p className="text-xs font-medium" style={{ color: TEXT_MUTED }}>
+              Acces complet la 250 lei &middot; plată unică
+            </p>
           </motion.div>
 
           {/* Lifetime access highlight */}
@@ -510,7 +505,8 @@ export function LandingPage() {
           >
             Vei folosi cele mai avansate platforme AI
           </motion.p>
-          <div className="flex flex-wrap items-center justify-center gap-12">
+          {/* Desktop: static */}
+          <div className="hidden md:flex flex-wrap items-center justify-center gap-12">
             {['KIE.AI', 'Google Veo 3.1', 'Nano Banana Pro', 'Kling 3.0'].map((name, i) => (
               <motion.span
                 key={name}
@@ -524,6 +520,28 @@ export function LandingPage() {
                 {name}
               </motion.span>
             ))}
+          </div>
+
+          {/* Mobile: marquee */}
+          <div className="md:hidden overflow-hidden">
+            <style>{`
+              @keyframes marquee-scroll {
+                from { transform: translateX(0); }
+                to { transform: translateX(-50%); }
+              }
+              .marquee-track { animation: marquee-scroll 10s linear infinite; }
+            `}</style>
+            <div className="marquee-track flex gap-14 w-max">
+              {[...['KIE.AI', 'Google Veo 3.1', 'Nano Banana Pro', 'Kling 3.0'], ...['KIE.AI', 'Google Veo 3.1', 'Nano Banana Pro', 'Kling 3.0']].map((name, i) => (
+                <span
+                  key={i}
+                  className="text-xl font-bold whitespace-nowrap"
+                  style={{ color: 'rgba(10,26,15,0.25)' }}
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -768,7 +786,6 @@ export function LandingPage() {
                 />
                 <div>
                   <p className="font-semibold text-sm" style={{ color: TEXT }}>{t.name}</p>
-                  <p className="text-xs" style={{ color: TEXT_MUTED }}>{t.role}</p>
                 </div>
               </div>
             </motion.div>

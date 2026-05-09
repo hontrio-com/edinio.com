@@ -18,15 +18,7 @@ const columns = [
     title: 'Cont',
     links: [
       { label: 'Intra in cont', href: '/auth/login' },
-      { label: 'Creeaza cont', href: '/auth/register' },
       { label: 'Dashboard', href: '/dashboard' },
-    ],
-  },
-  {
-    title: 'Companie',
-    links: [
-      { label: 'Despre noi', href: '/despre' },
-      { label: 'Contact', href: '/contact' },
     ],
   },
   {
@@ -50,7 +42,7 @@ export function Footer() {
     >
       <div className="container mx-auto px-4 pt-16 pb-10">
         {/* Top row */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-10 mb-14">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-10 mb-14">
           {/* Brand */}
           <div className="col-span-2">
             <div className="mb-4">
@@ -105,6 +97,17 @@ export function Footer() {
           <p className="text-xs" style={{ color: 'rgba(10,26,15,0.35)' }}>
             &copy; {new Date().getFullYear()} Edinio. Toate drepturile rezervate.
           </p>
+
+          {/* ANPC badges */}
+          <div className="flex items-center gap-3">
+            <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer">
+              <img src="/SAL.png" alt="ANPC SAL" style={{ height: '36px', width: 'auto' }} />
+            </a>
+            <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer">
+              <img src="/SOL.png" alt="ANPC SOL" style={{ height: '36px', width: 'auto' }} />
+            </a>
+          </div>
+
           <div className="flex items-center gap-6">
             {[
               { label: 'Termeni', href: '/termeni' },

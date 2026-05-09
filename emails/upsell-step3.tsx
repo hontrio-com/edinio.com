@@ -31,8 +31,8 @@ export function UpsellStep3Email({
       <Head />
       <Preview>
         {isRo
-          ? `⏰ Ultimele ore — reducerea de ${discountPercent}% expiră astăzi`
-          : `⏰ Last hours — ${discountPercent}% discount expires today`}
+          ? `⏰ Ultimele ore - reducerea de ${discountPercent}% expiră astăzi`
+          : `⏰ Last hours - ${discountPercent}% discount expires today`}
       </Preview>
       <Body style={{ backgroundColor: '#f9fafb', fontFamily: 'system-ui, sans-serif' }}>
         <Container style={{ maxWidth: '560px', margin: '0 auto', padding: '40px 20px' }}>

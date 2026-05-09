@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AdminPageHeader } from '@/components/admin/shared/admin-page-header'
 import { BundleForm } from '@/components/admin/bundles/bundle-form'
 
-export const metadata = { title: 'Bundle nou — Admin Edinio' }
+export const metadata = { title: 'Bundle nou - Admin Edinio' }
 
 export default async function NewBundlePage() {
   const supabase = await createClient()

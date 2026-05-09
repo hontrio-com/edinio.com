@@ -56,8 +56,8 @@ export function UpsellStep1Email({
             </Text>
             <Text style={{ fontSize: '15px', color: '#3f3f46', lineHeight: '1.6' }}>
               {isRo
-                ? `Mulți dintre cursanții noștri care au terminat ${purchasedCourseName} au continuat imediat cu ${upsellCourseName} — și rezultatele au fost mult mai bune când le-au combinat.`
-                : `Many students who completed ${purchasedCourseName} immediately continued with ${upsellCourseName} — and results were much better when combined.`}
+                ? `Mulți dintre cursanții noștri care au terminat ${purchasedCourseName} au continuat imediat cu ${upsellCourseName} - și rezultatele au fost mult mai bune când le-au combinat.`
+                : `Many students who completed ${purchasedCourseName} immediately continued with ${upsellCourseName} - and results were much better when combined.`}
             </Text>
 
             <Section style={{ backgroundColor: '#f4f4f5', borderRadius: '10px', padding: '20px', margin: '24px 0', textAlign: 'center' }}>

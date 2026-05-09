@@ -21,7 +21,7 @@ interface Resource {
   isDownloadable: boolean
 }
 
-// Static resources per course — extend when courses have dynamic resources in DB
+// Static resources per course - extend when courses have dynamic resources in DB
 const RESOURCES_BY_COURSE: Record<string, Resource[]> = {
   default: [
     {
@@ -32,7 +32,7 @@ const RESOURCES_BY_COURSE: Record<string, Resource[]> = {
       isDownloadable: true,
     },
     {
-      title: 'Cheatsheet — comenzi AI esențiale',
+      title: 'Cheatsheet - comenzi AI esențiale',
       description: 'Referință rapidă pentru cele mai utile comenzi AI.',
       url: '#',
       type: 'pdf',
@@ -64,7 +64,7 @@ const typeConfig: Record<ResourceType, { icon: React.ElementType; label: string 
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params
-  return { title: `Resurse — ${slug} | Edinio` }
+  return { title: `Resurse - ${slug} | Edinio` }
 }
 
 export default async function CourseResourcesPage({ params }: Props) {

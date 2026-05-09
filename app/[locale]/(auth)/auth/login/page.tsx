@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { LoginForm } from '@/components/auth/login-form'
 import { AuthLayout } from '@/components/auth/auth-layout'
 
-export const metadata: Metadata = { title: 'Autentificare — Edinio' }
+export const metadata: Metadata = { title: 'Autentificare - Edinio' }
 
 export default async function LoginPage({
   searchParams,

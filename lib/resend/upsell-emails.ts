@@ -74,8 +74,8 @@ export async function sendUpsellEmail(params: SendUpsellEmailParams) {
         from: `Edinio <${process.env.RESEND_FROM_EMAIL}>`,
         to,
         subject: isRo
-          ? `📦 Bundle complet -${discountBundle}% — toate cursurile AI`
-          : `📦 Complete bundle -${discountBundle}% — all AI courses`,
+          ? `📦 Bundle complet -${discountBundle}% - toate cursurile AI`
+          : `📦 Complete bundle -${discountBundle}% - all AI courses`,
         react: UpsellStep2Email({
           customerName,
           bundleName,
@@ -94,8 +94,8 @@ export async function sendUpsellEmail(params: SendUpsellEmailParams) {
         from: `Edinio <${process.env.RESEND_FROM_EMAIL}>`,
         to,
         subject: isRo
-          ? '⏰ Ultimele ore — oferta expiră în curând'
-          : '⏰ Last hours — offer expiring soon',
+          ? '⏰ Ultimele ore - oferta expiră în curând'
+          : '⏰ Last hours - offer expiring soon',
         react: UpsellStep3Email({
           customerName,
           upsellCourseName: isBundle ? bundleName : upsellCourseName,

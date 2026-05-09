@@ -10,7 +10,7 @@ import { format } from 'date-fns'
 import { ro } from 'date-fns/locale'
 import { Search } from 'lucide-react'
 
-export const metadata = { title: 'Vânzări — Admin Edinio' }
+export const metadata = { title: 'Vânzări - Admin Edinio' }
 
 const STATUS_FILTERS = [
   { label: 'Toate', value: undefined },
@@ -151,11 +151,11 @@ export default async function AdminSalesPage({ searchParams }: Props) {
               return (
                 <tr key={p.id} className="hover:bg-zinc-50 transition-colors">
                   <td className="px-5 py-3.5">
-                    <p className="text-sm font-medium text-zinc-900">{profile?.full_name || '—'}</p>
+                    <p className="text-sm font-medium text-zinc-900">{profile?.full_name || ' - '}</p>
                     <p className="text-xs text-zinc-400">{profile?.email}</p>
                   </td>
                   <td className="px-4 py-3.5 hidden sm:table-cell">
-                    <p className="text-sm text-zinc-700">{course?.title_ro || '—'}</p>
+                    <p className="text-sm text-zinc-700">{course?.title_ro || ' - '}</p>
                   </td>
                   <td className="px-4 py-3.5 hidden md:table-cell">
                     <p className="text-xs text-zinc-500">

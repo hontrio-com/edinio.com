@@ -97,7 +97,7 @@ export function RevenueChart({ data, currency = 'RON' }: RevenueChartProps) {
     <div className="bg-white border border-zinc-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm font-semibold text-zinc-900">Venit — ultimele 30 zile</p>
+          <p className="text-sm font-semibold text-zinc-900">Venit - ultimele 30 zile</p>
           <p className="text-xs text-zinc-500 mt-0.5">Totaluri zilnice confirmate</p>
         </div>
       </div>

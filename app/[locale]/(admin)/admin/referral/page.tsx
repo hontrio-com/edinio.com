@@ -6,7 +6,7 @@ import { formatPrice } from '@/lib/utils'
 import { format } from 'date-fns'
 import { ro } from 'date-fns/locale'
 
-export const metadata = { title: 'Referral & Payouts — Admin Edinio' }
+export const metadata = { title: 'Referral & Payouts - Admin Edinio' }
 
 export default async function AdminReferralPage() {
   const supabase = await createClient()
@@ -59,7 +59,7 @@ export default async function AdminReferralPage() {
                 return (
                   <tr key={req.id} className="hover:bg-zinc-50 transition-colors">
                     <td className="px-5 py-3.5">
-                      <p className="text-sm font-medium text-zinc-900">{profile?.full_name || '—'}</p>
+                      <p className="text-sm font-medium text-zinc-900">{profile?.full_name || ' - '}</p>
                       <p className="text-xs text-zinc-400">{profile?.email}</p>
                     </td>
                     <td className="px-4 py-3.5">
@@ -131,7 +131,7 @@ export default async function AdminReferralPage() {
                   return (
                     <tr key={conv.id} className="hover:bg-zinc-50 transition-colors">
                       <td className="px-5 py-3.5">
-                        <p className="text-sm font-medium text-zinc-900">{referrer?.full_name || '—'}</p>
+                        <p className="text-sm font-medium text-zinc-900">{referrer?.full_name || ' - '}</p>
                         <p className="text-xs text-zinc-400">{referrer?.email}</p>
                       </td>
                       <td className="px-4 py-3.5">

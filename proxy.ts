@@ -73,7 +73,7 @@ export async function proxy(request: NextRequest) {
     })
   }
 
-  // Geo detection — set once per 24h
+  // Geo detection - set once per 24h
   const existingCookie = request.cookies.get(GEO_COOKIE)?.value
   const existingGeo = parseGeoCookie(existingCookie)
 

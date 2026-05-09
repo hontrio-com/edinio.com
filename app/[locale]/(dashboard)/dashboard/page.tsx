@@ -17,7 +17,7 @@ import { DashboardSkeleton } from '@/components/ui/skeletons'
 import { getUpsellOffers } from '@/lib/upsell'
 import { parseGeoCookie, GEO_COOKIE } from '@/lib/geo'
 
-export const metadata = { title: 'Dashboard — Edinio' }
+export const metadata = { title: 'Dashboard - Edinio' }
 
 interface LessonData {
   id: string

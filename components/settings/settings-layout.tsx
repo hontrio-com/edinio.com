@@ -90,7 +90,7 @@ export function SettingsLayout({ profile, purchases, userId, notifPrefs }: Setti
 
   return (
     <div className="flex flex-col md:flex-row gap-6 md:gap-12">
-      {/* Navigare — orizontala pe mobil, verticala pe desktop */}
+      {/* Navigare - orizontala pe mobil, verticala pe desktop */}
       <aside className="md:w-[200px] md:shrink-0">
         <nav className="md:sticky md:top-6">
           {/* Mobile: scroll orizontal */}

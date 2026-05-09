@@ -344,7 +344,7 @@ export function LandingPage() {
             className="text-xl max-w-2xl mx-auto mb-12 leading-relaxed"
             style={{ color: TEXT_DIM }}
           >
-            Transforma o idee in videoclip profesional in mai putin de 2 ore. Fara camera, fara actor, fara studio. Doar AI si pasii pe care ti-i arat eu — pas cu pas, de la zero.
+            Transforma o idee in videoclip profesional in mai putin de 2 ore. Fara camera, fara actor, fara studio. Doar AI si pasii pe care ti-i arat eu - pas cu pas, de la zero.
           </motion.p>
 
           {/* Social proof avatars */}

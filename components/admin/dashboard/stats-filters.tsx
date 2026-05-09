@@ -68,7 +68,7 @@ export function StatsFilters({ currentPeriod, currentFrom, currentTo }: StatsFil
 
       <div className="h-5 w-px bg-zinc-200" />
 
-      {/* Date picker custom — PopoverTrigger renders as <button> in base-ui */}
+      {/* Date picker custom - PopoverTrigger renders as <button> in base-ui */}
       <Popover>
         <PopoverTrigger
           className={cn(

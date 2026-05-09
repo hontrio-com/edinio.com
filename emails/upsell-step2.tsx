@@ -33,8 +33,8 @@ export function UpsellStep2Email({
       <Head />
       <Preview>
         {isRo
-          ? `Bundle complet cu -${discountPercent}% — toate cursurile AI într-un singur pachet`
-          : `Complete bundle -${discountPercent}% — all AI courses in one package`}
+          ? `Bundle complet cu -${discountPercent}% - toate cursurile AI într-un singur pachet`
+          : `Complete bundle -${discountPercent}% - all AI courses in one package`}
       </Preview>
       <Body style={{ backgroundColor: '#f9fafb', fontFamily: 'system-ui, sans-serif' }}>
         <Container style={{ maxWidth: '560px', margin: '0 auto', padding: '40px 20px' }}>
@@ -48,7 +48,7 @@ export function UpsellStep2Email({
             </Text>
             <Text style={{ fontSize: '15px', color: '#3f3f46', lineHeight: '1.6' }}>
               {isRo
-                ? `Am observat că nu ai profitat încă de oferta noastră de ieri. Vrem să ne asigurăm că nu ratezi ocazia — mai ales că azi îți oferim ceva și mai bun: bundle-ul complet cu -${discountPercent}%.`
+                ? `Am observat că nu ai profitat încă de oferta noastră de ieri. Vrem să ne asigurăm că nu ratezi ocazia - mai ales că azi îți oferim ceva și mai bun: bundle-ul complet cu -${discountPercent}%.`
                 : `We noticed you haven't taken advantage of yesterday's offer yet. Today we're offering something even better: the complete bundle at -${discountPercent}%.`}
             </Text>
 

@@ -95,7 +95,7 @@ export default function AjutorPage() {
         </p>
       </div>
 
-      {/* Contact form — primul */}
+      {/* Contact form - primul */}
       <section className="space-y-4">
         <div className="space-y-1">
           <h2 className="text-base font-semibold">Contacteaza-ne</h2>
@@ -173,7 +173,7 @@ export default function AjutorPage() {
         )}
       </section>
 
-      {/* FAQ — al doilea */}
+      {/* FAQ - al doilea */}
       <section className="space-y-4">
         <h2 className="text-base font-semibold">Intrebari frecvente</h2>
         <div className="rounded-xl border bg-card px-5 divide-y">

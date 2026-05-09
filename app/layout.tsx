@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Edinio — Learn AI. Build the future.',
+    default: 'Edinio - Learn AI. Build the future.',
     template: '%s | Edinio',
   },
   description:

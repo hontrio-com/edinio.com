@@ -8,7 +8,7 @@ import { checkAndAwardBadges } from '@/lib/badges'
 import { processReferral } from '@/lib/referral'
 import type Stripe from 'stripe'
 
-// Lazy admin client — avoids build failure with placeholder env vars
+// Lazy admin client - avoids build failure with placeholder env vars
 function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     const customerEmail = session.customer_details?.email ?? ''
     const customerName = session.customer_details?.name ?? ''
 
-    // Idempotency — skip if session already processed
+    // Idempotency - skip if session already processed
     const { data: existingPurchase } = await db
       .from('purchases')
       .select('id')

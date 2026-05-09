@@ -31,7 +31,7 @@ export default async function ThankYouPage({ params }: Props) {
     .eq('slug', courseSlug)
     .maybeSingle()
 
-  // OTO offers — only if logged in
+  // OTO offers - only if logged in
   const { nextCourse, bundle } = user
     ? await getUpsellOffers(user.id)
     : { nextCourse: null, bundle: null }

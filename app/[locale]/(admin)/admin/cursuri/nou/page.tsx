@@ -1,7 +1,7 @@
 import { AdminPageHeader } from '@/components/admin/shared/admin-page-header'
 import { CourseForm } from '@/components/admin/courses/course-form'
 
-export const metadata = { title: 'Curs nou — Admin Edinio' }
+export const metadata = { title: 'Curs nou - Admin Edinio' }
 
 export default function NewCoursePage() {
   return (

@@ -10,7 +10,7 @@ import { AdvancedStats } from '@/components/admin/dashboard/advanced-stats'
 import { CircleDollarSign, TrendingUp, Users, BookOpen } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 
-export const metadata = { title: 'Dashboard — Admin Edinio' }
+export const metadata = { title: 'Dashboard - Admin Edinio' }
 
 interface Props {
   searchParams: Promise<{ period?: string; from?: string; to?: string }>

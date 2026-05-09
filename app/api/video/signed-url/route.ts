@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
         .maybeSingle()
 
       if (!bundlePurchase) {
-        return NextResponse.json({ error: 'Acces interzis — cumpără cursul pentru acces' }, { status: 403 })
+        return NextResponse.json({ error: 'Acces interzis - cumpără cursul pentru acces' }, { status: 403 })
       }
     }
   }

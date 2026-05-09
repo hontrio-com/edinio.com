@@ -12,7 +12,7 @@ import type { Database } from '@/types/database'
 
 type BundleRow = Database['public']['Tables']['bundles']['Row']
 
-export const metadata = { title: 'Bundle-uri — Admin Edinio' }
+export const metadata = { title: 'Bundle-uri - Admin Edinio' }
 
 export default async function AdminBundlesPage() {
   const supabase = await createClient()

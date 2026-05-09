@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { RegisterForm } from '@/components/auth/register-form'
 import { AuthLayout } from '@/components/auth/auth-layout'
 
-export const metadata: Metadata = { title: 'Creare cont — Edinio' }
+export const metadata: Metadata = { title: 'Creare cont - Edinio' }
 
 export default async function RegisterPage() {
   const supabase = await createClient()

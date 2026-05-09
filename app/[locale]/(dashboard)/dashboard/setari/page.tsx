@@ -4,7 +4,7 @@ import { Suspense } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SettingsLayout } from '@/components/settings/settings-layout'
 
-export const metadata = { title: 'Setări — Edinio' }
+export const metadata = { title: 'Setări - Edinio' }
 
 async function SettingsContent() {
   const supabase = await createClient()

@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Mesajul este prea lung.' }, { status: 400 })
   }
 
-  // Get current user (optional — contact works without auth too)
+  // Get current user (optional - contact works without auth too)
   let userId: string | null = null
   try {
     const supabase = await createServerClient()

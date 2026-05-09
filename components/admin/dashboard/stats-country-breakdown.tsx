@@ -18,7 +18,7 @@ interface StatsCountryBreakdownProps {
 }
 
 function TrendBadge({ value }: { value: number }) {
-  if (value === 0) return <span className="text-[10px] text-zinc-400">—</span>
+  if (value === 0) return <span className="text-[10px] text-zinc-400"> - </span>
   const positive = value > 0
   return (
     <span className={`text-[10px] font-medium ${positive ? 'text-green-600' : 'text-red-500'}`}>

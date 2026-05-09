@@ -55,7 +55,7 @@ export function UpsellCard({
     <section className="border rounded-xl overflow-hidden bg-card shadow-sm">
       {/* Urgency banner */}
       <div className="bg-amber-500 text-white text-center text-sm font-semibold py-2 px-4">
-        Ofertă specială — expiră în{' '}
+        Ofertă specială - expiră în{' '}
         <span className="font-mono font-bold">{display}</span>
       </div>
 

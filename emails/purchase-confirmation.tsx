@@ -34,7 +34,7 @@ export function PurchaseConfirmationEmail({
   return (
     <Html lang="ro">
       <Head />
-      <Preview>Acces activat: {courseName} — bun venit pe Edinio!</Preview>
+      <Preview>Acces activat: {courseName} - bun venit pe Edinio!</Preview>
       <Body style={main}>
         <Container style={container}>
           <Img

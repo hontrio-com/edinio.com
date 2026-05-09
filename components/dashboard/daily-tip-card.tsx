@@ -3,10 +3,10 @@ import { Lightbulb } from 'lucide-react'
 const TIPS = [
   'Practică zilnică de 20 de minute este mai eficientă decât sesiuni rare de 2 ore.',
   'Aplică imediat ce înveți. Creierul reține mai bine informațiile puse în practică.',
-  'Explică ce ai învățat altcuiva — una dintre cele mai eficiente metode de consolidare.',
+  'Explică ce ai învățat altcuiva - una dintre cele mai eficiente metode de consolidare.',
   'Fă pauze scurte la fiecare 45 de minute. Creierul procesează informațiile în repaus.',
   'Setează un obiectiv mic pentru sesiunea de azi. Progresul constant bate efortul rar.',
-  'Folosește AI ca partener de învățare — pune întrebări, cere exemple, testează-te.',
+  'Folosește AI ca partener de învățare - pune întrebări, cere exemple, testează-te.',
   'Revizuiește noțiunile din ziua anterioară înainte de a trece la lecția nouă.',
 ]
 

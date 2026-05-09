@@ -9,7 +9,7 @@ import { ro } from 'date-fns/locale'
 import { Search, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export const metadata = { title: 'Utilizatori — Admin Edinio' }
+export const metadata = { title: 'Utilizatori - Admin Edinio' }
 
 interface Props {
   searchParams: Promise<{ q?: string }>
@@ -72,7 +72,7 @@ export default async function AdminUsersPage({ searchParams }: Props) {
             {profiles?.map(p => (
               <tr key={p.id} className="hover:bg-zinc-50 transition-colors">
                 <td className="px-5 py-3.5">
-                  <p className="text-sm font-medium text-zinc-900">{p.full_name || '—'}</p>
+                  <p className="text-sm font-medium text-zinc-900">{p.full_name || ' - '}</p>
                   <p className="text-xs text-zinc-400">{p.email}</p>
                 </td>
                 <td className="px-4 py-3.5 hidden sm:table-cell">

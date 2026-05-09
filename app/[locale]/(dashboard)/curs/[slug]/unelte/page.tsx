@@ -11,7 +11,7 @@ interface Props {
   params: Promise<{ slug: string; locale: string }>
 }
 
-// Static tools per course — extend this when courses have dynamic tool lists in DB
+// Static tools per course - extend this when courses have dynamic tool lists in DB
 const TOOLS_BY_COURSE: Record<
   string,
   {
@@ -70,7 +70,7 @@ const TOOLS_BY_COURSE: Record<
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params
-  return { title: `Unelte — ${slug} | Edinio` }
+  return { title: `Unelte - ${slug} | Edinio` }
 }
 
 export default async function CourseToolsPage({ params }: Props) {

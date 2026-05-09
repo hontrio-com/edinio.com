@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/admin/shared/empty-state'
 import { formatPrice } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 
-export const metadata = { title: 'Cursuri — Admin Edinio' }
+export const metadata = { title: 'Cursuri - Admin Edinio' }
 
 interface Props {
   searchParams: Promise<{ q?: string; status?: string }>

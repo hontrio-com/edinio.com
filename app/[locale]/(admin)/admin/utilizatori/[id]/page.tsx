@@ -122,7 +122,7 @@ export default async function UserDetailPage({ params }: Props) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-zinc-900 truncate">
-                      {course?.title_ro ?? '—'}
+                      {course?.title_ro ?? ' - '}
                     </p>
                     <p className="text-xs text-zinc-400">
                       {format(new Date(p.purchased_at ?? Date.now()), 'd MMM yyyy', { locale: ro })}

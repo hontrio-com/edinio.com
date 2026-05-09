@@ -3,7 +3,6 @@
 import { motion, useInView, AnimatePresence } from 'framer-motion'
 import { useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   ArrowRight,
   Check,
@@ -357,19 +356,13 @@ export function LandingPage() {
           >
             <div className="flex -space-x-2.5">
               {[1, 2, 3, 4, 5, 6].map((n) => (
-                <div
+                <img
                   key={n}
-                  className="size-10 rounded-full border-[2.5px] border-white overflow-hidden"
+                  src={`/testimoniale/r${n}.jpg`}
+                  alt={`Student ${n}`}
+                  className="size-10 rounded-full object-cover border-[2.5px] border-white"
                   style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }}
-                >
-                  <Image
-                    src={`/testimoniale/r${n}.jpg`}
-                    alt={`Student ${n}`}
-                    width={40}
-                    height={40}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                />
               ))}
             </div>
             <div className="text-left">

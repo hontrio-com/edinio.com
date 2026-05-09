@@ -19,11 +19,12 @@ function getRedis(): Redis | null {
 type WindowStr = `${number} s` | `${number} m` | `${number} h` | `${number} d`
 
 const LIMITS: Record<string, { requests: number; window: WindowStr }> = {
-  checkout: { requests: 5, window: '1 m' },
-  auth:     { requests: 10, window: '5 m' },
-  api:      { requests: 60, window: '1 m' },
-  payout:   { requests: 3, window: '1 d' },
-  badges:   { requests: 30, window: '1 m' },
+  checkout:  { requests: 5,  window: '1 m' },
+  auth:      { requests: 10, window: '5 m' },
+  api:       { requests: 60, window: '1 m' },
+  payout:    { requests: 3,  window: '1 d' },
+  badges:    { requests: 30, window: '1 m' },
+  'video-url': { requests: 60, window: '1 m' },
 }
 
 export async function rateLimit(

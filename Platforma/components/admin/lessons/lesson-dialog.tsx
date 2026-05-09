@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Loader2 } from 'lucide-react'
+import { VideoUpload } from './video-upload'
 
 const schema = z.object({
   title_ro: z.string().min(2, 'Minim 2 caractere'),
@@ -33,21 +34,25 @@ interface LessonDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   lesson: {
+    id?: string
     title_ro: string
     title_en: string
     description_ro: string | null
     description_en: string | null
     bunny_video_id: string | null
+    storage_path?: string | null
     duration_seconds: number | null
     sort_order: number
     is_preview: boolean
   } | null
+  courseSlug?: string
   language: 'ro' | 'en'
   onSave: (data: any) => Promise<void>
 }
 
-export function LessonDialog({ open, onOpenChange, lesson, onSave }: LessonDialogProps) {
+export function LessonDialog({ open, onOpenChange, lesson, courseSlug, onSave }: LessonDialogProps) {
   const [loading, setLoading] = useState(false)
+  const [currentStoragePath, setCurrentStoragePath] = useState<string | null>(null)
   const isEdit = !!lesson
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormData>({
@@ -70,6 +75,7 @@ export function LessonDialog({ open, onOpenChange, lesson, onSave }: LessonDialo
         sort_order: lesson.sort_order,
         is_preview: lesson.is_preview,
       })
+      setCurrentStoragePath(lesson.storage_path ?? null)
     } else {
       reset({
         title_ro: '', title_en: '', description_ro: '', description_en: '',
@@ -124,17 +130,18 @@ export function LessonDialog({ open, onOpenChange, lesson, onSave }: LessonDialo
 
           <Separator />
 
-          <div className="space-y-1.5">
-            <Label className="text-xs text-zinc-600">Bunny.net Video ID</Label>
-            <Input
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="h-9 text-sm font-mono"
-              {...register('bunny_video_id')}
-            />
-            <p className="text-xs text-zinc-400">
-              Găsești ID-ul în Bunny Stream → biblioteca ta → videoclipul respectiv.
-            </p>
-          </div>
+          {isEdit && lesson?.id && courseSlug && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-600">Video lecție</Label>
+              <VideoUpload
+                lessonId={lesson.id}
+                courseSlug={courseSlug}
+                lessonOrder={watch('sort_order') ?? 0}
+                currentStoragePath={currentStoragePath}
+                onSuccess={(path) => setCurrentStoragePath(path)}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

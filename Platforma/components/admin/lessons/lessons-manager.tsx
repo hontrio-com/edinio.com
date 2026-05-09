@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LessonDialog } from './lesson-dialog'
 import { ConfirmDialog } from '../shared/confirm-dialog'
-import { Plus, Pencil, Trash2, Loader2, GripVertical, Clock, Unlock } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, GripVertical, Clock, Unlock, CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { formatDuration } from '@/lib/utils'
 
@@ -18,6 +18,7 @@ interface Lesson {
   description_ro: string | null
   description_en: string | null
   bunny_video_id: string | null
+  storage_path: string | null
   duration_seconds: number | null
   sort_order: number
   is_preview: boolean
@@ -26,11 +27,12 @@ interface Lesson {
 
 interface LessonsManagerProps {
   courseId: string
+  courseSlug: string
   lessons: Lesson[]
   language: 'ro' | 'en'
 }
 
-export function LessonsManager({ courseId, lessons: initial, language }: LessonsManagerProps) {
+export function LessonsManager({ courseId, courseSlug, lessons: initial, language }: LessonsManagerProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [lessons, setLessons] = useState<Lesson[]>(initial)
@@ -147,10 +149,13 @@ export function LessonsManager({ courseId, lessons: initial, language }: Lessons
                   )}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5">
-                  {lesson.bunny_video_id && (
-                    <span className="text-[11px] text-zinc-400 font-mono truncate max-w-[120px]">
-                      {lesson.bunny_video_id.slice(0, 8)}...
+                  {lesson.storage_path ? (
+                    <span className="flex items-center gap-1 text-[11px] text-green-600">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Video uploadat
                     </span>
+                  ) : (
+                    <span className="text-[11px] text-amber-600">⚠ Fără video</span>
                   )}
                   {lesson.duration_seconds && (
                     <span className="flex items-center gap-0.5 text-[11px] text-zinc-400">
@@ -199,6 +204,7 @@ export function LessonsManager({ courseId, lessons: initial, language }: Lessons
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         lesson={editLesson}
+        courseSlug={courseSlug}
         language={language}
         onSave={handleSave}
       />

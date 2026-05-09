@@ -81,7 +81,7 @@ export default async function EditCoursePage({ params }: Props) {
               <p className="text-sm font-medium">Lecții în limba Română</p>
               <p className="text-xs text-zinc-400 ml-auto">Vizibile pentru utilizatori din România</p>
             </div>
-            <LessonsManager courseId={id} lessons={roLessons as any} language="ro" />
+            <LessonsManager courseId={id} courseSlug={course.slug} lessons={roLessons as any} language="ro" />
           </div>
         </TabsContent>
 
@@ -94,7 +94,7 @@ export default async function EditCoursePage({ params }: Props) {
               <p className="text-sm font-medium">Lessons in English</p>
               <p className="text-xs text-zinc-400 ml-auto">Visible for international users</p>
             </div>
-            <LessonsManager courseId={id} lessons={enLessons as any} language="en" />
+            <LessonsManager courseId={id} courseSlug={course.slug} lessons={enLessons as any} language="en" />
           </div>
         </TabsContent>
       </Tabs>

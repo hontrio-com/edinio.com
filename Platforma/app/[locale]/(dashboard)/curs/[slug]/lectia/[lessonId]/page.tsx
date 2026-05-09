@@ -114,7 +114,6 @@ export default async function LessonPage({ params }: Props) {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="space-y-4">
         <VideoPlayer
-          bunnyVideoId={lesson.bunny_video_id}
           lessonId={lesson.id}
           userId={user.id}
           initialProgress={progress?.progress_seconds ?? 0}

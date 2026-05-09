@@ -155,4 +155,12 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
   }
+  /* Smooth scroll global */
+  html {
+    scroll-behavior: smooth;
+  }
+  /* Offset for sticky navbar */
+  [id] {
+    scroll-margin-top: 72px;
+  }
 }

@@ -1,9 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync, existsSync, statSync, readdirSync } from 'fs'
 import { resolve } from 'path'
-import { config } from 'dotenv'
-
-config({ path: '.env.local' })
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -12,18 +9,17 @@ const supabase = createClient(
 )
 
 const BUCKET = 'course-videos'
-const LOCAL_FOLDER = './video-uploads'
+const LOCAL_FOLDER = './video-ai'
 
-// Mapare fișier local (din public/videoclipuri) → cale în bucket
-// Fișierele existente: lectia1.mp4 ... lectia7.mp4
+// Mapare fișier local → cale în bucket
 const VIDEO_MAP = [
-  { file: 'lectia1.mp4', storagePath: 'video-ai/lectia-1-introducere.mp4',       lessonTitle: 'Lecția 1' },
-  { file: 'lectia2.mp4', storagePath: 'video-ai/lectia-2-tools.mp4',             lessonTitle: 'Lecția 2' },
-  { file: 'lectia3.mp4', storagePath: 'video-ai/lectia-3-kieai.mp4',             lessonTitle: 'Lecția 3' },
-  { file: 'lectia4.mp4', storagePath: 'video-ai/lectia-4-nano-banana.mp4',       lessonTitle: 'Lecția 4' },
-  { file: 'lectia5.mp4', storagePath: 'video-ai/lectia-5-scene-multiple.mp4',    lessonTitle: 'Lecția 5' },
-  { file: 'lectia6.mp4', storagePath: 'video-ai/lectia-6-veo.mp4',               lessonTitle: 'Lecția 6' },
-  { file: 'lectia7.mp4', storagePath: 'video-ai/lectia-7-capcut-montaj.mp4',     lessonTitle: 'Lecția 7' },
+  { file: 'lectia-1.mp4', storagePath: 'video-ai/lectia-1.mp4', lessonTitle: 'Lecția 1' },
+  { file: 'lectia-2.mp4', storagePath: 'video-ai/lectia-2.mp4', lessonTitle: 'Lecția 2' },
+  { file: 'lectia-3.mp4', storagePath: 'video-ai/lectia-3.mp4', lessonTitle: 'Lecția 3' },
+  { file: 'lectia-4.mp4', storagePath: 'video-ai/lectia-4.mp4', lessonTitle: 'Lecția 4' },
+  { file: 'lectia-5.mp4', storagePath: 'video-ai/lectia-5.mp4', lessonTitle: 'Lecția 5' },
+  { file: 'lectia-6.mp4', storagePath: 'video-ai/lectia-6.mp4', lessonTitle: 'Lecția 6' },
+  { file: 'lectia-7.mp4', storagePath: 'video-ai/lectia-7.mp4', lessonTitle: 'Lecția 7' },
 ]
 
 async function uploadFile(entry) {

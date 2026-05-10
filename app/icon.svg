@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="55%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#15803d"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="32" height="32" rx="7" fill="url(#g)"/>
+
+  <!-- Inner highlight border -->
+  <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="6.5"
+        fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+
+  <!-- Graduation cap icon (Lucide GraduationCap, centered in 22x22 at offset 5,5) -->
+  <svg x="5" y="5" width="22" height="22" viewBox="0 0 24 24"
+       fill="none" stroke="white" stroke-width="2.1"
+       stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 10l10-5 10 5-10 5z" fill="rgba(255,255,255,0.22)"/>
+    <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+    <path d="M22 10v6"/>
+  </svg>
+</svg>

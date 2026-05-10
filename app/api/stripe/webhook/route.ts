@@ -72,12 +72,10 @@ export async function POST(req: NextRequest) {
 
     if (!resolvedUserId && customerEmail) {
       // Check if user exists by email
-      const { data: existingUsers } = await db.auth.admin.listUsers()
-      const existingUser = existingUsers?.users.find(
-        (u) => u.email === customerEmail
-      )
+      const { data: existingUserData } = await db.auth.admin.getUserByEmail(customerEmail)
+      const existingUser = existingUserData?.user ?? null
 
-      if (existingUser) {
+      if (existingUser?.id) {
         resolvedUserId = existingUser.id
       } else {
         // Create new account

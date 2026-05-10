@@ -6,7 +6,6 @@ import {
   Heading,
   Hr,
   Html,
-  Img,
   Preview,
   Section,
   Text,
@@ -37,13 +36,7 @@ export function PurchaseConfirmationEmail({
       <Preview>Acces activat: {courseName} - bun venit pe Edinio!</Preview>
       <Body style={main}>
         <Container style={container}>
-          <Img
-            src="https://edinio.com/logo.png"
-            width={120}
-            height={40}
-            alt="Edinio"
-            style={logo}
-          />
+          <Text style={logoText}>edinio</Text>
 
           <Heading style={heading}>
             {isNewUser ? `Bun venit, ${customerName}!` : `Mulțumim, ${customerName}!`}
@@ -109,8 +102,12 @@ const container = {
   marginBottom: '40px',
 }
 
-const logo = {
+const logoText = {
+  fontSize: '28px',
+  fontWeight: '800',
+  color: '#16a34a',
   margin: '0 0 24px',
+  letterSpacing: '-0.5px',
 }
 
 const heading = {

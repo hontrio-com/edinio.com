@@ -487,6 +487,31 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* ━━ COURSE PREVIEW IMAGE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <div className="flex justify-center px-4 -mt-8 pb-6" style={{ backgroundColor: BG }}>
+        <motion.div
+          initial={{ opacity: 0, y: 32, scale: 0.97 }}
+          whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="relative w-full max-w-3xl rounded-2xl overflow-hidden"
+          style={{
+            boxShadow: '0 24px 80px rgba(22,163,74,0.15), 0 8px 32px rgba(0,0,0,0.12)',
+            border: '1px solid rgba(22,163,74,0.15)',
+          }}
+        >
+          <img
+            src="/course-thumbnail.png"
+            alt="Invata sa faci videoclipuri cu AI"
+            className="w-full h-auto block"
+          />
+          <div
+            className="absolute inset-0 pointer-events-none rounded-2xl"
+            style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)' }}
+          />
+        </motion.div>
+      </div>
+
       {/* ━━ TRUST BAR ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div
         style={{

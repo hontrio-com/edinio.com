@@ -47,7 +47,7 @@ export default async function CheckoutPage() {
       fbc: cookieStore.get('_fbc')?.value ?? undefined,
     },
     customData: {
-      value: course.price_ron,
+      value: course.price_ron / 100,
       currency: 'RON',
       contentIds: [course.id],
       contentName: course.title_ro,

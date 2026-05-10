@@ -20,6 +20,13 @@ export const metadata: Metadata = {
   },
   description:
     'Cursuri practice de AI pentru creatori, antreprenori și profesioniști.',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico' },
+    ],
+    apple: '/favicon.svg',
+  },
 }
 
 export default function RootLayout({

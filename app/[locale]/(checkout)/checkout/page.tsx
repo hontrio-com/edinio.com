@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe/client'
+import { sendCAPIEvent } from '@/lib/meta/capi'
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 
 export default async function CheckoutPage() {
   const supabase = await createClient()
@@ -30,8 +31,29 @@ export default async function CheckoutPage() {
   }
 
   const cookieStore = await cookies()
+  const headerStore = await headers()
   const referralCode = cookieStore.get('edinio_ref')?.value ?? ''
   const appUrl = process.env.NEXT_PUBLIC_APP_URL!
+
+  // Fire InitiateCheckout via CAPI (server-side)
+  sendCAPIEvent({
+    eventName: 'InitiateCheckout',
+    eventTime: Math.floor(Date.now() / 1000),
+    userData: {
+      email: user?.email,
+      clientIpAddress: headerStore.get('x-forwarded-for')?.split(',')[0] ?? undefined,
+      clientUserAgent: headerStore.get('user-agent') ?? undefined,
+      fbp: cookieStore.get('_fbp')?.value ?? undefined,
+      fbc: cookieStore.get('_fbc')?.value ?? undefined,
+    },
+    customData: {
+      value: course.price_ron / 100,
+      currency: 'RON',
+      contentIds: [course.id],
+      contentName: course.title_ro,
+    },
+    eventSourceUrl: `${appUrl}/checkout`,
+  }).catch(console.error)
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',

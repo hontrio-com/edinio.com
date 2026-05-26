@@ -47,6 +47,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "DB update failed" }, { status: 500 });
     }
 
+    // Clear any active suspension/grace period
+    await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
+
     console.log("[webhook] Plan updated successfully:", { userId, plan });
   }
 
@@ -55,10 +58,23 @@ export async function POST(req: NextRequest) {
     const userId = sub.metadata?.user_id;
     if (!userId) return NextResponse.json({ received: true });
 
-    await admin.from("users_profile").update({
-      plan: "free" as never,
-      plan_expires_at: null,
-    }).eq("id", userId);
+    // Don't immediately reset plan — give a 15-day grace period.
+    // During grace, the store is still visible to visitors.
+    // After grace expires, the public store page shows a suspended screen.
+    const graceUntil = new Date();
+    graceUntil.setDate(graceUntil.getDate() + 15);
+
+    const { error: graceError } = await admin
+      .from("businesses")
+      .update({ suspended_until: graceUntil.toISOString() })
+      .eq("user_id", userId);
+
+    if (graceError) {
+      console.error("[webhook] Failed to set grace period:", graceError);
+      return NextResponse.json({ error: "Grace period update failed" }, { status: 500 });
+    }
+
+    console.log("[webhook] Grace period set:", { userId, graceUntil });
   }
 
   if (event.type === "invoice.payment_succeeded") {
@@ -76,6 +92,11 @@ export async function POST(req: NextRequest) {
       plan: plan as never,
       plan_expires_at: expiresAt.toISOString(),
     }).eq("id", userId);
+
+    // Payment succeeded — clear any active suspension/grace period
+    await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
+
+    console.log("[webhook] Renewal processed, suspension cleared:", { userId, plan });
   }
 
   return NextResponse.json({ received: true });

@@ -68,6 +68,7 @@ export interface Database {
           features: Json;
           is_published: boolean;
           custom_domain: string | null;
+          suspended_until: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -97,6 +98,7 @@ export interface Database {
           features?: Json;
           is_published?: boolean;
           custom_domain?: string | null;
+          suspended_until?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -126,6 +128,7 @@ export interface Database {
           features?: Json;
           is_published?: boolean;
           custom_domain?: string | null;
+          suspended_until?: string | null;
           updated_at?: string;
         };
         Relationships: [];

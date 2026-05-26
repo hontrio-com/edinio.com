@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
+import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -31,6 +32,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     recentOrders = data ?? [];
   }
 
+  // Check if any business is in grace period or suspended
+  const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar
@@ -39,6 +43,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         plan={profile.plan}
       />
       <div className="lg:pl-[var(--sidebar-width)]">
+        {suspendedBusiness?.suspended_until && (
+          <GracePeriodBanner suspendedUntil={suspendedBusiness.suspended_until} />
+        )}
         <DashboardTopbar
           userFullName={profile.full_name}
           plan={profile.plan}

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
+import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { headers } from "next/headers";
 
 interface Props { params: Promise<{ slug: string }>; }
@@ -56,6 +57,21 @@ export default async function SlugPage({ params }: Props) {
         )}
       </div>
     );
+  }
+
+  // Check suspension: if grace period has fully expired, show suspended page to visitors.
+  // Owners can still access their store to preview it.
+  if (business.suspended_until && !isOwner) {
+    const suspendedUntil = new Date(business.suspended_until);
+    if (suspendedUntil < new Date()) {
+      return (
+        <SuspendedStorePage
+          businessName={business.business_name}
+          primaryColor={business.primary_color}
+          phone={business.phone}
+        />
+      );
+    }
   }
 
   const [{ data: products }, { data: storeSettings }] = await Promise.all([

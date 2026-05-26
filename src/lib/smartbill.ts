@@ -15,6 +15,8 @@ export function isSmartbillConfigured(): boolean {
   );
 }
 
+// Nu esti platitor de TVA — facturile se emit fara TVA.
+
 export interface SmartbillClient {
   name: string;
   email: string;
@@ -43,9 +45,6 @@ export async function createSmartbillInvoice(
     return null;
   }
 
-  const taxPercentage = Number(process.env.SMARTBILL_TAX_PERCENTAGE ?? 19);
-  const taxName = process.env.SMARTBILL_TAX_NAME ?? "Normala";
-
   const body = {
     companyVatCode: process.env.SMARTBILL_CIF,
     client: {
@@ -71,9 +70,7 @@ export async function createSmartbillInvoice(
         currency: "RON",
         quantity: product.quantity,
         price: product.price,
-        isTaxIncluded: true,
-        taxName,
-        taxPercentage,
+        // Neplatitor de TVA — nu se adauga TVA pe factura
         isService: true,
         saveToDb: false,
       },

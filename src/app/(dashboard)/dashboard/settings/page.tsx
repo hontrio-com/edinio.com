@@ -28,7 +28,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { data: storeSettings } = business
     ? await supabase
         .from("store_settings")
-        .select("store_policies, order_number_format")
+        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
         .eq("business_id", business.id)
         .single()
     : { data: null };
@@ -41,6 +41,12 @@ export default async function SettingsPage({ searchParams }: Props) {
       businessData={business ?? null}
       storePolicies={(storeSettings?.store_policies as Record<string, unknown>) ?? {}}
       orderNumberFormat={storeSettings?.order_number_format ?? "sequential"}
+      vatSettings={{
+        vat_enabled: storeSettings?.vat_enabled ?? false,
+        vat_rate: storeSettings?.vat_rate ?? 19,
+        prices_include_vat: storeSettings?.prices_include_vat ?? true,
+        show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+      }}
       planSuccess={plan_success === "1"}
     />
   );

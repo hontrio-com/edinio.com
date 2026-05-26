@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings } from "@/lib/actions/store.actions";
 import { deleteAccount } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import type { Database } from "@/types/database.types";
@@ -141,6 +141,13 @@ function parsePolicies(raw: Record<string, unknown>): PoliciesMap {
   return result;
 }
 
+interface VatSettings {
+  vat_enabled: boolean;
+  vat_rate: number;
+  prices_include_vat: boolean;
+  show_vat_breakdown: boolean;
+}
+
 interface Props {
   profile: UserProfile;
   email: string;
@@ -148,6 +155,7 @@ interface Props {
   businessData: BusinessData | null;
   storePolicies: Record<string, unknown>;
   orderNumberFormat: string;
+  vatSettings: VatSettings;
   planSuccess?: boolean;
 }
 
@@ -163,7 +171,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, planSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, planSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : "general");
 
   useEffect(() => {
@@ -225,6 +233,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [policies, setPolicies] = useState<PoliciesMap>(() => parsePolicies(storePolicies));
   const [savingPolicies, startPoliciesTransition] = useTransition();
 
+  // VAT
+  const [vat, setVat] = useState<VatSettings>(vatSettings);
+  const [vatRateInput, setVatRateInput] = useState(String(vatSettings.vat_rate));
+  const [savingVat, startVatTransition] = useTransition();
+
   const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
   async function saveProfile() {
@@ -272,6 +285,19 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateGeneralSettings(businessId, biz, orderFormat);
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile au fost salvate.");
+    });
+  }
+
+  function saveVat() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    const rate = parseFloat(vatRateInput);
+    if (isNaN(rate) || rate < 0 || rate > 100) { toast.error("Cota TVA trebuie sa fie intre 0 si 100."); return; }
+    const settings = { ...vat, vat_rate: rate };
+    setVat(settings);
+    startVatTransition(async () => {
+      const result = await updateVatSettings(businessId, settings);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Setarile TVA au fost salvate.");
     });
   }
 
@@ -660,7 +686,179 @@ export function SettingsClient({ profile, email, businessId, businessData, store
             <BillingSection plan={profile.plan} planExpiresAt={profile.plan_expires_at} />
           )}
           {activeSection === "livrare"    && <ComingSoon title="Livrare" />}
-          {activeSection === "taxe"       && <ComingSoon title="Taxe" />}
+
+          {/* ── Taxe / TVA ── */}
+          {activeSection === "taxe" && (
+            <div className="space-y-6">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                <Percent className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  Daca esti platitor de TVA, activeaza aceasta sectiune. TVA-ul va fi aplicat la totalul comenzii si afisat clientilor. Daca nu esti platitor de TVA, lasa aceasta sectiune dezactivata.
+                </p>
+              </div>
+
+              {!businessId && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
+                </div>
+              )}
+
+              {/* Toggle platitor TVA */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Platitor de TVA</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Activeaza daca firma ta este inregistrata ca platitor de TVA</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setVat(v => ({ ...v, vat_enabled: !v.vat_enabled }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                      vat.vat_enabled ? "bg-primary" : "bg-muted-foreground/30"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      vat.vat_enabled ? "translate-x-6" : "translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+
+                {vat.vat_enabled && (
+                  <>
+                    {/* Cota TVA */}
+                    <div className="space-y-3 pt-4 border-t border-border">
+                      <label className="block text-sm font-medium text-foreground">Cota TVA (%)</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {["19", "9", "5"].map(rate => (
+                          <button
+                            key={rate}
+                            type="button"
+                            onClick={() => { setVat(v => ({ ...v, vat_rate: Number(rate) })); setVatRateInput(rate); }}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-all ${
+                              String(vat.vat_rate) === rate && vatRateInput === rate
+                                ? "bg-primary text-white border-primary"
+                                : "border-border text-muted-foreground hover:border-primary/40 bg-background"
+                            }`}
+                          >
+                            {rate}%
+                          </button>
+                        ))}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={vatRateInput}
+                            onChange={e => { setVatRateInput(e.target.value); setVat(v => ({ ...v, vat_rate: parseFloat(e.target.value) || 0 })); }}
+                            className={`w-24 px-3 py-2 text-sm border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors ${
+                              !["19", "9", "5"].includes(vatRateInput) ? "border-primary ring-2 ring-primary/20" : "border-border"
+                            }`}
+                            placeholder="Alta cota"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Preturi cu sau fara TVA */}
+                    <div className="space-y-3 pt-4 border-t border-border">
+                      <label className="block text-sm font-medium text-foreground">Preturile produselor includ TVA?</label>
+                      <p className="text-xs text-muted-foreground">Alege daca preturile introduse in catalog includ deja TVA sau sunt fara TVA.</p>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setVat(v => ({ ...v, prices_include_vat: true }))}
+                          className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold border transition-all ${
+                            vat.prices_include_vat
+                              ? "bg-primary text-white border-primary"
+                              : "border-border text-muted-foreground hover:border-primary/40 bg-background"
+                          }`}
+                        >
+                          Da, preturile includ TVA
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVat(v => ({ ...v, prices_include_vat: false }))}
+                          className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold border transition-all ${
+                            !vat.prices_include_vat
+                              ? "bg-primary text-white border-primary"
+                              : "border-border text-muted-foreground hover:border-primary/40 bg-background"
+                          }`}
+                        >
+                          Nu, preturile sunt fara TVA
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Arata defalcarea TVA */}
+                    <div className="flex items-center justify-between pt-4 border-t border-border">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Afiseaza defalcarea TVA in cos</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Clientii vor vedea valoarea TVA separat in sumar</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setVat(v => ({ ...v, show_vat_breakdown: !v.show_vat_breakdown }))}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                          vat.show_vat_breakdown ? "bg-primary" : "bg-muted-foreground/30"
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          vat.show_vat_breakdown ? "translate-x-6" : "translate-x-1"
+                        }`} />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Previzualizare */}
+              {vat.vat_enabled && (
+                <div className="bg-surface border border-border rounded-xl p-5 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Previzualizare cos cumparaturi</p>
+                  {(() => {
+                    const exPrice = 100;
+                    const rate = vat.vat_rate / 100;
+                    const vatAmt = vat.prices_include_vat
+                      ? exPrice - exPrice / (1 + rate)
+                      : exPrice * rate;
+                    const total = vat.prices_include_vat ? exPrice : exPrice + vatAmt;
+                    return (
+                      <div className="space-y-1.5 text-sm">
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Subtotal</span>
+                          <span>{vat.prices_include_vat ? "100 lei" : "100 lei"}</span>
+                        </div>
+                        {vat.show_vat_breakdown && (
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>TVA ({vat.vat_rate}%){vat.prices_include_vat ? " inclus" : ""}</span>
+                            <span>{vatAmt.toFixed(2)} lei</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-semibold text-foreground border-t border-border pt-1.5">
+                          <span>Total</span>
+                          <span>{total.toFixed(2)} lei</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={saveVat}
+                  disabled={savingVat || !businessId}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {savingVat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savingVat ? "Se salveaza..." : "Salveaza setarile TVA"}
+                </button>
+              </div>
+            </div>
+          )}
           {activeSection === "domeniu"    && <ComingSoon title="Domeniu" />}
           {activeSection === "notificari" && <ComingSoon title="Notificari" />}
 

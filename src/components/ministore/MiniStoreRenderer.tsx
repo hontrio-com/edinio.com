@@ -160,6 +160,13 @@ function CartProvider({ children, slug }: { children: React.ReactNode; slug: str
   );
 }
 
+interface VatConfig {
+  vat_enabled: boolean;
+  vat_rate: number;
+  prices_include_vat: boolean;
+  show_vat_breakdown: boolean;
+}
+
 function CartCheckoutModal({
   open, onClose, color, slug, businessId, shippingCost, freeShippingThreshold,
 }: {
@@ -168,6 +175,7 @@ function CartCheckoutModal({
 }) {
   const { items, total, clear } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(undefined);
+  const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   const hiddenFields = checkoutConfig?.hidden_fields ?? [];
@@ -175,7 +183,17 @@ function CartCheckoutModal({
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const shipping = freeShippingThreshold && total >= freeShippingThreshold ? 0 : shippingCost;
-  const grandTotal = total + extrasTotal + shipping;
+
+  // VAT calculation
+  const vatBase = total + extrasTotal;
+  const vatAmount = vatConfig.vat_enabled
+    ? vatConfig.prices_include_vat
+      ? Math.round((vatBase - vatBase / (1 + vatConfig.vat_rate / 100)) * 100) / 100
+      : Math.round(vatBase * (vatConfig.vat_rate / 100) * 100) / 100
+    : 0;
+  const vatAddOn = vatConfig.vat_enabled && !vatConfig.prices_include_vat ? vatAmount : 0;
+  const grandTotal = total + extrasTotal + shipping + vatAddOn;
+
   const [form, setForm] = useState({ name: "", phone: "", county: "", city: "", address: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
@@ -193,7 +211,7 @@ function CartCheckoutModal({
     const supabase = createClient();
     supabase
       .from("store_settings")
-      .select("page_content")
+      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
       .eq("business_id", businessId)
       .single()
       .then(({ data }) => {
@@ -201,6 +219,12 @@ function CartCheckoutModal({
           const pc = data.page_content as { checkout_config?: PageContent["checkout_config"] };
           setCheckoutConfig(pc.checkout_config);
         }
+        setVatConfig({
+          vat_enabled: data?.vat_enabled ?? false,
+          vat_rate: Number(data?.vat_rate ?? 19),
+          prices_include_vat: data?.prices_include_vat ?? true,
+          show_vat_breakdown: data?.show_vat_breakdown ?? true,
+        });
       });
   }, [open, businessId]);
 
@@ -235,6 +259,8 @@ function CartCheckoutModal({
         customer_address: form.address,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
+        vat_amount: vatAmount,
+        vat_rate: vatConfig.vat_enabled ? vatConfig.vat_rate : 0,
       });
       if ("error" in result) { setErrors({ _: result.error as string }); return; }
       clear();
@@ -414,6 +440,12 @@ function CartCheckoutModal({
                 {shipping === 0 ? "Gratuit" : `${shipping} lei`}
               </span>
             </div>
+            {vatConfig.vat_enabled && vatConfig.show_vat_breakdown && vatAmount > 0 && (
+              <div className="flex justify-between text-gray-500">
+                <span>TVA ({vatConfig.vat_rate}%){vatConfig.prices_include_vat ? " inclus" : ""}</span>
+                <span className="font-medium text-gray-900">{vatAmount.toFixed(2)} lei</span>
+              </div>
+            )}
             {freeShippingThreshold && total < freeShippingThreshold && (
               <p className="text-xs text-gray-400">
                 Mai adauga <strong>{freeShippingThreshold - total} lei</strong> pentru livrare gratuita

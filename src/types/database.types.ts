@@ -288,6 +288,8 @@ export interface Database {
           discount_code: string | null;
           discount_amount: number;
           total: number;
+          vat_amount: number;
+          vat_rate: number;
           status: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
           payment_method: string;
           payment_status: "unpaid" | "paid" | "refunded";
@@ -311,6 +313,8 @@ export interface Database {
           discount_code?: string | null;
           discount_amount?: number;
           total: number;
+          vat_amount?: number;
+          vat_rate?: number;
           status?: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
           payment_method?: string;
           payment_status?: "unpaid" | "paid" | "refunded";
@@ -325,6 +329,8 @@ export interface Database {
           payment_status?: "unpaid" | "paid" | "refunded";
           internal_notes?: string | null;
           tracking_number?: string | null;
+          vat_amount?: number;
+          vat_rate?: number;
           updated_at?: string;
         };
         Relationships: [];
@@ -343,6 +349,10 @@ export interface Database {
           store_policies: Json;
           page_content: Json;
           order_number_format: string;
+          vat_enabled: boolean;
+          vat_rate: number;
+          prices_include_vat: boolean;
+          show_vat_breakdown: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -359,6 +369,10 @@ export interface Database {
           store_policies?: Json;
           page_content?: Json;
           order_number_format?: string;
+          vat_enabled?: boolean;
+          vat_rate?: number;
+          prices_include_vat?: boolean;
+          show_vat_breakdown?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -373,6 +387,10 @@ export interface Database {
           store_policies?: Json;
           page_content?: Json;
           order_number_format?: string;
+          vat_enabled?: boolean;
+          vat_rate?: number;
+          prices_include_vat?: boolean;
+          show_vat_breakdown?: boolean;
           updated_at?: string;
         };
         Relationships: [];

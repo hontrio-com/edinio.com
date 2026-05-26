@@ -77,6 +77,37 @@ export async function updateGeneralSettings(
   return { success: true };
 }
 
+export async function updateVatSettings(
+  businessId: string,
+  settings: { vat_enabled: boolean; vat_rate: number; prices_include_vat: boolean; show_vat_breakdown: boolean },
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const { data: existing } = await supabase
+    .from("store_settings").select("id").eq("business_id", businessId).single();
+
+  let error;
+  if (existing) {
+    ({ error } = await supabase.from("store_settings")
+      .update({ ...settings, updated_at: new Date().toISOString() })
+      .eq("business_id", businessId));
+  } else {
+    ({ error } = await supabase.from("store_settings")
+      .insert({ business_id: businessId, ...settings }));
+  }
+
+  if (error) return { error: "Eroare la salvare." };
+  revalidatePath("/dashboard/settings");
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  return { success: true };
+}
+
 export async function updateStorePolicies(
   businessId: string,
   policies: Record<string, { content: string; enabled: boolean }>,

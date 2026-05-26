@@ -163,6 +163,12 @@ export function OrderDetailClient({ order }: { order: Order }) {
               <span>Transport</span>
               <span>{Number(order.shipping_cost) === 0 ? "Gratuit" : formatPrice(Number(order.shipping_cost))}</span>
             </div>
+            {Number(order.vat_amount) > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>TVA ({Number(order.vat_rate)}%)</span>
+                <span>{formatPrice(Number(order.vat_amount))}</span>
+              </div>
+            )}
             <div className="flex justify-between font-semibold text-foreground text-base pt-1 border-t border-border">
               <span>Total</span>
               <span>{formatPrice(Number(order.total))}</span>

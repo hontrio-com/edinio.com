@@ -130,13 +130,16 @@ export async function placeCartOrder(data: {
   discount_amount?: number;
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
+  vat_amount?: number;
+  vat_rate?: number;
 }) {
   const supabase = await createClient();
 
   const extrasTotal = (data.extras ?? []).reduce((s, e) => s + e.price, 0);
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
   const discountAmount = data.discount_amount ?? 0;
-  const total = subtotal + extrasTotal - discountAmount + data.shipping_cost;
+  const vatAmount = data.vat_amount ?? 0;
+  const total = subtotal + extrasTotal - discountAmount + data.shipping_cost + vatAmount;
   const order_number = await buildOrderNumber(supabase, data.business_id);
 
   const allItems = [
@@ -160,6 +163,8 @@ export async function placeCartOrder(data: {
     discount_code: data.discount_code ?? null,
     discount_amount: discountAmount,
     total,
+    vat_amount: vatAmount,
+    vat_rate: data.vat_rate ?? 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields : null,
     payment_method: "cash_on_delivery",
     payment_status: "unpaid",

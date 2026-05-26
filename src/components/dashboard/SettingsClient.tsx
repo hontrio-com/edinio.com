@@ -542,16 +542,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                             : "border-border"
                       }`}
                     >
-                      {plan.badge && (
-                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 text-[10px] font-bold text-white bg-foreground rounded-full whitespace-nowrap">
-                          {plan.badge}
-                        </span>
-                      )}
-                      {isActive && (
+                      {isActive ? (
                         <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 text-[10px] font-bold text-white bg-primary rounded-full whitespace-nowrap">
                           Plan activ
                         </span>
-                      )}
+                      ) : plan.badge ? (
+                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 text-[10px] font-bold text-white bg-foreground rounded-full whitespace-nowrap">
+                          {plan.badge}
+                        </span>
+                      ) : null}
 
                       <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center mb-4">
                         <Icon className="h-4 w-4 text-muted-foreground" />

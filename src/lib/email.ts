@@ -59,6 +59,18 @@ function baseTemplate(content: string): string {
 </html>`;
 }
 
+export function baseTemplateForTest(from: string): string {
+  return baseTemplate(`
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Email de test</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Notificarile Edinio functioneaza corect.</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Configuratie activa</p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Trimis de pe: <strong>${from}</strong></p>
+    </div>
+    <p style="margin:0;font-size:13px;color:#71717a;">Cand vine o comanda noua in magazinul tau vei primi un email similar cu detaliile comenzii.</p>
+  `);
+}
+
 export async function sendNewOrderEmail(
   to: string,
   order: {

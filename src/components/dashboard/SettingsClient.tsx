@@ -247,6 +247,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   // Notifications
   const [notif, setNotif] = useState<NotificationsConfig>(notificationsConfig);
   const [savingNotif, startNotifTransition] = useTransition();
+  const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
 
   const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
@@ -309,6 +311,40 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile TVA au fost salvate.");
     });
+  }
+
+  async function sendTestEmail() {
+    const emailToTest = notif.notification_email.trim() || email;
+    setTestEmailLoading(true);
+    setTestEmailResult(null);
+    try {
+      const res = await fetch("/api/notifications/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailToTest }),
+      });
+      const data = await res.json() as {
+        success?: boolean; message_id?: string; from?: string; to?: string;
+        error?: string; api_key_prefix?: string;
+      };
+      if (data.success) {
+        setTestEmailResult({
+          ok: true,
+          message: `Email trimis cu succes catre ${data.to}`,
+          details: `De la: ${data.from} | ID mesaj: ${data.message_id}`,
+        });
+      } else {
+        setTestEmailResult({
+          ok: false,
+          message: data.error ?? "Eroare necunoscuta",
+          details: data.api_key_prefix ? `Cheie API: ${data.api_key_prefix} | De la: ${data.from} | Catre: ${data.to}` : undefined,
+        });
+      }
+    } catch (err) {
+      setTestEmailResult({ ok: false, message: `Eroare retea: ${String(err)}` });
+    } finally {
+      setTestEmailLoading(false);
+    }
   }
 
   function saveNotifications() {
@@ -941,6 +977,39 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </button>
                 </div>
 
+              </div>
+
+              {/* Test email */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Testeaza notificarile</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Trimite un email de test la adresa configurata mai sus pentru a verifica ca totul functioneaza
+                  </p>
+                </div>
+
+                {testEmailResult && (
+                  <div className={`rounded-lg p-3 text-sm space-y-1 ${
+                    testEmailResult.ok
+                      ? "bg-green-50 border border-green-200 text-green-800"
+                      : "bg-red-50 border border-red-200 text-red-800"
+                  }`}>
+                    <p className="font-semibold">{testEmailResult.ok ? "Succes" : "Eroare"}: {testEmailResult.message}</p>
+                    {testEmailResult.details && (
+                      <p className="text-xs opacity-80 font-mono">{testEmailResult.details}</p>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={sendTestEmail}
+                  disabled={testEmailLoading || !businessId}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {testEmailLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                  {testEmailLoading ? "Se trimite..." : "Trimite email de test"}
+                </button>
               </div>
 
               <div className="flex justify-end">

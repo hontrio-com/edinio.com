@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { sendSms, getSenders } from "@/lib/smso";
+import { sendSms } from "@/lib/smso";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -16,18 +16,6 @@ export async function POST(req: NextRequest) {
   if (!api_key?.trim()) return NextResponse.json({ error: "Cheia API lipseste." }, { status: 400 });
   if (!sender_id?.trim()) return NextResponse.json({ error: "Sender ID lipseste." }, { status: 400 });
   if (!phone?.trim()) return NextResponse.json({ error: "Numarul de telefon lipseste." }, { status: 400 });
-
-  // Validate sender exists
-  const senders = await getSenders(api_key.trim());
-  if ("error" in senders) {
-    return NextResponse.json({ error: senders.error }, { status: 400 });
-  }
-  const senderExists = senders.some(s => String(s.id) === sender_id.trim());
-  if (!senderExists) {
-    return NextResponse.json({
-      error: `Sender ID "${sender_id}" nu exista in contul tau SMSO. Sendere disponibile: ${senders.map(s => `${s.id} (${s.name})`).join(", ")}`,
-    }, { status: 400 });
-  }
 
   const result = await sendSms(api_key.trim(), {
     to: phone.trim(),

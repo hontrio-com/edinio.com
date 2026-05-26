@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getProductLimit } from "@/lib/plan-limits";
 
 interface ProductData {
   name: string;
@@ -44,6 +45,25 @@ export async function createProduct(businessId: string, data: ProductData) {
     .eq("user_id", user.id)
     .single();
   if (!biz) return { error: "Magazin negasit" };
+
+  // Check plan product limit
+  const { data: profile } = await supabase
+    .from("users_profile")
+    .select("plan")
+    .eq("id", user.id)
+    .single();
+
+  const plan = profile?.plan ?? "free";
+  const limit = getProductLimit(plan);
+
+  const { count } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+
+  if (limit !== Infinity && (count ?? 0) >= limit) {
+    return { error: `Ai atins limita de ${limit} produse pentru planul tau. Upgradeaza planul pentru mai multe produse.` };
+  }
 
   const { error } = await supabase.from("products").insert({
     business_id: businessId,

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ProductsClient } from "@/components/dashboard/ProductsClient";
+import { getProductLimit } from "@/lib/plan-limits";
 
 export default async function ProductsPage({
   searchParams,
@@ -11,7 +12,7 @@ export default async function ProductsPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: business }, { search: searchQuery }] = await Promise.all([
+  const [{ data: business }, { search: searchQuery }, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
       .select("id")
@@ -20,6 +21,7 @@ export default async function ProductsPage({
       .limit(1)
       .single(),
     searchParams,
+    supabase.from("users_profile").select("plan").eq("id", user.id).single(),
   ]);
 
   if (!business) redirect("/dashboard");
@@ -39,6 +41,10 @@ export default async function ProductsPage({
       .order("name"),
   ]);
 
+  const plan = profile?.plan ?? "free";
+  const productLimit = getProductLimit(plan);
+  const productCount = products?.length ?? 0;
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <ProductsClient
@@ -46,6 +52,9 @@ export default async function ProductsPage({
         businessId={business.id}
         initialSearch={searchQuery ?? ""}
         categories={categories ?? []}
+        productLimit={productLimit}
+        productCount={productCount}
+        plan={plan}
       />
     </div>
   );

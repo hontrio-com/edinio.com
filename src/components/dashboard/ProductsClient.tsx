@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Package, Pencil, Search, Star } from "lucide-react";
+import { Plus, X, Package, Pencil, Search, Star, AlertTriangle } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import type { Database } from "@/types/database.types";
@@ -10,14 +10,21 @@ import type { CategoryOption } from "@/components/dashboard/ProductForm";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
-export function ProductsClient({ products, businessId, initialSearch = "", categories = [] }: {
+export function ProductsClient({ products, businessId, initialSearch = "", categories = [], productLimit, productCount, plan }: {
   products: Product[];
   businessId: string;
   initialSearch?: string;
   categories: CategoryOption[];
+  productLimit: number;
+  productCount: number;
+  plan: string;
 }) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState(initialSearch);
+
+  const isAtLimit = productLimit !== Infinity && productCount >= productLimit;
+  const isNearLimit = !isAtLimit && productLimit !== Infinity && productCount >= Math.floor(productLimit * 0.9);
+  const limitPercent = productLimit === Infinity ? 0 : Math.min(100, Math.round((productCount / productLimit) * 100));
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -56,16 +63,73 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/products/new")}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4" />
-            Adauga produs
-          </button>
+          {isAtLimit ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary/40 rounded-xl whitespace-nowrap opacity-60 cursor-not-allowed"
+              >
+                <Plus className="h-4 w-4" />
+                Adauga produs
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/products/new")}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4" />
+              Adauga produs
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Plan limit indicator */}
+      {productLimit !== Infinity && (
+        <div className={cn(
+          "mb-4 px-4 py-3 rounded-xl border text-sm flex flex-col gap-2",
+          isAtLimit
+            ? "bg-red-50 border-red-200 text-red-700"
+            : isNearLimit
+              ? "bg-amber-50 border-amber-200 text-amber-700"
+              : "bg-muted/50 border-border text-muted-foreground"
+        )}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {(isAtLimit || isNearLimit) && <AlertTriangle className="h-4 w-4 flex-shrink-0" />}
+              <span>
+                {isAtLimit
+                  ? `Ai atins limita de ${productLimit} produse pentru planul ${plan.charAt(0).toUpperCase() + plan.slice(1)}.`
+                  : `${productCount} / ${productLimit} produse folosite`}
+              </span>
+            </div>
+            {(isAtLimit || isNearLimit) && (
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/settings")}
+                className={cn(
+                  "text-xs font-semibold underline underline-offset-2 whitespace-nowrap flex-shrink-0",
+                  isAtLimit ? "text-red-700" : "text-amber-700"
+                )}
+              >
+                Upgradeaza planul
+              </button>
+            )}
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-black/10 overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                isAtLimit ? "bg-red-500" : isNearLimit ? "bg-amber-500" : "bg-primary"
+              )}
+              style={{ width: `${limitPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {searchQuery.trim() && (
         <p className="text-sm text-muted-foreground mb-3">
@@ -177,11 +241,13 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
               <>
                 <p className="text-sm font-medium text-foreground mb-1">Niciun produs inca</p>
                 <p className="text-xs text-muted-foreground mb-5">Adauga primul produs pentru a-l afisa in magazin</p>
-                <button type="button" onClick={() => router.push("/dashboard/products/new")}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors">
-                  <Plus className="h-4 w-4" />
-                  Adauga produs
-                </button>
+                {!isAtLimit && (
+                  <button type="button" onClick={() => router.push("/dashboard/products/new")}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors">
+                    <Plus className="h-4 w-4" />
+                    Adauga produs
+                  </button>
+                )}
               </>
             )}
           </div>

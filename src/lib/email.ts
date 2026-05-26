@@ -8,14 +8,12 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.ro";
 export interface NotificationsConfig {
   notification_email: string;
   new_order: boolean;
-  order_cancelled: boolean;
 }
 
 export function parseNotificationsConfig(raw: Record<string, unknown>): NotificationsConfig {
   return {
     notification_email: typeof raw.notification_email === "string" ? raw.notification_email : "",
     new_order: raw.new_order !== false,
-    order_cancelled: raw.order_cancelled !== false,
   };
 }
 
@@ -142,53 +140,3 @@ export async function sendNewOrderEmail(
   });
 }
 
-export async function sendOrderCancelledEmail(
-  to: string,
-  order: {
-    order_number: string;
-    customer_name: string;
-    total: number;
-    business_name: string;
-    order_id: string;
-  }
-) {
-  if (!process.env.RESEND_API_KEY) return;
-
-  const dashboardUrl = `${SITE_URL}/dashboard/orders/${order.order_id}`;
-
-  const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda anulata</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">O comanda a fost marcata ca anulata la magazinul <strong>${order.business_name}</strong>.</p>
-
-    <!-- Order badge -->
-    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:24px;width:100%;box-sizing:border-box;">
-      <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">Comanda ${order.order_number} &mdash; Anulata</p>
-    </div>
-
-    <!-- Info -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-      <tr>
-        <td style="font-size:14px;color:#71717a;padding-bottom:4px;">Client</td>
-        <td style="font-size:14px;color:#18181b;font-weight:600;text-align:right;">${order.customer_name}</td>
-      </tr>
-      <tr>
-        <td style="font-size:14px;color:#71717a;padding-top:6px;">Valoare</td>
-        <td style="font-size:14px;color:#18181b;font-weight:600;text-align:right;padding-top:6px;">${formatPrice(order.total)}</td>
-      </tr>
-    </table>
-
-    <!-- CTA -->
-    <div style="text-align:center;margin-top:28px;">
-      <a href="${dashboardUrl}" style="display:inline-block;background:#18181b;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
-        Vezi comanda in dashboard
-      </a>
-    </div>
-  `;
-
-  await resend.emails.send({
-    from: FROM,
-    to,
-    subject: `Comanda ${order.order_number} a fost anulata`,
-    html: baseTemplate(content),
-  });
-}

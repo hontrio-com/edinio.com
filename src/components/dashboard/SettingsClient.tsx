@@ -151,7 +151,6 @@ interface VatSettings {
 interface NotificationsConfig {
   notification_email: string;
   new_order: boolean;
-  order_cancelled: boolean;
 }
 
 interface Props {
@@ -942,25 +941,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </button>
                 </div>
 
-                {/* Comanda anulata */}
-                <div className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Comanda anulata</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Primesti un email cand o comanda este marcata ca anulata</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setNotif(n => ({ ...n, order_cancelled: !n.order_cancelled }))}
-                    disabled={!businessId}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 ${
-                      notif.order_cancelled ? "bg-primary" : "bg-muted-foreground/30"
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      notif.order_cancelled ? "translate-x-6" : "translate-x-1"
-                    }`} />
-                  </button>
-                </div>
               </div>
 
               <div className="flex justify-end">

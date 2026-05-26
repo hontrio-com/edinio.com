@@ -79,7 +79,7 @@ export async function updateGeneralSettings(
 
 export async function updateNotificationsSettings(
   businessId: string,
-  config: { notification_email: string; new_order: boolean; order_cancelled: boolean },
+  config: { notification_email: string; new_order: boolean },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

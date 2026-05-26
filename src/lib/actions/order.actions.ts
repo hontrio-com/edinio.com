@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseNotificationsConfig, sendNewOrderEmail, sendOrderCancelledEmail } from "@/lib/email";
+import { parseNotificationsConfig, sendNewOrderEmail } from "@/lib/email";
 
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
@@ -146,34 +146,6 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   if (error) return { error: "Eroare la actualizare." };
 
-  // Send cancellation email if status changed to cancelled
-  const wasCancelled = order.status !== "cancelled" && data.status === "cancelled";
-  if (wasCancelled) {
-    void (async () => {
-      try {
-        const { data: settings } = await supabase
-          .from("store_settings")
-          .select("notifications_config, businesses(business_name)")
-          .eq("business_id", order.business_id)
-          .single();
-        if (!settings) return;
-        const config = parseNotificationsConfig(
-          (settings.notifications_config as Record<string, unknown>) ?? {}
-        );
-        const businessName =
-          (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
-        if (config.order_cancelled && config.notification_email) {
-          await sendOrderCancelledEmail(config.notification_email, {
-            order_number: order.order_number,
-            customer_name: order.customer_name,
-            total: Number(order.total),
-            business_name: businessName,
-            order_id: orderId,
-          });
-        }
-      } catch { /* ignore */ }
-    })();
-  }
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);

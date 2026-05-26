@@ -50,7 +50,6 @@ export default async function SettingsPage({ searchParams }: Props) {
       notificationsConfig={{
         notification_email: (storeSettings?.notifications_config as Record<string, unknown>)?.notification_email as string ?? "",
         new_order: (storeSettings?.notifications_config as Record<string, unknown>)?.new_order !== false,
-        order_cancelled: (storeSettings?.notifications_config as Record<string, unknown>)?.order_cancelled !== false,
       }}
       planSuccess={plan_success === "1"}
     />

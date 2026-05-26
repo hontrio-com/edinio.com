@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
-  Check, Sparkles, Crown, Rocket,
+  Check, Sparkles, Crown, Rocket, Search,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
@@ -186,6 +186,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     email: businessData?.email ?? "",
     cui: businessData?.cui ?? "",
   });
+  const [anafLoading, setAnafLoading] = useState(false);
   const [orderFormat, setOrderFormat] = useState<"sequential" | "random">(
     orderNumberFormat === "random" ? "random" : "sequential"
   );
@@ -233,6 +234,35 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     setSavingName(false);
     if (error) toast.error("Nu am putut salva modificarile.");
     else toast.success("Profilul a fost actualizat.");
+  }
+
+  async function lookupCui() {
+    if (!biz.cui.trim()) { toast.error("Introdu CUI-ul mai intai."); return; }
+    setAnafLoading(true);
+    try {
+      const res = await fetch("/api/anaf/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cui: biz.cui }),
+      });
+      const data = await res.json() as { business_name?: string; county?: string; city?: string; address?: string; error?: string };
+      if (!res.ok || data.error) {
+        toast.error(data.error ?? "CUI negasit in ANAF.");
+      } else {
+        setBiz(b => ({
+          ...b,
+          business_name: data.business_name ?? b.business_name,
+          county: data.county ?? b.county,
+          city: data.city ?? b.city,
+          address: data.address ?? b.address,
+        }));
+        toast.success("Date completate automat din ANAF.");
+      }
+    } catch {
+      toast.error("Eroare la interogarea ANAF.");
+    } finally {
+      setAnafLoading(false);
+    }
   }
 
   function saveGeneral() {
@@ -383,14 +413,25 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">CUI / CIF</label>
-                    <input
-                      type="text"
-                      value={biz.cui}
-                      onChange={(e) => setBiz(b => ({ ...b, cui: e.target.value }))}
-                      className={inputCls}
-                      placeholder="ex: RO12345678"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">Apare pe facturile emise catre tine.</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={biz.cui}
+                        onChange={(e) => setBiz(b => ({ ...b, cui: e.target.value }))}
+                        className={inputCls}
+                        placeholder="ex: RO12345678"
+                      />
+                      <button
+                        type="button"
+                        onClick={lookupCui}
+                        disabled={anafLoading || !biz.cui.trim()}
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {anafLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                        {anafLoading ? "Se cauta..." : "Completeaza automat"}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">Apare pe facturile emise catre tine. Butonul completeaza automat datele din ANAF.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">Adresa</label>

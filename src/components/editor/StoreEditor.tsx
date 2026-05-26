@@ -393,7 +393,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
               phone: general.phone || null,
               whatsapp: general.whatsapp || null,
               email: general.email || null,
-              features: { ...rawFeatures, ...features } as Record<string, unknown>,
+              features: { ...rawFeatures, ...features } as Record<string, boolean>,
             })} />
         </div>
       ),

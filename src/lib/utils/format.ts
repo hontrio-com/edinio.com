@@ -1,0 +1,50 @@
+import { format as dateFnsFormat } from "date-fns";
+import { ro } from "date-fns/locale";
+
+export function formatDate(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return dateFnsFormat(d, "d MMMM yyyy", { locale: ro });
+}
+
+export function formatDateShort(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return dateFnsFormat(d, "d MMM yyyy", { locale: ro });
+}
+
+export function formatDateTime(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return dateFnsFormat(d, "d MMMM yyyy, HH:mm", { locale: ro });
+}
+
+export function formatPrice(amount: number): string {
+  if (amount >= 1000) {
+    const parts = amount.toFixed(2).split(".");
+    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const decPart = parts[1] === "00" ? "" : `,${parts[1]}`;
+    return `${intPart}${decPart} lei`;
+  }
+  const formatted = amount % 1 === 0 ? String(Math.floor(amount)) : amount.toFixed(2).replace(".", ",");
+  return `${formatted} lei`;
+}
+
+export function formatPhoneDisplay(phone: string): string {
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.startsWith("40") && cleaned.length === 11) {
+    return `+4 0${cleaned.slice(2, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8)}`;
+  }
+  if (cleaned.length === 10 && cleaned.startsWith("0")) {
+    return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+  }
+  return phone;
+}
+
+export function whatsappLink(phone: string): string {
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.startsWith("07") || cleaned.startsWith("0")) {
+    return `https://wa.me/4${cleaned}`;
+  }
+  if (cleaned.startsWith("40")) {
+    return `https://wa.me/${cleaned}`;
+  }
+  return `https://wa.me/${cleaned}`;
+}

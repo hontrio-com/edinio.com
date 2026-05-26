@@ -139,7 +139,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   const { data: order } = await supabase
     .from("orders")
-    .select("business_id, order_number, customer_name, total, status")
+    .select("business_id, order_number, customer_name, total, status, payment_status")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -153,6 +153,14 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   if (error) return { error: "Eroare la actualizare." };
 
+  // Auto-generate SmartBill invoice if configured (fire-and-forget)
+  const statusChanged = data.status !== (order.status as string);
+  const paymentChanged = data.payment_status !== (order.payment_status as string);
+  if (statusChanged || paymentChanged) {
+    import("@/lib/actions/smartbill.actions").then(({ maybeAutoGenerateInvoice }) => {
+      void maybeAutoGenerateInvoice(order.business_id, orderId, data.status, data.payment_status);
+    }).catch(() => {});
+  }
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);

@@ -30,8 +30,11 @@ export default async function SmartbillPage() {
     token: "",
     company_vat_code: "",
     series_name: "",
+    estimate_series_name: "",
     tax_name: "",
     send_email: false,
+    auto_invoice: false,
+    auto_invoice_trigger: "confirmed",
   };
 
   return <SmartbillConfigClient businessId={business.id} initialConfig={config} />;

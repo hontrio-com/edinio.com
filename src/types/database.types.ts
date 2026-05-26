@@ -298,6 +298,10 @@ export interface Database {
           tracking_number: string | null;
           smartbill_invoice_number: string | null;
           smartbill_invoice_series: string | null;
+          smartbill_estimate_number: string | null;
+          smartbill_estimate_series: string | null;
+          smartbill_storno_number: string | null;
+          smartbill_storno_series: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -333,6 +337,10 @@ export interface Database {
           tracking_number?: string | null;
           smartbill_invoice_number?: string | null;
           smartbill_invoice_series?: string | null;
+          smartbill_estimate_number?: string | null;
+          smartbill_estimate_series?: string | null;
+          smartbill_storno_number?: string | null;
+          smartbill_storno_series?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;

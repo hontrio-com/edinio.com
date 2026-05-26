@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, X, ShoppingCart, ChevronRight, ChevronLeft } from "lucide-react";
+import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import type { Database } from "@/types/database.types";
@@ -31,9 +31,10 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled }: {
   orders: Order[];
   pendingCount: number;
+  smartbillEnabled?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -152,6 +153,9 @@ export function OrdersClient({ orders, pendingCount }: {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Data</th>
+                    {smartbillEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
+                    )}
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
@@ -178,6 +182,30 @@ export function OrdersClient({ orders, pendingCount }: {
                         <td className="px-5 py-3.5 text-muted-foreground hidden md:table-cell">
                           {formatDate(new Date(order.created_at))}
                         </td>
+                        {smartbillEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            <div className="flex items-center gap-1.5">
+                              {order.smartbill_storno_number && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                                  <XCircle className="h-3 w-3" />
+                                  Storno
+                                </span>
+                              )}
+                              {order.smartbill_invoice_number && !order.smartbill_storno_number && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                                  <FileCheck className="h-3 w-3" />
+                                  Factura
+                                </span>
+                              )}
+                              {order.smartbill_estimate_number && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                                  <FileText className="h-3 w-3" />
+                                  Proforma
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        )}
                         <td className="px-5 py-3.5">
                           <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </td>

@@ -6,13 +6,34 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Save, Loader2, FileText, ExternalLink,
   CheckCircle, RefreshCw, Mail, Building2, Key, Layers,
-  ReceiptText,
+  ReceiptText, Zap, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { updateSmartbillConfig } from "@/lib/actions/store.actions";
 import { testSmartbillConnection } from "@/lib/actions/smartbill.actions";
 import type { SmartbillConfig } from "@/lib/smartbill";
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+
+const AUTO_TRIGGERS = [
+  { value: "confirmed",  label: "Comanda Confirmata" },
+  { value: "processing", label: "In procesare" },
+  { value: "shipped",    label: "Expediata" },
+  { value: "delivered",  label: "Livrata" },
+  { value: "paid",       label: "Platita (status plata)" },
+] as const;
+
+const DEFAULT_CONFIG: SmartbillConfig = {
+  enabled: false,
+  email: "",
+  token: "",
+  company_vat_code: "",
+  series_name: "",
+  estimate_series_name: "",
+  tax_name: "",
+  send_email: false,
+  auto_invoice: false,
+  auto_invoice_trigger: "confirmed",
+};
 
 export function SmartbillConfigClient({
   businessId,
@@ -22,9 +43,12 @@ export function SmartbillConfigClient({
   initialConfig: SmartbillConfig;
 }) {
   const router = useRouter();
-  const [cfg, setCfg] = useState<SmartbillConfig>(initialConfig);
+  const [cfg, setCfg] = useState<SmartbillConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
   const [saving, startSave] = useTransition();
   const [testing, setTesting] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(
+    !!(initialConfig.estimate_series_name || initialConfig.auto_invoice)
+  );
   const [testResult, setTestResult] = useState<{
     ok: boolean;
     series?: string[];
@@ -32,11 +56,17 @@ export function SmartbillConfigClient({
     message: string;
   } | null>(null);
 
+  function set<K extends keyof SmartbillConfig>(key: K, value: SmartbillConfig[K]) {
+    setCfg(c => ({ ...c, [key]: value }));
+  }
+
   function save() {
-    if (cfg.enabled && !cfg.email.trim()) { toast.error("Email-ul SmartBill este obligatoriu."); return; }
-    if (cfg.enabled && !cfg.token.trim()) { toast.error("Tokenul API este obligatoriu."); return; }
-    if (cfg.enabled && !cfg.company_vat_code.trim()) { toast.error("CUI-ul firmei este obligatoriu."); return; }
-    if (cfg.enabled && !cfg.series_name.trim()) { toast.error("Seria facturilor este obligatorie."); return; }
+    if (cfg.enabled) {
+      if (!cfg.email.trim()) { toast.error("Email-ul SmartBill este obligatoriu."); return; }
+      if (!cfg.token.trim()) { toast.error("Tokenul API este obligatoriu."); return; }
+      if (!cfg.company_vat_code.trim()) { toast.error("CUI-ul firmei este obligatoriu."); return; }
+      if (!cfg.series_name.trim()) { toast.error("Seria facturilor este obligatorie."); return; }
+    }
     startSave(async () => {
       const result = await updateSmartbillConfig(businessId, cfg);
       if ("error" in result) { toast.error(result.error); return; }
@@ -50,6 +80,10 @@ export function SmartbillConfigClient({
       toast.error("Completeaza email-ul, tokenul si CUI-ul inainte de a testa.");
       return;
     }
+    // Save first so the server action can read the config
+    const saveResult = await updateSmartbillConfig(businessId, cfg);
+    if ("error" in saveResult) { toast.error(saveResult.error); return; }
+
     setTesting(true);
     setTestResult(null);
     try {
@@ -57,12 +91,7 @@ export function SmartbillConfigClient({
       if ("error" in result) {
         setTestResult({ ok: false, message: result.error });
       } else {
-        setTestResult({
-          ok: true,
-          message: "Conexiune reusita!",
-          series: result.series,
-          taxes: result.taxes,
-        });
+        setTestResult({ ok: true, message: "Conexiune reusita!", series: result.series, taxes: result.taxes });
       }
     } catch {
       setTestResult({ ok: false, message: "Eroare de retea." });
@@ -71,7 +100,7 @@ export function SmartbillConfigClient({
     }
   }
 
-  const canTest = cfg.email.trim() && cfg.token.trim() && cfg.company_vat_code.trim();
+  const canTest = !!(cfg.email.trim() && cfg.token.trim() && cfg.company_vat_code.trim());
 
   return (
     <div className="p-6 max-w-2xl">
@@ -97,13 +126,13 @@ export function SmartbillConfigClient({
         )}
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Info */}
         <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
           <FileText className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Integreaza contul tau SmartBill pentru a genera facturi automat pentru comenzile din magazin.
-            Facturile sunt create direct in contul tau SmartBill si pot fi trimise automat pe email catre clienti.
+            Integreaza contul tau SmartBill pentru a genera facturi si proforma direct din comenzile magazinului.
+            Documentele sunt emise in contul tau SmartBill si pot fi trimise automat pe email clientilor.
           </p>
         </div>
 
@@ -117,7 +146,7 @@ export function SmartbillConfigClient({
               {
                 step: "1",
                 title: "Creeaza un cont SmartBill",
-                desc: "Mergi pe smartbill.ro si inregistreaza-te. Ai nevoie de un cont activ pentru a emite facturi.",
+                desc: "Mergi pe smartbill.ro si inregistreaza-te.",
                 link: null,
               },
               {
@@ -128,14 +157,14 @@ export function SmartbillConfigClient({
               },
               {
                 step: "3",
-                title: "Verifica CUI-ul si Seria",
-                desc: "CUI-ul firmei se gaseste in setarile contului. Seria facturilor (ex: FACT) se configureaza in SmartBill > Nomenclatoare > Serii.",
+                title: "Configureaza serii de documente",
+                desc: "In SmartBill > Nomenclatoare > Serii, creeaza o serie pentru facturi (ex: FACT) si optional una pentru proforma (ex: PFACT).",
                 link: null,
               },
               {
                 step: "4",
-                title: "Configureaza si testeaza",
-                desc: "Completeaza campurile de mai jos, foloseste Testeaza conexiunea pentru a vedea seriile si cotele TVA disponibile, apoi salveaza.",
+                title: "Testeaza si salveaza",
+                desc: "Completeaza campurile, apasa Testeaza conexiunea — seriile si TVA-ul disponibil vor aparea automat — apoi salveaza.",
                 link: null,
               },
             ].map(({ step, title, desc, link }) => (
@@ -147,12 +176,8 @@ export function SmartbillConfigClient({
                   <p className="text-sm font-medium text-foreground">{title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
                   {link && (
-                    <a
-                      href={link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                    >
+                    <a href={link} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
                       Deschide SmartBill <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
@@ -162,138 +187,164 @@ export function SmartbillConfigClient({
           </div>
         </div>
 
-        {/* Configurare */}
+        {/* Main config card */}
         <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
-          {/* Toggle */}
+          {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Activeaza SmartBill</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Activeaza pentru a putea genera facturi din pagina comenzilor
+                Activeaza pentru a genera facturi din pagina comenzilor
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setCfg(c => ({ ...c, enabled: !c.enabled }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${cfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-            >
+            <button type="button" onClick={() => set("enabled", !cfg.enabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${cfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.enabled ? "translate-x-6" : "translate-x-1"}`} />
             </button>
           </div>
 
           <div className="space-y-4 pt-4 border-t border-border">
+            {/* Email */}
             <div>
               <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
                 <Mail className="h-3.5 w-3.5 text-muted-foreground" />Email cont SmartBill
               </label>
-              <input
-                type="email"
-                value={cfg.email}
-                onChange={e => setCfg(c => ({ ...c, email: e.target.value }))}
-                placeholder="email@firma.ro"
-                className={inputCls}
-              />
+              <input type="email" value={cfg.email}
+                onChange={e => set("email", e.target.value)}
+                placeholder="email@firma.ro" className={inputCls} />
             </div>
 
+            {/* Token */}
             <div>
               <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
                 <Key className="h-3.5 w-3.5 text-muted-foreground" />Token API SmartBill
               </label>
-              <input
-                type="password"
-                value={cfg.token}
-                onChange={e => setCfg(c => ({ ...c, token: e.target.value }))}
-                placeholder="Tokenul din Contul meu > Integrari > API"
-                className={inputCls}
-              />
+              <input type="password" value={cfg.token}
+                onChange={e => set("token", e.target.value)}
+                placeholder="Tokenul din Contul meu > Integrari > API" className={inputCls} />
             </div>
 
+            {/* CUI */}
             <div>
               <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
                 <Building2 className="h-3.5 w-3.5 text-muted-foreground" />CUI firma
               </label>
-              <input
-                type="text"
-                value={cfg.company_vat_code}
-                onChange={e => setCfg(c => ({ ...c, company_vat_code: e.target.value }))}
-                placeholder="ex: RO12345678 sau 12345678"
-                className={inputCls}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Codul unic de identificare al firmei tale, cu sau fara prefix RO.
-              </p>
+              <input type="text" value={cfg.company_vat_code}
+                onChange={e => set("company_vat_code", e.target.value)}
+                placeholder="ex: RO12345678 sau 12345678" className={inputCls} />
+              <p className="text-xs text-muted-foreground mt-1">Cu sau fara prefix RO.</p>
             </div>
 
+            {/* Invoice series */}
             <div>
               <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
                 <Layers className="h-3.5 w-3.5 text-muted-foreground" />Seria facturilor
               </label>
-              <input
-                type="text"
-                value={cfg.series_name}
-                onChange={e => setCfg(c => ({ ...c, series_name: e.target.value }))}
-                placeholder="ex: FACT"
-                className={inputCls}
-              />
+              <input type="text" value={cfg.series_name}
+                onChange={e => set("series_name", e.target.value)}
+                placeholder="ex: FACT" className={inputCls} />
               <p className="text-xs text-muted-foreground mt-1">
-                Numele exact al seriei din SmartBill. Testeaza conexiunea pentru a vedea seriile disponibile.
+                Testeaza conexiunea pentru a vedea seriile disponibile.
               </p>
             </div>
 
+            {/* Tax name */}
             <div>
               <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
-                <ReceiptText className="h-3.5 w-3.5 text-muted-foreground" />Cota TVA (optional)
+                <ReceiptText className="h-3.5 w-3.5 text-muted-foreground" />Cota TVA
               </label>
-              <input
-                type="text"
-                value={cfg.tax_name}
-                onChange={e => setCfg(c => ({ ...c, tax_name: e.target.value }))}
-                placeholder="ex: Cota 19% sau lasa gol daca esti neplatitor"
-                className={inputCls}
-              />
+              <input type="text" value={cfg.tax_name}
+                onChange={e => set("tax_name", e.target.value)}
+                placeholder="ex: Cota 19% — lasa gol daca nu esti platitor TVA" className={inputCls} />
               <p className="text-xs text-muted-foreground mt-1">
-                Numele exact al cotei TVA din SmartBill. Lasa gol daca nu esti platitor de TVA.
+                Numele exact al cotei din SmartBill. Testeaza conexiunea pentru a-l vedea.
               </p>
             </div>
 
             {/* Send email toggle */}
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-1">
               <div>
-                <p className="text-sm font-medium text-foreground">Trimite factura pe email clientului</p>
+                <p className="text-sm font-medium text-foreground">Trimite documentul pe email clientului</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Daca clientul a completat email-ul la comanda, SmartBill va trimite factura automat
+                  SmartBill va trimite factura/proforma automat daca clientul are email
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setCfg(c => ({ ...c, send_email: !c.send_email }))}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${cfg.send_email ? "bg-primary" : "bg-muted-foreground/30"}`}
-              >
+              <button type="button" onClick={() => set("send_email", !cfg.send_email)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${cfg.send_email ? "bg-primary" : "bg-muted-foreground/30"}`}>
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.send_email ? "translate-x-6" : "translate-x-1"}`} />
               </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-1">
-            {/* Test button */}
-            <button
-              type="button"
-              onClick={testConnection}
-              disabled={testing || !canTest}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-50 transition-colors"
-            >
+          {/* Advanced section: auto-invoice + proforma series */}
+          <div className="border-t border-border pt-4">
+            <button type="button" onClick={() => setAdvancedOpen(o => !o)}
+              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors w-full text-left">
+              <Zap className="h-4 w-4 text-primary" />
+              Setari avansate
+              {advancedOpen ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+            </button>
+
+            {advancedOpen && (
+              <div className="mt-4 space-y-5">
+                {/* Proforma series */}
+                <div>
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+                    <Layers className="h-3.5 w-3.5 text-muted-foreground" />Seria proformelor (optional)
+                  </label>
+                  <input type="text" value={cfg.estimate_series_name}
+                    onChange={e => set("estimate_series_name", e.target.value)}
+                    placeholder="ex: PFACT — lasa gol daca nu emiti proforma" className={inputCls} />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Daca este completata, vei putea genera proforma din detaliul comenzii.
+                  </p>
+                </div>
+
+                {/* Auto-invoice toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Generare automata factura</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Factura se genereaza automat cand comanda atinge statusul selectat
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => set("auto_invoice", !cfg.auto_invoice)}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${cfg.auto_invoice ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.auto_invoice ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </div>
+
+                {cfg.auto_invoice && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                      Declanseaza generarea cand comanda devine
+                    </label>
+                    <select
+                      value={cfg.auto_invoice_trigger}
+                      onChange={e => set("auto_invoice_trigger", e.target.value as SmartbillConfig["auto_invoice_trigger"])}
+                      className={inputCls}
+                    >
+                      {AUTO_TRIGGERS.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-2 border-t border-border">
+            <button type="button" onClick={testConnection} disabled={testing || !canTest}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-50 transition-colors">
               {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {testing ? "Se testeaza..." : "Testeaza conexiunea"}
             </button>
-
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
+            <button type="button" onClick={save} disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? "Se salveaza..." : "Salveaza integrarea"}
+              {saving ? "Se salveaza..." : "Salveaza"}
             </button>
           </div>
 
@@ -301,20 +352,17 @@ export function SmartbillConfigClient({
           {testResult && (
             <div className={`rounded-xl p-4 border space-y-3 ${testResult.ok ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
               <div className={`flex items-center gap-2 text-sm font-semibold ${testResult.ok ? "text-green-800" : "text-red-800"}`}>
-                <CheckCircle className={`h-4 w-4 ${testResult.ok ? "text-green-600" : "text-red-600"}`} />
+                <CheckCircle className="h-4 w-4" />
                 {testResult.message}
               </div>
               {testResult.ok && testResult.series && testResult.series.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-green-700 mb-1.5">Serii disponibile:</p>
+                  <p className="text-xs font-semibold text-green-700 mb-1.5">Serii disponibile (click pentru selectare):</p>
                   <div className="flex flex-wrap gap-1.5">
                     {testResult.series.map(s => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => { setCfg(c => ({ ...c, series_name: s })); toast.success(`Seria "${s}" selectata.`); }}
-                        className="px-2.5 py-1 text-xs font-mono font-semibold bg-white border border-green-300 text-green-800 rounded-lg hover:bg-green-100 transition-colors"
-                      >
+                      <button key={s} type="button"
+                        onClick={() => { set("series_name", s); toast.success(`Seria "${s}" selectata ca serie facturi.`); }}
+                        className="px-2.5 py-1 text-xs font-mono font-semibold bg-white border border-green-300 text-green-800 rounded-lg hover:bg-green-100 transition-colors">
                         {s}
                       </button>
                     ))}
@@ -323,17 +371,14 @@ export function SmartbillConfigClient({
               )}
               {testResult.ok && testResult.taxes && testResult.taxes.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-green-700 mb-1.5">Cote TVA disponibile:</p>
+                  <p className="text-xs font-semibold text-green-700 mb-1.5">Cote TVA disponibile (click pentru selectare):</p>
                   <div className="flex flex-wrap gap-1.5">
                     {testResult.taxes.map(t => {
                       const name = t.split(" (")[0];
                       return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => { setCfg(c => ({ ...c, tax_name: name })); toast.success(`Cota "${name}" selectata.`); }}
-                          className="px-2.5 py-1 text-xs font-mono font-semibold bg-white border border-green-300 text-green-800 rounded-lg hover:bg-green-100 transition-colors"
-                        >
+                        <button key={t} type="button"
+                          onClick={() => { set("tax_name", name); toast.success(`Cota "${name}" selectata.`); }}
+                          className="px-2.5 py-1 text-xs font-mono font-semibold bg-white border border-green-300 text-green-800 rounded-lg hover:bg-green-100 transition-colors">
                           {t}
                         </button>
                       );

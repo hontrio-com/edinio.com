@@ -37,14 +37,16 @@ export default async function OrderDetailPage({ params }: Props) {
     .eq("business_id", biz.id)
     .single();
 
-  const smartbillEnabled =
-    (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
+  const sbConfig = settings?.smartbill_config as SmartbillConfig | null;
+  const smartbillEnabled = sbConfig?.enabled === true;
+  const hasEstimateSeries = !!(sbConfig?.estimate_series_name);
 
   return (
     <OrderDetailClient
       order={order}
       businessId={biz.id}
       smartbillEnabled={smartbillEnabled}
+      hasEstimateSeries={hasEstimateSeries}
     />
   );
 }

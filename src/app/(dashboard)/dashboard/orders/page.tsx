@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
+import type { SmartbillConfig } from "@/lib/smartbill";
 
 export default async function OrdersPage() {
   const supabase = await createClient();
@@ -17,7 +18,7 @@ export default async function OrdersPage() {
 
   if (!business) redirect("/dashboard");
 
-  const [{ data: orders }, { count: pendingCount }] = await Promise.all([
+  const [{ data: orders }, { count: pendingCount }, { data: settings }] = await Promise.all([
     supabase
       .from("orders")
       .select("*")
@@ -28,11 +29,19 @@ export default async function OrdersPage() {
       .select("*", { count: "exact", head: true })
       .eq("business_id", business.id)
       .eq("status", "pending"),
+    supabase
+      .from("store_settings")
+      .select("smartbill_config")
+      .eq("business_id", business.id)
+      .single(),
   ]);
+
+  const smartbillEnabled =
+    (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} />
     </div>
   );
 }

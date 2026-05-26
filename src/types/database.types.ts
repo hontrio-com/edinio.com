@@ -16,6 +16,7 @@ export interface Database {
           avatar_url: string | null;
           plan: "free" | "basic" | "premium" | "ultra";
           plan_expires_at: string | null;
+          stripe_customer_id: string | null;
           onboarding_completed: boolean;
           created_at: string;
           updated_at: string;
@@ -26,6 +27,7 @@ export interface Database {
           avatar_url?: string | null;
           plan?: "free" | "basic" | "premium" | "ultra";
           plan_expires_at?: string | null;
+          stripe_customer_id?: string | null;
           onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -36,6 +38,7 @@ export interface Database {
           avatar_url?: string | null;
           plan?: "free" | "basic" | "premium" | "ultra";
           plan_expires_at?: string | null;
+          stripe_customer_id?: string | null;
           onboarding_completed?: boolean;
           updated_at?: string;
         };
@@ -396,6 +399,36 @@ export interface Database {
         };
         Update: {
           [key: string]: never;
+        };
+        Relationships: [];
+      };
+      invoices: {
+        Row: {
+          id: string;
+          user_id: string;
+          plan: string;
+          amount: number;
+          currency: string;
+          smartbill_series: string | null;
+          smartbill_number: string | null;
+          stripe_invoice_id: string | null;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          plan: string;
+          amount: number;
+          currency?: string;
+          smartbill_series?: string | null;
+          smartbill_number?: string | null;
+          stripe_invoice_id?: string | null;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          status?: string;
         };
         Relationships: [];
       };

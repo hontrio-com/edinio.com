@@ -11,6 +11,7 @@ import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
 import { updateStorePolicies, updateGeneralSettings } from "@/lib/actions/store.actions";
 import { deleteAccount } from "@/lib/actions/auth.actions";
+import { BillingSection } from "@/components/dashboard/BillingSection";
 import type { Database } from "@/types/database.types";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
@@ -600,8 +601,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
             </div>
           )}
 
-          {/* ── Coming soon ── */}
-          {activeSection === "facturare"  && <ComingSoon title="Facturare" />}
+          {/* ── Facturare ── */}
+          {activeSection === "facturare" && (
+            <BillingSection plan={profile.plan} planExpiresAt={profile.plan_expires_at} />
+          )}
           {activeSection === "livrare"    && <ComingSoon title="Livrare" />}
           {activeSection === "taxe"       && <ComingSoon title="Taxe" />}
           {activeSection === "domeniu"    && <ComingSoon title="Domeniu" />}

@@ -4,7 +4,7 @@ import { useState, createContext, useContext, useEffect, useTransition, useMemo 
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
   MapPin, Mail, Globe, ChevronRight, Package, User, Home, Loader2, Banknote,
-  Truck, ShieldCheck, RotateCcw, Check, Instagram, Facebook,
+  Truck, ShieldCheck, RotateCcw, Check,
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";

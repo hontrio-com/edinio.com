@@ -282,7 +282,7 @@ export interface Database {
           status: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
           payment_method: string;
           payment_status: "unpaid" | "paid" | "refunded";
-          notes: string | null;
+          notes: Json | null;
           internal_notes: string | null;
           tracking_number: string | null;
           created_at: string;
@@ -305,7 +305,7 @@ export interface Database {
           status?: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
           payment_method?: string;
           payment_status?: "unpaid" | "paid" | "refunded";
-          notes?: string | null;
+          notes?: Json | null;
           internal_notes?: string | null;
           tracking_number?: string | null;
           created_at?: string;

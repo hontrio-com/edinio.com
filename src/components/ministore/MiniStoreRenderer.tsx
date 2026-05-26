@@ -169,10 +169,11 @@ interface VatConfig {
 }
 
 function CartCheckoutModal({
-  open, onClose, color, slug, businessId, shippingCost, freeShippingThreshold,
+  open, onClose, color, slug, businessId, shippingCost, freeShippingThreshold, emailFieldConfig,
 }: {
   open: boolean; onClose: () => void; color: string; slug: string; businessId: string;
   shippingCost: number; freeShippingThreshold: number | null;
+  emailFieldConfig: { enabled: boolean; required: boolean };
 }) {
   const { items, total, clear } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(undefined);
@@ -180,7 +181,7 @@ function CartCheckoutModal({
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   const hiddenFields = checkoutConfig?.hidden_fields ?? [];
-  const emailField = checkoutConfig?.email_field ?? { enabled: false, required: false };
+  const emailField = emailFieldConfig;
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
@@ -1360,6 +1361,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
         businessId={business.id}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
+        emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: false, required: false }}
       />
 
       {/* Gallery lightbox */}

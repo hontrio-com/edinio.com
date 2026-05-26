@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User, Phone, MapPin, Home, Loader2, Banknote,
-  Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package,
+  Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package, Mail,
 } from "lucide-react";
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
@@ -28,6 +28,7 @@ interface CheckoutConfig {
   custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
   extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
   hidden_fields?: string[];
+  email_field?: { enabled: boolean; required: boolean };
 }
 
 interface Props {
@@ -72,10 +73,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? [];
+  const emailField = liveCheckoutConfig?.email_field ?? { enabled: false, required: false };
 
   const [selectedTierIdx, setSelectedTierIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const [form, setForm] = useState({ name: "", phone: "", county: "", city: "", address: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
@@ -185,6 +187,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
     if (!/^(\+40|0)(7\d{8})$/.test(form.phone.trim())) e.phone = "Format valid: 07XXXXXXXX";
+    if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
+    if (emailField.enabled && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Format email invalid";
     if (!form.county) e.county = "Selectati judetul";
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
@@ -211,6 +215,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         shipping_cost: shipping,
         customer_name: form.name,
         customer_phone: form.phone,
+        customer_email: form.email.trim() || undefined,
         customer_county: form.county,
         customer_city: form.city,
         customer_address: form.address,
@@ -357,6 +362,19 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </IconInput>
                 {errors.phone && <p className="text-xs text-red-500 mt-0.5">{errors.phone}</p>}
               </div>
+
+              {emailField.enabled && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Email {emailField.required ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal">(optional)</span>}
+                  </label>
+                  <IconInput icon={Mail} error={!!errors.email}>
+                    <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="adresa@email.com" type="email" className={inputCls} />
+                  </IconInput>
+                  {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">

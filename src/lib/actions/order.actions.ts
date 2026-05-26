@@ -30,6 +30,7 @@ export async function placeOrder(data: {
   shipping_cost: number;
   customer_name: string;
   customer_phone: string;
+  customer_email?: string;
   customer_county: string;
   customer_city: string;
   customer_address: string;
@@ -57,6 +58,7 @@ export async function placeOrder(data: {
     order_number,
     customer_name: data.customer_name.trim(),
     customer_phone: data.customer_phone.trim(),
+    customer_email: data.customer_email?.trim() || null,
     shipping_address: {
       county: data.customer_county,
       city: data.customer_city.trim(),
@@ -106,18 +108,24 @@ export async function placeOrder(data: {
       );
       const businessName =
         (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
-      if (config.new_order && config.notification_email) {
-        await sendNewOrderEmail(config.notification_email, {
-          order_number: order.order_number,
-          customer_name: data.customer_name,
-          customer_phone: data.customer_phone,
-          total,
-          items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
-          shipping_cost: data.shipping_cost,
-          business_name: businessName,
-          order_id: order.id,
-        });
-      }
+      const emailPayload = {
+        order_number: order.order_number,
+        customer_name: data.customer_name,
+        customer_phone: data.customer_phone,
+        total,
+        items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        shipping_cost: data.shipping_cost,
+        business_name: businessName,
+        order_id: order.id,
+      };
+      await Promise.all([
+        config.new_order && config.notification_email
+          ? sendNewOrderEmail(config.notification_email, emailPayload)
+          : null,
+        data.customer_email
+          ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)
+          : null,
+      ].filter(Boolean));
     }
   } catch { /* ignore — email failure must not block the order */ }
 

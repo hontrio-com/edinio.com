@@ -354,6 +354,7 @@ export interface Database {
           prices_include_vat: boolean;
           show_vat_breakdown: boolean;
           notifications_config: Json;
+          smso_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -375,6 +376,7 @@ export interface Database {
           prices_include_vat?: boolean;
           show_vat_breakdown?: boolean;
           notifications_config?: Json;
+          smso_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -394,6 +396,7 @@ export interface Database {
           prices_include_vat?: boolean;
           show_vat_breakdown?: boolean;
           notifications_config?: Json;
+          smso_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -423,6 +426,34 @@ export interface Database {
         };
         Update: {
           [key: string]: never;
+        };
+        Relationships: [];
+      };
+      sms_campaigns: {
+        Row: {
+          id: string;
+          business_id: string;
+          message: string;
+          recipient_count: number;
+          sent_count: number;
+          failed_count: number;
+          status: "sent" | "partial" | "failed";
+          filters: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          message: string;
+          recipient_count?: number;
+          sent_count?: number;
+          failed_count?: number;
+          status?: "sent" | "partial" | "failed";
+          filters?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: "sent" | "partial" | "failed";
         };
         Relationships: [];
       };

@@ -32,6 +32,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     recentOrders = data ?? [];
   }
 
+  // Fetch smso_config to know if SMS Marketing is enabled
+  let smsoEnabled = false;
+  if (currentBusiness) {
+    const { data: ss } = await supabase
+      .from("store_settings")
+      .select("smso_config")
+      .eq("business_id", currentBusiness.id)
+      .single();
+    const cfg = ss?.smso_config as { enabled?: boolean } | null;
+    smsoEnabled = cfg?.enabled === true;
+  }
+
   // Check if any business is in grace period or suspended
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
 
@@ -41,6 +53,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         businesses={allBusinesses}
         currentBusiness={currentBusiness}
         plan={profile.plan}
+        smsoEnabled={smsoEnabled}
       />
       <div className="lg:pl-[var(--sidebar-width)]">
         {suspendedBusiness?.suspended_until && (

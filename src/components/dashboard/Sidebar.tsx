@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ChevronDown, Plus, Zap, Ticket, Tag,
+  Package, ShoppingCart, ChevronDown, Plus, Zap, Ticket, Tag, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
@@ -42,10 +42,11 @@ function NavItem({ href, icon: Icon, label, active }: {
   );
 }
 
-export function Sidebar({ businesses, currentBusiness, plan }: {
+export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled }: {
   businesses: Business[];
   currentBusiness: Business | null;
   plan: string;
+  smsoEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -143,6 +144,15 @@ export function Sidebar({ businesses, currentBusiness, plan }: {
             <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive} />
           );
         })}
+
+        {smsoEnabled && (
+          <NavItem
+            href="/dashboard/sms"
+            icon={MessageSquare}
+            label="SMS Marketing"
+            active={pathname.startsWith("/dashboard/sms")}
+          />
+        )}
       </nav>
 
       {/* Upgrade banner (free plan) */}

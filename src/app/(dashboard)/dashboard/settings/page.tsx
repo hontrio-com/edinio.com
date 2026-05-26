@@ -28,7 +28,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { data: storeSettings } = business
     ? await supabase
         .from("store_settings")
-        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config")
+        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config")
         .eq("business_id", business.id)
         .single()
     : { data: null };
@@ -50,6 +50,11 @@ export default async function SettingsPage({ searchParams }: Props) {
       notificationsConfig={{
         notification_email: (storeSettings?.notifications_config as Record<string, unknown>)?.notification_email as string ?? "",
         new_order: (storeSettings?.notifications_config as Record<string, unknown>)?.new_order !== false,
+      }}
+      smsoConfig={{
+        enabled: (storeSettings?.smso_config as Record<string, unknown>)?.enabled === true,
+        api_key: (storeSettings?.smso_config as Record<string, unknown>)?.api_key as string ?? "",
+        sender_id: (storeSettings?.smso_config as Record<string, unknown>)?.sender_id as string ?? "",
       }}
       planSuccess={plan_success === "1"}
     />

@@ -14,7 +14,7 @@ export interface Database {
           id: string;
           full_name: string;
           avatar_url: string | null;
-          plan: "free" | "starter" | "pro" | "business";
+          plan: "free" | "basic" | "premium" | "ultra";
           plan_expires_at: string | null;
           onboarding_completed: boolean;
           created_at: string;
@@ -24,7 +24,7 @@ export interface Database {
           id: string;
           full_name?: string;
           avatar_url?: string | null;
-          plan?: "free" | "starter" | "pro" | "business";
+          plan?: "free" | "basic" | "premium" | "ultra";
           plan_expires_at?: string | null;
           onboarding_completed?: boolean;
           created_at?: string;
@@ -34,7 +34,7 @@ export interface Database {
           id?: string;
           full_name?: string;
           avatar_url?: string | null;
-          plan?: "free" | "starter" | "pro" | "business";
+          plan?: "free" | "basic" | "premium" | "ultra";
           plan_expires_at?: string | null;
           onboarding_completed?: boolean;
           updated_at?: string;

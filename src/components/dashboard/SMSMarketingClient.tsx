@@ -111,6 +111,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
   const [templateName, setTemplateName] = useState("");
   const [templateFormMessage, setTemplateFormMessage] = useState("");
   const [templateSaving, startTemplateSaving] = useTransition();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function fetchCredit() {
     setCreditLoading(true);
@@ -146,6 +147,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
   }
 
   function handleDeleteTemplate(id: string) {
+    setConfirmDeleteId(null);
     startTemplateSaving(async () => {
       const result = await deleteSmsTemplate(businessId, id);
       if ("error" in result) { toast.error(result.error); return; }
@@ -435,21 +437,42 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.message}</p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => { setMessage(t.message); toast.success("Sablon aplicat."); }}
-                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors"
-                      >
-                        Aplica
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteTemplate(t.id)}
-                        disabled={templateSaving}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {confirmDeleteId === t.id ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTemplate(t.id)}
+                            disabled={templateSaving}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                          >
+                            Da, sterge
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
+                          >
+                            Anuleaza
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => { setMessage(t.message); toast.success("Sablon aplicat."); }}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors"
+                          >
+                            Aplica
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(t.id)}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

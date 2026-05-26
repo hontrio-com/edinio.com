@@ -17,8 +17,15 @@ export async function POST(req: NextRequest) {
   if (!sender_id?.trim()) return NextResponse.json({ error: "Sender ID lipseste." }, { status: 400 });
   if (!phone?.trim()) return NextResponse.json({ error: "Numarul de telefon lipseste." }, { status: 400 });
 
+  const rawPhone = phone.trim();
+  const normalizedPhone = rawPhone.startsWith("0")
+    ? "+4" + rawPhone
+    : rawPhone.startsWith("40")
+    ? "+" + rawPhone
+    : rawPhone;
+
   const result = await sendSms(api_key.trim(), {
-    to: phone.trim(),
+    to: normalizedPhone,
     sender: sender_id.trim(),
     body: "Test SMS de la Edinio. Integrarea SMSO functioneaza corect!",
     type: "transactional",

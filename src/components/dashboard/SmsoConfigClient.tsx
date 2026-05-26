@@ -236,7 +236,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
                   type="tel"
                   value={testPhone}
                   onChange={e => setTestPhone(e.target.value)}
-                  placeholder="07XXXXXXXX"
+                  placeholder="07XXXXXXXX sau +407XXXXXXXX"
                   className="flex-1 px-3 py-2.5 text-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
               </div>

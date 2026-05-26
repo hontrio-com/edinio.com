@@ -16,7 +16,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "RESEND_API_KEY nu este setat in Environments." }, { status: 500 });
   }
 
-  const from = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+  const fromEmail = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+  const from = `Edinio.com <${fromEmail}>`;
 
   const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({
       error: `Resend error: ${error.message ?? JSON.stringify(error)}`,
-      from,
+      from: fromEmail,
       to: email,
       api_key_prefix: process.env.RESEND_API_KEY.slice(0, 8) + "...",
     }, { status: 400 });
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     message_id: data?.id,
-    from,
+    from: fromEmail,
     to: email,
   });
 }

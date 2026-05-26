@@ -2,7 +2,8 @@ import { Resend } from "resend";
 import { formatPrice } from "@/lib/utils/format";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+const FROM = `Edinio.com <${FROM_EMAIL}>`;
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.ro";
 
 export interface NotificationsConfig {
@@ -69,6 +70,65 @@ export function baseTemplateForTest(from: string): string {
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;">Cand vine o comanda noua in magazinul tau vei primi un email similar cu detaliile comenzii.</p>
   `);
+}
+
+export async function sendOrderConfirmationToCustomer(
+  to: string,
+  order: {
+    order_number: string;
+    customer_name: string;
+    total: number;
+    items: { name: string; quantity: number; price: number }[];
+    shipping_cost: number;
+    business_name: string;
+  }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+
+  const itemsRows = order.items
+    .map(
+      (i) =>
+        `<tr>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${i.name} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda ta a fost plasata!</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${order.customer_name}</strong>! Comanda ta la <strong>${order.business_name}</strong> a fost primita si va fi procesata in curand.</p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;width:100%;box-sizing:border-box;">
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${order.order_number}</p>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+      <tr>
+        <td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produsele tale</td>
+      </tr>
+      ${itemsRows}
+      <tr>
+        <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
+        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
+      </tr>
+      <tr>
+        <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total de plata</td>
+        <td style="padding-top:10px;font-size:16px;font-weight:700;color:#1AB554;text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(order.total)}</td>
+      </tr>
+    </table>
+
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:20px;">
+      <p style="margin:0;font-size:13px;color:#71717a;">Plata se face <strong>cash la livrare</strong>. Te rugam sa pregatesti suma exacta.</p>
+    </div>
+  `;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `Comanda ta ${order.order_number} a fost primita`,
+    html: baseTemplate(content),
+  });
 }
 
 export async function sendNewOrderEmail(

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseNotificationsConfig, sendNewOrderEmail } from "@/lib/email";
+import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer } from "@/lib/email";
 
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
@@ -93,7 +93,7 @@ export async function placeOrder(data: {
       .eq("id", data.product_id);
   }
 
-  // Send new order notification email
+  // Send emails
   try {
     const { data: settings } = await supabase
       .from("store_settings")
@@ -157,6 +157,7 @@ export async function placeCartOrder(data: {
   shipping_cost: number;
   customer_name: string;
   customer_phone: string;
+  customer_email?: string;
   customer_county: string;
   customer_city: string;
   customer_address: string;
@@ -187,6 +188,7 @@ export async function placeCartOrder(data: {
     order_number,
     customer_name: data.customer_name.trim(),
     customer_phone: data.customer_phone.trim(),
+    customer_email: data.customer_email?.trim() || null,
     shipping_address: {
       county: data.customer_county,
       city: data.customer_city.trim(),
@@ -232,7 +234,7 @@ export async function placeCartOrder(data: {
     );
   }
 
-  // Send new order notification email
+  // Send emails
   try {
     const { data: settings } = await supabase
       .from("store_settings")
@@ -245,18 +247,24 @@ export async function placeCartOrder(data: {
       );
       const businessName =
         (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
-      if (config.new_order && config.notification_email) {
-        await sendNewOrderEmail(config.notification_email, {
-          order_number: order.order_number,
-          customer_name: data.customer_name,
-          customer_phone: data.customer_phone,
-          total,
-          items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
-          shipping_cost: data.shipping_cost,
-          business_name: businessName,
-          order_id: order.id,
-        });
-      }
+      const emailPayload = {
+        order_number: order.order_number,
+        customer_name: data.customer_name,
+        customer_phone: data.customer_phone,
+        total,
+        items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        shipping_cost: data.shipping_cost,
+        business_name: businessName,
+        order_id: order.id,
+      };
+      await Promise.all([
+        config.new_order && config.notification_email
+          ? sendNewOrderEmail(config.notification_email, emailPayload)
+          : null,
+        data.customer_email
+          ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)
+          : null,
+      ].filter(Boolean));
     }
   } catch { /* ignore — email failure must not block the order */ }
 

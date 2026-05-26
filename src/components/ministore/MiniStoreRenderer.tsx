@@ -194,7 +194,7 @@ function CartCheckoutModal({
   const vatAddOn = vatConfig.vat_enabled && !vatConfig.prices_include_vat ? vatAmount : 0;
   const grandTotal = total + extrasTotal + shipping + vatAddOn;
 
-  const [form, setForm] = useState({ name: "", phone: "", county: "", city: "", address: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
 
@@ -232,6 +232,7 @@ function CartCheckoutModal({
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
     if (!/^(\+40|0)(7\d{8})$/.test(form.phone.trim())) e.phone = "Format valid: 07XXXXXXXX";
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalid";
     if (!form.county) e.county = "Selectati judetul";
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
@@ -254,6 +255,7 @@ function CartCheckoutModal({
         shipping_cost: shipping,
         customer_name: form.name,
         customer_phone: form.phone,
+        customer_email: form.email.trim() || undefined,
         customer_county: form.county,
         customer_city: form.city,
         customer_address: form.address,
@@ -317,6 +319,13 @@ function CartCheckoutModal({
               <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07XXXXXXXX" type="tel" className={fieldCls} />
             </FieldWrap>
             {errors.phone && <p className="text-xs text-red-500 mt-0.5">{errors.phone}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Email <span className="text-xs font-normal text-gray-400">(optional — pentru confirmare comanda)</span></label>
+            <FieldWrap icon={Mail} error={!!errors.email}>
+              <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="adresa@email.ro" type="email" className={fieldCls} />
+            </FieldWrap>
+            {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
           </div>
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Judet <span className="text-red-500">*</span></label>

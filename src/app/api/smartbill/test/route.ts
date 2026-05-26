@@ -17,6 +17,7 @@ export async function GET() {
     companyVatCode: cif,
     client: {
       name: "Test Client",
+      country: "Romania",
       isTaxPayer: false,
       saveToDb: false,
     },

@@ -51,6 +51,7 @@ export async function createSmartbillInvoice(
     client: {
       name: client.name,
       vatCode: client.vatCode || undefined,
+      country: "Romania",
       email: client.email || undefined,
       address: client.address || undefined,
       city: client.city || undefined,

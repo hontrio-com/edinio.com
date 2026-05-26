@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard, FileText } from "lucide-react";
+import { ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard, FileText, Receipt, Loader2, CheckCircle } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { updateOrder } from "@/lib/actions/order.actions";
+import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -47,11 +48,39 @@ function Badge({ cls, label }: { cls: string; label: string }) {
   );
 }
 
-export function OrderDetailClient({ order }: { order: Order }) {
+export function OrderDetailClient({
+  order,
+  businessId,
+  smartbillEnabled,
+}: {
+  order: Order;
+  businessId: string;
+  smartbillEnabled: boolean;
+}) {
   const router = useRouter();
   const [status, setStatus] = useState(order.status as string);
   const [paymentStatus, setPaymentStatus] = useState(order.payment_status as string);
   const [isPending, startTransition] = useTransition();
+  const [invoiceNumber, setInvoiceNumber] = useState<string | null>(
+    order.smartbill_invoice_number as string | null ?? null
+  );
+  const [invoiceSeries, setInvoiceSeries] = useState<string | null>(
+    order.smartbill_invoice_series as string | null ?? null
+  );
+  const [generatingInvoice, startInvoiceTransition] = useTransition();
+
+  function handleGenerateInvoice() {
+    startInvoiceTransition(async () => {
+      const result = await generateOrderInvoice(businessId, order.id);
+      if ("error" in result) {
+        toast.error(result.error);
+      } else {
+        setInvoiceNumber(result.number);
+        setInvoiceSeries(result.series);
+        toast.success(`Factura ${result.series}${result.number} generata cu succes.`);
+      }
+    });
+  }
 
   const items = (order.items as unknown as OrderItem[]) ?? [];
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
@@ -191,6 +220,47 @@ export function OrderDetailClient({ order }: { order: Order }) {
                 <span className="text-sm text-foreground text-right">{value}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* SmartBill */}
+      {smartbillEnabled && (
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 flex items-center justify-center">
+                <img src="/integrations/smartbill.svg" alt="SmartBill" className="h-5 w-auto object-contain" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Factura SmartBill</p>
+                {invoiceNumber && invoiceSeries ? (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                    <span className="text-xs font-mono font-semibold text-green-700">
+                      {invoiceSeries}{invoiceNumber}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Genereaza factura pentru aceasta comanda
+                  </p>
+                )}
+              </div>
+            </div>
+            {!invoiceNumber && (
+              <button
+                type="button"
+                onClick={handleGenerateInvoice}
+                disabled={generatingInvoice}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-50 transition-colors"
+              >
+                {generatingInvoice
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Receipt className="h-4 w-4" />}
+                {generatingInvoice ? "Se genereaza..." : "Genereaza factura"}
+              </button>
+            )}
           </div>
         </div>
       )}

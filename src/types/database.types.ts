@@ -296,6 +296,8 @@ export interface Database {
           notes: Json | null;
           internal_notes: string | null;
           tracking_number: string | null;
+          smartbill_invoice_number: string | null;
+          smartbill_invoice_series: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -329,6 +331,8 @@ export interface Database {
           payment_status?: "unpaid" | "paid" | "refunded";
           internal_notes?: string | null;
           tracking_number?: string | null;
+          smartbill_invoice_number?: string | null;
+          smartbill_invoice_series?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -355,6 +359,7 @@ export interface Database {
           show_vat_breakdown: boolean;
           notifications_config: Json;
           smso_config: Json | null;
+          smartbill_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -377,6 +382,7 @@ export interface Database {
           show_vat_breakdown?: boolean;
           notifications_config?: Json;
           smso_config?: Json | null;
+          smartbill_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -397,6 +403,7 @@ export interface Database {
           show_vat_breakdown?: boolean;
           notifications_config?: Json;
           smso_config?: Json | null;
+          smartbill_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

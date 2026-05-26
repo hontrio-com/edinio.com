@@ -169,6 +169,36 @@ export async function updateSmsoConfig(
   return { success: true };
 }
 
+export async function updateSmartbillConfig(
+  businessId: string,
+  config: { enabled: boolean; email: string; token: string; company_vat_code: string; series_name: string; tax_name: string; send_email: boolean },
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const { data: existing } = await supabase
+    .from("store_settings").select("id").eq("business_id", businessId).single();
+
+  let error;
+  if (existing) {
+    ({ error } = await supabase.from("store_settings")
+      .update({ smartbill_config: config as never, updated_at: new Date().toISOString() })
+      .eq("business_id", businessId));
+  } else {
+    ({ error } = await supabase.from("store_settings")
+      .insert({ business_id: businessId, smartbill_config: config as never }));
+  }
+
+  if (error) return { error: "Eroare la salvare." };
+  revalidatePath("/dashboard/features/smartbill");
+  return { success: true };
+}
+
 export async function updateStorePolicies(
   businessId: string,
   policies: Record<string, { content: string; enabled: boolean }>,

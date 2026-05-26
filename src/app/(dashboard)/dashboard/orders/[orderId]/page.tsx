@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrderDetailClient } from "@/components/dashboard/OrderDetailClient";
+import type { SmartbillConfig } from "@/lib/smartbill";
 
 interface Props {
   params: Promise<{ orderId: string }>;
@@ -30,5 +31,20 @@ export default async function OrderDetailPage({ params }: Props) {
 
   if (!biz) notFound();
 
-  return <OrderDetailClient order={order} />;
+  const { data: settings } = await supabase
+    .from("store_settings")
+    .select("smartbill_config")
+    .eq("business_id", biz.id)
+    .single();
+
+  const smartbillEnabled =
+    (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
+
+  return (
+    <OrderDetailClient
+      order={order}
+      businessId={biz.id}
+      smartbillEnabled={smartbillEnabled}
+    />
+  );
 }

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import type { SmsoConfig } from "@/lib/smso";
+import type { SmartbillConfig } from "@/lib/smartbill";
 
 type Integration = {
   name: string;
@@ -30,7 +31,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     id: "facturare",
     label: "Facturare",
     integrations: [
-      { name: "SmartBill", logo: "/integrations/smartbill.svg", scale: 1.25 },
+      { name: "SmartBill", logo: "/integrations/smartbill.svg", scale: 1.25, id: "smartbill" },
       { name: "Oblio",     logo: "/integrations/oblio.webp",    filter: "invert(1)" },
       { name: "fGo",       logo: "/integrations/fgo.svg" },
     ],
@@ -75,14 +76,15 @@ export default async function IntegrationsPage() {
     .single();
 
   let smsoActive = false;
+  let smartbillActive = false;
   if (business) {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("smso_config")
+      .select("smso_config, smartbill_config")
       .eq("business_id", business.id)
       .single();
-    const cfg = settings?.smso_config as SmsoConfig | null;
-    smsoActive = cfg?.enabled === true;
+    smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
+    smartbillActive = (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
   }
 
   return (
@@ -106,11 +108,15 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                if (integration.id === "smso") {
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill";
+                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : false;
+                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : "#";
+
+                if (isUnlocked) {
                   return (
                     <Link
                       key={integration.name}
-                      href="/dashboard/features/smso"
+                      href={href}
                       className="relative flex items-center gap-3.5 p-4 rounded-xl border border-primary/30 bg-surface hover:border-primary hover:shadow-sm transition-all group"
                     >
                       <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center">
@@ -126,7 +132,7 @@ export default async function IntegrationsPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-foreground">{integration.name}</p>
-                        {smsoActive ? (
+                        {isActive ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded mt-0.5">
                             <CheckCircle className="h-2.5 w-2.5" />Activ
                           </span>

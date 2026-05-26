@@ -135,3 +135,148 @@ export function getInvoicePdfUrl(series: string, number: string): string {
 export function getSmartbillAuthHeader(): string {
   return getSmartbillAuth();
 }
+
+// ─── Per-merchant SmartBill integration ────────────────────────────────────
+
+export interface SmartbillConfig {
+  enabled: boolean;
+  email: string;
+  token: string;
+  company_vat_code: string;
+  series_name: string;
+  tax_name: string;
+  send_email: boolean;
+}
+
+export interface SmartbillSeriesItem {
+  name: string;
+  type: string;
+}
+
+export interface SmartbillTaxItem {
+  name: string;
+  percentage: number;
+}
+
+function merchantAuth(email: string, token: string): string {
+  return "Basic " + Buffer.from(`${email}:${token}`).toString("base64");
+}
+
+function merchantHeaders(email: string, token: string) {
+  return {
+    Authorization: merchantAuth(email, token),
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+}
+
+export async function getMerchantSeries(
+  config: Pick<SmartbillConfig, "email" | "token" | "company_vat_code">
+): Promise<SmartbillSeriesItem[] | { error: string }> {
+  try {
+    const res = await fetch(
+      `${SMARTBILL_BASE}/series?cif=${encodeURIComponent(config.company_vat_code)}`,
+      { headers: merchantHeaders(config.email, config.token), cache: "no-store" }
+    );
+    if (res.status === 401) return { error: "Credentiale invalide. Verifica email-ul si tokenul API." };
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return { error: `Eroare SmartBill (${res.status})${body ? `: ${body}` : ""}` };
+    }
+    const data = await res.json() as { list?: Array<{ name: string; type: string }> };
+    return (data.list ?? []).map(s => ({ name: s.name, type: s.type }));
+  } catch {
+    return { error: "Eroare de retea. Verifica conexiunea." };
+  }
+}
+
+export async function getMerchantTaxes(
+  config: Pick<SmartbillConfig, "email" | "token" | "company_vat_code">
+): Promise<SmartbillTaxItem[] | { error: string }> {
+  try {
+    const res = await fetch(
+      `${SMARTBILL_BASE}/tax?cif=${encodeURIComponent(config.company_vat_code)}`,
+      { headers: merchantHeaders(config.email, config.token), cache: "no-store" }
+    );
+    if (res.status === 401) return { error: "Credentiale invalide." };
+    if (!res.ok) return { error: `Eroare SmartBill (${res.status})` };
+    const data = await res.json() as { taxes?: Array<{ name: string; percentage: number }> };
+    return (data.taxes ?? []).map(t => ({ name: t.name, percentage: t.percentage }));
+  } catch {
+    return { error: "Eroare de retea." };
+  }
+}
+
+export interface MerchantInvoiceProduct {
+  name: string;
+  measuringUnitName: string;
+  currency: string;
+  quantity: number;
+  price: number;
+  isTaxIncluded?: boolean;
+  taxName?: string;
+  taxPercentage?: number;
+  isService?: boolean;
+  isDiscount?: boolean;
+  numberOfItems?: number;
+  discountType?: number;
+  discountValue?: number;
+}
+
+export interface MerchantInvoiceParams {
+  companyVatCode: string;
+  client: {
+    name: string;
+    address?: string;
+    city?: string;
+    county?: string;
+    email?: string;
+    isTaxPayer?: boolean;
+    saveToDb?: boolean;
+  };
+  issueDate: string;
+  seriesName: string;
+  currency: string;
+  products: MerchantInvoiceProduct[];
+  sendEmail?: boolean;
+  email?: { to: string };
+  isDraft?: boolean;
+}
+
+export async function createMerchantInvoice(
+  config: Pick<SmartbillConfig, "email" | "token">,
+  params: MerchantInvoiceParams
+): Promise<{ number: string; series: string } | { error: string }> {
+  try {
+    const res = await fetch(`${SMARTBILL_BASE}/invoice`, {
+      method: "POST",
+      headers: merchantHeaders(config.email, config.token),
+      body: JSON.stringify(params),
+      cache: "no-store",
+    });
+    const data = await res.json() as {
+      errorText?: string;
+      message?: string;
+      number?: string;
+      series?: string;
+    };
+    if (!res.ok || data.errorText) {
+      return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
+    }
+    return { number: data.number ?? "", series: data.series ?? "" };
+  } catch {
+    return { error: "Eroare de retea la crearea facturii." };
+  }
+}
+
+export function getMerchantInvoicePdfUrl(
+  config: Pick<SmartbillConfig, "email" | "token" | "company_vat_code">,
+  series: string,
+  number: string
+): string {
+  const cif = encodeURIComponent(config.company_vat_code);
+  const s = encodeURIComponent(series);
+  const n = encodeURIComponent(number);
+  // Returns URL + auth header for server-side proxy (PDF requires auth)
+  return `${SMARTBILL_BASE}/invoice/pdf?cif=${cif}&seriesname=${s}&number=${n}`;
+}

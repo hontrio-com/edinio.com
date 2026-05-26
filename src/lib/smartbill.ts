@@ -20,6 +20,7 @@ export function isSmartbillConfigured(): boolean {
 export interface SmartbillClient {
   name: string;
   email: string;
+  vatCode?: string;
   address?: string;
   city?: string;
   county?: string;
@@ -49,6 +50,7 @@ export async function createSmartbillInvoice(
     companyVatCode: process.env.SMARTBILL_CIF,
     client: {
       name: client.name,
+      vatCode: client.vatCode || undefined,
       email: client.email || undefined,
       address: client.address || undefined,
       city: client.city || undefined,

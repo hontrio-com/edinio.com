@@ -35,7 +35,7 @@ export async function updatePageContent(businessId: string, pageContent: Record<
 
 export async function updateGeneralSettings(
   businessId: string,
-  business: { business_name: string; address: string; city: string; county: string; phone: string; email: string },
+  business: { business_name: string; address: string; city: string; county: string; phone: string; email: string; cui: string },
   orderNumberFormat: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -53,6 +53,7 @@ export async function updateGeneralSettings(
     county: business.county || null,
     phone: business.phone || null,
     email: business.email || null,
+    cui: business.cui || null,
     updated_at: new Date().toISOString(),
   }).eq("id", businessId);
   if (bizError) return { error: "Eroare la salvarea datelor magazinului." };

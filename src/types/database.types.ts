@@ -72,6 +72,7 @@ export interface Database {
           is_published: boolean;
           custom_domain: string | null;
           suspended_until: string | null;
+          cui: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -102,6 +103,7 @@ export interface Database {
           is_published?: boolean;
           custom_domain?: string | null;
           suspended_until?: string | null;
+          cui?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -132,6 +134,7 @@ export interface Database {
           is_published?: boolean;
           custom_domain?: string | null;
           suspended_until?: string | null;
+          cui?: string | null;
           updated_at?: string;
         };
         Relationships: [];

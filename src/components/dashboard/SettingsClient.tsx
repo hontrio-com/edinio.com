@@ -113,6 +113,7 @@ interface BusinessData {
   county: string | null;
   phone: string | null;
   email: string | null;
+  cui: string | null;
 }
 
 interface PolicyEntry {
@@ -183,6 +184,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     county: businessData?.county ?? "",
     phone: businessData?.phone ?? "",
     email: businessData?.email ?? "",
+    cui: businessData?.cui ?? "",
   });
   const [orderFormat, setOrderFormat] = useState<"sequential" | "random">(
     orderNumberFormat === "random" ? "random" : "sequential"
@@ -378,6 +380,17 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       className={inputCls}
                       placeholder="ex: SC Firma Mea SRL"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">CUI / CIF</label>
+                    <input
+                      type="text"
+                      value={biz.cui}
+                      onChange={(e) => setBiz(b => ({ ...b, cui: e.target.value }))}
+                      className={inputCls}
+                      placeholder="ex: RO12345678"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">Apare pe facturile emise catre tine.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">Adresa</label>

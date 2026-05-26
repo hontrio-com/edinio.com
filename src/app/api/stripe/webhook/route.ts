@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       const [{ data: authUserData }, { data: bizData }, { data: profileData }] = await Promise.all([
         admin.auth.admin.getUserById(userId),
         admin.from("businesses")
-          .select("business_name, address, city, county")
+          .select("business_name, address, city, county, cui")
           .eq("user_id", userId)
           .maybeSingle(),
         admin.from("users_profile")
@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
           {
             name: clientName,
             email: userEmail,
+            vatCode: bizData?.cui ?? undefined,
             address: bizData?.address ?? undefined,
             city: bizData?.city ?? undefined,
             county: bizData?.county ?? undefined,

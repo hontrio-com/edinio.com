@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
@@ -146,6 +146,7 @@ interface Props {
   businessData: BusinessData | null;
   storePolicies: Record<string, unknown>;
   orderNumberFormat: string;
+  planSuccess?: boolean;
 }
 
 function ComingSoon({ title }: { title: string }) {
@@ -160,8 +161,14 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat }: Props) {
-  const [activeSection, setActiveSection] = useState<SectionId>("general");
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, planSuccess }: Props) {
+  const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : "general");
+
+  useEffect(() => {
+    if (planSuccess) {
+      toast.success("Plata a fost procesata! Planul tau a fost actualizat.");
+    }
+  }, [planSuccess]);
 
   // Account
   const [fullName, setFullName] = useState(profile.full_name);

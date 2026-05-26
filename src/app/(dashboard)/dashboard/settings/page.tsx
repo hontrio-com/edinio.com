@@ -2,7 +2,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
 
-export default async function SettingsPage() {
+interface Props {
+  searchParams: Promise<{ plan_success?: string }>;
+}
+
+export default async function SettingsPage({ searchParams }: Props) {
+  const { plan_success } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -36,6 +41,7 @@ export default async function SettingsPage() {
       businessData={business ?? null}
       storePolicies={(storeSettings?.store_policies as Record<string, unknown>) ?? {}}
       orderNumberFormat={storeSettings?.order_number_format ?? "sequential"}
+      planSuccess={plan_success === "1"}
     />
   );
 }

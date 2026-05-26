@@ -1,17 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 
-interface AnafCompany {
-  denumire: string;
-  adresa: string;
-  judet: string;
-  cui: number;
-  data_inregistrare: string | null;
-  stare_inactiv: boolean;
+// ANAF Public API v9 — https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva
+const ANAF_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva";
+
+interface AnafDateGenerale {
+  denumire?: string;
+  adresa?: string;
+  judet?: string;
+  cui?: number;
+}
+
+interface AnafAdresaDomiciliu {
+  ddenumire_Judet?: string;
+  ddenumire_Localitate?: string;
+  dstrada?: string;
+  dnumar?: string;
+  dbloc?: string;
+  dscara?: string;
+  dapartament?: string;
+}
+
+interface AnafFoundItem {
+  date_generale?: AnafDateGenerale;
+  adresa_domiciliu_fiscal?: AnafAdresaDomiciliu;
+  // v8 flat fields (fallback)
+  denumire?: string;
+  adresa?: string;
+  judet?: string;
 }
 
 interface AnafResponse {
-  found: AnafCompany[];
-  notFound: number[];
+  cod?: number;
+  message?: string;
+  found?: AnafFoundItem[];
+  notFound?: number[];
 }
 
 export async function POST(req: NextRequest) {
@@ -21,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "CUI lipsa" }, { status: 400 });
   }
 
-  // Strip non-numeric characters (e.g. "RO" prefix)
+  // Strip non-numeric characters ("RO" prefix etc.)
   const cuiNumeric = Number(cui.replace(/\D/g, ""));
   if (!cuiNumeric || cuiNumeric <= 0) {
     return NextResponse.json({ error: "CUI invalid" }, { status: 400 });
@@ -29,56 +51,78 @@ export async function POST(req: NextRequest) {
 
   const today = new Date().toISOString().split("T")[0];
 
+  // Manual timeout via AbortController (AbortSignal.timeout not available everywhere)
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+
   try {
-    const res = await fetch(
-      "https://webservicesp.anaf.ro/PlatitorTvaRest/api/v8/ws/tva",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify([{ cui: cuiNumeric, data: today }]),
-        signal: AbortSignal.timeout(8000),
-      }
-    );
+    const res = await fetch(ANAF_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([{ cui: cuiNumeric, data: today }]),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
 
     if (!res.ok) {
-      return NextResponse.json({ error: "Serviciul ANAF nu raspunde" }, { status: 502 });
+      console.error("[anaf/lookup] HTTP error:", res.status);
+      return NextResponse.json({ error: "Serviciul ANAF nu raspunde. Incearca din nou." }, { status: 502 });
     }
 
     const data = await res.json() as AnafResponse;
 
     if (!data.found || data.found.length === 0) {
-      return NextResponse.json({ error: "CUI negasit in baza de date ANAF" }, { status: 404 });
+      return NextResponse.json({ error: "CUI negasit in baza de date ANAF." }, { status: 404 });
     }
 
-    const company = data.found[0];
+    const item = data.found[0];
 
-    // ANAF returns a single address string like "JUD. ILFOV, COM. VOLUNTARI, STR. EXEMPLU, NR. 5"
-    // We parse it to extract city and county separately.
-    const address = company.adresa ?? "";
-    const county = company.judet ?? "";
+    // Support both v9 nested structure and flat fallback
+    const dateGenerale = item.date_generale ?? item;
+    const adresa = item.adresa_domiciliu_fiscal;
 
-    // Try to extract city from address (after county prefix)
-    let city = "";
-    const cityMatch = address.match(/(?:MUN\.|COM\.|OR\.|SECTOR\s+\d)\s+([^,]+)/i);
-    if (cityMatch) {
-      city = cityMatch[0]
-        .replace(/^(?:MUN\.|COM\.|OR\.)\s*/i, "")
-        .replace(/^SECTOR\s+/i, "Sector ")
-        .trim();
+    const businessName = (dateGenerale.denumire ?? "").trim();
+    let county = (adresa?.ddenumire_Judet ?? dateGenerale.judet ?? "").trim();
+    let city = (adresa?.ddenumire_Localitate ?? "").trim();
+
+    // Build street address from domiciliu fiscal fields
+    let street = "";
+    if (adresa?.dstrada) {
+      street = `Str. ${adresa.dstrada}`;
+      if (adresa.dnumar) street += ` nr. ${adresa.dnumar}`;
+      if (adresa.dbloc) street += ` bl. ${adresa.dbloc}`;
+      if (adresa.dscara) street += ` sc. ${adresa.dscara}`;
+      if (adresa.dapartament) street += ` ap. ${adresa.dapartament}`;
+    } else {
+      // Fallback: use raw address string
+      street = (dateGenerale.adresa ?? "").trim();
     }
 
-    // Street address: everything after the city part
-    const streetMatch = address.match(/(?:STR\.|BD\.|CAL\.|SOS\.|AL\.|INTR\.|SL\.).*$/i);
-    const street = streetMatch ? streetMatch[0].trim() : "";
+    // Fallback: if no city parsed, use county name
+    if (!city) city = county;
+
+    // Capitalize county/city properly (ANAF returns uppercase)
+    const capitalize = (s: string) =>
+      s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+    if (!businessName) {
+      return NextResponse.json({ error: "Date incomplete in ANAF pentru acest CUI." }, { status: 404 });
+    }
 
     return NextResponse.json({
-      business_name: company.denumire?.trim() ?? "",
-      county: county.trim(),
-      city: city || county.trim(),
-      address: street || address.trim(),
+      business_name: businessName,
+      county: capitalize(county),
+      city: capitalize(city),
+      address: street,
     });
   } catch (err) {
+    clearTimeout(timer);
+    const isTimeout = err instanceof Error && err.name === "AbortError";
     console.error("[anaf/lookup] Error:", err);
-    return NextResponse.json({ error: "Eroare la interogarea ANAF" }, { status: 500 });
+    return NextResponse.json(
+      { error: isTimeout ? "Serviciul ANAF nu raspunde (timeout)." : "Eroare la interogarea ANAF." },
+      { status: 502 }
+    );
   }
 }

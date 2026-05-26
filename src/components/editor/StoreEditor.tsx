@@ -36,6 +36,7 @@ interface PageContent {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
     hidden_fields?: string[];
+    email_field?: { enabled: boolean; required: boolean };
   };
   how_it_works_section?: { enabled: boolean; title: string; steps: Array<{ title: string; desc: string; }>; };
   faq_section?: { enabled: boolean; title: string; items: Array<{ q: string; a: string; }>; };
@@ -894,6 +895,8 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
           {/* Standard fields toggles */}
           <div className="space-y-2">
             <p className="text-xs font-semibold text-foreground">Campuri standard</p>
+
+            {/* Discount code */}
             {[
               { id: "discount", label: "Cod discount", desc: "Permite clientilor sa aplice un cod de reducere" },
             ].map(field => {
@@ -916,6 +919,39 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
                 </div>
               );
             })}
+
+            {/* Email field */}
+            {(() => {
+              const emailField = pageContent.checkout_config?.email_field ?? { enabled: false, required: false };
+              return (
+                <div className="border border-border rounded-xl p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Camp Email</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Clientul poate introduce adresa de email pentru confirmare comanda</p>
+                    </div>
+                    <button type="button"
+                      onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, email_field: { ...emailField, enabled: !emailField.enabled } } }))}
+                      className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", emailField.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+                      <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", emailField.enabled ? "translate-x-4" : "translate-x-0")} />
+                    </button>
+                  </div>
+                  {emailField.enabled && (
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <div>
+                        <p className="text-xs font-medium text-foreground">Obligatoriu</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Daca e dezactivat, campul apare ca optional</p>
+                      </div>
+                      <button type="button"
+                        onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, email_field: { ...emailField, required: !emailField.required } } }))}
+                        className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", emailField.required ? "bg-primary" : "bg-muted-foreground/30")}>
+                        <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", emailField.required ? "translate-x-4" : "translate-x-0")} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <hr className="border-border" />

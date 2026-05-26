@@ -46,6 +46,7 @@ interface PageContent {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
     hidden_fields?: string[];
+    email_field?: { enabled: boolean; required: boolean };
   };
 }
 
@@ -179,6 +180,7 @@ function CartCheckoutModal({
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   const hiddenFields = checkoutConfig?.hidden_fields ?? [];
+  const emailField = checkoutConfig?.email_field ?? { enabled: false, required: false };
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
@@ -232,7 +234,8 @@ function CartCheckoutModal({
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
     if (!/^(\+40|0)(7\d{8})$/.test(form.phone.trim())) e.phone = "Format valid: 07XXXXXXXX";
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalid";
+    if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
+    else if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalid";
     if (!form.county) e.county = "Selectati judetul";
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
@@ -320,13 +323,21 @@ function CartCheckoutModal({
             </FieldWrap>
             {errors.phone && <p className="text-xs text-red-500 mt-0.5">{errors.phone}</p>}
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Email <span className="text-xs font-normal text-gray-400">(optional — pentru confirmare comanda)</span></label>
-            <FieldWrap icon={Mail} error={!!errors.email}>
-              <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="adresa@email.ro" type="email" className={fieldCls} />
-            </FieldWrap>
-            {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
-          </div>
+          {emailField.enabled && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Email{" "}
+                {emailField.required
+                  ? <span className="text-red-500">*</span>
+                  : <span className="text-xs font-normal text-gray-400">(optional — pentru confirmare comanda)</span>
+                }
+              </label>
+              <FieldWrap icon={Mail} error={!!errors.email}>
+                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="adresa@email.ro" type="email" className={fieldCls} />
+              </FieldWrap>
+              {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Judet <span className="text-red-500">*</span></label>
             <FieldWrap icon={MapPin} error={!!errors.county}>

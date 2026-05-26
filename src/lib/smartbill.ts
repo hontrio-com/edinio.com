@@ -71,7 +71,7 @@ export async function createSmartbillInvoice(
     currency: "RON",
     language: "RO",
     precision: 2,
-    sendEmail: !!(client.email),
+    sendEmail: false,
     products: [
       {
         name: product.name,

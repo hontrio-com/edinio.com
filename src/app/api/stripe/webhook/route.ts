@@ -27,16 +27,27 @@ export async function POST(req: NextRequest) {
     const userId = session.metadata?.user_id;
     const plan = session.metadata?.plan;
 
-    if (!userId || !plan) return NextResponse.json({ received: true });
+    console.log("[webhook] checkout.session.completed", { userId, plan });
 
-    // Calculate expiry: 1 month from now
+    if (!userId || !plan) {
+      console.error("[webhook] Missing userId or plan in metadata");
+      return NextResponse.json({ received: true });
+    }
+
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-    await admin.from("users_profile").update({
+    const { error } = await admin.from("users_profile").update({
       plan: plan as never,
       plan_expires_at: expiresAt.toISOString(),
     }).eq("id", userId);
+
+    if (error) {
+      console.error("[webhook] DB update failed:", error);
+      return NextResponse.json({ error: "DB update failed" }, { status: 500 });
+    }
+
+    console.log("[webhook] Plan updated successfully:", { userId, plan });
   }
 
   if (event.type === "customer.subscription.deleted") {

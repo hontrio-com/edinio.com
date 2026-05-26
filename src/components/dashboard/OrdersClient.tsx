@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle } from "lucide-react";
+import { useState, useMemo, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
+import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -31,14 +34,18 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, businessId }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
+  businessId?: string;
 }) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [generatingOrderId, setGeneratingOrderId] = useState<string | null>(null);
+  const [, startGenerateTransition] = useTransition();
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -64,6 +71,22 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled }: {
   function handleSearch(q: string) {
     setSearchQuery(q);
     setPage(1);
+  }
+
+  function handleGenerateInvoice(e: React.MouseEvent, orderId: string) {
+    e.stopPropagation();
+    if (!businessId) return;
+    setGeneratingOrderId(orderId);
+    startGenerateTransition(async () => {
+      const result = await generateOrderInvoice(businessId, orderId);
+      setGeneratingOrderId(null);
+      if ("error" in result) {
+        toast.error(result.error);
+      } else {
+        toast.success(`Factura ${result.series}${result.number} generata.`);
+        router.refresh();
+      }
+    });
   }
 
   return (
@@ -185,23 +208,35 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled }: {
                         {smartbillEnabled && (
                           <td className="px-5 py-3.5 hidden lg:table-cell">
                             <div className="flex items-center gap-1.5">
-                              {order.smartbill_storno_number && (
+                              {order.smartbill_storno_number ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
                                   <XCircle className="h-3 w-3" />
                                   Storno
                                 </span>
-                              )}
-                              {order.smartbill_invoice_number && !order.smartbill_storno_number && (
+                              ) : order.smartbill_invoice_number ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
                                   <FileCheck className="h-3 w-3" />
                                   Factura
                                 </span>
-                              )}
-                              {order.smartbill_estimate_number && (
+                              ) : order.smartbill_estimate_number ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
                                   <FileText className="h-3 w-3" />
                                   Proforma
                                 </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={e => handleGenerateInvoice(e, order.id)}
+                                  disabled={generatingOrderId === order.id}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50"
+                                >
+                                  {generatingOrderId === order.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <img src="/integrations/smartbill.svg" alt="SmartBill" className="h-3.5 w-auto" style={{ maxWidth: 14, objectFit: "contain" }} />
+                                  )}
+                                  Factura
+                                </button>
                               )}
                             </div>
                           </td>

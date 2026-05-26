@@ -381,9 +381,8 @@ export function OrderDetailClient({
       {smartbillEnabled && (
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
           {/* Card header */}
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
-            <img src="/integrations/smartbill.svg" alt="SmartBill" className="h-5 w-auto object-contain" style={{ transform: "scale(1.25)", transformOrigin: "left" }} />
-            <p className="text-sm font-semibold text-foreground">SmartBill</p>
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
+            <img src="/integrations/smartbill.svg" alt="SmartBill" className="h-6 w-auto object-contain" />
           </div>
 
           <div className="p-5 space-y-5">
@@ -424,8 +423,10 @@ export function OrderDetailClient({
                 ) : (
                   !invoiceNumber && (
                     <button type="button" onClick={handleGenerateEstimate} disabled={generatingEstimate}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                      {generatingEstimate ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus className="h-4 w-4" />}
+                      className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                      {generatingEstimate
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <img src="/integrations/smartbill.svg" alt="" className="h-4 w-auto object-contain" />}
                       {generatingEstimate ? "Se genereaza..." : "Genereaza proforma"}
                     </button>
                   )
@@ -495,8 +496,10 @@ export function OrderDetailClient({
                 </>
               ) : (
                 <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                  {generatingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                  {generatingInvoice
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <img src="/integrations/smartbill.svg" alt="" className="h-4 w-auto object-contain" />}
                   {generatingInvoice ? "Se genereaza..." : "Genereaza factura"}
                 </button>
               )}

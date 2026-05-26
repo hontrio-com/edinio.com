@@ -41,7 +41,7 @@ export default async function OrdersPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} businessId={business.id} />
     </div>
   );
 }

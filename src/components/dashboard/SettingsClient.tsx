@@ -18,7 +18,7 @@ type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
 type SectionId =
   | "general" | "plan" | "facturare" | "livrare"
-  | "taxe" | "domeniu" | "notificari" | "integrari" | "politici" | "securitate";
+  | "taxe" | "domeniu" | "notificari" | "politici" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
@@ -27,9 +27,8 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "livrare",    label: "Livrare",     icon: Truck     },
   { id: "taxe",       label: "Taxe",        icon: Percent   },
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
-  { id: "notificari", label: "Notificari",  icon: Bell         },
-  { id: "integrari",  label: "Integrari",   icon: MessageSquare },
-  { id: "politici",   label: "Politici",    icon: FileText     },
+  { id: "notificari", label: "Notificari",  icon: Bell      },
+  { id: "politici",   label: "Politici",    icon: FileText  },
   { id: "securitate", label: "Securitate",  icon: Lock      },
 ];
 
@@ -1070,181 +1069,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 >
                   {savingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {savingNotif ? "Se salveaza..." : "Salveaza notificarile"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Integrari / SMSO ── */}
-          {activeSection === "integrari" && (
-            <div className="space-y-6">
-              {/* Info banner */}
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
-                <MessageSquare className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Integreaza contul tau SMSO pentru a trimite campanii SMS catre clientii magazinului. Dupa activare, vei gasi sectiunea <strong>SMS Marketing</strong> in meniu.
-                </p>
-              </div>
-
-              {!businessId && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
-                </div>
-              )}
-
-              {/* Card activare */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Activeaza SMSO</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Activeaza integrarea pentru a putea trimite campanii SMS</p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={!businessId}
-                    onClick={() => setSmso(s => ({ ...s, enabled: !s.enabled }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 ${smso.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${smso.enabled ? "translate-x-6" : "translate-x-1"}`} />
-                  </button>
-                </div>
-
-                {smso.enabled && (
-                  <div className="space-y-4 pt-4 border-t border-border">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Cheie API SMSO</label>
-                      <input
-                        type="password"
-                        value={smso.api_key}
-                        onChange={e => setSmso(s => ({ ...s, api_key: e.target.value }))}
-                        placeholder="Cheia ta API de la app.smso.ro"
-                        className={inputCls}
-                        disabled={!businessId}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Sender ID</label>
-                      <input
-                        type="text"
-                        value={smso.sender_id}
-                        onChange={e => setSmso(s => ({ ...s, sender_id: e.target.value }))}
-                        placeholder="ID-ul numeric al senderului (ex: 4)"
-                        className={inputCls}
-                        disabled={!businessId}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Gasesti ID-ul in contul SMSO la sectiunea Sendere.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Ghid pas cu pas */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-border">
-                  <p className="text-sm font-semibold text-foreground">Cum obtii Cheia API si Sender ID?</p>
-                </div>
-                <div className="px-5 py-4 space-y-4">
-                  {[
-                    {
-                      step: "1",
-                      title: "Creeaza un cont SMSO",
-                      desc: "Mergi pe smso.ro si inregistreaza-te. Vei primi credit de test pentru a putea testa integrarea.",
-                      link: null,
-                    },
-                    {
-                      step: "2",
-                      title: "Obtine Cheia API",
-                      desc: "Dupa logare, mergi la Setari > Dezvoltatori > API. Copiaza cheia API generata.",
-                      link: "https://app.smso.ro/developers/api",
-                    },
-                    {
-                      step: "3",
-                      title: "Adauga un Sender",
-                      desc: "Mergi la Sendere in contul SMSO. Adauga un sender (poate fi un numar de telefon sau un nume). Noteaza ID-ul numeric afisat.",
-                      link: "https://app.smso.ro/senders",
-                    },
-                    {
-                      step: "4",
-                      title: "Completeaza si salveaza",
-                      desc: "Introdu Cheia API si Sender ID mai sus, salveaza, apoi trimite un SMS de test pentru a verifica integrarea.",
-                      link: null,
-                    },
-                  ].map(({ step, title, desc, link }) => (
-                    <div key={step} className="flex gap-3">
-                      <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-xs font-bold text-primary">{step}</span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground">{title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
-                        {link && (
-                          <a
-                            href={link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                          >
-                            Deschide in SMSO <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Test SMS */}
-              {smso.enabled && smso.api_key && smso.sender_id && (
-                <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Testeaza integrarea</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Trimite un SMS de test pentru a verifica ca Cheia API si Sender ID sunt corecte</p>
-                  </div>
-
-                  {testSmsResult && (
-                    <div className={`rounded-lg p-3 text-sm space-y-1 ${testSmsResult.ok ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
-                      <p className="font-semibold">{testSmsResult.ok ? "Succes" : "Eroare"}: {testSmsResult.message}</p>
-                      {testSmsResult.details && <p className="text-xs opacity-80 font-mono">{testSmsResult.details}</p>}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <div className="flex flex-1 overflow-hidden rounded-lg border border-border focus-within:border-primary transition-colors">
-                      <span className="flex items-center justify-center w-10 shrink-0 bg-muted/40">
-                        <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                      </span>
-                      <input
-                        type="tel"
-                        value={testSmsPhone}
-                        onChange={e => setTestSmsPhone(e.target.value)}
-                        placeholder="07XXXXXXXX"
-                        className="flex-1 px-3 py-2.5 text-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={sendTestSms}
-                      disabled={testSmsLoading || !businessId}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                    >
-                      {testSmsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
-                      {testSmsLoading ? "Se trimite..." : "Trimite test"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={saveSmso}
-                  disabled={savingSmso || !businessId}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {savingSmso ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {savingSmso ? "Se salveaza..." : "Salveaza integrarea"}
                 </button>
               </div>
             </div>

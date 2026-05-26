@@ -191,6 +191,25 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingAccount, startDeleteTransition] = useTransition();
 
+  // Stripe checkout
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+
+  async function startCheckout(planId: string) {
+    setCheckoutLoading(planId);
+    const res = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: planId }),
+    });
+    const data = await res.json() as { url?: string; error?: string };
+    if (data.error || !data.url) {
+      toast.error(data.error ?? "Eroare la initializarea platii.");
+      setCheckoutLoading(null);
+      return;
+    }
+    window.location.href = data.url;
+  }
+
   // Policies
   const [policies, setPolicies] = useState<PoliciesMap>(() => parsePolicies(storePolicies));
   const [savingPolicies, startPoliciesTransition] = useTransition();
@@ -553,12 +572,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       ) : (
                         <button
                           type="button"
-                          onClick={() => {
-                            window.location.href = "mailto:contact@edinio.ro?subject=Upgrade plan " + plan.label;
-                          }}
-                          className="py-2 text-xs font-semibold text-foreground border border-border rounded-lg hover:bg-muted transition-colors"
+                          disabled={checkoutLoading === plan.id}
+                          onClick={() => startCheckout(plan.id)}
+                          className="py-2 text-xs font-semibold text-foreground border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
                         >
-                          Alege {plan.label}
+                          {checkoutLoading === plan.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                          {checkoutLoading === plan.id ? "Se redirectioneaza..." : `Alege ${plan.label}`}
                         </button>
                       )}
                     </div>

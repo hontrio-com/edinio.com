@@ -121,64 +121,84 @@ export async function POST(req: NextRequest) {
     // 2. Clear suspension
     await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
 
-    // 3. Avoid duplicate invoices (checkout.session.completed fires alongside this)
+    // 3. Check for existing invoice record for this Stripe payment
     const { data: existingInvoice } = await admin
       .from("invoices")
-      .select("id")
+      .select("id, smartbill_series")
       .eq("stripe_invoice_id", stripeInvoiceId)
       .maybeSingle();
 
-    if (!existingInvoice) {
-      // 4. Fetch user email and business info for Smartbill
-      const [{ data: authUserData }, { data: bizData }, { data: profileData }] = await Promise.all([
-        admin.auth.admin.getUserById(userId),
-        admin.from("businesses")
-          .select("business_name, address, city, county, cui")
-          .eq("user_id", userId)
-          .maybeSingle(),
-        admin.from("users_profile")
-          .select("full_name")
-          .eq("id", userId)
-          .maybeSingle(),
-      ]);
+    // If invoice exists AND Smartbill already emitted — fully done, skip.
+    if (existingInvoice?.smartbill_series) {
+      console.log("[webhook] Invoice already fully processed, skipping:", stripeInvoiceId);
+      return NextResponse.json({ received: true });
+    }
 
-      const userEmail = authUserData?.user?.email ?? "";
-      const clientName =
-        bizData?.business_name ||
-        profileData?.full_name ||
-        userEmail ||
-        "Client";
+    // 4. Fetch user email and business info for Smartbill
+    const [{ data: authUserData }, { data: bizData }, { data: profileData }] = await Promise.all([
+      admin.auth.admin.getUserById(userId),
+      admin.from("businesses")
+        .select("business_name, address, city, county, cui")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      admin.from("users_profile")
+        .select("full_name")
+        .eq("id", userId)
+        .maybeSingle(),
+    ]);
 
-      const planPrice = PLAN_PRICES[plan] ?? 0;
+    const userEmail = authUserData?.user?.email ?? "";
+    const clientName =
+      bizData?.business_name ||
+      profileData?.full_name ||
+      userEmail ||
+      "Client";
 
-      // 5. Emit Smartbill invoice (non-blocking if not configured)
-      let sbSeries: string | null = null;
-      let sbNumber: string | null = null;
+    const planPrice = PLAN_PRICES[plan] ?? 0;
 
-      if (isSmartbillConfigured()) {
-        const sbResult = await createSmartbillInvoice(
-          {
-            name: clientName,
-            email: userEmail,
-            vatCode: bizData?.cui ?? undefined,
-            address: bizData?.address ?? undefined,
-            city: bizData?.city ?? undefined,
-            county: bizData?.county ?? undefined,
-          },
-          {
-            name: `Abonament Edinio ${capitalize(plan)}`,
-            price: planPrice,
-            quantity: 1,
-          }
-        );
+    // 5. Emit Smartbill invoice
+    let sbSeries: string | null = null;
+    let sbNumber: string | null = null;
 
-        if (sbResult) {
-          sbSeries = sbResult.series;
-          sbNumber = sbResult.number;
+    if (isSmartbillConfigured()) {
+      const sbResult = await createSmartbillInvoice(
+        {
+          name: clientName,
+          email: userEmail,
+          vatCode: bizData?.cui ?? undefined,
+          address: bizData?.address ?? undefined,
+          city: bizData?.city ?? undefined,
+          county: bizData?.county ?? undefined,
+        },
+        {
+          name: `Abonament Edinio ${capitalize(plan)}`,
+          price: planPrice,
+          quantity: 1,
         }
-      }
+      );
 
-      // 6. Save invoice record (always, even if Smartbill failed)
+      if (sbResult) {
+        sbSeries = sbResult.series;
+        sbNumber = sbResult.number;
+      } else {
+        console.error("[webhook] Smartbill invoice creation failed for:", stripeInvoiceId);
+      }
+    } else {
+      console.warn("[webhook] Smartbill not configured — skipping invoice emission.");
+    }
+
+    // 6. Insert or update invoice record
+    if (existingInvoice) {
+      // Record exists but Smartbill had failed — update with new Smartbill data
+      if (sbSeries && sbNumber) {
+        await admin.from("invoices").update({
+          smartbill_series: sbSeries,
+          smartbill_number: sbNumber,
+        }).eq("id", existingInvoice.id);
+        console.log("[webhook] Invoice updated with Smartbill data:", { sbSeries, sbNumber });
+      }
+    } else {
+      // New invoice — insert record
       const { error: invoiceError } = await admin.from("invoices").insert({
         user_id: userId,
         plan,

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseNotificationsConfig, sendNewOrderEmail, sendOrderCancelledEmail } from "@/lib/email";
 
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
@@ -92,6 +93,35 @@ export async function placeOrder(data: {
       .eq("id", data.product_id);
   }
 
+  // Send new order notification email (fire and forget)
+  void (async () => {
+    try {
+      const { data: settings } = await supabase
+        .from("store_settings")
+        .select("notifications_config, businesses(business_name)")
+        .eq("business_id", data.business_id)
+        .single();
+      if (!settings) return;
+      const config = parseNotificationsConfig(
+        (settings.notifications_config as Record<string, unknown>) ?? {}
+      );
+      const businessName =
+        (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
+      if (config.new_order && config.notification_email) {
+        await sendNewOrderEmail(config.notification_email, {
+          order_number: order.order_number,
+          customer_name: data.customer_name,
+          customer_phone: data.customer_phone,
+          total,
+          items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+          shipping_cost: data.shipping_cost,
+          business_name: businessName,
+          order_id: order.id,
+        });
+      }
+    } catch { /* ignore */ }
+  })();
+
   return { success: true, orderId: order.id, orderNumber: order.order_number };
 }
 
@@ -100,7 +130,11 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: order } = await supabase.from("orders").select("business_id").eq("id", orderId).single();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("business_id, order_number, customer_name, total, status")
+    .eq("id", orderId)
+    .single();
   if (!order) return { error: "Comanda negasita" };
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
@@ -111,6 +145,36 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     .eq("id", orderId);
 
   if (error) return { error: "Eroare la actualizare." };
+
+  // Send cancellation email if status changed to cancelled
+  const wasCancelled = order.status !== "cancelled" && data.status === "cancelled";
+  if (wasCancelled) {
+    void (async () => {
+      try {
+        const { data: settings } = await supabase
+          .from("store_settings")
+          .select("notifications_config, businesses(business_name)")
+          .eq("business_id", order.business_id)
+          .single();
+        if (!settings) return;
+        const config = parseNotificationsConfig(
+          (settings.notifications_config as Record<string, unknown>) ?? {}
+        );
+        const businessName =
+          (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
+        if (config.order_cancelled && config.notification_email) {
+          await sendOrderCancelledEmail(config.notification_email, {
+            order_number: order.order_number,
+            customer_name: order.customer_name,
+            total: Number(order.total),
+            business_name: businessName,
+            order_id: orderId,
+          });
+        }
+      } catch { /* ignore */ }
+    })();
+  }
+
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);
   return { success: true };
@@ -169,7 +233,7 @@ export async function placeCartOrder(data: {
     payment_method: "cash_on_delivery",
     payment_status: "unpaid",
     status: "pending",
-  }).select("id, order_number").single();
+  }).select("id, order_number, total").single();
 
   if (error) return { error: "Eroare la plasarea comenzii. Incearca din nou." };
 

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings } from "@/lib/actions/store.actions";
 import { deleteAccount } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import type { Database } from "@/types/database.types";
@@ -148,6 +148,12 @@ interface VatSettings {
   show_vat_breakdown: boolean;
 }
 
+interface NotificationsConfig {
+  notification_email: string;
+  new_order: boolean;
+  order_cancelled: boolean;
+}
+
 interface Props {
   profile: UserProfile;
   email: string;
@@ -156,6 +162,7 @@ interface Props {
   storePolicies: Record<string, unknown>;
   orderNumberFormat: string;
   vatSettings: VatSettings;
+  notificationsConfig: NotificationsConfig;
   planSuccess?: boolean;
 }
 
@@ -171,7 +178,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, planSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, planSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : "general");
 
   useEffect(() => {
@@ -238,6 +245,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [vatRateInput, setVatRateInput] = useState(String(vatSettings.vat_rate));
   const [savingVat, startVatTransition] = useTransition();
 
+  // Notifications
+  const [notif, setNotif] = useState<NotificationsConfig>(notificationsConfig);
+  const [savingNotif, startNotifTransition] = useTransition();
+
   const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
   async function saveProfile() {
@@ -298,6 +309,20 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateVatSettings(businessId, settings);
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile TVA au fost salvate.");
+    });
+  }
+
+  function saveNotifications() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    if (!notif.notification_email.trim()) { toast.error("Adresa de email este obligatorie."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notif.notification_email.trim())) {
+      toast.error("Adresa de email nu este valida.");
+      return;
+    }
+    startNotifTransition(async () => {
+      const result = await updateNotificationsSettings(businessId, notif);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Setarile de notificari au fost salvate.");
     });
   }
 
@@ -860,7 +885,97 @@ export function SettingsClient({ profile, email, businessId, businessData, store
             </div>
           )}
           {activeSection === "domeniu"    && <ComingSoon title="Domeniu" />}
-          {activeSection === "notificari" && <ComingSoon title="Notificari" />}
+
+          {/* ── Notificari ── */}
+          {activeSection === "notificari" && (
+            <div className="space-y-6">
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
+                <Bell className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Configureaza pe ce adresa de email primesti notificari despre activitatea magazinului tau. Notificarile sunt trimise in timp real.
+                </p>
+              </div>
+
+              {!businessId && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
+                </div>
+              )}
+
+              {/* Email destinatie */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Adresa de email pentru notificari</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Toate notificarile vor fi trimise pe aceasta adresa</p>
+                </div>
+                <input
+                  type="email"
+                  value={notif.notification_email}
+                  onChange={e => setNotif(n => ({ ...n, notification_email: e.target.value }))}
+                  placeholder={email}
+                  className={inputCls}
+                  disabled={!businessId}
+                />
+              </div>
+
+              {/* Evenimente */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-0 divide-y divide-border">
+                <p className="text-sm font-semibold text-foreground pb-4">Evenimente</p>
+
+                {/* Comanda noua */}
+                <div className="flex items-center justify-between py-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Comanda noua</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Primesti un email imediat cand un client plaseaza o comanda</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNotif(n => ({ ...n, new_order: !n.new_order }))}
+                    disabled={!businessId}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 ${
+                      notif.new_order ? "bg-primary" : "bg-muted-foreground/30"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      notif.new_order ? "translate-x-6" : "translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Comanda anulata */}
+                <div className="flex items-center justify-between py-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Comanda anulata</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Primesti un email cand o comanda este marcata ca anulata</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNotif(n => ({ ...n, order_cancelled: !n.order_cancelled }))}
+                    disabled={!businessId}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 ${
+                      notif.order_cancelled ? "bg-primary" : "bg-muted-foreground/30"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      notif.order_cancelled ? "translate-x-6" : "translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={saveNotifications}
+                  disabled={savingNotif || !businessId}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {savingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savingNotif ? "Se salveaza..." : "Salveaza notificarile"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Politici ── */}
           {activeSection === "politici" && (

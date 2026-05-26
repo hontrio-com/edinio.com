@@ -353,6 +353,7 @@ export interface Database {
           vat_rate: number;
           prices_include_vat: boolean;
           show_vat_breakdown: boolean;
+          notifications_config: Json;
           created_at: string;
           updated_at: string;
         };
@@ -373,6 +374,7 @@ export interface Database {
           vat_rate?: number;
           prices_include_vat?: boolean;
           show_vat_breakdown?: boolean;
+          notifications_config?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -391,6 +393,7 @@ export interface Database {
           vat_rate?: number;
           prices_include_vat?: boolean;
           show_vat_breakdown?: boolean;
+          notifications_config?: Json;
           updated_at?: string;
         };
         Relationships: [];

@@ -93,15 +93,14 @@ export async function placeOrder(data: {
       .eq("id", data.product_id);
   }
 
-  // Send new order notification email (fire and forget)
-  void (async () => {
-    try {
-      const { data: settings } = await supabase
-        .from("store_settings")
-        .select("notifications_config, businesses(business_name)")
-        .eq("business_id", data.business_id)
-        .single();
-      if (!settings) return;
+  // Send new order notification email
+  try {
+    const { data: settings } = await supabase
+      .from("store_settings")
+      .select("notifications_config, businesses(business_name)")
+      .eq("business_id", data.business_id)
+      .single();
+    if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
@@ -119,8 +118,8 @@ export async function placeOrder(data: {
           order_id: order.id,
         });
       }
-    } catch { /* ignore */ }
-  })();
+    }
+  } catch { /* ignore — email failure must not block the order */ }
 
   return { success: true, orderId: order.id, orderNumber: order.order_number };
 }
@@ -232,6 +231,34 @@ export async function placeCartOrder(data: {
         })
     );
   }
+
+  // Send new order notification email
+  try {
+    const { data: settings } = await supabase
+      .from("store_settings")
+      .select("notifications_config, businesses(business_name)")
+      .eq("business_id", data.business_id)
+      .single();
+    if (settings) {
+      const config = parseNotificationsConfig(
+        (settings.notifications_config as Record<string, unknown>) ?? {}
+      );
+      const businessName =
+        (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
+      if (config.new_order && config.notification_email) {
+        await sendNewOrderEmail(config.notification_email, {
+          order_number: order.order_number,
+          customer_name: data.customer_name,
+          customer_phone: data.customer_phone,
+          total,
+          items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+          shipping_cost: data.shipping_cost,
+          business_name: businessName,
+          order_id: order.id,
+        });
+      }
+    }
+  } catch { /* ignore — email failure must not block the order */ }
 
   return { success: true, orderId: order.id, orderNumber: order.order_number };
 }

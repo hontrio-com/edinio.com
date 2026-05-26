@@ -176,12 +176,14 @@ function CartCheckoutModal({
   emailFieldConfig: { enabled: boolean; required: boolean };
 }) {
   const { items, total, clear } = useCart();
-  const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(undefined);
+  const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(
+    { email_field: emailFieldConfig } as PageContent["checkout_config"]
+  );
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   const hiddenFields = checkoutConfig?.hidden_fields ?? [];
-  const emailField = emailFieldConfig;
+  const emailField = checkoutConfig?.email_field ?? emailFieldConfig;
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
@@ -220,7 +222,7 @@ function CartCheckoutModal({
       .then(({ data }) => {
         if (data?.page_content) {
           const pc = data.page_content as { checkout_config?: PageContent["checkout_config"] };
-          setCheckoutConfig(pc.checkout_config);
+          setCheckoutConfig(prev => ({ ...prev, ...pc.checkout_config }));
         }
         setVatConfig({
           vat_enabled: data?.vat_enabled ?? false,

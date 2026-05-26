@@ -162,3 +162,61 @@ export async function getSmsCampaigns(businessId: string) {
 
   return data ?? [];
 }
+
+export async function getSmsTemplates(businessId: string): Promise<{ id: string; name: string; message: string; created_at: string }[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("sms_templates")
+    .select("id, name, message, created_at")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false });
+
+  return (data ?? []) as { id: string; name: string; message: string; created_at: string }[];
+}
+
+export async function saveSmsTemplate(
+  businessId: string,
+  name: string,
+  message: string
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  const { data, error } = await supabase
+    .from("sms_templates")
+    .insert({ business_id: businessId, name: name.trim(), message: message.trim() })
+    .select("id")
+    .single();
+
+  if (error) return { error: "Eroare la salvarea sablonului." };
+  return { id: data.id as string };
+}
+
+export async function deleteSmsTemplate(
+  businessId: string,
+  templateId: string
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  await supabase
+    .from("sms_templates")
+    .delete()
+    .eq("id", templateId)
+    .eq("business_id", businessId);
+
+  return { success: true };
+}

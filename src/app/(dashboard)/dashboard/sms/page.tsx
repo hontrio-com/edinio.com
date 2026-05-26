@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SMSMarketingClient } from "@/components/dashboard/SMSMarketingClient";
 import type { SmsoConfig } from "@/lib/smso";
+import { getSmsTemplates } from "@/lib/actions/sms.actions";
 
 export default async function SmsMarketingPage() {
   const supabase = await createClient();
@@ -35,11 +36,14 @@ export default async function SmsMarketingPage() {
     .order("created_at", { ascending: false })
     .limit(50);
 
+  const initialTemplates = await getSmsTemplates(business.id);
+
   return (
     <SMSMarketingClient
       businessId={business.id}
       smsoConfig={smsoConfig}
       initialCampaigns={campaigns ?? []}
+      initialTemplates={initialTemplates}
     />
   );
 }

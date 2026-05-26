@@ -457,6 +457,27 @@ export interface Database {
         };
         Relationships: [];
       };
+      sms_templates: {
+        Row: {
+          id: string;
+          business_id: string;
+          name: string;
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          name: string;
+          message: string;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          message?: string;
+        };
+        Relationships: [];
+      };
       invoices: {
         Row: {
           id: string;

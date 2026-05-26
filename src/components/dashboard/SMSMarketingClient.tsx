@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import {
   MessageSquare, Users, Send, ChevronDown, ChevronUp,
   Loader2, AlertCircle, CheckCircle, XCircle, Filter,
-  Calendar, MapPin, Banknote, RefreshCw,
+  Calendar, MapPin, Banknote, RefreshCw, FileText, Plus, Trash2,
 } from "lucide-react";
-import { previewSmsRecipients, sendSmsCampaign } from "@/lib/actions/sms.actions";
+import { previewSmsRecipients, sendSmsCampaign, saveSmsTemplate, deleteSmsTemplate } from "@/lib/actions/sms.actions";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmsFilters } from "@/lib/actions/sms.actions";
 import { formatDate } from "@/lib/utils/format";
@@ -41,10 +41,18 @@ type Campaign = {
   created_at: string;
 };
 
+type SmsTemplate = {
+  id: string;
+  name: string;
+  message: string;
+  created_at: string;
+};
+
 interface Props {
   businessId: string;
   smsoConfig: SmsoConfig;
   initialCampaigns: Campaign[];
+  initialTemplates: SmsTemplate[];
 }
 
 function Toggle({ label, desc, checked, onChange }: { label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -71,7 +79,7 @@ function StatusBadge({ status }: { status: Campaign["status"] }) {
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"><XCircle className="h-3 w-3" />Esuat</span>;
 }
 
-export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns }: Props) {
+export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, initialTemplates }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
 
   // Filters state
@@ -96,6 +104,14 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns }:
   const [credit, setCredit] = useState<number | null>(null);
   const [creditLoading, setCreditLoading] = useState(false);
 
+  // Templates state
+  const [templates, setTemplates] = useState<SmsTemplate[]>(initialTemplates);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateFormMessage, setTemplateFormMessage] = useState("");
+  const [templateSaving, startTemplateSaving] = useTransition();
+
   async function fetchCredit() {
     setCreditLoading(true);
     try {
@@ -108,6 +124,39 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns }:
     } finally {
       setCreditLoading(false);
     }
+  }
+
+  function handleSaveTemplate() {
+    if (!templateName.trim()) { toast.error("Introdu un nume pentru sablon."); return; }
+    if (!templateFormMessage.trim()) { toast.error("Mesajul sablonului nu poate fi gol."); return; }
+    startTemplateSaving(async () => {
+      const result = await saveSmsTemplate(businessId, templateName, templateFormMessage);
+      if ("error" in result) { toast.error(result.error); return; }
+      setTemplates(prev => [{
+        id: result.id,
+        name: templateName.trim(),
+        message: templateFormMessage.trim(),
+        created_at: new Date().toISOString(),
+      }, ...prev]);
+      setShowSaveForm(false);
+      setTemplateName("");
+      setTemplateFormMessage("");
+      toast.success("Sablon salvat.");
+    });
+  }
+
+  function handleDeleteTemplate(id: string) {
+    startTemplateSaving(async () => {
+      const result = await deleteSmsTemplate(businessId, id);
+      if ("error" in result) { toast.error(result.error); return; }
+      setTemplates(prev => prev.filter(t => t.id !== id));
+    });
+  }
+
+  function handleSaveCurrentAsTemplate() {
+    setTemplatesOpen(true);
+    setShowSaveForm(true);
+    setTemplateFormMessage(message);
   }
 
   function handlePreview() {
@@ -169,7 +218,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns }:
           <div className="text-right">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Credit SMSO</p>
             {credit !== null
-              ? <p className="text-sm font-bold text-foreground">{credit.toFixed(2)} lei</p>
+              ? <p className="text-sm font-bold text-foreground">${credit.toFixed(2)}</p>
               : <button type="button" onClick={fetchCredit} disabled={creditLoading} className="text-xs text-primary hover:underline flex items-center gap-1">
                   {creditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   {creditLoading ? "..." : "Vezi creditul"}
@@ -348,6 +397,118 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns }:
         )}
       </div>
 
+      {/* Templates */}
+      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setTemplatesOpen(o => !o)}
+          className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-foreground">Sabloane</p>
+            {templates.length > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-muted text-muted-foreground rounded-full">
+                {templates.length}
+              </span>
+            )}
+          </div>
+          {templatesOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {templatesOpen && (
+          <div className="border-t border-border">
+            {templates.length === 0 && !showSaveForm ? (
+              <div className="px-5 py-8 text-center">
+                <FileText className="h-7 w-7 text-muted-foreground/40 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Niciun sablon creat inca.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Adauga un sablon pentru a-l refolosi rapid in campanii viitoare.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {templates.map(t => (
+                  <div key={t.id} className="flex items-start gap-3 px-5 py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">{t.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.message}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => { setMessage(t.message); toast.success("Sablon aplicat."); }}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors"
+                      >
+                        Aplica
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTemplate(t.id)}
+                        disabled={templateSaving}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Create / save form */}
+            <div className="px-5 py-4 border-t border-border space-y-3">
+              {showSaveForm ? (
+                <>
+                  <input
+                    type="text"
+                    value={templateName}
+                    onChange={e => setTemplateName(e.target.value)}
+                    placeholder="Nume sablon (ex: Reducere 20%)"
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    autoFocus
+                  />
+                  <textarea
+                    value={templateFormMessage}
+                    onChange={e => setTemplateFormMessage(e.target.value)}
+                    rows={3}
+                    placeholder="Textul mesajului SMS..."
+                    className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveTemplate}
+                      disabled={templateSaving}
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                    >
+                      {templateSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      Salveaza
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowSaveForm(false); setTemplateName(""); setTemplateFormMessage(""); }}
+                      className="px-4 py-2 text-xs font-semibold rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
+                    >
+                      Anuleaza
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSaveForm(true)}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Sablon nou
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Message composer */}
       <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between">
@@ -373,9 +534,20 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns }:
             Mesajul depaseste 160 de caractere. Va fi trimis ca {smsCount} SMS-uri per destinatar, ceea ce va creste costul campaniei.
           </p>
         )}
-        <p className="text-xs text-muted-foreground">
-          Caracterele speciale romanesti (ș, ț, ă, â, î) sunt inlocuite automat cu echivalentele lor ASCII la trimitere, pastrand mesajul in 1 SMS la 160 caractere.
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            Caracterele speciale romanesti (ș, ț, ă, â, î) sunt inlocuite automat cu echivalentele lor ASCII la trimitere.
+          </p>
+          {message.trim() && (
+            <button
+              type="button"
+              onClick={handleSaveCurrentAsTemplate}
+              className="flex items-center gap-1 text-xs text-primary hover:underline flex-shrink-0 ml-3"
+            >
+              <Plus className="h-3 w-3" />Salveaza ca sablon
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Send button */}

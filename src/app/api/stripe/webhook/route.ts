@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { createSmartbillInvoice, isSmartbillConfigured } from "@/lib/smartbill";
+import { createSmartbillInvoice } from "@/lib/smartbill";
 import type Stripe from "stripe";
 
 const PLAN_PRICES: Record<string, number> = {
@@ -159,46 +159,41 @@ export async function POST(req: NextRequest) {
     // 5. Emit Smartbill invoice
     let sbSeries: string | null = null;
     let sbNumber: string | null = null;
+    let sbError: string | null = null;
 
-    if (isSmartbillConfigured()) {
-      const sbResult = await createSmartbillInvoice(
-        {
-          name: clientName,
-          email: userEmail,
-          vatCode: bizData?.cui ?? undefined,
-          address: bizData?.address ?? undefined,
-          city: bizData?.city ?? undefined,
-          county: bizData?.county ?? undefined,
-        },
-        {
-          name: `Abonament Edinio ${capitalize(plan)}`,
-          price: planPrice,
-          quantity: 1,
-        }
-      );
-
-      if (sbResult) {
-        sbSeries = sbResult.series;
-        sbNumber = sbResult.number;
-      } else {
-        console.error("[webhook] Smartbill invoice creation failed for:", stripeInvoiceId);
+    const sbResult = await createSmartbillInvoice(
+      {
+        name: clientName,
+        email: userEmail,
+        vatCode: bizData?.cui ?? undefined,
+        address: bizData?.address ?? undefined,
+        city: bizData?.city ?? undefined,
+        county: bizData?.county ?? undefined,
+      },
+      {
+        name: `Abonament Edinio ${capitalize(plan)}`,
+        price: planPrice,
+        quantity: 1,
       }
+    );
+
+    if (sbResult.error) {
+      sbError = sbResult.error;
+      console.error("[webhook] Smartbill failed:", sbError, "| invoice:", stripeInvoiceId);
     } else {
-      console.warn("[webhook] Smartbill not configured — skipping invoice emission.");
+      sbSeries = sbResult.series ?? null;
+      sbNumber = sbResult.number ?? null;
     }
 
     // 6. Insert or update invoice record
     if (existingInvoice) {
-      // Record exists but Smartbill had failed — update with new Smartbill data
-      if (sbSeries && sbNumber) {
-        await admin.from("invoices").update({
-          smartbill_series: sbSeries,
-          smartbill_number: sbNumber,
-        }).eq("id", existingInvoice.id);
-        console.log("[webhook] Invoice updated with Smartbill data:", { sbSeries, sbNumber });
-      }
+      await admin.from("invoices").update({
+        smartbill_series: sbSeries,
+        smartbill_number: sbNumber,
+        smartbill_error: sbError,
+      }).eq("id", existingInvoice.id);
+      console.log("[webhook] Invoice updated:", { sbSeries, sbNumber, sbError });
     } else {
-      // New invoice — insert record
       const { error: invoiceError } = await admin.from("invoices").insert({
         user_id: userId,
         plan,
@@ -206,6 +201,7 @@ export async function POST(req: NextRequest) {
         currency: "RON",
         smartbill_series: sbSeries,
         smartbill_number: sbNumber,
+        smartbill_error: sbError,
         stripe_invoice_id: stripeInvoiceId,
         status: "issued",
       });
@@ -213,7 +209,7 @@ export async function POST(req: NextRequest) {
       if (invoiceError) {
         console.error("[webhook] Failed to save invoice record:", invoiceError);
       } else {
-        console.log("[webhook] Invoice saved:", { userId, plan, sbSeries, sbNumber });
+        console.log("[webhook] Invoice saved:", { userId, plan, sbSeries, sbNumber, sbError });
       }
     }
 

@@ -415,6 +415,7 @@ export interface Database {
           smartbill_series: string | null;
           smartbill_number: string | null;
           stripe_invoice_id: string | null;
+          smartbill_error: string | null;
           status: string;
           created_at: string;
         };
@@ -427,10 +428,14 @@ export interface Database {
           smartbill_series?: string | null;
           smartbill_number?: string | null;
           stripe_invoice_id?: string | null;
+          smartbill_error?: string | null;
           status?: string;
           created_at?: string;
         };
         Update: {
+          smartbill_series?: string | null;
+          smartbill_number?: string | null;
+          smartbill_error?: string | null;
           status?: string;
         };
         Relationships: [];

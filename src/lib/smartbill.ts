@@ -35,15 +35,21 @@ export interface SmartbillProduct {
 export interface SmartbillInvoiceResult {
   series: string;
   number: string;
+  error?: never;
+}
+
+export interface SmartbillInvoiceError {
+  error: string;
+  series?: never;
+  number?: never;
 }
 
 export async function createSmartbillInvoice(
   client: SmartbillClient,
   product: SmartbillProduct
-): Promise<SmartbillInvoiceResult | null> {
+): Promise<SmartbillInvoiceResult | SmartbillInvoiceError> {
   if (!isSmartbillConfigured()) {
-    console.warn("[smartbill] Not configured — skipping invoice creation.");
-    return null;
+    return { error: "Smartbill not configured (missing env vars)" };
   }
 
   const body = {
@@ -99,20 +105,23 @@ export async function createSmartbillInvoice(
     };
 
     if (!res.ok || data.errorText) {
-      console.error("[smartbill] Invoice creation failed:", data.errorText ?? res.status, data.message ?? "");
-      return null;
+      const errMsg = data.errorText || `HTTP ${res.status}`;
+      console.error("[smartbill] Invoice creation failed:", errMsg);
+      return { error: errMsg };
     }
 
     if (!data.series || !data.number) {
-      console.error("[smartbill] Missing series/number in response:", data);
-      return null;
+      const errMsg = `Missing series/number in response: ${JSON.stringify(data)}`;
+      console.error("[smartbill]", errMsg);
+      return { error: errMsg };
     }
 
     console.log("[smartbill] Invoice created:", data.series, data.number);
     return { series: data.series, number: data.number };
   } catch (err) {
-    console.error("[smartbill] Fetch error:", err);
-    return null;
+    const errMsg = String(err);
+    console.error("[smartbill] Fetch error:", errMsg);
+    return { error: errMsg };
   }
 }
 

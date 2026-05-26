@@ -121,6 +121,7 @@ async function buildInvoiceParams(
     companyVatCode: config.company_vat_code,
     client: {
       name: order.customer_name,
+      country: "Romania",
       address: address?.address ?? undefined,
       city: address?.city ?? undefined,
       county: address?.county ?? undefined,

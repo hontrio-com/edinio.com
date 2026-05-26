@@ -230,6 +230,7 @@ export interface MerchantInvoiceParams {
   companyVatCode: string;
   client: {
     name: string;
+    country?: string;
     address?: string;
     city?: string;
     county?: string;

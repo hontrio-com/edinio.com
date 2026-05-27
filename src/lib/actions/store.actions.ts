@@ -228,3 +228,47 @@ export async function updateStorePolicies(
   revalidatePath("/dashboard/settings");
   return { success: true };
 }
+
+export async function updateShippingConfig(
+  businessId: string,
+  config: {
+    shipping_enabled: boolean;
+    free_shipping_threshold: number | null;
+    shipping_zones: Record<string, { enabled: boolean; price: number; label?: string }>;
+  },
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const { data: existing } = await supabase
+    .from("store_settings").select("id").eq("business_id", businessId).single();
+
+  let error;
+  if (existing) {
+    ({ error } = await supabase.from("store_settings")
+      .update({
+        shipping_enabled: config.shipping_enabled,
+        free_shipping_threshold: config.free_shipping_threshold,
+        shipping_zones: config.shipping_zones as never,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("business_id", businessId));
+  } else {
+    ({ error } = await supabase.from("store_settings")
+      .insert({
+        business_id: businessId,
+        shipping_enabled: config.shipping_enabled,
+        free_shipping_threshold: config.free_shipping_threshold,
+        shipping_zones: config.shipping_zones as never,
+      }));
+  }
+
+  if (error) return { error: "Eroare la salvare." };
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}

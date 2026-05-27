@@ -29,7 +29,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { data: storeSettings } = business
     ? await supabase
         .from("store_settings")
-        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config")
+        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones")
         .eq("business_id", business.id)
         .single()
     : { data: null };
@@ -56,6 +56,11 @@ export default async function SettingsPage({ searchParams }: Props) {
         enabled: (storeSettings?.smso_config as Record<string, unknown>)?.enabled === true,
         api_key: (storeSettings?.smso_config as Record<string, unknown>)?.api_key as string ?? "",
         sender_id: (storeSettings?.smso_config as Record<string, unknown>)?.sender_id as string ?? "",
+      }}
+      shippingConfig={{
+        shipping_enabled: storeSettings?.shipping_enabled ?? false,
+        free_shipping_threshold: storeSettings?.free_shipping_threshold ?? null,
+        shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
       }}
       planSuccess={plan_success === "1"}
     />

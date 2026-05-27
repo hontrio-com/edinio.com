@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig } from "@/lib/actions/store.actions";
 import { deleteAccount } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import type { Database } from "@/types/database.types";
@@ -159,6 +159,37 @@ interface SmsoConfig {
   sender_id: string;
 }
 
+interface ShippingMethodConfig {
+  enabled: boolean;
+  price: number;
+  label?: string;
+}
+
+interface ShippingConfig {
+  shipping_enabled: boolean;
+  free_shipping_threshold: number | null;
+  shipping_zones: Record<string, ShippingMethodConfig>;
+}
+
+const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice: number }[] = [
+  { id: "fan-courier",  label: "Fan Courier",       logo: "/integrations/fan-courier.svg",  defaultPrice: 20 },
+  { id: "dpd",          label: "DPD",               logo: "/integrations/dpd.svg",          defaultPrice: 18 },
+  { id: "cargus",       label: "Cargus",            logo: "/integrations/cargus.svg",       defaultPrice: 17 },
+  { id: "sameday",      label: "Sameday",           logo: "/integrations/sameday.svg",      defaultPrice: 19 },
+  { id: "woot",         label: "Woot",              logo: "/integrations/woot.svg",         defaultPrice: 16 },
+  { id: "colete",       label: "Colete Online",     logo: "/integrations/colete-online.svg", defaultPrice: 15 },
+  { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
+  { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
+];
+
+function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
+  const zones: Record<string, ShippingMethodConfig> = {};
+  for (const m of SHIPPING_METHODS) {
+    zones[m.id] = existing[m.id] ?? { enabled: false, price: m.defaultPrice };
+  }
+  return zones;
+}
+
 interface Props {
   profile: UserProfile;
   email: string;
@@ -169,6 +200,7 @@ interface Props {
   vatSettings: VatSettings;
   notificationsConfig: NotificationsConfig;
   smsoConfig: SmsoConfig;
+  shippingConfig: ShippingConfig;
   planSuccess?: boolean;
 }
 
@@ -184,7 +216,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, planSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, planSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : "general");
 
   useEffect(() => {
@@ -264,6 +296,16 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
 
+  // Shipping
+  const [shippingEnabled, setShippingEnabled] = useState(shippingConfig.shipping_enabled);
+  const [freeThreshold, setFreeThreshold] = useState<string>(
+    shippingConfig.free_shipping_threshold != null ? String(shippingConfig.free_shipping_threshold) : ""
+  );
+  const [shippingZones, setShippingZones] = useState<Record<string, ShippingMethodConfig>>(
+    () => buildDefaultZones(shippingConfig.shipping_zones)
+  );
+  const [savingShipping, startShippingTransition] = useTransition();
+
   const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
   async function saveProfile() {
@@ -324,6 +366,24 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateVatSettings(businessId, settings);
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile TVA au fost salvate.");
+    });
+  }
+
+  function saveShipping() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    const threshold = freeThreshold.trim() ? parseFloat(freeThreshold) : null;
+    if (threshold !== null && (isNaN(threshold) || threshold < 0)) {
+      toast.error("Pragul pentru transport gratuit trebuie sa fie un numar pozitiv.");
+      return;
+    }
+    startShippingTransition(async () => {
+      const result = await updateShippingConfig(businessId, {
+        shipping_enabled: shippingEnabled,
+        free_shipping_threshold: threshold,
+        shipping_zones: shippingZones,
+      });
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Setarile de livrare au fost salvate.");
     });
   }
 
@@ -796,7 +856,115 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {activeSection === "facturare" && (
             <BillingSection plan={profile.plan} planExpiresAt={profile.plan_expires_at} />
           )}
-          {activeSection === "livrare"    && <ComingSoon title="Livrare" />}
+          {activeSection === "livrare" && (
+            <div className="space-y-6">
+              {!businessId && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
+                </div>
+              )}
+
+              {/* Global toggle */}
+              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-surface">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Livrare activata</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Permite clientilor sa aleaga o metoda de livrare la comanda</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShippingEnabled(v => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${shippingEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${shippingEnabled ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+
+              {/* Methods list */}
+              <div>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Metode de livrare</p>
+                <div className="space-y-2">
+                  {SHIPPING_METHODS.map((method) => {
+                    const zone = shippingZones[method.id] ?? { enabled: false, price: method.defaultPrice };
+                    return (
+                      <div key={method.id} className={`flex items-center gap-3 p-3.5 rounded-xl border transition-colors ${zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
+                        {/* Logo or icon */}
+                        <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-background border border-border">
+                          {method.logo ? (
+                            <img src={method.logo} alt={method.label} className="w-6 h-6 object-contain" />
+                          ) : (
+                            <Truck className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+
+                        {/* Label */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">{method.label}</p>
+                        </div>
+
+                        {/* Price input */}
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={zone.price}
+                            onChange={(e) => {
+                              const price = parseFloat(e.target.value) || 0;
+                              setShippingZones(z => ({ ...z, [method.id]: { ...zone, price } }));
+                            }}
+                            disabled={!zone.enabled}
+                            className="w-20 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground text-right focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          />
+                          <span className="text-xs text-muted-foreground w-6">lei</span>
+                        </div>
+
+                        {/* Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setShippingZones(z => ({ ...z, [method.id]: { ...zone, enabled: !zone.enabled } }))}
+                          className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${zone.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${zone.enabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Free shipping threshold */}
+              <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Transport gratuit de la</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Clientii nu vor plati livrarea daca comanda depaseste aceasta valoare. Lasa gol pentru a dezactiva.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="ex: 200"
+                    value={freeThreshold}
+                    onChange={(e) => setFreeThreshold(e.target.value)}
+                    className={`${inputCls} w-40`}
+                  />
+                  <span className="text-sm text-muted-foreground">lei</span>
+                </div>
+              </div>
+
+              {/* Save button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={saveShipping}
+                  disabled={savingShipping || !businessId}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {savingShipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Salveaza
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Taxe / TVA ── */}
           {activeSection === "taxe" && (

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
@@ -58,6 +58,7 @@ export async function saveWootConfig(
   revalidatePath("/dashboard/features/woot");
   revalidatePath("/dashboard/features");
   revalidatePath("/dashboard/orders");
+  updateTag(`store-settings-${businessId}`);
   return { success: true };
 }
 
@@ -76,6 +77,7 @@ export async function disconnectWoot(
   revalidatePath("/dashboard/features/woot");
   revalidatePath("/dashboard/features");
   revalidatePath("/dashboard/orders");
+  updateTag(`store-settings-${businessId}`);
   return { success: true };
 }
 

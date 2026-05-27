@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { NetopiaConfig } from "@/lib/netopia";
 
@@ -29,6 +29,9 @@ export async function saveNetopiaConfig(
 
   revalidatePath("/dashboard/features/netopia");
   revalidatePath("/dashboard/features");
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -56,5 +59,8 @@ export async function disconnectNetopia(
 
   revalidatePath("/dashboard/features/netopia");
   revalidatePath("/dashboard/features");
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }

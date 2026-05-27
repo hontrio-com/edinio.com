@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export async function updatePageContent(businessId: string, pageContent: Record<string, unknown>): Promise<{ error: string } | { success: true }> {
@@ -30,6 +30,9 @@ export async function updatePageContent(businessId: string, pageContent: Record<
   revalidatePath("/dashboard/editor");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
 
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -74,6 +77,9 @@ export async function updateGeneralSettings(
 
   revalidatePath("/dashboard/settings");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -104,6 +110,9 @@ export async function updateNotificationsSettings(
 
   if (error) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/settings");
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -135,6 +144,9 @@ export async function updateVatSettings(
   if (error) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/settings");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -166,6 +178,9 @@ export async function updateSmsoConfig(
   if (error) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/sms");
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -196,6 +211,9 @@ export async function updateSmartbillConfig(
 
   if (error) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/features/smartbill");
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -226,5 +244,8 @@ export async function updateStorePolicies(
 
   if (error) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/settings");
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }

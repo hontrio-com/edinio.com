@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createBusiness(data: {
@@ -66,6 +66,8 @@ export async function createBusiness(data: {
   }
 
   revalidatePath("/dashboard", "layout");
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true, businessId: business.id, slug: business.slug };
 }
 
@@ -110,6 +112,8 @@ export async function updateBusiness(
   revalidatePath("/dashboard/editor");
   revalidatePath("/dashboard/features");
   revalidatePath(`/[slug]`, "page");
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 

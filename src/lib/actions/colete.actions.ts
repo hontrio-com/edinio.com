@@ -1,5 +1,6 @@
 "use server";
 
+import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
@@ -35,6 +36,9 @@ export async function saveCOConfig(
 
   const { error } = await supabase.from("store_settings").update({ colete_config: config as unknown as import("@/types/database.types").Json, updated_at: new Date().toISOString() }).eq("business_id", businessId);
   if (error) return { error: error.message };
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -48,6 +52,9 @@ export async function disconnectCO(businessId: string): Promise<{ success: true 
 
   const { error } = await supabase.from("store_settings").update({ colete_config: null, updated_at: new Date().toISOString() }).eq("business_id", businessId);
   if (error) return { error: error.message };
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 

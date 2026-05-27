@@ -1,29 +1,17 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getCachedUser } from "@/lib/supabase/cached-queries";
+import { getCachedUser, getCachedCurrentBusiness, getCachedStoreSettings } from "@/lib/supabase/cached-queries";
 import { DpdConfigClient } from "@/components/dashboard/DpdConfigClient";
 import type { DpdConfig } from "@/lib/dpd";
 
 export default async function DpdPage() {
-  const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("user_id", user.id)
-    .order("created_at")
-    .limit(1)
-    .single();
+  const business = await getCachedCurrentBusiness(user.id);
 
   if (!business) redirect("/dashboard");
 
-  const { data: settings } = await supabase
-    .from("store_settings")
-    .select("dpd_config")
-    .eq("business_id", business.id)
-    .single();
+  const settings = await getCachedStoreSettings(business.id);
 
   const config = (settings?.dpd_config as DpdConfig | null) ?? null;
 

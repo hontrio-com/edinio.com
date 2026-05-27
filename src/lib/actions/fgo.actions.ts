@@ -1,5 +1,6 @@
 "use server";
 
+import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   createFgoInvoice,
@@ -136,6 +137,9 @@ export async function saveFgoConfig(
   }).eq("business_id", businessId);
 
   if (error) return { error: error.message };
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -156,6 +160,9 @@ export async function disconnectFgo(
   }).eq("business_id", businessId);
 
   if (error) return { error: error.message };
+  updateTag(`store-settings-${businessId}`);
+  updateTag(`businesses-${user.id}`);
+  updateTag(`business-${user.id}`);
   return { success: true };
 }
 

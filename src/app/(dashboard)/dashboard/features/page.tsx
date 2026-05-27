@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getCachedUser } from "@/lib/supabase/cached-queries";
+import { getCachedUser, getCachedCurrentBusiness, getCachedStoreSettings } from "@/lib/supabase/cached-queries";
 import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -74,17 +73,10 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
 ];
 
 export default async function IntegrationsPage() {
-  const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("user_id", user.id)
-    .order("created_at")
-    .limit(1)
-    .single();
+  const business = await getCachedCurrentBusiness(user.id);
 
   let smsoActive = false;
   let smartbillActive = false;
@@ -102,11 +94,7 @@ export default async function IntegrationsPage() {
   let ttActive = false;
   let googleActive = false;
   if (business) {
-    const { data: settings } = await supabase
-      .from("store_settings")
-      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config")
-      .eq("business_id", business.id)
-      .single();
+    const settings = await getCachedStoreSettings(business.id);
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
     smartbillActive = (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
     const sc = settings?.stripe_config as StripeConfig | null;

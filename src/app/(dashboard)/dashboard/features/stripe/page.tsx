@@ -1,30 +1,18 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { getCachedUser } from "@/lib/supabase/cached-queries";
+import { getCachedUser, getCachedCurrentBusiness, getCachedStoreSettings } from "@/lib/supabase/cached-queries";
 import { StripeConnectClient, type StripeConfig } from "@/components/dashboard/StripeConnectClient";
 
 export default async function StripeFeaturePage() {
-  const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("user_id", user.id)
-    .order("created_at")
-    .limit(1)
-    .single();
+  const business = await getCachedCurrentBusiness(user.id);
 
   let stripeConfig: StripeConfig | null = null;
   if (business) {
-    const { data: settings } = await supabase
-      .from("store_settings")
-      .select("stripe_config")
-      .eq("business_id", business.id)
-      .single();
+    const settings = await getCachedStoreSettings(business.id);
     stripeConfig = (settings?.stripe_config as StripeConfig | null) ?? null;
   }
 

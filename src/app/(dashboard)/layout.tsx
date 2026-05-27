@@ -1,26 +1,25 @@
 import { redirect } from "next/navigation";
+import { getCachedUser, getCachedProfile, getCachedBusinesses } from "@/lib/supabase/cached-queries";
 import { createClient } from "@/lib/supabase/server";
-import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: businesses }] = await Promise.all([
-    supabase.from("users_profile").select("*").eq("id", user.id).single(),
-    supabase.from("businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+  const [profile, allBusinesses] = await Promise.all([
+    getCachedProfile(user.id),
+    getCachedBusinesses(user.id),
   ]);
 
   if (!profile?.onboarding_completed) redirect("/onboarding/details");
 
-  const allBusinesses = businesses ?? [];
   const currentBusiness = allBusinesses[0] ?? null;
   const businessIds = allBusinesses.map(b => b.id);
 
+  const supabase = await createClient();
   const [ordersResult, smsoResult] = await Promise.all([
     businessIds.length > 0
       ? supabase
@@ -39,7 +38,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const recentOrders = ordersResult.data ?? [];
   const smsoEnabled = (smsoResult.data?.smso_config as { enabled?: boolean } | null)?.enabled === true;
 
-  // Check if any business is in grace period or suspended
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
 
   return (

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
+import type { COConfig } from "@/lib/colete";
 
 export default async function OrdersPage() {
   const supabase = await createClient();
@@ -32,7 +33,7 @@ export default async function OrdersPage() {
       .eq("status", "pending"),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config")
+      .select("smartbill_config, woot_config, colete_config")
       .eq("business_id", business.id)
       .single(),
   ]);
@@ -41,10 +42,12 @@ export default async function OrdersPage() {
     (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
   const wc = settings?.woot_config as WootConfig | null;
   const wootEnabled = !!(wc?.enabled && wc?.public_key && wc?.secret_key);
+  const cc = settings?.colete_config as COConfig | null;
+  const coleteEnabled = !!(cc?.enabled && cc?.client_id && cc?.client_secret);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} businessId={business.id} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} businessId={business.id} />
     </div>
   );
 }

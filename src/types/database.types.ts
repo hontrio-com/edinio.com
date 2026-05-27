@@ -309,6 +309,9 @@ export interface Database {
           woot_order_id: string | null;
           woot_awb_number: string | null;
           woot_service_name: string | null;
+          colete_order_id: string | null;
+          colete_awb_number: string | null;
+          colete_service_name: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -352,6 +355,9 @@ export interface Database {
           woot_order_id?: string | null;
           woot_awb_number?: string | null;
           woot_service_name?: string | null;
+          colete_order_id?: string | null;
+          colete_awb_number?: string | null;
+          colete_service_name?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -382,6 +388,7 @@ export interface Database {
           stripe_config: Json | null;
           netopia_config: Json | null;
           woot_config: Json | null;
+          colete_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -408,6 +415,7 @@ export interface Database {
           stripe_config?: Json | null;
           netopia_config?: Json | null;
           woot_config?: Json | null;
+          colete_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -432,6 +440,7 @@ export interface Database {
           stripe_config?: Json | null;
           netopia_config?: Json | null;
           woot_config?: Json | null;
+          colete_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

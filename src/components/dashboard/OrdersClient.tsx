@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
+import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -35,11 +36,12 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, businessId }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, businessId }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
   wootEnabled?: boolean;
+  coleteEnabled?: boolean;
   businessId?: string;
 }) {
   const router = useRouter();
@@ -49,6 +51,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [generatingOrderId, setGeneratingOrderId] = useState<string | null>(null);
   const [, startGenerateTransition] = useTransition();
   const [wootModalOrder, setWootModalOrder] = useState<Order | null>(null);
+  const [coleteModalOrder, setColeteModalOrder] = useState<Order | null>(null);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -101,6 +104,15 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
           order={wootModalOrder}
           businessId={businessId}
           onSuccess={() => { setWootModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {coleteModalOrder && businessId && (
+        <ColeteAwbModal
+          open={!!coleteModalOrder}
+          onClose={() => setColeteModalOrder(null)}
+          order={coleteModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setColeteModalOrder(null); router.refresh(); }}
         />
       )}
       {/* Header */}
@@ -192,7 +204,10 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
                     )}
                     {wootEnabled && (
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Woot</th>
+                    )}
+                    {coleteEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Colete</th>
                     )}
                     <th className="px-5 py-3" />
                   </tr>
@@ -235,6 +250,29 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setWootModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {coleteEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["colete_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setColeteModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["colete_awb_number"] as string}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setColeteModalOrder(order); }}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
                               >
                                 <Package className="h-3 w-3" />

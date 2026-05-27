@@ -6,6 +6,7 @@ import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
+  ShieldCheck, ShieldOff, Copy,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
@@ -226,6 +227,13 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     }
   }, [planSuccess]);
 
+  useEffect(() => {
+    if (activeSection === "securitate") {
+      void checkMfaStatus();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
+
   // Account
   const [fullName, setFullName] = useState(profile.full_name);
   const [savingName, setSavingName] = useState(false);
@@ -296,6 +304,16 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [savingNotif, startNotifTransition] = useTransition();
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
+
+  // 2FA
+  const [mfaStatus, setMfaStatus] = useState<"loading" | "enabled" | "disabled">("loading");
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaStep, setMfaStep] = useState<"idle" | "enrolling" | "disabling">("idle");
+  const [mfaTempFactorId, setMfaTempFactorId] = useState<string | null>(null);
+  const [mfaQrCode, setMfaQrCode] = useState<string | null>(null);
+  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaLoading, setMfaLoading] = useState(false);
 
   // Shipping
   const [shippingEnabled, setShippingEnabled] = useState(shippingConfig.shipping_enabled);
@@ -482,6 +500,66 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       toast.success("Parola a fost schimbata cu succes.");
       setNewPassword(""); setConfirmPassword("");
     }
+  }
+
+  async function checkMfaStatus() {
+    setMfaStatus("loading");
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (error || !data) { setMfaStatus("disabled"); return; }
+    const verified = data.totp.find((f) => f.status === "verified");
+    if (verified) { setMfaStatus("enabled"); setMfaFactorId(verified.id); }
+    else { setMfaStatus("disabled"); setMfaFactorId(null); }
+  }
+
+  async function startEnrollMfa() {
+    setMfaLoading(true);
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      issuer: "Edinio",
+      friendlyName: "Authenticator App",
+    });
+    setMfaLoading(false);
+    if (error || !data) { toast.error("Nu am putut initializa 2FA. Incearca din nou."); return; }
+    setMfaTempFactorId(data.id);
+    setMfaQrCode(data.totp.qr_code);
+    setMfaSecret(data.totp.secret);
+    setMfaStep("enrolling");
+    setMfaCode("");
+  }
+
+  async function confirmEnrollMfa() {
+    if (!mfaTempFactorId || mfaCode.length < 6) return;
+    setMfaLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaTempFactorId, code: mfaCode });
+    setMfaLoading(false);
+    if (error) { toast.error("Cod incorect. Verifica aplicatia si incearca din nou."); return; }
+    toast.success("Autentificarea in doi pasi a fost activata.");
+    setMfaStep("idle"); setMfaQrCode(null); setMfaSecret(null); setMfaCode(""); setMfaTempFactorId(null);
+    await checkMfaStatus();
+  }
+
+  async function cancelEnrollMfa() {
+    if (mfaTempFactorId) {
+      const supabase = createClient();
+      await supabase.auth.mfa.unenroll({ factorId: mfaTempFactorId });
+    }
+    setMfaStep("idle"); setMfaQrCode(null); setMfaSecret(null); setMfaCode(""); setMfaTempFactorId(null);
+  }
+
+  async function confirmDisableMfa() {
+    if (!mfaFactorId || mfaCode.length < 6) return;
+    setMfaLoading(true);
+    const supabase = createClient();
+    const { error: verifyErr } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaFactorId, code: mfaCode });
+    if (verifyErr) { setMfaLoading(false); toast.error("Cod incorect. Verifica aplicatia si incearca din nou."); return; }
+    const { error: unenrollErr } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
+    setMfaLoading(false);
+    if (unenrollErr) { toast.error("Nu am putut dezactiva 2FA. Incearca din nou."); return; }
+    toast.success("Autentificarea in doi pasi a fost dezactivata.");
+    setMfaStep("idle"); setMfaCode(""); setMfaFactorId(null); setMfaStatus("disabled");
   }
 
   function savePolicies() {
@@ -1385,27 +1463,175 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-foreground">Autentificare in doi pasi (2FA)</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Adauga un nivel suplimentar de protectie contului tau.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Adauga un nivel suplimentar de protectie contului tau prin TOTP.</p>
                   </div>
-                  <span className="px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full border border-amber-200 flex-shrink-0">
-                    In curand
-                  </span>
+                  {mfaStatus === "enabled" && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-green-700 bg-green-100 rounded-full border border-green-200 flex-shrink-0">
+                      <ShieldCheck className="h-3 w-3" />Activ
+                    </span>
+                  )}
                 </div>
+
                 <div className="px-5 py-5">
-                  <div className="flex items-start gap-4 p-4 rounded-xl border border-border bg-muted/30 opacity-60 cursor-not-allowed">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Lock className="h-5 w-5 text-primary" />
+                  {mfaStatus === "loading" && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />Se verifica statusul...
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground">Verificare prin Email</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                        La fiecare autentificare vei primi un cod de 6 cifre pe adresa <strong>{email}</strong>. Introdu codul pentru a confirma ca esti tu.
+                  )}
+
+                  {/* Disabled — idle */}
+                  {mfaStatus === "disabled" && mfaStep === "idle" && (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Foloseste o aplicatie de autentificare (Google Authenticator, Authy etc.) pentru a genera coduri temporare la fiecare autentificare.
                       </p>
+                      <button
+                        type="button"
+                        onClick={startEnrollMfa}
+                        disabled={mfaLoading}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
+                      >
+                        {mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                        Activeaza 2FA
+                      </button>
                     </div>
-                    <div className="relative w-10 h-6 rounded-full bg-muted-foreground/20 flex-shrink-0 mt-0.5">
-                      <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow" />
+                  )}
+
+                  {/* Enrolling — show QR */}
+                  {mfaStep === "enrolling" && mfaQrCode && (
+                    <div className="space-y-5">
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
+                        Scaneaza codul QR de mai jos cu aplicatia ta de autentificare, apoi introdu codul de 6 cifre generat.
+                      </div>
+
+                      <div className="flex gap-6 items-start flex-wrap">
+                        {/* QR code */}
+                        <div className="w-40 h-40 bg-white border border-border rounded-xl p-2 flex-shrink-0 flex items-center justify-center">
+                          <img
+                            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(mfaQrCode)}`}
+                            alt="QR Code 2FA"
+                            className="w-full h-full"
+                          />
+                        </div>
+
+                        {/* Secret + code input */}
+                        <div className="flex-1 min-w-0 space-y-4">
+                          {mfaSecret && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Cheie manuala (alternativa la QR)</p>
+                              <div className="flex items-center gap-2">
+                                <code className="text-xs font-mono bg-muted px-2 py-1.5 rounded-lg border border-border break-all select-all">
+                                  {mfaSecret}
+                                </code>
+                                <button
+                                  type="button"
+                                  onClick={() => { void navigator.clipboard.writeText(mfaSecret); toast.success("Copiat!"); }}
+                                  className="flex-shrink-0 p-1.5 rounded-lg border border-border hover:bg-muted transition-colors"
+                                >
+                                  <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-xs font-medium text-foreground mb-1.5">Cod de verificare</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={mfaCode}
+                              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                              onKeyDown={(e) => { if (e.key === "Enter") void confirmEnrollMfa(); }}
+                              placeholder="000000"
+                              className={`${inputCls} w-36 text-center text-lg font-mono tracking-widest`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void confirmEnrollMfa()}
+                          disabled={mfaLoading || mfaCode.length < 6}
+                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
+                        >
+                          {mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          Verifica si activeaza
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void cancelEnrollMfa()}
+                          disabled={mfaLoading}
+                          className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
+                        >
+                          Anuleaza
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Enabled — idle */}
+                  {mfaStatus === "enabled" && mfaStep === "idle" && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
+                        <ShieldCheck className="h-5 w-5 text-green-600 flex-shrink-0" />
+                        <p className="text-sm text-green-800 leading-relaxed">
+                          Contul tau este protejat. La urmatoarea autentificare vei fi solicitat sa introduci codul din aplicatia de autentificare.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setMfaStep("disabling"); setMfaCode(""); }}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-destructive border border-destructive/30 rounded-lg hover:bg-destructive/10 transition-colors"
+                      >
+                        <ShieldOff className="h-4 w-4" />
+                        Dezactiveaza 2FA
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Disabling — confirm with TOTP code */}
+                  {mfaStatus === "enabled" && mfaStep === "disabling" && (
+                    <div className="space-y-4">
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 leading-relaxed">
+                        Pentru a dezactiva 2FA, introdu codul curent din aplicatia ta de autentificare.
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5">Cod de verificare</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={mfaCode}
+                          onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                          onKeyDown={(e) => { if (e.key === "Enter") void confirmDisableMfa(); }}
+                          placeholder="000000"
+                          className={`${inputCls} w-36 text-center text-lg font-mono tracking-widest`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void confirmDisableMfa()}
+                          disabled={mfaLoading || mfaCode.length < 6}
+                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors disabled:opacity-60"
+                        >
+                          {mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                          Confirma dezactivarea
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setMfaStep("idle"); setMfaCode(""); }}
+                          disabled={mfaLoading}
+                          className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
+                        >
+                          Anuleaza
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

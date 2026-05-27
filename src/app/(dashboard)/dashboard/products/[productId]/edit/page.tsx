@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { ProductForm } from "@/components/dashboard/ProductForm";
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
 export default async function EditProductPage({ params }: Props) {
   const { productId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { AnalyticsClient } from "@/components/dashboard/AnalyticsClient";
 import { COUNTY_CODE_MAP } from "@/components/dashboard/RomaniaMap";
 import fs from "fs";
@@ -13,7 +14,7 @@ const MONTHS_RO = ["Ian", "Feb", "Mar", "Apr", "Mai", "Iun", "Iul", "Aug", "Sep"
 
 export default async function AnalyticsPage({ searchParams }: Props) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

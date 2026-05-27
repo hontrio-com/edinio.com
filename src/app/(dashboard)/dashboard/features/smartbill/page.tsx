@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SmartbillConfigClient } from "@/components/dashboard/SmartbillConfigClient";
 import type { SmartbillConfig } from "@/lib/smartbill";
 
 export default async function SmartbillPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

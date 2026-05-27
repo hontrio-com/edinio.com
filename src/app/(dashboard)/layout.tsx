@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
@@ -20,29 +21,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const currentBusiness = allBusinesses[0] ?? null;
   const businessIds = allBusinesses.map(b => b.id);
 
-  let recentOrders: { id: string; customer_name: string; created_at: string; total: number }[] = [];
-  if (businessIds.length > 0) {
-    const { data } = await supabase
-      .from("orders")
-      .select("id, customer_name, created_at, total")
-      .in("business_id", businessIds)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(20);
-    recentOrders = data ?? [];
-  }
+  const [ordersResult, smsoResult] = await Promise.all([
+    businessIds.length > 0
+      ? supabase
+          .from("orders")
+          .select("id, customer_name, created_at, total")
+          .in("business_id", businessIds)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [] as { id: string; customer_name: string; created_at: string; total: number }[] }),
+    currentBusiness
+      ? supabase.from("store_settings").select("smso_config").eq("business_id", currentBusiness.id).single()
+      : Promise.resolve({ data: null }),
+  ]);
 
-  // Fetch smso_config to know if SMS Marketing is enabled
-  let smsoEnabled = false;
-  if (currentBusiness) {
-    const { data: ss } = await supabase
-      .from("store_settings")
-      .select("smso_config")
-      .eq("business_id", currentBusiness.id)
-      .single();
-    const cfg = ss?.smso_config as { enabled?: boolean } | null;
-    smsoEnabled = cfg?.enabled === true;
-  }
+  const recentOrders = ordersResult.data ?? [];
+  const smsoEnabled = (smsoResult.data?.smso_config as { enabled?: boolean } | null)?.enabled === true;
 
   // Check if any business is in grace period or suspended
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);

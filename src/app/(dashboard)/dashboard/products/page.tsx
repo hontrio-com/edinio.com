@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { ProductsClient } from "@/components/dashboard/ProductsClient";
 import { getProductLimit } from "@/lib/plan-limits";
 
@@ -9,7 +10,7 @@ export default async function ProductsPage({
   searchParams: Promise<{ search?: string }>;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: business }, { search: searchQuery }, { data: profile }] = await Promise.all([

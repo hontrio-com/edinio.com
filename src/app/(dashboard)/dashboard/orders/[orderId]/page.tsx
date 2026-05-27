@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrderDetailClient } from "@/components/dashboard/OrderDetailClient";
 import type { SmartbillConfig } from "@/lib/smartbill";
 
@@ -11,7 +12,7 @@ export default async function OrderDetailPage({ params }: Props) {
   const { orderId } = await params;
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: order } = await supabase

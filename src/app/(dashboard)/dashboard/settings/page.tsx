@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
 export default async function SettingsPage({ searchParams }: Props) {
   const { plan_success } = await searchParams;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: business }] = await Promise.all([

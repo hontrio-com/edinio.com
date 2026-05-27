@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { FgoConfigClient } from "@/components/dashboard/FgoConfigClient";
 import type { FgoConfig } from "@/lib/fgo";
 
 export default async function FgoPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

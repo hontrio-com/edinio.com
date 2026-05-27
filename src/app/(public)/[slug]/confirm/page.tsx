@@ -4,6 +4,7 @@ import { CheckCircle, Package, Phone, ArrowLeft } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
+import type { MarketingConfig } from "@/lib/marketing";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -16,7 +17,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
 
   const supabase = await createClient();
   const { data: business } = await supabase
-    .from("businesses").select("business_name, primary_color, logo_url, phone, slug").eq("slug", slug).single();
+    .from("businesses").select("id, business_name, primary_color, logo_url, phone, slug").eq("slug", slug).single();
   if (!business) notFound();
 
   const color = business.primary_color ?? "#1AB554";
@@ -48,10 +49,24 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const computedTotal = subtotal + shippingCost - discountAmount;
   const displayTotal = computedTotal || Number(total) || 0;
 
+  const { data: storeSettings } = await supabase
+    .from("store_settings")
+    .select("marketing_config")
+    .eq("business_id", business.id)
+    .single();
+  const marketingConfig = (storeSettings?.marketing_config as MarketingConfig | null) ?? null;
+
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center px-4 py-12">
       <ConfettiEffect color={color} />
-      {orderId && <FbPurchaseEvent orderId={orderId} total={displayTotal} />}
+      {orderId && (
+        <FbPurchaseEvent
+          orderId={orderId}
+          total={displayTotal}
+          googleTagId={marketingConfig?.google_tag_id}
+          googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
+        />
+      )}
 
       <div className="w-full max-w-md">
         {/* Success card */}

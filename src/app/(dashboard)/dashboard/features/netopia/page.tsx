@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { redirect } from "next/navigation";
 import NetopiaConfigClient from "@/components/dashboard/NetopiaConfigClient";
 import type { NetopiaConfig } from "@/lib/netopia";
 
 export default async function NetopiaPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

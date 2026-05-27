@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { SamedayConfigClient } from "@/components/dashboard/SamedayConfigClient";
-import type { SamedayConfig } from "@/lib/sameday";
+import { GoogleAdsConfigClient } from "@/components/dashboard/GoogleAdsConfigClient";
+import type { MarketingConfig } from "@/lib/marketing";
 
-export default async function SamedayPage() {
+export default async function GoogleAdsPage() {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -21,29 +21,29 @@ export default async function SamedayPage() {
 
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config")
+    .select("marketing_config")
     .eq("business_id", business.id)
     .single();
 
-  const config = (settings?.sameday_config as SamedayConfig | null) ?? null;
+  const config = (settings?.marketing_config as MarketingConfig | null) ?? null;
 
   return (
     <div className="p-6 max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
         <img
-          src="/integrations/sameday.svg"
-          alt="Sameday"
+          src="/integrations/google-ads.svg"
+          alt="Google Ads"
           className="h-8 w-auto object-contain"
         />
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Sameday</h1>
+          <h1 className="text-xl font-semibold text-foreground">Google Ads / GA4</h1>
           <p className="text-sm text-muted-foreground">
-            Genereaza AWB-uri Sameday direct din comenzile magazinului tau.
+            Urmareste conversiile si optimizeaza campaniile tale pe Google.
           </p>
         </div>
       </div>
 
-      <SamedayConfigClient businessId={business.id} initialConfig={config} />
+      <GoogleAdsConfigClient businessId={business.id} initialConfig={config} />
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { redirect } from "next/navigation";
 import OblioConfigClient from "@/components/dashboard/OblioConfigClient";
 import type { OblioConfig } from "@/lib/oblio";
 
 export default async function OblioPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

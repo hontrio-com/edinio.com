@@ -2,6 +2,7 @@ export type MarketingConfig = {
   facebook_pixel_id?: string;
   tiktok_pixel_id?: string;
   google_tag_id?: string;
+  google_ads_conversion_label?: string; // e.g. "abc123XYZ" — needed for Purchase conversion tracking in Google Ads
 };
 
 // Facebook Pixel — call window.fbq safely

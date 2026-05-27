@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SMSMarketingClient } from "@/components/dashboard/SMSMarketingClient";
 import type { SmsoConfig } from "@/lib/smso";
 import { getSmsTemplates } from "@/lib/actions/sms.actions";
 
 export default async function SmsMarketingPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

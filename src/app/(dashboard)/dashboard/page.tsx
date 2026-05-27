@@ -5,6 +5,7 @@ import {
   TrendingUp, TrendingDown, AlertCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
@@ -60,7 +61,7 @@ const ORDER_STATUS_LABELS: Record<string, { label: string; className: string }> 
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

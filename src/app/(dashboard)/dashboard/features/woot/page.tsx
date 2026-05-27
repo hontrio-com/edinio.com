@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { redirect } from "next/navigation";
 import WootConfigClient from "@/components/dashboard/WootConfigClient";
 import type { WootConfig } from "@/lib/woot";
 
 export default async function WootPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { data: business } = await supabase

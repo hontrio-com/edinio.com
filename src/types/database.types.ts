@@ -323,6 +323,8 @@ export interface Database {
           fgo_invoice_link: string | null;
           fgo_storno_number: string | null;
           fgo_storno_series: string | null;
+          cargus_awb_number: string | null;
+          cargus_service_name: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -380,6 +382,8 @@ export interface Database {
           fgo_invoice_link?: string | null;
           fgo_storno_number?: string | null;
           fgo_storno_series?: string | null;
+          cargus_awb_number?: string | null;
+          cargus_service_name?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -413,6 +417,7 @@ export interface Database {
           colete_config: Json | null;
           oblio_config: Json | null;
           fgo_config: Json | null;
+          cargus_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -442,6 +447,7 @@ export interface Database {
           colete_config?: Json | null;
           oblio_config?: Json | null;
           fgo_config?: Json | null;
+          cargus_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -469,6 +475,7 @@ export interface Database {
           colete_config?: Json | null;
           oblio_config?: Json | null;
           fgo_config?: Json | null;
+          cargus_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

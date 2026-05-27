@@ -6,6 +6,7 @@ import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
+import type { CargusConfig } from "@/lib/cargus";
 
 export default async function OrdersPage() {
   const supabase = await createClient();
@@ -35,7 +36,7 @@ export default async function OrdersPage() {
       .eq("status", "pending"),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config")
       .eq("business_id", business.id)
       .single(),
   ]);
@@ -50,10 +51,12 @@ export default async function OrdersPage() {
   const oblioEnabled = !!(oc?.enabled && oc?.client_id && oc?.cif && oc?.series_invoice);
   const fc = settings?.fgo_config as FgoConfig | null;
   const fgoEnabled = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
+  const cg = settings?.cargus_config as CargusConfig | null;
+  const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} businessId={business.id} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} businessId={business.id} />
     </div>
   );
 }

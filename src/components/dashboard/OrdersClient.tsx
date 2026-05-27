@@ -9,6 +9,7 @@ import { formatDate, formatPrice } from "@/lib/utils/format";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
+import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import type { Database } from "@/types/database.types";
@@ -38,7 +39,7 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, businessId }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, businessId }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
@@ -46,6 +47,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   coleteEnabled?: boolean;
   oblioEnabled?: boolean;
   fgoEnabled?: boolean;
+  cargusEnabled?: boolean;
   businessId?: string;
 }) {
   const router = useRouter();
@@ -59,6 +61,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [oblioActionOrderId, setOblioActionOrderId] = useState<string | null>(null);
   const [oblioAction, setOblioAction] = useState<"invoice" | "proforma" | "storno" | null>(null);
   const [, startOblioTransition] = useTransition();
+  const [cargusModalOrder, setCargusModalOrder] = useState<Order | null>(null);
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
@@ -159,6 +162,15 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
           onSuccess={() => { setWootModalOrder(null); router.refresh(); }}
         />
       )}
+      {cargusModalOrder && businessId && (
+        <CargusAwbModal
+          open={!!cargusModalOrder}
+          onClose={() => setCargusModalOrder(null)}
+          order={cargusModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setCargusModalOrder(null); router.refresh(); }}
+        />
+      )}
       {coleteModalOrder && businessId && (
         <ColeteAwbModal
           open={!!coleteModalOrder}
@@ -256,6 +268,9 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                     {wootEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Woot</th>
                     )}
+                    {cargusEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Cargus</th>
+                    )}
                     {coleteEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Colete</th>
                     )}
@@ -309,6 +324,29 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setWootModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {cargusEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {order.cargus_awb_number ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setCargusModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {order.cargus_awb_number}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setCargusModalOrder(order); }}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
                               >
                                 <Package className="h-3 w-3" />

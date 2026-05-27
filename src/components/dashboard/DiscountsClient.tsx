@@ -238,6 +238,7 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
             </label>
             <input
               type="date"
+              lang="ro"
               value={form.expires_at ?? ""}
               onChange={e => setForm(f => ({ ...f, expires_at: e.target.value || null }))}
               min={new Date().toISOString().slice(0, 10)}
@@ -380,10 +381,11 @@ export function DiscountsClient({ discounts, businessId }: {
         <button
           type="button"
           onClick={handleNew}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors"
+          className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Cod nou
+          <span className="hidden xs:inline sm:inline">Cod nou</span>
+          <span className="xs:hidden sm:hidden">Nou</span>
         </button>
       </div>
 

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  ShoppingCart, Banknote, Package, Clock,
+  ShoppingCart, Wallet, Package, Clock,
   TrendingUp, TrendingDown, AlertCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
         <StatCard icon={ShoppingCart} label="Comenzi azi"          value={ordersTodayCount}         trend={ordersTrend} />
-        <StatCard icon={Banknote}     label="Vanzari luna aceasta" value={formatPrice(monthRevenue)} trend={revenueTrend} />
+        <StatCard icon={Wallet}       label="Vanzari luna aceasta" value={formatPrice(monthRevenue)} trend={revenueTrend} />
         <StatCard icon={Package}      label="Produse active"       value={activeProducts ?? 0} />
         <StatCard icon={Clock}        label="In asteptare"         value={pendingOrders ?? 0} />
       </div>

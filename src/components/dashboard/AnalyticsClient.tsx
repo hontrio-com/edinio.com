@@ -302,21 +302,21 @@ export function AnalyticsClient({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex-1">
+      <div className="space-y-3">
+        <div>
           <h1 className="text-xl font-semibold text-foreground">Statistici</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Performanta magazinului tau</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Period selector */}
-          <div className="flex bg-muted rounded-xl p-1 gap-0.5">
+          <div className="flex bg-muted rounded-xl p-1 gap-0.5 flex-1 sm:flex-none">
             {PERIOD_OPTIONS.map(opt => (
               <button
                 key={opt.value}
                 type="button"
                 onClick={() => setPeriod(opt.value)}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                  "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
                   String(period) === opt.value
                     ? "bg-white text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -327,12 +327,12 @@ export function AnalyticsClient({
             ))}
           </div>
           {/* Tab switcher */}
-          <div className="flex bg-muted rounded-xl p-1 gap-0.5">
+          <div className="flex bg-muted rounded-xl p-1 gap-0.5 flex-1 sm:flex-none">
             <button
               type="button"
               onClick={() => setTab("overview")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                "flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
                 tab === "overview" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -343,7 +343,7 @@ export function AnalyticsClient({
               type="button"
               onClick={() => setTab("live")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                "flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
                 tab === "live" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >

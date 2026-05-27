@@ -217,36 +217,36 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
         />
       )}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-        <div className="flex-1">
-          <h1 className="text-xl font-semibold text-foreground">Comenzi</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Toate comenzile primite</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 mb-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Comenzi</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Toate comenzile primite</p>
+          </div>
           {pendingCount > 0 && (
-            <span className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full border border-amber-200">
+            <span className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full border border-amber-200 flex-shrink-0">
               {pendingCount} in asteptare
             </span>
           )}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={e => handleSearch(e.target.value)}
-              placeholder="Cauta comanda, client..."
-              className="pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors w-52"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => handleSearch("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Cauta comanda, client..."
+            className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => handleSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

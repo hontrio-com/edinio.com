@@ -159,7 +159,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
           </button>
 
           {notifOpen && (
-            <div className="absolute right-0 top-full mt-2 w-96 bg-popover border border-border rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[500px]">
+            <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-popover border border-border rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[500px]">
               {/* Header */}
               <div className="px-5 py-4 border-b border-border flex-shrink-0">
                 <div className="flex items-center justify-between mb-3">
@@ -177,7 +177,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
                       onClick={markAllRead}
                       className="text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
                     >
-                      Mark all as read
+                      Marcheaza ca citite
                     </button>
                   )}
                 </div>
@@ -201,7 +201,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
                         unreadOnly ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"
                       )}
                     >
-                      View unread only {unreadCount > 0 && `(${unreadCount})`}
+                      Necitite {unreadCount > 0 && `(${unreadCount})`}
                     </button>
                   </div>
                 )}

@@ -228,6 +228,19 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     }
   }, [planSuccess]);
 
+  useEffect(() => {
+    if (planSuccess) return;
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const hashMap: Partial<Record<string, SectionId>> = {
+      abonament: "facturare",
+      facturare: "facturare",
+      plan: "plan",
+    };
+    const mapped = hashMap[hash] ?? (NAV_SECTIONS.some(s => s.id === hash) ? hash as SectionId : null);
+    if (mapped) setActiveSection(mapped);
+  }, [planSuccess]);
+
 
   // Account
   const [fullName, setFullName] = useState(profile.full_name);
@@ -914,15 +927,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               )}
 
               {/* Global toggle */}
-              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-surface">
-                <div>
+              <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-border bg-surface">
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">Livrare activata</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Permite clientilor sa aleaga o metoda de livrare la comanda</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShippingEnabled(v => !v)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${shippingEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${shippingEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${shippingEnabled ? "translate-x-6" : "translate-x-1"}`} />
                 </button>
@@ -950,7 +963,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground">{method.label}</p>
                           {!isIntegrated && method.id !== "own" && method.id !== "pickup" && (
-                            <a href="/dashboard/features" className="text-[10px] text-primary hover:underline">
+                            <a href="/dashboard/features" className="text-[10px] text-primary hover:underline whitespace-nowrap">
                               Configureaza integrarea
                             </a>
                           )}
@@ -1040,15 +1053,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
               {/* Toggle platitor TVA */}
               <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">Platitor de TVA</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Activeaza daca firma ta este inregistrata ca platitor de TVA</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setVat(v => ({ ...v, vat_enabled: !v.vat_enabled }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${
                       vat.vat_enabled ? "bg-primary" : "bg-muted-foreground/30"
                     }`}
                   >
@@ -1127,15 +1140,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     </div>
 
                     {/* Arata defalcarea TVA */}
-                    <div className="flex items-center justify-between pt-4 border-t border-border">
-                      <div>
+                    <div className="flex items-center justify-between gap-4 pt-4 border-t border-border">
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-foreground">Afiseaza defalcarea TVA in cos</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Clientii vor vedea valoarea TVA separat in sumar</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setVat(v => ({ ...v, show_vat_breakdown: !v.show_vat_breakdown }))}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${
                           vat.show_vat_breakdown ? "bg-primary" : "bg-muted-foreground/30"
                         }`}
                       >
@@ -1233,8 +1246,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <p className="text-sm font-semibold text-foreground pb-4">Evenimente</p>
 
                 {/* Comanda noua */}
-                <div className="flex items-center justify-between py-4">
-                  <div>
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">Comanda noua</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Primesti un email imediat cand un client plaseaza o comanda</p>
                   </div>
@@ -1242,7 +1255,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     type="button"
                     onClick={() => setNotif(n => ({ ...n, new_order: !n.new_order }))}
                     disabled={!businessId}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 ${
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 ${
                       notif.new_order ? "bg-primary" : "bg-muted-foreground/30"
                     }`}
                   >

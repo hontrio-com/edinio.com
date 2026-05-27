@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCachedUser, getCachedCurrentBusiness, getCachedStoreSettings } from "@/lib/supabase/cached-queries";
+import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -76,7 +76,7 @@ export default async function IntegrationsPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const business = await getCachedCurrentBusiness(user.id);
+  const { business, settings: preloadedSettings } = await getCachedBusinessWithSettings(user.id);
 
   let smsoActive = false;
   let smartbillActive = false;
@@ -94,7 +94,7 @@ export default async function IntegrationsPage() {
   let ttActive = false;
   let googleActive = false;
   if (business) {
-    const settings = await getCachedStoreSettings(business.id);
+    const settings = preloadedSettings;
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
     smartbillActive = (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
     const sc = settings?.stripe_config as StripeConfig | null;

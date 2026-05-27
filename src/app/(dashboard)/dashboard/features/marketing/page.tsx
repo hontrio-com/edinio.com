@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCachedUser, getCachedCurrentBusiness, getCachedStoreSettings } from "@/lib/supabase/cached-queries";
+import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { MarketingConfigClient } from "@/components/dashboard/MarketingConfigClient";
 import type { MarketingConfig } from "@/lib/marketing";
 
@@ -7,11 +7,8 @@ export default async function MarketingPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const business = await getCachedCurrentBusiness(user.id);
-
+  const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
-
-  const settings = await getCachedStoreSettings(business.id);
 
   const config = (settings?.marketing_config as MarketingConfig | null) ?? null;
 

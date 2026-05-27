@@ -1,6 +1,5 @@
 "use server";
 
-import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   createDpdShipment,
@@ -30,9 +29,6 @@ export async function saveDpdConfig(
   }).eq("business_id", businessId);
 
   if (error) return { error: error.message };
-  updateTag(`store-settings-${businessId}`);
-  updateTag(`businesses-${user.id}`);
-  updateTag(`business-${user.id}`);
   return { success: true };
 }
 
@@ -53,9 +49,6 @@ export async function disconnectDpd(
   }).eq("business_id", businessId);
 
   if (error) return { error: error.message };
-  updateTag(`store-settings-${businessId}`);
-  updateTag(`businesses-${user.id}`);
-  updateTag(`business-${user.id}`);
   return { success: true };
 }
 

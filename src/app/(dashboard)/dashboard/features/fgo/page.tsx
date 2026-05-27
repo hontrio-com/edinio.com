@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCachedUser, getCachedCurrentBusiness, getCachedStoreSettings } from "@/lib/supabase/cached-queries";
+import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { FgoConfigClient } from "@/components/dashboard/FgoConfigClient";
 import type { FgoConfig } from "@/lib/fgo";
 
@@ -7,11 +7,8 @@ export default async function FgoPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const business = await getCachedCurrentBusiness(user.id);
-
+  const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
-
-  const settings = await getCachedStoreSettings(business.id);
 
   const config = (settings?.fgo_config as FgoConfig | null) ?? null;
 

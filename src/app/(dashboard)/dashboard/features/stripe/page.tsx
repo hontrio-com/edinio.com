@@ -1,20 +1,16 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { getCachedUser, getCachedCurrentBusiness, getCachedStoreSettings } from "@/lib/supabase/cached-queries";
+import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { StripeConnectClient, type StripeConfig } from "@/components/dashboard/StripeConnectClient";
 
 export default async function StripeFeaturePage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const business = await getCachedCurrentBusiness(user.id);
+  const { business, settings } = await getCachedBusinessWithSettings(user.id);
 
-  let stripeConfig: StripeConfig | null = null;
-  if (business) {
-    const settings = await getCachedStoreSettings(business.id);
-    stripeConfig = (settings?.stripe_config as StripeConfig | null) ?? null;
-  }
+  const stripeConfig = (settings?.stripe_config as StripeConfig | null) ?? null;
 
   return (
     <div className="p-6 max-w-2xl">

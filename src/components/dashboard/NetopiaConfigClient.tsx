@@ -143,7 +143,7 @@ export default function NetopiaConfigClient({
         </button>
         <span className="text-muted-foreground">/</span>
         <div className="flex items-center gap-2">
-          <img src="/integrations/netopia.svg" alt="Netopia" className="h-5 w-auto object-contain" style={{ filter: "var(--logo-filter, none)" }} />
+          <img src="/integrations/netopia.svg" alt="Netopia" className="h-5 w-auto object-contain" style={{ filter: "invert(1)" }} />
           <span className="text-sm font-semibold text-foreground">Netopia Payments</span>
         </div>
         {cfg.enabled && isConfigured && (

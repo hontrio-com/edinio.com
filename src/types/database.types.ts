@@ -305,6 +305,7 @@ export interface Database {
           smartbill_estimate_series: string | null;
           smartbill_storno_number: string | null;
           smartbill_storno_series: string | null;
+          stripe_session_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -344,6 +345,7 @@ export interface Database {
           smartbill_estimate_series?: string | null;
           smartbill_storno_number?: string | null;
           smartbill_storno_series?: string | null;
+          stripe_session_id?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -371,6 +373,7 @@ export interface Database {
           notifications_config: Json;
           smso_config: Json | null;
           smartbill_config: Json | null;
+          stripe_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -394,6 +397,7 @@ export interface Database {
           notifications_config?: Json;
           smso_config?: Json | null;
           smartbill_config?: Json | null;
+          stripe_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -415,6 +419,7 @@ export interface Database {
           notifications_config?: Json;
           smso_config?: Json | null;
           smartbill_config?: Json | null;
+          stripe_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

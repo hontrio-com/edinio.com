@@ -3,7 +3,7 @@
 import { useState, createContext, useContext, useEffect, useTransition, useMemo } from "react";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
-  MapPin, Mail, Globe, ChevronRight, Package, User, Home, Loader2, Banknote,
+  MapPin, Mail, Globe, ChevronRight, Package, User, Home, Loader2, Banknote, CreditCard,
   Truck, ShieldCheck, RotateCcw, Check,
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
@@ -180,6 +180,8 @@ function CartCheckoutModal({
     { email_field: emailFieldConfig } as PageContent["checkout_config"]
   );
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
+  const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "stripe">("cash_on_delivery");
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   const hiddenFields = checkoutConfig?.hidden_fields ?? [];
@@ -216,7 +218,7 @@ function CartCheckoutModal({
     const supabase = createClient();
     supabase
       .from("store_settings")
-      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
+      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config")
       .eq("business_id", businessId)
       .single()
       .then(({ data }) => {
@@ -230,6 +232,10 @@ function CartCheckoutModal({
           prices_include_vat: data?.prices_include_vat ?? true,
           show_vat_breakdown: data?.show_vat_breakdown ?? true,
         });
+        const sc = data?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
+        const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
+        setStripeEnabled(stripeOk);
+        if (!stripeOk) setPaymentMethod("cash_on_delivery");
       });
   }, [open, businessId]);
 
@@ -269,11 +275,27 @@ function CartCheckoutModal({
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
         vat_amount: vatAmount,
         vat_rate: vatConfig.vat_enabled ? vatConfig.vat_rate : 0,
+        payment_method: paymentMethod,
       });
       if ("error" in result) { setErrors({ _: result.error as string }); return; }
+
+      const orderId = (result as { orderId: string }).orderId;
+
+      if (paymentMethod === "stripe") {
+        const res = await fetch("/api/stripe/order-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId, businessId }),
+        });
+        const data = await res.json() as { url?: string; error?: string };
+        if (data.url) { clear(); window.location.href = data.url; return; }
+        setErrors({ _: data.error ?? "Eroare la initierea platii cu cardul." });
+        return;
+      }
+
       clear();
       onClose();
-      window.location.href = `/${slug}/confirm?orderId=${(result as { orderId: string }).orderId}&name=${encodeURIComponent(form.name)}&total=${grandTotal}`;
+      window.location.href = `/${slug}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${grandTotal}`;
     });
   }
 
@@ -479,19 +501,50 @@ function CartCheckoutModal({
               <span style={{ color }}>{grandTotal} lei</span>
             </div>
           </div>
+          {/* Payment method toggle */}
+          {stripeEnabled && (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-gray-700">Metoda de plata</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setPaymentMethod("cash_on_delivery")}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                  style={paymentMethod === "cash_on_delivery"
+                    ? { borderColor: color, backgroundColor: `${color}12`, color: "#111" }
+                    : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                  <Banknote className="h-4 w-4" />
+                  Ramburs
+                </button>
+                <button type="button" onClick={() => setPaymentMethod("stripe")}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                  style={paymentMethod === "stripe"
+                    ? { borderColor: "#635bff", backgroundColor: "#635bff12", color: "#111" }
+                    : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                  <CreditCard className="h-4 w-4" />
+                  Card online
+                </button>
+              </div>
+            </div>
+          )}
+
           {errors._ && <p className="text-sm text-red-500 text-center">{errors._}</p>}
           <button
             type="submit"
             disabled={isPending}
             className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-            style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
+            style={paymentMethod === "stripe"
+              ? { backgroundColor: "#635bff", boxShadow: "0px 2px 12px #635bff55" }
+              : { backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >
             {isPending
               ? <><Loader2 className="h-[18px] w-[18px] animate-spin" />Se proceseaza...</>
-              : <><Banknote className="h-5 w-5" />Plata la livrare - {grandTotal} lei</>
+              : paymentMethod === "stripe"
+                ? <><CreditCard className="h-5 w-5" />Plateste cu cardul - {grandTotal} lei</>
+                : <><Banknote className="h-5 w-5" />Plata la livrare - {grandTotal} lei</>
             }
           </button>
-          <p className="text-center text-xs text-gray-400">Platesti cash curierului - Fara card necesar</p>
+          <p className="text-center text-xs text-gray-400">
+            {paymentMethod === "stripe" ? "Vei fi redirectionat catre Stripe pentru plata securizata" : "Platesti cash curierului - Fara card necesar"}
+          </p>
         </form>
       </div>
     </>

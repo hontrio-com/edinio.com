@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  X, User, Phone, MapPin, Home, Loader2, Banknote,
+  X, User, Phone, MapPin, Home, Loader2, Banknote, CreditCard,
   Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package, Mail,
 } from "lucide-react";
 import { placeOrder } from "@/lib/actions/order.actions";
@@ -29,6 +29,12 @@ interface CheckoutConfig {
   extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
   hidden_fields?: string[];
   email_field?: { enabled: boolean; required: boolean };
+}
+
+interface StripeConfig {
+  account_id?: string;
+  enabled?: boolean;
+  charges_enabled?: boolean;
 }
 
 interface Props {
@@ -70,6 +76,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const color = business.primary_color;
   const hasTiers = tiers && tiers.length > 0;
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
+  const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "stripe">("cash_on_delivery");
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? [];
@@ -126,13 +134,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     };
   }, [open, onClose]);
 
-  // Fetch checkout config fresh from DB when modal opens
+  // Fetch checkout config + stripe config fresh from DB when modal opens
   useEffect(() => {
     if (!open) return;
     const supabase = createClient();
     supabase
       .from("store_settings")
-      .select("page_content")
+      .select("page_content, stripe_config")
       .eq("business_id", business.id)
       .single()
       .then(({ data }) => {
@@ -140,6 +148,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           const pc = data.page_content as { checkout_config?: CheckoutConfig };
           setLiveCheckoutConfig(pc.checkout_config);
         }
+        const sc = data?.stripe_config as StripeConfig | null;
+        const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
+        setStripeEnabled(stripeOk);
+        if (!stripeOk) setPaymentMethod("cash_on_delivery");
       });
   }, [open, business.id]);
 
@@ -224,8 +236,22 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         discount_amount: discountAmount,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
+        payment_method: paymentMethod,
       });
       if (result.error) { setErrors({ _: result.error }); return; }
+
+      if (paymentMethod === "stripe") {
+        const res = await fetch("/api/stripe/order-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: result.orderId, businessId: business.id }),
+        });
+        const data = await res.json() as { url?: string; error?: string };
+        if (data.url) { window.location.href = data.url; return; }
+        setErrors({ _: data.error ?? "Eroare la initierea platii cu cardul." });
+        return;
+      }
+
       onClose();
       window.location.href = `/${business.slug}/confirm?orderId=${result.orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
     });
@@ -588,20 +614,49 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               </div>
 
+              {/* Payment method */}
+              {stripeEnabled && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-gray-700">Metoda de plata</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setPaymentMethod("cash_on_delivery")}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                      style={paymentMethod === "cash_on_delivery"
+                        ? { borderColor: color, backgroundColor: `${color}12`, color: "#111" }
+                        : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                      <Banknote size={16} />
+                      Ramburs
+                    </button>
+                    <button type="button" onClick={() => setPaymentMethod("stripe")}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                      style={paymentMethod === "stripe"
+                        ? { borderColor: "#635bff", backgroundColor: "#635bff12", color: "#111" }
+                        : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                      <CreditCard size={16} />
+                      Card online
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {errors._ && <p className="text-sm text-red-500 text-center">{errors._}</p>}
 
               {/* Submit */}
               <button type="submit" disabled={isPending}
                 className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
-                style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
+                style={paymentMethod === "stripe"
+                  ? { backgroundColor: "#635bff", boxShadow: "0px 2px 12px #635bff55" }
+                  : { backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
                 {isPending
                   ? <><Loader2 size={18} className="animate-spin" />Se proceseaza...</>
-                  : <><Banknote size={20} />Plata la livrare - {total.toFixed(2).replace(".00", "")} lei</>
+                  : paymentMethod === "stripe"
+                    ? <><CreditCard size={20} />Plateste cu cardul - {total.toFixed(2).replace(".00", "")} lei</>
+                    : <><Banknote size={20} />Plata la livrare - {total.toFixed(2).replace(".00", "")} lei</>
                 }
               </button>
 
               <p className="text-center text-xs text-gray-400">
-                Platesti cash curierului - Fara card necesar
+                {paymentMethod === "stripe" ? "Vei fi redirectionat catre Stripe pentru plata securizata" : "Platesti cash curierului - Fara card necesar"}
               </p>
             </form>
           </motion.div>

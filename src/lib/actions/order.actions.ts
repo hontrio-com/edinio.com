@@ -39,6 +39,7 @@ export async function placeOrder(data: {
   discount_amount?: number;
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
+  payment_method?: string;
 }) {
   const supabase = await createClient();
 
@@ -71,7 +72,7 @@ export async function placeOrder(data: {
     discount_amount: discountAmount,
     total,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields : null,
-    payment_method: "cash_on_delivery",
+    payment_method: data.payment_method ?? "cash_on_delivery",
     payment_status: "unpaid",
     status: "pending",
   }).select("id, order_number").single();
@@ -184,6 +185,7 @@ export async function placeCartOrder(data: {
   custom_fields?: Record<string, string>;
   vat_amount?: number;
   vat_rate?: number;
+  payment_method?: string;
 }) {
   const supabase = await createClient();
 
@@ -219,7 +221,7 @@ export async function placeCartOrder(data: {
     vat_amount: vatAmount,
     vat_rate: data.vat_rate ?? 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields : null,
-    payment_method: "cash_on_delivery",
+    payment_method: data.payment_method ?? "cash_on_delivery",
     payment_status: "unpaid",
     status: "pending",
   }).select("id, order_number, total").single();

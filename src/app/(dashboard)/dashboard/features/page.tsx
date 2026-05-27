@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
+import type { StripeConfig } from "@/components/dashboard/StripeConnectClient";
 
 type Integration = {
   name: string;
@@ -47,7 +48,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     id: "plati",
     label: "Procesatori de plati",
     integrations: [
-      { name: "Stripe",           logo: "/integrations/stripe.svg" },
+      { name: "Stripe",           logo: "/integrations/stripe.svg", id: "stripe" },
       { name: "Netopia Payments", logo: "/integrations/netopia.svg", filter: "invert(1)" },
     ],
   },
@@ -77,14 +78,17 @@ export default async function IntegrationsPage() {
 
   let smsoActive = false;
   let smartbillActive = false;
+  let stripeActive = false;
   if (business) {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("smso_config, smartbill_config")
+      .select("smso_config, smartbill_config, stripe_config")
       .eq("business_id", business.id)
       .single();
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
     smartbillActive = (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
+    const sc = settings?.stripe_config as StripeConfig | null;
+    stripeActive = !!(sc?.enabled && sc?.charges_enabled);
   }
 
   return (
@@ -108,9 +112,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "smso" || integration.id === "smartbill";
-                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : false;
-                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : "#";
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe";
+                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : false;
+                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : "#";
 
                 if (isUnlocked) {
                   return (

@@ -18,6 +18,9 @@ export interface Database {
           plan_expires_at: string | null;
           stripe_customer_id: string | null;
           onboarding_completed: boolean;
+          mfa_email_enabled: boolean;
+          mfa_otp: string | null;
+          mfa_otp_expires_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -29,6 +32,9 @@ export interface Database {
           plan_expires_at?: string | null;
           stripe_customer_id?: string | null;
           onboarding_completed?: boolean;
+          mfa_email_enabled?: boolean;
+          mfa_otp?: string | null;
+          mfa_otp_expires_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -40,6 +46,9 @@ export interface Database {
           plan_expires_at?: string | null;
           stripe_customer_id?: string | null;
           onboarding_completed?: boolean;
+          mfa_email_enabled?: boolean;
+          mfa_otp?: string | null;
+          mfa_otp_expires_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];

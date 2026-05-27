@@ -82,6 +82,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
       }}
       activeCourierIds={activeCourierIds}
+      mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={plan_success === "1"}
     />
   );

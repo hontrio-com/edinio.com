@@ -131,6 +131,24 @@ export async function sendOrderConfirmationToCustomer(
   });
 }
 
+export async function sendMfaOtpEmail(to: string, otp: string) {
+  if (!process.env.RESEND_API_KEY) return;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cod de verificare</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Foloseste codul de mai jos pentru a confirma autentificarea in contul tau Edinio.</p>
+    <div style="text-align:center;margin:28px 0;padding:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
+      <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#1AB554;font-family:monospace;">${otp}</span>
+    </div>
+    <p style="margin:0;font-size:13px;color:#71717a;text-align:center;">Codul este valabil <strong>10 minute</strong>. Daca nu ai initiat tu aceasta autentificare, ignora acest email.</p>
+  `;
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `${otp} — Codul tau de verificare Edinio`,
+    html: baseTemplate(content),
+  });
+}
+
 export async function sendNewOrderEmail(
   to: string,
   order: {

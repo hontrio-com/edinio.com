@@ -6,12 +6,12 @@ import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
-  ShieldCheck, ShieldOff, Copy,
+  ShieldCheck, ShieldOff, Mail,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
 import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig } from "@/lib/actions/store.actions";
-import { deleteAccount } from "@/lib/actions/auth.actions";
+import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import type { Database } from "@/types/database.types";
 
@@ -203,6 +203,7 @@ interface Props {
   smsoConfig: SmsoConfig;
   shippingConfig: ShippingConfig;
   activeCourierIds: string[];
+  mfaEmailEnabled: boolean;
   planSuccess?: boolean;
 }
 
@@ -218,7 +219,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, planSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, mfaEmailEnabled, planSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : "general");
 
   useEffect(() => {
@@ -227,12 +228,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     }
   }, [planSuccess]);
 
-  useEffect(() => {
-    if (activeSection === "securitate") {
-      void checkMfaStatus();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSection]);
 
   // Account
   const [fullName, setFullName] = useState(profile.full_name);
@@ -305,15 +300,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
 
-  // 2FA
-  const [mfaStatus, setMfaStatus] = useState<"loading" | "enabled" | "disabled">("loading");
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
-  const [mfaStep, setMfaStep] = useState<"idle" | "enrolling" | "disabling">("idle");
-  const [mfaTempFactorId, setMfaTempFactorId] = useState<string | null>(null);
-  const [mfaQrCode, setMfaQrCode] = useState<string | null>(null);
-  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+  // 2FA email
+  const [mfaEnabled, setMfaEnabled] = useState(mfaEmailEnabled);
+  const [mfaStep, setMfaStep] = useState<"idle" | "enabling" | "disabling">("idle");
   const [mfaCode, setMfaCode] = useState("");
-  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaSending, setMfaSending] = useState(false);
+  const [mfaVerifying, setMfaVerifying] = useState(false);
 
   // Shipping
   const [shippingEnabled, setShippingEnabled] = useState(shippingConfig.shipping_enabled);
@@ -502,64 +494,42 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     }
   }
 
-  async function checkMfaStatus() {
-    setMfaStatus("loading");
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.mfa.listFactors();
-    if (error || !data) { setMfaStatus("disabled"); return; }
-    const verified = data.totp.find((f) => f.status === "verified");
-    if (verified) { setMfaStatus("enabled"); setMfaFactorId(verified.id); }
-    else { setMfaStatus("disabled"); setMfaFactorId(null); }
-  }
-
-  async function startEnrollMfa() {
-    setMfaLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.mfa.enroll({
-      factorType: "totp",
-      issuer: "Edinio",
-      friendlyName: "Authenticator App",
-    });
-    setMfaLoading(false);
-    if (error || !data) { toast.error("Nu am putut initializa 2FA. Incearca din nou."); return; }
-    setMfaTempFactorId(data.id);
-    setMfaQrCode(data.totp.qr_code);
-    setMfaSecret(data.totp.secret);
-    setMfaStep("enrolling");
+  async function startEnableMfa() {
+    setMfaSending(true);
+    const result = await sendMfaOtp();
+    setMfaSending(false);
+    if ("error" in result) { toast.error(result.error); return; }
+    setMfaStep("enabling");
     setMfaCode("");
   }
 
-  async function confirmEnrollMfa() {
-    if (!mfaTempFactorId || mfaCode.length < 6) return;
-    setMfaLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaTempFactorId, code: mfaCode });
-    setMfaLoading(false);
-    if (error) { toast.error("Cod incorect. Verifica aplicatia si incearca din nou."); return; }
+  async function confirmEnableMfa() {
+    if (mfaCode.length < 6) return;
+    setMfaVerifying(true);
+    const result = await verifyAndEnableMfaEmail(mfaCode);
+    setMfaVerifying(false);
+    if ("error" in result) { toast.error(result.error); return; }
     toast.success("Autentificarea in doi pasi a fost activata.");
-    setMfaStep("idle"); setMfaQrCode(null); setMfaSecret(null); setMfaCode(""); setMfaTempFactorId(null);
-    await checkMfaStatus();
+    setMfaEnabled(true); setMfaStep("idle"); setMfaCode("");
   }
 
-  async function cancelEnrollMfa() {
-    if (mfaTempFactorId) {
-      const supabase = createClient();
-      await supabase.auth.mfa.unenroll({ factorId: mfaTempFactorId });
-    }
-    setMfaStep("idle"); setMfaQrCode(null); setMfaSecret(null); setMfaCode(""); setMfaTempFactorId(null);
+  async function startDisableMfa() {
+    setMfaSending(true);
+    const result = await sendMfaOtp();
+    setMfaSending(false);
+    if ("error" in result) { toast.error(result.error); return; }
+    setMfaStep("disabling");
+    setMfaCode("");
   }
 
   async function confirmDisableMfa() {
-    if (!mfaFactorId || mfaCode.length < 6) return;
-    setMfaLoading(true);
-    const supabase = createClient();
-    const { error: verifyErr } = await supabase.auth.mfa.challengeAndVerify({ factorId: mfaFactorId, code: mfaCode });
-    if (verifyErr) { setMfaLoading(false); toast.error("Cod incorect. Verifica aplicatia si incearca din nou."); return; }
-    const { error: unenrollErr } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
-    setMfaLoading(false);
-    if (unenrollErr) { toast.error("Nu am putut dezactiva 2FA. Incearca din nou."); return; }
+    if (mfaCode.length < 6) return;
+    setMfaVerifying(true);
+    const result = await verifyAndDisableMfaEmail(mfaCode);
+    setMfaVerifying(false);
+    if ("error" in result) { toast.error(result.error); return; }
     toast.success("Autentificarea in doi pasi a fost dezactivata.");
-    setMfaStep("idle"); setMfaCode(""); setMfaFactorId(null); setMfaStatus("disabled");
+    setMfaEnabled(false); setMfaStep("idle"); setMfaCode("");
   }
 
   function savePolicies() {
@@ -1463,9 +1433,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-foreground">Autentificare in doi pasi (2FA)</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Adauga un nivel suplimentar de protectie contului tau prin TOTP.</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">La autentificare vei primi un cod de verificare pe email.</p>
                   </div>
-                  {mfaStatus === "enabled" && (
+                  {mfaEnabled && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-green-700 bg-green-100 rounded-full border border-green-200 flex-shrink-0">
                       <ShieldCheck className="h-3 w-3" />Activ
                     </span>
@@ -1473,97 +1443,60 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
 
                 <div className="px-5 py-5">
-                  {mfaStatus === "loading" && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />Se verifica statusul...
-                    </div>
-                  )}
-
                   {/* Disabled — idle */}
-                  {mfaStatus === "disabled" && mfaStep === "idle" && (
+                  {!mfaEnabled && mfaStep === "idle" && (
                     <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        Foloseste o aplicatie de autentificare (Google Authenticator, Authy etc.) pentru a genera coduri temporare la fiecare autentificare.
-                      </p>
+                      <div className="flex items-start gap-3 p-4 rounded-xl border border-border bg-muted/30">
+                        <Mail className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          La fiecare autentificare vei primi un cod de 6 cifre pe adresa <strong className="text-foreground">{email}</strong>. Introduce-l pentru a confirma ca esti tu.
+                        </p>
+                      </div>
                       <button
                         type="button"
-                        onClick={startEnrollMfa}
-                        disabled={mfaLoading}
+                        onClick={() => void startEnableMfa()}
+                        disabled={mfaSending}
                         className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
                       >
-                        {mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                        Activeaza 2FA
+                        {mfaSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                        {mfaSending ? "Se trimite codul..." : "Activeaza 2FA"}
                       </button>
                     </div>
                   )}
 
-                  {/* Enrolling — show QR */}
-                  {mfaStep === "enrolling" && mfaQrCode && (
-                    <div className="space-y-5">
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
-                        Scaneaza codul QR de mai jos cu aplicatia ta de autentificare, apoi introdu codul de 6 cifre generat.
+                  {/* Enabling — enter code sent to email */}
+                  {mfaStep === "enabling" && (
+                    <div className="space-y-4">
+                      <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl text-xs text-foreground leading-relaxed">
+                        Am trimis un cod de verificare la <strong>{email}</strong>. Introdu-l mai jos pentru a activa 2FA.
                       </div>
-
-                      <div className="flex gap-6 items-start flex-wrap">
-                        {/* QR code */}
-                        <div className="w-40 h-40 bg-white border border-border rounded-xl p-2 flex-shrink-0 flex items-center justify-center">
-                          <img
-                            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(mfaQrCode)}`}
-                            alt="QR Code 2FA"
-                            className="w-full h-full"
-                          />
-                        </div>
-
-                        {/* Secret + code input */}
-                        <div className="flex-1 min-w-0 space-y-4">
-                          {mfaSecret && (
-                            <div>
-                              <p className="text-xs font-medium text-muted-foreground mb-1">Cheie manuala (alternativa la QR)</p>
-                              <div className="flex items-center gap-2">
-                                <code className="text-xs font-mono bg-muted px-2 py-1.5 rounded-lg border border-border break-all select-all">
-                                  {mfaSecret}
-                                </code>
-                                <button
-                                  type="button"
-                                  onClick={() => { void navigator.clipboard.writeText(mfaSecret); toast.success("Copiat!"); }}
-                                  className="flex-shrink-0 p-1.5 rounded-lg border border-border hover:bg-muted transition-colors"
-                                >
-                                  <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          <div>
-                            <label className="block text-xs font-medium text-foreground mb-1.5">Cod de verificare</label>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              maxLength={6}
-                              value={mfaCode}
-                              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-                              onKeyDown={(e) => { if (e.key === "Enter") void confirmEnrollMfa(); }}
-                              placeholder="000000"
-                              className={`${inputCls} w-36 text-center text-lg font-mono tracking-widest`}
-                            />
-                          </div>
-                        </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5">Cod de verificare</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          autoFocus
+                          value={mfaCode}
+                          onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                          onKeyDown={(e) => { if (e.key === "Enter") void confirmEnableMfa(); }}
+                          placeholder="000000"
+                          className={`${inputCls} w-36 text-center text-lg font-mono tracking-widest`}
+                        />
                       </div>
-
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => void confirmEnrollMfa()}
-                          disabled={mfaLoading || mfaCode.length < 6}
+                          onClick={() => void confirmEnableMfa()}
+                          disabled={mfaVerifying || mfaCode.length < 6}
                           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
                         >
-                          {mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                          {mfaVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                           Verifica si activeaza
                         </button>
                         <button
                           type="button"
-                          onClick={() => void cancelEnrollMfa()}
-                          disabled={mfaLoading}
+                          onClick={() => { setMfaStep("idle"); setMfaCode(""); }}
                           className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
                         >
                           Anuleaza
@@ -1573,30 +1506,31 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   )}
 
                   {/* Enabled — idle */}
-                  {mfaStatus === "enabled" && mfaStep === "idle" && (
+                  {mfaEnabled && mfaStep === "idle" && (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
                         <ShieldCheck className="h-5 w-5 text-green-600 flex-shrink-0" />
                         <p className="text-sm text-green-800 leading-relaxed">
-                          Contul tau este protejat. La urmatoarea autentificare vei fi solicitat sa introduci codul din aplicatia de autentificare.
+                          Contul tau este protejat. La autentificare vei primi un cod pe adresa <strong>{email}</strong>.
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => { setMfaStep("disabling"); setMfaCode(""); }}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-destructive border border-destructive/30 rounded-lg hover:bg-destructive/10 transition-colors"
+                        onClick={() => void startDisableMfa()}
+                        disabled={mfaSending}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-destructive border border-destructive/30 rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-60"
                       >
-                        <ShieldOff className="h-4 w-4" />
-                        Dezactiveaza 2FA
+                        {mfaSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                        {mfaSending ? "Se trimite codul..." : "Dezactiveaza 2FA"}
                       </button>
                     </div>
                   )}
 
-                  {/* Disabling — confirm with TOTP code */}
-                  {mfaStatus === "enabled" && mfaStep === "disabling" && (
+                  {/* Disabling — enter code sent to email */}
+                  {mfaEnabled && mfaStep === "disabling" && (
                     <div className="space-y-4">
                       <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 leading-relaxed">
-                        Pentru a dezactiva 2FA, introdu codul curent din aplicatia ta de autentificare.
+                        Am trimis un cod de verificare la <strong>{email}</strong>. Introdu-l mai jos pentru a dezactiva 2FA.
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-1.5">Cod de verificare</label>
@@ -1604,6 +1538,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           type="text"
                           inputMode="numeric"
                           maxLength={6}
+                          autoFocus
                           value={mfaCode}
                           onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
                           onKeyDown={(e) => { if (e.key === "Enter") void confirmDisableMfa(); }}
@@ -1615,16 +1550,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         <button
                           type="button"
                           onClick={() => void confirmDisableMfa()}
-                          disabled={mfaLoading || mfaCode.length < 6}
+                          disabled={mfaVerifying || mfaCode.length < 6}
                           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors disabled:opacity-60"
                         >
-                          {mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                          {mfaVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
                           Confirma dezactivarea
                         </button>
                         <button
                           type="button"
                           onClick={() => { setMfaStep("idle"); setMfaCode(""); }}
-                          disabled={mfaLoading}
                           className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
                         >
                           Anuleaza

@@ -1,9 +1,25 @@
 "use server";
 
+import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { sendMfaOtpEmail } from "@/lib/email";
+
+function generateOtp(): { otp: string; otpHash: string; expiresAt: string } {
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  return { otp, otpHash, expiresAt };
+}
+
+function verifyOtpHash(code: string, storedHash: string, expiresAt: string): boolean {
+  if (new Date() > new Date(expiresAt)) return false;
+  const hash = crypto.createHash("sha256").update(code).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(storedHash));
+}
 
 export async function login(formData: { email: string; password: string }) {
   const supabase = await createClient();
@@ -22,17 +38,92 @@ export async function login(formData: { email: string; password: string }) {
 
   const { data: profile } = await supabase
     .from("users_profile")
-    .select("onboarding_completed")
+    .select("onboarding_completed, mfa_email_enabled")
     .eq("id", user.id)
     .single();
 
   revalidatePath("/", "layout");
+
+  if (profile?.mfa_email_enabled) {
+    const { otp, otpHash, expiresAt } = generateOtp();
+    await supabase.from("users_profile").update({ mfa_otp: otpHash, mfa_otp_expires_at: expiresAt }).eq("id", user.id);
+    await sendMfaOtpEmail(user.email!, otp);
+    const cookieStore = await cookies();
+    cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 10 * 60 });
+    redirect("/login/mfa");
+  }
 
   if (!profile?.onboarding_completed) {
     redirect("/onboarding/details");
   }
 
   redirect("/dashboard");
+}
+
+export async function verifyMfaLogin(code: string): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Sesiune expirata. Autentifica-te din nou." };
+
+  const { data: profile } = await supabase
+    .from("users_profile")
+    .select("mfa_otp, mfa_otp_expires_at, onboarding_completed")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Autentifica-te din nou." };
+  if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) {
+    return { error: "Cod incorect sau expirat." };
+  }
+
+  await supabase.from("users_profile").update({ mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
+  const cookieStore = await cookies();
+  cookieStore.delete("mfa_pending");
+  revalidatePath("/", "layout");
+
+  if (!profile.onboarding_completed) redirect("/onboarding/details");
+  redirect("/dashboard");
+}
+
+export async function sendMfaOtp(): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return { error: "Neautorizat" };
+
+  const { otp, otpHash, expiresAt } = generateOtp();
+  await supabase.from("users_profile").update({ mfa_otp: otpHash, mfa_otp_expires_at: expiresAt }).eq("id", user.id);
+  await sendMfaOtpEmail(user.email, otp);
+  return { success: true };
+}
+
+export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: profile } = await supabase
+    .from("users_profile").select("mfa_otp, mfa_otp_expires_at").eq("id", user.id).single();
+
+  if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Incearca din nou." };
+  if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
+
+  await supabase.from("users_profile").update({ mfa_email_enabled: true, mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
+  return { success: true };
+}
+
+export async function verifyAndDisableMfaEmail(code: string): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: profile } = await supabase
+    .from("users_profile").select("mfa_otp, mfa_otp_expires_at").eq("id", user.id).single();
+
+  if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Incearca din nou." };
+  if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
+
+  await supabase.from("users_profile").update({ mfa_email_enabled: false, mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
+  return { success: true };
 }
 
 export async function register(formData: {
@@ -90,6 +181,8 @@ export async function resetPassword(password: string) {
 export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
+  const cookieStore = await cookies();
+  cookieStore.delete("mfa_pending");
   revalidatePath("/", "layout");
   redirect("/login");
 }

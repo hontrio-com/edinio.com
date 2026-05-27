@@ -39,10 +39,22 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authenticated on auth pages → redirect to dashboard
+  const mfaPending = request.cookies.get("mfa_pending")?.value === "1";
+
+  // Authenticated on auth pages → redirect to dashboard (except /login/mfa when MFA pending)
   if (isAuth && user) {
+    if (mfaPending && pathname.startsWith("/login/mfa")) {
+      return supabaseResponse; // let through to complete MFA
+    }
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = mfaPending ? "/login/mfa" : "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  // Authenticated on dashboard but MFA not yet verified → redirect to /login/mfa
+  if (user && isDashboard && mfaPending) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login/mfa";
     return NextResponse.redirect(url);
   }
 

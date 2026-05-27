@@ -26,7 +26,7 @@ export default function AuthLayout({
             </span>
           </a>
         </div>
-        <div className="bg-surface/90 backdrop-blur-sm rounded-xl border border-border p-6 sm:p-8 shadow-lg">
+        <div className="bg-surface rounded-xl border border-border p-6 sm:p-8 shadow-md">
           {children}
         </div>
       </div>

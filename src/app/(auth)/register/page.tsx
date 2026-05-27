@@ -8,6 +8,7 @@ import { Loader2, Eye, EyeOff, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { registerSchema, type RegisterInput } from "@/lib/validations/auth";
 import { register as registerAction } from "@/lib/actions/auth.actions";
+import { GoogleAuthButton } from "@/components/ui/GoogleAuthButton";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -223,7 +224,18 @@ export default function RegisterPage() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-muted-foreground">
+      <div className="mt-5">
+        <div className="relative flex items-center gap-3 my-1">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-muted-foreground">sau</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+        <div className="mt-3">
+          <GoogleAuthButton label="Inregistrare cu Google" />
+        </div>
+      </div>
+
+      <p className="mt-5 text-center text-sm text-muted-foreground">
         Ai deja cont?{" "}
         <Link href="/login" className="text-primary font-medium hover:underline">
           Conecteaza-te

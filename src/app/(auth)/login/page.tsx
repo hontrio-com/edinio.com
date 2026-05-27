@@ -8,6 +8,7 @@ import { Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { login } from "@/lib/actions/auth.actions";
+import { GoogleAuthButton } from "@/components/ui/GoogleAuthButton";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -127,7 +128,18 @@ export default function LoginPage() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-muted-foreground">
+      <div className="mt-5">
+        <div className="relative flex items-center gap-3 my-1">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-muted-foreground">sau</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+        <div className="mt-3">
+          <GoogleAuthButton label="Conectare cu Google" />
+        </div>
+      </div>
+
+      <p className="mt-5 text-center text-sm text-muted-foreground">
         Nu ai cont?{" "}
         <Link href="/register" className="text-primary font-medium hover:underline">
           Creeaza cont gratuit

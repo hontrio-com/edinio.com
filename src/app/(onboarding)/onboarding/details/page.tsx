@@ -212,7 +212,10 @@ export default function OnboardingDetailsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Telefon" htmlFor="phone" error={errors.phone?.message}>
                 <input id="phone" type="tel" placeholder="0712 345 678"
-                  {...register("phone")} className={inputCls(!!errors.phone)} />
+                  {...register("phone", {
+                    setValueAs: (v: string) => v.replace(/[\s\-().+]/g, ""),
+                  })}
+                  className={inputCls(!!errors.phone)} />
               </Field>
               <div className="sm:col-span-2">
                 <Field label="Email (optional)" htmlFor="email" error={errors.email?.message}>

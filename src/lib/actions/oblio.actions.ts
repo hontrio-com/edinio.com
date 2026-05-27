@@ -1,0 +1,409 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import {
+  getOblioToken,
+  getCompanies,
+  getSeries,
+  getVatRates,
+  createOblioDoc,
+  cancelOblioDoc,
+  type OblioConfig,
+  type OblioProduct,
+  type OblioInvoiceData,
+} from "@/lib/oblio";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+type OrderItem = { name: string; price: number; quantity: number };
+type ShippingAddress = { county?: string; city?: string; address?: string };
+
+async function getConfigAndOrder(businessId: string, orderId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" as const };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" as const };
+
+  const [{ data: settings }, { data: order }] = await Promise.all([
+    supabase.from("store_settings")
+      .select("oblio_config, prices_include_vat, vat_enabled")
+      .eq("business_id", businessId).single(),
+    supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
+  ]);
+
+  if (!order) return { error: "Comanda negasita" as const };
+
+  const config = settings?.oblio_config as OblioConfig | null;
+  if (!config?.enabled || !config.client_id || !config.client_secret || !config.cif) {
+    return { error: "Oblio nu este configurat complet" as const };
+  }
+
+  return { supabase, config, order, pricesIncludeVat: settings?.prices_include_vat ?? false, vatEnabled: settings?.vat_enabled ?? false };
+}
+
+function buildProducts(
+  order: { items: unknown; shipping_cost: unknown; discount_amount: unknown; discount_code: string | null },
+  config: OblioConfig,
+  pricesIncludeVat: boolean,
+  vatEnabled: boolean,
+): OblioProduct[] {
+  const items = (order.items as OrderItem[]) ?? [];
+  const vatIncluded: 0 | 1 = pricesIncludeVat ? 1 : 0;
+  const vatFields = vatEnabled && config.vat_name && config.vat_percentage > 0
+    ? { vatName: config.vat_name, vatPercentage: config.vat_percentage, vatIncluded }
+    : { vatName: "SFDD", vatPercentage: 0, vatIncluded: 0 as const };
+
+  const products: OblioProduct[] = items.map(item => ({
+    name: item.name,
+    price: item.price,
+    measuringUnit: "buc",
+    quantity: item.quantity,
+    productType: "Serviciu",
+    save: 0,
+    ...vatFields,
+  }));
+
+  if (Number(order.shipping_cost) > 0) {
+    products.push({
+      name: "Transport",
+      price: Number(order.shipping_cost),
+      measuringUnit: "buc",
+      quantity: 1,
+      productType: "Serviciu",
+      save: 0,
+      ...vatFields,
+    });
+  }
+
+  if (Number(order.discount_amount) > 0) {
+    products.push({
+      name: order.discount_code ? `Discount (${order.discount_code})` : "Discount",
+      discount: Number(order.discount_amount),
+      discountType: "valoric",
+      discountAllAbove: 1,
+    });
+  }
+
+  return products;
+}
+
+function buildCollect(
+  paymentMethod: string,
+  paymentStatus: string,
+  total: number,
+): OblioInvoiceData["collect"] | undefined {
+  if (paymentStatus !== "paid" && paymentMethod !== "cash_on_delivery") return undefined;
+
+  const typeMap: Record<string, string> = {
+    cash_on_delivery: "Ramburs",
+    stripe: "Card",
+    card: "Card",
+    bank_transfer: "Ordin de plata",
+    netopia: "Card",
+  };
+
+  const type = typeMap[paymentMethod] ?? "Alta incasare banca";
+  return { type, value: total };
+}
+
+function buildInvoiceData(
+  config: OblioConfig,
+  order: {
+    customer_name: string;
+    customer_email: string | null;
+    customer_phone: string;
+    shipping_address: unknown;
+    items: unknown;
+    shipping_cost: unknown;
+    discount_amount: unknown;
+    discount_code: string | null;
+    payment_method: string;
+    payment_status: string;
+    total: unknown;
+    order_number: string;
+  },
+  seriesName: string,
+  pricesIncludeVat: boolean,
+  vatEnabled: boolean,
+  extra?: Partial<OblioInvoiceData>,
+): OblioInvoiceData {
+  const addr = order.shipping_address as ShippingAddress | null;
+  const today = new Date().toISOString().split("T")[0];
+  const products = buildProducts(order, config, pricesIncludeVat, vatEnabled);
+  const collect = buildCollect(order.payment_method, order.payment_status, Number(order.total));
+
+  return {
+    cif: config.cif,
+    client: {
+      name: order.customer_name,
+      address: addr?.address ?? undefined,
+      state: addr?.county ?? undefined,
+      city: addr?.city ?? undefined,
+      email: order.customer_email ?? undefined,
+      phone: order.customer_phone,
+      vatPayer: false,
+      save: 0,
+    },
+    issueDate: today,
+    seriesName,
+    language: "RO",
+    precision: 2,
+    currency: "RON",
+    products,
+    ...(collect ? { collect } : {}),
+    internalNote: `Comanda ${order.order_number}`,
+    idempotencyKey: `${config.cif}-${seriesName}-${order.order_number}`,
+    ...extra,
+  };
+}
+
+// ─── Config actions ───────────────────────────────────────────────────────────
+
+export async function saveOblioConfig(
+  businessId: string,
+  config: OblioConfig,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Business negasit" };
+
+  const { error } = await supabase.from("store_settings").update({
+    oblio_config: config as unknown as import("@/types/database.types").Json,
+    updated_at: new Date().toISOString(),
+  }).eq("business_id", businessId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function disconnectOblio(businessId: string): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Business negasit" };
+
+  const { error } = await supabase.from("store_settings").update({
+    oblio_config: null,
+    updated_at: new Date().toISOString(),
+  }).eq("business_id", businessId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function loadOblioAccountData(
+  clientId: string,
+  clientSecret: string,
+): Promise<{
+  companies: { cif: string; name: string }[];
+  series: { type: string; name: string; default: boolean }[];
+  vatRates: { name: string; percent: number; default: boolean }[];
+  firstCif: string;
+} | { error: string }> {
+  try {
+    const token = await getOblioToken(clientId, clientSecret);
+    const companies = await getCompanies(token);
+    if (!companies.length) return { error: "Nicio firma gasita in contul Oblio" };
+
+    const firstCif = companies[0].cif;
+    const [series, vatRates] = await Promise.all([
+      getSeries(token, firstCif),
+      getVatRates(token, firstCif),
+    ]);
+
+    return {
+      companies: companies.map(c => ({ cif: c.cif, name: c.company })),
+      series: series.map(s => ({ type: s.type, name: s.name, default: s.default })),
+      vatRates: vatRates.map(v => ({ name: v.name, percent: v.percent, default: v.default })),
+      firstCif,
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function loadOblioSeriesForCif(
+  clientId: string,
+  clientSecret: string,
+  cif: string,
+): Promise<{
+  series: { type: string; name: string; default: boolean }[];
+  vatRates: { name: string; percent: number; default: boolean }[];
+} | { error: string }> {
+  try {
+    const token = await getOblioToken(clientId, clientSecret);
+    const [series, vatRates] = await Promise.all([
+      getSeries(token, cif),
+      getVatRates(token, cif),
+    ]);
+    return {
+      series: series.map(s => ({ type: s.type, name: s.name, default: s.default })),
+      vatRates: vatRates.map(v => ({ name: v.name, percent: v.percent, default: v.default })),
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ─── Document actions ─────────────────────────────────────────────────────────
+
+export async function generateOblioInvoice(
+  businessId: string,
+  orderId: string,
+): Promise<{ number: string; series: string } | { error: string }> {
+  const ctx = await getConfigAndOrder(businessId, orderId);
+  if ("error" in ctx) return { error: ctx.error as string };
+  const { supabase, config, order, pricesIncludeVat, vatEnabled } = ctx;
+
+  const orderData = order as typeof order & { oblio_invoice_number?: string | null };
+  if (orderData.oblio_invoice_number) return { error: "Factura Oblio a fost deja generata" };
+
+  try {
+    const token = await getOblioToken(config.client_id, config.client_secret);
+    const data = buildInvoiceData(config, order, config.series_invoice, pricesIncludeVat, vatEnabled);
+    const result = await createOblioDoc(token, "invoice", data);
+
+    await supabase.from("orders").update({
+      oblio_invoice_number: result.number,
+      oblio_invoice_series: result.seriesName,
+      updated_at: new Date().toISOString(),
+    }).eq("id", orderId);
+
+    return { number: result.number, series: result.seriesName };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function generateOblioProforma(
+  businessId: string,
+  orderId: string,
+): Promise<{ number: string; series: string } | { error: string }> {
+  const ctx = await getConfigAndOrder(businessId, orderId);
+  if ("error" in ctx) return { error: ctx.error as string };
+  const { supabase, config, order, pricesIncludeVat, vatEnabled } = ctx;
+
+  if (!config.series_proforma?.trim()) return { error: "Seria pentru proforma nu este configurata in Oblio" };
+
+  const orderData = order as typeof order & { oblio_proforma_number?: string | null };
+  if (orderData.oblio_proforma_number) return { error: "Proforma Oblio a fost deja generata" };
+
+  try {
+    const token = await getOblioToken(config.client_id, config.client_secret);
+    const data = buildInvoiceData(config, order, config.series_proforma, pricesIncludeVat, vatEnabled);
+    // Proforma doesn't have collect
+    const { collect: _collect, ...dataWithoutCollect } = data;
+    const result = await createOblioDoc(token, "proforma", dataWithoutCollect as OblioInvoiceData);
+
+    await supabase.from("orders").update({
+      oblio_proforma_number: result.number,
+      oblio_proforma_series: result.seriesName,
+      updated_at: new Date().toISOString(),
+    }).eq("id", orderId);
+
+    return { number: result.number, series: result.seriesName };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function stornoOblioInvoice(
+  businessId: string,
+  orderId: string,
+): Promise<{ number: string; series: string } | { error: string }> {
+  const ctx = await getConfigAndOrder(businessId, orderId);
+  if ("error" in ctx) return { error: ctx.error as string };
+  const { supabase, config, order } = ctx;
+
+  const orderData = order as typeof order & {
+    oblio_invoice_number?: string | null;
+    oblio_invoice_series?: string | null;
+    oblio_storno_number?: string | null;
+  };
+
+  if (!orderData.oblio_invoice_number || !orderData.oblio_invoice_series) {
+    return { error: "Nu exista factura Oblio pentru aceasta comanda" };
+  }
+  if (orderData.oblio_storno_number) return { error: "Factura a fost deja stornata" };
+
+  try {
+    const token = await getOblioToken(config.client_id, config.client_secret);
+
+    // Create storno invoice via referenceDocument
+    const today = new Date().toISOString().split("T")[0];
+    const stornoData: OblioInvoiceData = {
+      cif: config.cif,
+      client: { name: order.customer_name, save: 0 },
+      issueDate: today,
+      seriesName: config.series_invoice,
+      language: "RO",
+      precision: 2,
+      currency: "RON",
+      products: [],
+      referenceDocument: {
+        type: "Factura",
+        refund: 1,
+        seriesName: orderData.oblio_invoice_series,
+        number: orderData.oblio_invoice_number,
+      },
+      internalNote: `Storno comanda ${order.order_number}`,
+    };
+
+    const result = await createOblioDoc(token, "invoice", stornoData);
+
+    await supabase.from("orders").update({
+      oblio_storno_number: result.number,
+      oblio_storno_series: result.seriesName,
+      updated_at: new Date().toISOString(),
+    }).eq("id", orderId);
+
+    return { number: result.number, series: result.seriesName };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function cancelOblioProforma(
+  businessId: string,
+  orderId: string,
+): Promise<{ success: true } | { error: string }> {
+  const ctx = await getConfigAndOrder(businessId, orderId);
+  if ("error" in ctx) return { error: ctx.error as string };
+  const { supabase, config, order } = ctx;
+
+  const orderData = order as typeof order & {
+    oblio_proforma_number?: string | null;
+    oblio_proforma_series?: string | null;
+    oblio_invoice_number?: string | null;
+  };
+
+  if (!orderData.oblio_proforma_number || !orderData.oblio_proforma_series) {
+    return { error: "Nu exista proforma Oblio pentru aceasta comanda" };
+  }
+  if (orderData.oblio_invoice_number) {
+    return { error: "Nu se poate anula proforma dupa ce a fost emisa factura" };
+  }
+
+  try {
+    const token = await getOblioToken(config.client_id, config.client_secret);
+    await cancelOblioDoc(token, "proforma", config.cif, orderData.oblio_proforma_series, orderData.oblio_proforma_number);
+
+    await supabase.from("orders").update({
+      oblio_proforma_number: null,
+      oblio_proforma_series: null,
+      updated_at: new Date().toISOString(),
+    }).eq("id", orderId);
+
+    return { success: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}

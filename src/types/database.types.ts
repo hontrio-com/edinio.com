@@ -312,6 +312,12 @@ export interface Database {
           colete_order_id: string | null;
           colete_awb_number: string | null;
           colete_service_name: string | null;
+          oblio_invoice_number: string | null;
+          oblio_invoice_series: string | null;
+          oblio_proforma_number: string | null;
+          oblio_proforma_series: string | null;
+          oblio_storno_number: string | null;
+          oblio_storno_series: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -358,6 +364,12 @@ export interface Database {
           colete_order_id?: string | null;
           colete_awb_number?: string | null;
           colete_service_name?: string | null;
+          oblio_invoice_number?: string | null;
+          oblio_invoice_series?: string | null;
+          oblio_proforma_number?: string | null;
+          oblio_proforma_series?: string | null;
+          oblio_storno_number?: string | null;
+          oblio_storno_series?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -389,6 +401,7 @@ export interface Database {
           netopia_config: Json | null;
           woot_config: Json | null;
           colete_config: Json | null;
+          oblio_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -416,6 +429,7 @@ export interface Database {
           netopia_config?: Json | null;
           woot_config?: Json | null;
           colete_config?: Json | null;
+          oblio_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -441,6 +455,7 @@ export interface Database {
           netopia_config?: Json | null;
           woot_config?: Json | null;
           colete_config?: Json | null;
+          oblio_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

@@ -8,6 +8,7 @@ import type { StripeConfig } from "@/components/dashboard/StripeConnectClient";
 import type { NetopiaConfig } from "@/lib/netopia";
 import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
+import type { OblioConfig } from "@/lib/oblio";
 
 type Integration = {
   name: string;
@@ -36,7 +37,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "Facturare",
     integrations: [
       { name: "SmartBill", logo: "/integrations/smartbill.svg", scale: 1.25, id: "smartbill" },
-      { name: "Oblio",     logo: "/integrations/oblio.webp",    filter: "invert(1)" },
+      { name: "Oblio",     logo: "/integrations/oblio.webp",    filter: "invert(1)", id: "oblio" },
       { name: "fGo",       logo: "/integrations/fgo.svg" },
     ],
   },
@@ -85,10 +86,11 @@ export default async function IntegrationsPage() {
   let netopiaActive = false;
   let wootActive = false;
   let coleteActive = false;
+  let oblioActive = false;
   if (business) {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config")
+      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config")
       .eq("business_id", business.id)
       .single();
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
@@ -101,6 +103,8 @@ export default async function IntegrationsPage() {
     wootActive = !!(wc?.enabled && wc?.public_key && wc?.secret_key);
     const cc = settings?.colete_config as COConfig | null;
     coleteActive = !!(cc?.enabled && cc?.client_id && cc?.client_secret);
+    const oc = settings?.oblio_config as OblioConfig | null;
+    oblioActive = !!(oc?.enabled && oc?.client_id && oc?.cif && oc?.series_invoice);
   }
 
   return (
@@ -124,9 +128,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "woot" || integration.id === "colete";
-                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : false;
-                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : "#";
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio";
+                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : false;
+                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : "#";
 
                 if (isUnlocked) {
                   return (

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
+import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import type { Database } from "@/types/database.types";
@@ -36,12 +37,13 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, businessId }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, businessId }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
   wootEnabled?: boolean;
   coleteEnabled?: boolean;
+  oblioEnabled?: boolean;
   businessId?: string;
 }) {
   const router = useRouter();
@@ -52,6 +54,9 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [, startGenerateTransition] = useTransition();
   const [wootModalOrder, setWootModalOrder] = useState<Order | null>(null);
   const [coleteModalOrder, setColeteModalOrder] = useState<Order | null>(null);
+  const [oblioActionOrderId, setOblioActionOrderId] = useState<string | null>(null);
+  const [oblioAction, setOblioAction] = useState<"invoice" | "proforma" | "storno" | null>(null);
+  const [, startOblioTransition] = useTransition();
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -77,6 +82,28 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   function handleSearch(q: string) {
     setSearchQuery(q);
     setPage(1);
+  }
+
+  function handleOblioAction(e: React.MouseEvent, orderId: string, action: "invoice" | "proforma" | "storno") {
+    e.stopPropagation();
+    if (!businessId) return;
+    setOblioActionOrderId(orderId);
+    setOblioAction(action);
+    startOblioTransition(async () => {
+      let result: { error: string } | { number: string; series: string } | { success: true };
+      if (action === "invoice") result = await generateOblioInvoice(businessId, orderId);
+      else if (action === "proforma") result = await generateOblioProforma(businessId, orderId);
+      else result = await stornoOblioInvoice(businessId, orderId);
+      setOblioActionOrderId(null);
+      setOblioAction(null);
+      if ("error" in result) {
+        toast.error(result.error);
+      } else if ("number" in result) {
+        const labels = { invoice: "Factura", proforma: "Proforma", storno: "Storno" };
+        toast.success(`${labels[action]} Oblio ${result.series}${result.number} generata`);
+        router.refresh();
+      }
+    });
   }
 
   function handleGenerateInvoice(e: React.MouseEvent, orderId: string) {
@@ -200,14 +227,17 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Data</th>
-                    {smartbillEnabled && (
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
-                    )}
                     {wootEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Woot</th>
                     )}
                     {coleteEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Colete</th>
+                    )}
+                    {oblioEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Oblio</th>
+                    )}
+                    {smartbillEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
                     )}
                     <th className="px-5 py-3" />
                   </tr>
@@ -279,6 +309,71 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                                 Creeaza AWB
                               </button>
                             )}
+                          </td>
+                        )}
+                        {oblioEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {order.oblio_storno_number ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                                  <XCircle className="h-3 w-3" />
+                                  Storno {order.oblio_storno_series}{order.oblio_storno_number}
+                                </span>
+                              ) : order.oblio_invoice_number ? (
+                                <>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                                    <FileCheck className="h-3 w-3" />
+                                    Factura {order.oblio_invoice_series}{order.oblio_invoice_number}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={e => handleOblioAction(e, order.id, "storno")}
+                                    disabled={oblioActionOrderId === order.id}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                  >
+                                    {oblioActionOrderId === order.id && oblioAction === "storno" ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                                    Storno
+                                  </button>
+                                </>
+                              ) : order.oblio_proforma_number ? (
+                                <>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                                    <FileText className="h-3 w-3" />
+                                    Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={e => handleOblioAction(e, order.id, "invoice")}
+                                    disabled={oblioActionOrderId === order.id}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+                                  >
+                                    {oblioActionOrderId === order.id && oblioAction === "invoice" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck className="h-3 w-3" />}
+                                    Factura
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={e => handleOblioAction(e, order.id, "invoice")}
+                                    disabled={oblioActionOrderId === order.id}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50"
+                                  >
+                                    {oblioActionOrderId === order.id && oblioAction === "invoice" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck className="h-3 w-3" />}
+                                    Factura
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={e => handleOblioAction(e, order.id, "proforma")}
+                                    disabled={oblioActionOrderId === order.id}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50"
+                                  >
+                                    {oblioActionOrderId === order.id && oblioAction === "proforma" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
+                                    Proforma
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         )}
                         {smartbillEnabled && (

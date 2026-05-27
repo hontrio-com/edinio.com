@@ -73,6 +73,7 @@ export async function updateBusiness(
   businessId: string,
   data: Partial<{
     business_name: string;
+    store_name: string | null;
     tagline: string | null;
     description: string | null;
     phone: string | null;

@@ -69,11 +69,11 @@ export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled }: {
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
                 style={{ backgroundColor: currentBusiness?.primary_color ?? "var(--color-brand)" }}>
-                {currentBusiness?.business_name?.[0]?.toUpperCase() ?? "M"}
+                {(currentBusiness?.store_name ?? currentBusiness?.business_name)?.[0]?.toUpperCase() ?? "M"}
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-semibold text-foreground truncate">
-                  {currentBusiness?.business_name ?? "Magazinul tau"}
+                  {currentBusiness?.store_name ?? currentBusiness?.business_name ?? "Magazinul tau"}
                 </div>
                 <div className="text-xs text-muted-foreground">Mini-Store</div>
               </div>
@@ -88,9 +88,9 @@ export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled }: {
                   className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent transition-colors text-left text-sm">
                   <div className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
                     style={{ backgroundColor: b.primary_color }}>
-                    {b.business_name[0]?.toUpperCase()}
+                    {(b.store_name ?? b.business_name)[0]?.toUpperCase()}
                   </div>
-                  <span className="truncate text-foreground">{b.business_name}</span>
+                  <span className="truncate text-foreground">{b.store_name ?? b.business_name}</span>
                 </button>
               ))}
               <div className="border-t border-border">

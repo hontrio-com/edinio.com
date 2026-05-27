@@ -544,9 +544,9 @@ export function ProductPage({ business, product, storeSettings }: {
           </a>
           <span className="text-gray-300">/</span>
           {business.logo_url ? (
-            <img src={business.logo_url} alt={business.business_name} className="h-7 w-auto object-contain" />
+            <img src={business.logo_url} alt={business.store_name ?? business.business_name} className="h-7 w-auto object-contain" />
           ) : (
-            <span className="font-bold text-sm text-gray-900 truncate">{business.business_name}</span>
+            <span className="font-bold text-sm text-gray-900 truncate">{business.store_name ?? business.business_name}</span>
           )}
         </div>
       </header>
@@ -732,10 +732,10 @@ export function ProductPage({ business, product, storeSettings }: {
           <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div>
               {business.logo_url ? (
-                <img src={business.logo_url} alt={business.business_name}
+                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
                   className="h-7 w-auto mb-3 brightness-0 invert object-contain" />
               ) : (
-                <p className="font-bold text-white text-lg mb-3">{business.business_name}</p>
+                <p className="font-bold text-white text-lg mb-3">{business.store_name ?? business.business_name}</p>
               )}
               <p className="text-gray-500 text-sm leading-relaxed">
                 {business.tagline ?? "Produse de calitate. Livrare rapida in toata Romania."}
@@ -758,7 +758,7 @@ export function ProductPage({ business, product, storeSettings }: {
           </div>
           <div className="border-t border-white/5 pt-6 text-center">
             <p className="text-gray-600 text-xs">
-              &copy; {new Date().getFullYear()} {business.business_name}. Creat cu{" "}
+              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}. Creat cu{" "}
               <span className="font-semibold" style={{ color }}>Edinio</span>
             </p>
           </div>

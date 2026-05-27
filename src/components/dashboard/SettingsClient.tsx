@@ -544,6 +544,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       className={inputCls}
                       placeholder="ex: SC Firma Mea SRL"
                     />
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Folosita pentru date legale si facturare. Numele afisat in magazin se editeaza din <strong>Editeaza magazinul</strong>.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">CUI / CIF</label>

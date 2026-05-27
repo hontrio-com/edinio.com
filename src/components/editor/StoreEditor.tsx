@@ -208,7 +208,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
 
   // ── General section state
   const [general, setGeneral] = useState({
-    business_name: business.business_name,
+    store_name: business.store_name ?? business.business_name,
     tagline: business.tagline ?? "",
     description: business.description ?? "",
     phone: business.phone ?? "",
@@ -329,8 +329,8 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
         <div className="px-5 pb-5 space-y-3">
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Numele magazinului</label>
-            <input type="text" value={general.business_name} className={inputCls}
-              onChange={(e) => setGeneral((p) => ({ ...p, business_name: e.target.value }))} />
+            <input type="text" value={general.store_name} className={inputCls}
+              onChange={(e) => setGeneral((p) => ({ ...p, store_name: e.target.value }))} />
           </div>
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Slogan</label>
@@ -388,7 +388,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
           </div>
           <SaveBtn loading={saving === "general"} saved={saved === "general"}
             onSave={() => save("general", {
-              business_name: general.business_name,
+              store_name: general.store_name || null,
               tagline: general.tagline || null,
               description: general.description || null,
               phone: general.phone || null,

@@ -826,15 +826,15 @@ function StoreContent({ business, products, storeSettings }: Props) {
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <a href="#" className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
             {business.logo_url ? (
-              <img src={business.logo_url} alt={business.business_name}
+              <img src={business.logo_url} alt={business.store_name ?? business.business_name}
                 className="w-9 h-9 rounded-xl object-cover flex-shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                 style={{ backgroundColor: color }}>
-                {business.business_name[0]?.toUpperCase()}
+                {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
               </div>
             )}
-            <span className="font-semibold text-sm text-foreground truncate hidden sm:block">{business.business_name}</span>
+            <span className="font-semibold text-sm text-foreground truncate hidden sm:block">{business.store_name ?? business.business_name}</span>
           </a>
 
           <div className="flex items-center gap-2">
@@ -890,12 +890,12 @@ function StoreContent({ business, products, storeSettings }: Props) {
           <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/40 to-black/70" />
           <div className="relative z-10 max-w-3xl mx-auto px-4 py-20 sm:py-28 text-center text-white">
             {business.logo_url && (
-              <img src={business.logo_url} alt={business.business_name}
+              <img src={business.logo_url} alt={business.store_name ?? business.business_name}
                 className="w-18 h-18 rounded-2xl object-cover mx-auto mb-5 border-2 border-white/20 shadow-2xl"
                 style={{ width: 72, height: 72 }} />
             )}
             <h1 className="text-3xl sm:text-4xl font-black mb-3 drop-shadow-sm tracking-tight">
-              {business.business_name}
+              {business.store_name ?? business.business_name}
             </h1>
             {business.tagline && (
               <p className="text-lg text-white/85 mb-8 leading-relaxed max-w-xl mx-auto">{business.tagline}</p>
@@ -1203,16 +1203,16 @@ function StoreContent({ business, products, storeSettings }: Props) {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-8 border-b border-white/10">
             <div className="flex items-center gap-3">
               {business.logo_url ? (
-                <img src={business.logo_url} alt={business.business_name}
+                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
                   className="w-10 h-10 rounded-xl object-cover border border-white/10" />
               ) : (
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm"
                   style={{ backgroundColor: color }}>
-                  {business.business_name[0]?.toUpperCase()}
+                  {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
                 </div>
               )}
               <div>
-                <p className="font-bold text-white">{business.business_name}</p>
+                <p className="font-bold text-white">{business.store_name ?? business.business_name}</p>
                 {business.city && <p className="text-xs text-white/50">{business.city}</p>}
               </div>
             </div>
@@ -1306,7 +1306,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
           {/* Copyright */}
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs text-white/35">
-              &copy; {new Date().getFullYear()} {business.business_name}. Toate drepturile rezervate.
+              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}. Toate drepturile rezervate.
             </p>
             <p className="text-xs text-white/35">
               Creat cu{" "}

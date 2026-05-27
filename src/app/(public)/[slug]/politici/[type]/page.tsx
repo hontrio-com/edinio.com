@@ -22,10 +22,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!meta) return {};
   const supabase = await createClient();
   const { data: business } = await supabase
-    .from("businesses").select("business_name").eq("slug", slug).single();
+    .from("businesses").select("business_name, store_name").eq("slug", slug).single();
   if (!business) return {};
   return {
-    title: `${meta.label} | ${business.business_name}`,
+    title: `${meta.label} | ${business.store_name ?? business.business_name}`,
     robots: { index: false },
   };
 }
@@ -38,7 +38,7 @@ export default async function PolicyPage({ params }: Props) {
   const supabase = await createClient();
 
   const [{ data: business }, ] = await Promise.all([
-    supabase.from("businesses").select("id, business_name, primary_color, logo_url").eq("slug", slug).single(),
+    supabase.from("businesses").select("id, business_name, store_name, primary_color, logo_url").eq("slug", slug).single(),
   ]);
 
   if (!business) notFound();
@@ -83,15 +83,15 @@ export default async function PolicyPage({ params }: Props) {
         {/* Business branding */}
         <div className="flex items-center gap-3 mb-8">
           {business.logo_url ? (
-            <img src={business.logo_url} alt={business.business_name}
+            <img src={business.logo_url} alt={business.store_name ?? business.business_name}
               className="w-10 h-10 rounded-xl object-cover border border-border flex-shrink-0" />
           ) : (
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
               style={{ backgroundColor: color }}>
-              {business.business_name[0]?.toUpperCase()}
+              {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
             </div>
           )}
-          <span className="text-sm font-semibold text-foreground">{business.business_name}</span>
+          <span className="text-sm font-semibold text-foreground">{business.store_name ?? business.business_name}</span>
         </div>
 
         <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">{meta.label}</h1>
@@ -115,7 +115,7 @@ export default async function PolicyPage({ params }: Props) {
 
         <div className="mt-12 pt-6 border-t border-border text-center">
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} {business.business_name}. Toate drepturile rezervate.
+            &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}. Toate drepturile rezervate.
           </p>
         </div>
       </main>

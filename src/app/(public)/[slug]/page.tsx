@@ -12,12 +12,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("business_name, tagline, description, city, cover_url")
+    .select("business_name, store_name, tagline, description, city, cover_url")
     .eq("slug", slug)
     .single();
   if (!business) return {};
-  const title = business.city ? `${business.business_name} - ${business.city}` : business.business_name;
-  const description = business.tagline ?? business.description?.slice(0, 155) ?? `Cumpara din ${business.business_name} online.`;
+  const displayName = business.store_name ?? business.business_name;
+  const title = business.city ? `${displayName} - ${business.city}` : displayName;
+  const description = business.tagline ?? business.description?.slice(0, 155) ?? `Cumpara din ${displayName} online.`;
   return {
     title,
     description,
@@ -44,9 +45,9 @@ export default async function SlugPage({ params }: Props) {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center">
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mb-6 mx-auto"
           style={{ backgroundColor: business.primary_color }}>
-          {business.business_name[0]?.toUpperCase()}
+          {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
         </div>
-        <h1 className="text-2xl font-semibold text-foreground mb-2">{business.business_name}</h1>
+        <h1 className="text-2xl font-semibold text-foreground mb-2">{business.store_name ?? business.business_name}</h1>
         <p className="text-muted-foreground mb-6">Magazinul este in curand disponibil.</p>
         {business.phone && (
           <a href={`tel:${business.phone}`}
@@ -66,7 +67,7 @@ export default async function SlugPage({ params }: Props) {
     if (suspendedUntil < new Date()) {
       return (
         <SuspendedStorePage
-          businessName={business.business_name}
+          businessName={business.store_name ?? business.business_name}
           primaryColor={business.primary_color}
           phone={business.phone}
         />

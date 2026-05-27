@@ -73,6 +73,7 @@ export interface Database {
           custom_domain: string | null;
           suspended_until: string | null;
           cui: string | null;
+          store_name: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -83,6 +84,7 @@ export interface Database {
           slug: string;
           niche_id?: string | null;
           business_name: string;
+          store_name?: string | null;
           tagline?: string | null;
           description?: string | null;
           phone?: string | null;
@@ -135,6 +137,7 @@ export interface Database {
           custom_domain?: string | null;
           suspended_until?: string | null;
           cui?: string | null;
+          store_name?: string | null;
           updated_at?: string;
         };
         Relationships: [];

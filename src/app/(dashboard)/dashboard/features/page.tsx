@@ -66,7 +66,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "Marketing",
     integrations: [
       { name: "Facebook Pixel", logo: "/integrations/facebook-pixel.svg", id: "marketing" },
-      { name: "TikTok Pixel",   logo: "/integrations/tiktok-pixel.svg" },
+      { name: "TikTok Pixel",   logo: "/integrations/tiktok-pixel.svg", id: "marketing" },
       { name: "Google Ads",     logo: "/integrations/google-ads.svg" },
     ],
   },

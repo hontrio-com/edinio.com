@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { FacebookPixel } from "@/components/public/FacebookPixel";
+import { TikTokPixel } from "@/components/public/TikTokPixel";
 import type { MarketingConfig } from "@/lib/marketing";
 
 interface Props {
@@ -17,7 +18,8 @@ export default async function StoreLayout({ children, params }: Props) {
     .eq("slug", slug)
     .single();
 
-  let pixelId: string | null = null;
+  let fbPixelId: string | null = null;
+  let ttPixelId: string | null = null;
 
   if (business) {
     const { data: settings } = await supabase
@@ -27,12 +29,14 @@ export default async function StoreLayout({ children, params }: Props) {
       .single();
 
     const mc = settings?.marketing_config as MarketingConfig | null;
-    pixelId = mc?.facebook_pixel_id?.trim() || null;
+    fbPixelId = mc?.facebook_pixel_id?.trim() || null;
+    ttPixelId = mc?.tiktok_pixel_id?.trim() || null;
   }
 
   return (
     <>
-      {pixelId && <FacebookPixel pixelId={pixelId} />}
+      {fbPixelId && <FacebookPixel pixelId={fbPixelId} />}
+      {ttPixelId && <TikTokPixel pixelId={ttPixelId} />}
       {children}
     </>
   );

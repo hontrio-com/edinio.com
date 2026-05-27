@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";
-import { fbTrack } from "@/lib/marketing";
+import { fbTrack, ttqTrack } from "@/lib/marketing";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database.types";
 
@@ -921,6 +921,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
       imageUrl: images[0] ? String(images[0]) : null,
     });
     fbTrack("AddToCart", { value: Number(product.price), currency: "RON", content_name: product.name, content_ids: [product.id], content_type: "product" });
+    ttqTrack("AddToCart", { value: Number(product.price), currency: "RON", content_id: product.id, content_name: product.name, content_type: "product" });
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 1500);
   }
@@ -1458,7 +1459,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         color={color}
-        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count }); }}
+        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count }); ttqTrack("InitiateCheckout", { value: total, currency: "RON" }); }}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
       />

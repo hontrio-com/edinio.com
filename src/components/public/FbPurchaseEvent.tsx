@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { fbTrack } from "@/lib/marketing";
+import { fbTrack, ttqTrack } from "@/lib/marketing";
 
 export function FbPurchaseEvent({ orderId, total }: { orderId: string; total: number }) {
   useEffect(() => {
     fbTrack("Purchase", { value: total, currency: "RON", order_id: orderId });
+    ttqTrack("CompletePayment", { value: total, currency: "RON", order_id: orderId });
   }, [orderId, total]);
 
   return null;

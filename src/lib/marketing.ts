@@ -1,6 +1,7 @@
 export type MarketingConfig = {
   facebook_pixel_id?: string;
   tiktok_pixel_id?: string;
+  google_tag_id?: string;
 };
 
 // Facebook Pixel — call window.fbq safely
@@ -15,4 +16,11 @@ export function ttqTrack(event: string, data?: Record<string, unknown>) {
   if (typeof window === "undefined") return;
   const ttq = (window as unknown as { ttq?: { track: (...args: unknown[]) => void } }).ttq;
   if (ttq && typeof ttq.track === "function") ttq.track(event, data);
+}
+
+// Google Tag (gtag.js) — call window.gtag safely
+export function gtagEvent(event: string, data?: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+  const gtag = (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag;
+  if (typeof gtag === "function") gtag("event", event, data);
 }

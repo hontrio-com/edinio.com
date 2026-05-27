@@ -18,15 +18,18 @@ export function MarketingConfigClient({
   const [saving, setSaving] = useState(false);
   const [fbPixelId, setFbPixelId] = useState(initialConfig?.facebook_pixel_id ?? "");
   const [ttPixelId, setTtPixelId] = useState(initialConfig?.tiktok_pixel_id ?? "");
+  const [googleTagId, setGoogleTagId] = useState(initialConfig?.google_tag_id ?? "");
 
   const fbActive = !!initialConfig?.facebook_pixel_id?.trim();
   const ttActive = !!initialConfig?.tiktok_pixel_id?.trim();
+  const googleActive = !!initialConfig?.google_tag_id?.trim();
 
   async function handleSave() {
     setSaving(true);
     const result = await saveMarketingConfig(businessId, {
       facebook_pixel_id: fbPixelId.trim() || undefined,
       tiktok_pixel_id: ttPixelId.trim() || undefined,
+      google_tag_id: googleTagId.trim() || undefined,
     });
     setSaving(false);
 
@@ -122,6 +125,47 @@ export function MarketingConfigClient({
         </a>
       </div>
 
+      {/* Google Ads / GA4 */}
+      <div className="p-4 rounded-xl border border-border bg-surface space-y-4">
+        <div className="flex items-center gap-3">
+          <img src="/integrations/google-ads.svg" alt="Google Ads" className="h-8 w-8 object-contain flex-shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Google Ads / GA4</h3>
+            {googleActive ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded mt-0.5">
+                Activ · {initialConfig?.google_tag_id}
+              </span>
+            ) : (
+              <span className="text-[10px] text-muted-foreground">Neconectat</span>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tag ID</label>
+          <input
+            type="text"
+            value={googleTagId}
+            onChange={e => setGoogleTagId(e.target.value)}
+            placeholder="ex: AW-123456789 sau G-XXXXXXXXXX"
+            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors font-mono"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Google Ads: gaseste Tag ID-ul in Google Ads &gt; Tools &gt; Google Tag. GA4: in Analytics &gt; Admin &gt; Data Streams.
+          </p>
+        </div>
+
+        <a
+          href="https://ads.google.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          Deschide Google Ads
+        </a>
+      </div>
+
       {/* Save button */}
       <div className="flex justify-end">
         <button
@@ -142,7 +186,7 @@ export function MarketingConfigClient({
           <li><span className="font-mono text-foreground">PageView</span> — la fiecare vizita pe pagina magazinului</li>
           <li><span className="font-mono text-foreground">AddToCart</span> — cand un produs este adaugat in cos</li>
           <li><span className="font-mono text-foreground">InitiateCheckout</span> — la deschiderea formularului de comanda</li>
-          <li><span className="font-mono text-foreground">Purchase / CompletePayment</span> — la confirmarea comenzii (cu valoare + RON)</li>
+          <li><span className="font-mono text-foreground">Purchase / CompletePayment / purchase</span> — la confirmarea comenzii (cu valoare + RON)</li>
         </ul>
       </div>
     </div>

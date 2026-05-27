@@ -133,6 +133,7 @@ export default async function IntegrationsPage() {
                           alt={integration.name}
                           className="w-full h-full object-contain"
                           style={{
+                            filter: integration.filter ?? undefined,
                             transform: integration.scale ? `scale(${integration.scale})` : undefined,
                             transformOrigin: "center",
                           }}

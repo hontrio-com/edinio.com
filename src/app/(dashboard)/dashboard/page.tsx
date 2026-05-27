@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   ShoppingCart, Wallet, Package, Clock,
-  TrendingUp, TrendingDown, AlertCircle,
+  AlertCircle, ArrowRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -16,35 +16,47 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  trend,
+  href = "#",
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
-  trend?: { pct: number; label: string } | null;
+  href?: string;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-muted-foreground font-medium">{label}</span>
-        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <Icon className="h-4 w-4 text-primary" />
-        </div>
+    <div className="relative bg-surface border border-border rounded-2xl p-5 overflow-hidden">
+      {/* Decorative arcs bottom-right */}
+      <svg
+        className="absolute bottom-0 right-0 opacity-[0.07] pointer-events-none"
+        width="100" height="70" viewBox="0 0 100 70" fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path d="M100 70 Q55 70 55 25" stroke="#1AB554" strokeWidth="18" fill="none" strokeLinecap="round"/>
+        <path d="M100 70 Q40 70 40 5"  stroke="#1AB554" strokeWidth="18" fill="none" strokeLinecap="round"/>
+        <path d="M100 70 Q70 70 70 45" stroke="#1AB554" strokeWidth="18" fill="none" strokeLinecap="round"/>
+      </svg>
+
+      {/* Icon */}
+      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+        <Icon className="h-5 w-5 text-primary" />
       </div>
-      <div className="text-2xl font-semibold text-foreground">{value}</div>
-      {trend != null && (
-        <div className={cn(
-          "flex items-center gap-1 mt-1.5 text-xs font-medium",
-          trend.pct >= 0 ? "text-green-600" : "text-red-500"
-        )}>
-          {trend.pct >= 0
-            ? <TrendingUp className="h-3.5 w-3.5" />
-            : <TrendingDown className="h-3.5 w-3.5" />
-          }
-          <span>{trend.pct >= 0 ? "+" : ""}{trend.pct}%</span>
-          <span className="text-muted-foreground font-normal">{trend.label}</span>
-        </div>
-      )}
+
+      {/* Label */}
+      <p className="text-sm text-muted-foreground mb-1.5">{label}</p>
+
+      {/* Value */}
+      <p className="text-3xl font-bold text-foreground">{value}</p>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-5">
+        <span className="text-xs text-muted-foreground">Actualizat acum</span>
+        <Link
+          href={href}
+          className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors"
+        >
+          <ArrowRight className="h-3.5 w-3.5 text-primary" />
+        </Link>
+      </div>
     </div>
   );
 }
@@ -174,10 +186,10 @@ export default async function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-        <StatCard icon={ShoppingCart} label="Comenzi azi"          value={ordersTodayCount}         trend={ordersTrend} />
-        <StatCard icon={Wallet}       label="Vanzari luna aceasta" value={formatPrice(monthRevenue)} trend={revenueTrend} />
-        <StatCard icon={Package}      label="Produse active"       value={activeProducts ?? 0} />
-        <StatCard icon={Clock}        label="In asteptare"         value={pendingOrders ?? 0} />
+        <StatCard icon={ShoppingCart} label="Comenzi azi"          value={ordersTodayCount}         href="/dashboard/orders" />
+        <StatCard icon={Wallet}       label="Vanzari luna aceasta" value={formatPrice(monthRevenue)} href="/dashboard/orders" />
+        <StatCard icon={Package}      label="Produse active"       value={activeProducts ?? 0}       href="/dashboard/products" />
+        <StatCard icon={Clock}        label="In asteptare"         value={pendingOrders ?? 0}         href="/dashboard/orders?status=pending" />
       </div>
 
       {/* Chart + recent orders */}

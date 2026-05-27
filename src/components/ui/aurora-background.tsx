@@ -23,7 +23,7 @@ export function AuroraBackground({
       {...props}
     >
       <div
-        className="absolute inset-0 overflow-hidden"
+        className="pointer-events-none absolute inset-0 overflow-hidden"
         style={
           {
             "--aurora":
@@ -63,7 +63,9 @@ export function AuroraBackground({
           )}
         />
       </div>
-      {children}
+      <div className="relative z-10 w-full flex flex-col items-center justify-center">
+        {children}
+      </div>
     </div>
   );
 }

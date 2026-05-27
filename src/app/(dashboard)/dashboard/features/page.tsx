@@ -32,7 +32,6 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "DPD",           logo: "/integrations/dpd.svg", id: "dpd" },
       { name: "Cargus",        logo: "/integrations/cargus.svg", id: "cargus" },
       { name: "Sameday",       logo: "/integrations/sameday.svg", id: "sameday" },
-      { name: "GLS",           logo: "/integrations/gls.svg" },
       { name: "Woot",          logo: "/integrations/woot.svg",    filter: "invert(1)", id: "woot" },
       { name: "Colete Online", logo: "/integrations/colete-online.svg", id: "colete" },
     ],

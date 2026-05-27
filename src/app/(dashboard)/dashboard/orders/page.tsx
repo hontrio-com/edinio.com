@@ -5,6 +5,7 @@ import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
 import type { OblioConfig } from "@/lib/oblio";
+import type { FgoConfig } from "@/lib/fgo";
 
 export default async function OrdersPage() {
   const supabase = await createClient();
@@ -34,7 +35,7 @@ export default async function OrdersPage() {
       .eq("status", "pending"),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config")
       .eq("business_id", business.id)
       .single(),
   ]);
@@ -47,10 +48,12 @@ export default async function OrdersPage() {
   const coleteEnabled = !!(cc?.enabled && cc?.client_id && cc?.client_secret);
   const oc = settings?.oblio_config as OblioConfig | null;
   const oblioEnabled = !!(oc?.enabled && oc?.client_id && oc?.cif && oc?.series_invoice);
+  const fc = settings?.fgo_config as FgoConfig | null;
+  const fgoEnabled = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} businessId={business.id} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} businessId={business.id} />
     </div>
   );
 }

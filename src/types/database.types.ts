@@ -318,6 +318,11 @@ export interface Database {
           oblio_proforma_series: string | null;
           oblio_storno_number: string | null;
           oblio_storno_series: string | null;
+          fgo_invoice_number: string | null;
+          fgo_invoice_series: string | null;
+          fgo_invoice_link: string | null;
+          fgo_storno_number: string | null;
+          fgo_storno_series: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -370,6 +375,11 @@ export interface Database {
           oblio_proforma_series?: string | null;
           oblio_storno_number?: string | null;
           oblio_storno_series?: string | null;
+          fgo_invoice_number?: string | null;
+          fgo_invoice_series?: string | null;
+          fgo_invoice_link?: string | null;
+          fgo_storno_number?: string | null;
+          fgo_storno_series?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -402,6 +412,7 @@ export interface Database {
           woot_config: Json | null;
           colete_config: Json | null;
           oblio_config: Json | null;
+          fgo_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -430,6 +441,7 @@ export interface Database {
           woot_config?: Json | null;
           colete_config?: Json | null;
           oblio_config?: Json | null;
+          fgo_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -456,6 +468,7 @@ export interface Database {
           woot_config?: Json | null;
           colete_config?: Json | null;
           oblio_config?: Json | null;
+          fgo_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

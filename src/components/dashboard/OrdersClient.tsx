@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
+import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import type { Database } from "@/types/database.types";
@@ -37,13 +38,14 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, businessId }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, businessId }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
   wootEnabled?: boolean;
   coleteEnabled?: boolean;
   oblioEnabled?: boolean;
+  fgoEnabled?: boolean;
   businessId?: string;
 }) {
   const router = useRouter();
@@ -57,6 +59,9 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [oblioActionOrderId, setOblioActionOrderId] = useState<string | null>(null);
   const [oblioAction, setOblioAction] = useState<"invoice" | "proforma" | "storno" | null>(null);
   const [, startOblioTransition] = useTransition();
+  const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
+  const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
+  const [, startFgoTransition] = useTransition();
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -101,6 +106,27 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
       } else if ("number" in result) {
         const labels = { invoice: "Factura", proforma: "Proforma", storno: "Storno" };
         toast.success(`${labels[action]} Oblio ${result.series}${result.number} generata`);
+        router.refresh();
+      }
+    });
+  }
+
+  function handleFgoAction(e: React.MouseEvent, orderId: string, action: "invoice" | "storno") {
+    e.stopPropagation();
+    if (!businessId) return;
+    setFgoActionOrderId(orderId);
+    setFgoAction(action);
+    startFgoTransition(async () => {
+      const result = action === "invoice"
+        ? await generateFgoInvoice(businessId, orderId)
+        : await stornoFgoInvoiceAction(businessId, orderId);
+      setFgoActionOrderId(null);
+      setFgoAction(null);
+      if ("error" in result) {
+        toast.error(result.error);
+      } else if ("number" in result) {
+        const label = action === "invoice" ? "Factura fGO" : "Storno fGO";
+        toast.success(`${label} ${result.series}${result.number} generata`);
         router.refresh();
       }
     });
@@ -235,6 +261,9 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                     )}
                     {oblioEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Oblio</th>
+                    )}
+                    {fgoEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">fGO</th>
                     )}
                     {smartbillEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
@@ -372,6 +401,56 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                                     Proforma
                                   </button>
                                 </>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                        {fgoEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {(order as unknown as Record<string, unknown>)["fgo_storno_number"] ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                                  <XCircle className="h-3 w-3" />
+                                  Storno {(order as unknown as Record<string, unknown>)["fgo_storno_series"] as string}{(order as unknown as Record<string, unknown>)["fgo_storno_number"] as string}
+                                </span>
+                              ) : (order as unknown as Record<string, unknown>)["fgo_invoice_number"] ? (
+                                <>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                                    <FileCheck className="h-3 w-3" />
+                                    {(order as unknown as Record<string, unknown>)["fgo_invoice_series"] as string}{(order as unknown as Record<string, unknown>)["fgo_invoice_number"] as string}
+                                  </span>
+                                  {(order as unknown as Record<string, unknown>)["fgo_invoice_link"] && (
+                                    <a
+                                      href={(order as unknown as Record<string, unknown>)["fgo_invoice_link"] as string}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={e => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                      PDF
+                                    </a>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={e => handleFgoAction(e, order.id, "storno")}
+                                    disabled={fgoActionOrderId === order.id}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                  >
+                                    {fgoActionOrderId === order.id && fgoAction === "storno" ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                                    Storno
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={e => handleFgoAction(e, order.id, "invoice")}
+                                  disabled={fgoActionOrderId === order.id}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50"
+                                >
+                                  {fgoActionOrderId === order.id && fgoAction === "invoice" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck className="h-3 w-3" />}
+                                  Factura
+                                </button>
                               )}
                             </div>
                           </td>

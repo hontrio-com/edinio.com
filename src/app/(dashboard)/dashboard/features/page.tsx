@@ -5,6 +5,7 @@ import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { StripeConfig } from "@/components/dashboard/StripeConnectClient";
+import type { NetopiaConfig } from "@/lib/netopia";
 
 type Integration = {
   name: string;
@@ -49,7 +50,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "Procesatori de plati",
     integrations: [
       { name: "Stripe",           logo: "/integrations/stripe.svg", id: "stripe" },
-      { name: "Netopia Payments", logo: "/integrations/netopia.svg", filter: "invert(1)" },
+      { name: "Netopia Payments", logo: "/integrations/netopia.svg", filter: "invert(1)", id: "netopia" },
     ],
   },
   {
@@ -79,16 +80,18 @@ export default async function IntegrationsPage() {
   let smsoActive = false;
   let smartbillActive = false;
   let stripeActive = false;
+  let netopiaActive = false;
   if (business) {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("smso_config, smartbill_config, stripe_config")
+      .select("smso_config, smartbill_config, stripe_config, netopia_config")
       .eq("business_id", business.id)
       .single();
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
     smartbillActive = (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
     const sc = settings?.stripe_config as StripeConfig | null;
     stripeActive = !!(sc?.enabled && sc?.charges_enabled);
+    netopiaActive = (settings?.netopia_config as NetopiaConfig | null)?.enabled === true;
   }
 
   return (
@@ -112,9 +115,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe";
-                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : false;
-                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : "#";
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia";
+                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : false;
+                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : "#";
 
                 if (isUnlocked) {
                   return (

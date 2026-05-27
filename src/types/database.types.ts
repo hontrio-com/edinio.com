@@ -374,6 +374,7 @@ export interface Database {
           smso_config: Json | null;
           smartbill_config: Json | null;
           stripe_config: Json | null;
+          netopia_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -398,6 +399,7 @@ export interface Database {
           smso_config?: Json | null;
           smartbill_config?: Json | null;
           stripe_config?: Json | null;
+          netopia_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -420,6 +422,7 @@ export interface Database {
           smso_config?: Json | null;
           smartbill_config?: Json | null;
           stripe_config?: Json | null;
+          netopia_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

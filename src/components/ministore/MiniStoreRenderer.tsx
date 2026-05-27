@@ -181,7 +181,8 @@ function CartCheckoutModal({
   );
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const [stripeEnabled, setStripeEnabled] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "stripe">("cash_on_delivery");
+  const [netopiaEnabled, setNetopiaEnabled] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "stripe" | "netopia">("cash_on_delivery");
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   const hiddenFields = checkoutConfig?.hidden_fields ?? [];
@@ -218,7 +219,7 @@ function CartCheckoutModal({
     const supabase = createClient();
     supabase
       .from("store_settings")
-      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config")
+      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config, netopia_config")
       .eq("business_id", businessId)
       .single()
       .then(({ data }) => {
@@ -235,6 +236,8 @@ function CartCheckoutModal({
         const sc = data?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
         const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
         setStripeEnabled(stripeOk);
+        const nc = data?.netopia_config as { enabled?: boolean; pos_signature?: string; public_key?: string; private_key?: string } | null;
+        setNetopiaEnabled(!!(nc?.enabled && nc?.pos_signature && nc?.public_key && nc?.private_key));
         if (!stripeOk) setPaymentMethod("cash_on_delivery");
       });
   }, [open, businessId]);
@@ -290,6 +293,34 @@ function CartCheckoutModal({
         const data = await res.json() as { url?: string; error?: string };
         if (data.url) { clear(); window.location.href = data.url; return; }
         setErrors({ _: data.error ?? "Eroare la initierea platii cu cardul." });
+        return;
+      }
+
+      if (paymentMethod === "netopia") {
+        const res = await fetch("/api/netopia/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId, businessId }),
+        });
+        const np = await res.json() as { envKey?: string; data?: string; iv?: string; url?: string; error?: string };
+        if (np.envKey && np.data && np.url) {
+          clear();
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = np.url;
+          const fields = { env_key: np.envKey, data: np.data, cipher: "aes-256-cbc", iv: np.iv ?? "" };
+          for (const [k, v] of Object.entries(fields)) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = k;
+            input.value = v;
+            form.appendChild(input);
+          }
+          document.body.appendChild(form);
+          form.submit();
+          return;
+        }
+        setErrors({ _: np.error ?? "Eroare la initierea platii Netopia." });
         return;
       }
 
@@ -502,10 +533,10 @@ function CartCheckoutModal({
             </div>
           </div>
           {/* Payment method toggle */}
-          {stripeEnabled && (
+          {(stripeEnabled || netopiaEnabled) && (
             <div className="space-y-2">
               <p className="text-sm font-semibold text-gray-700">Metoda de plata</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className={`grid gap-2 ${stripeEnabled && netopiaEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
                 <button type="button" onClick={() => setPaymentMethod("cash_on_delivery")}
                   className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
                   style={paymentMethod === "cash_on_delivery"
@@ -514,14 +545,26 @@ function CartCheckoutModal({
                   <Banknote className="h-4 w-4" />
                   Ramburs
                 </button>
-                <button type="button" onClick={() => setPaymentMethod("stripe")}
-                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
-                  style={paymentMethod === "stripe"
-                    ? { borderColor: "#635bff", backgroundColor: "#635bff12", color: "#111" }
-                    : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
-                  <CreditCard className="h-4 w-4" />
-                  Card online
-                </button>
+                {stripeEnabled && (
+                  <button type="button" onClick={() => setPaymentMethod("stripe")}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                    style={paymentMethod === "stripe"
+                      ? { borderColor: "#635bff", backgroundColor: "#635bff12", color: "#111" }
+                      : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                    <CreditCard className="h-4 w-4" />
+                    Stripe
+                  </button>
+                )}
+                {netopiaEnabled && (
+                  <button type="button" onClick={() => setPaymentMethod("netopia")}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                    style={paymentMethod === "netopia"
+                      ? { borderColor: "#e63946", backgroundColor: "#e6394612", color: "#111" }
+                      : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                    <CreditCard className="h-4 w-4" />
+                    Netopia
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -533,17 +576,25 @@ function CartCheckoutModal({
             className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
             style={paymentMethod === "stripe"
               ? { backgroundColor: "#635bff", boxShadow: "0px 2px 12px #635bff55" }
-              : { backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
+              : paymentMethod === "netopia"
+                ? { backgroundColor: "#e63946", boxShadow: "0px 2px 12px #e6394655" }
+                : { backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >
             {isPending
               ? <><Loader2 className="h-[18px] w-[18px] animate-spin" />Se proceseaza...</>
               : paymentMethod === "stripe"
-                ? <><CreditCard className="h-5 w-5" />Plateste cu cardul - {grandTotal} lei</>
-                : <><Banknote className="h-5 w-5" />Plata la livrare - {grandTotal} lei</>
+                ? <><CreditCard className="h-5 w-5" />Plateste cu Stripe - {grandTotal} lei</>
+                : paymentMethod === "netopia"
+                  ? <><CreditCard className="h-5 w-5" />Plateste cu Netopia - {grandTotal} lei</>
+                  : <><Banknote className="h-5 w-5" />Plata la livrare - {grandTotal} lei</>
             }
           </button>
           <p className="text-center text-xs text-gray-400">
-            {paymentMethod === "stripe" ? "Vei fi redirectionat catre Stripe pentru plata securizata" : "Platesti cash curierului - Fara card necesar"}
+            {paymentMethod === "stripe"
+              ? "Vei fi redirectionat catre Stripe pentru plata securizata"
+              : paymentMethod === "netopia"
+                ? "Vei fi redirectionat catre Netopia pentru plata securizata"
+                : "Platesti cash curierului - Fara card necesar"}
           </p>
         </form>
       </div>

@@ -13,6 +13,7 @@ import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { FanCourierConfig } from "@/lib/fancourier";
+import type { SamedayConfig } from "@/lib/sameday";
 
 type Integration = {
   name: string;
@@ -30,7 +31,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "Fan Courier",   logo: "/integrations/fan-courier.svg", id: "fan-courier" },
       { name: "DPD",           logo: "/integrations/dpd.svg", id: "dpd" },
       { name: "Cargus",        logo: "/integrations/cargus.svg", id: "cargus" },
-      { name: "Sameday",       logo: "/integrations/sameday.svg" },
+      { name: "Sameday",       logo: "/integrations/sameday.svg", id: "sameday" },
       { name: "GLS",           logo: "/integrations/gls.svg" },
       { name: "Woot",          logo: "/integrations/woot.svg",    filter: "invert(1)", id: "woot" },
       { name: "Colete Online", logo: "/integrations/colete-online.svg", id: "colete" },
@@ -95,10 +96,11 @@ export default async function IntegrationsPage() {
   let cargusActive = false;
   let dpdActive = false;
   let fanCourierActive = false;
+  let samedayActive = false;
   if (business) {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config")
+      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config")
       .eq("business_id", business.id)
       .single();
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
@@ -121,6 +123,8 @@ export default async function IntegrationsPage() {
     dpdActive = !!(dg?.enabled && dg?.username && dg?.client_id);
     const fg = settings?.fan_courier_config as FanCourierConfig | null;
     fanCourierActive = !!(fg?.enabled && fg?.username && fg?.client_id);
+    const sg = settings?.sameday_config as SamedayConfig | null;
+    samedayActive = !!(sg?.enabled && sg?.username && sg?.pickup_point_id);
   }
 
   return (
@@ -144,9 +148,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier";
-                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : false;
-                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : "#";
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday";
+                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : integration.id === "sameday" ? samedayActive : false;
+                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : integration.id === "sameday" ? "/dashboard/features/sameday" : "#";
 
                 if (isUnlocked) {
                   return (

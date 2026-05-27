@@ -9,6 +9,7 @@ import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { FanCourierConfig } from "@/lib/fancourier";
+import type { SamedayConfig } from "@/lib/sameday";
 
 export default async function OrdersPage() {
   const supabase = await createClient();
@@ -38,7 +39,7 @@ export default async function OrdersPage() {
       .eq("status", "pending"),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config")
       .eq("business_id", business.id)
       .single(),
   ]);
@@ -59,10 +60,12 @@ export default async function OrdersPage() {
   const dpdEnabled = !!(dg?.enabled && dg?.username && dg?.client_id);
   const fg = settings?.fan_courier_config as FanCourierConfig | null;
   const fanCourierEnabled = !!(fg?.enabled && fg?.username && fg?.client_id);
+  const sg = settings?.sameday_config as SamedayConfig | null;
+  const samedayEnabled = !!(sg?.enabled && sg?.username && sg?.pickup_point_id);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} businessId={business.id} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} samedayEnabled={samedayEnabled} businessId={business.id} />
     </div>
   );
 }

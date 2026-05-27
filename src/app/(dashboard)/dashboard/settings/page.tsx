@@ -29,10 +29,29 @@ export default async function SettingsPage({ searchParams }: Props) {
   const { data: storeSettings } = business
     ? await supabase
         .from("store_settings")
-        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones")
+        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config")
         .eq("business_id", business.id)
         .single()
     : { data: null };
+
+  type CourierCfg = Record<string, unknown>;
+  const fc = storeSettings?.fan_courier_config as CourierCfg | null;
+  const dg = storeSettings?.dpd_config as CourierCfg | null;
+  const cg = storeSettings?.cargus_config as CourierCfg | null;
+  const sg = storeSettings?.sameday_config as CourierCfg | null;
+  const wc = storeSettings?.woot_config as CourierCfg | null;
+  const cc = storeSettings?.colete_config as CourierCfg | null;
+
+  const activeCourierIds: string[] = [
+    ...(fc?.enabled && fc?.username && fc?.client_id ? ["fan-courier"] : []),
+    ...(dg?.enabled && dg?.username && dg?.client_id ? ["dpd"] : []),
+    ...(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id ? ["cargus"] : []),
+    ...(sg?.enabled && sg?.username && sg?.pickup_point_id ? ["sameday"] : []),
+    ...(wc?.enabled && wc?.public_key && wc?.secret_key ? ["woot"] : []),
+    ...(cc?.enabled && cc?.client_id && cc?.client_secret ? ["colete"] : []),
+    "own",
+    "pickup",
+  ];
 
   return (
     <SettingsClient
@@ -62,6 +81,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         free_shipping_threshold: storeSettings?.free_shipping_threshold ?? null,
         shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
       }}
+      activeCourierIds={activeCourierIds}
       planSuccess={plan_success === "1"}
     />
   );

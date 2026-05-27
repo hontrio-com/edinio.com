@@ -27,9 +27,8 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "Curieri",
     integrations: [
       { name: "Fan Courier",   logo: "/integrations/fan-courier.svg" },
-      { name: "DPD",           logo: "/integrations/dpd.svg" },
-      { name: "Cargus",        logo: "/integrations/cargus.svg", id: "cargus" },
       { name: "DPD",           logo: "/integrations/dpd.svg", id: "dpd" },
+      { name: "Cargus",        logo: "/integrations/cargus.svg", id: "cargus" },
       { name: "Sameday",       logo: "/integrations/sameday.svg" },
       { name: "GLS",           logo: "/integrations/gls.svg" },
       { name: "Woot",          logo: "/integrations/woot.svg",    filter: "invert(1)", id: "woot" },

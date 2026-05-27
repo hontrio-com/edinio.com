@@ -131,6 +131,40 @@ export async function sendOrderConfirmationToCustomer(
   });
 }
 
+export async function sendWelcomeEmail(
+  to: string,
+  data: { name: string; business_name: string; slug: string }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const storeUrl = `${SITE_URL}/${data.slug}`;
+  const dashboardUrl = `${SITE_URL}/dashboard`;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Felicitari${data.name ? `, ${data.name}` : ""}!</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Magazinul tau <strong>${data.business_name}</strong> a fost creat cu succes si este acum live pe Edinio.</p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Magazinul tau este online</p>
+      <p style="margin:4px 0 0 0;font-size:13px;">
+        <a href="${storeUrl}" style="color:#15803d;text-decoration:none;">${storeUrl}</a>
+      </p>
+    </div>
+
+    <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Urmatorul pas: adauga produse si configureaza-ti magazinul din panoul de control.</p>
+
+    <div style="text-align:center;">
+      <a href="${dashboardUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Mergi la dashboard
+      </a>
+    </div>
+  `;
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `Magazinul tau ${data.business_name} este live!`,
+    html: baseTemplate(content),
+  });
+}
+
 export async function sendMfaOtpEmail(to: string, otp: string) {
   if (!process.env.RESEND_API_KEY) return;
   const content = `

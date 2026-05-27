@@ -58,6 +58,20 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Authenticated on onboarding → redirect to dashboard if already completed
+  if (user && isOnboarding) {
+    const { data: profile } = await supabase
+      .from("users_profile")
+      .select("onboarding_completed")
+      .eq("id", user.id)
+      .single();
+    if (profile?.onboarding_completed) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Authenticated on dashboard → verify onboarding complete
   if (user && isDashboard) {
     const [{ data: profile }, { count: bizCount }] = await Promise.all([

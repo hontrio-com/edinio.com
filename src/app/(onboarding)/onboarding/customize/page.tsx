@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import { Loader2, Upload, X, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -121,8 +122,10 @@ export default function OnboardingCustomizePage() {
       }
 
       sessionStorage.removeItem("onboarding_details");
+      localStorage.removeItem("onboarding_draft_v2");
       toast.success("Magazinul tau a fost creat cu succes!");
-      window.location.href = "/dashboard";
+      confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
+      setTimeout(() => { window.location.href = "/dashboard"; }, 1800);
     } catch {
       toast.error("A aparut o eroare. Incearca din nou.");
       setLoading(false);

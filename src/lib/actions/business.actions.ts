@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export async function createBusiness(data: {
   business_name: string;
@@ -9,9 +10,9 @@ export async function createBusiness(data: {
   phone: string;
   whatsapp?: string;
   email?: string;
-  address: string;
-  city: string;
-  county: string;
+  address?: string;
+  city?: string;
+  county?: string;
   slug: string;
   logo_url?: string;
   cover_url?: string;
@@ -32,9 +33,9 @@ export async function createBusiness(data: {
       phone: data.phone,
       whatsapp: data.whatsapp || null,
       email: data.email || null,
-      address: data.address,
-      city: data.city,
-      county: data.county,
+      address: data.address || null,
+      city: data.city || null,
+      county: data.county || null,
       logo_url: data.logo_url || null,
       cover_url: data.cover_url || null,
       primary_color: data.primary_color,
@@ -63,6 +64,20 @@ export async function createBusiness(data: {
       .from("users_profile")
       .update({ onboarding_completed: true })
       .eq("id", user.id);
+  }
+
+  // Send welcome email (non-blocking)
+  if (user.email) {
+    const { data: profile } = await supabase
+      .from("users_profile")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+    sendWelcomeEmail(user.email, {
+      name: profile?.full_name ?? "",
+      business_name: data.business_name,
+      slug: business.slug,
+    }).catch(() => {});
   }
 
   revalidatePath("/dashboard", "layout");

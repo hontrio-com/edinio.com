@@ -13,19 +13,14 @@ export const ROMANIAN_COUNTIES = [
 export const businessSchema = z.object({
   business_name: z.string().min(2, "Minim 2 caractere").max(100),
   tagline: z.string().max(120).optional(),
-  phone: z
-    .string()
-    .regex(/^07[0-9]{8}$/, "Format invalid: 07XXXXXXXX")
-    .min(10),
-  whatsapp: z
-    .string()
-    .regex(/^07[0-9]{8}$/, "Format invalid: 07XXXXXXXX")
-    .optional()
-    .or(z.literal("")),
+  phone: z.preprocess(
+    (v) => (typeof v === "string" ? v.replace(/[\s\-().+]/g, "") : v),
+    z.string().regex(/^07[0-9]{8}$/, "Format invalid: 07XXXXXXXX"),
+  ),
   email: z.string().email("Email invalid").optional().or(z.literal("")),
-  address: z.string().min(5, "Minim 5 caractere"),
-  city: z.string().min(2, "Minim 2 caractere"),
-  county: z.string().min(1, "Selecteaza judetul"),
+  address: z.string().optional().or(z.literal("")),
+  city: z.string().optional().or(z.literal("")),
+  county: z.string().optional(),
   slug: z
     .string()
     .min(3, "Minim 3 caractere")

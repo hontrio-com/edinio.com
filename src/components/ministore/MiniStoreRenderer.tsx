@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";
+import { fbTrack } from "@/lib/marketing";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database.types";
 
@@ -859,7 +860,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
   const [categoryFilter, setCategoryFilter] = useState("toate");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
-  const { addItem, count } = useCart();
+  const { addItem, count, total } = useCart();
 
   const color = business.primary_color ?? "#1AB554";
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
@@ -919,6 +920,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
       price: Number(product.price),
       imageUrl: images[0] ? String(images[0]) : null,
     });
+    fbTrack("AddToCart", { value: Number(product.price), currency: "RON", content_name: product.name, content_ids: [product.id], content_type: "product" });
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 1500);
   }
@@ -1456,7 +1458,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         color={color}
-        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }}
+        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count }); }}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
       />

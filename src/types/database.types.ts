@@ -429,6 +429,7 @@ export interface Database {
           dpd_config: Json | null;
           fan_courier_config: Json | null;
           sameday_config: Json | null;
+          marketing_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -462,6 +463,7 @@ export interface Database {
           dpd_config?: Json | null;
           fan_courier_config?: Json | null;
           sameday_config?: Json | null;
+          marketing_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -493,6 +495,7 @@ export interface Database {
           dpd_config?: Json | null;
           fan_courier_config?: Json | null;
           sameday_config?: Json | null;
+          marketing_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

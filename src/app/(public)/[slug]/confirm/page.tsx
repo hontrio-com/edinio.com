@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CheckCircle, Package, Phone, ArrowLeft } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
+import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -50,6 +51,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center px-4 py-12">
       <ConfettiEffect color={color} />
+      {orderId && <FbPurchaseEvent orderId={orderId} total={displayTotal} />}
 
       <div className="w-full max-w-md">
         {/* Success card */}

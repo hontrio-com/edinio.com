@@ -11,6 +11,7 @@ import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from 
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
+import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import type { Database } from "@/types/database.types";
@@ -40,7 +41,7 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, businessId }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, businessId }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
@@ -50,6 +51,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   fgoEnabled?: boolean;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
+  fanCourierEnabled?: boolean;
   businessId?: string;
 }) {
   const router = useRouter();
@@ -65,6 +67,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [, startOblioTransition] = useTransition();
   const [cargusModalOrder, setCargusModalOrder] = useState<Order | null>(null);
   const [dpdModalOrder, setDpdModalOrder] = useState<Order | null>(null);
+  const [fanCourierModalOrder, setFanCourierModalOrder] = useState<Order | null>(null);
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
@@ -183,6 +186,15 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
           onSuccess={() => { setDpdModalOrder(null); router.refresh(); }}
         />
       )}
+      {fanCourierModalOrder && businessId && (
+        <FanCourierAwbModal
+          open={!!fanCourierModalOrder}
+          onClose={() => setFanCourierModalOrder(null)}
+          order={fanCourierModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setFanCourierModalOrder(null); router.refresh(); }}
+        />
+      )}
       {coleteModalOrder && businessId && (
         <ColeteAwbModal
           open={!!coleteModalOrder}
@@ -286,6 +298,9 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                     {dpdEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB DPD</th>
                     )}
+                    {fanCourierEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB FAN Courier</th>
+                    )}
                     {coleteEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Colete</th>
                     )}
@@ -385,6 +400,29 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setDpdModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {fanCourierEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["fan_courier_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setFanCourierModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["fan_courier_awb_number"] as string}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setFanCourierModalOrder(order); }}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
                               >
                                 <Package className="h-3 w-3" />

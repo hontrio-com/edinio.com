@@ -327,6 +327,7 @@ export interface Database {
           cargus_service_name: string | null;
           dpd_shipment_id: number | null;
           dpd_awb_number: string | null;
+          fan_courier_awb_number: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -388,6 +389,7 @@ export interface Database {
           cargus_service_name?: string | null;
           dpd_shipment_id?: number | null;
           dpd_awb_number?: string | null;
+          fan_courier_awb_number?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -423,6 +425,7 @@ export interface Database {
           fgo_config: Json | null;
           cargus_config: Json | null;
           dpd_config: Json | null;
+          fan_courier_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -454,6 +457,7 @@ export interface Database {
           fgo_config?: Json | null;
           cargus_config?: Json | null;
           dpd_config?: Json | null;
+          fan_courier_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -483,6 +487,7 @@ export interface Database {
           fgo_config?: Json | null;
           cargus_config?: Json | null;
           dpd_config?: Json | null;
+          fan_courier_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

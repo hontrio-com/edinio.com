@@ -11,6 +11,7 @@ import type { COConfig } from "@/lib/colete";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
+import type { DpdConfig } from "@/lib/dpd";
 
 type Integration = {
   name: string;
@@ -28,6 +29,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "Fan Courier",   logo: "/integrations/fan-courier.svg" },
       { name: "DPD",           logo: "/integrations/dpd.svg" },
       { name: "Cargus",        logo: "/integrations/cargus.svg", id: "cargus" },
+      { name: "DPD",           logo: "/integrations/dpd.svg", id: "dpd" },
       { name: "Sameday",       logo: "/integrations/sameday.svg" },
       { name: "GLS",           logo: "/integrations/gls.svg" },
       { name: "Woot",          logo: "/integrations/woot.svg",    filter: "invert(1)", id: "woot" },
@@ -91,10 +93,11 @@ export default async function IntegrationsPage() {
   let oblioActive = false;
   let fgoActive = false;
   let cargusActive = false;
+  let dpdActive = false;
   if (business) {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config")
+      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config")
       .eq("business_id", business.id)
       .single();
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
@@ -113,6 +116,8 @@ export default async function IntegrationsPage() {
     fgoActive = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
     const cg = settings?.cargus_config as CargusConfig | null;
     cargusActive = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
+    const dg = settings?.dpd_config as DpdConfig | null;
+    dpdActive = !!(dg?.enabled && dg?.username && dg?.client_id);
   }
 
   return (
@@ -136,9 +141,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus";
-                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : false;
-                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : "#";
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd";
+                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : false;
+                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : "#";
 
                 if (isUnlocked) {
                   return (

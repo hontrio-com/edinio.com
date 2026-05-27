@@ -134,6 +134,10 @@
 
 /* ─── Tailwind theme bridge ──────────────────────────────────────────────── */
 
+@theme {
+  --animate-aurora: aurora 60s linear infinite;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -259,6 +263,11 @@
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+@keyframes aurora {
+  from { background-position: 50% 50%, 50% 50%; }
+  to   { background-position: 350% 50%, 350% 50%; }
 }
 
 @keyframes spin {

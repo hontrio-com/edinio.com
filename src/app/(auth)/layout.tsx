@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuroraBackground } from "@/components/ui/aurora-background";
 
 export const metadata: Metadata = {
   title: "Autentificare",
@@ -10,8 +11,8 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8 sm:py-12">
-      <div className="w-full max-w-md">
+    <AuroraBackground>
+      <div className="w-full max-w-md px-4 py-8">
         <div className="mb-6 sm:mb-8 text-center">
           <a href="/" className="inline-flex items-center gap-2">
             <div
@@ -25,10 +26,10 @@ export default function AuthLayout({
             </span>
           </a>
         </div>
-        <div className="bg-surface rounded-xl border border-border p-6 sm:p-8 shadow-md">
+        <div className="bg-surface/90 backdrop-blur-sm rounded-xl border border-border p-6 sm:p-8 shadow-lg">
           {children}
         </div>
       </div>
-    </div>
+    </AuroraBackground>
   );
 }

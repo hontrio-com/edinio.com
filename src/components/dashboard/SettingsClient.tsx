@@ -171,12 +171,12 @@ interface ShippingConfig {
   shipping_zones: Record<string, ShippingMethodConfig>;
 }
 
-const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice: number }[] = [
+const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice: number; filter?: string }[] = [
   { id: "fan-courier",  label: "Fan Courier",       logo: "/integrations/fan-courier.svg",  defaultPrice: 20 },
   { id: "dpd",          label: "DPD",               logo: "/integrations/dpd.svg",          defaultPrice: 18 },
   { id: "cargus",       label: "Cargus",            logo: "/integrations/cargus.svg",       defaultPrice: 17 },
   { id: "sameday",      label: "Sameday",           logo: "/integrations/sameday.svg",      defaultPrice: 19 },
-  { id: "woot",         label: "Woot",              logo: "/integrations/woot.svg",         defaultPrice: 16 },
+  { id: "woot",         label: "Woot",              logo: "/integrations/woot.svg",         defaultPrice: 16, filter: "invert(1)" },
   { id: "colete",       label: "Colete Online",     logo: "/integrations/colete-online.svg", defaultPrice: 15 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
@@ -892,7 +892,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         {/* Logo or icon */}
                         <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-background border border-border">
                           {method.logo ? (
-                            <img src={method.logo} alt={method.label} className="w-6 h-6 object-contain" />
+                            <img src={method.logo} alt={method.label} className="w-6 h-6 object-contain" style={method.filter ? { filter: method.filter } : undefined} />
                           ) : (
                             <Truck className="h-4 w-4 text-muted-foreground" />
                           )}

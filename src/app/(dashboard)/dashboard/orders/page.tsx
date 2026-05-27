@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
 import type { SmartbillConfig } from "@/lib/smartbill";
+import type { WootConfig } from "@/lib/woot";
 
 export default async function OrdersPage() {
   const supabase = await createClient();
@@ -31,17 +32,19 @@ export default async function OrdersPage() {
       .eq("status", "pending"),
     supabase
       .from("store_settings")
-      .select("smartbill_config")
+      .select("smartbill_config, woot_config")
       .eq("business_id", business.id)
       .single(),
   ]);
 
   const smartbillEnabled =
     (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
+  const wc = settings?.woot_config as WootConfig | null;
+  const wootEnabled = !!(wc?.enabled && wc?.public_key && wc?.secret_key);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} businessId={business.id} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} businessId={business.id} />
     </div>
   );
 }

@@ -306,6 +306,9 @@ export interface Database {
           smartbill_storno_number: string | null;
           smartbill_storno_series: string | null;
           stripe_session_id: string | null;
+          woot_order_id: string | null;
+          woot_awb_number: string | null;
+          woot_service_name: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -346,6 +349,9 @@ export interface Database {
           smartbill_storno_number?: string | null;
           smartbill_storno_series?: string | null;
           stripe_session_id?: string | null;
+          woot_order_id?: string | null;
+          woot_awb_number?: string | null;
+          woot_service_name?: string | null;
           vat_amount?: number;
           vat_rate?: number;
           updated_at?: string;
@@ -375,6 +381,7 @@ export interface Database {
           smartbill_config: Json | null;
           stripe_config: Json | null;
           netopia_config: Json | null;
+          woot_config: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -400,6 +407,7 @@ export interface Database {
           smartbill_config?: Json | null;
           stripe_config?: Json | null;
           netopia_config?: Json | null;
+          woot_config?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -423,6 +431,7 @@ export interface Database {
           smartbill_config?: Json | null;
           stripe_config?: Json | null;
           netopia_config?: Json | null;
+          woot_config?: Json | null;
           updated_at?: string;
         };
         Relationships: [];

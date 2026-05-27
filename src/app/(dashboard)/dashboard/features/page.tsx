@@ -6,6 +6,7 @@ import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { StripeConfig } from "@/components/dashboard/StripeConnectClient";
 import type { NetopiaConfig } from "@/lib/netopia";
+import type { WootConfig } from "@/lib/woot";
 
 type Integration = {
   name: string;
@@ -25,7 +26,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "Cargus",        logo: "/integrations/cargus.svg" },
       { name: "Sameday",       logo: "/integrations/sameday.svg" },
       { name: "GLS",           logo: "/integrations/gls.svg" },
-      { name: "Woot",          logo: "/integrations/woot.svg",    filter: "invert(1)" },
+      { name: "Woot",          logo: "/integrations/woot.svg",    filter: "invert(1)", id: "woot" },
       { name: "Colete Online", logo: "/integrations/colete-online.svg" },
     ],
   },
@@ -81,10 +82,11 @@ export default async function IntegrationsPage() {
   let smartbillActive = false;
   let stripeActive = false;
   let netopiaActive = false;
+  let wootActive = false;
   if (business) {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("smso_config, smartbill_config, stripe_config, netopia_config")
+      .select("smso_config, smartbill_config, stripe_config, netopia_config, woot_config")
       .eq("business_id", business.id)
       .single();
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
@@ -93,6 +95,8 @@ export default async function IntegrationsPage() {
     stripeActive = !!(sc?.enabled && sc?.charges_enabled);
     const nc = settings?.netopia_config as NetopiaConfig | null;
     netopiaActive = !!(nc?.enabled && nc?.pos_signature && (nc.sandbox ? (nc.sandbox_public_key && nc.sandbox_private_key) : (nc.live_public_key && nc.live_private_key)));
+    const wc = settings?.woot_config as WootConfig | null;
+    wootActive = !!(wc?.enabled && wc?.public_key && wc?.secret_key);
   }
 
   return (
@@ -116,9 +120,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia";
-                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : false;
-                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : "#";
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "woot";
+                const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "woot" ? wootActive : false;
+                const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "woot" ? "/dashboard/features/woot" : "#";
 
                 if (isUnlocked) {
                   return (

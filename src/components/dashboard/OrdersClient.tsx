@@ -2,11 +2,12 @@
 
 import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2 } from "lucide-react";
+import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
+import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -34,10 +35,11 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, businessId }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, businessId }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
+  wootEnabled?: boolean;
   businessId?: string;
 }) {
   const router = useRouter();
@@ -46,6 +48,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, businessI
   const [page, setPage] = useState(1);
   const [generatingOrderId, setGeneratingOrderId] = useState<string | null>(null);
   const [, startGenerateTransition] = useTransition();
+  const [wootModalOrder, setWootModalOrder] = useState<Order | null>(null);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -91,6 +94,15 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, businessI
 
   return (
     <>
+      {wootModalOrder && businessId && (
+        <WootAwbModal
+          open={!!wootModalOrder}
+          onClose={() => setWootModalOrder(null)}
+          order={wootModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setWootModalOrder(null); router.refresh(); }}
+        />
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
         <div className="flex-1">
@@ -179,6 +191,9 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, businessI
                     {smartbillEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
                     )}
+                    {wootEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB</th>
+                    )}
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
@@ -205,6 +220,29 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, businessI
                         <td className="px-5 py-3.5 text-muted-foreground hidden md:table-cell">
                           {formatDate(new Date(order.created_at))}
                         </td>
+                        {wootEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {order.woot_awb_number ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setWootModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {order.woot_awb_number}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setWootModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
                         {smartbillEnabled && (
                           <td className="px-5 py-3.5 hidden lg:table-cell">
                             <div className="flex items-center gap-1.5">

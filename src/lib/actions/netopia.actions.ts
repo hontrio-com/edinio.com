@@ -6,7 +6,7 @@ import type { NetopiaConfig } from "@/lib/netopia";
 
 export async function saveNetopiaConfig(
   businessId: string,
-  config: Omit<NetopiaConfig, "enabled">
+  config: NetopiaConfig
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -20,11 +20,9 @@ export async function saveNetopiaConfig(
     .single();
   if (!biz) return { success: false, error: "Acces interzis" };
 
-  const enabled = !!(config.pos_signature?.trim() && config.public_key?.trim() && config.private_key?.trim());
-
   const { error } = await supabase
     .from("store_settings")
-    .update({ netopia_config: { ...config, enabled } })
+    .update({ netopia_config: config })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

@@ -182,6 +182,7 @@ function CartCheckoutModal({
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const [stripeEnabled, setStripeEnabled] = useState(false);
   const [netopiaEnabled, setNetopiaEnabled] = useState(false);
+  const [netopiaTitle, setNetopiaTitle] = useState("Card online (Netopia)");
   const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "stripe" | "netopia">("cash_on_delivery");
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
@@ -236,8 +237,10 @@ function CartCheckoutModal({
         const sc = data?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
         const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
         setStripeEnabled(stripeOk);
-        const nc = data?.netopia_config as { enabled?: boolean; pos_signature?: string; public_key?: string; private_key?: string } | null;
-        setNetopiaEnabled(!!(nc?.enabled && nc?.pos_signature && nc?.public_key && nc?.private_key));
+        const nc = data?.netopia_config as { enabled?: boolean; sandbox?: boolean; pos_signature?: string; title?: string; live_public_key?: string; live_private_key?: string; sandbox_public_key?: string; sandbox_private_key?: string } | null;
+        const netopiaOk = !!(nc?.enabled && nc?.pos_signature && (nc.sandbox ? (nc.sandbox_public_key && nc.sandbox_private_key) : (nc.live_public_key && nc.live_private_key)));
+        setNetopiaEnabled(netopiaOk);
+        if (nc?.title) setNetopiaTitle(nc.title);
         if (!stripeOk) setPaymentMethod("cash_on_delivery");
       });
   }, [open, businessId]);
@@ -562,7 +565,7 @@ function CartCheckoutModal({
                       ? { borderColor: "#e63946", backgroundColor: "#e6394612", color: "#111" }
                       : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
                     <CreditCard className="h-4 w-4" />
-                    Netopia
+                    {netopiaTitle}
                   </button>
                 )}
               </div>
@@ -585,7 +588,7 @@ function CartCheckoutModal({
               : paymentMethod === "stripe"
                 ? <><CreditCard className="h-5 w-5" />Plateste cu Stripe - {grandTotal} lei</>
                 : paymentMethod === "netopia"
-                  ? <><CreditCard className="h-5 w-5" />Plateste cu Netopia - {grandTotal} lei</>
+                  ? <><CreditCard className="h-5 w-5" />{netopiaTitle} - {grandTotal} lei</>
                   : <><Banknote className="h-5 w-5" />Plata la livrare - {grandTotal} lei</>
             }
           </button>

@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   const config = settings?.netopia_config as NetopiaConfig | null;
-  if (!config?.enabled || !config.pos_signature || !config.public_key) {
+  const publicKey = config?.sandbox ? config?.sandbox_public_key : config?.live_public_key;
+  if (!config?.enabled || !config.pos_signature || !publicKey) {
     return NextResponse.json({ error: "Netopia not configured" }, { status: 400 });
   }
 
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
   });
 
   try {
-    const { envKey, data, iv } = encryptForNetopia(xml, config.public_key);
+    const { envKey, data, iv } = encryptForNetopia(xml, publicKey);
     const netopiaUrl = config.sandbox ? NETOPIA_SANDBOX_URL : NETOPIA_PRODUCTION_URL;
     return NextResponse.json({ envKey, data, iv, url: netopiaUrl });
   } catch (err) {

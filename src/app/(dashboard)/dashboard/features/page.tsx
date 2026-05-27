@@ -91,7 +91,8 @@ export default async function IntegrationsPage() {
     smartbillActive = (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
     const sc = settings?.stripe_config as StripeConfig | null;
     stripeActive = !!(sc?.enabled && sc?.charges_enabled);
-    netopiaActive = (settings?.netopia_config as NetopiaConfig | null)?.enabled === true;
+    const nc = settings?.netopia_config as NetopiaConfig | null;
+    netopiaActive = !!(nc?.enabled && nc?.pos_signature && (nc.sandbox ? (nc.sandbox_public_key && nc.sandbox_private_key) : (nc.live_public_key && nc.live_private_key)));
   }
 
   return (

@@ -131,10 +131,13 @@ export function parseIpnXml(xml: string): {
 
 export type NetopiaConfig = {
   enabled: boolean;
-  pos_signature: string;
-  public_key: string;
-  private_key: string;
   sandbox: boolean;
+  pos_signature: string;
+  title: string;
+  live_public_key: string;
+  live_private_key: string;
+  sandbox_public_key: string;
+  sandbox_private_key: string;
 };
 
 export const NETOPIA_SANDBOX_URL = "https://sandboxsecure.mobilpay.ro";

@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
     .single();
 
   const config = settings?.netopia_config as NetopiaConfig | null;
-  if (!config?.private_key) return new Response("Netopia not configured", { status: 400 });
+  const privateKey = config?.sandbox ? config?.sandbox_private_key : config?.live_private_key;
+  if (!privateKey) return new Response("Netopia not configured", { status: 400 });
 
   const formData = await request.formData();
   const envKey = formData.get("env_key") as string;
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
 
   let xml: string;
   try {
-    xml = decryptFromNetopia(envKey, data, iv ?? "", config.private_key);
+    xml = decryptFromNetopia(envKey, data, iv ?? "", privateKey);
   } catch (err) {
     console.error("[netopia/notify] Decrypt failed:", err);
     return new Response("Decrypt error", { status: 500 });

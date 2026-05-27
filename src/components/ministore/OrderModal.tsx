@@ -39,9 +39,13 @@ interface StripeConfig {
 
 interface NetopiaConfig {
   enabled?: boolean;
+  sandbox?: boolean;
   pos_signature?: string;
-  public_key?: string;
-  private_key?: string;
+  title?: string;
+  live_public_key?: string;
+  live_private_key?: string;
+  sandbox_public_key?: string;
+  sandbox_private_key?: string;
 }
 
 interface Props {
@@ -85,6 +89,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
   const [stripeEnabled, setStripeEnabled] = useState(false);
   const [netopiaEnabled, setNetopiaEnabled] = useState(false);
+  const [netopiaTitle, setNetopiaTitle] = useState("Card online (Netopia)");
   const [paymentMethod, setPaymentMethod] = useState<"cash_on_delivery" | "stripe" | "netopia">("cash_on_delivery");
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
@@ -160,7 +165,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
         setStripeEnabled(stripeOk);
         const nc = data?.netopia_config as NetopiaConfig | null;
-        setNetopiaEnabled(!!(nc?.enabled && nc?.pos_signature && nc?.public_key && nc?.private_key));
+        const netopiaOk = !!(nc?.enabled && nc?.pos_signature && (nc.sandbox ? (nc.sandbox_public_key && nc.sandbox_private_key) : (nc.live_public_key && nc.live_private_key)));
+        setNetopiaEnabled(netopiaOk);
+        if (nc?.title) setNetopiaTitle(nc.title);
         if (!stripeOk) setPaymentMethod("cash_on_delivery");
       });
   }, [open, business.id]);
@@ -681,7 +688,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                           ? { borderColor: "#e63946", backgroundColor: "#e6394612", color: "#111" }
                           : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
                         <CreditCard size={16} />
-                        Netopia
+                        {netopiaTitle}
                       </button>
                     )}
                   </div>
@@ -703,7 +710,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   : paymentMethod === "stripe"
                     ? <><CreditCard size={20} />Plateste cu Stripe - {total.toFixed(2).replace(".00", "")} lei</>
                     : paymentMethod === "netopia"
-                      ? <><CreditCard size={20} />Plateste cu Netopia - {total.toFixed(2).replace(".00", "")} lei</>
+                      ? <><CreditCard size={20} />{netopiaTitle} - {total.toFixed(2).replace(".00", "")} lei</>
                       : <><Banknote size={20} />Plata la livrare - {total.toFixed(2).replace(".00", "")} lei</>
                 }
               </button>

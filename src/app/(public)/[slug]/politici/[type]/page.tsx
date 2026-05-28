@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { ArrowLeft } from "lucide-react";
 
 const POLICY_META: Record<string, { label: string; key: string }> = {
@@ -37,9 +38,11 @@ export default async function PolicyPage({ params }: Props) {
 
   const supabase = await createClient();
 
-  const [{ data: business }, ] = await Promise.all([
-    supabase.from("businesses").select("id, business_name, store_name, primary_color, logo_url").eq("slug", slug).single(),
-  ]);
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, business_name, store_name, primary_color, logo_url, address, city, county, phone, email, cui")
+    .eq("slug", slug)
+    .single();
 
   if (!business) notFound();
 
@@ -61,8 +64,23 @@ export default async function PolicyPage({ params }: Props) {
     enabled = (policyVal as Record<string, unknown>).enabled !== false;
   }
 
+  // Fall back to auto-generated template if content is empty
+  const isEmpty = !content.trim() || content === "<p></p>";
+  if (isEmpty && enabled) {
+    const templates = buildPolicyTemplates({
+      businessName: business.business_name,
+      cui:          (business as Record<string, unknown>).cui as string | null ?? null,
+      address:      (business as Record<string, unknown>).address as string | null ?? null,
+      city:         (business as Record<string, unknown>).city as string | null ?? null,
+      county:       (business as Record<string, unknown>).county as string | null ?? null,
+      phone:        (business as Record<string, unknown>).phone as string | null ?? null,
+      email:        (business as Record<string, unknown>).email as string | null ?? null,
+    });
+    content = templates[meta.key] ?? "";
+  }
+
   const color = business.primary_color ?? "#1AB554";
-  const isEmpty = !content || content === "<p></p>";
+  const showContent = enabled && content.trim() !== "";
 
   return (
     <div className="min-h-screen bg-background">
@@ -97,13 +115,10 @@ export default async function PolicyPage({ params }: Props) {
         <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">{meta.label}</h1>
         <div className="w-12 h-1 rounded-full mb-8" style={{ backgroundColor: color }} />
 
-        {(!enabled || isEmpty) ? (
+        {!showContent ? (
           <div className="text-center py-20 border border-dashed border-border rounded-2xl">
             <p className="text-muted-foreground text-sm">
-              Aceasta politica nu a fost configurata inca.
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Proprietarul magazinului o va adauga in curand.
+              Aceasta politica nu este disponibila momentan.
             </p>
           </div>
         ) : (

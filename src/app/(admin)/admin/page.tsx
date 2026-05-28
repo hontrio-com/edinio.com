@@ -66,7 +66,7 @@ export default async function AdminPage() {
   }));
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
       <AdminOverview
         stats={{
           totalUsers: totalUsers ?? 0,

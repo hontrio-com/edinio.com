@@ -37,9 +37,9 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
   const totalRevenue = (invoices ?? []).filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-5xl mx-auto">
       <AdminUserDetail
-        profile={{ ...profile, role: profile.role as string }}
+        profile={{ ...profile, role: profile.role as string, suspended_until: profile.suspended_until ?? null, admin_notes: profile.admin_notes ?? null }}
         authUser={{
           email: authUser?.email ?? "",
           created_at: authUser?.created_at ?? profile.created_at,

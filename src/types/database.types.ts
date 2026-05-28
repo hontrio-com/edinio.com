@@ -880,12 +880,15 @@ export type Database = {
           mfa_otp_expires_at: string | null
           onboarding_completed: boolean
           plan: string
+          admin_notes: string | null
           plan_expires_at: string | null
           role: string
           stripe_customer_id: string | null
+          suspended_until: string | null
           updated_at: string
         }
         Insert: {
+          admin_notes?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string
@@ -898,9 +901,11 @@ export type Database = {
           plan_expires_at?: string | null
           role?: string
           stripe_customer_id?: string | null
+          suspended_until?: string | null
           updated_at?: string
         }
         Update: {
+          admin_notes?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string
@@ -913,6 +918,7 @@ export type Database = {
           plan_expires_at?: string | null
           role?: string
           stripe_customer_id?: string | null
+          suspended_until?: string | null
           updated_at?: string
         }
         Relationships: []

@@ -88,6 +88,25 @@ export default async function AdminStatsPage() {
     return acc;
   }, {});
 
+  // MRR / ARR: last 30 days paid invoices
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const { data: recentPaidInvoices } = await admin
+    .from("invoices")
+    .select("amount")
+    .eq("status", "paid")
+    .gte("created_at", thirtyDaysAgo.toISOString());
+  const mrr = (recentPaidInvoices ?? []).reduce((s, i) => s + (i.amount ?? 0), 0) / 100;
+  const arr = mrr * 12;
+
+  // Plan-based MRR estimate: count active paid users × plan price
+  const PLAN_PRICES: Record<string, number> = { free: 0, starter: 49, pro: 99, business: 199 };
+  const { data: activePaidProfiles } = await admin
+    .from("users_profile")
+    .select("plan")
+    .in("plan", ["starter", "pro", "business"]);
+  const mrrByPlan = (activePaidProfiles ?? []).reduce((s, p) => s + (PLAN_PRICES[p.plan] ?? 0), 0);
+
   // Top 10 businesses by order count (all time)
   const { data: allOrders } = await admin.from("orders").select("business_id, total, status");
   const bizOrderMap = new Map<string, { count: number; revenue: number }>();
@@ -108,7 +127,7 @@ export default async function AdminStatsPage() {
     .slice(0, 10);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
       <AdminStatsClient
         usersByMonth={usersByMonth}
         ordersByMonth={ordersByMonth}
@@ -117,6 +136,9 @@ export default async function AdminStatsPage() {
         planCounts={planCounts}
         nicheCounts={nicheCounts}
         topBusinesses={topBusinesses}
+        mrr={mrr}
+        arr={arr}
+        mrrByPlan={mrrByPlan}
       />
     </div>
   );

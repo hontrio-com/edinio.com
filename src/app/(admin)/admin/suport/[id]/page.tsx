@@ -24,7 +24,7 @@ export default async function AdminSupportTicketPage({ params }: { params: Promi
   const { data: authUser } = await admin.auth.admin.getUserById(ticket.user_id);
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-3xl mx-auto">
       <AdminSupportTicketClient
         ticket={ticket}
         initialMessages={(messages ?? []).map((m) => ({ ...m, attachments: m.attachments as { url: string; name: string }[] | null }))}

@@ -8,7 +8,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <AdminSidebar adminName={profile.full_name} adminEmail={user.email ?? ""} />
-      <div style={{ paddingLeft: "var(--admin-sidebar-width, 240px)" }}>
+      {/* Desktop: offset by sidebar width. Mobile: add top padding for hamburger button */}
+      <div className="lg:pl-[var(--admin-sidebar-width,240px)] pt-14 lg:pt-0">
         <main className="min-h-screen">{children}</main>
       </div>
     </div>

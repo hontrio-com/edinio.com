@@ -14,6 +14,9 @@ interface Props {
   planCounts: Record<string, number>;
   nicheCounts: Record<string, number>;
   topBusinesses: { name: string; order_count: number; revenue: number }[];
+  mrr?: number;
+  arr?: number;
+  mrrByPlan?: number;
 }
 
 const PLAN_COLORS: Record<string, string> = {
@@ -49,6 +52,7 @@ function StatCard({ label, value, sub, color = "text-zinc-900 dark:text-white" }
 export function AdminStatsClient({
   usersByMonth, ordersByMonth, invoicesByMonth, ticketsByMonth,
   planCounts, nicheCounts, topBusinesses,
+  mrr = 0, arr = 0, mrrByPlan = 0,
 }: Props) {
   const totalUsers = Object.values(planCounts).reduce((s, v) => s + v, 0);
   const totalOrders = ordersByMonth.reduce((s, m) => s + m.count, 0);
@@ -86,6 +90,25 @@ export function AdminStatsClient({
       <div>
         <h1 className="text-2xl font-black text-zinc-900 dark:text-white">Statistici</h1>
         <p className="text-sm text-zinc-500 mt-1">Ultimele 12 luni</p>
+      </div>
+
+      {/* MRR / ARR highlight */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-1">MRR (incasari 30 zile)</p>
+          <p className="text-3xl font-black text-zinc-900 dark:text-white">{mrr.toLocaleString("ro-RO", { maximumFractionDigits: 0 })} lei</p>
+          <p className="text-xs text-zinc-500 mt-1">Din facturi platite in ultimele 30 de zile</p>
+        </div>
+        <div className="bg-gradient-to-br from-amber-50 to-amber-50/50 dark:from-amber-950/20 dark:to-amber-950/10 border border-amber-200 dark:border-amber-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">ARR estimat</p>
+          <p className="text-3xl font-black text-zinc-900 dark:text-white">{arr.toLocaleString("ro-RO", { maximumFractionDigits: 0 })} lei</p>
+          <p className="text-xs text-zinc-500 mt-1">MRR × 12</p>
+        </div>
+        <div className="bg-gradient-to-br from-blue-50 to-blue-50/50 dark:from-blue-950/20 dark:to-blue-950/10 border border-blue-200 dark:border-blue-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">MRR dupa plan activ</p>
+          <p className="text-3xl font-black text-zinc-900 dark:text-white">{mrrByPlan.toLocaleString("ro-RO", { maximumFractionDigits: 0 })} lei</p>
+          <p className="text-xs text-zinc-500 mt-1">Utilizatori platitori × pretul planului</p>
+        </div>
       </div>
 
       {/* KPI cards */}

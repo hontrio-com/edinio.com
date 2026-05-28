@@ -19,7 +19,7 @@ export default async function AdminOrdersPage() {
   }));
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
       <AdminOrdersClient orders={enriched} />
     </div>
   );

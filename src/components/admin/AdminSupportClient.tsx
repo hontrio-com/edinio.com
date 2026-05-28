@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Search, ChevronLeft, ChevronRight, LifeBuoy } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, LifeBuoy, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { toast } from "sonner";
 
 interface Ticket {
   id: string; subject: string; category: string; priority: string;
@@ -29,11 +30,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const PAGE_SIZE = 25;
 
-export function AdminSupportClient({ tickets }: { tickets: Ticket[] }) {
+export function AdminSupportClient({ tickets: initialTickets }: { tickets: Ticket[] }) {
+  const [tickets, setTickets] = useState(initialTickets);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const open = tickets.filter((t) => t.status === "open").length;
   const inProgress = tickets.filter((t) => t.status === "in_progress").length;
@@ -53,6 +56,18 @@ export function AdminSupportClient({ tickets }: { tickets: Ticket[] }) {
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  async function handleDelete(id: string) {
+    if (!confirm("Stergi definitiv acest tichet si toate mesajele sale?")) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/admin/tickets/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setTickets((prev) => prev.filter((t) => t.id !== id));
+      toast.success("Tichet sters");
+    } catch { toast.error("Eroare la stergere"); }
+    finally { setDeletingId(null); }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -65,7 +80,7 @@ export function AdminSupportClient({ tickets }: { tickets: Ticket[] }) {
         {[
           { label: "Deschise", value: open, color: "text-blue-600" },
           { label: "In lucru", value: inProgress, color: "text-amber-600" },
-          { label: "Fara raspuns admin", value: unread, color: "text-red-600" },
+          { label: "Fara raspuns", value: unread, color: "text-red-600" },
           { label: "Totale", value: tickets.length, color: "text-zinc-600" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
@@ -77,7 +92,7 @@ export function AdminSupportClient({ tickets }: { tickets: Ticket[] }) {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-52">
+        <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
           <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }}
             placeholder="Cauta dupa subiect sau utilizator..."
@@ -109,10 +124,10 @@ export function AdminSupportClient({ tickets }: { tickets: Ticket[] }) {
               <tr>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Subiect</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Client</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Categorie</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Prioritate</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide hidden sm:table-cell">Categorie</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide hidden sm:table-cell">Prioritate</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Actualizat</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide hidden sm:table-cell">Actualizat</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -131,17 +146,17 @@ export function AdminSupportClient({ tickets }: { tickets: Ticket[] }) {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {needsReply && <div className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />}
-                        <p className="text-sm font-semibold text-zinc-900 dark:text-white max-w-xs truncate">{t.subject}</p>
+                        <p className="text-sm font-semibold text-zinc-900 dark:text-white max-w-[200px] truncate">{t.subject}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <Link href={`/admin/utilizatori/${t.user_id}`} className="hover:underline">
                         <p className="text-sm font-medium text-zinc-900 dark:text-white">{t.user_name}</p>
-                        <p className="text-xs text-zinc-400">{t.user_email}</p>
+                        <p className="text-xs text-zinc-400 hidden sm:block">{t.user_email}</p>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-zinc-500">{CATEGORY_LABELS[t.category] ?? t.category}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-sm text-zinc-500 hidden sm:table-cell">{CATEGORY_LABELS[t.category] ?? t.category}</td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
                       <span className="flex items-center gap-1.5 text-xs text-zinc-600">
                         <span className={cn("w-1.5 h-1.5 rounded-full", pc.dot)} />
                         {pc.label}
@@ -150,11 +165,21 @@ export function AdminSupportClient({ tickets }: { tickets: Ticket[] }) {
                     <td className="px-4 py-3">
                       <span className={cn("text-[10px] font-semibold px-2.5 py-1 rounded-full", sc.color)}>{sc.label}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-zinc-500">{new Date(t.updated_at).toLocaleDateString("ro-RO")}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Link href={`/admin/suport/${t.id}`} className={cn("text-xs font-semibold hover:underline", needsReply ? "text-red-600" : "text-primary")}>
-                        {needsReply ? "Raspunde" : "Deschide"}
-                      </Link>
+                    <td className="px-4 py-3 text-sm text-zinc-500 hidden sm:table-cell">{new Date(t.updated_at).toLocaleDateString("ro-RO")}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/admin/suport/${t.id}`} className={cn("text-xs font-semibold hover:underline", needsReply ? "text-red-600" : "text-primary")}>
+                          {needsReply ? "Raspunde" : "Deschide"}
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(t.id)}
+                          disabled={deletingId === t.id}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-40"
+                          title="Sterge tichet"
+                        >
+                          {deletingId === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

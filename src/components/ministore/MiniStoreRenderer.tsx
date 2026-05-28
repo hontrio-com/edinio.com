@@ -49,6 +49,10 @@ interface PageContent {
     hidden_fields?: string[];
     email_field?: { enabled: boolean; required: boolean };
   };
+  show_announcement_on_store?: boolean;
+  sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };
+  sticky_cart_bar?: { enabled: boolean };
+  new_badge?: { enabled: boolean; days: number };
 }
 
 interface StorePolicies {
@@ -738,11 +742,12 @@ function CartDrawer({
   );
 }
 
-function ProductCard({ product, color, slug, onAddToCart, isAdded }: {
-  product: Product; color: string; slug: string; onAddToCart: () => void; isAdded: boolean;
+function ProductCard({ product, color, slug, onAddToCart, isAdded, newBadgeDays }: {
+  product: Product; color: string; slug: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number;
 }) {
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
+  const isNew = newBadgeDays > 0 && (Date.now() - new Date(product.created_at).getTime()) < newBadgeDays * 86400000;
   const hasDiscount = product.compare_at_price && Number(product.compare_at_price) > Number(product.price);
   const discountPct = hasDiscount
     ? Math.round((1 - Number(product.price) / Number(product.compare_at_price)) * 100)
@@ -776,6 +781,11 @@ function ProductCard({ product, color, slug, onAddToCart, isAdded }: {
               <span className="text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm"
                 style={{ backgroundColor: color }}>
                 Popular
+              </span>
+            )}
+            {isNew && !hasDiscount && !product.is_featured && (
+              <span className="bg-blue-500 text-white text-[11px] font-black px-2 py-0.5 rounded-lg shadow-sm">
+                Nou
               </span>
             )}
           </div>
@@ -887,6 +897,19 @@ function StoreContent({ business, products, storeSettings }: Props) {
   const featuredTitle = pageContent.featured_section_title || "Recomandate";
   const showShippingProgress = pageContent.show_shipping_progress === true && freeShippingThreshold !== null;
 
+  const showAnnouncementOnStore = pageContent.show_announcement_on_store !== false && pageContent.announcement_bar?.enabled === true;
+  const announcementBar = pageContent.announcement_bar;
+
+  const showStickyCartBar = pageContent.sticky_cart_bar?.enabled !== false;
+
+  const newBadgeDays = pageContent.new_badge?.enabled !== false ? (pageContent.new_badge?.days ?? 7) : 0;
+
+  const sortOption = pageContent.sort_options?.enabled
+    ? (pageContent.sort_options.default_sort ?? "newest")
+    : null;
+  const [sort, setSort] = useState<string>(sortOption ?? "newest");
+  const showSort = pageContent.sort_options?.enabled !== false;
+
   const hasCoverOrTagline = !!(business.cover_url || business.tagline);
 
   // Categories
@@ -903,14 +926,23 @@ function StoreContent({ business, products, storeSettings }: Props) {
 
   // Filtered products
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
+    let list = products.filter(p => {
       const matchesSearch = search === "" ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         (p.description ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesCategory = categoryFilter === "toate" || p.category === categoryFilter;
       return matchesSearch && matchesCategory;
     });
-  }, [products, search, categoryFilter]);
+    // Sort
+    switch (sort) {
+      case "price_asc": list.sort((a, b) => Number(a.price) - Number(b.price)); break;
+      case "price_desc": list.sort((a, b) => Number(b.price) - Number(a.price)); break;
+      case "popular": list.sort((a, b) => (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0)); break;
+      case "name_asc": list.sort((a, b) => a.name.localeCompare(b.name)); break;
+      case "newest": default: list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
+    }
+    return list;
+  }, [products, search, categoryFilter, sort]);
 
   function handleAddToCart(product: Product) {
     const images = Array.isArray(product.images) ? product.images : [];
@@ -932,8 +964,22 @@ function StoreContent({ business, products, storeSettings }: Props) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Announcement bar */}
+      {showAnnouncementOnStore && announcementBar && (
+        <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
+          style={{ background: announcementBar.bg_color || color }}>
+          <div className="flex whitespace-nowrap">
+            {[0, 1].map(i => (
+              <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white">
+                {announcementBar.text}&nbsp;&nbsp;&nbsp;
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Sticky header */}
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border">
+      <header className={`sticky ${showAnnouncementOnStore ? "top-9" : "top-0"} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <a href="#" className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
             {business.logo_url ? (
@@ -1047,16 +1093,28 @@ function StoreContent({ business, products, storeSettings }: Props) {
       )}
 
       <main className="max-w-6xl mx-auto px-4 py-10">
-        {/* Search */}
-        <div className="relative mb-5 max-w-lg">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="search"
-            placeholder="Cauta produse..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 text-sm border border-border rounded-2xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-          />
+        {/* Search + Sort */}
+        <div className="flex items-center gap-3 mb-5 max-w-2xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="search"
+              placeholder="Cauta produse..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 text-sm border border-border rounded-2xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+            />
+          </div>
+          {showSort && (
+            <select value={sort} onChange={e => setSort(e.target.value)}
+              className="h-[46px] px-3 text-sm border border-border rounded-2xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+              <option value="newest">Cele mai noi</option>
+              <option value="price_asc">Pret crescator</option>
+              <option value="price_desc">Pret descrescator</option>
+              <option value="popular">Populare</option>
+              <option value="name_asc">Alfabetic A-Z</option>
+            </select>
+          )}
         </div>
 
         {/* Category filters */}
@@ -1109,6 +1167,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
                   slug={business.slug}
                   onAddToCart={() => handleAddToCart(product)}
                   isAdded={addedId === product.id}
+                  newBadgeDays={newBadgeDays}
                 />
               ))}
             </div>
@@ -1150,6 +1209,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
                   slug={business.slug}
                   onAddToCart={() => handleAddToCart(product)}
                   isAdded={addedId === product.id}
+                  newBadgeDays={newBadgeDays}
                 />
               ))}
             </div>
@@ -1454,6 +1514,22 @@ function StoreContent({ business, products, storeSettings }: Props) {
           </a>
         )}
       </div>
+
+      {/* Sticky cart bar (mobile) */}
+      {showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-white border-t border-gray-200 shadow-2xl px-4 py-3"
+          style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
+          <button type="button" onClick={() => setCartOpen(true)}
+            className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl text-white font-bold text-sm active:scale-[0.98] transition-transform"
+            style={{ backgroundColor: color }}>
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" />
+              <span>{count} {count === 1 ? "produs" : "produse"}</span>
+            </div>
+            <span>{formatPrice(total)}</span>
+          </button>
+        </div>
+      )}
 
       {/* Cart drawer */}
       <CartDrawer

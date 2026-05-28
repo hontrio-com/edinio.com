@@ -41,6 +41,12 @@ interface PageContent {
   how_it_works_section?: { enabled: boolean; title: string; steps: Array<{ title: string; desc: string; }>; };
   faq_section?: { enabled: boolean; title: string; items: Array<{ q: string; a: string; }>; };
   button_effect?: string;
+  show_announcement_on_store?: boolean;
+  sort_options?: { enabled: boolean; default_sort?: string; };
+  sticky_cart_bar?: { enabled: boolean; };
+  new_badge?: { enabled: boolean; days: number; };
+  image_zoom?: { enabled: boolean; };
+  delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
 }
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
@@ -289,6 +295,12 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
     button_effect: rawPageContent.button_effect ?? "none",
     reviews_section: rawPageContent.reviews_section ?? { enabled: false, title: "Ce spun clientii nostri", items: [] },
     checkout_config: rawPageContent.checkout_config ?? { custom_fields: [], extras: [] },
+    show_announcement_on_store: rawPageContent.show_announcement_on_store ?? true,
+    sort_options: rawPageContent.sort_options ?? { enabled: true, default_sort: "newest" },
+    sticky_cart_bar: rawPageContent.sticky_cart_bar ?? { enabled: true },
+    new_badge: rawPageContent.new_badge ?? { enabled: true, days: 7 },
+    image_zoom: rawPageContent.image_zoom ?? { enabled: true },
+    delivery_estimate: rawPageContent.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
   });
 
   async function savePageContent() {
@@ -675,6 +687,57 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
 
           <hr className="border-border" />
 
+          {/* Image zoom */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Zoom imagine la hover</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Mareste imaginea produsului cand treci cu mouse-ul pe desktop</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, image_zoom: { enabled: !p.image_zoom?.enabled } }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.image_zoom?.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.image_zoom?.enabled ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Delivery estimate */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-semibold text-foreground">Estimare livrare</label>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Afiseaza o estimare a datei de livrare pe pagina produsului</p>
+              </div>
+              <button type="button"
+                onClick={() => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, enabled: !p.delivery_estimate?.enabled } }))}
+                className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.delivery_estimate?.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+                <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.delivery_estimate?.enabled ? "translate-x-4" : "translate-x-0")} />
+              </button>
+            </div>
+            {pageContent.delivery_estimate?.enabled && (
+              <div className="space-y-2">
+                <input type="text" value={pageContent.delivery_estimate.text ?? "Estimare livrare"} className={inputCls + " !py-1.5 !text-xs"}
+                  placeholder="Estimare livrare"
+                  onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, text: e.target.value } }))} />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Zile minim</label>
+                    <input type="number" min={1} max={30} value={pageContent.delivery_estimate.min_days ?? 2} className={inputCls + " !py-1.5 !text-xs"}
+                      onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, min_days: parseInt(e.target.value) || 2 } }))} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Zile maxim</label>
+                    <input type="number" min={1} max={30} value={pageContent.delivery_estimate.max_days ?? 4} className={inputCls + " !py-1.5 !text-xs"}
+                      onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, max_days: parseInt(e.target.value) || 4 } }))} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-border" />
+
           {/* Efect buton comanda */}
           <div>
             <label className="text-xs font-semibold text-foreground block mb-1">Efect buton "Comanda acum"</label>
@@ -872,6 +935,90 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
                     <Plus className="h-3 w-3" /> Adauga recenzie
                   </button>
                 )}
+              </div>
+            )}
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Announcement bar on store */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Announcement bar pe magazin</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Afiseaza bannerul scrolling si pe pagina magazinului</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, show_announcement_on_store: !p.show_announcement_on_store }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_announcement_on_store ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_announcement_on_store ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Sort options */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-semibold text-foreground">Sortare produse</label>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Permite clientilor sa sorteze produsele</p>
+              </div>
+              <button type="button"
+                onClick={() => setPageContent(p => ({ ...p, sort_options: { ...p.sort_options!, enabled: !p.sort_options?.enabled } }))}
+                className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.sort_options?.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+                <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.sort_options?.enabled ? "translate-x-4" : "translate-x-0")} />
+              </button>
+            </div>
+            {pageContent.sort_options?.enabled && (
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Sortare implicita</label>
+                <select value={pageContent.sort_options.default_sort ?? "newest"} className={inputCls + " !py-1.5 !text-xs"}
+                  onChange={e => setPageContent(p => ({ ...p, sort_options: { ...p.sort_options!, default_sort: e.target.value } }))}>
+                  <option value="newest">Cele mai noi</option>
+                  <option value="price_asc">Pret crescator</option>
+                  <option value="price_desc">Pret descrescator</option>
+                  <option value="popular">Populare</option>
+                  <option value="name_asc">Alfabetic A-Z</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Sticky cart bar */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Bara cos pe mobil</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Buton floating jos cu numarul de produse si totalul</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, sticky_cart_bar: { enabled: !p.sticky_cart_bar?.enabled } }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.sticky_cart_bar?.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.sticky_cart_bar?.enabled ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* New badge */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-semibold text-foreground">Badge "Nou" pe produse</label>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Afiseaza automat badge pe produsele adaugate recent</p>
+              </div>
+              <button type="button"
+                onClick={() => setPageContent(p => ({ ...p, new_badge: { ...p.new_badge!, enabled: !p.new_badge?.enabled } }))}
+                className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.new_badge?.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+                <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.new_badge?.enabled ? "translate-x-4" : "translate-x-0")} />
+              </button>
+            </div>
+            {pageContent.new_badge?.enabled && (
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Numarul de zile considerate "nou"</label>
+                <input type="number" min={1} max={90} value={pageContent.new_badge.days ?? 7} className={inputCls + " !py-1.5 !text-xs"}
+                  onChange={e => setPageContent(p => ({ ...p, new_badge: { ...p.new_badge!, days: parseInt(e.target.value) || 7 } }))} />
               </div>
             )}
           </div>

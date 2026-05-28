@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw, Phone,
-  Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye,
+  Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye, Calendar,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
@@ -31,6 +31,8 @@ interface PageContent {
   benefits_section?: { enabled: boolean; title: string; items: BenefitItem[]; };
   how_it_works_section?: { enabled: boolean; title: string; steps: HowItWorksStep[]; };
   faq_section?: { enabled: boolean; title: string; items: FaqItem[]; };
+  image_zoom?: { enabled: boolean };
+  delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
   button_effect?: string;
   checkout_config?: {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
@@ -227,6 +229,8 @@ export function ProductPage({ business, product, storeSettings }: {
   const howItWorksSection = pageContent.how_it_works_section;
   const faqSection = pageContent.faq_section;
   const buttonEffect = pageContent.button_effect ?? "none";
+  const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
+  const deliveryEstimate = pageContent.delivery_estimate;
 
   // Variants
   const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
@@ -324,7 +328,19 @@ export function ProductPage({ business, product, storeSettings }: {
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [zoomPos, setZoomPos] = useState<{x: number; y: number} | null>(null);
   const touchStartX = useRef<number>(0);
+
+  const deliveryDates = useMemo(() => {
+    if (!deliveryEstimate?.enabled) return null;
+    const now = new Date();
+    const minDate = new Date(now);
+    minDate.setDate(minDate.getDate() + (deliveryEstimate.min_days ?? 2));
+    const maxDate = new Date(now);
+    maxDate.setDate(maxDate.getDate() + (deliveryEstimate.max_days ?? 4));
+    const fmt = (d: Date) => d.toLocaleDateString("ro-RO", { day: "numeric", month: "long" });
+    return { min: fmt(minDate), max: fmt(maxDate) };
+  }, [deliveryEstimate]);
 
   // Reset slide when variant image changes
   useEffect(() => { setActiveSlide(0); }, [selectedCombo?.image]);
@@ -360,9 +376,21 @@ export function ProductPage({ business, product, storeSettings }: {
           </div>
         ) : (
           slides.map((src, i) => (
-            <div key={i} className="absolute inset-0 transition-opacity duration-700"
-              style={{ opacity: i === activeSlide ? 1 : 0 }}>
-              <img src={src} alt={`${product.name} ${i + 1}`} className="w-full h-full object-contain p-2"
+            <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
+              style={{ opacity: i === activeSlide ? 1 : 0 }}
+              onMouseMove={(e) => {
+                if (!imageZoomEnabled) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                setZoomPos({ x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 });
+              }}
+              onMouseLeave={() => setZoomPos(null)}>
+              <img src={src} alt={`${product.name} ${i + 1}`}
+                className="w-full h-full object-contain p-2 transition-transform duration-200"
+                style={zoomPos && i === activeSlide ? {
+                  transform: "scale(2.2)",
+                  transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
+                  cursor: "zoom-in",
+                } : { cursor: imageZoomEnabled ? "zoom-in" : "default" }}
                 loading={i === 0 ? "eager" : "lazy"} fetchPriority={i === 0 ? "high" : "auto"} />
             </div>
           ))
@@ -436,7 +464,18 @@ export function ProductPage({ business, product, storeSettings }: {
           )}
         </div>
 
-        {/* Variants */}
+        {deliveryDates && (
+          <div className="flex items-center gap-2.5 bg-green-50 border border-green-200 rounded-xl px-3.5 py-2.5">
+            <Calendar size={16} className="text-green-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-green-800">
+                {deliveryEstimate?.text || "Estimare livrare"}
+              </p>
+              <p className="text-xs text-green-600">{deliveryDates.min} - {deliveryDates.max}</p>
+            </div>
+          </div>
+        )}
+
         {variantsData && variantsData.options.length > 0 && (
           <div className="space-y-4">
             {variantsData.options.map(option => (

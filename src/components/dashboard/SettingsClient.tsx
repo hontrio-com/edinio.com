@@ -917,7 +917,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
           {/* ── Facturare ── */}
           {activeSection === "facturare" && (
-            <BillingSection plan={profile.plan} planExpiresAt={profile.plan_expires_at} />
+            <BillingSection plan={profile.plan as "basic" | "premium" | "ultra" | "free"} planExpiresAt={profile.plan_expires_at} />
           )}
           {activeSection === "livrare" && (
             <div className="space-y-6">

@@ -13,8 +13,8 @@ interface Category {
   parent_id: string | null;
   name: string;
   sort_order: number;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 interface Props {

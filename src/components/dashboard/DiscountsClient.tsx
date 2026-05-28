@@ -63,7 +63,7 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
     editing
       ? {
           code: editing.code,
-          type: editing.type,
+          type: editing.type as DiscountData["type"],
           value: editing.value,
           min_order_amount: editing.min_order_amount,
           max_uses: editing.max_uses,
@@ -427,7 +427,7 @@ export function DiscountsClient({ discounts, businessId }: {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {discounts.map(d => {
-                    const cfg = TYPE_CONFIG[d.type];
+                    const cfg = TYPE_CONFIG[d.type as keyof typeof TYPE_CONFIG];
                     const Icon = cfg.icon;
                     const expired = isExpired(d);
                     const usedUp = d.max_uses !== null && d.uses_count >= d.max_uses;

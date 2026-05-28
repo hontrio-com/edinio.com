@@ -43,7 +43,7 @@ export default async function SmsMarketingPage() {
     <SMSMarketingClient
       businessId={business.id}
       smsoConfig={smsoConfig}
-      initialCampaigns={campaigns ?? []}
+      initialCampaigns={(campaigns ?? []).map(c => ({ ...c, status: c.status as "sent" | "partial" | "failed" }))}
       initialTemplates={initialTemplates}
     />
   );

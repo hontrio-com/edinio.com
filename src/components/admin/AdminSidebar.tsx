@@ -1,0 +1,102 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard, Users, Store, ShoppingCart, Receipt,
+  LifeBuoy, BarChart2, Shield, ChevronRight, LogOut,
+} from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+
+const NAV = [
+  { href: "/admin", icon: LayoutDashboard, label: "Prezentare generala", exact: true },
+  { href: "/admin/utilizatori", icon: Users, label: "Utilizatori" },
+  { href: "/admin/magazine", icon: Store, label: "Magazine" },
+  { href: "/admin/comenzi", icon: ShoppingCart, label: "Comenzi" },
+  { href: "/admin/facturi", icon: Receipt, label: "Facturi" },
+  { href: "/admin/suport", icon: LifeBuoy, label: "Suport" },
+  { href: "/admin/statistici", icon: BarChart2, label: "Statistici" },
+];
+
+export function AdminSidebar({ adminName, adminEmail }: { adminName: string; adminEmail: string }) {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
+  return (
+    <aside
+      className="fixed inset-y-0 left-0 z-30 flex flex-col bg-zinc-900 dark:bg-zinc-950 border-r border-zinc-800"
+      style={{ width: "var(--admin-sidebar-width, 240px)" }}
+    >
+      {/* Brand */}
+      <div className="flex items-center gap-2.5 px-5 py-4 border-b border-zinc-800">
+        <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+          <Shield className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-white leading-none">Edinio Admin</p>
+          <p className="text-[10px] text-zinc-400 mt-0.5">Panou de control</p>
+        </div>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {NAV.map(({ href, icon: Icon, label, exact }) => {
+          const active = exact ? pathname === href : pathname.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
+                active
+                  ? "bg-primary/20 text-primary"
+                  : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+              )}
+            >
+              <Icon className="h-4 w-4 flex-shrink-0" />
+              <span className="flex-1">{label}</span>
+              {active && <ChevronRight className="h-3.5 w-3.5 opacity-60" />}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Back to dashboard */}
+      <div className="px-3 pb-2">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+        >
+          <LayoutDashboard className="h-3.5 w-3.5" />
+          Inapoi la dashboard
+        </Link>
+      </div>
+
+      {/* Admin user */}
+      <div className="border-t border-zinc-800 px-4 py-3 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+          <Shield className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-white truncate">{adminName}</p>
+          <p className="text-[10px] text-zinc-400 truncate">{adminEmail}</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="text-zinc-500 hover:text-red-400 transition-colors"
+          title="Delogare"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
+    </aside>
+  );
+}

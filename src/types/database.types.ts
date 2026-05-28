@@ -881,6 +881,7 @@ export type Database = {
           onboarding_completed: boolean
           plan: string
           plan_expires_at: string | null
+          role: string
           stripe_customer_id: string | null
           updated_at: string
         }
@@ -895,6 +896,7 @@ export type Database = {
           onboarding_completed?: boolean
           plan?: string
           plan_expires_at?: string | null
+          role?: string
           stripe_customer_id?: string | null
           updated_at?: string
         }
@@ -909,6 +911,7 @@ export type Database = {
           onboarding_completed?: boolean
           plan?: string
           plan_expires_at?: string | null
+          role?: string
           stripe_customer_id?: string | null
           updated_at?: string
         }

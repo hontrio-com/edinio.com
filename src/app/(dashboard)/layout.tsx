@@ -55,6 +55,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         plan={profile.plan}
         smsoEnabled={smsoEnabled}
         unreadSupportCount={unreadSupportCount}
+        isAdmin={profile.role === "admin"}
       />
       <div className="lg:pl-[var(--sidebar-width)]">
         {suspendedBusiness?.suspended_until && (

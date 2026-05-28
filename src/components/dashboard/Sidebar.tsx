@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ChevronDown, Plus, Zap, Ticket, Tag, MessageSquare, LifeBuoy,
+  Package, ShoppingCart, ChevronDown, Plus, Zap, Ticket, Tag, MessageSquare, LifeBuoy, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
@@ -42,12 +42,13 @@ function NavItem({ href, icon: Icon, label, active }: {
   );
 }
 
-export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled, unreadSupportCount = 0 }: {
+export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled, unreadSupportCount = 0, isAdmin = false }: {
   businesses: Business[];
   currentBusiness: Business | null;
   plan: string;
   smsoEnabled?: boolean;
   unreadSupportCount?: number;
+  isAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -189,6 +190,19 @@ export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled, unread
           )}
         </div>
       </div>
+
+      {/* Admin Panel */}
+      {isAdmin && (
+        <div className="px-3 pb-1">
+          <Link
+            href="/admin"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-950/30 dark:hover:bg-amber-950/50"
+          >
+            <ShieldCheck className="h-4 w-4 flex-shrink-0" />
+            Panou Admin
+          </Link>
+        </div>
+      )}
 
       {/* Settings */}
       <div className="px-3 pb-3">

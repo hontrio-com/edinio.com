@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  ShoppingCart, Wallet, Package, Clock,
-  AlertCircle, ArrowRight,
+  ShoppingCart, Wallet, Package, Clock, AlertCircle,
+  type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -12,52 +12,91 @@ import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import type { ChartDay } from "@/components/dashboard/RevenueChart";
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  href = "#",
-}: {
-  icon: React.ComponentType<{ className?: string }>;
+type StatCardProps = {
   label: string;
   value: string | number;
-  href?: string;
-}) {
+  unit?: string;
+  delta?: string;
+  deltaDir?: "up" | "down";
+  deltaCaption?: string;
+  href: string;
+  icon: LucideIcon;
+  empty?: boolean;
+};
+
+function StatCard({
+  label,
+  value,
+  unit,
+  delta,
+  deltaDir = "up",
+  deltaCaption = "vs. ieri",
+  href,
+  icon: Icon,
+  empty = false,
+}: StatCardProps) {
   return (
-    <div className="relative bg-surface border border-border rounded-2xl p-5 overflow-hidden">
-      {/* Decorative arcs bottom-right */}
-      <svg
-        className="absolute bottom-0 right-0 opacity-[0.07] pointer-events-none"
-        width="100" height="70" viewBox="0 0 100 70" fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path d="M100 70 Q55 70 55 25" stroke="#1AB554" strokeWidth="18" fill="none" strokeLinecap="round"/>
-        <path d="M100 70 Q40 70 40 5"  stroke="#1AB554" strokeWidth="18" fill="none" strokeLinecap="round"/>
-        <path d="M100 70 Q70 70 70 45" stroke="#1AB554" strokeWidth="18" fill="none" strokeLinecap="round"/>
-      </svg>
-
-      {/* Icon */}
-      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-        <Icon className="h-5 w-5 text-primary" />
+    <Link
+      href={href}
+      className={[
+        "group relative flex flex-col overflow-hidden rounded-[18px] bg-surface",
+        "shadow-[0_1px_2px_rgba(15,23,20,0.04)]",
+        "border border-border transition-all duration-200",
+        "hover:-translate-y-0.5",
+        "hover:shadow-[0_1px_2px_rgba(15,23,20,0.04),0_18px_32px_-20px_rgba(15,23,20,0.12)]",
+        "min-h-[168px] no-underline",
+      ].join(" ")}
+    >
+      {/* top — label + icon */}
+      <div className="flex items-center justify-between border-b border-dashed border-border px-[18px] py-[14px]">
+        <span className="text-[12px] font-medium text-muted-foreground tracking-[0.01em]">
+          {label}
+        </span>
+        <span className="grid h-7 w-7 place-items-center text-muted-foreground">
+          <Icon strokeWidth={1.4} className="h-[15px] w-[15px]" />
+        </span>
       </div>
 
-      {/* Label */}
-      <p className="text-sm text-muted-foreground mb-1.5">{label}</p>
-
-      {/* Value */}
-      <p className="text-3xl font-bold text-foreground">{value}</p>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between mt-5">
-        <span className="text-xs text-muted-foreground">Actualizat acum</span>
-        <Link
-          href={href}
-          className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors"
+      {/* bottom — value + footer */}
+      <div className="flex flex-1 flex-col justify-between px-[18px] pt-4 pb-[18px]">
+        <div
+          className={cn(
+            "text-[44px] leading-none font-medium tracking-[-0.03em] tabular-nums",
+            empty ? "text-muted-foreground/30" : "text-foreground"
+          )}
         >
-          <ArrowRight className="h-3.5 w-3.5 text-primary" />
-        </Link>
+          {value}
+          {unit && (
+            <span className="ml-1 text-[20px] font-normal text-muted-foreground">
+              {unit}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-[14px] flex items-center gap-2 text-[12px] text-muted-foreground">
+          {!empty && delta ? (
+            <>
+              <span className={cn(
+                "font-medium tabular-nums",
+                deltaDir === "down" ? "text-destructive" : "text-primary"
+              )}>
+                {deltaDir === "up" ? "↑" : "↓"} {delta}
+              </span>
+              <span>{deltaCaption}</span>
+            </>
+          ) : (
+            <span>Actualizat acum</span>
+          )}
+
+          <span className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+            Vezi detalii
+            <span className="inline-block transition-transform duration-200 group-hover:translate-x-[3px]">
+              →
+            </span>
+          </span>
+        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -131,17 +170,19 @@ export default async function DashboardPage() {
       .order("stock_quantity", { ascending: true }).limit(5),
   ]);
 
+  const fmt = (n: number) => new Intl.NumberFormat("ro-RO").format(n);
+  const fmtDelta = (pct: number) => `${Math.abs(pct)}%`;
+
   const monthRevenue     = (ordersMonth ?? []).reduce((s, o) => s + Number(o.total), 0);
   const lastMonthRevenue = (ordersLastMonth ?? []).reduce((s, o) => s + Number(o.total), 0);
-
-  const revenueTrend = lastMonthRevenue > 0
-    ? { pct: Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100), label: "vs luna trecuta" }
+  const revenuePct = lastMonthRevenue > 0
+    ? Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
     : null;
 
   const ordersTodayCount     = ordersToday ?? 0;
   const ordersYesterdayCount = ordersYesterday ?? 0;
-  const ordersTrend = ordersYesterdayCount > 0
-    ? { pct: Math.round(((ordersTodayCount - ordersYesterdayCount) / ordersYesterdayCount) * 100), label: "vs ieri" }
+  const ordersPct = ordersYesterdayCount > 0
+    ? Math.round(((ordersTodayCount - ordersYesterdayCount) / ordersYesterdayCount) * 100)
     : null;
 
   // Build 7-day chart data
@@ -185,11 +226,42 @@ export default async function DashboardPage() {
       )}
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-        <StatCard icon={ShoppingCart} label="Comenzi azi"          value={ordersTodayCount}         href="/dashboard/orders" />
-        <StatCard icon={Wallet}       label="Vanzari luna aceasta" value={formatPrice(monthRevenue)} href="/dashboard/orders" />
-        <StatCard icon={Package}      label="Produse active"       value={activeProducts ?? 0}       href="/dashboard/products" />
-        <StatCard icon={Clock}        label="In asteptare"         value={pendingOrders ?? 0}         href="/dashboard/orders?status=pending" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-4">
+        <StatCard
+          label="Comenzi azi"
+          value={fmt(ordersTodayCount)}
+          delta={ordersPct !== null ? fmtDelta(ordersPct) : undefined}
+          deltaDir={ordersPct !== null && ordersPct >= 0 ? "up" : "down"}
+          deltaCaption="vs. ieri"
+          href="/dashboard/orders"
+          icon={ShoppingCart}
+          empty={ordersTodayCount === 0}
+        />
+        <StatCard
+          label="Vanzari luna aceasta"
+          value={fmt(monthRevenue)}
+          unit="lei"
+          delta={revenuePct !== null ? fmtDelta(revenuePct) : undefined}
+          deltaDir={revenuePct !== null && revenuePct >= 0 ? "up" : "down"}
+          deltaCaption="vs. luna trecuta"
+          href="/dashboard/orders"
+          icon={Wallet}
+          empty={monthRevenue === 0}
+        />
+        <StatCard
+          label="Produse active"
+          value={fmt(activeProducts ?? 0)}
+          href="/dashboard/products"
+          icon={Package}
+          empty={(activeProducts ?? 0) === 0}
+        />
+        <StatCard
+          label="In asteptare"
+          value={fmt(pendingOrders ?? 0)}
+          href="/dashboard/orders?status=pending"
+          icon={Clock}
+          empty={(pendingOrders ?? 0) === 0}
+        />
       </div>
 
       {/* Chart + recent orders */}

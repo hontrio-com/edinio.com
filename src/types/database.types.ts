@@ -4,638 +4,993 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[];
+  | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.4"
+  }
   public: {
     Tables: {
-      users_profile: {
-        Row: {
-          id: string;
-          full_name: string;
-          avatar_url: string | null;
-          plan: "free" | "basic" | "premium" | "ultra";
-          plan_expires_at: string | null;
-          stripe_customer_id: string | null;
-          onboarding_completed: boolean;
-          mfa_email_enabled: boolean;
-          mfa_otp: string | null;
-          mfa_otp_expires_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id: string;
-          full_name?: string;
-          avatar_url?: string | null;
-          plan?: "free" | "basic" | "premium" | "ultra";
-          plan_expires_at?: string | null;
-          stripe_customer_id?: string | null;
-          onboarding_completed?: boolean;
-          mfa_email_enabled?: boolean;
-          mfa_otp?: string | null;
-          mfa_otp_expires_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          full_name?: string;
-          avatar_url?: string | null;
-          plan?: "free" | "basic" | "premium" | "ultra";
-          plan_expires_at?: string | null;
-          stripe_customer_id?: string | null;
-          onboarding_completed?: boolean;
-          mfa_email_enabled?: boolean;
-          mfa_otp?: string | null;
-          mfa_otp_expires_at?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
       businesses: {
         Row: {
-          id: string;
-          user_id: string;
-          type: "ministore";
-          slug: string;
-          niche_id: string | null;
-          business_name: string;
-          tagline: string | null;
-          description: string | null;
-          phone: string | null;
-          whatsapp: string | null;
-          email: string | null;
-          website: string | null;
-          address: string | null;
-          city: string | null;
-          county: string | null;
-          lat: number | null;
-          lng: number | null;
-          logo_url: string | null;
-          cover_url: string | null;
-          primary_color: string;
-          social: Json;
-          gallery: Json;
-          features: Json;
-          is_published: boolean;
-          custom_domain: string | null;
-          suspended_until: string | null;
-          cui: string | null;
-          store_name: string | null;
-          created_at: string;
-          updated_at: string;
-        };
+          address: string | null
+          business_name: string
+          city: string | null
+          county: string | null
+          cover_url: string | null
+          created_at: string
+          cui: string | null
+          custom_domain: string | null
+          description: string | null
+          email: string | null
+          features: Json
+          gallery: Json
+          id: string
+          is_published: boolean
+          lat: number | null
+          lng: number | null
+          logo_url: string | null
+          niche_id: string | null
+          phone: string | null
+          primary_color: string
+          slug: string
+          social: Json
+          store_name: string | null
+          suspended_until: string | null
+          tagline: string | null
+          type: string
+          updated_at: string
+          user_id: string
+          website: string | null
+          whatsapp: string | null
+        }
         Insert: {
-          id?: string;
-          user_id: string;
-          type?: "ministore";
-          slug: string;
-          niche_id?: string | null;
-          business_name: string;
-          store_name?: string | null;
-          tagline?: string | null;
-          description?: string | null;
-          phone?: string | null;
-          whatsapp?: string | null;
-          email?: string | null;
-          website?: string | null;
-          address?: string | null;
-          city?: string | null;
-          county?: string | null;
-          lat?: number | null;
-          lng?: number | null;
-          logo_url?: string | null;
-          cover_url?: string | null;
-          primary_color?: string;
-          social?: Json;
-          gallery?: Json;
-          features?: Json;
-          is_published?: boolean;
-          custom_domain?: string | null;
-          suspended_until?: string | null;
-          cui?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
+          address?: string | null
+          business_name: string
+          city?: string | null
+          county?: string | null
+          cover_url?: string | null
+          created_at?: string
+          cui?: string | null
+          custom_domain?: string | null
+          description?: string | null
+          email?: string | null
+          features?: Json
+          gallery?: Json
+          id?: string
+          is_published?: boolean
+          lat?: number | null
+          lng?: number | null
+          logo_url?: string | null
+          niche_id?: string | null
+          phone?: string | null
+          primary_color?: string
+          slug: string
+          social?: Json
+          store_name?: string | null
+          suspended_until?: string | null
+          tagline?: string | null
+          type?: string
+          updated_at?: string
+          user_id: string
+          website?: string | null
+          whatsapp?: string | null
+        }
         Update: {
-          id?: string;
-          user_id?: string;
-          type?: "ministore";
-          slug?: string;
-          niche_id?: string | null;
-          business_name?: string;
-          tagline?: string | null;
-          description?: string | null;
-          phone?: string | null;
-          whatsapp?: string | null;
-          email?: string | null;
-          website?: string | null;
-          address?: string | null;
-          city?: string | null;
-          county?: string | null;
-          lat?: number | null;
-          lng?: number | null;
-          logo_url?: string | null;
-          cover_url?: string | null;
-          primary_color?: string;
-          social?: Json;
-          gallery?: Json;
-          features?: Json;
-          is_published?: boolean;
-          custom_domain?: string | null;
-          suspended_until?: string | null;
-          cui?: string | null;
-          store_name?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          address?: string | null
+          business_name?: string
+          city?: string | null
+          county?: string | null
+          cover_url?: string | null
+          created_at?: string
+          cui?: string | null
+          custom_domain?: string | null
+          description?: string | null
+          email?: string | null
+          features?: Json
+          gallery?: Json
+          id?: string
+          is_published?: boolean
+          lat?: number | null
+          lng?: number | null
+          logo_url?: string | null
+          niche_id?: string | null
+          phone?: string | null
+          primary_color?: string
+          slug?: string
+          social?: Json
+          store_name?: string | null
+          suspended_until?: string | null
+          tagline?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
-          id: string;
-          business_id: string;
-          parent_id: string | null;
-          name: string;
-          sort_order: number;
-          created_at: string;
-          updated_at: string;
-        };
+          business_id: string
+          created_at: string | null
+          id: string
+          name: string
+          parent_id: string | null
+          sort_order: number
+          updated_at: string | null
+        }
         Insert: {
-          id?: string;
-          business_id: string;
-          parent_id?: string | null;
-          name: string;
-          sort_order?: number;
-          created_at?: string;
-          updated_at?: string;
-        };
+          business_id: string
+          created_at?: string | null
+          id?: string
+          name: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string | null
+        }
         Update: {
-          parent_id?: string | null;
-          name?: string;
-          sort_order?: number;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      products: {
-        Row: {
-          id: string;
-          business_id: string;
-          name: string;
-          slug: string | null;
-          description: string | null;
-          price: number;
-          compare_at_price: number | null;
-          sku: string | null;
-          stock_quantity: number | null;
-          track_inventory: boolean;
-          images: Json;
-          category: string | null;
-          tags: Json;
-          is_active: boolean;
-          is_featured: boolean;
-          weight_grams: number | null;
-          sort_order: number;
-          page_sections: Json;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          business_id: string;
-          name: string;
-          slug?: string | null;
-          description?: string | null;
-          price: number;
-          compare_at_price?: number | null;
-          sku?: string | null;
-          stock_quantity?: number | null;
-          track_inventory?: boolean;
-          images?: Json;
-          category?: string | null;
-          tags?: Json;
-          is_active?: boolean;
-          is_featured?: boolean;
-          weight_grams?: number | null;
-          sort_order?: number;
-          page_sections?: Json;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          name?: string;
-          slug?: string | null;
-          description?: string | null;
-          price?: number;
-          compare_at_price?: number | null;
-          sku?: string | null;
-          stock_quantity?: number | null;
-          track_inventory?: boolean;
-          images?: Json;
-          category?: string | null;
-          tags?: Json;
-          is_active?: boolean;
-          is_featured?: boolean;
-          weight_grams?: number | null;
-          sort_order?: number;
-          page_sections?: Json;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          business_id?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       discounts: {
         Row: {
-          id: string;
-          business_id: string;
-          code: string;
-          type: "percent" | "fixed" | "free_shipping";
-          value: number;
-          min_order_amount: number | null;
-          max_uses: number | null;
-          uses_count: number;
-          is_active: boolean;
-          expires_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
+          business_id: string
+          code: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          min_order_amount: number | null
+          type: string
+          updated_at: string
+          uses_count: number
+          value: number
+        }
         Insert: {
-          id?: string;
-          business_id: string;
-          code: string;
-          type: "percent" | "fixed" | "free_shipping";
-          value?: number;
-          min_order_amount?: number | null;
-          max_uses?: number | null;
-          uses_count?: number;
-          is_active?: boolean;
-          expires_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
+          business_id: string
+          code: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          min_order_amount?: number | null
+          type: string
+          updated_at?: string
+          uses_count?: number
+          value?: number
+        }
         Update: {
-          code?: string;
-          type?: "percent" | "fixed" | "free_shipping";
-          value?: number;
-          min_order_amount?: number | null;
-          max_uses?: number | null;
-          is_active?: boolean;
-          expires_at?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      orders: {
+          business_id?: string
+          code?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          min_order_amount?: number | null
+          type?: string
+          updated_at?: string
+          uses_count?: number
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discounts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      domains: {
         Row: {
-          id: string;
-          business_id: string;
-          order_number: string;
-          customer_name: string;
-          customer_email: string | null;
-          customer_phone: string;
-          shipping_address: Json;
-          items: Json;
-          subtotal: number;
-          shipping_cost: number;
-          discount_code: string | null;
-          discount_amount: number;
-          total: number;
-          vat_amount: number;
-          vat_rate: number;
-          status: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
-          payment_method: string;
-          payment_status: "unpaid" | "paid" | "refunded";
-          notes: Json | null;
-          internal_notes: string | null;
-          tracking_number: string | null;
-          smartbill_invoice_number: string | null;
-          smartbill_invoice_series: string | null;
-          smartbill_estimate_number: string | null;
-          smartbill_estimate_series: string | null;
-          smartbill_storno_number: string | null;
-          smartbill_storno_series: string | null;
-          stripe_session_id: string | null;
-          woot_order_id: string | null;
-          woot_awb_number: string | null;
-          woot_service_name: string | null;
-          colete_order_id: string | null;
-          colete_awb_number: string | null;
-          colete_service_name: string | null;
-          oblio_invoice_number: string | null;
-          oblio_invoice_series: string | null;
-          oblio_proforma_number: string | null;
-          oblio_proforma_series: string | null;
-          oblio_storno_number: string | null;
-          oblio_storno_series: string | null;
-          fgo_invoice_number: string | null;
-          fgo_invoice_series: string | null;
-          fgo_invoice_link: string | null;
-          fgo_storno_number: string | null;
-          fgo_storno_series: string | null;
-          cargus_awb_number: string | null;
-          cargus_service_name: string | null;
-          dpd_shipment_id: number | null;
-          dpd_awb_number: string | null;
-          fan_courier_awb_number: string | null;
-          sameday_awb_number: string | null;
-          created_at: string;
-          updated_at: string;
-        };
+          auto_renew: boolean
+          business_id: string
+          created_at: string
+          domain: string
+          expiry_date: string | null
+          id: string
+          source: string
+          status: string
+          user_id: string
+        }
         Insert: {
-          id?: string;
-          business_id: string;
-          order_number: string;
-          customer_name: string;
-          customer_email?: string | null;
-          customer_phone: string;
-          shipping_address: Json;
-          items: Json;
-          subtotal: number;
-          shipping_cost?: number;
-          discount_code?: string | null;
-          discount_amount?: number;
-          total: number;
-          vat_amount?: number;
-          vat_rate?: number;
-          status?: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
-          payment_method?: string;
-          payment_status?: "unpaid" | "paid" | "refunded";
-          notes?: Json | null;
-          internal_notes?: string | null;
-          tracking_number?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
+          auto_renew?: boolean
+          business_id: string
+          created_at?: string
+          domain: string
+          expiry_date?: string | null
+          id?: string
+          source?: string
+          status?: string
+          user_id: string
+        }
         Update: {
-          status?: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
-          payment_status?: "unpaid" | "paid" | "refunded";
-          internal_notes?: string | null;
-          tracking_number?: string | null;
-          smartbill_invoice_number?: string | null;
-          smartbill_invoice_series?: string | null;
-          smartbill_estimate_number?: string | null;
-          smartbill_estimate_series?: string | null;
-          smartbill_storno_number?: string | null;
-          smartbill_storno_series?: string | null;
-          stripe_session_id?: string | null;
-          woot_order_id?: string | null;
-          woot_awb_number?: string | null;
-          woot_service_name?: string | null;
-          colete_order_id?: string | null;
-          colete_awb_number?: string | null;
-          colete_service_name?: string | null;
-          oblio_invoice_number?: string | null;
-          oblio_invoice_series?: string | null;
-          oblio_proforma_number?: string | null;
-          oblio_proforma_series?: string | null;
-          oblio_storno_number?: string | null;
-          oblio_storno_series?: string | null;
-          fgo_invoice_number?: string | null;
-          fgo_invoice_series?: string | null;
-          fgo_invoice_link?: string | null;
-          fgo_storno_number?: string | null;
-          fgo_storno_series?: string | null;
-          cargus_awb_number?: string | null;
-          cargus_service_name?: string | null;
-          dpd_shipment_id?: number | null;
-          dpd_awb_number?: string | null;
-          fan_courier_awb_number?: string | null;
-          sameday_awb_number?: string | null;
-          vat_amount?: number;
-          vat_rate?: number;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      store_settings: {
-        Row: {
-          id: string;
-          business_id: string;
-          currency: string;
-          shipping_enabled: boolean;
-          free_shipping_threshold: number | null;
-          default_shipping_cost: number;
-          shipping_zones: Json;
-          payment_methods: Json;
-          min_order_amount: number | null;
-          store_policies: Json;
-          page_content: Json;
-          order_number_format: string;
-          vat_enabled: boolean;
-          vat_rate: number;
-          prices_include_vat: boolean;
-          show_vat_breakdown: boolean;
-          notifications_config: Json;
-          smso_config: Json | null;
-          smartbill_config: Json | null;
-          stripe_config: Json | null;
-          netopia_config: Json | null;
-          woot_config: Json | null;
-          colete_config: Json | null;
-          oblio_config: Json | null;
-          fgo_config: Json | null;
-          cargus_config: Json | null;
-          dpd_config: Json | null;
-          fan_courier_config: Json | null;
-          sameday_config: Json | null;
-          marketing_config: Json | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          business_id: string;
-          currency?: string;
-          shipping_enabled?: boolean;
-          free_shipping_threshold?: number | null;
-          default_shipping_cost?: number;
-          shipping_zones?: Json;
-          payment_methods?: Json;
-          min_order_amount?: number | null;
-          store_policies?: Json;
-          page_content?: Json;
-          order_number_format?: string;
-          vat_enabled?: boolean;
-          vat_rate?: number;
-          prices_include_vat?: boolean;
-          show_vat_breakdown?: boolean;
-          notifications_config?: Json;
-          smso_config?: Json | null;
-          smartbill_config?: Json | null;
-          stripe_config?: Json | null;
-          netopia_config?: Json | null;
-          woot_config?: Json | null;
-          colete_config?: Json | null;
-          oblio_config?: Json | null;
-          fgo_config?: Json | null;
-          cargus_config?: Json | null;
-          dpd_config?: Json | null;
-          fan_courier_config?: Json | null;
-          sameday_config?: Json | null;
-          marketing_config?: Json | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          currency?: string;
-          shipping_enabled?: boolean;
-          free_shipping_threshold?: number | null;
-          default_shipping_cost?: number;
-          shipping_zones?: Json;
-          payment_methods?: Json;
-          min_order_amount?: number | null;
-          store_policies?: Json;
-          page_content?: Json;
-          order_number_format?: string;
-          vat_enabled?: boolean;
-          vat_rate?: number;
-          prices_include_vat?: boolean;
-          show_vat_breakdown?: boolean;
-          notifications_config?: Json;
-          smso_config?: Json | null;
-          smartbill_config?: Json | null;
-          stripe_config?: Json | null;
-          netopia_config?: Json | null;
-          woot_config?: Json | null;
-          colete_config?: Json | null;
-          oblio_config?: Json | null;
-          fgo_config?: Json | null;
-          cargus_config?: Json | null;
-          dpd_config?: Json | null;
-          fan_courier_config?: Json | null;
-          sameday_config?: Json | null;
-          marketing_config?: Json | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      site_analytics: {
-        Row: {
-          id: string;
-          business_id: string;
-          event_type: string;
-          device: string | null;
-          source: string | null;
-          referrer: string | null;
-          country: string;
-          metadata: Json;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          business_id: string;
-          event_type: string;
-          device?: string | null;
-          source?: string | null;
-          referrer?: string | null;
-          country?: string;
-          metadata?: Json;
-          created_at?: string;
-        };
-        Update: {
-          [key: string]: never;
-        };
-        Relationships: [];
-      };
-      sms_campaigns: {
-        Row: {
-          id: string;
-          business_id: string;
-          message: string;
-          recipient_count: number;
-          sent_count: number;
-          failed_count: number;
-          status: "sent" | "partial" | "failed";
-          filters: Json | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          business_id: string;
-          message: string;
-          recipient_count?: number;
-          sent_count?: number;
-          failed_count?: number;
-          status?: "sent" | "partial" | "failed";
-          filters?: Json | null;
-          created_at?: string;
-        };
-        Update: {
-          status?: "sent" | "partial" | "failed";
-        };
-        Relationships: [];
-      };
-      sms_templates: {
-        Row: {
-          id: string;
-          business_id: string;
-          name: string;
-          message: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          business_id: string;
-          name: string;
-          message: string;
-          created_at?: string;
-        };
-        Update: {
-          name?: string;
-          message?: string;
-        };
-        Relationships: [];
-      };
+          auto_renew?: boolean
+          business_id?: string
+          created_at?: string
+          domain?: string
+          expiry_date?: string | null
+          id?: string
+          source?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "domains_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
-          id: string;
-          user_id: string;
-          plan: string;
-          amount: number;
-          currency: string;
-          smartbill_series: string | null;
-          smartbill_number: string | null;
-          stripe_invoice_id: string | null;
-          smartbill_error: string | null;
-          status: string;
-          created_at: string;
-        };
+          amount: number
+          created_at: string
+          currency: string
+          id: string
+          plan: string
+          smartbill_error: string | null
+          smartbill_number: string | null
+          smartbill_series: string | null
+          status: string
+          stripe_invoice_id: string | null
+          user_id: string
+        }
         Insert: {
-          id?: string;
-          user_id: string;
-          plan: string;
-          amount: number;
-          currency?: string;
-          smartbill_series?: string | null;
-          smartbill_number?: string | null;
-          stripe_invoice_id?: string | null;
-          smartbill_error?: string | null;
-          status?: string;
-          created_at?: string;
-        };
+          amount: number
+          created_at?: string
+          currency?: string
+          id?: string
+          plan: string
+          smartbill_error?: string | null
+          smartbill_number?: string | null
+          smartbill_series?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          user_id: string
+        }
         Update: {
-          smartbill_series?: string | null;
-          smartbill_number?: string | null;
-          smartbill_error?: string | null;
-          status?: string;
-        };
-        Relationships: [];
-      };
-    };
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          plan?: string
+          smartbill_error?: string | null
+          smartbill_number?: string | null
+          smartbill_series?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      orders: {
+        Row: {
+          business_id: string
+          cargus_awb_number: string | null
+          cargus_service_name: string | null
+          colete_awb_number: string | null
+          colete_order_id: string | null
+          colete_service_name: string | null
+          colete_unique_id: string | null
+          created_at: string
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string
+          discount_amount: number
+          discount_code: string | null
+          dpd_awb_number: string | null
+          dpd_shipment_id: number | null
+          fan_courier_awb_number: string | null
+          fgo_invoice_link: string | null
+          fgo_invoice_number: string | null
+          fgo_invoice_series: string | null
+          fgo_storno_number: string | null
+          fgo_storno_series: string | null
+          id: string
+          internal_notes: string | null
+          items: Json
+          notes: string | null
+          oblio_invoice_number: string | null
+          oblio_invoice_series: string | null
+          oblio_proforma_number: string | null
+          oblio_proforma_series: string | null
+          oblio_storno_number: string | null
+          oblio_storno_series: string | null
+          order_number: string
+          payment_method: string
+          payment_status: string
+          sameday_awb_number: string | null
+          shipping_address: Json
+          shipping_cost: number
+          smartbill_estimate_number: string | null
+          smartbill_estimate_series: string | null
+          smartbill_invoice_number: string | null
+          smartbill_invoice_series: string | null
+          smartbill_storno_number: string | null
+          smartbill_storno_series: string | null
+          status: string
+          stripe_session_id: string | null
+          subtotal: number
+          total: number
+          tracking_number: string | null
+          updated_at: string
+          vat_amount: number
+          vat_rate: number
+          woot_awb_number: string | null
+          woot_order_id: string | null
+          woot_service_name: string | null
+        }
+        Insert: {
+          business_id: string
+          cargus_awb_number?: string | null
+          cargus_service_name?: string | null
+          colete_awb_number?: string | null
+          colete_order_id?: string | null
+          colete_service_name?: string | null
+          colete_unique_id?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name: string
+          customer_phone: string
+          discount_amount?: number
+          discount_code?: string | null
+          dpd_awb_number?: string | null
+          dpd_shipment_id?: number | null
+          fan_courier_awb_number?: string | null
+          fgo_invoice_link?: string | null
+          fgo_invoice_number?: string | null
+          fgo_invoice_series?: string | null
+          fgo_storno_number?: string | null
+          fgo_storno_series?: string | null
+          id?: string
+          internal_notes?: string | null
+          items: Json
+          notes?: string | null
+          oblio_invoice_number?: string | null
+          oblio_invoice_series?: string | null
+          oblio_proforma_number?: string | null
+          oblio_proforma_series?: string | null
+          oblio_storno_number?: string | null
+          oblio_storno_series?: string | null
+          order_number: string
+          payment_method?: string
+          payment_status?: string
+          sameday_awb_number?: string | null
+          shipping_address: Json
+          shipping_cost?: number
+          smartbill_estimate_number?: string | null
+          smartbill_estimate_series?: string | null
+          smartbill_invoice_number?: string | null
+          smartbill_invoice_series?: string | null
+          smartbill_storno_number?: string | null
+          smartbill_storno_series?: string | null
+          status?: string
+          stripe_session_id?: string | null
+          subtotal: number
+          total: number
+          tracking_number?: string | null
+          updated_at?: string
+          vat_amount?: number
+          vat_rate?: number
+          woot_awb_number?: string | null
+          woot_order_id?: string | null
+          woot_service_name?: string | null
+        }
+        Update: {
+          business_id?: string
+          cargus_awb_number?: string | null
+          cargus_service_name?: string | null
+          colete_awb_number?: string | null
+          colete_order_id?: string | null
+          colete_service_name?: string | null
+          colete_unique_id?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string
+          customer_phone?: string
+          discount_amount?: number
+          discount_code?: string | null
+          dpd_awb_number?: string | null
+          dpd_shipment_id?: number | null
+          fan_courier_awb_number?: string | null
+          fgo_invoice_link?: string | null
+          fgo_invoice_number?: string | null
+          fgo_invoice_series?: string | null
+          fgo_storno_number?: string | null
+          fgo_storno_series?: string | null
+          id?: string
+          internal_notes?: string | null
+          items?: Json
+          notes?: string | null
+          oblio_invoice_number?: string | null
+          oblio_invoice_series?: string | null
+          oblio_proforma_number?: string | null
+          oblio_proforma_series?: string | null
+          oblio_storno_number?: string | null
+          oblio_storno_series?: string | null
+          order_number?: string
+          payment_method?: string
+          payment_status?: string
+          sameday_awb_number?: string | null
+          shipping_address?: Json
+          shipping_cost?: number
+          smartbill_estimate_number?: string | null
+          smartbill_estimate_series?: string | null
+          smartbill_invoice_number?: string | null
+          smartbill_invoice_series?: string | null
+          smartbill_storno_number?: string | null
+          smartbill_storno_series?: string | null
+          status?: string
+          stripe_session_id?: string | null
+          subtotal?: number
+          total?: number
+          tracking_number?: string | null
+          updated_at?: string
+          vat_amount?: number
+          vat_rate?: number
+          woot_awb_number?: string | null
+          woot_order_id?: string | null
+          woot_service_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          business_id: string
+          category: string | null
+          compare_at_price: number | null
+          created_at: string
+          description: string | null
+          id: string
+          images: Json
+          is_active: boolean
+          is_featured: boolean
+          name: string
+          page_sections: Json
+          price: number
+          sku: string | null
+          slug: string | null
+          sort_order: number
+          stock_quantity: number | null
+          tags: Json
+          track_inventory: boolean
+          updated_at: string
+          weight_grams: number | null
+        }
+        Insert: {
+          business_id: string
+          category?: string | null
+          compare_at_price?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: Json
+          is_active?: boolean
+          is_featured?: boolean
+          name: string
+          page_sections?: Json
+          price: number
+          sku?: string | null
+          slug?: string | null
+          sort_order?: number
+          stock_quantity?: number | null
+          tags?: Json
+          track_inventory?: boolean
+          updated_at?: string
+          weight_grams?: number | null
+        }
+        Update: {
+          business_id?: string
+          category?: string | null
+          compare_at_price?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: Json
+          is_active?: boolean
+          is_featured?: boolean
+          name?: string
+          page_sections?: Json
+          price?: number
+          sku?: string | null
+          slug?: string | null
+          sort_order?: number
+          stock_quantity?: number | null
+          tags?: Json
+          track_inventory?: boolean
+          updated_at?: string
+          weight_grams?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_analytics: {
+        Row: {
+          business_id: string
+          country: string
+          created_at: string
+          device: string | null
+          event_type: string
+          id: string
+          metadata: Json
+          referrer: string | null
+          source: string | null
+        }
+        Insert: {
+          business_id: string
+          country?: string
+          created_at?: string
+          device?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json
+          referrer?: string | null
+          source?: string | null
+        }
+        Update: {
+          business_id?: string
+          country?: string
+          created_at?: string
+          device?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json
+          referrer?: string | null
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_analytics_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_campaigns: {
+        Row: {
+          business_id: string
+          created_at: string
+          failed_count: number
+          filters: Json | null
+          id: string
+          message: string
+          recipient_count: number
+          sent_count: number
+          status: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          failed_count?: number
+          filters?: Json | null
+          id?: string
+          message: string
+          recipient_count?: number
+          sent_count?: number
+          status?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          failed_count?: number
+          filters?: Json | null
+          id?: string
+          message?: string
+          recipient_count?: number
+          sent_count?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_campaigns_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_templates: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          message: string
+          name: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          message: string
+          name: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_templates_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_settings: {
+        Row: {
+          business_id: string
+          cargus_config: Json | null
+          colete_config: Json | null
+          created_at: string
+          currency: string
+          default_shipping_cost: number
+          dpd_config: Json | null
+          fan_courier_config: Json | null
+          fgo_config: Json | null
+          free_shipping_threshold: number | null
+          id: string
+          marketing_config: Json | null
+          min_order_amount: number | null
+          netopia_config: Json | null
+          notifications_config: Json
+          oblio_config: Json | null
+          order_counter: number
+          order_number_format: string
+          page_content: Json
+          payment_methods: Json
+          prices_include_vat: boolean
+          sameday_config: Json | null
+          shipping_enabled: boolean
+          shipping_zones: Json
+          show_vat_breakdown: boolean
+          smartbill_config: Json | null
+          smso_config: Json | null
+          store_policies: Json
+          stripe_config: Json | null
+          updated_at: string
+          vat_enabled: boolean
+          vat_rate: number
+          woot_config: Json | null
+        }
+        Insert: {
+          business_id: string
+          cargus_config?: Json | null
+          colete_config?: Json | null
+          created_at?: string
+          currency?: string
+          default_shipping_cost?: number
+          dpd_config?: Json | null
+          fan_courier_config?: Json | null
+          fgo_config?: Json | null
+          free_shipping_threshold?: number | null
+          id?: string
+          marketing_config?: Json | null
+          min_order_amount?: number | null
+          netopia_config?: Json | null
+          notifications_config?: Json
+          oblio_config?: Json | null
+          order_counter?: number
+          order_number_format?: string
+          page_content?: Json
+          payment_methods?: Json
+          prices_include_vat?: boolean
+          sameday_config?: Json | null
+          shipping_enabled?: boolean
+          shipping_zones?: Json
+          show_vat_breakdown?: boolean
+          smartbill_config?: Json | null
+          smso_config?: Json | null
+          store_policies?: Json
+          stripe_config?: Json | null
+          updated_at?: string
+          vat_enabled?: boolean
+          vat_rate?: number
+          woot_config?: Json | null
+        }
+        Update: {
+          business_id?: string
+          cargus_config?: Json | null
+          colete_config?: Json | null
+          created_at?: string
+          currency?: string
+          default_shipping_cost?: number
+          dpd_config?: Json | null
+          fan_courier_config?: Json | null
+          fgo_config?: Json | null
+          free_shipping_threshold?: number | null
+          id?: string
+          marketing_config?: Json | null
+          min_order_amount?: number | null
+          netopia_config?: Json | null
+          notifications_config?: Json
+          oblio_config?: Json | null
+          order_counter?: number
+          order_number_format?: string
+          page_content?: Json
+          payment_methods?: Json
+          prices_include_vat?: boolean
+          sameday_config?: Json | null
+          shipping_enabled?: boolean
+          shipping_zones?: Json
+          show_vat_breakdown?: boolean
+          smartbill_config?: Json | null
+          smso_config?: Json | null
+          store_policies?: Json
+          stripe_config?: Json | null
+          updated_at?: string
+          vat_enabled?: boolean
+          vat_rate?: number
+          woot_config?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_settings_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users_profile: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string
+          id: string
+          mfa_email_enabled: boolean
+          mfa_otp: string | null
+          mfa_otp_expires_at: string | null
+          onboarding_completed: boolean
+          plan: string
+          plan_expires_at: string | null
+          stripe_customer_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string
+          id: string
+          mfa_email_enabled?: boolean
+          mfa_otp?: string | null
+          mfa_otp_expires_at?: string | null
+          onboarding_completed?: boolean
+          plan?: string
+          plan_expires_at?: string | null
+          stripe_customer_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          mfa_email_enabled?: boolean
+          mfa_otp?: string | null
+          mfa_otp_expires_at?: string | null
+          onboarding_completed?: boolean
+          plan?: string
+          plan_expires_at?: string | null
+          stripe_customer_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+    }
     Views: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     Functions: {
       increment_discount_uses: {
-        Args: { p_discount_id: string };
-        Returns: void;
-      };
-    };
+        Args: { p_discount_id: string }
+        Returns: undefined
+      }
+      increment_referral_balance: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      increment_tool_views: { Args: { tool_id: string }; Returns: undefined }
+      is_admin: { Args: never; Returns: boolean }
+      mark_payout_complete: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      next_order_number: { Args: { p_business_id: string }; Returns: number }
+      reserve_payout_balance: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+    }
     Enums: {
-      [_ in never]: never;
-    };
+      difficulty_level: "incepator" | "intermediar" | "avansat"
+      pricing_type: "gratuit" | "freemium" | "platit"
+    }
     CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
+      [_ in never]: never
+    }
+  }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      difficulty_level: ["incepator", "intermediar", "avansat"],
+      pricing_type: ["gratuit", "freemium", "platit"],
+    },
+  },
+} as const

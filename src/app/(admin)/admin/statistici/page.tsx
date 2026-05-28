@@ -100,11 +100,11 @@ export default async function AdminStatsPage() {
   const arr = mrr * 12;
 
   // Plan-based MRR estimate: count active paid users × plan price
-  const PLAN_PRICES: Record<string, number> = { free: 0, starter: 49, pro: 99, business: 199 };
+  const PLAN_PRICES: Record<string, number> = { free: 0, basic: 49, premium: 99, ultra: 199 };
   const { data: activePaidProfiles } = await admin
     .from("users_profile")
     .select("plan")
-    .in("plan", ["starter", "pro", "business"]);
+    .in("plan", ["basic", "premium", "ultra"]);
   const mrrByPlan = (activePaidProfiles ?? []).reduce((s, p) => s + (PLAN_PRICES[p.plan] ?? 0), 0);
 
   // Top 10 businesses by order count (all time)

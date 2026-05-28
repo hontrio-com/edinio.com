@@ -17,6 +17,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ success: true });
 }
 
+// DELETE: permanently delete invoice
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await requireAdminApi();
+  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.from("invoices").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
+
 // POST: reissue invoice (create duplicate with pending status)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();

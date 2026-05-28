@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, ChevronLeft, ChevronRight, Receipt, AlertCircle, XCircle, RefreshCw, Loader2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Receipt, AlertCircle, XCircle, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { toast } from "sonner";
 
@@ -28,7 +28,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit", starter: "Starter", pro: "Pro", business: "Business",
+  free: "Gratuit", basic: "Basic", premium: "Premium", ultra: "Ultra",
 };
 
 const PAGE_SIZE = 30;
@@ -74,6 +74,18 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
       setInvoices((prev) => prev.map((i) => i.id === id ? { ...i, status: "void" } : i));
       toast.success("Factura anulata");
     } catch { toast.error("Eroare la anulare"); }
+    finally { setActionLoading(null); }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Stergi definitiv aceasta factura? Actiunea este ireversibila.")) return;
+    setActionLoading(id + "_delete");
+    try {
+      const res = await fetch(`/api/admin/invoices/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setInvoices((prev) => prev.filter((i) => i.id !== id));
+      toast.success("Factura stearsa");
+    } catch { toast.error("Eroare la stergere"); }
     finally { setActionLoading(null); }
   }
 
@@ -150,7 +162,7 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Suma</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide hidden sm:table-cell">Data</th>
-                <th className="px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Actiuni</th>
+                <th className="px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide text-right">Actiuni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -195,24 +207,23 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
                       {new Date(inv.created_at).toLocaleDateString("ro-RO", { day: "numeric", month: "short", year: "numeric" })}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center justify-end gap-1.5">
                         {inv.status !== "void" && (
-                          <button
-                            onClick={() => handleCancel(inv.id)}
-                            disabled={!!actionLoading}
+                          <button onClick={() => handleCancel(inv.id)} disabled={!!actionLoading}
                             title="Anuleaza factura"
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-40"
-                          >
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors disabled:opacity-40">
                             {loadingCancel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                           </button>
                         )}
-                        <button
-                          onClick={() => handleReissue(inv.id)}
-                          disabled={!!actionLoading}
+                        <button onClick={() => handleReissue(inv.id)} disabled={!!actionLoading}
                           title="Reemite factura"
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40"
-                        >
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-40">
                           {loadingReissue ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        </button>
+                        <button onClick={() => handleDelete(inv.id)} disabled={!!actionLoading}
+                          title="Sterge factura"
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-40">
+                          {actionLoading === inv.id + "_delete" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                         </button>
                       </div>
                     </td>

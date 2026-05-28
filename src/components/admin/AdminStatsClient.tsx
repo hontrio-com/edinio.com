@@ -21,12 +21,12 @@ interface Props {
 
 const PLAN_COLORS: Record<string, string> = {
   free: "#a1a1aa",
-  starter: "#3b82f6",
-  pro: "#1AB554",
-  business: "#f59e0b",
+  basic: "#3b82f6",
+  premium: "#8b5cf6",
+  ultra: "#f59e0b",
 };
 const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit", starter: "Starter", pro: "Pro", business: "Business",
+  free: "Gratuit", basic: "Basic", premium: "Premium", ultra: "Ultra",
 };
 
 const CHART_COLORS = ["#1AB554", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"];

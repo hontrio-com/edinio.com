@@ -11,8 +11,8 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { toast } from "sonner";
 
-const PLAN_OPTIONS = ["free", "starter", "pro", "business"] as const;
-const PLAN_LABELS: Record<string, string> = { free: "Gratuit", starter: "Starter", pro: "Pro", business: "Business" };
+const PLAN_OPTIONS = ["free", "basic", "premium", "ultra"] as const;
+const PLAN_LABELS: Record<string, string> = { free: "Gratuit", basic: "Basic", premium: "Premium", ultra: "Ultra" };
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-blue-100 text-blue-700",
   in_progress: "bg-amber-100 text-amber-700",

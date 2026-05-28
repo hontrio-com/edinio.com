@@ -89,34 +89,32 @@ function parseTldPricing(data: unknown): Record<string, number> {
   return pricing;
 }
 
-// Parse lookup response — handles various shapes
+// Parse lookup response — Reseller.ro returns a flat array of domain objects
 function parseLookupResults(
   data: unknown,
   tldPricing: Record<string, number>
 ): LookupResult[] {
-  if (!data || typeof data !== "object") return [];
-  const root = data as Record<string, unknown>;
-
-  // Could be array or { domains: [...] } or { domains: { domain: [...] } }
+  // Reseller.ro returns a flat JSON array at root level
   let raw: unknown[] = [];
-  if (Array.isArray(root.domains)) {
-    raw = root.domains;
-  } else if (root.domains && typeof root.domains === "object") {
-    const inner = (root.domains as Record<string, unknown>).domain;
-    raw = Array.isArray(inner) ? inner : [];
-  } else if (Array.isArray(root)) {
-    raw = root as unknown[];
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (data && typeof data === "object") {
+    const root = data as Record<string, unknown>;
+    if (Array.isArray(root.domains)) raw = root.domains;
+    else if (root.domains && typeof root.domains === "object") {
+      const inner = (root.domains as Record<string, unknown>).domain;
+      if (Array.isArray(inner)) raw = inner;
+    }
   }
 
   return raw.map((item) => {
     const d = item as Record<string, unknown>;
-    const domain = String(d.domain ?? "");
-    const available = String(d.status ?? "").toLowerCase() === "available";
+    // Reseller.ro uses domainName + isAvailable fields
+    const domain = String(d.domainName ?? d.domain ?? "");
+    const available = d.isAvailable === true ||
+      String(d.legacyStatus ?? "").toLowerCase() === "available";
     const tld = "." + domain.split(".").slice(1).join(".");
-    const priceFromResult =
-      (d.pricing as Record<string, number> | undefined)?.["1"] ??
-      (d.price as number | undefined);
-    const price = priceFromResult ?? tldPricing[tld];
+    const price = tldPricing[tld];
 
     return {
       domain,

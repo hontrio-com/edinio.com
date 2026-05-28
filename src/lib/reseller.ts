@@ -13,8 +13,11 @@ const BASE_URL =
  * followed by Buffer.from(...).toString("base64").
  */
 function getToken(): string {
-  const apiKey = process.env.RESELLER_API_KEY!;
-  const email = process.env.RESELLER_EMAIL!;
+  const apiKey = process.env.RESELLER_API_KEY;
+  const email = process.env.RESELLER_EMAIL;
+  if (!apiKey || !email) {
+    throw new Error("RESELLER_API_KEY or RESELLER_EMAIL env vars are not set");
+  }
 
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");

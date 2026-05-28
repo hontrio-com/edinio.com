@@ -74,8 +74,13 @@ export async function resellerCall(
     options.body = buildQuery(body);
   }
 
-  const res = await fetch(`${BASE_URL}${action}`, options);
+  const url = `${BASE_URL}${action}`;
+  console.log(`[reseller] ${method} ${url}`);
+  if (method === "POST" && body) console.log("[reseller] body:", options.body);
+
+  const res = await fetch(url, options);
   const text = await res.text();
+  console.log(`[reseller] status=${res.status} body=${text.slice(0, 300)}`);
 
   try {
     return JSON.parse(text) as Record<string, unknown>;

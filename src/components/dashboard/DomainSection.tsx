@@ -237,8 +237,16 @@ export function DomainSection({
           body: JSON.stringify({ searchTerm: clean }),
         });
         const data = await res.json() as unknown;
+        if (!res.ok) {
+          const msg = (data as Record<string, unknown>).error as string | undefined;
+          const details = (data as Record<string, unknown>).details as string | undefined;
+          console.error("[lookup]", msg, details);
+          toast.error(msg ?? "Eroare la verificarea disponibilitatii.");
+          return;
+        }
         setResults(parseLookupResults(data, tldPricing));
-      } catch {
+      } catch (err) {
+        console.error("[lookup] fetch error:", err);
         toast.error("Eroare la verificarea disponibilitatii.");
       } finally {
         setSearching(false);

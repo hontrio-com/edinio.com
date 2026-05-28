@@ -13,11 +13,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "searchTerm prea scurt" }, { status: 400 });
   }
 
-  const data = await resellerCall("/domains/lookup", "POST", {
-    searchTerm,
-    tldsToInclude: [".ro", ".com", ".net", ".org"],
-    premiumEnabled: false,
-  });
+  let data: Record<string, unknown>;
+  try {
+    data = await resellerCall("/domains/lookup", "POST", {
+      searchTerm,
+      tldsToInclude: [".ro", ".com", ".net", ".org"],
+      premiumEnabled: false,
+    });
+  } catch (err) {
+    console.error("[domains/lookup] resellerCall error:", err);
+    return NextResponse.json({ error: "Reseller API error", details: String(err) }, { status: 502 });
+  }
 
+  console.log("[domains/lookup] response:", JSON.stringify(data).slice(0, 500));
   return NextResponse.json(data);
 }

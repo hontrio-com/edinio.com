@@ -28,5 +28,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(data.error) }, { status: 502 });
   }
 
+  console.log("[domains/lookup] raw:", JSON.stringify(data).slice(0, 1000));
   return NextResponse.json(data);
 }

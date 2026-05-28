@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig } from "@/lib/actions/store.actions";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
+import { DomainSection } from "@/components/dashboard/DomainSection";
 import type { Database } from "@/types/database.types";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
@@ -1207,7 +1208,19 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
             </div>
           )}
-          {activeSection === "domeniu" && <ComingSoon title="Domeniu" />}
+          {activeSection === "domeniu" && (
+            <DomainSection
+              businessId={businessId}
+              businessName={businessData?.business_name ?? ""}
+              phone={businessData?.phone ?? null}
+              address={businessData?.address ?? null}
+              city={businessData?.city ?? null}
+              county={businessData?.county ?? null}
+              profileFullName={profile.full_name}
+              email={email}
+              initialCustomDomain={null}
+            />
+          )}
 
           {/* ── Notificari ── */}
           {activeSection === "notificari" && (

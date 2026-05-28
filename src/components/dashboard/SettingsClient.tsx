@@ -15,6 +15,7 @@ import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfa
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
 import type { Database } from "@/types/database.types";
+import { buildPolicyTemplates } from "@/lib/policy-templates";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
@@ -292,8 +293,25 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     window.location.href = data.url;
   }
 
-  // Policies
-  const [policies, setPolicies] = useState<PoliciesMap>(() => parsePolicies(storePolicies));
+  // Policies — inject templates for any empty policy
+  const [policies, setPolicies] = useState<PoliciesMap>(() => {
+    const parsed = parsePolicies(storePolicies);
+    const templates = buildPolicyTemplates({
+      businessName: businessData?.business_name ?? null,
+      cui:          businessData?.cui ?? null,
+      address:      businessData?.address ?? null,
+      city:         businessData?.city ?? null,
+      county:       businessData?.county ?? null,
+      phone:        businessData?.phone ?? null,
+      email:        businessData?.email ?? null,
+    });
+    for (const { key } of POLICIES) {
+      if (!parsed[key]?.content?.trim()) {
+        parsed[key] = { content: templates[key] ?? "", enabled: true };
+      }
+    }
+    return parsed;
+  });
   const [savingPolicies, startPoliciesTransition] = useTransition();
 
   // VAT

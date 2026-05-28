@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 export async function GET(request: NextRequest) {
@@ -7,6 +8,15 @@ export async function GET(request: NextRequest) {
   const dashboardUrl = new URL("/dashboard/features/stripe", request.nextUrl.origin).toString();
 
   if (!businessId) return NextResponse.redirect(dashboardUrl);
+
+  // Verify authenticated user owns this business
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.redirect(new URL("/login", request.nextUrl.origin).toString());
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return NextResponse.redirect(dashboardUrl);
 
   const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

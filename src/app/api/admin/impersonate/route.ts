@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAudit } from "@/lib/audit";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.ro";
 
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest) {
   if (error || !data?.properties?.action_link) {
     return NextResponse.json({ error: error?.message ?? "Eroare la generarea linkului" }, { status: 500 });
   }
+
+  await logAudit(admin.id, "user.impersonate", "user", body.userId, {
+    email,
+  });
 
   return NextResponse.json({ url: data.properties.action_link });
 }

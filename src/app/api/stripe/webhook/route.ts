@@ -2,13 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createSmartbillInvoice } from "@/lib/smartbill";
+import { PLAN_PRICES } from "@/lib/plans";
 import type Stripe from "stripe";
-
-const PLAN_PRICES: Record<string, number> = {
-  basic: 99,
-  premium: 249,
-  ultra: 499,
-};
 
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);

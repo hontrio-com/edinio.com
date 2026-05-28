@@ -130,6 +130,7 @@ export async function placeOrder(data: {
     }
   } catch { /* ignore — email failure must not block the order */ }
 
+  revalidatePath("/dashboard/orders");
   return { success: true, orderId: order.id, orderNumber: order.order_number };
 }
 
@@ -286,5 +287,6 @@ export async function placeCartOrder(data: {
     }
   } catch { /* ignore — email failure must not block the order */ }
 
+  revalidatePath("/dashboard/orders");
   return { success: true, orderId: order.id, orderNumber: order.order_number };
 }

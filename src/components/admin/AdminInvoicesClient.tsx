@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, ChevronLeft, ChevronRight, Receipt, AlertCircle, XCircle, RefreshCw, Loader2, Trash2 } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Receipt, AlertCircle, XCircle, RefreshCw, Loader2, Trash2, Download } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { toast } from "sonner";
+import { PLAN_LABELS } from "@/lib/plans";
 
 interface Invoice {
   id: string;
@@ -27,9 +28,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   void: { label: "Anulata", color: "bg-zinc-100 text-zinc-500" },
 };
 
-const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit", basic: "Basic", premium: "Premium", ultra: "Ultra",
-};
+// PLAN_LABELS imported from @/lib/plans
 
 const PAGE_SIZE = 30;
 
@@ -40,8 +39,27 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
   const [page, setPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  const [exporting, setExporting] = useState(false);
   const totalRevenue = invoices.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
   const failedCount = invoices.filter((i) => i.status === "failed").length;
+  const smartbillErrors = invoices.filter((i) => i.smartbill_error).length;
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/admin/export/invoices");
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `facturi_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Export descarcat");
+    } catch { toast.error("Eroare la export"); }
+    finally { setExporting(false); }
+  }
 
   const filtered = useMemo(() => {
     let list = [...invoices];
@@ -104,9 +122,16 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-black text-zinc-900 dark:text-white">Facturi</h1>
-        <p className="text-sm text-zinc-500 mt-1">{invoices.length} facturi totale</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-zinc-900 dark:text-white">Facturi</h1>
+          <p className="text-sm text-zinc-500 mt-1">{invoices.length} facturi totale</p>
+        </div>
+        <button onClick={handleExport} disabled={exporting}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50">
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Export CSV
+        </button>
       </div>
 
       {/* Stats */}
@@ -124,10 +149,20 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
         ))}
       </div>
 
-      {failedCount > 0 && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-400">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          {failedCount} {failedCount === 1 ? "factura esuata" : "facturi esuate"} — verifica erorile SmartBill.
+      {(failedCount > 0 || smartbillErrors > 0) && (
+        <div className="space-y-2">
+          {failedCount > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-400">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {failedCount} {failedCount === 1 ? "factura esuata" : "facturi esuate"} — verifica erorile SmartBill.
+            </div>
+          )}
+          {smartbillErrors > 0 && smartbillErrors !== failedCount && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-xl text-sm text-orange-700 dark:text-orange-400">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {smartbillErrors} {smartbillErrors === 1 ? "factura cu eroare" : "facturi cu erori"} SmartBill — reemite facturile afectate.
+            </div>
+          )}
         </div>
       )}
 

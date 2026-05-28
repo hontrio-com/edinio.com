@@ -49,7 +49,7 @@ export async function login(formData: { email: string; password: string }) {
     await supabase.from("users_profile").update({ mfa_otp: otpHash, mfa_otp_expires_at: expiresAt }).eq("id", user.id);
     await sendMfaOtpEmail(user.email!, otp);
     const cookieStore = await cookies();
-    cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 10 * 60 });
+    cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 10 * 60, secure: process.env.NODE_ENV === "production" });
     redirect("/login/mfa");
   }
 

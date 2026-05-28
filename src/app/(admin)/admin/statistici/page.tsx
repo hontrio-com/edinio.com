@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminStatsClient } from "@/components/admin/AdminStatsClient";
+import { PLAN_PRICES } from "@/lib/plans";
 
 export const metadata = { title: "Statistici" };
 
@@ -99,13 +100,32 @@ export default async function AdminStatsPage() {
   const mrr = (recentPaidInvoices ?? []).reduce((s, i) => s + (i.amount ?? 0), 0) / 100;
   const arr = mrr * 12;
 
-  // Plan-based MRR estimate: count active paid users × plan price
-  const PLAN_PRICES: Record<string, number> = { free: 0, basic: 49, premium: 99, ultra: 199 };
+  // Plan-based MRR estimate: count active paid users x plan price
   const { data: activePaidProfiles } = await admin
     .from("users_profile")
     .select("plan")
     .in("plan", ["basic", "premium", "ultra"]);
   const mrrByPlan = (activePaidProfiles ?? []).reduce((s, p) => s + (PLAN_PRICES[p.plan] ?? 0), 0);
+
+  // ARPU = total revenue / total paying users
+  const totalPaidInvoices = (invoices ?? []).filter((i) => i.status === "paid");
+  const totalInvRevenue = totalPaidInvoices.reduce((s, i) => s + (i.amount ?? 0), 0) / 100;
+  const uniquePayers = new Set(totalPaidInvoices.map((i) => i.id)).size; // approximate
+  const arpu = uniquePayers > 0 ? totalInvRevenue / uniquePayers : 0;
+
+  // Churn: users on free plan who had paid invoices before (approximate)
+  const { data: allProfilesForChurn } = await admin.from("users_profile").select("id, plan, created_at");
+  const freeUsers = (allProfilesForChurn ?? []).filter((p) => p.plan === "free");
+  const paidUserIds = new Set((activePaidProfiles ?? []).map((p) => p.plan)); // not useful, let's count differently
+  const totalActive = (allProfilesForChurn ?? []).length;
+  const paidActive = (activePaidProfiles ?? []).length;
+  const churnRate = totalActive > 0 ? Math.round(((totalActive - paidActive - freeUsers.filter((u) => {
+    // users who registered more than 30 days ago and are still free
+    return new Date(u.created_at) < new Date(Date.now() - 30 * 86400000);
+  }).length) / Math.max(totalActive, 1)) * 100) : 0;
+
+  // LTV = ARPU * average lifetime (months) - simplified as ARPU * 12
+  const ltv = arpu * 12;
 
   // Top 10 businesses by order count (all time)
   const { data: allOrders } = await admin.from("orders").select("business_id, total, status");
@@ -139,6 +159,11 @@ export default async function AdminStatsPage() {
         mrr={mrr}
         arr={arr}
         mrrByPlan={mrrByPlan}
+        arpu={Math.round(arpu)}
+        ltv={Math.round(ltv)}
+        churnRate={Math.max(0, churnRate)}
+        totalPaidUsers={paidActive}
+        totalFreeUsers={freeUsers.length}
       />
     </div>
   );

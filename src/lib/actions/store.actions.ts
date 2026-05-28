@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { SmartbillConfig } from "@/lib/smartbill";
 
 export async function updatePageContent(businessId: string, pageContent: Record<string, unknown>): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -73,6 +74,7 @@ export async function updateGeneralSettings(
   if (settingsError) return { error: "Eroare la salvarea setarilor." };
 
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard", "layout");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
   return { success: true };
 }
@@ -171,7 +173,7 @@ export async function updateSmsoConfig(
 
 export async function updateSmartbillConfig(
   businessId: string,
-  config: { enabled: boolean; email: string; token: string; company_vat_code: string; series_name: string; tax_name: string; send_email: boolean },
+  config: SmartbillConfig,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -208,7 +210,7 @@ export async function updateStorePolicies(
   if (!user) return { error: "Neautorizat" };
 
   const { data: biz } = await supabase
-    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: existing } = await supabase
@@ -226,6 +228,7 @@ export async function updateStorePolicies(
 
   if (error) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/settings");
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
   return { success: true };
 }
 
@@ -242,7 +245,7 @@ export async function updateShippingConfig(
   if (!user) return { error: "Neautorizat" };
 
   const { data: biz } = await supabase
-    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: existing } = await supabase
@@ -270,5 +273,24 @@ export async function updateShippingConfig(
 
   if (error) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/settings");
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  return { success: true };
+}
+
+export async function updateProfileName(
+  fullName: string,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { error } = await supabase
+    .from("users_profile")
+    .update({ full_name: fullName })
+    .eq("id", user.id);
+
+  if (error) return { error: "Nu am putut salva modificarile." };
+
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }

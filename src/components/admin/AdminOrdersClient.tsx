@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, ChevronLeft, ChevronRight, ShoppingBag, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ShoppingBag, ChevronDown, ChevronUp, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 
 interface Order {
@@ -46,7 +47,25 @@ export function AdminOrdersClient({ orders }: { orders: Order[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+  const [exporting, setExporting] = useState(false);
   const totalRevenue = orders.filter((o) => o.status !== "cancelled" && o.status !== "refunded").reduce((s, o) => s + (o.total ?? 0), 0);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/admin/export/orders");
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `comenzi_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Export descarcat");
+    } catch { toast.error("Eroare la export"); }
+    finally { setExporting(false); }
+  }
 
   const filtered = useMemo(() => {
     let list = [...orders];
@@ -88,9 +107,16 @@ export function AdminOrdersClient({ orders }: { orders: Order[] }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-black text-zinc-900 dark:text-white">Comenzi</h1>
-        <p className="text-sm text-zinc-500 mt-1">{orders.length} comenzi totale</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-zinc-900 dark:text-white">Comenzi</h1>
+          <p className="text-sm text-zinc-500 mt-1">{orders.length} comenzi totale</p>
+        </div>
+        <button onClick={handleExport} disabled={exporting}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-50">
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Export CSV
+        </button>
       </div>
 
       {/* Stats */}

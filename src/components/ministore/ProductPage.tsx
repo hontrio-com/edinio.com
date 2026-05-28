@@ -7,6 +7,7 @@ import {
   Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
+import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
 import type { Database } from "@/types/database.types";
@@ -418,7 +419,7 @@ export function ProductPage({ business, product, storeSettings }: {
         {product.description && product.description !== "<p></p>" && (
           <div
             className={`policy-content text-gray-500 leading-relaxed ${mobile ? "text-sm" : "text-base"}`}
-            dangerouslySetInnerHTML={{ __html: product.description }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.description) }}
           />
         )}
 

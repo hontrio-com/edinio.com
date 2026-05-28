@@ -23,6 +23,14 @@ export async function POST(request: NextRequest) {
 
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
+  // Prevent duplicate checkout for already-paid or cancelled orders
+  if (order.payment_status === "paid") {
+    return NextResponse.json({ error: "Comanda a fost deja platita" }, { status: 400 });
+  }
+  if (order.status === "cancelled") {
+    return NextResponse.json({ error: "Comanda a fost anulata" }, { status: 400 });
+  }
+
   const stripeConfig = settings?.stripe_config as { account_id?: string; enabled?: boolean } | null;
   if (!stripeConfig?.account_id || !stripeConfig.enabled) {
     return NextResponse.json({ error: "Stripe not connected for this business" }, { status: 400 });

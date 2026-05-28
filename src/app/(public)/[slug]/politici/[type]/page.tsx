@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
+import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { ArrowLeft } from "lucide-react";
 
 const POLICY_META: Record<string, { label: string; key: string }> = {
@@ -124,7 +125,7 @@ export default async function PolicyPage({ params }: Props) {
         ) : (
           <div
             className="policy-content text-sm text-foreground"
-            dangerouslySetInnerHTML={{ __html: content }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
           />
         )}
 

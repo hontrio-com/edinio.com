@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAudit } from "@/lib/audit";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();
@@ -19,6 +20,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { error } = await adminClient.auth.admin.updateUserById(id, { email: body.email.trim() });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logAudit(admin.id, "user.edit", "user", id, {
+    full_name: body.full_name?.trim() || undefined,
+    email: body.email?.trim() || undefined,
+  });
 
   return NextResponse.json({ success: true });
 }

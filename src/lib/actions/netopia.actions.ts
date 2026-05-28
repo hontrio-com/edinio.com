@@ -22,7 +22,7 @@ export async function saveNetopiaConfig(
 
   const { error } = await supabase
     .from("store_settings")
-    .update({ netopia_config: config })
+    .update({ netopia_config: config, updated_at: new Date().toISOString() })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

@@ -34,6 +34,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Date incomplete" }, { status: 400 });
   }
 
+  // Verify the user owns this business before spending money on domain registration
+  const supabaseCheck = await createClient();
+  const { data: ownedBiz } = await supabaseCheck
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!ownedBiz) {
+    return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
+  }
+
   // Validate contact fields required by Reseller.ro
   const required: (keyof ContactInfo)[] = [
     "firstname", "lastname", "email", "phonenumber",
@@ -81,8 +89,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  // Save to domains table
-  const supabase = await createClient();
+  // Save to domains table (reuse the client from ownership check above)
+  const supabase = supabaseCheck;
 
   const expiryDate = new Date();
   expiryDate.setFullYear(expiryDate.getFullYear() + Number(regperiod));

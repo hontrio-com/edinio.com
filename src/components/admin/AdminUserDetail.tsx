@@ -10,9 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { toast } from "sonner";
-
-const PLAN_OPTIONS = ["free", "basic", "premium", "ultra"] as const;
-const PLAN_LABELS: Record<string, string> = { free: "Gratuit", basic: "Basic", premium: "Premium", ultra: "Ultra" };
+import { PLANS, PLAN_LABELS, ROLES, ROLE_LABELS } from "@/lib/plans";
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-blue-100 text-blue-700",
   in_progress: "bg-amber-100 text-amber-700",
@@ -304,16 +302,14 @@ export function AdminUserDetail({ profile, authUser, businesses, invoices, ticke
             <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1.5">Plan abonament</label>
             <select value={plan} onChange={(e) => setPlan(e.target.value)}
               className="w-full h-9 px-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
-              {PLAN_OPTIONS.map((p) => <option key={p} value={p}>{PLAN_LABELS[p]}</option>)}
+              {PLANS.map((p) => <option key={p} value={p}>{PLAN_LABELS[p]}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1.5">Rol</label>
             <select value={role} onChange={(e) => setRole(e.target.value)}
               className="w-full h-9 px-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
-              <option value="user">Utilizator</option>
-              <option value="admin">Admin</option>
-              <option value="moderator">Moderator</option>
+              {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </select>
           </div>
         </div>
@@ -365,8 +361,9 @@ export function AdminUserDetail({ profile, authUser, businesses, invoices, ticke
                 <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0",
                   b.is_published ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-500"
                 )}>{b.is_published ? "Publicat" : "Draft"}</span>
-                <a href={`/${b.slug}`} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-primary transition-colors">
-                  <ExternalLink className="h-4 w-4" />
+                <a href={`/${b.slug}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-primary transition-colors" title="Viziteaza magazinul">
+                  <ExternalLink className="h-3.5 w-3.5" /> Viziteaza
                 </a>
                 <Link href={`/admin/magazine/${b.id}`} className="text-xs font-semibold text-primary hover:underline flex-shrink-0">Detalii</Link>
               </div>

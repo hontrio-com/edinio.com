@@ -30,10 +30,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({
-      error: `Resend error: ${error.message ?? JSON.stringify(error)}`,
-      from: fromEmail,
-      to: email,
-      api_key_prefix: process.env.RESEND_API_KEY.slice(0, 8) + "...",
+      error: `Resend error: ${error.message ?? "Eroare necunoscuta"}`,
     }, { status: 400 });
   }
 

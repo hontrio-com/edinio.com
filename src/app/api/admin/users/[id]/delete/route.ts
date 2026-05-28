@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAudit } from "@/lib/audit";
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();
@@ -14,6 +15,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const adminClient = createAdminClient();
   const { error } = await adminClient.auth.admin.deleteUser(id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit(admin.id, "user.delete", "user", id);
 
   return NextResponse.json({ success: true });
 }

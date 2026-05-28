@@ -58,8 +58,16 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Cookie flag: skip DB queries if onboarding already confirmed
+  const onboardingDone = request.cookies.get("onboarding_done")?.value === "1";
+
   // Authenticated on onboarding → redirect to dashboard if already completed
   if (user && isOnboarding) {
+    if (onboardingDone) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
     const { data: profile } = await supabase
       .from("users_profile")
       .select("onboarding_completed")
@@ -68,12 +76,14 @@ export async function updateSession(request: NextRequest) {
     if (profile?.onboarding_completed) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
+      const res = NextResponse.redirect(url);
+      res.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
+      return res;
     }
   }
 
-  // Authenticated on dashboard → verify onboarding complete
-  if (user && isDashboard) {
+  // Authenticated on dashboard → verify onboarding complete (skip if cookie set)
+  if (user && isDashboard && !onboardingDone) {
     const [{ data: profile }, { count: bizCount }] = await Promise.all([
       supabase.from("users_profile").select("onboarding_completed").eq("id", user.id).single(),
       supabase.from("businesses").select("*", { count: "exact", head: true }).eq("user_id", user.id),
@@ -83,13 +93,17 @@ export async function updateSession(request: NextRequest) {
 
     if (profile && !profile.onboarding_completed) {
       if (hasBusiness) {
-        // Stale flag - fix silently
+        // Stale flag - fix silently and set cookie
         supabase.from("users_profile").update({ onboarding_completed: true }).eq("id", user.id).then(() => {});
+        supabaseResponse.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
       } else {
         const url = request.nextUrl.clone();
         url.pathname = "/onboarding/details";
         return NextResponse.redirect(url);
       }
+    } else if (profile?.onboarding_completed) {
+      // Set cookie so we skip this check on future requests
+      supabaseResponse.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
     }
   }
 

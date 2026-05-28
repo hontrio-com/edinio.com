@@ -27,6 +27,7 @@ export function MarketingConfigClient({
   async function handleSave() {
     setSaving(true);
     const result = await saveMarketingConfig(businessId, {
+      ...initialConfig,
       facebook_pixel_id: fbPixelId.trim() || undefined,
       tiktok_pixel_id: ttPixelId.trim() || undefined,
       google_tag_id: googleTagId.trim() || undefined,

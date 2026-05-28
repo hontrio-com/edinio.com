@@ -5,6 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { cn } from "@/lib/utils/cn";
+import { PLAN_LABELS, PLAN_COLORS } from "@/lib/plans";
 
 interface Props {
   usersByMonth: { month: string; count: number }[];
@@ -17,17 +18,14 @@ interface Props {
   mrr?: number;
   arr?: number;
   mrrByPlan?: number;
+  arpu?: number;
+  ltv?: number;
+  churnRate?: number;
+  totalPaidUsers?: number;
+  totalFreeUsers?: number;
 }
 
-const PLAN_COLORS: Record<string, string> = {
-  free: "#a1a1aa",
-  basic: "#3b82f6",
-  premium: "#8b5cf6",
-  ultra: "#f59e0b",
-};
-const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit", basic: "Basic", premium: "Premium", ultra: "Ultra",
-};
+// PLAN_COLORS and PLAN_LABELS imported from @/lib/plans
 
 const CHART_COLORS = ["#1AB554", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"];
 
@@ -53,6 +51,8 @@ export function AdminStatsClient({
   usersByMonth, ordersByMonth, invoicesByMonth, ticketsByMonth,
   planCounts, nicheCounts, topBusinesses,
   mrr = 0, arr = 0, mrrByPlan = 0,
+  arpu = 0, ltv = 0, churnRate = 0,
+  totalPaidUsers = 0, totalFreeUsers = 0,
 }: Props) {
   const totalUsers = Object.values(planCounts).reduce((s, v) => s + v, 0);
   const totalOrders = ordersByMonth.reduce((s, m) => s + m.count, 0);
@@ -108,6 +108,35 @@ export function AdminStatsClient({
           <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">MRR dupa plan activ</p>
           <p className="text-3xl font-black text-zinc-900 dark:text-white">{mrrByPlan.toLocaleString("ro-RO", { maximumFractionDigits: 0 })} lei</p>
           <p className="text-xs text-zinc-500 mt-1">Utilizatori platitori × pretul planului</p>
+        </div>
+      </div>
+
+      {/* Revenue metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="bg-gradient-to-br from-emerald-50 to-emerald-50/50 dark:from-emerald-950/20 dark:to-emerald-950/10 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-1">ARPU</p>
+          <p className="text-3xl font-black text-zinc-900 dark:text-white">{arpu.toLocaleString("ro-RO")} lei</p>
+          <p className="text-xs text-zinc-500 mt-1">Venit mediu per utilizator</p>
+        </div>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-50/50 dark:from-purple-950/20 dark:to-purple-950/10 border border-purple-200 dark:border-purple-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-1">LTV estimat</p>
+          <p className="text-3xl font-black text-zinc-900 dark:text-white">{ltv.toLocaleString("ro-RO")} lei</p>
+          <p className="text-xs text-zinc-500 mt-1">ARPU x 12 luni</p>
+        </div>
+        <div className="bg-gradient-to-br from-red-50 to-red-50/50 dark:from-red-950/20 dark:to-red-950/10 border border-red-200 dark:border-red-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">Rata churn</p>
+          <p className="text-3xl font-black text-zinc-900 dark:text-white">{churnRate}%</p>
+          <p className="text-xs text-zinc-500 mt-1">Utilizatori care nu platesc</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Platitori</p>
+          <p className="text-3xl font-black text-primary">{totalPaidUsers}</p>
+          <p className="text-xs text-zinc-500 mt-1">Utilizatori cu abonament activ</p>
+        </div>
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Gratuiti</p>
+          <p className="text-3xl font-black text-zinc-400">{totalFreeUsers}</p>
+          <p className="text-xs text-zinc-500 mt-1">Utilizatori pe plan gratuit</p>
         </div>
       </div>
 

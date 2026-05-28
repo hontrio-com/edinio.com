@@ -3,6 +3,7 @@ import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAgentReplyToUser } from "@/lib/email";
 import { createClient } from "@/lib/supabase/server";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     attachments: [],
   }).select().single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: "Eroare la salvarea mesajului" }, { status: 500 });
 
   // Update ticket status
   const newStatus = body.status ?? ticket.status;
@@ -47,6 +48,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }).catch(() => {});
   }
 
+  await logAudit(admin.id, "ticket.reply", "ticket", ticketId, {
+    message_id: message?.id,
+  });
+  if (newStatus !== ticket.status) {
+    await logAudit(admin.id, "ticket.status_change", "ticket", ticketId, {
+      old_status: ticket.status,
+      new_status: newStatus,
+    });
+  }
+
   return NextResponse.json({ message }, { status: 201 });
 }
 
@@ -58,8 +69,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json() as { status?: string };
 
   const adminClient = createAdminClient();
+  const { data: oldTicket } = await adminClient.from("support_tickets").select("status").eq("id", ticketId).single();
+
   const { error } = await adminClient.from("support_tickets").update({ status: body.status }).eq("id", ticketId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: "Eroare la actualizare" }, { status: 500 });
+
+  await logAudit(admin.id, "ticket.status_change", "ticket", ticketId, {
+    old_status: oldTicket?.status,
+    new_status: body.status,
+  });
 
   return NextResponse.json({ success: true });
 }

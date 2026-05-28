@@ -28,6 +28,14 @@ export async function POST(request: NextRequest) {
 
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
+  // Prevent duplicate payment for already-paid or cancelled orders
+  if (order.payment_status === "paid") {
+    return NextResponse.json({ error: "Comanda a fost deja platita" }, { status: 400 });
+  }
+  if (order.status === "cancelled") {
+    return NextResponse.json({ error: "Comanda a fost anulata" }, { status: 400 });
+  }
+
   const config = settings?.netopia_config as NetopiaConfig | null;
   const publicKey = config?.sandbox ? config?.sandbox_public_key : config?.live_public_key;
   if (!config?.enabled || !config.pos_signature || !publicKey) {

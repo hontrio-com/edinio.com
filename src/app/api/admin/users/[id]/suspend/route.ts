@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAudit } from "@/lib/audit";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();
@@ -17,6 +18,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { error } = await adminClient.from("users_profile").update(update).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const isSuspend = !!body.suspended_until;
+  await logAudit(admin.id, isSuspend ? "user.suspend" : "user.unsuspend", "user", id, {
+    suspended_until: body.suspended_until ?? null,
+    admin_notes: body.admin_notes,
+  });
 
   return NextResponse.json({ success: true });
 }

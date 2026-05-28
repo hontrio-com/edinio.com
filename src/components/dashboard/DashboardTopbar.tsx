@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { logout } from "@/lib/actions/auth.actions";
 import { formatPrice } from "@/lib/utils/format";
+import { PLAN_LABELS as PLAN_NAMES } from "@/lib/plans";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -32,11 +33,11 @@ const NAV_ITEMS = [
   { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },
 ];
 
-const PLAN_LABELS: Record<string, { label: string; cls: string }> = {
-  free:     { label: "Gratuit",  cls: "bg-muted text-muted-foreground" },
-  starter:  { label: "Starter",  cls: "bg-blue-100 text-blue-700" },
-  pro:      { label: "Pro",      cls: "bg-primary/10 text-primary" },
-  business: { label: "Business", cls: "bg-amber-100 text-amber-700" },
+const PLAN_BADGE_STYLES: Record<string, string> = {
+  free:    "bg-muted text-muted-foreground",
+  basic:   "bg-blue-100 text-blue-700",
+  premium: "bg-primary/10 text-primary",
+  ultra:   "bg-amber-100 text-amber-700",
 };
 
 interface Props {
@@ -61,7 +62,8 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
-  const planInfo = PLAN_LABELS[plan] ?? PLAN_LABELS.free;
+  const planLabel = PLAN_NAMES[plan] ?? plan;
+  const planCls = PLAN_BADGE_STYLES[plan] ?? PLAN_BADGE_STYLES.free;
   const initials = userFullName?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "U";
 
   // Load read IDs from localStorage (after hydration)
@@ -302,8 +304,8 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
             <div className="absolute right-0 top-full mt-2 w-56 bg-popover border border-border rounded-xl shadow-lg z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-border">
                 <p className="text-sm font-semibold text-foreground truncate">{userFullName || "Contul meu"}</p>
-                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold mt-1", planInfo.cls)}>
-                  {planInfo.label}
+                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold mt-1", planCls)}>
+                  {planLabel}
                 </span>
               </div>
               <Link href="/dashboard/settings" onClick={() => setUserOpen(false)}

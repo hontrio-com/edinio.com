@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Search, ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { toast } from "sonner";
 
 interface Business {
   id: string; business_name: string; store_name: string | null; slug: string;
@@ -15,13 +16,30 @@ interface Business {
 const PAGE_SIZE = 20;
 type SortKey = "business_name" | "created_at" | "orders_count" | "type";
 
-export function AdminBusinessesClient({ businesses }: { businesses: Business[] }) {
+export function AdminBusinessesClient({ businesses: initialBusinesses }: { businesses: Business[] }) {
+  const [businesses, setBusinesses] = useState(initialBusinesses);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  async function handleTogglePublish(id: string, currentlyPublished: boolean) {
+    setTogglingId(id);
+    try {
+      const res = await fetch(`/api/admin/businesses/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_published: !currentlyPublished }),
+      });
+      if (!res.ok) throw new Error();
+      setBusinesses((prev) => prev.map((b) => b.id === id ? { ...b, is_published: !currentlyPublished } : b));
+      toast.success(currentlyPublished ? "Magazin dezpublicat" : "Magazin publicat");
+    } catch { toast.error("Eroare la actualizare"); }
+    finally { setTogglingId(null); }
+  }
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -160,7 +178,17 @@ export function AdminBusinessesClient({ businesses }: { businesses: Business[] }
                     )}>{b.is_published ? "Publicat" : "Draft"}</span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-3">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => handleTogglePublish(b.id, b.is_published)} disabled={togglingId === b.id}
+                        title={b.is_published ? "Dezpublica" : "Publica"}
+                        className={cn("p-1.5 rounded-lg transition-colors disabled:opacity-40",
+                          b.is_published
+                            ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            : "text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30"
+                        )}>
+                        {togglingId === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
+                          b.is_published ? <ToggleLeft className="h-3.5 w-3.5" /> : <ToggleRight className="h-3.5 w-3.5" />}
+                      </button>
                       <a href={`/${b.slug}`} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-primary transition-colors">
                         <ExternalLink className="h-4 w-4" />
                       </a>

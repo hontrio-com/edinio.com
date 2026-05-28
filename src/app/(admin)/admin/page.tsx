@@ -23,6 +23,9 @@ export default async function AdminPage() {
     { data: allInvoices },
     { data: mrrInvoices },
     { data: usersByPlanRaw },
+    { data: pastDueUsers },
+    { data: failedInvoices },
+    { data: recentAudit },
   ] = await Promise.all([
     admin.from("users_profile").select("*", { count: "exact", head: true }),
     admin.from("users_profile").select("*", { count: "exact", head: true }).gte("created_at", monthStart),
@@ -32,11 +35,15 @@ export default async function AdminPage() {
     admin.from("support_tickets").select("*", { count: "exact", head: true }).in("status", ["open", "in_progress"]),
     admin.from("users_profile").select("id, full_name, plan, role, created_at").order("created_at", { ascending: false }).limit(8),
     admin.from("support_tickets").select("id, subject, status, priority, created_at").order("created_at", { ascending: false }).limit(6),
-    // All paid invoices for revenue by date picker (keep it small — only amount + date)
     admin.from("invoices").select("amount, created_at").eq("status", "paid").order("created_at", { ascending: false }),
-    // MRR: last 30 days
     admin.from("invoices").select("amount").eq("status", "paid").gte("created_at", thirtyDaysAgo),
     admin.from("users_profile").select("plan"),
+    // Payment health: users with expired plans
+    admin.from("users_profile").select("id").neq("plan", "free").lt("plan_expires_at", now.toISOString()),
+    // Failed invoices (SmartBill errors)
+    admin.from("invoices").select("id, smartbill_error").not("smartbill_error", "is", null),
+    // Recent audit log entries
+    admin.from("admin_audit_log").select("id, action, target_type, created_at").order("created_at", { ascending: false }).limit(5),
   ]);
 
   // Revenue calculations
@@ -85,12 +92,15 @@ export default async function AdminPage() {
           activeBusinesses: activeBusinesses ?? 0,
           totalBusinesses: totalBusinesses ?? 0,
           pendingSupport: pendingSupport ?? 0,
+          pastDueCount: pastDueUsers?.length ?? 0,
+          failedInvoicesCount: failedInvoices?.length ?? 0,
         }}
         recentUsers={recentUsers ?? []}
         recentTickets={recentTickets ?? []}
         revenueChart={revenueChart}
         usersByPlan={usersByPlan}
         allInvoices={(allInvoices ?? []).map((i) => ({ amount: Math.round(i.amount / 100), created_at: i.created_at }))}
+        recentAudit={(recentAudit ?? []).map((a) => ({ action: a.action, target_type: a.target_type, created_at: a.created_at }))}
       />
     </div>
   );

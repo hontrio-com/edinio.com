@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 // ANAF Public API v9 — https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva
 const ANAF_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva";
@@ -37,6 +38,10 @@ interface AnafResponse {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
+
   const { cui } = await req.json() as { cui: string };
 
   if (!cui) {

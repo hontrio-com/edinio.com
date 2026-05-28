@@ -10,12 +10,13 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName } from "@/lib/actions/store.actions";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
 import type { Database } from "@/types/database.types";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
+import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
@@ -35,25 +36,20 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "securitate", label: "Securitate",  icon: Lock      },
 ];
 
-const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit",
-  basic: "Basic",
-  premium: "Premium",
-  ultra: "Ultra",
-};
+// PLAN_LABELS, PLAN_PRICES imported from @/lib/plans
 
-const PLAN_COLORS: Record<string, string> = {
+const PLAN_BADGE_COLORS: Record<string, string> = {
   free: "bg-gray-100 text-gray-600 border-gray-200",
   basic: "bg-blue-50 text-blue-700 border-blue-200",
   premium: "bg-purple-50 text-purple-700 border-purple-200",
   ultra: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
-const PLANS = [
+const PLAN_CARDS = [
   {
     id: "basic",
-    label: "Basic",
-    price: 99,
+    label: PLAN_LABELS.basic,
+    price: PLAN_PRICES.basic,
     icon: Rocket,
     color: "blue",
     badge: null,
@@ -67,8 +63,8 @@ const PLANS = [
   },
   {
     id: "premium",
-    label: "Premium",
-    price: 249,
+    label: PLAN_LABELS.premium,
+    price: PLAN_PRICES.premium,
     icon: Sparkles,
     color: "purple",
     badge: "Recomandat",
@@ -83,8 +79,8 @@ const PLANS = [
   },
   {
     id: "ultra",
-    label: "Ultra",
-    price: 499,
+    label: PLAN_LABELS.ultra,
+    price: PLAN_PRICES.ultra,
     icon: Crown,
     color: "amber",
     badge: null,
@@ -353,10 +349,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
   async function saveProfile() {
     setSavingName(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("users_profile").update({ full_name: fullName }).eq("id", profile.id);
+    const result = await updateProfileName(fullName);
     setSavingName(false);
-    if (error) toast.error("Nu am putut salva modificarile.");
+    if ("error" in result) toast.error(result.error);
     else toast.success("Profilul a fost actualizat.");
   }
 
@@ -853,14 +848,14 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     </p>
                   )}
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${PLAN_COLORS[profile.plan] ?? PLAN_COLORS.free}`}>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${PLAN_BADGE_COLORS[profile.plan] ?? PLAN_BADGE_COLORS.free}`}>
                   {PLAN_LABELS[profile.plan] ?? "Gratuit"}
                 </span>
               </div>
 
               {/* Carduri planuri */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {PLANS.map((plan) => {
+                {PLAN_CARDS.map((plan) => {
                   const Icon = plan.icon;
                   const isActive = profile.plan === plan.id;
 

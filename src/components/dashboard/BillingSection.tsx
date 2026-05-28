@@ -5,21 +5,9 @@ import { Loader2, FileText, ExternalLink, CreditCard, AlertCircle } from "lucide
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database.types";
+import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
 
 type Invoice = Database["public"]["Tables"]["invoices"]["Row"];
-
-const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit",
-  basic: "Basic",
-  premium: "Premium",
-  ultra: "Ultra",
-};
-
-const PLAN_PRICES: Record<string, number> = {
-  basic: 99,
-  premium: 249,
-  ultra: 499,
-};
 
 interface Props {
   plan: "free" | "basic" | "premium" | "ultra";

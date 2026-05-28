@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Users, Store, Receipt,
+  LayoutDashboard, Users, Store, Receipt, ShoppingCart,
   LifeBuoy, BarChart2, Shield, ChevronRight, LogOut, Menu, X,
+  History, Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { createClient } from "@/lib/supabase/client";
@@ -15,9 +16,12 @@ const NAV = [
   { href: "/admin", icon: LayoutDashboard, label: "Prezentare generala", exact: true },
   { href: "/admin/utilizatori", icon: Users, label: "Utilizatori" },
   { href: "/admin/magazine", icon: Store, label: "Magazine" },
+  { href: "/admin/comenzi", icon: ShoppingCart, label: "Comenzi" },
   { href: "/admin/facturi", icon: Receipt, label: "Facturi" },
   { href: "/admin/suport", icon: LifeBuoy, label: "Suport" },
   { href: "/admin/statistici", icon: BarChart2, label: "Statistici" },
+  { href: "/admin/activitate", icon: History, label: "Activitate" },
+  { href: "/admin/setari", icon: Settings2, label: "Setari platforma" },
 ];
 
 function SidebarContent({ adminName, adminEmail, onClose }: { adminName: string; adminEmail: string; onClose?: () => void }) {

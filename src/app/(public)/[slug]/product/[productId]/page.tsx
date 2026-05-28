@@ -48,8 +48,8 @@ export default async function ProductDetailPage({ params }: Props) {
 
   if (!businessRaw || !product || product.business_id !== businessRaw.id || !product.is_active) notFound();
 
-  const rawSettings = (businessRaw as unknown as { store_settings: unknown[] }).store_settings;
-  const storeSettings = Array.isArray(rawSettings) ? (rawSettings[0] ?? null) : null;
+  const rawSettings = (businessRaw as unknown as { store_settings: unknown }).store_settings;
+  const storeSettings = Array.isArray(rawSettings) ? (rawSettings[0] ?? null) : (rawSettings ?? null);
 
   // business without the nested store_settings key (ProductPage doesn't expect it)
   const { store_settings: _ignored, ...business } = businessRaw as typeof businessRaw & { store_settings: unknown };

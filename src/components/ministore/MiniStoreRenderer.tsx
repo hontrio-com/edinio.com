@@ -1367,128 +1367,113 @@ function StoreContent({ business, products, storeSettings }: Props) {
         )}
       </main>
 
-      {/* Dark Footer */}
-      <footer className="bg-[#111] text-white">
-        <div className="max-w-6xl mx-auto px-4 pt-12 pb-6">
-          {/* Top: logo + social */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-8 border-b border-white/10">
-            <div className="flex items-center gap-3">
+      {/* Footer */}
+      <footer className="bg-[#0A0A0A] text-white">
+        <div className="max-w-6xl mx-auto px-5 pt-10 pb-6 sm:pt-12">
+          {/* Top row: brand + social */}
+          <div className="flex items-center justify-between gap-4 pb-8">
+            <div className="flex items-center gap-3 min-w-0">
               {business.logo_url ? (
                 <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-                  className="w-10 h-10 rounded-xl object-cover border border-white/10" />
+                  className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0" />
               ) : (
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm"
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
                   style={{ backgroundColor: color }}>
                   {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
                 </div>
               )}
-              <div>
-                <p className="font-bold text-white">{business.store_name ?? business.business_name}</p>
-                {business.city && <p className="text-xs text-white/50">{business.city}</p>}
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-white truncate">{business.store_name ?? business.business_name}</p>
+                {business.city && <p className="text-[11px] text-white/40">{business.city}</p>}
               </div>
             </div>
-
-            {/* Social */}
             {(social.instagram || social.facebook || social.tiktok || social.website) && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {social.instagram && (
                   <a href={social.instagram} target="_blank" rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
                     </svg>
                   </a>
                 )}
                 {social.facebook && (
                   <a href={social.facebook} target="_blank" rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
                     </svg>
                   </a>
                 )}
                 {social.tiktok && (
                   <a href={social.tiktok} target="_blank" rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
                     </svg>
                   </a>
                 )}
                 {social.website && (
                   <a href={social.website} target="_blank" rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                    <Globe className="h-4 w-4" />
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <Globe className="h-3.5 w-3.5" />
                   </a>
                 )}
               </div>
             )}
           </div>
 
-          {/* Policy links */}
-          <div className="py-8 border-b border-white/10">
-            <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-4">Informatii legale</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2.5">
-              {POLICY_LINKS.map(({ slug: pSlug, label }) => (
-                <a
-                  key={pSlug}
-                  href={`/${business.slug}/politici/${pSlug}`}
-                  className="text-sm text-white/60 hover:text-white transition-colors leading-snug"
-                >
-                  {label}
+          {/* Divider */}
+          <div className="h-px bg-white/[0.06]" />
+
+          {/* Middle: policies + consumer protection side by side on desktop, stacked on mobile */}
+          <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
+            {/* Policies */}
+            <div className="flex-1">
+              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                {POLICY_LINKS.map(({ slug: pSlug, label }) => (
+                  <a key={pSlug} href={`/${business.slug}/politici/${pSlug}`}
+                    className="text-[13px] text-white/50 hover:text-white transition-colors">
+                    {label}
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* SAL / SOL */}
+            <div className="shrink-0">
+              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Protectia consumatorilor</p>
+              <div className="flex items-center gap-3">
+                <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
+                  <img src="/anpc-sal.avif" alt="SAL" className="h-10 w-auto rounded-md" />
                 </a>
-              ))}
+                <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
+                  <img src="/anpc-sol.avif" alt="SOL" className="h-10 w-auto rounded-md" />
+                </a>
+              </div>
             </div>
           </div>
 
-          {/* ANPC / SAL / SOL */}
-          <div className="py-8 border-b border-white/10">
-            <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-4">Protectia consumatorilor</p>
-            <div className="flex flex-wrap items-center gap-4 mb-3">
-              <a href="https://anpc.ro" target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-xs text-white/70 hover:text-white border border-white/10">
-                ANPC - Autoritatea Nationala pentru Protectia Consumatorilor
-              </a>
-            </div>
-            <div className="flex flex-wrap gap-4">
-              <a
-                href="https://anpc.ro/ce-este-sal/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:opacity-80 transition-opacity"
-                title="SAL - Solutionarea Alternativa a Litigiilor"
-              >
-                <img src="/anpc-sal.avif" alt="SAL - Solutionarea Alternativa a Litigiilor"
-                  className="h-12 w-auto rounded-lg" />
-              </a>
-              <a
-                href="https://ec.europa.eu/consumers/odr"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:opacity-80 transition-opacity"
-                title="SOL - Platforma europeana de solutionare online a litigiilor"
-              >
-                <img src="/anpc-sol.avif" alt="SOL - Platforma europeana de solutionare a litigiilor"
-                  className="h-12 w-auto rounded-lg" />
-              </a>
-            </div>
-          </div>
+          {/* Divider */}
+          <div className="h-px bg-white/[0.06]" />
 
-          {/* Copyright */}
-          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-xs text-white/35">
-              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}. Toate drepturile rezervate.
+          {/* Bottom: copyright */}
+          <div className="pt-5 flex items-center justify-between gap-3">
+            <p className="text-[11px] text-white/25">
+              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
             </p>
-            <p className="text-xs text-white/35">
-              Creat cu{" "}
-              <span className="font-semibold" style={{ color }}>Edinio</span>
+            <p className="text-[11px] text-white/25">
+              Creat cu <span className="font-semibold" style={{ color }}>Edinio</span>
             </p>
           </div>
         </div>
       </footer>
 
       {/* Floating buttons */}
-      <div className="fixed bottom-5 right-4 z-30 flex flex-col items-center gap-3">
+      <div className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}`}>
         {showCall && (
           <a href={`tel:${business.phone}`}
             className="hover:scale-110 active:scale-95 transition-transform"

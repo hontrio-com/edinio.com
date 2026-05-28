@@ -21,10 +21,12 @@ export async function POST(req: NextRequest) {
       premiumEnabled: false,
     });
   } catch (err) {
-    console.error("[domains/lookup] resellerCall error:", err);
-    return NextResponse.json({ error: "Reseller API error", details: String(err) }, { status: 502 });
+    return NextResponse.json({ error: String(err) }, { status: 502 });
   }
 
-  console.log("[domains/lookup] response:", JSON.stringify(data).slice(0, 500));
+  if (data.error) {
+    return NextResponse.json({ error: String(data.error) }, { status: 502 });
+  }
+
   return NextResponse.json(data);
 }

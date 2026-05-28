@@ -183,6 +183,131 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
   });
 }
 
+const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.ro";
+
+export async function sendNewSupportTicketToAdmin(data: {
+  ticketId: string;
+  subject: string;
+  category: string;
+  priority: string;
+  userEmail: string;
+  businessName: string | null;
+  content: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const categoryLabel: Record<string, string> = {
+    technical: "Tehnic", billing: "Facturare", feature: "Cerere functionalitate", other: "Altele",
+  };
+  const priorityLabel: Record<string, string> = {
+    low: "Scazuta", normal: "Normala", high: "Mare", urgent: "Urgenta",
+  };
+  const priorityColor: Record<string, string> = {
+    low: "#71717a", normal: "#3b82f6", high: "#f97316", urgent: "#ef4444",
+  };
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Tichet nou de suport</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Un client a deschis un tichet nou care necesita atentia ta.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="padding:10px 14px;background:#f4f4f5;border-radius:8px 8px 0 0;border-bottom:1px solid #e4e4e7;">
+          <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;">Subiect</span>
+          <p style="margin:2px 0 0 0;font-size:15px;font-weight:600;color:#18181b;">${data.subject}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;background:#f4f4f5;border-radius:0 0 8px 8px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="width:33%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Categorie</span>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${categoryLabel[data.category] ?? data.category}</p>
+              </td>
+              <td style="width:33%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Prioritate</span>
+                <p style="margin:2px 0 0 0;font-size:13px;font-weight:600;color:${priorityColor[data.priority] ?? "#3f3f46"};">${priorityLabel[data.priority] ?? data.priority}</p>
+              </td>
+              <td style="width:33%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Client</span>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${data.userEmail}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    ${data.businessName ? `<p style="margin:0 0 16px 0;font-size:13px;color:#71717a;">Magazin: <strong>${data.businessName}</strong></p>` : ""}
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${data.content}</p>
+    </div>
+    <div style="text-align:center;">
+      <a href="${SITE_URL}/dashboard/suport/${data.ticketId}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Vezi tichetul
+      </a>
+    </div>
+  `;
+  await resend.emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: `[Suport] ${data.subject} — ${data.userEmail}`,
+    html: baseTemplate(content),
+  });
+}
+
+export async function sendSupportReplyToAdmin(data: {
+  ticketId: string;
+  subject: string;
+  userEmail: string;
+  content: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const emailContent = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Raspuns nou la tichet</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;"><strong>${data.userEmail}</strong> a raspuns la tichetul <em>${data.subject}</em>.</p>
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${data.content}</p>
+    </div>
+    <div style="text-align:center;">
+      <a href="${SITE_URL}/dashboard/suport/${data.ticketId}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Raspunde
+      </a>
+    </div>
+  `;
+  await resend.emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: `[Suport] RE: ${data.subject} — ${data.userEmail}`,
+    html: baseTemplate(emailContent),
+  });
+}
+
+export async function sendAgentReplyToUser(data: {
+  to: string;
+  ticketId: string;
+  subject: string;
+  content: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const ticketUrl = `${SITE_URL}/dashboard/suport/${data.ticketId}`;
+  const emailContent = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Raspuns la tichetul tau</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Echipa Edinio a raspuns la tichetul tau: <strong>${data.subject}</strong>.</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#15803d;white-space:pre-wrap;">${data.content}</p>
+    </div>
+    <div style="text-align:center;">
+      <a href="${ticketUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Raspunde sau vezi conversatia
+      </a>
+    </div>
+  `;
+  await resend.emails.send({
+    from: FROM,
+    to: data.to,
+    subject: `Raspuns la tichetul tau: ${data.subject}`,
+    html: baseTemplate(emailContent),
+  });
+}
+
 export async function sendNewOrderEmail(
   to: string,
   order: {

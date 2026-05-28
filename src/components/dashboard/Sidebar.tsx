@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ChevronDown, Plus, Zap, Ticket, Tag, MessageSquare,
+  Package, ShoppingCart, ChevronDown, Plus, Zap, Ticket, Tag, MessageSquare, LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
@@ -42,11 +42,12 @@ function NavItem({ href, icon: Icon, label, active }: {
   );
 }
 
-export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled }: {
+export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled, unreadSupportCount = 0 }: {
   businesses: Business[];
   currentBusiness: Business | null;
   plan: string;
   smsoEnabled?: boolean;
+  unreadSupportCount?: number;
 }) {
   const pathname = usePathname();
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -171,6 +172,23 @@ export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled }: {
           </Link>
         </div>
       )}
+
+      {/* Support */}
+      <div className="px-3 pb-1">
+        <div className="relative">
+          <NavItem
+            href="/dashboard/suport"
+            icon={LifeBuoy}
+            label="Suport"
+            active={pathname.startsWith("/dashboard/suport")}
+          />
+          {unreadSupportCount > 0 && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-white text-[10px] font-bold rounded-full px-1 pointer-events-none">
+              {unreadSupportCount}
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Settings */}
       <div className="px-3 pb-3">

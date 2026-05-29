@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
-  Search, Globe, Check, X, Loader2, Copy,
+  Globe, Loader2, Copy,
   AlertCircle, ShoppingCart, ExternalLink, Clock,
   CheckCircle2, XCircle,
 } from "lucide-react";
@@ -30,12 +30,6 @@ type DomainOrder = {
   total_price: number;
   status: string;
   created_at: string;
-};
-
-type LookupResult = {
-  domain: string;
-  status: "available" | "unavailable" | "unknown";
-  price?: number; // lei/an, period 1
 };
 
 type ContactForm = {
@@ -77,59 +71,13 @@ function splitName(fullName: string): [string, string] {
   return [parts[0], parts.slice(1).join(" ")];
 }
 
-// Parse TLD pricing response — handles various Reseller.ro response shapes
-function parseTldPricing(data: unknown): Record<string, number> {
-  const pricing: Record<string, number> = {};
-  if (!data || typeof data !== "object") return pricing;
-
-  const root = data as Record<string, unknown>;
-  const p = root.pricing ?? root.tlds ?? root;
-  if (!p || typeof p !== "object") return pricing;
-
-  for (const [tld, val] of Object.entries(p as Record<string, unknown>)) {
-    if (!val || typeof val !== "object") continue;
-    const v = val as Record<string, unknown>;
-    const regPrices =
-      (v.register as Record<string, number> | undefined) ??
-      (v.registration as Record<string, number> | undefined);
-    const price = regPrices?.["1"] ?? (v.register_price as number | undefined);
-    if (price) pricing[tld.startsWith(".") ? tld : `.${tld}`] = Number(price);
-  }
-  return pricing;
-}
-
-// Parse lookup response
-function parseLookupResults(
-  data: unknown,
-  tldPricing: Record<string, number>
-): LookupResult[] {
-  let raw: unknown[] = [];
-  if (Array.isArray(data)) {
-    raw = data;
-  } else if (data && typeof data === "object") {
-    const root = data as Record<string, unknown>;
-    if (Array.isArray(root.domains)) raw = root.domains;
-    else if (root.domains && typeof root.domains === "object") {
-      const inner = (root.domains as Record<string, unknown>).domain;
-      if (Array.isArray(inner)) raw = inner;
-    }
-  }
-
-  return raw.map((item) => {
-    const d = item as Record<string, unknown>;
-    const domain = String(d.domainName ?? d.domain ?? "");
-    const available = d.isAvailable === true ||
-      String(d.legacyStatus ?? "").toLowerCase() === "available";
-    const tld = "." + domain.split(".").slice(1).join(".");
-    const price = tldPricing[tld];
-
-    return {
-      domain,
-      status: available ? "available" : "unavailable",
-      price: price ? Number(price) : undefined,
-    } as LookupResult;
-  });
-}
+// Hardcoded TLD pricing (lei/an) — updated manually from reseller panel
+const TLD_OPTIONS = [
+  { tld: ".ro",  price: 25,  label: ".ro" },
+  { tld: ".com", price: 55,  label: ".com" },
+  { tld: ".net", price: 60,  label: ".net" },
+  { tld: ".org", price: 60,  label: ".org" },
+];
 
 const ORDER_STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; color: string }> = {
   pending:    { label: "In asteptare",  icon: Clock,        color: "bg-amber-50 text-amber-700 border-amber-200" },
@@ -154,12 +102,9 @@ export function DomainSection({
 }: Props) {
   const [tab, setTab] = useState<"buy" | "connect">("buy");
 
-  // Search state
-  const [searchInput, setSearchInput] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<LookupResult[]>([]);
-  const [tldPricing, setTldPricing] = useState<Record<string, number>>({});
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Domain name input
+  const [domainName, setDomainName] = useState("");
+  const [selectedTld, setSelectedTld] = useState<typeof TLD_OPTIONS[number] | null>(null);
 
   // Domains list
   const [domains, setDomains] = useState<DomainRow[]>([]);
@@ -172,7 +117,6 @@ export function DomainSection({
   const [customDomain, setCustomDomain] = useState<string | null>(initialCustomDomain);
 
   // Buy modal
-  const [buyTarget, setBuyTarget] = useState<LookupResult | null>(null);
   const [buyPeriod, setBuyPeriod] = useState(1);
   const [buying, setBuying] = useState(false);
   const [contact, setContact] = useState<ContactForm>(() => {
@@ -201,7 +145,6 @@ export function DomainSection({
 
     const supabase = createClient();
 
-    // Fetch purchased domains
     supabase
       .from("domains")
       .select("*")
@@ -212,7 +155,6 @@ export function DomainSection({
         setLoadingDomains(false);
       });
 
-    // Fetch domain orders
     supabase
       .from("domain_orders")
       .select("id, domain, tld, period, total_price, status, created_at")
@@ -222,7 +164,6 @@ export function DomainSection({
         setOrders(data ?? []);
       });
 
-    // Fetch currently connected domain
     supabase
       .from("businesses")
       .select("custom_domain")
@@ -231,58 +172,23 @@ export function DomainSection({
       .then(({ data }) => {
         if (data?.custom_domain) setCustomDomain(data.custom_domain);
       });
-
-    fetch("/api/domains/pricing")
-      .then((r) => r.json())
-      .then((data: unknown) => setTldPricing(parseTldPricing(data)))
-      .catch(() => {});
   }, [businessId]);
 
-  // ── Domain search ─────────────────────────────────────────────────────────────
+  // ── Cleaned domain name ────────────────────────────────────────────────────
 
-  function handleSearchInput(value: string) {
-    setSearchInput(value);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
+  const cleanName = domainName
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/\.[a-z]+$/, "");
 
-    const clean = value
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/\.[a-z]+$/, "");
-
-    if (clean.length < 2) { setResults([]); return; }
-
-    searchTimer.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await fetch("/api/domains/lookup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ searchTerm: clean }),
-        });
-        const data = await res.json() as unknown;
-        if (!res.ok) {
-          const msg = (data as Record<string, unknown>).error as string | undefined;
-          const details = (data as Record<string, unknown>).details as string | undefined;
-          console.error("[lookup]", msg, details);
-          toast.error(msg ?? "Eroare la verificarea disponibilitatii.");
-          return;
-        }
-        setResults(parseLookupResults(data, tldPricing));
-      } catch (err) {
-        console.error("[lookup] fetch error:", err);
-        toast.error("Eroare la verificarea disponibilitatii.");
-      } finally {
-        setSearching(false);
-      }
-    }, 700);
-  }
+  const isValidName = cleanName.length >= 2;
 
   // ── Buy flow ──────────────────────────────────────────────────────────────────
 
   async function handleBuy() {
-    if (!buyTarget || !businessId) return;
+    if (!selectedTld || !businessId || !isValidName) return;
 
     const required: (keyof ContactForm)[] = [
       "firstname", "lastname", "email", "phonenumber",
@@ -295,28 +201,31 @@ export function DomainSection({
       }
     }
 
+    const fullDomain = `${cleanName}${selectedTld.tld}`;
+
     setBuying(true);
     try {
       const res = await fetch("/api/domains/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          domain:       buyTarget.domain,
+          domain:       fullDomain,
           regperiod:    buyPeriod,
           businessId,
-          pricePerYear: buyTarget.price ?? 0,
+          pricePerYear: selectedTld.price,
           contact:      { ...contact, country: "RO" },
         }),
       });
-      const data = await res.json() as { success?: boolean; error?: string; orderId?: string };
+      const data = await res.json() as { success?: boolean; error?: string };
 
       if (!data.success) {
         toast.error(data.error ?? "Comanda nu a putut fi plasata.");
         return;
       }
 
-      toast.success(`Comanda pentru ${buyTarget.domain} a fost plasata! Vei fi notificat cand domeniul este activ.`);
-      setBuyTarget(null);
+      toast.success(`Comanda pentru ${fullDomain} a fost plasata! Vei fi notificat cand domeniul este activ.`);
+      setSelectedTld(null);
+      setDomainName("");
 
       // Refresh orders list
       const supabase = createClient();
@@ -358,7 +267,6 @@ export function DomainSection({
     navigator.clipboard.writeText(text).then(() => toast.success("Copiat!")).catch(() => {});
   }
 
-  // Active (non-terminal) orders
   const activeOrders = orders.filter((o) => o.status === "pending" || o.status === "processing");
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -417,81 +325,61 @@ export function DomainSection({
       {/* ── Tab: Cumpara ── */}
       {tab === "buy" && (
         <div className="space-y-4">
-          {/* Search bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          {/* Domain name input */}
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Numele domeniului dorit
+            </label>
             <input
               type="text"
-              value={searchInput}
-              onChange={(e) => handleSearchInput(e.target.value)}
-              placeholder="Cauta un domeniu (ex: magazinul-tau)"
-              className={cn(inputCls, "pl-10 pr-10")}
+              value={domainName}
+              onChange={(e) => setDomainName(e.target.value)}
+              placeholder="ex: magazinul-meu"
+              className={inputCls}
               disabled={!businessId}
             />
-            {searching && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            {domainName && !isValidName && (
+              <p className="text-xs text-destructive mt-1">Minim 2 caractere (litere, cifre, cratima).</p>
             )}
           </div>
 
-          {/* Search results */}
-          {results.length > 0 && (
+          {/* TLD options */}
+          {isValidName && (
             <div className="space-y-2">
-              {results.map((r) => (
-                <div
-                  key={r.domain}
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-xl border transition-colors",
-                    r.status === "available"
-                      ? "bg-surface border-border"
-                      : "bg-muted/40 border-border opacity-55"
-                  )}
-                >
-                  <div
+              <p className="text-xs font-medium text-muted-foreground">Alege extensia</p>
+              <div className="grid grid-cols-2 gap-2">
+                {TLD_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.tld}
+                    type="button"
+                    onClick={() => { setSelectedTld(opt); setBuyPeriod(1); }}
                     className={cn(
-                      "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0",
-                      r.status === "available" ? "bg-primary/10" : "bg-muted"
+                      "flex items-center justify-between p-4 rounded-xl border transition-all text-left",
+                      "hover:border-primary/40"
                     )}
                   >
-                    {r.status === "available" ? (
-                      <Check className="h-3 w-3 text-primary" />
-                    ) : (
-                      <X className="h-3 w-3 text-muted-foreground" />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground font-mono">
-                      {r.domain}
-                    </p>
-                    <p
-                      className={cn(
-                        "text-xs",
-                        r.status === "available" ? "text-primary" : "text-muted-foreground"
-                      )}
-                    >
-                      {r.status === "available" ? "Disponibil" : "Indisponibil"}
-                    </p>
-                  </div>
-
-                  {r.status === "available" && (
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      {r.price && (
-                        <span className="text-sm font-semibold text-foreground">
-                          {r.price} lei<span className="text-xs font-normal text-muted-foreground">/an</span>
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => { setBuyTarget(r); setBuyPeriod(1); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors"
-                      >
-                        <ShoppingCart className="h-3 w-3" />
-                        Comanda
-                      </button>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground font-mono">
+                        {cleanName}{opt.tld}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Extensie {opt.label}
+                      </p>
                     </div>
-                  )}
-                </div>
-              ))}
+                    <div className="text-right flex-shrink-0 ml-3">
+                      <p className="text-sm font-bold text-foreground">{opt.price} lei</p>
+                      <p className="text-[10px] text-muted-foreground">/an</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5">
+                <Clock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  Disponibilitatea domeniului va fi verificata dupa plasarea comenzii.
+                  Daca domeniul nu este disponibil, vei fi contactat si nu vei fi taxat.
+                </p>
+              </div>
             </div>
           )}
 
@@ -606,14 +494,14 @@ export function DomainSection({
           )}
 
           {/* Empty state */}
-          {!loadingDomains && domains.length === 0 && !results.length && activeOrders.length === 0 && (
+          {!loadingDomains && domains.length === 0 && activeOrders.length === 0 && !isValidName && (
             <div className="text-center py-10">
               <Globe className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground mb-1">
                 Nu ai niciun domeniu
               </p>
               <p className="text-xs text-muted-foreground">
-                Cauta un domeniu mai sus pentru a-l comanda direct din Edinio.
+                Introdu numele domeniului dorit mai sus pentru a plasa o comanda.
               </p>
             </div>
           )}
@@ -665,7 +553,6 @@ export function DomainSection({
               </div>
 
               <div className="px-5 py-4 space-y-2">
-                {/* Table header */}
                 <div className="grid grid-cols-[64px_64px_1fr_32px] gap-2 px-3 mb-1">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Tip</span>
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Nume</span>
@@ -719,13 +606,13 @@ export function DomainSection({
       )}
 
       {/* ── Buy modal ── */}
-      {buyTarget && (
+      {selectedTld && isValidName && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm">
           <div className="w-full sm:max-w-lg bg-background border border-border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95dvh]">
             {/* Header */}
             <div className="px-6 py-5 border-b border-border flex-shrink-0">
-              <p className="text-base font-semibold text-foreground">
-                Comanda {buyTarget.domain}
+              <p className="text-base font-semibold text-foreground font-mono">
+                {cleanName}{selectedTld.tld}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Completeaza datele titularului. Domeniul va fi activat in max. 24h.
@@ -738,8 +625,8 @@ export function DomainSection({
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5">
                 <Clock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 leading-relaxed">
-                  Dupa plasarea comenzii, domeniul va fi inregistrat si conectat automat
-                  la magazinul tau in maximum 24 de ore. Vei primi o notificare cand este activ.
+                  Dupa plasarea comenzii, verificam disponibilitatea si inregistram domeniul
+                  in maximum 24 de ore. Daca nu este disponibil, te contactam si nu vei fi taxat.
                 </p>
               </div>
 
@@ -762,11 +649,9 @@ export function DomainSection({
                       )}
                     >
                       {p} {p === 1 ? "an" : "ani"}
-                      {buyTarget.price && (
-                        <span className="block text-[11px] font-normal opacity-80 mt-0.5">
-                          {buyTarget.price * p} lei
-                        </span>
-                      )}
+                      <span className="block text-[11px] font-normal opacity-80 mt-0.5">
+                        {selectedTld.price * p} lei
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -897,18 +782,16 @@ export function DomainSection({
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-border flex items-center gap-3 bg-muted/20 flex-shrink-0">
-              {buyTarget.price && (
-                <div className="flex-shrink-0">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</p>
-                  <p className="text-base font-bold text-foreground">
-                    {buyTarget.price * buyPeriod} lei
-                  </p>
-                </div>
-              )}
+              <div className="flex-shrink-0">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</p>
+                <p className="text-base font-bold text-foreground">
+                  {selectedTld.price * buyPeriod} lei
+                </p>
+              </div>
               <div className="flex gap-2 ml-auto">
                 <button
                   type="button"
-                  onClick={() => setBuyTarget(null)}
+                  onClick={() => setSelectedTld(null)}
                   disabled={buying}
                   className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
                 >
@@ -923,7 +806,7 @@ export function DomainSection({
                   {buying && <Loader2 className="h-4 w-4 animate-spin" />}
                   {buying
                     ? "Se plaseaza..."
-                    : `Plaseaza comanda${buyTarget.price ? ` — ${buyTarget.price * buyPeriod} lei` : ""}`}
+                    : `Plaseaza comanda — ${selectedTld.price * buyPeriod} lei`}
                 </button>
               </div>
             </div>

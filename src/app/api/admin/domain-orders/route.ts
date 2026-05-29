@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { addDomainToVercel } from "@/lib/vercel";
 
 export async function PATCH(req: NextRequest) {
   const admin = await requireAdminApi();
@@ -68,6 +69,9 @@ export async function PATCH(req: NextRequest) {
       .from("businesses")
       .update({ custom_domain: order.domain })
       .eq("id", order.business_id);
+
+    // Add domain to Vercel project for SSL + routing
+    await addDomainToVercel(order.domain);
   }
 
   return NextResponse.json({ success: true });

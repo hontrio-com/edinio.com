@@ -277,17 +277,47 @@ export function DomainSection({
     if (!externalInput.trim() || !businessId) return;
     setSavingExternal(true);
 
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("businesses")
-      .update({ custom_domain: externalInput.trim() })
-      .eq("id", businessId);
+    try {
+      const res = await fetch("/api/domains/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: externalInput.trim(), businessId }),
+      });
+      const data = await res.json() as { success?: boolean; domain?: string; error?: string };
 
-    if (error) {
-      toast.error("Nu am putut salva domeniul.");
-    } else {
-      setCustomDomain(externalInput.trim());
-      toast.success("Domeniu salvat. Configureaza DNS-ul conform instructiunilor.");
+      if (!res.ok || !data.success) {
+        toast.error(data.error ?? "Nu am putut conecta domeniul.");
+      } else {
+        setCustomDomain(data.domain ?? externalInput.trim());
+        setExternalInput("");
+        toast.success("Domeniu conectat cu succes. Configureaza DNS-ul conform instructiunilor.");
+      }
+    } catch {
+      toast.error("Eroare de retea. Incearca din nou.");
+    }
+    setSavingExternal(false);
+  }
+
+  async function handleDisconnectDomain() {
+    if (!businessId || !customDomain) return;
+    setSavingExternal(true);
+
+    try {
+      const res = await fetch("/api/domains/connect", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId }),
+      });
+      const data = await res.json() as { success?: boolean; error?: string };
+
+      if (!res.ok || !data.success) {
+        toast.error(data.error ?? "Nu am putut deconecta domeniul.");
+      } else {
+        setCustomDomain(null);
+        toast.success("Domeniu deconectat.");
+      }
+    } catch {
+      toast.error("Eroare de retea.");
     }
     setSavingExternal(false);
   }
@@ -329,6 +359,15 @@ export function DomainSection({
           >
             <ExternalLink className="h-4 w-4 text-muted-foreground" />
           </a>
+          <button
+            type="button"
+            onClick={handleDisconnectDomain}
+            disabled={savingExternal}
+            className="flex-shrink-0 hover:text-destructive transition-colors"
+            title="Deconecteaza domeniul"
+          >
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       )}
 

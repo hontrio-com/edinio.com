@@ -14,7 +14,7 @@ const NAV_LINKS = [
 ];
 
 const ANNOUNCEMENT =
-  "Mentenanta gratuita pe viata la orice abonament — fara costuri ascunse, fara surprize";
+  "Mentenanta gratuita pe viata la orice abonament. Fara costuri ascunse, fara surprize.";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -43,12 +43,12 @@ export function Navbar() {
   return (
     <>
       {/* ── Announcement bar ── */}
-      <div className="relative bg-foreground text-background overflow-hidden">
+      <div className="relative bg-primary text-white overflow-hidden">
         <div className="flex items-center h-9">
           <div className="flex animate-marquee whitespace-nowrap">
             {Array.from({ length: 6 }).map((_, i) => (
               <span key={i} className="inline-flex items-center gap-2 mx-8 text-xs font-medium tracking-wide uppercase">
-                <Sparkles className="h-3 w-3 opacity-60" />
+                <Sparkles className="h-3 w-3 opacity-70" />
                 {ANNOUNCEMENT}
               </span>
             ))}
@@ -59,10 +59,10 @@ export function Navbar() {
       {/* ── Main navbar ── */}
       <header
         className={cn(
-          "sticky top-0 z-50 transition-all duration-300",
+          "sticky top-0 z-50 transition-all duration-300 border-b",
           scrolled
-            ? "glass-nav shadow-lg shadow-black/[0.03]"
-            : "bg-background/50 backdrop-blur-sm"
+            ? "glass-nav shadow-lg shadow-black/[0.03] border-border"
+            : "bg-background border-border"
         )}
       >
         <nav className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">

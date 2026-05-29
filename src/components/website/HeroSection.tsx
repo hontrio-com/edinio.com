@@ -1,63 +1,49 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden bg-background">
+    <section className="relative overflow-hidden bg-muted/30">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-16 lg:pt-24 lg:pb-24">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
           {/* ── Left: Text ── */}
           <div>
             {/* Badge */}
-            <div className="inline-flex items-center gap-2.5 mb-8">
-              <span className="px-2.5 py-1 rounded-md bg-primary text-white text-xs font-bold tracking-wide">
-                NOU
-              </span>
-              <span className="text-sm text-muted-foreground">
-                Platforma lansata!
+            <div className="inline-flex items-center gap-2 mb-8 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-sm font-semibold text-primary">
+                Platforma lansata oficial
               </span>
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold text-foreground tracking-tight leading-[1.12] mb-6">
-              Creeaza-ti{" "}
-              <span className="text-primary">magazinul online</span> care
-              livreaza rezultate reale
+            <h1 className="text-3xl sm:text-5xl lg:text-[3.25rem] font-bold text-foreground tracking-tight leading-[1.12] mb-6">
+              Creeaza-ti propriul{" "}
+              <span className="text-primary">magazin online</span> in cateva
+              minute, fara investitii de mii de euro
             </h1>
 
             {/* Subtitle */}
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-lg mb-10">
-              Afacerile locale pot construi si gestiona un magazin online complet
-              intr-o singura platforma vizuala.
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl mb-10">
+              Tot ce ai nevoie pentru a incepe sa vinzi online: magazin online,
+              plati, facturi, AWB-uri, suport si mentenanta gratuita permanenta.
             </p>
 
-            {/* CTA + Social proof */}
-            <div className="flex flex-wrap items-center gap-6">
+            {/* CTAs */}
+            <div className="flex items-center gap-3">
               <Link
                 href="/register"
-                className="inline-flex items-center justify-center h-11 px-7 rounded-lg bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 transition-colors"
+                className="inline-flex items-center justify-center h-11 px-7 rounded-full bg-primary text-white text-sm font-semibold shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/30 hover:bg-primary/90 transition-all duration-200"
               >
                 Incepe gratuit
               </Link>
-
-              <div className="flex items-center gap-3">
-                <div className="flex -space-x-2">
-                  {[
-                    "bg-rose-200 text-rose-700",
-                    "bg-sky-200 text-sky-700",
-                    "bg-amber-200 text-amber-700",
-                  ].map((cls, i) => (
-                    <div
-                      key={i}
-                      className={`w-8 h-8 rounded-full border-2 border-background flex items-center justify-center text-xs font-bold ${cls}`}
-                    >
-                      {["M", "A", "E"][i]}
-                    </div>
-                  ))}
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  <strong className="text-primary">500+</strong> afaceri locale
-                </span>
-              </div>
+              <Link
+                href="/#functionalitati"
+                className="inline-flex items-center justify-center gap-1.5 h-11 px-6 rounded-full border border-border text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+              >
+                Vezi toate functiile
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
 
@@ -77,7 +63,7 @@ export function HeroSection() {
       </div>
 
       {/* ── Logo marquee ── */}
-      <div className="border-t border-border py-8">
+      <div className="border-t border-border bg-background py-8">
         <p className="text-center text-sm text-muted-foreground mb-6">
           Folosit de{" "}
           <span className="text-primary font-semibold">150+</span> afaceri

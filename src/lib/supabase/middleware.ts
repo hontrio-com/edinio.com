@@ -23,6 +23,18 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
 
+  // Helper: create a redirect that preserves Supabase auth cookies
+  function redirectTo(dest: string) {
+    const url = request.nextUrl.clone();
+    url.pathname = dest;
+    const res = NextResponse.redirect(url);
+    // Copy refreshed auth cookies so the next request has valid tokens
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      res.cookies.set(cookie.name, cookie.value, cookie as any);
+    });
+    return res;
+  }
+
   const isDashboard = pathname.startsWith("/dashboard");
   const isOnboarding = pathname.startsWith("/onboarding");
   const isAuth =
@@ -36,7 +48,11 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     if (isDashboard) url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      res.cookies.set(cookie.name, cookie.value, cookie as any);
+    });
+    return res;
   }
 
   const mfaPending = request.cookies.get("mfa_pending")?.value === "1";
@@ -46,16 +62,12 @@ export async function updateSession(request: NextRequest) {
     if (mfaPending && pathname.startsWith("/login/mfa")) {
       return supabaseResponse; // let through to complete MFA
     }
-    const url = request.nextUrl.clone();
-    url.pathname = mfaPending ? "/login/mfa" : "/dashboard";
-    return NextResponse.redirect(url);
+    return redirectTo(mfaPending ? "/login/mfa" : "/dashboard");
   }
 
   // Authenticated on dashboard but MFA not yet verified → redirect to /login/mfa
   if (user && isDashboard && mfaPending) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login/mfa";
-    return NextResponse.redirect(url);
+    return redirectTo("/login/mfa");
   }
 
   // Cookie flag: skip DB queries if onboarding already confirmed
@@ -64,9 +76,7 @@ export async function updateSession(request: NextRequest) {
   // Authenticated on onboarding → redirect to dashboard if already completed
   if (user && isOnboarding) {
     if (onboardingDone) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
+      return redirectTo("/dashboard");
     }
     const { data: profile } = await supabase
       .from("users_profile")
@@ -74,9 +84,7 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .single();
     if (profile?.onboarding_completed) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      const res = NextResponse.redirect(url);
+      const res = redirectTo("/dashboard");
       res.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
       return res;
     }
@@ -97,9 +105,7 @@ export async function updateSession(request: NextRequest) {
         supabase.from("users_profile").update({ onboarding_completed: true }).eq("id", user.id).then(() => {});
         supabaseResponse.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
       } else {
-        const url = request.nextUrl.clone();
-        url.pathname = "/onboarding/details";
-        return NextResponse.redirect(url);
+        return redirectTo("/onboarding/details");
       }
     } else if (profile?.onboarding_completed) {
       // Set cookie so we skip this check on future requests

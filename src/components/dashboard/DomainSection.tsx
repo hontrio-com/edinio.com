@@ -73,10 +73,8 @@ function splitName(fullName: string): [string, string] {
 
 // Hardcoded TLD pricing (lei/an) — updated manually from reseller panel
 const TLD_OPTIONS = [
-  { tld: ".ro",  price: 25,  label: ".ro" },
-  { tld: ".com", price: 55,  label: ".com" },
-  { tld: ".net", price: 60,  label: ".net" },
-  { tld: ".org", price: 60,  label: ".org" },
+  { tld: ".ro",  price: 60, label: ".ro" },
+  { tld: ".com", price: 99, label: ".com" },
 ];
 
 const ORDER_STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; color: string }> = {

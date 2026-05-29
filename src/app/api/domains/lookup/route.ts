@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import net from "net";
 
-const TLDS = [".ro", ".com", ".net", ".org"];
+const TLDS = [".ro", ".com"];
 
 const WHOIS_SERVERS: Record<string, string> = {
   ".ro":  "whois.rotld.ro",

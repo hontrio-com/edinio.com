@@ -113,6 +113,7 @@ interface BusinessData {
   phone: string | null;
   email: string | null;
   cui: string | null;
+  custom_domain: string | null;
 }
 
 interface PolicyEntry {
@@ -1235,7 +1236,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               county={businessData?.county ?? null}
               profileFullName={profile.full_name}
               email={email}
-              initialCustomDomain={null}
+              initialCustomDomain={businessData?.custom_domain ?? null}
             />
           )}
 

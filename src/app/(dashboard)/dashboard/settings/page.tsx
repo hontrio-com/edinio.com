@@ -17,7 +17,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, address, city, county, phone, email, cui")
+      .select("id, business_name, address, city, county, phone, email, cui, custom_domain")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)

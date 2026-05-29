@@ -71,7 +71,11 @@ export async function PATCH(req: NextRequest) {
       .eq("id", order.business_id);
 
     // Add domain to Vercel project for SSL + routing
-    await addDomainToVercel(order.domain);
+    const vercelResult = await addDomainToVercel(order.domain);
+    if (!vercelResult.success) {
+      console.error("[domain-orders] Vercel add failed:", vercelResult.error);
+      // Don't fail the whole request — domain is saved in DB, admin can retry
+    }
   }
 
   return NextResponse.json({ success: true });

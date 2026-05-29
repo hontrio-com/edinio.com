@@ -81,14 +81,16 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Niciun domeniu de deconectat" }, { status: 404 });
   }
 
-  // Remove from Vercel
-  await removeDomainFromVercel(biz.custom_domain);
+  const domainToRemove = biz.custom_domain;
 
-  // Clear from DB
+  // Clear from DB first (safe side — if Vercel fails, DB is clean)
   await supabase
     .from("businesses")
     .update({ custom_domain: null })
     .eq("id", businessId);
+
+  // Then remove from Vercel
+  await removeDomainFromVercel(domainToRemove);
 
   return NextResponse.json({ success: true });
 }

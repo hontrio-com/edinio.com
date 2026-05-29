@@ -40,44 +40,51 @@ export async function POST(req: NextRequest) {
     if (session.metadata?.type === "domain_order") {
       const { user_id, business_id, domain, tld, period, price_per_year, total_price, contact } = session.metadata;
 
-      if (!user_id || !business_id || !domain) {
-        console.error("[webhook] domain_order: missing metadata");
+      if (!user_id || !business_id || !domain || !tld || !period || !total_price) {
+        console.error("[webhook] domain_order: incomplete metadata", session.metadata);
         return NextResponse.json({ received: true });
       }
 
       let contactInfo = {};
       try { contactInfo = JSON.parse(contact ?? "{}"); } catch { /* ignore */ }
 
-      const { error: orderError } = await admin.from("domain_orders").insert({
+      const { data: createdOrder, error: orderError } = await admin.from("domain_orders").insert({
         user_id,
         business_id,
         domain,
-        tld: tld ?? "",
+        tld,
         period: Number(period) || 1,
         price_per_year: Number(price_per_year) || 0,
         total_price: Number(total_price) || 0,
         status: "pending",
         contact_info: contactInfo,
-      });
+      }).select("id").single();
 
       if (orderError) {
         console.error("[webhook] domain_order insert failed:", orderError);
       } else {
-        console.log("[webhook] domain_order created:", domain);
+        console.log("[webhook] domain_order created:", domain, createdOrder?.id);
+
+        // Fetch business name for admin email
+        const { data: bizData } = await admin
+          .from("businesses")
+          .select("business_name")
+          .eq("id", business_id)
+          .single();
 
         // Send admin notification
         const { sendDomainOrderToAdmin } = await import("@/lib/email");
         const ci = contactInfo as Record<string, string>;
         sendDomainOrderToAdmin({
-          orderId: domain,
+          orderId: createdOrder?.id ?? domain,
           domain,
-          tld: tld ?? "",
+          tld,
           period: Number(period) || 1,
           totalPrice: Number(total_price) || 0,
           customerName: `${ci.firstname ?? ""} ${ci.lastname ?? ""}`.trim(),
           customerEmail: ci.email ?? session.customer_email ?? "",
-          businessName: business_id,
-        }).catch(() => {});
+          businessName: bizData?.business_name ?? "N/A",
+        }).catch((err) => console.error("[webhook] domain admin email failed:", err));
       }
 
       return NextResponse.json({ received: true });

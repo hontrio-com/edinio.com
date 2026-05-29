@@ -1,36 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
+import net from "net";
 
 const TLDS = [".ro", ".com", ".net", ".org"];
 
-/**
- * Check domain availability via DNS-over-HTTPS (Google Public DNS).
- * If the domain has NS records → it's registered (unavailable).
- * If we get NXDOMAIN (status 3) → it doesn't exist (available).
- */
+const WHOIS_SERVERS: Record<string, string> = {
+  ".ro":  "whois.rotld.ro",
+  ".com": "whois.verisign-grs.com",
+  ".net": "whois.verisign-grs.com",
+  ".org": "whois.pir.org",
+};
+
+// Patterns that indicate a domain is NOT registered
+const AVAILABLE_PATTERNS: Record<string, string[]> = {
+  ".ro":  ["No entries found"],
+  ".com": ["No match for"],
+  ".net": ["No match for"],
+  ".org": ["NOT FOUND"],
+};
+
+function whoisLookup(domain: string, server: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let data = "";
+
+    socket.setTimeout(8000);
+    socket.connect(43, server, () => {
+      socket.write(`${domain}\r\n`);
+    });
+
+    socket.on("data", (chunk) => {
+      data += chunk.toString();
+    });
+
+    socket.on("end", () => {
+      resolve(data);
+    });
+
+    socket.on("timeout", () => {
+      socket.destroy();
+      reject(new Error("WHOIS timeout"));
+    });
+
+    socket.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
+
 async function checkAvailability(
   name: string,
   tld: string
 ): Promise<{ domain: string; tld: string; available: boolean | null }> {
   const fqdn = `${name}${tld}`;
+  const server = WHOIS_SERVERS[tld];
+  const patterns = AVAILABLE_PATTERNS[tld];
+
+  if (!server || !patterns) {
+    return { domain: fqdn, tld, available: null };
+  }
 
   try {
-    const res = await fetch(
-      `https://dns.google/resolve?name=${encodeURIComponent(fqdn)}&type=NS`,
-      { signal: AbortSignal.timeout(5000) }
+    const response = await whoisLookup(fqdn, server);
+
+    // If any "not found" pattern matches, domain is available
+    const isAvailable = patterns.some((p) =>
+      response.toUpperCase().includes(p.toUpperCase())
     );
 
-    if (!res.ok) return { domain: fqdn, tld, available: null };
-
-    const data = (await res.json()) as { Status: number; Answer?: unknown[] };
-
-    // Status 3 = NXDOMAIN → domain does not exist → available
-    if (data.Status === 3) return { domain: fqdn, tld, available: true };
-
-    // Status 0 = NOERROR → domain exists (has DNS records) → unavailable
-    if (data.Status === 0) return { domain: fqdn, tld, available: false };
-
-    return { domain: fqdn, tld, available: null };
+    return { domain: fqdn, tld, available: isAvailable };
   } catch {
     return { domain: fqdn, tld, available: null };
   }

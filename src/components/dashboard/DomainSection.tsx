@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
-  Globe, Loader2, Copy,
+  Globe, Loader2, Copy, Check, X,
   AlertCircle, ShoppingCart, ExternalLink, Clock,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -102,9 +102,12 @@ export function DomainSection({
 }: Props) {
   const [tab, setTab] = useState<"buy" | "connect">("buy");
 
-  // Domain name input
+  // Domain search + availability
   const [domainName, setDomainName] = useState("");
   const [selectedTld, setSelectedTld] = useState<typeof TLD_OPTIONS[number] | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [availability, setAvailability] = useState<Record<string, boolean | null>>({});
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Domains list
   const [domains, setDomains] = useState<DomainRow[]>([]);
@@ -184,6 +187,44 @@ export function DomainSection({
     .replace(/\.[a-z]+$/, "");
 
   const isValidName = cleanName.length >= 2;
+
+  // ── Availability check (debounced) ─────────────────────────────────────────
+
+  function handleDomainInput(value: string) {
+    setDomainName(value);
+    setAvailability({});
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+
+    const clean = value
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/\.[a-z]+$/, "");
+
+    if (clean.length < 2) return;
+
+    searchTimer.current = setTimeout(async () => {
+      setChecking(true);
+      try {
+        const res = await fetch("/api/domains/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ searchTerm: clean }),
+        });
+        const data = await res.json() as { domain: string; tld: string; available: boolean | null }[];
+        if (Array.isArray(data)) {
+          const map: Record<string, boolean | null> = {};
+          for (const r of data) map[r.tld] = r.available;
+          setAvailability(map);
+        }
+      } catch {
+        // Silent fail — user can still order, admin verifies manually
+      } finally {
+        setChecking(false);
+      }
+    }, 800);
+  }
 
   // ── Buy flow ──────────────────────────────────────────────────────────────────
 
@@ -326,60 +367,97 @@ export function DomainSection({
       {tab === "buy" && (
         <div className="space-y-4">
           {/* Domain name input */}
-          <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">
-              Numele domeniului dorit
-            </label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <input
               type="text"
               value={domainName}
-              onChange={(e) => setDomainName(e.target.value)}
-              placeholder="ex: magazinul-meu"
-              className={inputCls}
+              onChange={(e) => handleDomainInput(e.target.value)}
+              placeholder="Cauta un domeniu (ex: magazinul-meu)"
+              className={cn(inputCls, "pl-10 pr-10")}
               disabled={!businessId}
             />
-            {domainName && !isValidName && (
-              <p className="text-xs text-destructive mt-1">Minim 2 caractere (litere, cifre, cratima).</p>
+            {checking && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
             )}
           </div>
+          {domainName && !isValidName && (
+            <p className="text-xs text-destructive -mt-2">Minim 2 caractere (litere, cifre, cratima).</p>
+          )}
 
-          {/* TLD options */}
+          {/* TLD options with availability */}
           {isValidName && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Alege extensia</p>
-              <div className="grid grid-cols-2 gap-2">
-                {TLD_OPTIONS.map((opt) => (
-                  <button
+              {TLD_OPTIONS.map((opt) => {
+                const avail = availability[opt.tld];
+                const isAvailable = avail === true;
+                const isUnavailable = avail === false;
+                const isUnknown = avail === null || avail === undefined;
+
+                return (
+                  <div
                     key={opt.tld}
-                    type="button"
-                    onClick={() => { setSelectedTld(opt); setBuyPeriod(1); }}
                     className={cn(
-                      "flex items-center justify-between p-4 rounded-xl border transition-all text-left",
-                      "hover:border-primary/40"
+                      "flex items-center gap-3 p-4 rounded-xl border transition-colors",
+                      isUnavailable
+                        ? "bg-muted/40 border-border opacity-55"
+                        : "bg-surface border-border"
                     )}
                   >
-                    <div>
+                    <div
+                      className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0",
+                        isAvailable ? "bg-primary/10" :
+                        isUnavailable ? "bg-muted" : "bg-muted"
+                      )}
+                    >
+                      {checking ? (
+                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                      ) : isAvailable ? (
+                        <Check className="h-3 w-3 text-primary" />
+                      ) : isUnavailable ? (
+                        <X className="h-3 w-3 text-muted-foreground" />
+                      ) : (
+                        <Globe className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-foreground font-mono">
                         {cleanName}{opt.tld}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Extensie {opt.label}
+                      <p className={cn(
+                        "text-xs",
+                        isAvailable ? "text-primary" :
+                        isUnavailable ? "text-muted-foreground" :
+                        checking ? "text-muted-foreground" : "text-muted-foreground"
+                      )}>
+                        {checking ? "Se verifica..." :
+                         isAvailable ? "Disponibil" :
+                         isUnavailable ? "Indisponibil" :
+                         "Verifica disponibilitatea"}
                       </p>
                     </div>
-                    <div className="text-right flex-shrink-0 ml-3">
-                      <p className="text-sm font-bold text-foreground">{opt.price} lei</p>
-                      <p className="text-[10px] text-muted-foreground">/an</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5">
-                <Clock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-blue-700 leading-relaxed">
-                  Disponibilitatea domeniului va fi verificata dupa plasarea comenzii.
-                  Daca domeniul nu este disponibil, vei fi contactat si nu vei fi taxat.
-                </p>
-              </div>
+
+                    {!isUnavailable && (
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-sm font-semibold text-foreground">
+                          {opt.price} lei<span className="text-xs font-normal text-muted-foreground">/an</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedTld(opt); setBuyPeriod(1); }}
+                          disabled={checking}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          <ShoppingCart className="h-3 w-3" />
+                          Comanda
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 

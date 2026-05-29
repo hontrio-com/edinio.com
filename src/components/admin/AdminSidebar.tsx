@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Store, Receipt, ShoppingCart,
   LifeBuoy, BarChart2, Shield, ChevronRight, LogOut, Menu, X,
-  History, Settings2,
+  History, Settings2, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { createClient } from "@/lib/supabase/client";
@@ -17,6 +17,7 @@ const NAV = [
   { href: "/admin/utilizatori", icon: Users, label: "Utilizatori" },
   { href: "/admin/magazine", icon: Store, label: "Magazine" },
   { href: "/admin/comenzi", icon: ShoppingCart, label: "Comenzi" },
+  { href: "/admin/domenii", icon: Globe, label: "Domenii" },
   { href: "/admin/facturi", icon: Receipt, label: "Facturi" },
   { href: "/admin/suport", icon: LifeBuoy, label: "Suport" },
   { href: "/admin/statistici", icon: BarChart2, label: "Statistici" },

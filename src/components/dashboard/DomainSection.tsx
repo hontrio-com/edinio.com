@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
   Search, Globe, Check, X, Loader2, Copy,
-  AlertCircle, ShoppingCart, ExternalLink,
+  AlertCircle, ShoppingCart, ExternalLink, Clock,
+  CheckCircle2, XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,6 +19,16 @@ type DomainRow = {
   expiry_date: string | null;
   auto_renew: boolean;
   source: string;
+  created_at: string;
+};
+
+type DomainOrder = {
+  id: string;
+  domain: string;
+  tld: string;
+  period: number;
+  total_price: number;
+  status: string;
   created_at: string;
 };
 
@@ -72,8 +83,6 @@ function parseTldPricing(data: unknown): Record<string, number> {
   if (!data || typeof data !== "object") return pricing;
 
   const root = data as Record<string, unknown>;
-  // Common shapes: { pricing: { ".ro": { register: { "1": 25 } } } }
-  //             or { tlds: { ".ro": { register_price: 25 } } }
   const p = root.pricing ?? root.tlds ?? root;
   if (!p || typeof p !== "object") return pricing;
 
@@ -89,12 +98,11 @@ function parseTldPricing(data: unknown): Record<string, number> {
   return pricing;
 }
 
-// Parse lookup response — Reseller.ro returns a flat array of domain objects
+// Parse lookup response
 function parseLookupResults(
   data: unknown,
   tldPricing: Record<string, number>
 ): LookupResult[] {
-  // Reseller.ro returns a flat JSON array at root level
   let raw: unknown[] = [];
   if (Array.isArray(data)) {
     raw = data;
@@ -109,7 +117,6 @@ function parseLookupResults(
 
   return raw.map((item) => {
     const d = item as Record<string, unknown>;
-    // Reseller.ro uses domainName + isAvailable fields
     const domain = String(d.domainName ?? d.domain ?? "");
     const available = d.isAvailable === true ||
       String(d.legacyStatus ?? "").toLowerCase() === "available";
@@ -123,6 +130,14 @@ function parseLookupResults(
     } as LookupResult;
   });
 }
+
+const ORDER_STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; color: string }> = {
+  pending:    { label: "In asteptare",  icon: Clock,        color: "bg-amber-50 text-amber-700 border-amber-200" },
+  processing: { label: "Se proceseaza", icon: Loader2,      color: "bg-blue-50 text-blue-700 border-blue-200" },
+  completed:  { label: "Finalizata",    icon: CheckCircle2, color: "bg-green-50 text-green-700 border-green-200" },
+  cancelled:  { label: "Anulata",       icon: XCircle,      color: "bg-red-50 text-red-700 border-red-200" },
+  refunded:   { label: "Rambursata",    icon: XCircle,      color: "bg-zinc-50 text-zinc-500 border-zinc-200" },
+};
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
@@ -149,6 +164,9 @@ export function DomainSection({
   // Domains list
   const [domains, setDomains] = useState<DomainRow[]>([]);
   const [loadingDomains, setLoadingDomains] = useState(true);
+
+  // Domain orders
+  const [orders, setOrders] = useState<DomainOrder[]>([]);
 
   // Connected domain
   const [customDomain, setCustomDomain] = useState<string | null>(initialCustomDomain);
@@ -194,6 +212,16 @@ export function DomainSection({
         setLoadingDomains(false);
       });
 
+    // Fetch domain orders
+    supabase
+      .from("domain_orders")
+      .select("id, domain, tld, period, total_price, status, created_at")
+      .eq("business_id", businessId)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setOrders(data ?? []);
+      });
+
     // Fetch currently connected domain
     supabase
       .from("businesses")
@@ -221,7 +249,6 @@ export function DomainSection({
       .toLowerCase()
       .replace(/\s+/g, "-")
       .replace(/[^a-z0-9-]/g, "")
-      // Strip TLD if user typed it (e.g. "test.ro" → "test")
       .replace(/\.[a-z]+$/, "");
 
     if (clean.length < 2) { setResults([]); return; }
@@ -274,31 +301,31 @@ export function DomainSection({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          domain:     buyTarget.domain,
-          regperiod:  buyPeriod,
+          domain:       buyTarget.domain,
+          regperiod:    buyPeriod,
           businessId,
-          contact:    { ...contact, country: "RO" },
+          pricePerYear: buyTarget.price ?? 0,
+          contact:      { ...contact, country: "RO" },
         }),
       });
-      const data = await res.json() as { success?: boolean; error?: string };
+      const data = await res.json() as { success?: boolean; error?: string; orderId?: string };
 
       if (!data.success) {
-        toast.error(data.error ?? "Inregistrarea a esuat.");
+        toast.error(data.error ?? "Comanda nu a putut fi plasata.");
         return;
       }
 
-      toast.success(`${buyTarget.domain} a fost inregistrat cu succes!`);
+      toast.success(`Comanda pentru ${buyTarget.domain} a fost plasata! Vei fi notificat cand domeniul este activ.`);
       setBuyTarget(null);
-      setCustomDomain(buyTarget.domain);
 
-      // Refresh list
+      // Refresh orders list
       const supabase = createClient();
       const { data: fresh } = await supabase
-        .from("domains")
-        .select("*")
+        .from("domain_orders")
+        .select("id, domain, tld, period, total_price, status, created_at")
         .eq("business_id", businessId)
         .order("created_at", { ascending: false });
-      setDomains(fresh ?? []);
+      setOrders(fresh ?? []);
     } catch {
       toast.error("Eroare de retea. Incearca din nou.");
     } finally {
@@ -330,6 +357,9 @@ export function DomainSection({
   function copy(text: string) {
     navigator.clipboard.writeText(text).then(() => toast.success("Copiat!")).catch(() => {});
   }
+
+  // Active (non-terminal) orders
+  const activeOrders = orders.filter((o) => o.status === "pending" || o.status === "processing");
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -456,12 +486,55 @@ export function DomainSection({
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors"
                       >
                         <ShoppingCart className="h-3 w-3" />
-                        Cumpara
+                        Comanda
                       </button>
                     </div>
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Pending orders */}
+          {activeOrders.length > 0 && (
+            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border">
+                <p className="text-sm font-semibold text-foreground">Comenzi in curs</p>
+              </div>
+              <div className="divide-y divide-border">
+                {activeOrders.map((o) => {
+                  const cfg = ORDER_STATUS_CONFIG[o.status] ?? ORDER_STATUS_CONFIG.pending;
+                  const Icon = cfg.icon;
+                  return (
+                    <div key={o.id} className="flex items-center gap-3 px-5 py-3.5">
+                      <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground font-mono">
+                          {o.domain}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {o.period} {o.period === 1 ? "an" : "ani"} &middot; {o.total_price} lei
+                          &middot; {new Date(o.created_at).toLocaleDateString("ro-RO")}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+                          cfg.color
+                        )}
+                      >
+                        <Icon className={cn("h-3 w-3", o.status === "processing" && "animate-spin")} />
+                        {cfg.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="px-5 py-3 border-t border-border bg-muted/20">
+                <p className="text-xs text-muted-foreground">
+                  Domeniul va fi activat in maximum 24 de ore de la plasarea comenzii.
+                </p>
+              </div>
             </div>
           )}
 
@@ -502,15 +575,45 @@ export function DomainSection({
             </div>
           )}
 
+          {/* Completed/cancelled orders history */}
+          {orders.filter((o) => o.status !== "pending" && o.status !== "processing").length > 0 && (
+            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border">
+                <p className="text-sm font-semibold text-foreground">Istoric comenzi domenii</p>
+              </div>
+              <div className="divide-y divide-border">
+                {orders
+                  .filter((o) => o.status !== "pending" && o.status !== "processing")
+                  .map((o) => {
+                    const cfg = ORDER_STATUS_CONFIG[o.status] ?? ORDER_STATUS_CONFIG.pending;
+                    return (
+                      <div key={o.id} className="flex items-center gap-3 px-5 py-3.5">
+                        <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground font-mono">{o.domain}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(o.created_at).toLocaleDateString("ro-RO")}
+                          </p>
+                        </div>
+                        <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold border", cfg.color)}>
+                          {cfg.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
           {/* Empty state */}
-          {!loadingDomains && domains.length === 0 && !results.length && (
+          {!loadingDomains && domains.length === 0 && !results.length && activeOrders.length === 0 && (
             <div className="text-center py-10">
               <Globe className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
               <p className="text-sm font-medium text-foreground mb-1">
                 Nu ai niciun domeniu
               </p>
               <p className="text-xs text-muted-foreground">
-                Cauta un domeniu mai sus pentru a-l inregistra direct din Edinio.
+                Cauta un domeniu mai sus pentru a-l comanda direct din Edinio.
               </p>
             </div>
           )}
@@ -548,7 +651,7 @@ export function DomainSection({
             </button>
           </div>
 
-          {/* DNS instructions — shown after domain is saved */}
+          {/* DNS instructions */}
           {customDomain && (
             <div className="bg-surface border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
@@ -622,15 +725,24 @@ export function DomainSection({
             {/* Header */}
             <div className="px-6 py-5 border-b border-border flex-shrink-0">
               <p className="text-base font-semibold text-foreground">
-                Inregistreaza {buyTarget.domain}
+                Comanda {buyTarget.domain}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Completeaza datele titularului de domeniu
+                Completeaza datele titularului. Domeniul va fi activat in max. 24h.
               </p>
             </div>
 
             {/* Scrollable body */}
             <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+              {/* Info banner */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5">
+                <Clock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  Dupa plasarea comenzii, domeniul va fi inregistrat si conectat automat
+                  la magazinul tau in maximum 24 de ore. Vei primi o notificare cand este activ.
+                </p>
+              </div>
+
               {/* Period picker */}
               <div>
                 <label className="block text-xs font-medium text-foreground mb-2">
@@ -810,8 +922,8 @@ export function DomainSection({
                 >
                   {buying && <Loader2 className="h-4 w-4 animate-spin" />}
                   {buying
-                    ? "Se proceseaza..."
-                    : `Confirma${buyTarget.price ? ` — ${buyTarget.price * buyPeriod} lei` : ""}`}
+                    ? "Se plaseaza..."
+                    : `Plaseaza comanda${buyTarget.price ? ` — ${buyTarget.price * buyPeriod} lei` : ""}`}
                 </button>
               </div>
             </div>

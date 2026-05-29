@@ -241,6 +241,62 @@ export type Database = {
           },
         ]
       }
+      domain_orders: {
+        Row: {
+          id: string
+          business_id: string
+          user_id: string
+          domain: string
+          tld: string
+          period: number
+          price_per_year: number
+          total_price: number
+          status: string
+          contact_info: Json
+          admin_notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          user_id: string
+          domain: string
+          tld: string
+          period?: number
+          price_per_year?: number
+          total_price?: number
+          status?: string
+          contact_info?: Json
+          admin_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          user_id?: string
+          domain?: string
+          tld?: string
+          period?: number
+          price_per_year?: number
+          total_price?: number
+          status?: string
+          contact_info?: Json
+          admin_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "domain_orders_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       domains: {
         Row: {
           auto_renew: boolean

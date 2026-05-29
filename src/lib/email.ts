@@ -308,6 +308,80 @@ export async function sendAgentReplyToUser(data: {
   });
 }
 
+export async function sendDomainOrderToAdmin(data: {
+  orderId: string;
+  domain: string;
+  tld: string;
+  period: number;
+  totalPrice: number;
+  customerName: string;
+  customerEmail: string;
+  businessName: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const adminUrl = `${SITE_URL}/admin/domenii`;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda noua de domeniu</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Un client a comandat un domeniu care trebuie inregistrat manual.</p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:18px;font-weight:700;color:#16a34a;font-family:monospace;">${data.domain}</p>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr>
+        <td style="padding:10px 14px;background:#f4f4f5;border-radius:8px 8px 0 0;border-bottom:1px solid #e4e4e7;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="width:50%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Client</span>
+                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${data.customerName}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${data.customerEmail}</p>
+              </td>
+              <td style="width:50%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Magazin</span>
+                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${data.businessName}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;background:#f4f4f5;border-radius:0 0 8px 8px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="width:33%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Extensie</span>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${data.tld}</p>
+              </td>
+              <td style="width:33%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Perioada</span>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${data.period} ${data.period === 1 ? "an" : "ani"}</p>
+              </td>
+              <td style="width:33%;vertical-align:top;">
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Total</span>
+                <p style="margin:2px 0 0 0;font-size:13px;font-weight:700;color:#1AB554;">${data.totalPrice} lei</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <div style="text-align:center;">
+      <a href="${adminUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Gestioneaza comanda
+      </a>
+    </div>
+  `;
+  await resend.emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: `[Domeniu] Comanda noua: ${data.domain} — ${data.customerName}`,
+    html: baseTemplate(content),
+  });
+}
+
 export async function sendNewOrderEmail(
   to: string,
   order: {

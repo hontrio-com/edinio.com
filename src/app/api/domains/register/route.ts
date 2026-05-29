@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resellerCall } from "@/lib/reseller";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { createClient } from "@/lib/supabase/server";
+import { sendDomainOrderToAdmin } from "@/lib/email";
 
 interface ContactInfo {
   firstname: string;
@@ -21,6 +21,7 @@ interface RegisterBody {
   regperiod: number;
   businessId: string;
   contact: ContactInfo;
+  pricePerYear: number;
 }
 
 export async function POST(req: NextRequest) {
@@ -28,21 +29,21 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json() as RegisterBody;
-  const { domain, regperiod, businessId, contact } = body;
+  const { domain, regperiod, businessId, contact, pricePerYear } = body;
 
   if (!domain || !regperiod || !businessId || !contact) {
     return NextResponse.json({ error: "Date incomplete" }, { status: 400 });
   }
 
-  // Verify the user owns this business before spending money on domain registration
-  const supabaseCheck = await createClient();
-  const { data: ownedBiz } = await supabaseCheck
-    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  // Verify ownership
+  const supabase = await createClient();
+  const { data: ownedBiz } = await supabase
+    .from("businesses").select("id, business_name").eq("id", businessId).eq("user_id", user.id).single();
   if (!ownedBiz) {
     return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
   }
 
-  // Validate contact fields required by Reseller.ro
+  // Validate contact fields
   const required: (keyof ContactInfo)[] = [
     "firstname", "lastname", "email", "phonenumber",
     "address1", "city", "state", "postcode",
@@ -56,60 +57,42 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const contactFull = {
-    ...contact,
-    fullname: `${contact.firstname} ${contact.lastname}`,
-    address2: "",
-    country: "RO",
-  };
+  // Extract TLD
+  const tld = "." + domain.split(".").slice(1).join(".");
+  const totalPrice = (pricePerYear || 0) * regperiod;
 
-  // Register domain via Reseller.ro
-  const result = await resellerCall("/order/domains/register", "POST", {
-    domain,
-    regperiod: String(regperiod),
-    nameservers: {
-      ns1: process.env.RESELLER_NS1 ?? "ns1.domaincity.ro",
-      ns2: process.env.RESELLER_NS2 ?? "ns2.domaincity.ro",
-    },
-    contacts: {
-      registrant: contactFull,
-      tech:       contactFull,
-      billing:    contactFull,
-      admin:      contactFull,
-    },
-    addons: {
-      dnsmanagement:   1,
-      emailforwarding: 0,
-      idprotection:    0,
-    },
-  });
+  // Save as domain order (manual fulfillment)
+  const { data: order, error } = await supabase
+    .from("domain_orders")
+    .insert({
+      business_id: businessId,
+      user_id: user.id,
+      domain,
+      tld,
+      period: regperiod,
+      price_per_year: pricePerYear || 0,
+      total_price: totalPrice,
+      status: "pending",
+      contact_info: contact as unknown as Record<string, string>,
+    })
+    .select("id")
+    .single();
 
-  if (result.result !== "success") {
-    const msg = (result.message as string) ?? "Inregistrarea a esuat";
-    return NextResponse.json({ error: msg }, { status: 400 });
+  if (error) {
+    return NextResponse.json({ error: "Nu am putut salva comanda" }, { status: 500 });
   }
 
-  // Save to domains table (reuse the client from ownership check above)
-  const supabase = supabaseCheck;
-
-  const expiryDate = new Date();
-  expiryDate.setFullYear(expiryDate.getFullYear() + Number(regperiod));
-
-  await supabase.from("domains").insert({
-    business_id: businessId,
-    user_id:     user.id,
+  // Send notification email to admin
+  sendDomainOrderToAdmin({
+    orderId: order.id,
     domain,
-    status:      "active",
-    source:      "purchased",
-    expiry_date: expiryDate.toISOString().split("T")[0],
-    auto_renew:  true,
-  });
+    tld,
+    period: regperiod,
+    totalPrice,
+    customerName: `${contact.firstname} ${contact.lastname}`,
+    customerEmail: contact.email,
+    businessName: ownedBiz.business_name,
+  }).catch(() => {});
 
-  // Auto-connect domain to business
-  await supabase
-    .from("businesses")
-    .update({ custom_domain: domain })
-    .eq("id", businessId);
-
-  return NextResponse.json({ success: true, domain });
+  return NextResponse.json({ success: true, orderId: order.id });
 }

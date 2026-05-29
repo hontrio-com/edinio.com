@@ -63,17 +63,15 @@ export function HeroSection() {
 
           {/* ── Right: Video ── */}
           <div className="relative hidden lg:block">
-            <div className="rounded-2xl overflow-hidden shadow-2xl border border-border">
-              <video
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="w-full h-auto"
-              >
-                <source src="/hero/video.webm" type="video/webm" />
-              </video>
-            </div>
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-auto mix-blend-screen"
+            >
+              <source src="/hero/video.webm" type="video/webm" />
+            </video>
           </div>
         </div>
       </div>

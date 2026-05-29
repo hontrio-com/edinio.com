@@ -68,7 +68,7 @@ export function HeroSection() {
               loop
               muted
               playsInline
-              className="w-full h-auto mix-blend-screen"
+              className="w-full h-auto"
             >
               <source src="/hero/video.webm" type="video/webm" />
             </video>

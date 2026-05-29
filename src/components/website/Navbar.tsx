@@ -14,7 +14,7 @@ const NAV_LINKS = [
 ];
 
 const ANNOUNCEMENT =
-  "Mentenanta gratuita pe viata la orice abonament. Fara costuri ascunse, fara surprize.";
+  "Mentenanta gratuita pe viata la orice abonament";
 
 export function Navbar() {
   const pathname = usePathname();

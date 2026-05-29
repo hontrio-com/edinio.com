@@ -4,11 +4,11 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
 
 interface Props {
-  searchParams: Promise<{ plan_success?: string }>;
+  searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
 }
 
 export default async function SettingsPage({ searchParams }: Props) {
-  const { plan_success } = await searchParams;
+  const { plan_success, domain_success } = await searchParams;
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -84,6 +84,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       activeCourierIds={activeCourierIds}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={plan_success === "1"}
+      domainSuccess={domain_success === "1"}
     />
   );
 }

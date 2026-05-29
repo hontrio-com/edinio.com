@@ -35,6 +35,55 @@ export async function POST(req: NextRequest) {
   // event handles Smartbill invoice creation to avoid duplicates.
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
+
+    // ── Domain order payment ────────────────────────────────────────────────
+    if (session.metadata?.type === "domain_order") {
+      const { user_id, business_id, domain, tld, period, price_per_year, total_price, contact } = session.metadata;
+
+      if (!user_id || !business_id || !domain) {
+        console.error("[webhook] domain_order: missing metadata");
+        return NextResponse.json({ received: true });
+      }
+
+      let contactInfo = {};
+      try { contactInfo = JSON.parse(contact ?? "{}"); } catch { /* ignore */ }
+
+      const { error: orderError } = await admin.from("domain_orders").insert({
+        user_id,
+        business_id,
+        domain,
+        tld: tld ?? "",
+        period: Number(period) || 1,
+        price_per_year: Number(price_per_year) || 0,
+        total_price: Number(total_price) || 0,
+        status: "pending",
+        contact_info: contactInfo,
+      });
+
+      if (orderError) {
+        console.error("[webhook] domain_order insert failed:", orderError);
+      } else {
+        console.log("[webhook] domain_order created:", domain);
+
+        // Send admin notification
+        const { sendDomainOrderToAdmin } = await import("@/lib/email");
+        const ci = contactInfo as Record<string, string>;
+        sendDomainOrderToAdmin({
+          orderId: domain,
+          domain,
+          tld: tld ?? "",
+          period: Number(period) || 1,
+          totalPrice: Number(total_price) || 0,
+          customerName: `${ci.firstname ?? ""} ${ci.lastname ?? ""}`.trim(),
+          customerEmail: ci.email ?? session.customer_email ?? "",
+          businessName: business_id,
+        }).catch(() => {});
+      }
+
+      return NextResponse.json({ received: true });
+    }
+
+    // ── Subscription plan payment ───────────────────────────────────────────
     const userId = session.metadata?.user_id;
     const plan = session.metadata?.plan;
 

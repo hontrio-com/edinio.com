@@ -203,6 +203,7 @@ interface Props {
   activeCourierIds: string[];
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
+  domainSuccess?: boolean;
 }
 
 function ComingSoon({ title }: { title: string }) {
@@ -217,17 +218,20 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, mfaEmailEnabled, planSuccess }: Props) {
-  const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : "general");
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+  const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
     if (planSuccess) {
       toast.success("Plata a fost procesata! Planul tau a fost actualizat.");
     }
-  }, [planSuccess]);
+    if (domainSuccess) {
+      toast.success("Plata a fost procesata! Comanda ta de domeniu a fost inregistrata si va fi activata in maximum 24 de ore.");
+    }
+  }, [planSuccess, domainSuccess]);
 
   useEffect(() => {
-    if (planSuccess) return;
+    if (planSuccess || domainSuccess) return;
     const hash = window.location.hash.slice(1);
     if (!hash) return;
     const hashMap: Partial<Record<string, SectionId>> = {
@@ -237,7 +241,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     };
     const mapped = hashMap[hash] ?? (NAV_SECTIONS.some(s => s.id === hash) ? hash as SectionId : null);
     if (mapped) setActiveSection(mapped);
-  }, [planSuccess]);
+  }, [planSuccess, domainSuccess]);
 
 
   // Account

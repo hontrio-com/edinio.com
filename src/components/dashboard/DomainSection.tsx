@@ -244,39 +244,29 @@ export function DomainSection({
 
     setBuying(true);
     try {
-      const res = await fetch("/api/domains/register", {
+      const res = await fetch("/api/stripe/domain-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           domain:       fullDomain,
-          regperiod:    buyPeriod,
-          businessId,
+          tld:          selectedTld.tld,
+          period:       buyPeriod,
           pricePerYear: selectedTld.price,
+          businessId,
           contact:      { ...contact, country: "RO" },
         }),
       });
-      const data = await res.json() as { success?: boolean; error?: string };
+      const data = await res.json() as { url?: string; error?: string };
 
-      if (!data.success) {
-        toast.error(data.error ?? "Comanda nu a putut fi plasata.");
+      if (!data.url) {
+        toast.error(data.error ?? "Nu am putut initia plata.");
         return;
       }
 
-      toast.success(`Comanda pentru ${fullDomain} a fost plasata! Vei fi notificat cand domeniul este activ.`);
-      setSelectedTld(null);
-      setDomainName("");
-
-      // Refresh orders list
-      const supabase = createClient();
-      const { data: fresh } = await supabase
-        .from("domain_orders")
-        .select("id, domain, tld, period, total_price, status, created_at")
-        .eq("business_id", businessId)
-        .order("created_at", { ascending: false });
-      setOrders(fresh ?? []);
+      // Redirect to Stripe Checkout
+      window.location.href = data.url;
     } catch {
       toast.error("Eroare de retea. Incearca din nou.");
-    } finally {
       setBuying(false);
     }
   }
@@ -701,8 +691,8 @@ export function DomainSection({
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5">
                 <Clock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 leading-relaxed">
-                  Dupa plasarea comenzii, verificam disponibilitatea si inregistram domeniul
-                  in maximum 24 de ore. Daca nu este disponibil, te contactam si nu vei fi taxat.
+                  Dupa finalizarea platii, domeniul va fi inregistrat si conectat automat
+                  la magazinul tau in maximum 24 de ore. Plata se proceseaza securizat prin Stripe.
                 </p>
               </div>
 
@@ -881,8 +871,8 @@ export function DomainSection({
                 >
                   {buying && <Loader2 className="h-4 w-4 animate-spin" />}
                   {buying
-                    ? "Se plaseaza..."
-                    : `Plaseaza comanda — ${selectedTld.price * buyPeriod} lei`}
+                    ? "Redirectare la plata..."
+                    : `Plateste ${selectedTld.price * buyPeriod} lei`}
                 </button>
               </div>
             </div>

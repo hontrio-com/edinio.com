@@ -161,7 +161,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
           </button>
 
           {notifOpen && (
-            <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-popover border border-border rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[500px]">
+            <div className="fixed inset-x-4 top-[3.75rem] sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 max-w-sm bg-popover border border-border rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-[500px]">
               {/* Header */}
               <div className="px-5 py-4 border-b border-border flex-shrink-0">
                 <div className="flex items-center justify-between mb-3">

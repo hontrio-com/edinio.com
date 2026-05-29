@@ -1,31 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 
-const RDAP_ENDPOINTS: Record<string, string> = {
-  ".com": "https://rdap.verisign.com/com/v1/domain/",
-  ".net": "https://rdap.verisign.com/net/v1/domain/",
-  ".org": "https://rdap.org/domain/",
-  ".ro":  "https://rdap.org/domain/",
-};
-
 const TLDS = [".ro", ".com", ".net", ".org"];
 
+/**
+ * Check domain availability via DNS-over-HTTPS (Google Public DNS).
+ * If the domain has NS records → it's registered (unavailable).
+ * If we get NXDOMAIN (status 3) → it doesn't exist (available).
+ */
 async function checkAvailability(
-  domain: string,
+  name: string,
   tld: string
 ): Promise<{ domain: string; tld: string; available: boolean | null }> {
-  const fqdn = `${domain}${tld}`;
-  const endpoint = RDAP_ENDPOINTS[tld] ?? "https://rdap.org/domain/";
+  const fqdn = `${name}${tld}`;
 
   try {
-    const res = await fetch(`${endpoint}${fqdn}`, {
-      headers: { Accept: "application/rdap+json" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(6000),
-    });
+    const res = await fetch(
+      `https://dns.google/resolve?name=${encodeURIComponent(fqdn)}&type=NS`,
+      { signal: AbortSignal.timeout(5000) }
+    );
 
-    if (res.status === 404) return { domain: fqdn, tld, available: true };
-    if (res.ok) return { domain: fqdn, tld, available: false };
+    if (!res.ok) return { domain: fqdn, tld, available: null };
+
+    const data = (await res.json()) as { Status: number; Answer?: unknown[] };
+
+    // Status 3 = NXDOMAIN → domain does not exist → available
+    if (data.Status === 3) return { domain: fqdn, tld, available: true };
+
+    // Status 0 = NOERROR → domain exists (has DNS records) → unavailable
+    if (data.Status === 0) return { domain: fqdn, tld, available: false };
+
     return { domain: fqdn, tld, available: null };
   } catch {
     return { domain: fqdn, tld, available: null };
@@ -43,7 +47,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "searchTerm prea scurt" }, { status: 400 });
   }
 
-  // Check all TLDs in parallel via RDAP
   const results = await Promise.all(
     TLDS.map((tld) => checkAvailability(searchTerm, tld))
   );

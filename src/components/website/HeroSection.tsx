@@ -62,7 +62,7 @@ export function HeroSection() {
           </div>
 
           {/* ── Right: Video ── */}
-          <div className="relative hidden lg:block">
+          <div className="relative">
             <video
               autoPlay
               loop

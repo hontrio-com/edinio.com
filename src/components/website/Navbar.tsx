@@ -46,9 +46,9 @@ export function Navbar() {
       <div className="relative bg-primary text-white overflow-hidden">
         <div className="flex items-center h-9">
           <div className="flex animate-marquee whitespace-nowrap">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <span key={i} className="inline-flex items-center gap-2 mx-8 text-xs font-medium tracking-wide uppercase">
-                <Sparkles className="h-3 w-3 opacity-70" />
+            {Array.from({ length: 10 }).map((_, i) => (
+              <span key={i} className="inline-flex items-center gap-2.5 mx-10 text-xs font-medium tracking-wide uppercase">
+                <Sparkles className="h-3 w-3 opacity-70 flex-shrink-0" />
                 {ANNOUNCEMENT}
               </span>
             ))}

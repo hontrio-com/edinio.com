@@ -4,27 +4,19 @@ import { ArrowRight } from "lucide-react";
 export function HeroSection() {
   return (
     <section className="relative overflow-hidden bg-muted/30">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-16 lg:pt-24 lg:pb-24">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-12 sm:pt-14 sm:pb-16 lg:pt-20 lg:pb-24">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-8 items-center">
           {/* ── Left: Text ── */}
           <div>
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 mb-8 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-sm font-semibold text-primary">
-                Platforma lansata oficial
-              </span>
-            </div>
-
             {/* Headline */}
-            <h1 className="text-3xl sm:text-5xl lg:text-[3.25rem] font-bold text-foreground tracking-tight leading-[1.12] mb-6">
+            <h1 className="text-3xl sm:text-5xl lg:text-[3.25rem] font-bold text-foreground tracking-tight leading-[1.12] mb-5">
               Creeaza-ti propriul{" "}
               <span className="text-primary">magazin online</span> in cateva
               minute, fara investitii de mii de euro
             </h1>
 
             {/* Subtitle */}
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl mb-10">
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl mb-8">
               Tot ce ai nevoie pentru a incepe sa vinzi online: magazin online,
               plati, facturi, AWB-uri, suport si mentenanta gratuita permanenta.
             </p>

@@ -8,32 +8,32 @@ const FAQS = [
   {
     question: "Ce este Edinio?",
     answer:
-      "Edinio este o platforma care permite afacerilor locale sa-si creeze un mini-site profesional sau un magazin online complet, fara cunostinte tehnice. Poti adauga produse, primi comenzi, gestiona programari si multe altele.",
+      "Edinio este o platforma care permite afacerilor locale sa-si creeze un magazin online complet, fara cunostinte tehnice. Poti adauga produse, primi comenzi, configura integrari cu curierii si procesatoare de plati, totul dintr-un singur loc.",
   },
   {
     question: "Cat costa Edinio?",
     answer:
-      "Edinio ofera un plan gratuit cu functii de baza, ideal pentru a testa platforma. Planurile platite incep de la 99 lei/luna si includ functionalitati avansate precum domeniu personalizat, statistici detaliate si fara comisioane pe vanzari.",
+      "Oferim o perioada de testare gratuita de 15 zile, fara card de credit. Planurile platite incep de la 99 lei/luna si includ mentenanta gratuita pe viata, suport 7 zile din 7 si toate integrarile necesare.",
   },
   {
     question: "Am nevoie de cunostinte tehnice?",
     answer:
-      "Nu. Edinio este conceput pentru a fi folosit de oricine. Interfata este intuitiva, iar configurarea magazinului se face prin drag & drop, fara a scrie o singura linie de cod.",
+      "Nu. Edinio este conceput pentru a fi folosit de oricine. Interfata este intuitiva, iar configurarea magazinului se face simplu, fara a scrie o singura linie de cod.",
   },
   {
-    question: "Pot folosi propriul domeniu?",
+    question: "Ce include mentenanta gratuita?",
     answer:
-      "Da, de pe planul Basic in sus poti conecta propriul domeniu (de exemplu, magazinulmeu.ro). Pe planul gratuit primesti un subdomeniu de forma numelemeu.edinio.ro.",
+      "Mentenanta este gratuita pe viata la orice abonament. Ne ocupam de actualizari, securitate, performanta si disponibilitate. Suntem la dispozitia ta 7 zile din 7 pentru orice problema sau intrebare.",
   },
   {
     question: "Ce metode de plata sunt acceptate?",
     answer:
-      "Magazinul tau poate accepta plati prin card bancar, ramburs la livrare si transfer bancar. Integrarile de plata sunt preconfigurate si nu necesita configurare tehnica.",
+      "Magazinul tau poate accepta plati prin card bancar (Stripe, Netopia), ramburs la curier si ridicare din magazin. Integrarile de plata sunt preconfigurate si nu necesita configurare tehnica.",
   },
   {
     question: "Pot anula abonamentul oricand?",
     answer:
-      "Da, poti anula abonamentul oricand, fara costuri suplimentare sau penalitati. Datele tale raman disponibile pe planul gratuit.",
+      "Da, poti anula abonamentul oricand, fara costuri suplimentare sau penalitati.",
   },
 ];
 

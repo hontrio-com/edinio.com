@@ -4,29 +4,31 @@ import { cn } from "@/lib/utils/cn";
 
 const PLANS = [
   {
-    id: "free",
-    name: "Gratuit",
+    id: "trial",
+    name: "Testare",
     price: 0,
-    description: "Perfect pentru a incepe",
+    priceSuffix: "15 zile",
+    description: "Testeaza platforma fara obligatii",
     features: [
+      "Acces complet 15 zile",
       "Pana la 10 produse",
       "Comenzi nelimitate",
-      "Suport prin email",
-      "Mentenanta gratuita",
+      "Suport 7 zile din 7",
     ],
-    cta: "Incepe gratuit",
+    cta: "Incepe testarea",
     popular: false,
   },
   {
     id: "basic",
     name: "Basic",
     price: 99,
+    priceSuffix: "lei/luna",
     description: "Pentru afaceri in crestere",
     features: [
       "Pana la 500 produse",
       "Comenzi nelimitate",
-      "Suport non-stop 24/7",
-      "Mentenanta gratuita",
+      "Suport 7 zile din 7",
+      "Mentenanta gratuita pe viata",
     ],
     cta: "Alege Basic",
     popular: false,
@@ -35,12 +37,13 @@ const PLANS = [
     id: "premium",
     name: "Premium",
     price: 249,
+    priceSuffix: "lei/luna",
     description: "Cel mai popular",
     features: [
       "Pana la 2.500 produse",
       "Comenzi nelimitate",
-      "Suport non-stop 24/7",
-      "Mentenanta gratuita",
+      "Suport 7 zile din 7",
+      "Mentenanta gratuita pe viata",
       "Manager dedicat magazinului tau",
     ],
     cta: "Alege Premium",
@@ -50,12 +53,13 @@ const PLANS = [
     id: "ultra",
     name: "Ultra",
     price: 499,
+    priceSuffix: "lei/luna",
     description: "Pentru afaceri mari",
     features: [
       "Produse nelimitate",
       "Comenzi nelimitate",
-      "Suport non-stop 24/7",
-      "Mentenanta gratuita",
+      "Suport 7 zile din 7",
+      "Mentenanta gratuita pe viata",
       "Manager dedicat magazinului tau",
     ],
     cta: "Alege Ultra",
@@ -73,8 +77,7 @@ export function PricingSection() {
             Preturi simple, fara surprize
           </h2>
           <p className="text-lg text-muted-foreground">
-            Alege planul potrivit pentru afacerea ta. Fara contracte, anuleaza
-            oricand.
+            Testeaza gratuit 15 zile, fara card de credit. Mentenanta gratuita pe viata si suport 7 zile din 7 la orice abonament.
           </p>
         </div>
 
@@ -105,11 +108,18 @@ export function PricingSection() {
 
               <div className="mt-6 mb-6">
                 <span className="text-4xl font-bold text-foreground">
-                  {plan.price}
+                  {plan.price === 0 ? "Gratuit" : plan.price}
                 </span>
-                <span className="text-sm text-muted-foreground ml-1">
-                  lei/luna
-                </span>
+                {plan.price > 0 && (
+                  <span className="text-sm text-muted-foreground ml-1">
+                    {plan.priceSuffix}
+                  </span>
+                )}
+                {plan.price === 0 && (
+                  <span className="block text-sm text-muted-foreground mt-1">
+                    {plan.priceSuffix}
+                  </span>
+                )}
               </div>
 
               <ul className="space-y-3 mb-8 flex-1">
@@ -122,7 +132,7 @@ export function PricingSection() {
               </ul>
 
               <Link
-                href={plan.id === "ultra" ? "/contact" : "/register"}
+                href="/register"
                 className={cn(
                   "block w-full text-center py-2.5 rounded-xl text-sm font-semibold transition-colors",
                   plan.popular

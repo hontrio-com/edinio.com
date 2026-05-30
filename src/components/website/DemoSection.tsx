@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw, Phone,
-  Star, ShoppingBag, Eye, ArrowLeft, Calendar,
+  Star, ShoppingBag, Eye, ArrowLeft, Calendar, X, User, MapPin, Home,
+  Minus, Plus, Banknote, Check, Zap,
 } from "lucide-react";
 
-const BRAND_COLOR = "#1877F2";
-const STORE_NAME = "Super Iluminat";
+const COLOR = "#1877F2";
+const STORE = "Super Iluminat";
+const SHIPPING = 20;
 
 const IMAGES = [
   "/demo/ImaginePrincipala.webp",
@@ -17,15 +20,16 @@ const IMAGES = [
 ];
 
 const PRICE = 49;
-const COMPARE_PRICE = 99;
-const DISCOUNT = Math.round((1 - PRICE / COMPARE_PRICE) * 100);
+const COMPARE = 99;
+const DISCOUNT = Math.round((1 - PRICE / COMPARE) * 100);
+const PRODUCT_NAME = "Lampa Solara Stradala \u2013 8 LED-uri Puternice, Panou Solar Integrat";
 
 const SPECS = [
   { label: "Panou solar", value: "Integrat, incarcare automata" },
-  { label: "LED-uri", value: "8 LED-uri de mare putere" },
+  { label: "LED-uri", value: "8 de mare putere" },
   { label: "Telecomanda", value: "Inclusa" },
   { label: "Senzor lumina", value: "Pornire automata la intuneric" },
-  { label: "Rezistenta", value: "Waterproof, utilizare exterior" },
+  { label: "Rezistenta", value: "Waterproof, exterior" },
   { label: "Alimentare", value: "Autonoma, fara cabluri" },
   { label: "Dimensiune", value: "55 cm" },
 ];
@@ -34,29 +38,75 @@ const REVIEWS = [
   { name: "Mihai D.", text: "Lumina este foarte puternica si acopera o suprafata mare. Se incarca bine si functioneaza perfect in fiecare noapte." },
   { name: "Andrei P.", text: "Am montat doua in curte si sunt foarte multumit. Instalarea a durat doar cateva minute." },
   { name: "Cristina M.", text: "Raport calitate-pret excelent. Telecomanda este foarte utila, iar senzorul de lumina functioneaza impecabil." },
+  { name: "George T.", text: "Produs exact ca in descriere. Materiale de calitate si lumina puternica pentru zona de acces din fata casei." },
+  { name: "Daniela R.", text: "O solutie excelenta pentru iluminarea gradinii fara consum de energie electrica. Recomand cu incredere!" },
+];
+
+const JUDETE = [
+  "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
+  "Braila","Brasov","Buzau","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj",
+  "Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Ilfov","Maramures",
+  "Mehedinti","Mures","Neamt","Olt","Prahova","Salaj","Satu Mare","Sibiu","Suceava",
+  "Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea",
 ];
 
 export function DemoSection() {
   const [slide, setSlide] = useState(0);
   const [viewers, setViewers] = useState(18);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [prioritize, setPrioritize] = useState(false);
+  const [form, setForm] = useState({ name: "", phone: "", county: "", city: "", address: "" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setViewers(18 + Math.floor(Math.random() * 10)); }, []);
 
-  // Auto-advance gallery
   useEffect(() => {
+    if (modalOpen) return;
     const t = setInterval(() => setSlide((s) => (s + 1) % IMAGES.length), 4000);
     return () => clearInterval(t);
-  }, []);
+  }, [modalOpen]);
 
   const now = new Date();
-  const minDate = new Date(now);
-  minDate.setDate(minDate.getDate() + 2);
-  const maxDate = new Date(now);
-  maxDate.setDate(maxDate.getDate() + 4);
+  const minDate = new Date(now); minDate.setDate(minDate.getDate() + 2);
+  const maxDate = new Date(now); maxDate.setDate(maxDate.getDate() + 4);
   const fmt = (d: Date) => d.toLocaleDateString("ro-RO", { day: "numeric", month: "long" });
 
+  const subtotal = PRICE * quantity;
+  const extraCost = prioritize ? 4.99 : 0;
+  const total = subtotal + extraCost + SHIPPING;
+
+  function validate() {
+    const e: Record<string, string> = {};
+    if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
+    if (!/^(0)(7\d{8})$/.test(form.phone.trim())) e.phone = "Format: 07XXXXXXXX";
+    if (!form.county) e.county = "Selectati judetul";
+    if (form.city.trim().length < 2) e.city = "Introduceti orasul";
+    if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  function handleSubmit(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!validate()) return;
+    setSuccess(true);
+  }
+
+  function resetDemo() {
+    setSuccess(false);
+    setModalOpen(false);
+    setQuantity(1);
+    setPrioritize(false);
+    setForm({ name: "", phone: "", county: "", city: "", address: "" });
+    setErrors({});
+    scrollRef.current?.scrollTo({ top: 0 });
+  }
+
   return (
-    <section className="py-20 lg:py-28 bg-muted/30">
+    <section className="py-20 lg:py-28 bg-muted/30 overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="max-w-2xl mx-auto text-center mb-12 lg:mb-16">
@@ -65,250 +115,432 @@ export function DemoSection() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
             </span>
-            Demo live
+            Demo interactiv
           </div>
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
             Asa va arata magazinul tau
           </h2>
           <p className="text-lg text-muted-foreground">
-            Pagina de produs completa, gata sa primeasca comenzi. Tu doar adaugi produsele.
+            Exploreaza pagina de produs, da scroll si plaseaza o comanda de test.
           </p>
         </div>
 
-        {/* Browser frame */}
-        <div className="rounded-2xl border border-border bg-white shadow-2xl overflow-hidden max-w-5xl mx-auto">
-          {/* Chrome bar */}
-          <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-100 border-b border-gray-200">
-            <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-[#FF5F57]" />
-              <div className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
-              <div className="w-3 h-3 rounded-full bg-[#28C840]" />
-            </div>
-            <div className="flex-1 flex justify-center">
-              <div className="bg-white rounded-lg px-4 py-1.5 text-xs text-gray-500 border border-gray-200 w-full max-w-md text-center truncate">
-                superiluminat.edinio.ro/lampa-solara-stradala
+        {/* Phone mockup */}
+        <div className="flex justify-center">
+          <div className="relative w-[310px] sm:w-[375px] h-[620px] sm:h-[740px] rounded-[44px] sm:rounded-[50px] border-[6px] sm:border-[7px] border-gray-900 bg-gray-900 shadow-2xl shadow-black/40 overflow-hidden">
+            {/* Notch */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[110px] sm:w-[140px] h-[26px] sm:h-[32px] bg-gray-900 rounded-b-2xl z-50" />
+
+            {/* Status bar */}
+            <div className="relative h-[42px] sm:h-[48px] bg-white flex items-end justify-between px-6 pb-1 z-40">
+              <span className="text-[10px] font-semibold text-gray-900">9:41</span>
+              <div className="flex items-center gap-1">
+                <div className="flex gap-px">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="w-[3px] rounded-sm bg-gray-900" style={{ height: 3 + i * 2 }} />
+                  ))}
+                </div>
+                <div className="w-5 h-2.5 rounded-sm border border-gray-900 relative ml-1">
+                  <div className="absolute inset-[1px] rounded-[1px] bg-gray-900" style={{ width: "70%" }} />
+                </div>
               </div>
             </div>
-            <div className="w-[54px]" />
-          </div>
 
-          {/* Page content */}
-          <div className="bg-[#FAFAFA]">
-            {/* Store header */}
-            <div className="bg-white border-b border-gray-100 px-4 md:px-8 h-11 flex items-center gap-2">
-              <ArrowLeft size={14} className="text-gray-400" />
-              <span className="text-xs text-gray-400">Magazin</span>
-              <span className="text-gray-300 text-xs">/</span>
-              <span className="text-xs font-bold text-gray-900">{STORE_NAME}</span>
-            </div>
+            {/* Scrollable content */}
+            <div
+              ref={scrollRef}
+              className="bg-[#FAFAFA] overflow-y-auto overflow-x-hidden scrollbar-none"
+              style={{ height: "calc(100% - 48px - 56px)" }}
+            >
+              {/* Store header */}
+              <div className="bg-white border-b border-gray-100 px-3 h-10 flex items-center gap-1.5 sticky top-0 z-30">
+                <ArrowLeft size={13} className="text-gray-400" />
+                <span className="text-[11px] text-gray-400">Magazin</span>
+                <span className="text-gray-300 text-[11px]">/</span>
+                <span className="text-[11px] font-bold text-gray-900">{STORE}</span>
+              </div>
 
-            {/* Product hero */}
-            <div className="p-4 md:p-8">
-              <div className="grid md:grid-cols-2 gap-6 md:gap-10 items-start">
-                {/* Gallery */}
-                <div>
-                  <div className="relative aspect-square rounded-2xl bg-gray-50 overflow-hidden shadow-lg">
+              {/* Gallery */}
+              <div className="px-3 pt-2 pb-1">
+                <div className="relative aspect-square rounded-2xl bg-gray-50 overflow-hidden shadow-md">
+                  <div className="flex h-full transition-transform duration-500 ease-in-out"
+                    style={{ transform: `translateX(-${slide * 100}%)` }}>
                     {IMAGES.map((src, i) => (
-                      <div key={i} className="absolute inset-0 transition-opacity duration-700"
-                        style={{ opacity: i === slide ? 1 : 0 }}>
-                        <Image src={src} alt={`Lampa solara ${i + 1}`} fill
-                          className="object-contain p-3" sizes="(max-width: 768px) 100vw, 40vw" />
+                      <div key={i} className="relative w-full h-full flex-shrink-0">
+                        <Image src={src} alt={`Lampa ${i + 1}`} fill className="object-contain p-2" sizes="375px" />
                       </div>
                     ))}
-
-                    <button type="button" onClick={() => setSlide((slide - 1 + IMAGES.length) % IMAGES.length)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10">
-                      <ChevronLeft size={14} className="text-gray-700" />
-                    </button>
-                    <button type="button" onClick={() => setSlide((slide + 1) % IMAGES.length)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10">
-                      <ChevronRight size={14} className="text-gray-700" />
-                    </button>
-
-                    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
-                      {IMAGES.map((_, i) => (
-                        <button key={i} type="button" onClick={() => setSlide(i)}
-                          className="rounded-full transition-all duration-300"
-                          style={i === slide
-                            ? { width: 20, height: 6, backgroundColor: BRAND_COLOR }
-                            : { width: 6, height: 6, backgroundColor: "rgba(0,0,0,0.15)" }} />
-                      ))}
-                    </div>
-
-                    <div className="absolute top-3 left-3 bg-black/30 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full z-10">
-                      {slide + 1} / {IMAGES.length}
-                    </div>
-                    <div className="absolute top-3 right-3 bg-amber-400 text-black text-[10px] font-black px-2.5 py-1 rounded-full shadow z-10">
-                      -{DISCOUNT}%
-                    </div>
                   </div>
-
-                  {/* Thumbnails (desktop) */}
-                  <div className="hidden md:flex gap-2 mt-2">
-                    {IMAGES.map((src, i) => (
+                  <button type="button" onClick={() => setSlide((slide - 1 + IMAGES.length) % IMAGES.length)}
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow z-10">
+                    <ChevronLeft size={12} className="text-gray-700" />
+                  </button>
+                  <button type="button" onClick={() => setSlide((slide + 1) % IMAGES.length)}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow z-10">
+                    <ChevronRight size={12} className="text-gray-700" />
+                  </button>
+                  <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 z-10">
+                    {IMAGES.map((_, i) => (
                       <button key={i} type="button" onClick={() => setSlide(i)}
-                        className="relative flex-1 aspect-square rounded-lg overflow-hidden transition-all"
-                        style={{ border: `2px solid ${i === slide ? BRAND_COLOR : "transparent"}`, opacity: i === slide ? 1 : 0.5 }}>
-                        <Image src={src} alt="" fill className="object-contain p-1" sizes="80px" />
+                        className="rounded-full transition-all duration-300"
+                        style={i === slide
+                          ? { width: 16, height: 5, backgroundColor: COLOR }
+                          : { width: 5, height: 5, backgroundColor: "rgba(0,0,0,0.15)" }} />
+                    ))}
+                  </div>
+                  <div className="absolute top-2 left-2 bg-black/30 backdrop-blur-sm text-white text-[9px] font-medium px-1.5 py-0.5 rounded-full z-10">
+                    {slide + 1} / {IMAGES.length}
+                  </div>
+                  <div className="absolute top-2 right-2 bg-amber-400 text-black text-[9px] font-black px-2 py-0.5 rounded-full shadow z-10">
+                    -{DISCOUNT}%
+                  </div>
+                </div>
+              </div>
+
+              {/* Product info */}
+              <div className="px-3 pt-3 pb-2 space-y-2.5">
+                <div className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 w-fit">
+                  <div className="flex">{[1,2,3,4,5].map(i => <Star key={i} size={9} className="text-amber-400 fill-amber-400" />)}</div>
+                  <span className="text-[9px] font-semibold text-amber-800">Calitate verificata</span>
+                </div>
+
+                <h3 className="text-[15px] font-black text-gray-900 leading-tight">{PRODUCT_NAME}</h3>
+
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Ilumineaza eficient orice spatiu exterior fara costuri la energie electrica! Echipata cu 8 LED-uri de mare putere, panou solar integrat si telecomanda.
+                </p>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-2xl font-black text-gray-900">{PRICE} lei</span>
+                  <span className="text-sm text-gray-400 line-through">{COMPARE} lei</span>
+                  <span className="bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.5 rounded-full">-{DISCOUNT}%</span>
+                </div>
+
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-2.5 py-2">
+                  <Calendar size={13} className="text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-[11px] font-semibold text-green-800">Livrare estimata</p>
+                    <p className="text-[10px] text-green-600">{fmt(minDate)} - {fmt(maxDate)}</p>
+                  </div>
+                </div>
+
+                {/* CTA */}
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-xl pointer-events-none"
+                    style={{ backgroundColor: COLOR, animation: "demoPulse 1.2s ease-out infinite" }} />
+                  <button type="button" onClick={() => { setModalOpen(true); setSuccess(false); }}
+                    className="relative w-full py-3 text-[11px] font-bold text-white rounded-xl flex items-center justify-center gap-1.5 uppercase tracking-wide"
+                    style={{ backgroundColor: COLOR, boxShadow: `0 4px 16px ${COLOR}55` }}>
+                    <ShoppingBag size={14} />
+                    Comanda acum - Plata la livrare
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 py-0.5">
+                  {[
+                    { icon: ShieldCheck, text: "Plata la livrare" },
+                    { icon: Truck, text: "Livrare 24-48h" },
+                    { icon: RotateCcw, text: "Retur 14 zile" },
+                  ].map(({ icon: Icon, text }) => (
+                    <div key={text} className="flex flex-col items-center gap-0.5 text-center">
+                      <Icon size={14} style={{ color: COLOR }} />
+                      <span className="text-[9px] text-gray-500 font-medium leading-tight">{text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 bg-white border border-gray-100 shadow-sm rounded-full px-2.5 py-1 text-[10px] w-fit">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                  </span>
+                  <Eye size={10} className="text-gray-500" />
+                  <span className="text-gray-700">
+                    <span className="font-bold text-gray-900">{viewers}</span> persoane se uita acum
+                  </span>
+                </div>
+              </div>
+
+              {/* Trust badges */}
+              <div className="px-3 py-4 bg-white">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { icon: Truck, title: "Livrare 24-48h", desc: "Livrare rapida in toata Romania." },
+                    { icon: ShieldCheck, title: "Plata la livrare", desc: "Platesti cash curierului." },
+                    { icon: RotateCcw, title: "Retur 14 zile", desc: "Returneaza fara intrebari." },
+                    { icon: Phone, title: "Suport dedicat", desc: "Disponibil oricand." },
+                  ].map(({ icon: Icon, title, desc }) => (
+                    <div key={title} className="flex flex-col items-center text-center gap-1 p-2.5 bg-white rounded-xl border border-gray-100 shadow-sm">
+                      <div className="w-7 h-7 rounded-full bg-gray-50 flex items-center justify-center">
+                        <Icon size={14} style={{ color: COLOR }} />
+                      </div>
+                      <p className="font-semibold text-gray-900 text-[10px]">{title}</p>
+                      <p className="text-[9px] text-gray-500 leading-relaxed">{desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Specifications */}
+              <div className="px-3 py-4">
+                <div className="text-center mb-3">
+                  <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-0.5">Detalii tehnice</p>
+                  <p className="text-xs font-bold text-gray-900">Specificatii</p>
+                </div>
+                <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                  {SPECS.map((spec, i) => (
+                    <div key={spec.label}
+                      className={`flex items-center gap-2 px-3 py-2 text-[11px] ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${i < SPECS.length - 1 ? "border-b border-gray-100" : ""}`}>
+                      <span className="text-gray-500 w-24 shrink-0 font-medium">{spec.label}</span>
+                      <span className="font-semibold text-gray-900">{spec.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reviews */}
+              <div className="px-3 py-4 bg-white">
+                <div className="text-center mb-3">
+                  <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-0.5">Recenzii verificate</p>
+                  <p className="text-xs font-bold text-gray-900">Ce spun clientii</p>
+                </div>
+                <div className="space-y-2">
+                  {REVIEWS.map((r) => (
+                    <div key={r.name} className="bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
+                      <div className="flex gap-0.5 mb-1.5">
+                        {[1,2,3,4,5].map(i => <Star key={i} size={9} className="text-amber-400 fill-amber-400" />)}
+                      </div>
+                      <p className="text-[11px] text-gray-700 leading-relaxed mb-2">&ldquo;{r.text}&rdquo;</p>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
+                          style={{ backgroundColor: COLOR }}>
+                          {r.name[0]}
+                        </div>
+                        <span className="text-[10px] font-semibold text-gray-900">{r.name}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-gray-900 px-3 py-4 text-center">
+                <p className="text-gray-600 text-[9px]">
+                  &copy; {new Date().getFullYear()} {STORE}. Creat cu{" "}
+                  <span className="font-semibold" style={{ color: COLOR }}>Edinio</span>
+                </p>
+              </div>
+
+              {/* Spacer for sticky bar */}
+              <div className="h-14" />
+            </div>
+
+            {/* Sticky bottom bar */}
+            {!modalOpen && (
+              <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] px-3 py-2 z-30"
+                style={{ paddingBottom: 20 }}>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[9px] font-medium text-gray-500 truncate">{PRODUCT_NAME}</p>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-sm font-bold text-gray-900">{PRICE} lei</span>
+                      <span className="text-[9px] text-gray-400 line-through">{COMPARE} lei</span>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => { setModalOpen(true); setSuccess(false); }}
+                    className="flex items-center gap-1.5 px-4 py-2 text-[10px] font-bold text-white rounded-xl flex-shrink-0 uppercase tracking-wide"
+                    style={{ backgroundColor: COLOR }}>
+                    <ShoppingBag size={12} />
+                    Comanda
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Order modal */}
+            {modalOpen && (
+              <div className="absolute inset-0 z-40" style={{ top: 48 }}>
+                <div className="absolute inset-0 bg-black/60" onClick={() => !success && setModalOpen(false)} />
+
+                <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-[20px] overflow-y-auto"
+                  style={{ maxHeight: "92%", border: `3px solid ${COLOR}`, borderBottom: 0 }}>
+
+                  {success ? (
+                    <div className="px-5 py-10 text-center">
+                      <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ backgroundColor: COLOR }}>
+                        <Check size={32} className="text-white" />
+                      </div>
+                      <h3 className="text-lg font-black text-gray-900 mb-2">Comanda plasata!</h3>
+                      <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                        Aceasta a fost o demonstratie.<br />
+                        Creeaza-ti propriul magazin online gratuit pe Edinio.
+                      </p>
+                      <Link href="/register"
+                        className="inline-flex items-center justify-center gap-2 w-full py-3 text-sm font-bold text-white rounded-xl"
+                        style={{ backgroundColor: "#1AB554" }}>
+                        <Zap size={16} />
+                        Creeaza-ti magazinul gratuit
+                      </Link>
+                      <button type="button" onClick={resetDemo}
+                        className="mt-4 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                        Incearca din nou
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="flex flex-col gap-3">
-                  {/* Rating */}
-                  <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 w-fit">
-                    <div className="flex">{[1,2,3,4,5].map(i => <Star key={i} size={10} className="text-amber-400 fill-amber-400" />)}</div>
-                    <span className="text-[10px] font-semibold text-amber-800">Calitate verificata</span>
-                  </div>
-
-                  {/* Title */}
-                  <h3 className="text-base sm:text-lg md:text-xl font-black text-gray-900 leading-tight">
-                    Lampa Solara Stradala &ndash; 8 LED-uri Puternice, Panou Solar Integrat
-                  </h3>
-
-                  {/* Description */}
-                  <p className="text-[11px] sm:text-xs text-gray-500 leading-relaxed">
-                    Ilumineaza eficient orice spatiu exterior fara costuri la energie electrica! Echipata cu 8 LED-uri de mare putere, panou solar integrat, senzor inteligent de lumina si telecomanda.
-                  </p>
-
-                  {/* Price */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-2xl md:text-3xl font-black text-gray-900">{PRICE} lei</span>
-                    <span className="text-sm text-gray-400 line-through">{COMPARE_PRICE} lei</span>
-                    <span className="bg-amber-400 text-black text-[10px] font-black px-2 py-0.5 rounded-full">-{DISCOUNT}%</span>
-                  </div>
-
-                  {/* Delivery estimate */}
-                  <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                    <Calendar size={14} className="text-green-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-semibold text-green-800">Livrare estimata</p>
-                      <p className="text-[11px] text-green-600">{fmt(minDate)} - {fmt(maxDate)}</p>
                     </div>
-                  </div>
-
-                  {/* CTA */}
-                  <div className="relative">
-                    <div className="absolute inset-0 rounded-xl"
-                      style={{ backgroundColor: BRAND_COLOR, animation: "demoPulse 1.2s ease-out infinite" }} />
-                    <button type="button"
-                      className="relative w-full py-3 text-xs sm:text-sm font-bold text-white rounded-xl flex items-center justify-center gap-2 uppercase tracking-wide"
-                      style={{ backgroundColor: BRAND_COLOR, boxShadow: `0 4px 16px ${BRAND_COLOR}55` }}>
-                      <ShoppingBag size={15} />
-                      Comanda acum - Plata la livrare
-                    </button>
-                  </div>
-
-                  {/* Trust mini */}
-                  <div className="grid grid-cols-3 gap-2 py-1">
-                    {[
-                      { icon: ShieldCheck, text: "Plata la livrare" },
-                      { icon: Truck, text: "Livrare 24-48h" },
-                      { icon: RotateCcw, text: "Retur 14 zile" },
-                    ].map(({ icon: Icon, text }) => (
-                      <div key={text} className="flex flex-col items-center gap-1 text-center">
-                        <Icon size={16} style={{ color: BRAND_COLOR }} />
-                        <span className="text-[10px] text-gray-500 font-medium leading-tight">{text}</span>
+                  ) : (
+                    <>
+                      <div className="flex justify-center pt-2">
+                        <div className="w-8 h-1 rounded-full bg-gray-200" />
                       </div>
-                    ))}
-                  </div>
+                      <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100">
+                        <h3 className="text-sm font-black text-gray-900">Finalizeaza comanda</h3>
+                        <button type="button" onClick={() => setModalOpen(false)} className="p-1 rounded-full hover:bg-gray-100">
+                          <X size={15} className="text-gray-500" />
+                        </button>
+                      </div>
 
-                  {/* Social proof */}
-                  <div className="inline-flex items-center gap-2 bg-white border border-gray-100 shadow-sm rounded-full px-3 py-1.5 text-[11px] w-fit">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                    </span>
-                    <Eye size={12} className="text-gray-500" />
-                    <span className="text-gray-700">
-                      <span className="font-bold text-gray-900">{viewers}</span> persoane se uita acum
-                    </span>
-                  </div>
+                      <form onSubmit={handleSubmit} className="px-4 pt-3 pb-5 space-y-2.5">
+                        {/* Product summary */}
+                        <div className="flex items-center gap-2 p-2 rounded-xl border border-gray-100 bg-gray-50">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-white">
+                            <Image src={IMAGES[0]} alt="" width={40} height={40} className="w-full h-full object-contain p-0.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[10px] text-gray-900 truncate">{PRODUCT_NAME}</p>
+                            <p className="text-[10px] font-black" style={{ color: COLOR }}>{PRICE} lei</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                              className="w-5 h-5 rounded border border-gray-200 flex items-center justify-center text-gray-600">
+                              <Minus size={9} />
+                            </button>
+                            <span className="w-4 text-center text-[10px] font-bold">{quantity}</span>
+                            <button type="button" onClick={() => setQuantity(q => q + 1)}
+                              className="w-5 h-5 rounded border border-gray-200 flex items-center justify-center text-gray-600">
+                              <Plus size={9} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Fields */}
+                        {([
+                          { key: "name", label: "Nume complet", icon: User, placeholder: "Prenume Nume", type: "text" },
+                          { key: "phone", label: "Numar de telefon", icon: Phone, placeholder: "07XXXXXXXX", type: "tel" },
+                        ] as const).map(f => (
+                          <div key={f.key}>
+                            <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">{f.label} *</label>
+                            <div className={`flex overflow-hidden rounded-lg border ${errors[f.key] ? "border-red-400" : "border-gray-200"}`}>
+                              <span className="flex items-center justify-center w-7 bg-gray-50"><f.icon size={12} className="text-gray-500" /></span>
+                              <input value={form[f.key]} onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                placeholder={f.placeholder} type={f.type}
+                                className="flex-1 px-2 py-1.5 text-[11px] text-gray-800 bg-white focus:outline-none placeholder:text-gray-400" />
+                            </div>
+                            {errors[f.key] && <p className="text-[9px] text-red-500 mt-0.5">{errors[f.key]}</p>}
+                          </div>
+                        ))}
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Judet *</label>
+                          <div className={`flex overflow-hidden rounded-lg border ${errors.county ? "border-red-400" : "border-gray-200"}`}>
+                            <span className="flex items-center justify-center w-7 bg-gray-50"><MapPin size={12} className="text-gray-500" /></span>
+                            <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))}
+                              className="flex-1 px-2 py-1.5 text-[11px] text-gray-800 bg-white focus:outline-none">
+                              <option value="">Selecteaza judetul</option>
+                              {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
+                            </select>
+                          </div>
+                          {errors.county && <p className="text-[9px] text-red-500 mt-0.5">{errors.county}</p>}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Oras *</label>
+                          <div className={`flex overflow-hidden rounded-lg border ${errors.city ? "border-red-400" : "border-gray-200"}`}>
+                            <span className="flex items-center justify-center w-7 bg-gray-50"><MapPin size={12} className="text-gray-500" /></span>
+                            <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                              placeholder="Oras / Localitate"
+                              className="flex-1 px-2 py-1.5 text-[11px] text-gray-800 bg-white focus:outline-none placeholder:text-gray-400" />
+                          </div>
+                          {errors.city && <p className="text-[9px] text-red-500 mt-0.5">{errors.city}</p>}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Adresa *</label>
+                          <div className={`flex overflow-hidden rounded-lg border ${errors.address ? "border-red-400" : "border-gray-200"}`}>
+                            <span className="flex items-center justify-center w-7 bg-gray-50"><Home size={12} className="text-gray-500" /></span>
+                            <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                              placeholder="Strada, nr., bloc, ap."
+                              className="flex-1 px-2 py-1.5 text-[11px] text-gray-800 bg-white focus:outline-none placeholder:text-gray-400" />
+                          </div>
+                          {errors.address && <p className="text-[9px] text-red-500 mt-0.5">{errors.address}</p>}
+                        </div>
+
+                        {/* Prioritize extra */}
+                        <button type="button" onClick={() => setPrioritize(!prioritize)}
+                          className="w-full text-left rounded-xl border-2 border-dashed p-2 transition-all"
+                          style={prioritize ? { borderColor: COLOR, backgroundColor: `${COLOR}08` } : { borderColor: "#D1D5DB" }}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded flex items-center justify-center border-2 flex-shrink-0"
+                              style={prioritize ? { borderColor: COLOR, backgroundColor: COLOR } : { borderColor: "#D1D5DB" }}>
+                              {prioritize && <Check size={8} className="text-white" strokeWidth={3} />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-semibold text-gray-900">Prioritizeaza comanda mea</p>
+                              <p className="text-[8px] text-gray-500">Expediata inaintea celorlalte comenzi</p>
+                            </div>
+                            <span className="text-[10px] font-black flex-shrink-0" style={{ color: COLOR }}>+4.99 lei</span>
+                          </div>
+                        </button>
+
+                        {/* Order summary */}
+                        <div className="rounded-xl p-2.5 space-y-1 text-[10px] bg-gray-50 border border-gray-200">
+                          <div className="flex justify-between text-gray-500">
+                            <span>Produs ({quantity} buc)</span>
+                            <span className="font-medium text-gray-900">{subtotal} lei</span>
+                          </div>
+                          {prioritize && (
+                            <div className="flex justify-between text-gray-500">
+                              <span>Prioritizare comanda</span>
+                              <span className="font-medium text-gray-900">4.99 lei</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-gray-500">
+                            <span>Transport</span>
+                            <span className="font-medium text-gray-900">{SHIPPING} lei</span>
+                          </div>
+                          <div className="flex justify-between font-black text-xs border-t border-gray-200 pt-1.5">
+                            <span>Total</span>
+                            <span style={{ color: COLOR }}>{total.toFixed(2).replace(".00", "")} lei</span>
+                          </div>
+                        </div>
+
+                        <button type="submit"
+                          className="w-full flex items-center justify-center gap-2 py-2.5 font-bold text-[11px] text-white rounded-xl uppercase tracking-wide"
+                          style={{ backgroundColor: COLOR, boxShadow: `0 2px 12px ${COLOR}55` }}>
+                          <Banknote size={14} />
+                          Plata la livrare - {total.toFixed(2).replace(".00", "")} lei
+                        </button>
+                        <p className="text-center text-[8px] text-gray-400">
+                          Platesti cash curierului - Fara card necesar
+                        </p>
+                      </form>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Trust badges */}
-            <div className="px-4 md:px-8 pb-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                {[
-                  { icon: Truck, title: "Livrare 24-48h", desc: "Livrare rapida in toata Romania." },
-                  { icon: ShieldCheck, title: "Plata la livrare", desc: "Platesti cash curierului." },
-                  { icon: RotateCcw, title: "Retur 14 zile", desc: "Returneaza fara intrebari." },
-                  { icon: Phone, title: "Suport dedicat", desc: "Disponibil pentru orice intrebare." },
-                ].map(({ icon: Icon, title, desc }) => (
-                  <div key={title} className="flex flex-col items-center text-center gap-1.5 p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
-                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
-                      <Icon size={16} style={{ color: BRAND_COLOR }} />
-                    </div>
-                    <p className="font-semibold text-gray-900 text-[11px]">{title}</p>
-                    <p className="text-[10px] text-gray-500 leading-relaxed">{desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Specifications */}
-            <div className="px-4 md:px-8 pb-6">
-              <div className="text-center mb-4">
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-mono mb-1">Detalii tehnice</p>
-                <p className="text-sm font-bold text-gray-900">Specificatii</p>
-              </div>
-              <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm max-w-2xl mx-auto">
-                {SPECS.map((spec, i) => (
-                  <div key={spec.label}
-                    className={`flex items-center gap-3 px-4 py-2.5 text-xs ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${i < SPECS.length - 1 ? "border-b border-gray-100" : ""}`}>
-                    <span className="text-gray-500 w-28 shrink-0 font-medium">{spec.label}</span>
-                    <span className="font-semibold text-gray-900">{spec.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Reviews */}
-            <div className="px-4 md:px-8 pb-8">
-              <div className="text-center mb-4">
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-mono mb-1">Recenzii verificate</p>
-                <p className="text-sm font-bold text-gray-900">Ce spun clientii</p>
-              </div>
-              <div className="grid sm:grid-cols-3 gap-3 max-w-3xl mx-auto">
-                {REVIEWS.map((r) => (
-                  <div key={r.name} className="bg-white border border-gray-100 rounded-xl p-3 sm:p-4 shadow-sm">
-                    <div className="flex gap-0.5 mb-2">
-                      {[1,2,3,4,5].map(i => <Star key={i} size={10} className="text-amber-400 fill-amber-400" />)}
-                    </div>
-                    <p className="text-[11px] text-gray-700 leading-relaxed mb-3">&ldquo;{r.text}&rdquo;</p>
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                        style={{ backgroundColor: BRAND_COLOR }}>
-                        {r.name[0]}
-                      </div>
-                      <span className="text-[11px] font-semibold text-gray-900">{r.name}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Footer mini */}
-            <div className="bg-gray-900 px-4 md:px-8 py-5 text-center">
-              <p className="text-gray-600 text-[10px]">
-                &copy; {new Date().getFullYear()} {STORE_NAME}. Creat cu{" "}
-                <span className="font-semibold" style={{ color: BRAND_COLOR }}>Edinio</span>
-              </p>
-            </div>
+            {/* Home indicator */}
+            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-24 h-[4px] rounded-full bg-gray-600 z-50" />
           </div>
         </div>
       </div>
 
-      {/* Pulse animation for CTA */}
       <style>{`
         @keyframes demoPulse {
           0% { opacity: 0.6; transform: scale(1); }
           100% { opacity: 0; transform: scale(1.08); }
         }
+        .scrollbar-none::-webkit-scrollbar { display: none; }
+        .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </section>
   );

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { TransparentVideo } from "./TransparentVideo";
+import { HeroMockups } from "./HeroMockups";
 
 export function HeroSection() {
   return (
@@ -40,8 +40,8 @@ export function HeroSection() {
             </div>
           </div>
 
-          {/* ── Right: Video ── */}
-          <TransparentVideo webmSrc="/hero/video.webm" />
+          {/* ── Right: Mockups carousel ── */}
+          <HeroMockups />
         </div>
       </div>
 

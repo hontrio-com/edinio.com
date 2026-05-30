@@ -12,6 +12,7 @@ const SIZES: Record<LogoSize, { icon: number; text: string }> = {
 
 interface LogoProps {
   size?: LogoSize;
+  iconSize?: number;
   href?: string;
   className?: string;
   showText?: boolean;
@@ -20,20 +21,22 @@ interface LogoProps {
 
 export function Logo({
   size = "md",
+  iconSize,
   href = "/",
   className,
   showText = true,
   textClassName,
 }: LogoProps) {
   const { icon, text } = SIZES[size];
+  const finalIcon = iconSize ?? icon;
 
   const content = (
     <>
       <Image
         src="/logo.png"
         alt="Edinio"
-        width={icon}
-        height={icon}
+        width={finalIcon}
+        height={finalIcon}
         className="flex-shrink-0"
       />
       {showText && (

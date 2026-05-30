@@ -238,9 +238,6 @@ const BOTTOM_FEATURES = [
   },
 ];
 
-/* ── Shared visual height for top cards ── */
-const VISUAL_HEIGHT = "h-[300px]";
-
 /* ── Main section ── */
 
 export function FeaturesSection() {
@@ -255,35 +252,36 @@ export function FeaturesSection() {
           </h2>
         </div>
 
-        {/* Top row: 3 cards with real dashboard mockups */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
+        {/* Top row: 3 cards */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5 items-stretch">
           {TOP_FEATURES.map(({ image, visual, title, description }) => (
             <div
               key={title}
-              className="group rounded-2xl border border-border bg-muted/30 p-5 hover:border-primary/20 hover:shadow-md transition-all"
+              className="group rounded-2xl border border-border bg-muted/30 p-5 hover:border-primary/20 hover:shadow-md transition-all flex flex-col"
             >
-              {/* Fixed-height visual wrapper so titles align */}
-              <div className={`${VISUAL_HEIGHT} overflow-hidden rounded-xl mb-5`}>
+              {/* Visual area grows to fill, pushing text to bottom */}
+              <div className="flex-1 mb-5">
                 {image ? (
-                  <div className="relative w-full h-full">
-                    <Image
-                      src={image}
-                      alt={title}
-                      fill
-                      className="object-cover object-top rounded-xl"
-                      sizes="(max-width: 768px) 100vw, 33vw"
-                    />
-                  </div>
+                  <Image
+                    src={image}
+                    alt={title}
+                    width={600}
+                    height={800}
+                    className="w-full h-auto rounded-xl border border-border shadow-sm"
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                  />
                 ) : (
                   visual
                 )}
               </div>
-              <h3 className="text-base font-semibold text-foreground mb-1.5 h-10 flex items-start">
-                {title}
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {description}
-              </p>
+              <div className="mt-auto">
+                <h3 className="text-base font-semibold text-foreground mb-1.5">
+                  {title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {description}
+                </p>
+              </div>
             </div>
           ))}
         </div>

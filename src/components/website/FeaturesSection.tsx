@@ -287,9 +287,9 @@ export function FeaturesSection() {
                 {/* Visual */}
                 <div className={`${reversed ? "lg:order-1" : "lg:order-2"}`}>
                   {feature.images ? (
-                    <div className="flex items-center justify-center gap-4">
+                    <div className="flex items-center justify-center gap-3 sm:gap-4">
                       {feature.images.map((img) => (
-                        <div key={img.src} className="max-w-[180px] sm:max-w-[220px]">
+                        <div key={img.src} className="w-[42%] sm:max-w-[220px]">
                           <Image
                             src={img.src}
                             alt={img.alt}

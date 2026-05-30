@@ -11,9 +11,9 @@ const STEPS = [
   {
     icon: Palette,
     step: "02",
-    title: "Personalizeaza-ti magazinul",
+    title: "Configureaza-ti magazinul",
     description:
-      "Alege un template, adauga produse, seteaza culorile si logo-ul. Totul drag & drop.",
+      "Adauga produse, seteaza logo-ul si culorile, configureaza integrarile cu curierii si procesatorul de plati.",
   },
   {
     icon: Rocket,

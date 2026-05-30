@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils/cn";
 const NAV_LINKS = [
   { href: "/", label: "Acasa" },
   { href: "/preturi", label: "Preturi" },
-  { href: "/#functionalitati", label: "Functionalitati" },
+  { href: "/despre", label: "Despre" },
   { href: "/contact", label: "Contact" },
 ];
 
@@ -36,8 +36,7 @@ export function Navbar() {
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
-    if (href.startsWith("/#")) return pathname === "/";
-    return pathname === href;
+    return pathname === href || pathname.startsWith(href + "/");
   };
 
   return (

@@ -4,7 +4,6 @@ import { HeroSection } from "@/components/website/HeroSection";
 import { FeaturesSection } from "@/components/website/FeaturesSection";
 import { HowItWorksSection } from "@/components/website/HowItWorksSection";
 import { PricingSection } from "@/components/website/PricingSection";
-import { TestimonialsSection } from "@/components/website/TestimonialsSection";
 import { FAQSection } from "@/components/website/FAQSection";
 
 export default function LandingPage() {
@@ -14,7 +13,6 @@ export default function LandingPage() {
       <FeaturesSection />
       <HowItWorksSection />
       <PricingSection />
-      <TestimonialsSection />
       <FAQSection />
 
       {/* Final CTA */}

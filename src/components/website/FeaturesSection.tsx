@@ -240,7 +240,7 @@ const FEATURES: Feature[] = [
 
 export function FeaturesSection() {
   return (
-    <section id="functionalitati" className="py-20 lg:py-28 bg-background">
+    <section id="functionalitati" className="py-20 lg:py-28 bg-background overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="max-w-2xl mx-auto text-center mb-16 lg:mb-20">

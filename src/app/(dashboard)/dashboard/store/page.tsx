@@ -10,19 +10,13 @@ export default async function StoreEditorPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("*")
+    .select("id")
     .eq("user_id", user.id)
     .eq("type", "ministore")
     .limit(1)
     .single();
 
   if (!business) redirect("/dashboard");
-
-  const { data: storeSettings } = await supabase
-    .from("store_settings")
-    .select("*")
-    .eq("business_id", business.id)
-    .single();
 
   return (
     <div className="p-6 max-w-3xl mx-auto">

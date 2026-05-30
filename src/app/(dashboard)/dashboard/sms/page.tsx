@@ -10,38 +10,34 @@ export default async function SmsMarketingPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name")
+    .select("id, business_name, store_settings(smso_config)")
     .eq("user_id", user.id)
     .order("created_at")
     .limit(1)
     .single();
 
-  if (!business) redirect("/dashboard");
+  if (!bizRow) redirect("/dashboard");
 
-  const { data: settings } = await supabase
-    .from("store_settings")
-    .select("smso_config")
-    .eq("business_id", business.id)
-    .single();
-
-  const smsoConfig = settings?.smso_config as SmsoConfig | null;
+  const rawSettings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] ?? null : bizRow.store_settings ?? null;
+  const smsoConfig = rawSettings?.smso_config as SmsoConfig | null;
 
   if (!smsoConfig?.enabled) redirect("/dashboard/settings");
 
-  const { data: campaigns } = await supabase
-    .from("sms_campaigns")
-    .select("*")
-    .eq("business_id", business.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  const initialTemplates = await getSmsTemplates(business.id);
+  const [{ data: campaigns }, initialTemplates] = await Promise.all([
+    supabase
+      .from("sms_campaigns")
+      .select("*")
+      .eq("business_id", bizRow.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    getSmsTemplates(bizRow.id),
+  ]);
 
   return (
     <SMSMarketingClient
-      businessId={business.id}
+      businessId={bizRow.id}
       smsoConfig={smsoConfig}
       initialCampaigns={(campaigns ?? []).map(c => ({ ...c, status: c.status as "sent" | "partial" | "failed" }))}
       initialTemplates={initialTemplates}

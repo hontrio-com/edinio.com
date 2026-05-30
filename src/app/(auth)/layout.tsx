@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AuroraBackground } from "@/components/ui/aurora-background";
+import { Logo } from "@/components/ui/Logo";
 
 export const metadata: Metadata = {
   title: "Autentificare",
@@ -13,18 +14,8 @@ export default function AuthLayout({
   return (
     <AuroraBackground>
       <div className="w-full max-w-md px-4 py-8">
-        <div className="mb-6 sm:mb-8 text-center">
-          <a href="/" className="inline-flex items-center gap-2">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-              style={{ backgroundColor: "var(--color-brand)" }}
-            >
-              E
-            </div>
-            <span className="text-xl font-semibold text-foreground tracking-tight">
-              Edinio
-            </span>
-          </a>
+        <div className="mb-6 sm:mb-8 flex justify-center">
+          <Logo size="lg" />
         </div>
         <div className="bg-white rounded-xl border border-border p-6 sm:p-8 shadow-md">
           {children}

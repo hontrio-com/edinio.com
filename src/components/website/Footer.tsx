@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Logo } from "@/components/ui/Logo";
 
 const PRODUCT_LINKS = [
   { href: "/#functionalitati", label: "Funcționalități" },
@@ -22,12 +23,7 @@ export function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 lg:gap-12">
           {/* Col 1: Logo + descriere */}
           <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-sm">
-                E
-              </div>
-              <span className="text-xl font-bold">Edinio</span>
-            </div>
+            <Logo size="lg" href={undefined} className="mb-4" textClassName="text-background" />
             <p className="text-sm text-background/60 leading-relaxed">
               Platformă completă pentru magazine online. Creează-ți magazinul în câteva minute, cu mentenanță gratuită pe viață și suport 7 zile din 7.
             </p>

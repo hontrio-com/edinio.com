@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { logout } from "@/lib/actions/auth.actions";
+import { Logo } from "@/components/ui/Logo";
 import { formatPrice } from "@/lib/utils/format";
 import { PLAN_LABELS as PLAN_NAMES } from "@/lib/plans";
 import type { Database } from "@/types/database.types";
@@ -342,11 +343,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
       )}>
         {/* Drawer header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-              style={{ backgroundColor: "var(--color-brand)" }}>E</div>
-            <span className="text-base font-semibold text-foreground">Edinio</span>
-          </div>
+          <Logo size="sm" href="/dashboard" />
           <button type="button" onClick={() => setMobileOpen(false)}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors">
             <X className="h-4.5 w-4.5 text-muted-foreground" />

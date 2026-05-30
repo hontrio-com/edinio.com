@@ -9,6 +9,7 @@ import {
   History, Settings2, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { Logo } from "@/components/ui/Logo";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
@@ -40,13 +41,7 @@ function SidebarContent({ adminName, adminEmail, onClose }: { adminName: string;
       {/* Brand */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-            <Shield className="h-4 w-4 text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-white leading-none">Edinio Admin</p>
-            <p className="text-[10px] text-zinc-400 mt-0.5">Panou de control</p>
-          </div>
+          <Logo size="sm" href="/admin" textClassName="text-white" />
         </div>
         {onClose && (
           <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors lg:hidden">

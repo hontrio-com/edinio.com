@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { Logo } from "@/components/ui/Logo";
 
 const NAV_LINKS = [
   { href: "/#functionalitati", label: "Funcționalități" },
@@ -99,14 +100,7 @@ export function Navbar() {
       >
         <nav className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-sm shadow-md shadow-primary/25 transition-transform group-hover:scale-105">
-              E
-            </div>
-            <span className="text-xl font-bold text-foreground tracking-tight">
-              Edinio
-            </span>
-          </Link>
+          <Logo size="lg" className="group" />
 
           {/* Desktop links — pill style */}
           <div className="hidden md:flex items-center gap-1 rounded-full bg-muted/60 backdrop-blur-sm border border-border/50 px-1.5 py-1">

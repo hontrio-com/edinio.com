@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
+import { Logo } from "@/components/ui/Logo";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -57,10 +58,8 @@ export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled, unread
     <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 bg-sidebar border-r border-sidebar-border z-20"
       style={{ width: "var(--sidebar-width)" }}>
       {/* Logo */}
-      <div className="px-4 py-4 border-b border-sidebar-border flex items-center gap-2">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-          style={{ backgroundColor: "var(--color-brand)" }}>E</div>
-        <span className="text-base font-semibold text-foreground tracking-tight">Edinio</span>
+      <div className="px-4 py-4 border-b border-sidebar-border">
+        <Logo size="sm" href="/dashboard" />
       </div>
 
       {/* Business switcher */}

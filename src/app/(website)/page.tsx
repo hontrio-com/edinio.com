@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { HeroSection } from "@/components/website/HeroSection";
 import { FeaturesSection } from "@/components/website/FeaturesSection";
 import { HowItWorksSection } from "@/components/website/HowItWorksSection";
+import { DemoSection } from "@/components/website/DemoSection";
 import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
 
@@ -12,6 +13,7 @@ export default function LandingPage() {
       <HeroSection />
       <FeaturesSection />
       <HowItWorksSection />
+      <DemoSection />
       <PricingSection />
       <FAQSection />
 

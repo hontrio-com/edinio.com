@@ -59,10 +59,10 @@ export function Navbar() {
       {/* ── Main navbar ── */}
       <header
         className={cn(
-          "sticky top-0 z-50 transition-all duration-300 border-b",
+          "sticky top-0 z-50 transition-all duration-300 border-b bg-background",
           scrolled
-            ? "glass-nav shadow-lg shadow-black/[0.03] border-border"
-            : "bg-background border-border"
+            ? "shadow-lg shadow-black/[0.03] border-border"
+            : "border-border"
         )}
       >
         <nav className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">

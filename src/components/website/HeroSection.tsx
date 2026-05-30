@@ -44,44 +44,6 @@ export function HeroSection() {
           <HeroMockups />
         </div>
       </div>
-
-      {/* ── Logo marquee ── */}
-      <div className="border-t border-border bg-background py-8">
-        <p className="text-center text-sm text-muted-foreground mb-6">
-          Folosit de{" "}
-          <span className="text-primary font-semibold">150+</span> afaceri
-          locale din Romania
-        </p>
-        <div className="relative overflow-hidden">
-          <div className="flex items-center gap-16 animate-marquee whitespace-nowrap">
-            {[
-              "Floraria Maria",
-              "Cofetaria Dulce",
-              "Bijuterii Ana",
-              "Salon Elena",
-              "Patiseria Bon",
-              "Atelier Creativ",
-              "Casa Verde",
-              "Dulciuri Fine",
-              "Floraria Maria",
-              "Cofetaria Dulce",
-              "Bijuterii Ana",
-              "Salon Elena",
-              "Patiseria Bon",
-              "Atelier Creativ",
-              "Casa Verde",
-              "Dulciuri Fine",
-            ].map((name, i) => (
-              <span
-                key={i}
-                className="text-lg font-bold text-muted-foreground/25 select-none"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
     </section>
   );
 }

@@ -101,7 +101,7 @@ const ORBIT_ICONS: { src: string; alt: string; filter?: string; scale?: number }
   { src: "/integrations/dpd.svg", alt: "DPD" },
   { src: "/integrations/colete-online.svg", alt: "Colete Online" },
   { src: "/integrations/woot.svg", alt: "Woot", filter: "invert(1)" },
-  { src: "/integrations/fgo.svg", alt: "FGO" },
+  { src: "/integrations/fgo.svg", alt: "FGO", filter: "invert(1)" },
   { src: "/integrations/smartbill.svg", alt: "SmartBill", scale: 1.25 },
   { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   { src: "/integrations/smso.svg", alt: "SMSO", scale: 1.3 },
@@ -175,6 +175,7 @@ interface Feature {
   title: string;
   description: string;
   benefits: string[];
+  images?: { src: string; alt: string }[];
   image?: string;
   visual?: React.ReactNode;
   imageClass?: string;
@@ -182,16 +183,19 @@ interface Feature {
 
 const FEATURES: Feature[] = [
   {
-    image: "/features/f1.png",
-    imageClass: "max-w-[280px] sm:max-w-[320px] mx-auto",
+    images: [
+      { src: "/features/f1.png", alt: "Pagina produs" },
+      { src: "/features/f1.1.png", alt: "Formular comanda" },
+    ],
     title: "Sablon optimizat pentru piata din Romania",
     description:
       "Magazine configurate cu lei, livrare locala, facturare si tot ce ai nevoie pentru a vinde in Romania.",
     benefits: [
-      "Preturi in lei, checkout in limba romana",
-      "Facturare automata integrata",
-      "Metode de livrare locale preconfigurate",
-      "Sablon creat special pentru piata romaneasca",
+      "Formular de comanda optimizat",
+      "Elemente de trust integrate",
+      "Sistem de adaugare recenzii",
+      "Adaugare caracteristici produs",
+      "Buton de COMANDA ACUM sticky",
     ],
   },
   {
@@ -282,7 +286,22 @@ export function FeaturesSection() {
 
                 {/* Visual */}
                 <div className={`${reversed ? "lg:order-1" : "lg:order-2"}`}>
-                  {feature.image ? (
+                  {feature.images ? (
+                    <div className="flex items-center justify-center gap-4">
+                      {feature.images.map((img) => (
+                        <div key={img.src} className="max-w-[180px] sm:max-w-[220px]">
+                          <Image
+                            src={img.src}
+                            alt={img.alt}
+                            width={400}
+                            height={800}
+                            className="w-full h-auto rounded-2xl border border-border shadow-lg"
+                            sizes="(max-width: 1024px) 45vw, 25vw"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : feature.image ? (
                     <div className={feature.imageClass ?? ""}>
                       <Image
                         src={feature.image}

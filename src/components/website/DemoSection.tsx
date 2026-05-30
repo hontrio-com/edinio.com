@@ -112,7 +112,7 @@ export function DemoSection() {
   }
 
   return (
-    <section className="py-20 lg:py-28 bg-muted/30 overflow-hidden">
+    <section id="demo" className="py-20 lg:py-28 bg-muted/30 overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="max-w-2xl mx-auto text-center mb-12 lg:mb-16">

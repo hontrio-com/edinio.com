@@ -7,10 +7,10 @@ import { Menu, X, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const NAV_LINKS = [
-  { href: "/", label: "Acasa" },
-  { href: "/preturi", label: "Preturi" },
-  { href: "/despre", label: "Despre" },
-  { href: "/contact", label: "Contact" },
+  { href: "/#functionalitati", label: "Functionalitati" },
+  { href: "/#demo", label: "Demo interactiv" },
+  { href: "/#preturi", label: "Preturi" },
+  { href: "/#faq", label: "FAQ" },
 ];
 
 const ANNOUNCEMENT =
@@ -20,6 +20,7 @@ export function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [activeHash, setActiveHash] = useState("");
 
   useEffect(() => {
     function onScroll() {
@@ -34,9 +35,41 @@ export function Navbar() {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Track active section via IntersectionObserver
+  useEffect(() => {
+    if (pathname !== "/") { setActiveHash(""); return; }
+    const ids = ["functionalitati", "demo", "preturi", "faq"];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveHash("#" + entry.target.id);
+          }
+        }
+      },
+      { rootMargin: "-40% 0px -55% 0px" }
+    );
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [pathname]);
+
+  function handleClick(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    const hash = href.replace("/", "");
+    const el = document.querySelector(hash);
+    if (el) {
+      e.preventDefault();
+      el.scrollIntoView({ behavior: "smooth" });
+      setMobileOpen(false);
+    }
+  }
+
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname === href || pathname.startsWith(href + "/");
+    if (pathname !== "/") return false;
+    const hash = href.replace("/", "");
+    return activeHash === hash;
   };
 
   return (
@@ -78,18 +111,19 @@ export function Navbar() {
           {/* Desktop links — pill style */}
           <div className="hidden md:flex items-center gap-1 rounded-full bg-muted/60 backdrop-blur-sm border border-border/50 px-1.5 py-1">
             {NAV_LINKS.map((link) => (
-              <Link
+              <a
                 key={link.href}
                 href={link.href}
+                onClick={(e) => handleClick(e, link.href)}
                 className={cn(
-                  "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
+                  "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer",
                   isActive(link.href)
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
               >
                 {link.label}
-              </Link>
+              </a>
             ))}
           </div>
 
@@ -129,18 +163,19 @@ export function Navbar() {
           <div className="md:hidden glass-nav border-t border-white/10">
             <div className="max-w-6xl mx-auto px-4 py-4 space-y-1">
               {NAV_LINKS.map((link) => (
-                <Link
+                <a
                   key={link.href}
                   href={link.href}
+                  onClick={(e) => handleClick(e, link.href)}
                   className={cn(
-                    "block px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                    "block px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer",
                     isActive(link.href)
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                   )}
                 >
                   {link.label}
-                </Link>
+                </a>
               ))}
               <div className="pt-3 mt-2 border-t border-border/50 space-y-2">
                 <Link

@@ -1,6 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
 import {
-  ChevronDown,
+  ChevronDown, Check,
   Info, Palette, MapPin, Share2, Layout, Globe,
 } from "lucide-react";
 
@@ -113,11 +114,11 @@ function IntegrationOrbit() {
 
   return (
     <div className="relative w-[340px] h-[340px] sm:w-[380px] sm:h-[380px] mx-auto">
-      {/* Orbit ring lines */}
+      {/* Orbit ring lines (static) */}
       <div className="absolute inset-[60px] sm:inset-[65px] rounded-full border border-border/40" />
       <div className="absolute inset-[30px] sm:inset-[25px] rounded-full border border-dashed border-border/20" />
 
-      {/* Center - Edinio logo */}
+      {/* Center - Edinio logo (static) */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-primary flex items-center justify-center shadow-xl shadow-primary/25 z-10">
         <span className="text-white font-bold text-2xl sm:text-3xl">E</span>
       </div>
@@ -125,38 +126,45 @@ function IntegrationOrbit() {
       {/* Subtle glow behind center */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-primary/10 blur-xl" />
 
-      {/* Orbiting icons */}
-      {ORBIT_ICONS.map((icon, i) => {
-        const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
-        const r = radius;
-        const x = Math.cos(angle) * r;
-        const y = Math.sin(angle) * r;
+      {/* Rotating icons wrapper */}
+      <div
+        className="absolute inset-0"
+        style={{ animation: "spin 80s linear infinite" }}
+      >
+        {ORBIT_ICONS.map((icon, i) => {
+          const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
 
-        return (
-          <div
-            key={icon.alt}
-            className="absolute top-1/2 left-1/2 z-20"
-            style={{
-              transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
-            }}
-          >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white border border-border flex items-center justify-center p-2 shadow-md hover:shadow-lg hover:scale-110 transition-all">
-              <Image
-                src={icon.src}
-                alt={icon.alt}
-                width={28}
-                height={28}
-                className="w-full h-full object-contain"
-                style={{
-                  filter: icon.filter ?? undefined,
-                  transform: icon.scale ? `scale(${icon.scale})` : undefined,
-                  transformOrigin: "center",
-                }}
-              />
+          return (
+            <div
+              key={icon.alt}
+              className="absolute top-1/2 left-1/2 z-20"
+              style={{
+                transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
+              }}
+            >
+              <div
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white border border-border flex items-center justify-center p-2 shadow-md"
+                style={{ animation: "spin 80s linear infinite reverse" }}
+              >
+                <Image
+                  src={icon.src}
+                  alt={icon.alt}
+                  width={28}
+                  height={28}
+                  className="w-full h-full object-contain"
+                  style={{
+                    filter: icon.filter ?? undefined,
+                    transform: icon.scale ? `scale(${icon.scale})` : undefined,
+                    transformOrigin: "center",
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -166,6 +174,7 @@ function IntegrationOrbit() {
 interface Feature {
   title: string;
   description: string;
+  benefits: string[];
   image?: string;
   visual?: React.ReactNode;
   imageClass?: string;
@@ -177,25 +186,49 @@ const FEATURES: Feature[] = [
     imageClass: "max-w-[280px] sm:max-w-[320px] mx-auto",
     title: "Sablon optimizat pentru piata din Romania",
     description:
-      "Magazine configurate cu lei, livrare locala, facturare si tot ce ai nevoie pentru a vinde in Romania. Sablonul nostru e creat special pentru antreprenorii romani.",
+      "Magazine configurate cu lei, livrare locala, facturare si tot ce ai nevoie pentru a vinde in Romania.",
+    benefits: [
+      "Preturi in lei, checkout in limba romana",
+      "Facturare automata integrata",
+      "Metode de livrare locale preconfigurate",
+      "Sablon creat special pentru piata romaneasca",
+    ],
   },
   {
     image: "/features/f2.png",
     title: "Gestioneaza totul usor",
     description:
-      "Comenzi, produse, stocuri si clienti. Toate intr-un singur dashboard intuitiv. Ai control total asupra magazinului tau, de pe orice dispozitiv.",
+      "Comenzi, produse, stocuri si clienti. Toate intr-un singur dashboard intuitiv.",
+    benefits: [
+      "Dashboard complet pentru comenzi si produse",
+      "Gestionare stocuri in timp real",
+      "Acces de pe orice dispozitiv",
+      "Notificari pentru comenzi noi",
+    ],
   },
   {
     visual: <MockCustomize />,
     title: "Personalizare rapida, chiar si de pe telefon",
     description:
-      "Schimba culori, fonturi, efecte si continut din cateva click-uri. Fara cunostinte tehnice. Fiecare sectiune se salveaza independent.",
+      "Schimba culori, fonturi, efecte si continut din cateva click-uri. Fara cunostinte tehnice.",
+    benefits: [
+      "Editor vizual intuitiv",
+      "Schimba culori si fonturi instant",
+      "Fiecare sectiune se salveaza independent",
+      "Functioneaza perfect pe mobil",
+    ],
   },
   {
     visual: <IntegrationOrbit />,
     title: "Toate integrarile de care ai nevoie, intr-un singur loc",
     description:
-      "Plati prin card, ramburs la curier, ridicare din magazin, curieri, facturare, SMS si marketing. Totul conectat nativ la magazinul tau, fara cod si fara costuri suplimentare.",
+      "Plati, curieri, facturare, SMS si marketing. Totul conectat nativ la magazinul tau.",
+    benefits: [
+      "Plati prin card, ramburs sau ridicare din magazin",
+      "Curieri: Sameday, Fan Courier, Cargus, DPD, GLS",
+      "Facturare: SmartBill, Oblio, FGO",
+      "SMS si marketing: SMSO, Woot",
+    ],
   },
 ];
 
@@ -228,9 +261,23 @@ export function FeaturesSection() {
                   <h3 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-4">
                     {feature.title}
                   </h3>
-                  <p className="text-base text-muted-foreground leading-relaxed">
+                  <p className="text-base text-muted-foreground leading-relaxed mb-5">
                     {feature.description}
                   </p>
+                  <ul className="space-y-2.5 mb-7">
+                    {feature.benefits.map((b) => (
+                      <li key={b} className="flex items-start gap-2.5 text-sm text-foreground">
+                        <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
+                  >
+                    Testeaza gratuit
+                  </Link>
                 </div>
 
                 {/* Visual */}

@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw, Phone,
   Star, ShoppingBag, Eye, ArrowLeft, Calendar, X, User, MapPin, Home,
-  Minus, Plus, Banknote, Check, Zap,
+  Banknote, Check, Zap,
 } from "lucide-react";
 
 const COLOR = "#1877F2";
@@ -55,7 +55,7 @@ export function DemoSection() {
   const [viewers, setViewers] = useState(18);
   const [modalOpen, setModalOpen] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const [selectedTier, setSelectedTier] = useState(0);
   const [prioritize, setPrioritize] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", county: "", city: "", address: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -74,7 +74,13 @@ export function DemoSection() {
   const maxDate = new Date(now); maxDate.setDate(maxDate.getDate() + 4);
   const fmt = (d: Date) => d.toLocaleDateString("ro-RO", { day: "numeric", month: "long" });
 
-  const subtotal = PRICE * quantity;
+  const TIERS = [
+    { qty: 1, price: 49, badge: "" },
+    { qty: 2, price: 89, badge: "Cel mai bun pret" },
+    { qty: 3, price: 125, badge: "Cel mai bun pret" },
+  ];
+  const tier = TIERS[selectedTier];
+  const subtotal = tier.price;
   const extraCost = prioritize ? 4.99 : 0;
   const total = subtotal + extraCost + SHIPPING;
 
@@ -98,7 +104,7 @@ export function DemoSection() {
   function resetDemo() {
     setSuccess(false);
     setModalOpen(false);
-    setQuantity(1);
+    setSelectedTier(0);
     setPrioritize(false);
     setForm({ name: "", phone: "", county: "", city: "", address: "" });
     setErrors({});
@@ -132,16 +138,26 @@ export function DemoSection() {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[110px] sm:w-[140px] h-[26px] sm:h-[32px] bg-gray-900 rounded-b-2xl z-50" />
 
             {/* Status bar */}
-            <div className="relative h-[42px] sm:h-[48px] bg-white flex items-end justify-between px-6 pb-1 z-40">
-              <span className="text-[10px] font-semibold text-gray-900">9:41</span>
-              <div className="flex items-center gap-1">
-                <div className="flex gap-px">
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className="w-[3px] rounded-sm bg-gray-900" style={{ height: 3 + i * 2 }} />
-                  ))}
+            <div className="relative h-[42px] sm:h-[48px] bg-white flex items-end justify-between px-6 sm:px-7 pb-1.5 z-40">
+              <span className="text-[11px] font-semibold text-gray-900 tracking-tight">9:41</span>
+              <div className="flex items-center gap-[5px]">
+                {/* Signal bars */}
+                <div className="flex items-end gap-[1.5px]">
+                  <div className="w-[3px] h-[4px] rounded-[0.5px] bg-gray-900" />
+                  <div className="w-[3px] h-[6px] rounded-[0.5px] bg-gray-900" />
+                  <div className="w-[3px] h-[8px] rounded-[0.5px] bg-gray-900" />
+                  <div className="w-[3px] h-[10px] rounded-[0.5px] bg-gray-900" />
                 </div>
-                <div className="w-5 h-2.5 rounded-sm border border-gray-900 relative ml-1">
-                  <div className="absolute inset-[1px] rounded-[1px] bg-gray-900" style={{ width: "70%" }} />
+                {/* WiFi */}
+                <svg width="13" height="10" viewBox="0 0 16 12" className="text-gray-900 ml-0.5">
+                  <path d="M8 9.6a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4zM8 6c1.82 0 3.47.74 4.66 1.94a.6.6 0 01-.85.85A5.37 5.37 0 008 7.2a5.37 5.37 0 00-3.81 1.59.6.6 0 01-.85-.85A6.57 6.57 0 018 6zm0-3.6c2.8 0 5.34 1.14 7.17 2.98a.6.6 0 01-.85.85A9.17 9.17 0 008 3.6a9.17 9.17 0 00-6.32 2.63.6.6 0 01-.85-.85A10.37 10.37 0 018 2.4z" fill="currentColor" />
+                </svg>
+                {/* Battery */}
+                <div className="flex items-center ml-0.5">
+                  <div className="w-[22px] h-[10px] rounded-[2.5px] border-[1.5px] border-gray-900 relative">
+                    <div className="absolute inset-[1.5px] rounded-[1px] bg-gray-900" style={{ width: "65%" }} />
+                  </div>
+                  <div className="w-[1.5px] h-[4px] rounded-r-sm bg-gray-900 ml-[0.5px]" />
                 </div>
               </div>
             </div>
@@ -399,26 +415,47 @@ export function DemoSection() {
                       </div>
 
                       <form onSubmit={handleSubmit} className="px-4 pt-3 pb-5 space-y-2.5">
-                        {/* Product summary */}
-                        <div className="flex items-center gap-2 p-2 rounded-xl border border-gray-100 bg-gray-50">
-                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-white">
-                            <Image src={IMAGES[0]} alt="" width={40} height={40} className="w-full h-full object-contain p-0.5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-[10px] text-gray-900 truncate">{PRODUCT_NAME}</p>
-                            <p className="text-[10px] font-black" style={{ color: COLOR }}>{PRICE} lei</p>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                              className="w-5 h-5 rounded border border-gray-200 flex items-center justify-center text-gray-600">
-                              <Minus size={9} />
-                            </button>
-                            <span className="w-4 text-center text-[10px] font-bold">{quantity}</span>
-                            <button type="button" onClick={() => setQuantity(q => q + 1)}
-                              className="w-5 h-5 rounded border border-gray-200 flex items-center justify-center text-gray-600">
-                              <Plus size={9} />
-                            </button>
-                          </div>
+                        {/* Quantity tiers */}
+                        <div className="space-y-1.5">
+                          <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Alege cantitatea</p>
+                          {TIERS.map((t, i) => {
+                            const selected = selectedTier === i;
+                            const baseTotal = PRICE * t.qty;
+                            const savings = baseTotal - t.price;
+                            return (
+                              <button key={i} type="button" onClick={() => setSelectedTier(i)}
+                                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl border-2 transition-all text-left"
+                                style={{ borderColor: selected ? COLOR : "#E5E7EB", background: selected ? `${COLOR}12` : "#fff" }}>
+                                <div className="w-9 h-9 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-gray-50">
+                                  <Image src={IMAGES[0]} alt="" width={36} height={36} className="w-full h-full object-contain p-0.5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-bold text-[10px] text-gray-900">
+                                    {t.qty} x {t.qty === 1 ? "Lampa Solara" : "Lampi Solare"}
+                                  </p>
+                                  {t.badge ? (
+                                    <span className="inline-block mt-0.5 text-white text-[8px] font-black px-1.5 py-px rounded"
+                                      style={{ backgroundColor: COLOR }}>{t.badge}</span>
+                                  ) : (
+                                    <span className="text-[9px] text-gray-400">{t.price} lei / buc</span>
+                                  )}
+                                  {savings > 0 && (
+                                    <p className="text-[8px] text-green-600 font-semibold">Economisesti {savings} lei</p>
+                                  )}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="font-black text-sm text-gray-900">{t.price} lei</p>
+                                  {savings > 0 && (
+                                    <p className="text-[9px] text-gray-400 line-through">{baseTotal} lei</p>
+                                  )}
+                                </div>
+                                <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0"
+                                  style={selected ? { borderColor: COLOR, backgroundColor: COLOR } : { borderColor: "#D1D5DB" }}>
+                                  {selected && <Check size={8} className="text-white" strokeWidth={3} />}
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
 
                         {/* Fields */}
@@ -493,7 +530,7 @@ export function DemoSection() {
                         {/* Order summary */}
                         <div className="rounded-xl p-2.5 space-y-1 text-[10px] bg-gray-50 border border-gray-200">
                           <div className="flex justify-between text-gray-500">
-                            <span>Produs ({quantity} buc)</span>
+                            <span>Produs ({tier.qty} buc)</span>
                             <span className="font-medium text-gray-900">{subtotal} lei</span>
                           </div>
                           {prioritize && (

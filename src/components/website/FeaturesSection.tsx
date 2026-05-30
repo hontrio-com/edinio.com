@@ -2,7 +2,6 @@ import Image from "next/image";
 import {
   ChevronDown,
   Info, Palette, MapPin, Share2, Layout, Globe,
-  Banknote, Store,
 } from "lucide-react";
 
 /* ── Store editor mockup (matches real StoreEditor.tsx) ── */
@@ -90,19 +89,11 @@ function MockCustomize() {
   );
 }
 
-/* ── Integration icon grids ── */
+/* ── Integration orbit ── */
 
-const PAYMENT_ICONS: { src: string; alt: string; filter?: string }[] = [
+const ORBIT_ICONS: { src: string; alt: string; filter?: string; scale?: number }[] = [
   { src: "/integrations/stripe.svg", alt: "Stripe" },
   { src: "/integrations/netopia.svg", alt: "Netopia", filter: "invert(1)" },
-];
-
-const PAYMENT_EXTRA = [
-  { icon: Banknote, label: "Ramburs la curier" },
-  { icon: Store, label: "Ridicare din magazin" },
-];
-
-const SERVICE_ICONS: { src: string; alt: string; filter?: string; scale?: number }[] = [
   { src: "/integrations/sameday.svg", alt: "Sameday" },
   { src: "/integrations/fan-courier.svg", alt: "Fan Courier" },
   { src: "/integrations/cargus.svg", alt: "Cargus" },
@@ -116,59 +107,56 @@ const SERVICE_ICONS: { src: string; alt: string; filter?: string; scale?: number
   { src: "/integrations/gls.svg", alt: "GLS" },
 ];
 
-function IconGrid({ icons }: { icons: { src: string; alt: string; filter?: string; scale?: number }[] }) {
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-4">
-      {icons.map((icon) => (
-        <div
-          key={icon.alt}
-          className="w-14 h-14 rounded-xl bg-white border border-border flex items-center justify-center p-2.5 shadow-sm"
-        >
-          <Image
-            src={icon.src}
-            alt={icon.alt}
-            width={32}
-            height={32}
-            className="w-full h-full object-contain"
-            style={{
-              filter: icon.filter ?? undefined,
-              transform: icon.scale ? `scale(${icon.scale})` : undefined,
-              transformOrigin: "center",
-            }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
+function IntegrationOrbit() {
+  const count = ORBIT_ICONS.length;
+  const radius = 155;
 
-function PaymentGrid() {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-4">
-      {PAYMENT_ICONS.map((icon) => (
-        <div
-          key={icon.alt}
-          className="w-14 h-14 rounded-xl bg-white border border-border flex items-center justify-center p-2.5 shadow-sm"
-        >
-          <Image
-            src={icon.src}
-            alt={icon.alt}
-            width={32}
-            height={32}
-            className="w-full h-full object-contain"
-            style={{ filter: icon.filter ?? undefined }}
-          />
-        </div>
-      ))}
-      {PAYMENT_EXTRA.map(({ icon: Icon, label }) => (
-        <div
-          key={label}
-          className="h-14 rounded-xl bg-white border border-border flex items-center justify-center gap-2 px-4 shadow-sm"
-        >
-          <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-          <span className="text-sm font-medium text-foreground whitespace-nowrap">{label}</span>
-        </div>
-      ))}
+    <div className="relative w-[340px] h-[340px] sm:w-[380px] sm:h-[380px] mx-auto">
+      {/* Orbit ring lines */}
+      <div className="absolute inset-[60px] sm:inset-[65px] rounded-full border border-border/40" />
+      <div className="absolute inset-[30px] sm:inset-[25px] rounded-full border border-dashed border-border/20" />
+
+      {/* Center - Edinio logo */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-primary flex items-center justify-center shadow-xl shadow-primary/25 z-10">
+        <span className="text-white font-bold text-2xl sm:text-3xl">E</span>
+      </div>
+
+      {/* Subtle glow behind center */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-primary/10 blur-xl" />
+
+      {/* Orbiting icons */}
+      {ORBIT_ICONS.map((icon, i) => {
+        const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
+        const r = radius;
+        const x = Math.cos(angle) * r;
+        const y = Math.sin(angle) * r;
+
+        return (
+          <div
+            key={icon.alt}
+            className="absolute top-1/2 left-1/2 z-20"
+            style={{
+              transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
+            }}
+          >
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white border border-border flex items-center justify-center p-2 shadow-md hover:shadow-lg hover:scale-110 transition-all">
+              <Image
+                src={icon.src}
+                alt={icon.alt}
+                width={28}
+                height={28}
+                className="w-full h-full object-contain"
+                style={{
+                  filter: icon.filter ?? undefined,
+                  transform: icon.scale ? `scale(${icon.scale})` : undefined,
+                  transformOrigin: "center",
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -180,11 +168,13 @@ interface Feature {
   description: string;
   image?: string;
   visual?: React.ReactNode;
+  imageClass?: string;
 }
 
 const FEATURES: Feature[] = [
   {
     image: "/features/f1.png",
+    imageClass: "max-w-[280px] sm:max-w-[320px] mx-auto",
     title: "Sablon optimizat pentru piata din Romania",
     description:
       "Magazine configurate cu lei, livrare locala, facturare si tot ce ai nevoie pentru a vinde in Romania. Sablonul nostru e creat special pentru antreprenorii romani.",
@@ -202,16 +192,10 @@ const FEATURES: Feature[] = [
       "Schimba culori, fonturi, efecte si continut din cateva click-uri. Fara cunostinte tehnice. Fiecare sectiune se salveaza independent.",
   },
   {
-    visual: <PaymentGrid />,
-    title: "Configurare modalitati de plata",
+    visual: <IntegrationOrbit />,
+    title: "Toate integrarile de care ai nevoie, intr-un singur loc",
     description:
-      "Accepta plati prin card, transfer bancar, ramburs la curier sau ridicare din magazin. Configurare in cateva minute, totul integrat nativ.",
-  },
-  {
-    visual: <IconGrid icons={SERVICE_ICONS} />,
-    title: "Integrari cu servicii locale",
-    description:
-      "Conecteaza magazinul cu servicii de livrare, facturare, SMS si marketing din Romania. Totul se configureaza din dashboard fara cod.",
+      "Plati prin card, ramburs la curier, ridicare din magazin, curieri, facturare, SMS si marketing. Totul conectat nativ la magazinul tau, fara cod si fara costuri suplimentare.",
   },
 ];
 
@@ -237,9 +221,7 @@ export function FeaturesSection() {
             return (
               <div
                 key={feature.title}
-                className={`grid lg:grid-cols-2 gap-8 lg:gap-16 items-center ${
-                  reversed ? "lg:direction-rtl" : ""
-                }`}
+                className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center"
               >
                 {/* Text */}
                 <div className={`${reversed ? "lg:order-2" : "lg:order-1"}`}>
@@ -254,18 +236,18 @@ export function FeaturesSection() {
                 {/* Visual */}
                 <div className={`${reversed ? "lg:order-1" : "lg:order-2"}`}>
                   {feature.image ? (
-                    <Image
-                      src={feature.image}
-                      alt={feature.title}
-                      width={600}
-                      height={800}
-                      className="w-full h-auto rounded-2xl border border-border shadow-lg"
-                      sizes="(max-width: 1024px) 100vw, 50vw"
-                    />
-                  ) : (
-                    <div className="rounded-2xl border border-border bg-muted/30 p-5 lg:p-8 shadow-lg">
-                      {feature.visual}
+                    <div className={feature.imageClass ?? ""}>
+                      <Image
+                        src={feature.image}
+                        alt={feature.title}
+                        width={600}
+                        height={800}
+                        className="w-full h-auto rounded-2xl border border-border shadow-lg"
+                        sizes="(max-width: 1024px) 100vw, 50vw"
+                      />
                     </div>
+                  ) : (
+                    feature.visual
                   )}
                 </div>
               </div>

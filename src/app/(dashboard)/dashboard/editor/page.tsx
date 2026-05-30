@@ -8,21 +8,20 @@ export default async function EditorPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: row } = await supabase
     .from("businesses")
-    .select("*")
+    .select("*, store_settings(*)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .single();
 
-  if (!business) redirect("/dashboard");
+  if (!row) redirect("/dashboard");
 
-  const { data: storeSettings } = await supabase
-    .from("store_settings")
-    .select("*")
-    .eq("business_id", business.id)
-    .single();
+  const { store_settings: rawSettings, ...business } = row;
+  const storeSettings = Array.isArray(rawSettings)
+    ? rawSettings[0] ?? null
+    : rawSettings ?? null;
 
   return <StoreEditor business={business} storeSettings={storeSettings} />;
 }

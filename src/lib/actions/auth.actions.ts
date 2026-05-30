@@ -24,17 +24,16 @@ function verifyOtpHash(code: string, storedHash: string, expiresAt: string): boo
 export async function login(formData: { email: string; password: string }) {
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data: authData, error } = await supabase.auth.signInWithPassword({
     email: formData.email,
     password: formData.password,
   });
 
-  if (error) {
+  if (error || !authData.user) {
     return { error: "Email sau parola incorecta. Incearca din nou." };
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Autentificare esuata." };
+  const user = authData.user;
 
   const { data: profile } = await supabase
     .from("users_profile")
@@ -56,6 +55,10 @@ export async function login(formData: { email: string; password: string }) {
   if (!profile?.onboarding_completed) {
     redirect("/onboarding/details");
   }
+
+  // Set cookie so proxy middleware skips onboarding DB check on redirect
+  const cookieStore = await cookies();
+  cookieStore.set("onboarding_done", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30, secure: process.env.NODE_ENV === "production" });
 
   redirect("/dashboard");
 }

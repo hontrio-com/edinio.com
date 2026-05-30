@@ -8,24 +8,20 @@ export default async function DiscountsPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: row } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, discounts(*)")
     .eq("user_id", user.id)
     .limit(1)
     .single();
 
-  if (!business) redirect("/dashboard");
+  if (!row) redirect("/dashboard");
 
-  const { data: discounts } = await supabase
-    .from("discounts")
-    .select("*")
-    .eq("business_id", business.id)
-    .order("created_at", { ascending: false });
+  const discounts = Array.isArray(row.discounts) ? row.discounts : [];
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <DiscountsClient discounts={discounts ?? []} businessId={business.id} />
+      <DiscountsClient discounts={discounts} businessId={row.id} />
     </div>
   );
 }

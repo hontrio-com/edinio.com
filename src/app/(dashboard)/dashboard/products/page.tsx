@@ -13,10 +13,10 @@ export default async function ProductsPage({
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: business }, { search: searchQuery }, { data: profile }] = await Promise.all([
+  const [{ data: bizRow }, { search: searchQuery }, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id")
+      .select("id, products(*), categories(id, name, parent_id, sort_order)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -25,36 +25,31 @@ export default async function ProductsPage({
     supabase.from("users_profile").select("plan").eq("id", user.id).single(),
   ]);
 
-  if (!business) redirect("/dashboard");
+  if (!bizRow) redirect("/dashboard");
 
-  const [{ data: products }, { data: categories }] = await Promise.all([
-    supabase
-      .from("products")
-      .select("*")
-      .eq("business_id", business.id)
-      .order("is_featured", { ascending: false })
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("categories")
-      .select("id, name, parent_id")
-      .eq("business_id", business.id)
-      .order("sort_order")
-      .order("name"),
-  ]);
+  const products = Array.isArray(bizRow.products)
+    ? [...bizRow.products].sort((a, b) => {
+        if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      })
+    : [];
+
+  const categories = Array.isArray(bizRow.categories)
+    ? [...bizRow.categories].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
+    : [];
 
   const plan = profile?.plan ?? "free";
   const productLimit = getProductLimit(plan);
-  const productCount = products?.length ?? 0;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <ProductsClient
-        products={products ?? []}
-        businessId={business.id}
+        products={products}
+        businessId={bizRow.id}
         initialSearch={searchQuery ?? ""}
-        categories={categories ?? []}
+        categories={categories}
         productLimit={productLimit}
-        productCount={productCount}
+        productCount={products.length}
         plan={plan}
       />
     </div>

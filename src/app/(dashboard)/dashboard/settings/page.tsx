@@ -13,11 +13,11 @@ export default async function SettingsPage({ searchParams }: Props) {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: business }] = await Promise.all([
+  const [{ data: profile }, { data: bizRow }] = await Promise.all([
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, address, city, county, phone, email, cui, custom_domain")
+      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -26,13 +26,9 @@ export default async function SettingsPage({ searchParams }: Props) {
 
   if (!profile) redirect("/login");
 
-  const { data: storeSettings } = business
-    ? await supabase
-        .from("store_settings")
-        .select("store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config")
-        .eq("business_id", business.id)
-        .single()
-    : { data: null };
+  const business = bizRow ? { id: bizRow.id, business_name: bizRow.business_name, address: bizRow.address, city: bizRow.city, county: bizRow.county, phone: bizRow.phone, email: bizRow.email, cui: bizRow.cui, custom_domain: bizRow.custom_domain } : null;
+  const rawSettings = bizRow?.store_settings;
+  const storeSettings = Array.isArray(rawSettings) ? rawSettings[0] ?? null : rawSettings ?? null;
 
   type CourierCfg = Record<string, unknown>;
   const fc = storeSettings?.fan_courier_config as CourierCfg | null;

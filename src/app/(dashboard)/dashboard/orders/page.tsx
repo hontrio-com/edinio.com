@@ -17,17 +17,19 @@ export default async function OrdersPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const { data: business } = await supabase
+  const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name")
+    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config)")
     .eq("user_id", user.id)
     .eq("type", "ministore")
     .limit(1)
     .single();
 
-  if (!business) redirect("/dashboard");
+  if (!bizRow) redirect("/dashboard");
+  const business = { id: bizRow.id, business_name: bizRow.business_name };
+  const settings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] ?? null : bizRow.store_settings ?? null;
 
-  const [{ data: orders }, { count: pendingCount }, { data: settings }] = await Promise.all([
+  const [{ data: orders }, { count: pendingCount }] = await Promise.all([
     supabase
       .from("orders")
       .select("*")
@@ -38,11 +40,6 @@ export default async function OrdersPage() {
       .select("*", { count: "exact", head: true })
       .eq("business_id", business.id)
       .eq("status", "pending"),
-    supabase
-      .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config")
-      .eq("business_id", business.id)
-      .single(),
   ]);
 
   const smartbillEnabled =

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer,
@@ -13,46 +12,40 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { formatPrice } from "@/lib/utils/format";
-import { RomaniaMap } from "@/components/dashboard/RomaniaMap";
+import { RomaniaMap, COUNTY_CODE_MAP } from "@/components/dashboard/RomaniaMap";
 import { createClient } from "@/lib/supabase/client";
 
-interface DayData {
-  date: string;
-  label: string;
-  revenue: number;
-  orders: number;
-}
+const MONTHS_RO = ["Ian", "Feb", "Mar", "Apr", "Mai", "Iun", "Iul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const VALID_STATUSES = ["pending", "confirmed", "processing", "shipped", "delivered"];
 
+interface DayData { date: string; label: string; revenue: number; orders: number }
 interface Metrics {
-  totalRevenue: number;
-  ordersCount: number;
-  aov: number;
-  conversionRate: number;
-  visitsCount: number;
-  prevRevenue: number;
-  prevOrdersCount: number;
+  totalRevenue: number; ordersCount: number; aov: number;
+  conversionRate: number; visitsCount: number;
+  prevRevenue: number; prevOrdersCount: number;
 }
-
 interface SourceEntry { source: string; count: number }
 interface DeviceEntry { device: string; count: number }
 interface CountyEntry { county: string; code: string; orders: number }
 
-interface Props {
-  period: number;
+interface AnalyticsData {
   salesByDay: DayData[];
   metrics: Metrics;
   trafficSources: SourceEntry[];
   devices: DeviceEntry[];
   ordersByCounty: CountyEntry[];
+}
+
+interface Props {
   businessId: string;
   svgContent: string;
   primaryColor: string;
 }
 
 const PERIOD_OPTIONS = [
-  { value: "7",  label: "7 zile" },
-  { value: "30", label: "30 zile" },
-  { value: "90", label: "90 zile" },
+  { value: 7, label: "7 zile" },
+  { value: 30, label: "30 zile" },
+  { value: 90, label: "90 zile" },
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -96,7 +89,6 @@ function StatCard({
   );
 }
 
-// Custom recharts tooltip
 function ChartTooltip({ active, payload, label }: {
   active?: boolean; payload?: { value: number }[]; label?: string;
 }) {
@@ -104,7 +96,7 @@ function ChartTooltip({ active, payload, label }: {
   return (
     <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-lg text-sm">
       <p className="font-semibold text-gray-900 mb-1">{label}</p>
-      <p className="text-gray-500">Vânzări: <span className="font-bold text-gray-900">{formatPrice(payload[0]?.value ?? 0)}</span></p>
+      <p className="text-gray-500">Vanzari: <span className="font-bold text-gray-900">{formatPrice(payload[0]?.value ?? 0)}</span></p>
       {payload[1] && (
         <p className="text-gray-500">Comenzi: <span className="font-bold text-gray-900">{payload[1].value}</span></p>
       )}
@@ -127,6 +119,18 @@ function ProgressRow({ label, count, total, color }: {
       </div>
       <span className="text-foreground font-semibold w-10 text-right tabular-nums">{count}</span>
       <span className="text-muted-foreground w-9 text-right tabular-nums">{pctVal}%</span>
+    </div>
+  );
+}
+
+function StatSkeleton() {
+  return (
+    <div className="bg-white border border-border rounded-xl p-5 animate-pulse">
+      <div className="flex items-start justify-between mb-3">
+        <div className="w-9 h-9 rounded-lg bg-muted" />
+      </div>
+      <div className="h-7 w-24 bg-muted rounded-lg mb-2" />
+      <div className="h-3 w-16 bg-muted rounded" />
     </div>
   );
 }
@@ -274,30 +278,110 @@ function LiveTab({ businessId, ordersByCounty, svgContent, primaryColor }: {
 }
 
 /* ── Main component ───────────────────────────────────────────────────────── */
-export function AnalyticsClient({
-  period, salesByDay, metrics, trafficSources, devices,
-  ordersByCounty, businessId, svgContent, primaryColor,
-}: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props) {
+  const [period, setPeriod] = useState(30);
   const [tab, setTab] = useState<"overview" | "live">("overview");
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<AnalyticsData | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
-  function setPeriod(p: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("period", p);
-    router.push(`?${params.toString()}`);
-  }
+  const fetchAnalytics = useCallback(async (p: number) => {
+    setLoading(true);
+    const supabase = createClient();
+    const now = Date.now();
+    const since = new Date(now - p * 86400000).toISOString();
+    const prevSince = new Date(now - p * 2 * 86400000).toISOString();
 
-  const totalVisits = trafficSources.reduce((s, x) => s + x.count, 0);
-  const totalDevices = devices.reduce((s, x) => s + x.count, 0);
+    const [eventsRes, ordersRes, prevOrdersRes, allOrdersRes] = await Promise.all([
+      supabase.from("site_analytics")
+        .select("event_type, device, source, created_at")
+        .eq("business_id", businessId)
+        .gte("created_at", since),
+      supabase.from("orders")
+        .select("total, created_at, status")
+        .eq("business_id", businessId)
+        .gte("created_at", since),
+      supabase.from("orders")
+        .select("total, status")
+        .eq("business_id", businessId)
+        .gte("created_at", prevSince)
+        .lt("created_at", since),
+      supabase.from("orders")
+        .select("shipping_address, status")
+        .eq("business_id", businessId),
+    ]);
 
-  const revenueTrend = pct(metrics.totalRevenue, metrics.prevRevenue);
-  const ordersTrend = pct(metrics.ordersCount, metrics.prevOrdersCount);
+    const events = eventsRes.data ?? [];
+    const orders = ordersRes.data ?? [];
+    const prevOrders = prevOrdersRes.data ?? [];
+    const allOrders = allOrdersRes.data ?? [];
 
-  const hasOrders = metrics.ordersCount > 0;
+    // Metrics
+    const validOrders = orders.filter(o => VALID_STATUSES.includes(o.status));
+    const totalRevenue = validOrders.reduce((s, o) => s + Number(o.total), 0);
+    const ordersCount = validOrders.length;
+    const aov = ordersCount > 0 ? totalRevenue / ordersCount : 0;
+    const visits = events.filter(e => e.event_type === "visit");
+    const visitsCount = visits.length;
+    const conversionRate = visitsCount > 0 ? (ordersCount / visitsCount) * 100 : 0;
+    const prevValidOrders = prevOrders.filter(o => VALID_STATUSES.includes(o.status));
+    const prevRevenue = prevValidOrders.reduce((s, o) => s + Number(o.total), 0);
+    const prevOrdersCount = prevValidOrders.length;
+
+    // Daily sales
+    const salesByDay: DayData[] = Array.from({ length: p }, (_, i) => {
+      const d = new Date(now - (p - 1 - i) * 86400000);
+      d.setHours(0, 0, 0, 0);
+      const dayStr = d.toISOString().slice(0, 10);
+      const dayOrders = validOrders.filter(o => o.created_at.slice(0, 10) === dayStr);
+      return {
+        date: dayStr,
+        label: `${d.getDate()} ${MONTHS_RO[d.getMonth()]}`,
+        revenue: Math.round(dayOrders.reduce((s, o) => s + Number(o.total), 0)),
+        orders: dayOrders.length,
+      };
+    });
+
+    // Traffic sources
+    const sourceMap: Record<string, number> = {};
+    visits.forEach(e => { sourceMap[e.source ?? "direct"] = (sourceMap[e.source ?? "direct"] ?? 0) + 1; });
+    const trafficSources = Object.entries(sourceMap).map(([source, count]) => ({ source, count }));
+
+    // Devices
+    const deviceMap: Record<string, number> = {};
+    events.forEach(e => { if (e.device) deviceMap[e.device] = (deviceMap[e.device] ?? 0) + 1; });
+    const devices = Object.entries(deviceMap).map(([device, count]) => ({ device, count }));
+
+    // County orders
+    const countyOrderMap: Record<string, number> = {};
+    allOrders.forEach(o => {
+      if (!VALID_STATUSES.includes(o.status)) return;
+      const addr = o.shipping_address as { county?: string } | null;
+      if (addr?.county) countyOrderMap[addr.county] = (countyOrderMap[addr.county] ?? 0) + 1;
+    });
+    const ordersByCounty: CountyEntry[] = Object.entries(COUNTY_CODE_MAP).map(([county, code]) => ({
+      county, code, orders: countyOrderMap[county] ?? 0,
+    }));
+
+    setData({
+      salesByDay,
+      metrics: { totalRevenue, ordersCount, aov, conversionRate, visitsCount, prevRevenue, prevOrdersCount },
+      trafficSources,
+      devices,
+      ordersByCounty,
+    });
+    setLoading(false);
+  }, [businessId]);
+
+  useEffect(() => { fetchAnalytics(period); }, [period, fetchAnalytics]);
+
+  const totalVisits = data?.trafficSources.reduce((s, x) => s + x.count, 0) ?? 0;
+  const totalDevices = data?.devices.reduce((s, x) => s + x.count, 0) ?? 0;
+  const revenueTrend = data ? pct(data.metrics.totalRevenue, data.metrics.prevRevenue) : null;
+  const ordersTrend = data ? pct(data.metrics.ordersCount, data.metrics.prevOrdersCount) : null;
+  const hasOrders = (data?.metrics.ordersCount ?? 0) > 0;
 
   return (
     <div className="space-y-6">
@@ -317,7 +401,7 @@ export function AnalyticsClient({
                 onClick={() => setPeriod(opt.value)}
                 className={cn(
                   "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                  String(period) === opt.value
+                  period === opt.value
                     ? "bg-white text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
@@ -358,43 +442,49 @@ export function AnalyticsClient({
       {tab === "overview" && (
         <div className="space-y-6">
           {/* Metric cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              label={`Vanzari (${period} zile)`}
-              value={formatPrice(metrics.totalRevenue)}
-              trend={revenueTrend}
-              icon={BadgeDollarSign}
-              color="bg-green-50 text-green-600"
-            />
-            <StatCard
-              label="Comenzi"
-              value={String(metrics.ordersCount)}
-              sub={`vs ${metrics.prevOrdersCount} perioada anterioara`}
-              trend={ordersTrend}
-              icon={ShoppingCart}
-              color="bg-blue-50 text-blue-600"
-            />
-            <StatCard
-              label="Valoare medie comanda"
-              value={hasOrders ? formatPrice(metrics.aov) : "-"}
-              icon={TrendingUp}
-              color="bg-purple-50 text-purple-600"
-            />
-            <StatCard
-              label="Rata de conversie"
-              value={metrics.visitsCount > 0 ? `${metrics.conversionRate.toFixed(1)}%` : "-"}
-              sub={`${metrics.visitsCount} vizite`}
-              icon={Eye}
-              color="bg-amber-50 text-amber-600"
-            />
-          </div>
+          {loading || !data ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                label={`Vanzari (${period} zile)`}
+                value={formatPrice(data.metrics.totalRevenue)}
+                trend={revenueTrend}
+                icon={BadgeDollarSign}
+                color="bg-green-50 text-green-600"
+              />
+              <StatCard
+                label="Comenzi"
+                value={String(data.metrics.ordersCount)}
+                sub={`vs ${data.metrics.prevOrdersCount} perioada anterioara`}
+                trend={ordersTrend}
+                icon={ShoppingCart}
+                color="bg-blue-50 text-blue-600"
+              />
+              <StatCard
+                label="Valoare medie comanda"
+                value={hasOrders ? formatPrice(data.metrics.aov) : "-"}
+                icon={TrendingUp}
+                color="bg-purple-50 text-purple-600"
+              />
+              <StatCard
+                label="Rata de conversie"
+                value={data.metrics.visitsCount > 0 ? `${data.metrics.conversionRate.toFixed(1)}%` : "-"}
+                sub={`${data.metrics.visitsCount} vizite`}
+                icon={Eye}
+                color="bg-amber-50 text-amber-600"
+              />
+            </div>
+          )}
 
           {/* Sales chart */}
           <div className="bg-white border border-border rounded-xl p-5">
             <h2 className="text-sm font-semibold text-foreground mb-4">
               Vanzari zilnice - ultimele {period} zile
             </h2>
-            {!mounted ? (
+            {!mounted || loading || !data ? (
               <div className="h-56 bg-muted animate-pulse rounded-xl" />
             ) : !hasOrders ? (
               <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">
@@ -402,7 +492,7 @@ export function AnalyticsClient({
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={salesByDay} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <BarChart data={data.salesByDay} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                   <XAxis
                     dataKey="label"
@@ -430,79 +520,86 @@ export function AnalyticsClient({
           </div>
 
           {/* Traffic sources + Devices */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="bg-white border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Globe className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold text-foreground">Surse de trafic</h2>
-              </div>
-              {totalVisits === 0 ? (
-                <p className="text-sm text-muted-foreground">Nu exista date</p>
-              ) : (
-                <div className="space-y-3">
-                  {trafficSources
-                    .sort((a, b) => b.count - a.count)
-                    .map(({ source, count }) => (
-                      <ProgressRow
-                        key={source}
-                        label={SOURCE_LABELS[source] ?? source}
-                        count={count}
-                        total={totalVisits}
-                        color={primaryColor}
-                      />
-                    ))}
-                </div>
-              )}
+          {loading || !data ? (
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-muted rounded-xl h-48 animate-pulse" />
+              <div className="bg-muted rounded-xl h-48 animate-pulse" />
             </div>
-
-            <div className="bg-white border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold text-foreground">Dispozitive</h2>
-              </div>
-              {totalDevices === 0 ? (
-                <p className="text-sm text-muted-foreground">Nu exista date</p>
-              ) : (
-                <div className="space-y-3">
-                  {devices
-                    .sort((a, b) => b.count - a.count)
-                    .map(({ device, count }) => {
-                      const labels: Record<string, string> = {
-                        mobile: "Mobil", tablet: "Tableta", desktop: "Desktop",
-                      };
-                      return (
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-white border border-border rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold text-foreground">Surse de trafic</h2>
+                </div>
+                {totalVisits === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nu exista date</p>
+                ) : (
+                  <div className="space-y-3">
+                    {data.trafficSources
+                      .sort((a, b) => b.count - a.count)
+                      .map(({ source, count }) => (
                         <ProgressRow
-                          key={device}
-                          label={labels[device] ?? device}
+                          key={source}
+                          label={SOURCE_LABELS[source] ?? source}
                           count={count}
-                          total={totalDevices}
+                          total={totalVisits}
                           color={primaryColor}
                         />
-                      );
-                    })}
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white border border-border rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold text-foreground">Dispozitive</h2>
                 </div>
-              )}
+                {totalDevices === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nu exista date</p>
+                ) : (
+                  <div className="space-y-3">
+                    {data.devices
+                      .sort((a, b) => b.count - a.count)
+                      .map(({ device, count }) => {
+                        const labels: Record<string, string> = {
+                          mobile: "Mobil", tablet: "Tableta", desktop: "Desktop",
+                        };
+                        return (
+                          <ProgressRow
+                            key={device}
+                            label={labels[device] ?? device}
+                            count={count}
+                            total={totalDevices}
+                            color={primaryColor}
+                          />
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* AOV + Conversion details */}
-          {hasOrders && (
+          {!loading && data && hasOrders && (
             <div className="grid md:grid-cols-3 gap-4">
               <div className="bg-white border border-border rounded-xl p-5">
                 <p className="text-xs text-muted-foreground mb-1">Vanzari totale brute</p>
-                <p className="text-xl font-bold text-foreground">{formatPrice(metrics.totalRevenue)}</p>
+                <p className="text-xl font-bold text-foreground">{formatPrice(data.metrics.totalRevenue)}</p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5">
                 <p className="text-xs text-muted-foreground mb-1">Valoare medie comanda (AOV)</p>
-                <p className="text-xl font-bold text-foreground">{formatPrice(metrics.aov)}</p>
+                <p className="text-xl font-bold text-foreground">{formatPrice(data.metrics.aov)}</p>
               </div>
               <div className="bg-white border border-border rounded-xl p-5">
                 <p className="text-xs text-muted-foreground mb-1">Rata conversie</p>
                 <p className="text-xl font-bold text-foreground">
-                  {metrics.visitsCount > 0 ? `${metrics.conversionRate.toFixed(2)}%` : "N/A"}
+                  {data.metrics.visitsCount > 0 ? `${data.metrics.conversionRate.toFixed(2)}%` : "N/A"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {metrics.ordersCount} comenzi / {metrics.visitsCount} vizite
+                  {data.metrics.ordersCount} comenzi / {data.metrics.visitsCount} vizite
                 </p>
               </div>
             </div>
@@ -514,7 +611,7 @@ export function AnalyticsClient({
       {tab === "live" && (
         <LiveTab
           businessId={businessId}
-          ordersByCounty={ordersByCounty}
+          ordersByCounty={data?.ordersByCounty ?? []}
           svgContent={svgContent}
           primaryColor={primaryColor}
         />

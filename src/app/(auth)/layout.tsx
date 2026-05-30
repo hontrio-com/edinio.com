@@ -15,7 +15,7 @@ export default function AuthLayout({
     <AuroraBackground>
       <div className="w-full max-w-md px-4 py-8">
         <div className="mb-6 sm:mb-8 flex justify-center">
-          <Logo size="lg" />
+          <Logo size="lg" showText={false} className="[&_img]:w-16 [&_img]:h-16" />
         </div>
         <div className="bg-white rounded-xl border border-border p-6 sm:p-8 shadow-md">
           {children}

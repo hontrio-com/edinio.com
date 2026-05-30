@@ -5,7 +5,7 @@ import {
   Banknote, Store,
 } from "lucide-react";
 
-/* ── 3. Store editor mockup (matches real StoreEditor.tsx) ── */
+/* ── Store editor mockup (matches real StoreEditor.tsx) ── */
 
 function MockCustomize() {
   const COLOR_PRESETS = [
@@ -13,60 +13,55 @@ function MockCustomize() {
   ];
 
   return (
-    <div className="bg-background rounded-2xl border border-border overflow-hidden shadow-sm">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-border">
-        <span className="text-[10px] font-semibold text-foreground block">Editeaza magazinul</span>
-        <span className="text-[6px] text-muted-foreground">Modificarile se salveaza separat pentru fiecare sectiune</span>
+    <div className="bg-background rounded-2xl border border-border overflow-hidden shadow-sm max-w-md mx-auto">
+      <div className="px-4 py-3 border-b border-border">
+        <span className="text-sm font-semibold text-foreground block">Editeaza magazinul</span>
+        <span className="text-xs text-muted-foreground">Modificarile se salveaza separat</span>
       </div>
 
       <div className="divide-y divide-border">
-        {/* Collapsed: Informatii generale */}
-        <div className="px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Info className="h-2.5 w-2.5 text-muted-foreground" />
-            <span className="text-[8px] font-semibold text-foreground">Informatii generale</span>
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-semibold text-foreground">Informatii generale</span>
           </div>
-          <ChevronDown className="h-2 w-2 text-muted-foreground" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </div>
 
-        {/* Open: Identitate vizuala */}
         <div>
-          <div className="px-3 py-2 flex items-center justify-between bg-muted/30">
-            <div className="flex items-center gap-1.5">
-              <Palette className="h-2.5 w-2.5 text-muted-foreground" />
-              <span className="text-[8px] font-semibold text-foreground">Identitate vizuala</span>
+          <div className="px-4 py-3 flex items-center justify-between bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-foreground">Identitate vizuala</span>
             </div>
-            <ChevronDown className="h-2 w-2 text-muted-foreground rotate-180" />
+            <ChevronDown className="h-3 w-3 text-muted-foreground rotate-180" />
           </div>
-          <div className="px-3 py-2 space-y-2">
-            {/* Logo & Cover placeholders */}
-            <div className="grid grid-cols-2 gap-2">
+          <div className="px-4 py-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <span className="text-[5px] font-medium text-muted-foreground block mb-0.5">Logo</span>
-                <div className="rounded border-2 border-dashed border-border flex items-center justify-center py-2">
-                  <span className="text-[5px] text-muted-foreground">Incarca imagine</span>
+                <span className="text-[10px] font-medium text-muted-foreground block mb-1">Logo</span>
+                <div className="rounded-lg border-2 border-dashed border-border flex items-center justify-center py-4">
+                  <span className="text-[10px] text-muted-foreground">Incarca imagine</span>
                 </div>
               </div>
               <div>
-                <span className="text-[5px] font-medium text-muted-foreground block mb-0.5">Banner / Cover</span>
-                <div className="rounded border-2 border-dashed border-border flex items-center justify-center py-2">
-                  <span className="text-[5px] text-muted-foreground">Incarca imagine</span>
+                <span className="text-[10px] font-medium text-muted-foreground block mb-1">Banner / Cover</span>
+                <div className="rounded-lg border-2 border-dashed border-border flex items-center justify-center py-4">
+                  <span className="text-[10px] text-muted-foreground">Incarca imagine</span>
                 </div>
               </div>
             </div>
-            {/* Color presets */}
             <div>
-              <span className="text-[6px] font-medium text-muted-foreground block mb-1">Culoare principala</span>
-              <div className="flex items-center gap-1">
+              <span className="text-[10px] font-medium text-muted-foreground block mb-1.5">Culoare principala</span>
+              <div className="flex items-center gap-1.5">
                 {COLOR_PRESETS.map((c, i) => (
                   <div
                     key={c}
-                    className="w-3.5 h-3.5 rounded-full transition-transform"
+                    className="w-5 h-5 rounded-full transition-transform"
                     style={{
                       backgroundColor: c,
                       border: i === 0 ? "2px solid white" : "none",
-                      boxShadow: i === 0 ? `0 0 0 1.5px ${c}` : "none",
+                      boxShadow: i === 0 ? `0 0 0 2px ${c}` : "none",
                       transform: i === 0 ? "scale(1.15)" : "scale(1)",
                     }}
                   />
@@ -76,41 +71,20 @@ function MockCustomize() {
           </div>
         </div>
 
-        {/* Collapsed: Locatie */}
-        <div className="px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <MapPin className="h-2.5 w-2.5 text-muted-foreground" />
-            <span className="text-[8px] font-semibold text-foreground">Locatie</span>
+        {[
+          { icon: MapPin, label: "Locatie" },
+          { icon: Share2, label: "Social media" },
+          { icon: Layout, label: "Pagina produs" },
+          { icon: Globe, label: "Publicare" },
+        ].map(({ icon: Icon, label }) => (
+          <div key={label} className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-foreground">{label}</span>
+            </div>
+            <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </div>
-          <ChevronDown className="h-2 w-2 text-muted-foreground" />
-        </div>
-
-        {/* Collapsed: Social media */}
-        <div className="px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Share2 className="h-2.5 w-2.5 text-muted-foreground" />
-            <span className="text-[8px] font-semibold text-foreground">Social media</span>
-          </div>
-          <ChevronDown className="h-2 w-2 text-muted-foreground" />
-        </div>
-
-        {/* Collapsed: Pagina produs */}
-        <div className="px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Layout className="h-2.5 w-2.5 text-muted-foreground" />
-            <span className="text-[8px] font-semibold text-foreground">Pagina produs</span>
-          </div>
-          <ChevronDown className="h-2 w-2 text-muted-foreground" />
-        </div>
-
-        {/* Collapsed: Publicare */}
-        <div className="px-3 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Globe className="h-2.5 w-2.5 text-muted-foreground" />
-            <span className="text-[8px] font-semibold text-foreground">Publicare</span>
-          </div>
-          <ChevronDown className="h-2 w-2 text-muted-foreground" />
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -118,7 +92,7 @@ function MockCustomize() {
 
 /* ── Integration icon grids ── */
 
-const PAYMENT_ICONS: { src?: string; alt: string; filter?: string }[] = [
+const PAYMENT_ICONS: { src: string; alt: string; filter?: string }[] = [
   { src: "/integrations/stripe.svg", alt: "Stripe" },
   { src: "/integrations/netopia.svg", alt: "Netopia", filter: "invert(1)" },
 ];
@@ -144,11 +118,11 @@ const SERVICE_ICONS: { src: string; alt: string; filter?: string; scale?: number
 
 function IconGrid({ icons }: { icons: { src: string; alt: string; filter?: string; scale?: number }[] }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-3 py-3">
+    <div className="flex flex-wrap items-center justify-center gap-4">
       {icons.map((icon) => (
         <div
           key={icon.alt}
-          className="w-12 h-12 rounded-xl bg-white border border-border flex items-center justify-center p-2 shadow-sm"
+          className="w-14 h-14 rounded-xl bg-white border border-border flex items-center justify-center p-2.5 shadow-sm"
         >
           <Image
             src={icon.src}
@@ -170,14 +144,14 @@ function IconGrid({ icons }: { icons: { src: string; alt: string; filter?: strin
 
 function PaymentGrid() {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-3 py-3">
+    <div className="flex flex-wrap items-center justify-center gap-4">
       {PAYMENT_ICONS.map((icon) => (
         <div
           key={icon.alt}
-          className="w-12 h-12 rounded-xl bg-white border border-border flex items-center justify-center p-2 shadow-sm"
+          className="w-14 h-14 rounded-xl bg-white border border-border flex items-center justify-center p-2.5 shadow-sm"
         >
           <Image
-            src={icon.src!}
+            src={icon.src}
             alt={icon.alt}
             width={32}
             height={32}
@@ -189,52 +163,55 @@ function PaymentGrid() {
       {PAYMENT_EXTRA.map(({ icon: Icon, label }) => (
         <div
           key={label}
-          className="h-12 rounded-xl bg-white border border-border flex items-center justify-center gap-1.5 px-3 shadow-sm"
+          className="h-14 rounded-xl bg-white border border-border flex items-center justify-center gap-2 px-4 shadow-sm"
         >
-          <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <span className="text-[11px] font-medium text-foreground whitespace-nowrap">{label}</span>
+          <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          <span className="text-sm font-medium text-foreground whitespace-nowrap">{label}</span>
         </div>
       ))}
     </div>
   );
 }
 
-/* ── Feature cards config ── */
+/* ── Features data ── */
 
-const TOP_FEATURES = [
+interface Feature {
+  title: string;
+  description: string;
+  image?: string;
+  visual?: React.ReactNode;
+}
+
+const FEATURES: Feature[] = [
   {
     image: "/features/f1.png",
     title: "Sablon optimizat pentru piata din Romania",
     description:
-      "Magazine configurate cu lei, livrare locala, facturare si tot ce ai nevoie pentru a vinde in Romania.",
+      "Magazine configurate cu lei, livrare locala, facturare si tot ce ai nevoie pentru a vinde in Romania. Sablonul nostru e creat special pentru antreprenorii romani.",
   },
   {
     image: "/features/f2.png",
     title: "Gestioneaza totul usor",
     description:
-      "Comenzi, produse, stocuri si clienti. Toate intr-un singur dashboard intuitiv, exact ca in platforma.",
+      "Comenzi, produse, stocuri si clienti. Toate intr-un singur dashboard intuitiv. Ai control total asupra magazinului tau, de pe orice dispozitiv.",
   },
   {
     visual: <MockCustomize />,
-    image: null,
     title: "Personalizare rapida, chiar si de pe telefon",
     description:
-      "Schimba culori, fonturi, efecte si continut din cateva click-uri. Fara cunostinte tehnice.",
+      "Schimba culori, fonturi, efecte si continut din cateva click-uri. Fara cunostinte tehnice. Fiecare sectiune se salveaza independent.",
   },
-];
-
-const BOTTOM_FEATURES = [
   {
     visual: <PaymentGrid />,
     title: "Configurare modalitati de plata",
     description:
-      "Accepta plati prin card, transfer bancar, ramburs la curier sau ridicare din magazin. Configurare in cateva minute.",
+      "Accepta plati prin card, transfer bancar, ramburs la curier sau ridicare din magazin. Configurare in cateva minute, totul integrat nativ.",
   },
   {
     visual: <IconGrid icons={SERVICE_ICONS} />,
     title: "Integrari cu servicii locale",
     description:
-      "Conecteaza magazinul cu servicii de livrare, facturare, SMS si marketing din Romania.",
+      "Conecteaza magazinul cu servicii de livrare, facturare, SMS si marketing din Romania. Totul se configureaza din dashboard fara cod.",
   },
 ];
 
@@ -245,63 +222,55 @@ export function FeaturesSection() {
     <section id="functionalitati" className="py-20 lg:py-28 bg-background">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="max-w-2xl mx-auto text-center mb-16">
+        <div className="max-w-2xl mx-auto text-center mb-16 lg:mb-20">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
             Primul pas catre succesul online,{" "}
             <span className="text-primary">noi te ghidam</span>
           </h2>
         </div>
 
-        {/* Top row: 3 cards */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5 items-stretch">
-          {TOP_FEATURES.map(({ image, visual, title, description }) => (
-            <div
-              key={title}
-              className="group rounded-2xl border border-border bg-muted/30 p-5 hover:border-primary/20 hover:shadow-md transition-all flex flex-col"
-            >
-              {/* Visual area grows to fill, pushing text to bottom */}
-              <div className="flex-1 mb-5">
-                {image ? (
-                  <Image
-                    src={image}
-                    alt={title}
-                    width={600}
-                    height={800}
-                    className="w-full h-auto rounded-xl border border-border shadow-sm"
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                  />
-                ) : (
-                  visual
-                )}
-              </div>
-              <div className="mt-auto">
-                <h3 className="text-base font-semibold text-foreground mb-1.5">
-                  {title}
-                </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {description}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* Alternating rows */}
+        <div className="space-y-16 lg:space-y-24">
+          {FEATURES.map((feature, i) => {
+            const reversed = i % 2 === 1;
 
-        {/* Bottom row: 2 wider cards with real integration icons */}
-        <div className="grid sm:grid-cols-2 gap-5">
-          {BOTTOM_FEATURES.map(({ visual, title, description }) => (
-            <div
-              key={title}
-              className="rounded-2xl border border-border bg-muted/30 p-5 hover:border-primary/20 hover:shadow-md transition-all"
-            >
-              <div className="mb-5">{visual}</div>
-              <h3 className="text-base font-semibold text-foreground mb-1.5">
-                {title}
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {description}
-              </p>
-            </div>
-          ))}
+            return (
+              <div
+                key={feature.title}
+                className={`grid lg:grid-cols-2 gap-8 lg:gap-16 items-center ${
+                  reversed ? "lg:direction-rtl" : ""
+                }`}
+              >
+                {/* Text */}
+                <div className={`${reversed ? "lg:order-2" : "lg:order-1"}`}>
+                  <h3 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-4">
+                    {feature.title}
+                  </h3>
+                  <p className="text-base text-muted-foreground leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+
+                {/* Visual */}
+                <div className={`${reversed ? "lg:order-1" : "lg:order-2"}`}>
+                  {feature.image ? (
+                    <Image
+                      src={feature.image}
+                      alt={feature.title}
+                      width={600}
+                      height={800}
+                      className="w-full h-auto rounded-2xl border border-border shadow-lg"
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                    />
+                  ) : (
+                    <div className="rounded-2xl border border-border bg-muted/30 p-5 lg:p-8 shadow-lg">
+                      {feature.visual}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

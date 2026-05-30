@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { TransparentVideo } from "./TransparentVideo";
 
 export function HeroSection() {
   return (
@@ -40,18 +41,7 @@ export function HeroSection() {
           </div>
 
           {/* ── Right: Video ── */}
-          <div className="relative">
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full h-auto"
-            >
-              <source src="/hero/video.mp4" type="video/mp4; codecs=hvc1" />
-              <source src="/hero/video.webm" type="video/webm" />
-            </video>
-          </div>
+          <TransparentVideo webmSrc="/hero/video.webm" />
         </div>
       </div>
 

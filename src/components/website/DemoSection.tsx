@@ -22,32 +22,32 @@ const IMAGES = [
 const PRICE = 49;
 const COMPARE = 99;
 const DISCOUNT = Math.round((1 - PRICE / COMPARE) * 100);
-const PRODUCT_NAME = "Lampa Solara Stradala \u2013 8 LED-uri Puternice, Panou Solar Integrat";
+const PRODUCT_NAME = "Lampă Solară Stradală \u2013 8 LED-uri Puternice, Panou Solar Integrat";
 
 const SPECS = [
-  { label: "Panou solar", value: "Integrat, incarcare automata" },
+  { label: "Panou solar", value: "Integrat, încărcare automată" },
   { label: "LED-uri", value: "8 de mare putere" },
-  { label: "Telecomanda", value: "Inclusa" },
-  { label: "Senzor lumina", value: "Pornire automata la intuneric" },
-  { label: "Rezistenta", value: "Waterproof, exterior" },
-  { label: "Alimentare", value: "Autonoma, fara cabluri" },
+  { label: "Telecomandă", value: "Inclusă" },
+  { label: "Senzor lumină", value: "Pornire automată la întuneric" },
+  { label: "Rezistență", value: "Waterproof, exterior" },
+  { label: "Alimentare", value: "Autonomă, fără cabluri" },
   { label: "Dimensiune", value: "55 cm" },
 ];
 
 const REVIEWS = [
-  { name: "Mihai D.", text: "Lumina este foarte puternica si acopera o suprafata mare. Se incarca bine si functioneaza perfect in fiecare noapte." },
-  { name: "Andrei P.", text: "Am montat doua in curte si sunt foarte multumit. Instalarea a durat doar cateva minute." },
-  { name: "Cristina M.", text: "Raport calitate-pret excelent. Telecomanda este foarte utila, iar senzorul de lumina functioneaza impecabil." },
-  { name: "George T.", text: "Produs exact ca in descriere. Materiale de calitate si lumina puternica pentru zona de acces din fata casei." },
-  { name: "Daniela R.", text: "O solutie excelenta pentru iluminarea gradinii fara consum de energie electrica. Recomand cu incredere!" },
+  { name: "Mihai D.", text: "Lumina este foarte puternică și acoperă o suprafață mare. Se încarcă bine și funcționează perfect în fiecare noapte." },
+  { name: "Andrei P.", text: "Am montat două în curte și sunt foarte mulțumit. Instalarea a durat doar câteva minute." },
+  { name: "Cristina M.", text: "Raport calitate-preț excelent. Telecomanda este foarte utilă, iar senzorul de lumină funcționează impecabil." },
+  { name: "George T.", text: "Produs exact ca în descriere. Materiale de calitate și lumină puternică pentru zona de acces din fața casei." },
+  { name: "Daniela R.", text: "O soluție excelentă pentru iluminarea grădinii fără consum de energie electrică. Recomand cu încredere!" },
 ];
 
 const JUDETE = [
-  "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
-  "Braila","Brasov","Buzau","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj",
-  "Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Ilfov","Maramures",
-  "Mehedinti","Mures","Neamt","Olt","Prahova","Salaj","Satu Mare","Sibiu","Suceava",
-  "Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea",
+  "Municipiul București","Alba","Arad","Argeș","Bacău","Bihor","Bistrița-Năsăud","Botoșani",
+  "Brăila","Brașov","Buzău","Călărași","Cluj","Constanța","Covasna","Dâmbovița","Dolj",
+  "Galați","Giurgiu","Gorj","Harghita","Hunedoara","Ialomița","Iași","Ilfov","Maramureș",
+  "Mehedinți","Mureș","Neamț","Olt","Prahova","Sălaj","Satu Mare","Sibiu","Suceava",
+  "Teleorman","Timiș","Tulcea","Vaslui","Vâlcea","Vrancea",
 ];
 
 export function DemoSection() {
@@ -76,8 +76,8 @@ export function DemoSection() {
 
   const TIERS = [
     { qty: 1, price: 49, badge: "" },
-    { qty: 2, price: 89, badge: "Cel mai bun pret" },
-    { qty: 3, price: 125, badge: "Cel mai bun pret" },
+    { qty: 2, price: 89, badge: "Cel mai bun preț" },
+    { qty: 3, price: 125, badge: "Cel mai bun preț" },
   ];
   const tier = TIERS[selectedTier];
   const subtotal = tier.price;
@@ -88,8 +88,8 @@ export function DemoSection() {
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
     if (!/^(0)(7\d{8})$/.test(form.phone.trim())) e.phone = "Format: 07XXXXXXXX";
-    if (!form.county) e.county = "Selectati judetul";
-    if (form.city.trim().length < 2) e.city = "Introduceti orasul";
+    if (!form.county) e.county = "Selectați județul";
+    if (form.city.trim().length < 2) e.city = "Introduceți orașul";
     if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -124,10 +124,10 @@ export function DemoSection() {
             Demo interactiv
           </div>
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Asa va arata magazinul tau
+            Așa va arăta magazinul tău
           </h2>
           <p className="text-lg text-muted-foreground">
-            Exploreaza pagina de produs, da scroll si plaseaza o comanda de test.
+            Explorează pagina de produs, dă scroll și plasează o comandă de test.
           </p>
         </div>
 
@@ -183,7 +183,7 @@ export function DemoSection() {
                     style={{ transform: `translateX(-${slide * 100}%)` }}>
                     {IMAGES.map((src, i) => (
                       <div key={i} className="relative w-full h-full flex-shrink-0">
-                        <Image src={src} alt={`Lampa ${i + 1}`} fill className="object-contain p-2" sizes="375px" />
+                        <Image src={src} alt={`Lampă ${i + 1}`} fill className="object-contain p-2" sizes="375px" />
                       </div>
                     ))}
                   </div>
@@ -217,13 +217,13 @@ export function DemoSection() {
               <div className="px-3 pt-3 pb-2 space-y-2.5">
                 <div className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 w-fit">
                   <div className="flex">{[1,2,3,4,5].map(i => <Star key={i} size={9} className="text-amber-400 fill-amber-400" />)}</div>
-                  <span className="text-[9px] font-semibold text-amber-800">Calitate verificata</span>
+                  <span className="text-[9px] font-semibold text-amber-800">Calitate verificată</span>
                 </div>
 
                 <h3 className="text-[15px] font-black text-gray-900 leading-tight">{PRODUCT_NAME}</h3>
 
                 <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Ilumineaza eficient orice spatiu exterior fara costuri la energie electrica! Echipata cu 8 LED-uri de mare putere, panou solar integrat si telecomanda.
+                  Iluminează eficient orice spațiu exterior fără costuri la energie electrică! Echipată cu 8 LED-uri de mare putere, panou solar integrat și telecomandă.
                 </p>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -235,7 +235,7 @@ export function DemoSection() {
                 <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-2.5 py-2">
                   <Calendar size={13} className="text-green-600 flex-shrink-0" />
                   <div>
-                    <p className="text-[11px] font-semibold text-green-800">Livrare estimata</p>
+                    <p className="text-[11px] font-semibold text-green-800">Livrare estimată</p>
                     <p className="text-[10px] text-green-600">{fmt(minDate)} - {fmt(maxDate)}</p>
                   </div>
                 </div>
@@ -248,7 +248,7 @@ export function DemoSection() {
                     className="relative w-full py-3 text-[11px] font-bold text-white rounded-xl flex items-center justify-center gap-1.5 uppercase tracking-wide"
                     style={{ backgroundColor: COLOR, boxShadow: `0 4px 16px ${COLOR}55` }}>
                     <ShoppingBag size={14} />
-                    Comanda acum - Plata la livrare
+                    Comandă acum - Plata la livrare
                   </button>
                 </div>
 
@@ -272,7 +272,7 @@ export function DemoSection() {
                   </span>
                   <Eye size={10} className="text-gray-500" />
                   <span className="text-gray-700">
-                    <span className="font-bold text-gray-900">{viewers}</span> persoane se uita acum
+                    <span className="font-bold text-gray-900">{viewers}</span> persoane se uită acum
                   </span>
                 </div>
               </div>
@@ -281,10 +281,10 @@ export function DemoSection() {
               <div className="px-3 py-4 bg-white">
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { icon: Truck, title: "Livrare 24-48h", desc: "Livrare rapida in toata Romania." },
-                    { icon: ShieldCheck, title: "Plata la livrare", desc: "Platesti cash curierului." },
-                    { icon: RotateCcw, title: "Retur 14 zile", desc: "Returneaza fara intrebari." },
-                    { icon: Phone, title: "Suport dedicat", desc: "Disponibil oricand." },
+                    { icon: Truck, title: "Livrare 24-48h", desc: "Livrare rapidă în toată România." },
+                    { icon: ShieldCheck, title: "Plata la livrare", desc: "Plătești cash curierului." },
+                    { icon: RotateCcw, title: "Retur 14 zile", desc: "Returnează fără întrebări." },
+                    { icon: Phone, title: "Suport dedicat", desc: "Disponibil oricând." },
                   ].map(({ icon: Icon, title, desc }) => (
                     <div key={title} className="flex flex-col items-center text-center gap-1 p-2.5 bg-white rounded-xl border border-gray-100 shadow-sm">
                       <div className="w-7 h-7 rounded-full bg-gray-50 flex items-center justify-center">
@@ -301,7 +301,7 @@ export function DemoSection() {
               <div className="px-3 py-4">
                 <div className="text-center mb-3">
                   <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-0.5">Detalii tehnice</p>
-                  <p className="text-xs font-bold text-gray-900">Specificatii</p>
+                  <p className="text-xs font-bold text-gray-900">Specificații</p>
                 </div>
                 <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
                   {SPECS.map((spec, i) => (
@@ -318,7 +318,7 @@ export function DemoSection() {
               <div className="px-3 py-4 bg-white">
                 <div className="text-center mb-3">
                   <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-0.5">Recenzii verificate</p>
-                  <p className="text-xs font-bold text-gray-900">Ce spun clientii</p>
+                  <p className="text-xs font-bold text-gray-900">Ce spun clienții</p>
                 </div>
                 <div className="space-y-2">
                   {REVIEWS.map((r) => (
@@ -367,7 +367,7 @@ export function DemoSection() {
                     className="flex items-center gap-1.5 px-4 py-2 text-[10px] font-bold text-white rounded-xl flex-shrink-0 uppercase tracking-wide"
                     style={{ backgroundColor: COLOR }}>
                     <ShoppingBag size={12} />
-                    Comanda
+                    Comandă
                   </button>
                 </div>
               </div>
@@ -386,20 +386,20 @@ export function DemoSection() {
                       <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center" style={{ backgroundColor: COLOR }}>
                         <Check size={32} className="text-white" />
                       </div>
-                      <h3 className="text-lg font-black text-gray-900 mb-2">Comanda plasata!</h3>
+                      <h3 className="text-lg font-black text-gray-900 mb-2">Comandă plasată!</h3>
                       <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-                        Aceasta a fost o demonstratie.<br />
-                        Creeaza-ti propriul magazin online gratuit pe Edinio.
+                        Aceasta a fost o demonstrație.<br />
+                        Creează-ți propriul magazin online gratuit pe Edinio.
                       </p>
                       <Link href="/register"
                         className="inline-flex items-center justify-center gap-2 w-full py-3 text-sm font-bold text-white rounded-xl"
                         style={{ backgroundColor: "#1AB554" }}>
                         <Zap size={16} />
-                        Creeaza-ti magazinul gratuit
+                        Creează-ți magazinul gratuit
                       </Link>
                       <button type="button" onClick={resetDemo}
                         className="mt-4 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                        Incearca din nou
+                        Încearcă din nou
                       </button>
                     </div>
                   ) : (
@@ -408,7 +408,7 @@ export function DemoSection() {
                         <div className="w-8 h-1 rounded-full bg-gray-200" />
                       </div>
                       <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100">
-                        <h3 className="text-sm font-black text-gray-900">Finalizeaza comanda</h3>
+                        <h3 className="text-sm font-black text-gray-900">Finalizează comanda</h3>
                         <button type="button" onClick={() => setModalOpen(false)} className="p-1 rounded-full hover:bg-gray-100">
                           <X size={15} className="text-gray-500" />
                         </button>
@@ -431,7 +431,7 @@ export function DemoSection() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-bold text-[10px] text-gray-900">
-                                    {t.qty} x {t.qty === 1 ? "Lampa Solara" : "Lampi Solare"}
+                                    {t.qty} x {t.qty === 1 ? "Lampă Solară" : "Lămpi Solare"}
                                   </p>
                                   {t.badge ? (
                                     <span className="inline-block mt-0.5 text-white text-[8px] font-black px-1.5 py-px rounded"
@@ -440,7 +440,7 @@ export function DemoSection() {
                                     <span className="text-[9px] text-gray-400">{t.price} lei / buc</span>
                                   )}
                                   {savings > 0 && (
-                                    <p className="text-[8px] text-green-600 font-semibold">Economisesti {savings} lei</p>
+                                    <p className="text-[8px] text-green-600 font-semibold">Economisești {savings} lei</p>
                                   )}
                                 </div>
                                 <div className="text-right shrink-0">
@@ -461,7 +461,7 @@ export function DemoSection() {
                         {/* Fields */}
                         {([
                           { key: "name", label: "Nume complet", icon: User, placeholder: "Prenume Nume", type: "text" },
-                          { key: "phone", label: "Numar de telefon", icon: Phone, placeholder: "07XXXXXXXX", type: "tel" },
+                          { key: "phone", label: "Număr de telefon", icon: Phone, placeholder: "07XXXXXXXX", type: "tel" },
                         ] as const).map(f => (
                           <div key={f.key}>
                             <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">{f.label} *</label>
@@ -476,12 +476,12 @@ export function DemoSection() {
                         ))}
 
                         <div>
-                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Judet *</label>
+                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Județ *</label>
                           <div className={`flex overflow-hidden rounded-lg border ${errors.county ? "border-red-400" : "border-gray-200"}`}>
                             <span className="flex items-center justify-center w-7 bg-gray-50"><MapPin size={12} className="text-gray-500" /></span>
                             <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))}
                               className="flex-1 px-2 py-1.5 text-[11px] text-gray-800 bg-white focus:outline-none">
-                              <option value="">Selecteaza judetul</option>
+                              <option value="">Selectează județul</option>
                               {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
                             </select>
                           </div>
@@ -489,18 +489,18 @@ export function DemoSection() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Oras *</label>
+                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Oraș *</label>
                           <div className={`flex overflow-hidden rounded-lg border ${errors.city ? "border-red-400" : "border-gray-200"}`}>
                             <span className="flex items-center justify-center w-7 bg-gray-50"><MapPin size={12} className="text-gray-500" /></span>
                             <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                              placeholder="Oras / Localitate"
+                              placeholder="Oraș / Localitate"
                               className="flex-1 px-2 py-1.5 text-[11px] text-gray-800 bg-white focus:outline-none placeholder:text-gray-400" />
                           </div>
                           {errors.city && <p className="text-[9px] text-red-500 mt-0.5">{errors.city}</p>}
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Adresa *</label>
+                          <label className="block text-[10px] font-semibold text-gray-700 mb-0.5">Adresă *</label>
                           <div className={`flex overflow-hidden rounded-lg border ${errors.address ? "border-red-400" : "border-gray-200"}`}>
                             <span className="flex items-center justify-center w-7 bg-gray-50"><Home size={12} className="text-gray-500" /></span>
                             <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
@@ -520,8 +520,8 @@ export function DemoSection() {
                               {prioritize && <Check size={8} className="text-white" strokeWidth={3} />}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-[10px] font-semibold text-gray-900">Prioritizeaza comanda mea</p>
-                              <p className="text-[8px] text-gray-500">Expediata inaintea celorlalte comenzi</p>
+                              <p className="text-[10px] font-semibold text-gray-900">Prioritizează comanda mea</p>
+                              <p className="text-[8px] text-gray-500">Expediată înaintea celorlalte comenzi</p>
                             </div>
                             <span className="text-[10px] font-black flex-shrink-0" style={{ color: COLOR }}>+4.99 lei</span>
                           </div>
@@ -535,7 +535,7 @@ export function DemoSection() {
                           </div>
                           {prioritize && (
                             <div className="flex justify-between text-gray-500">
-                              <span>Prioritizare comanda</span>
+                              <span>Prioritizare comandă</span>
                               <span className="font-medium text-gray-900">4.99 lei</span>
                             </div>
                           )}
@@ -556,7 +556,7 @@ export function DemoSection() {
                           Plata la livrare - {total.toFixed(2).replace(".00", "")} lei
                         </button>
                         <p className="text-center text-[8px] text-gray-400">
-                          Platesti cash curierului - Fara card necesar
+                          Plătești cash curierului - Fără card necesar
                         </p>
                       </form>
                     </>

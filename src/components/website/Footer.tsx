@@ -2,15 +2,15 @@ import Image from "next/image";
 import Link from "next/link";
 
 const PRODUCT_LINKS = [
-  { href: "/#functionalitati", label: "Functionalitati" },
+  { href: "/#functionalitati", label: "Funcționalități" },
   { href: "/#demo", label: "Demo interactiv" },
-  { href: "/#preturi", label: "Preturi" },
-  { href: "/#faq", label: "Intrebari frecvente" },
+  { href: "/#preturi", label: "Prețuri" },
+  { href: "/#faq", label: "Întrebări frecvente" },
 ];
 
 const LEGAL_LINKS = [
-  { href: "/termeni", label: "Termeni si conditii" },
-  { href: "/confidentialitate", label: "Politica de confidentialitate" },
+  { href: "/termeni", label: "Termeni și condiții" },
+  { href: "/confidentialitate", label: "Politica de confidențialitate" },
   { href: "/cookies", label: "Politica cookies" },
   { href: "/gdpr", label: "GDPR" },
 ];
@@ -29,7 +29,7 @@ export function Footer() {
               <span className="text-xl font-bold">Edinio</span>
             </div>
             <p className="text-sm text-background/60 leading-relaxed">
-              Platforma completa pentru magazine online. Creeaza-ti magazinul in cateva minute, cu mentenanta gratuita pe viata si suport 7 zile din 7.
+              Platformă completă pentru magazine online. Creează-ți magazinul în câteva minute, cu mentenanță gratuită pe viață și suport 7 zile din 7.
             </p>
           </div>
 
@@ -66,7 +66,7 @@ export function Footer() {
                   contact@edinio.com
                 </a>
               </li>
-              <li>Matasari, Jud. Gorj</li>
+              <li>Mătăsari, Jud. Gorj</li>
               <li>Str. Progresului, Nr. 2</li>
             </ul>
           </div>
@@ -96,7 +96,7 @@ export function Footer() {
           </p>
           <div className="flex items-center gap-3">
             <a
-              href="https://anpc.ro/ce-ستe-sal/"
+              href="https://anpc.ro/ce-este-sal/"
               target="_blank"
               rel="noopener noreferrer"
             >

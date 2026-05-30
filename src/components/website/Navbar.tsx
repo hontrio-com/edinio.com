@@ -7,14 +7,14 @@ import { Menu, X, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const NAV_LINKS = [
-  { href: "/#functionalitati", label: "Functionalitati" },
+  { href: "/#functionalitati", label: "Funcționalități" },
   { href: "/#demo", label: "Demo interactiv" },
-  { href: "/#preturi", label: "Preturi" },
+  { href: "/#preturi", label: "Prețuri" },
   { href: "/#faq", label: "FAQ" },
 ];
 
 const ANNOUNCEMENT =
-  "Mentenanta gratuita pe viata la orice abonament";
+  "Mentenanță gratuită pe viață la orice abonament";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -133,13 +133,13 @@ export function Navbar() {
               href="/login"
               className="inline-flex items-center justify-center h-9 px-5 rounded-full text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
             >
-              Conecteaza-te
+              Conectează-te
             </Link>
             <Link
               href="/register"
               className="inline-flex items-center justify-center h-9 px-5 rounded-full bg-primary text-white text-sm font-semibold shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/30 hover:bg-primary/90 transition-all duration-200"
             >
-              Incepe gratuit
+              Începe gratuit
             </Link>
           </div>
 
@@ -182,13 +182,13 @@ export function Navbar() {
                   href="/login"
                   className="block py-3 rounded-xl border border-border/50 text-sm font-medium text-center text-foreground hover:bg-muted/60 transition-colors"
                 >
-                  Conecteaza-te
+                  Conectează-te
                 </Link>
                 <Link
                   href="/register"
                   className="block py-3 rounded-xl bg-primary text-white text-sm font-semibold text-center shadow-md shadow-primary/25 hover:bg-primary/90 transition-colors"
                 >
-                  Incepe gratuit
+                  Începe gratuit
                 </Link>
               </div>
             </div>

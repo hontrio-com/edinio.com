@@ -38,27 +38,27 @@ export default function LandingPage() {
 
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight mb-5">
-            Esti pregatit sa vinzi in toata Romania{" "}
+            Ești pregătit să vinzi în toată România{" "}
             <span className="text-primary">cu ajutorul Edinio?</span>
           </h2>
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-10">
-            Testeaza gratuit 15 zile. Fara card de credit, fara obligatii. Mentenanta gratuita pe viata si suport 7 zile din 7.
+            Testează gratuit 15 zile. Fără card de credit, fără obligații. Mentenanță gratuită pe viață și suport 7 zile din 7.
           </p>
 
           <Link
             href="/register"
             className="inline-flex items-center justify-center h-13 px-10 rounded-xl bg-primary text-white text-base font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 hover:bg-primary/90 transition-all duration-200"
           >
-            Incepe gratuit acum
+            Începe gratuit acum
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
 
           {/* Trust row */}
           <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 mt-12">
             {[
-              { icon: Shield, text: "Fara card de credit" },
+              { icon: Shield, text: "Fără card de credit" },
               { icon: Headset, text: "Suport 7 zile din 7" },
-              { icon: Wrench, text: "Mentenanta gratuita pe viata" },
+              { icon: Wrench, text: "Mentenanță gratuită pe viață" },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-2 text-gray-500">
                 <Icon className="h-4 w-4 text-primary" />

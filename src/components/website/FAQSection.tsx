@@ -8,32 +8,32 @@ const FAQS = [
   {
     question: "Ce este Edinio?",
     answer:
-      "Edinio este o platforma care permite afacerilor locale sa-si creeze un magazin online complet, fara cunostinte tehnice. Poti adauga produse, primi comenzi, configura integrari cu curierii si procesatoare de plati, totul dintr-un singur loc.",
+      "Edinio este o platformă care permite afacerilor locale să-și creeze un magazin online complet, fără cunoștințe tehnice. Poți adăuga produse, primi comenzi, configura integrări cu curierii și procesatoare de plăți, totul dintr-un singur loc.",
   },
   {
-    question: "Cat costa Edinio?",
+    question: "Cât costă Edinio?",
     answer:
-      "Oferim o perioada de testare gratuita de 15 zile, fara card de credit. Planurile platite incep de la 99 lei/luna si includ mentenanta gratuita pe viata, suport 7 zile din 7 si toate integrarile necesare.",
+      "Oferim o perioadă de testare gratuită de 15 zile, fără card de credit. Planurile plătite încep de la 99 lei/lună și includ mentenanță gratuită pe viață, suport 7 zile din 7 și toate integrările necesare.",
   },
   {
-    question: "Am nevoie de cunostinte tehnice?",
+    question: "Am nevoie de cunoștințe tehnice?",
     answer:
-      "Nu. Edinio este conceput pentru a fi folosit de oricine. Interfata este intuitiva, iar configurarea magazinului se face simplu, fara a scrie o singura linie de cod.",
+      "Nu. Edinio este conceput pentru a fi folosit de oricine. Interfața este intuitivă, iar configurarea magazinului se face simplu, fără a scrie o singură linie de cod.",
   },
   {
-    question: "Ce include mentenanta gratuita?",
+    question: "Ce include mentenanța gratuită?",
     answer:
-      "Mentenanta este gratuita pe viata la orice abonament. Ne ocupam de actualizari, securitate, performanta si disponibilitate. Suntem la dispozitia ta 7 zile din 7 pentru orice problema sau intrebare.",
+      "Mentenanța este gratuită pe viață la orice abonament. Ne ocupăm de actualizări, securitate, performanță și disponibilitate. Suntem la dispoziția ta 7 zile din 7 pentru orice problemă sau întrebare.",
   },
   {
-    question: "Ce metode de plata sunt acceptate?",
+    question: "Ce metode de plată sunt acceptate?",
     answer:
-      "Magazinul tau poate accepta plati prin card bancar (Stripe, Netopia), ramburs la curier si ridicare din magazin. Integrarile de plata sunt preconfigurate si nu necesita configurare tehnica.",
+      "Magazinul tău poate accepta plăți prin card bancar (Stripe, Netopia), ramburs la curier și ridicare din magazin. Integrările de plată sunt preconfigurate și nu necesită configurare tehnică.",
   },
   {
-    question: "Pot anula abonamentul oricand?",
+    question: "Pot anula abonamentul oricând?",
     answer:
-      "Da, poti anula abonamentul oricand, fara costuri suplimentare sau penalitati.",
+      "Da, poți anula abonamentul oricând, fără costuri suplimentare sau penalități.",
   },
 ];
 
@@ -46,10 +46,10 @@ export function FAQSection() {
         {/* Header */}
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Intrebari frecvente
+            Întrebări frecvente
           </h2>
           <p className="text-lg text-muted-foreground">
-            Raspunsuri la cele mai comune intrebari despre Edinio.
+            Răspunsuri la cele mai comune întrebări despre Edinio.
           </p>
         </div>
 

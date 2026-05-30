@@ -15,15 +15,15 @@ function MockCustomize() {
   return (
     <div className="bg-background rounded-2xl border border-border overflow-hidden shadow-sm max-w-md mx-auto">
       <div className="px-4 py-3 border-b border-border">
-        <span className="text-sm font-semibold text-foreground block">Editeaza magazinul</span>
-        <span className="text-xs text-muted-foreground">Modificarile se salveaza separat</span>
+        <span className="text-sm font-semibold text-foreground block">Editează magazinul</span>
+        <span className="text-xs text-muted-foreground">Modificările se salvează separat</span>
       </div>
 
       <div className="divide-y divide-border">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Info className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-semibold text-foreground">Informatii generale</span>
+            <span className="text-xs font-semibold text-foreground">Informații generale</span>
           </div>
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </div>
@@ -32,7 +32,7 @@ function MockCustomize() {
           <div className="px-4 py-3 flex items-center justify-between bg-muted/30">
             <div className="flex items-center gap-2">
               <Palette className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-semibold text-foreground">Identitate vizuala</span>
+              <span className="text-xs font-semibold text-foreground">Identitate vizuală</span>
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground rotate-180" />
           </div>
@@ -41,18 +41,18 @@ function MockCustomize() {
               <div>
                 <span className="text-[10px] font-medium text-muted-foreground block mb-1">Logo</span>
                 <div className="rounded-lg border-2 border-dashed border-border flex items-center justify-center py-4">
-                  <span className="text-[10px] text-muted-foreground">Incarca imagine</span>
+                  <span className="text-[10px] text-muted-foreground">Încarcă imagine</span>
                 </div>
               </div>
               <div>
                 <span className="text-[10px] font-medium text-muted-foreground block mb-1">Banner / Cover</span>
                 <div className="rounded-lg border-2 border-dashed border-border flex items-center justify-center py-4">
-                  <span className="text-[10px] text-muted-foreground">Incarca imagine</span>
+                  <span className="text-[10px] text-muted-foreground">Încarcă imagine</span>
                 </div>
               </div>
             </div>
             <div>
-              <span className="text-[10px] font-medium text-muted-foreground block mb-1.5">Culoare principala</span>
+              <span className="text-[10px] font-medium text-muted-foreground block mb-1.5">Culoare principală</span>
               <div className="flex items-center gap-1.5">
                 {COLOR_PRESETS.map((c, i) => (
                   <div
@@ -72,9 +72,9 @@ function MockCustomize() {
         </div>
 
         {[
-          { icon: MapPin, label: "Locatie" },
+          { icon: MapPin, label: "Locație" },
           { icon: Share2, label: "Social media" },
-          { icon: Layout, label: "Pagina produs" },
+          { icon: Layout, label: "Pagină produs" },
           { icon: Globe, label: "Publicare" },
         ].map(({ icon: Icon, label }) => (
           <div key={label} className="px-4 py-3 flex items-center justify-between">
@@ -184,54 +184,54 @@ interface Feature {
 const FEATURES: Feature[] = [
   {
     images: [
-      { src: "/features/f1.png", alt: "Pagina produs" },
-      { src: "/features/f1.1.png", alt: "Formular comanda" },
+      { src: "/features/f1.png", alt: "Pagină produs" },
+      { src: "/features/f1.1.png", alt: "Formular comandă" },
     ],
-    title: "Sablon optimizat pentru piata din Romania",
+    title: "Șablon optimizat pentru piața din România",
     description:
-      "Magazine configurate cu lei, livrare locala, facturare si tot ce ai nevoie pentru a vinde in Romania.",
+      "Magazinul tău vine pregătit cu tot ce trebuie: prețuri în lei, livrare prin curierii locali, facturare automată și formulare optimizate pentru conversie maximă.",
     benefits: [
-      "Formular de comanda optimizat",
+      "Formular de comandă optimizat",
       "Elemente de trust integrate",
-      "Sistem de adaugare recenzii",
-      "Adaugare caracteristici produs",
-      "Buton de COMANDA ACUM sticky",
+      "Sistem de adăugare recenzii",
+      "Adăugare caracteristici produs",
+      "Buton de COMANDĂ ACUM sticky",
     ],
   },
   {
     image: "/features/f2.png",
-    title: "Gestioneaza totul usor",
+    title: "Gestionează totul ușor",
     description:
-      "Comenzi, produse, stocuri si clienti. Toate intr-un singur dashboard intuitiv.",
+      "Comenzi, produse, stocuri și clienți. Toate într-un singur dashboard intuitiv.",
     benefits: [
-      "Dashboard complet pentru comenzi si produse",
-      "Gestionare stocuri in timp real",
+      "Dashboard complet pentru comenzi și produse",
+      "Gestionare stocuri în timp real",
       "Acces de pe orice dispozitiv",
-      "Notificari pentru comenzi noi",
+      "Notificări pentru comenzi noi",
     ],
   },
   {
     visual: <MockCustomize />,
-    title: "Personalizare rapida, chiar si de pe telefon",
+    title: "Personalizare rapidă, chiar și de pe telefon",
     description:
-      "Schimba culori, fonturi, efecte si continut din cateva click-uri. Fara cunostinte tehnice.",
+      "Schimbă culori, fonturi, efecte și conținut din câteva click-uri. Fără cunoștințe tehnice.",
     benefits: [
       "Editor vizual intuitiv",
-      "Schimba culori si fonturi instant",
-      "Fiecare sectiune se salveaza independent",
-      "Functioneaza perfect pe mobil",
+      "Schimbă culori și fonturi instant",
+      "Fiecare secțiune se salvează independent",
+      "Funcționează perfect pe mobil",
     ],
   },
   {
     visual: <IntegrationOrbit />,
-    title: "Toate integrarile de care ai nevoie, intr-un singur loc",
+    title: "Toate integrările de care ai nevoie, într-un singur loc",
     description:
-      "Plati, curieri, facturare, SMS si marketing. Totul conectat nativ la magazinul tau.",
+      "Plăți, curieri, facturare, SMS și marketing. Totul conectat nativ la magazinul tău.",
     benefits: [
-      "Plati prin card, ramburs sau ridicare din magazin",
-      "Curieri: Sameday, Fan Courier, Cargus, DPD, GLS",
+      "Plăți prin card, ramburs sau ridicare din magazin",
+      "Curieri: Sameday, Fan Courier, Cargus, DPD, GLS, Woot",
       "Facturare: SmartBill, Oblio, FGO",
-      "SMS si marketing: SMSO, Woot",
+      "SMS și marketing: SMSO",
     ],
   },
 ];
@@ -245,8 +245,8 @@ export function FeaturesSection() {
         {/* Header */}
         <div className="max-w-2xl mx-auto text-center mb-16 lg:mb-20">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
-            Primul pas catre succesul online,{" "}
-            <span className="text-primary">noi te ghidam</span>
+            Primul pas către succesul online,{" "}
+            <span className="text-primary">noi te ghidăm</span>
           </h2>
         </div>
 
@@ -280,7 +280,7 @@ export function FeaturesSection() {
                     href="/register"
                     className="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
                   >
-                    Testeaza gratuit
+                    Testează gratuit
                   </Link>
                 </div>
 

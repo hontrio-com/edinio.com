@@ -8,27 +8,27 @@ const PLANS = [
     name: "Testare",
     price: 0,
     priceSuffix: "15 zile",
-    description: "Testeaza platforma fara obligatii",
+    description: "Testează platforma fără obligații",
     features: [
       "Acces complet 15 zile",
-      "Pana la 10 produse",
+      "Până la 10 produse",
       "Comenzi nelimitate",
       "Suport 7 zile din 7",
     ],
-    cta: "Incepe testarea",
+    cta: "Începe testarea",
     popular: false,
   },
   {
     id: "basic",
     name: "Basic",
     price: 99,
-    priceSuffix: "lei/luna",
-    description: "Pentru afaceri in crestere",
+    priceSuffix: "lei/lună",
+    description: "Pentru afaceri în creștere",
     features: [
-      "Pana la 500 produse",
+      "Până la 500 produse",
       "Comenzi nelimitate",
       "Suport 7 zile din 7",
-      "Mentenanta gratuita pe viata",
+      "Mentenanță gratuită pe viață",
     ],
     cta: "Alege Basic",
     popular: false,
@@ -37,14 +37,14 @@ const PLANS = [
     id: "premium",
     name: "Premium",
     price: 249,
-    priceSuffix: "lei/luna",
+    priceSuffix: "lei/lună",
     description: "Cel mai popular",
     features: [
-      "Pana la 2.500 produse",
+      "Până la 2.500 produse",
       "Comenzi nelimitate",
       "Suport 7 zile din 7",
-      "Mentenanta gratuita pe viata",
-      "Manager dedicat magazinului tau",
+      "Mentenanță gratuită pe viață",
+      "Manager dedicat magazinului tău",
     ],
     cta: "Alege Premium",
     popular: true,
@@ -53,14 +53,14 @@ const PLANS = [
     id: "ultra",
     name: "Ultra",
     price: 499,
-    priceSuffix: "lei/luna",
+    priceSuffix: "lei/lună",
     description: "Pentru afaceri mari",
     features: [
       "Produse nelimitate",
       "Comenzi nelimitate",
       "Suport 7 zile din 7",
-      "Mentenanta gratuita pe viata",
-      "Manager dedicat magazinului tau",
+      "Mentenanță gratuită pe viață",
+      "Manager dedicat magazinului tău",
     ],
     cta: "Alege Ultra",
     popular: false,
@@ -74,10 +74,10 @@ export function PricingSection() {
         {/* Header */}
         <div className="max-w-2xl mx-auto text-center mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Preturi simple, fara surprize
+            Prețuri simple, fără surprize
           </h2>
           <p className="text-lg text-muted-foreground">
-            Testeaza gratuit 15 zile, fara card de credit. Mentenanta gratuita pe viata si suport 7 zile din 7 la orice abonament.
+            Testează gratuit 15 zile, fără card de credit. Mentenanță gratuită pe viață și suport 7 zile din 7 la orice abonament.
           </p>
         </div>
 

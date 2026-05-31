@@ -3,6 +3,7 @@ import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import { logAudit } from "@/lib/audit";
+import { buildAdminNotifyHtml } from "@/lib/email";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM ?? "Edinio <noreply@edinio.com>";
@@ -28,15 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     from: FROM,
     to: authUser.user.email,
     subject: body.subject.trim(),
-    html: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-        <h2 style="color:#1AB554;margin-bottom:8px;">Edinio</h2>
-        <p style="color:#52525b;font-size:14px;margin-bottom:4px;">Buna ${profile?.full_name ?? ""},</p>
-        <div style="color:#18181b;font-size:15px;line-height:1.6;white-space:pre-wrap;margin:16px 0;">${body.message.trim()}</div>
-        <hr style="border:none;border-top:1px solid #e4e4e7;margin:24px 0;" />
-        <p style="color:#a1a1aa;font-size:12px;">Acesta este un mesaj de la echipa Edinio.</p>
-      </div>
-    `,
+    html: buildAdminNotifyHtml(profile?.full_name ?? "", body.message.trim()),
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

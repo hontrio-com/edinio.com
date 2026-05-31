@@ -34,7 +34,9 @@ function baseTemplate(content: string): string {
         <!-- Logo / header -->
         <tr>
           <td align="center" style="padding-bottom:24px;">
-            <span style="font-size:22px;font-weight:800;color:#1AB554;letter-spacing:-0.5px;">edinio</span>
+            <a href="${SITE_URL}" style="text-decoration:none;">
+              <img src="${SITE_URL}/logo.png" width="44" height="44" alt="Edinio" style="display:inline-block;width:44px;height:auto;border:0;" />
+            </a>
           </td>
         </tr>
         <!-- Card -->
@@ -58,6 +60,17 @@ function baseTemplate(content: string): string {
 </table>
 </body>
 </html>`;
+}
+
+export function buildAdminNotifyHtml(name: string, message: string): string {
+  return baseTemplate(`
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj de la echipa Edinio</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${name ? `, ${name}` : ""},</p>
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.6;white-space:pre-wrap;">${message}</p>
+    </div>
+    <p style="margin:0;font-size:13px;color:#71717a;">Daca ai intrebari, raspunde direct la acest email.</p>
+  `);
 }
 
 export function baseTemplateForTest(from: string): string {

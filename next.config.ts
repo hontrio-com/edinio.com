@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "cdn.edinio.com",
+        hostname: "*.r2.dev",
         pathname: "/**",
       },
     ],

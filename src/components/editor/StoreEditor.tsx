@@ -104,7 +104,7 @@ function ImageUploadField({ label, preview, aspectRatio, onFile, onRemove }: {
           className="border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
           <Upload className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Incarca imagine</span>
-          <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+          <input ref={ref} type="file" accept="image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
         </div>
       )}

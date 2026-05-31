@@ -425,7 +425,7 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
               ref={fileRef}
               type="file"
               multiple
-              accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.zip"
+              accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf,.txt,.zip"
               className="hidden"
               onChange={(e) => addFiles(e.target.files)}
             />

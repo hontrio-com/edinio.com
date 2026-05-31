@@ -267,7 +267,7 @@ export function AdminSupportTicketClient({ ticket: initialTicket, initialMessage
               </button>
             </div>
           </div>
-          <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" className="hidden"
+          <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf" className="hidden"
             onChange={(e) => { if (e.target.files) setAttachFiles(prev => [...prev, ...Array.from(e.target.files!)].slice(0, 5)); e.target.value = ""; }} />
           {attachFiles.length > 0 && (
             <div className="flex flex-wrap gap-2">

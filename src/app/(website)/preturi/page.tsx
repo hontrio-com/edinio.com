@@ -5,9 +5,19 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Preturi",
+  title:
+    "Preturi creare magazin online - de la 99 lei/luna | Edinio",
   description:
-    "Planuri si preturi Edinio. Incepe gratuit, fara card de credit.",
+    "Pret creare magazin online de la 99 lei/luna. Plan gratuit 15 zile, fara card de credit. Include mentenanta gratuita pe viata, integrari curierat, plati online si facturare.",
+  alternates: {
+    canonical: "https://edinio.ro/preturi",
+  },
+  openGraph: {
+    title: "Preturi creare magazin online | Edinio",
+    description:
+      "Pret site magazin online de la 99 lei/luna. Testare gratuita 15 zile, fara card de credit. Mentenanta gratuita pe viata.",
+    url: "https://edinio.ro/preturi",
+  },
 };
 
 export default function PreturiPage() {

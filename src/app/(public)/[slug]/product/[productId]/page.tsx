@@ -10,25 +10,35 @@ interface Props {
 
 // React cache() deduplicates this call between generateMetadata and the page
 // — a single DB round trip serves both, per request.
-const getProductCached = cache(async (productId: string) => {
+const getProductCached = cache(async (productId: string, slug: string) => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("products")
-    .select("name, description, page_sections")
+    .select("name, description, page_sections, price, images")
     .eq("id", productId)
     .single();
-  return data;
+  return data ? { ...data, slug } : null;
 });
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { productId } = await params;
-  const product = await getProductCached(productId);
+  const { productId, slug } = await params;
+  const product = await getProductCached(productId, slug);
   if (!product) return {};
   const seo = (product.page_sections as { seo?: { title?: string; description?: string } } | null)?.seo;
+  const title = seo?.title || product.name;
+  const description = seo?.description
+    || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
+  const images = product.images as string[] | null;
   return {
-    title: seo?.title || product.name,
-    description: seo?.description
-      || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name),
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      url: `https://edinio.ro/${slug}/product/${productId}`,
+      ...(images?.[0] ? { images: [{ url: images[0] }] } : {}),
+    },
   };
 }
 

@@ -3,9 +3,18 @@ import { Mail, MapPin, Clock } from "lucide-react";
 import { ContactForm } from "@/components/website/ContactForm";
 
 export const metadata: Metadata = {
-  title: "Contact",
+  title: "Contact Edinio - Suport creare magazin online",
   description:
-    "Contacteaza echipa Edinio. Suntem aici sa te ajutam cu orice intrebare.",
+    "Contacteaza echipa Edinio pentru orice intrebare despre creare magazin online. Suport 7 zile din 7, raspuns rapid.",
+  alternates: {
+    canonical: "https://edinio.ro/contact",
+  },
+  openGraph: {
+    title: "Contact Edinio - Suport creare magazin online",
+    description:
+      "Contacteaza echipa Edinio. Suntem aici sa te ajutam cu orice intrebare.",
+    url: "https://edinio.ro/contact",
+  },
 };
 
 const CONTACT_INFO = [

@@ -7,7 +7,6 @@ import {
   Loader2, Paperclip, X, AlertCircle, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 interface Ticket {
@@ -111,18 +110,15 @@ export function SupportClient({ tickets, businesses, userEmail }: {
     if (!subject.trim() || !content.trim()) return;
     setSubmitting(true);
     try {
-      const supabase = createClient();
       let uploadedUrls: string[] = [];
 
       if (files.length > 0) {
+        const { uploadImage } = await import("@/lib/upload");
         const uploads = await Promise.all(
           files.map(async (file) => {
-            const ext = file.name.split(".").pop();
-            const path = `${crypto.randomUUID()}.${ext}`;
-            const { error } = await supabase.storage.from("support-attachments").upload(path, file, { upsert: false });
-            if (error) throw error;
-            const { data } = supabase.storage.from("support-attachments").getPublicUrl(path);
-            return data.publicUrl;
+            const result = await uploadImage(file, "avatars", "support");
+            if ("error" in result) throw new Error(result.error);
+            return result.url;
           })
         );
         uploadedUrls = uploads;

@@ -185,18 +185,15 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
     if (ticket.status === "closed") return;
     setSending(true);
     try {
-      const supabase = createClient();
       let uploadedUrls: string[] = [];
 
       if (files.length > 0) {
+        const { uploadImage } = await import("@/lib/upload");
         const uploads = await Promise.all(
           files.map(async (file) => {
-            const ext = file.name.split(".").pop();
-            const path = `${crypto.randomUUID()}.${ext}`;
-            const { error } = await supabase.storage.from("support-attachments").upload(path, file, { upsert: false });
-            if (error) throw error;
-            const { data } = supabase.storage.from("support-attachments").getPublicUrl(path);
-            return data.publicUrl;
+            const result = await uploadImage(file, "avatars", "support");
+            if ("error" in result) throw new Error(result.error);
+            return result.url;
           })
         );
         uploadedUrls = uploads;

@@ -1,6 +1,7 @@
 /**
  * Client-side image compression using Canvas API.
  * Resizes to max dimensions and converts to WebP for minimal file size.
+ * Falls back to regular canvas for browsers without OffscreenCanvas (Safari <16.4).
  */
 
 const MAX_WIDTH = 1200;
@@ -19,11 +20,23 @@ export async function compressImage(
   // Skip SVGs — can't compress them with canvas
   if (file.type === "image/svg+xml") return file;
 
+  // Skip non-image files (PDFs, docs, etc.)
+  if (!file.type.startsWith("image/")) return file;
+
   // If already small enough and WebP, skip
   if (file.size < 50_000 && file.type === "image/webp") return file;
 
-  const bitmap = await createImageBitmap(file);
-  let { width, height } = bitmap;
+  // Load image
+  const imgUrl = URL.createObjectURL(file);
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = imgUrl;
+  });
+  URL.revokeObjectURL(imgUrl);
+
+  let { naturalWidth: width, naturalHeight: height } = img;
 
   // Scale down if needed, keeping aspect ratio
   if (width > maxW || height > maxH) {
@@ -32,14 +45,28 @@ export async function compressImage(
     height = Math.round(height * ratio);
   }
 
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  // Use OffscreenCanvas if available, fallback to regular canvas
+  let blob: Blob;
+  if (typeof OffscreenCanvas !== "undefined") {
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, 0, 0, width, height);
+    blob = await canvas.convertToBlob({ type: OUTPUT_TYPE, quality });
+  } else {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(img, 0, 0, width, height);
+    blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Canvas toBlob failed"))),
+        OUTPUT_TYPE,
+        quality
+      );
+    });
+  }
 
-  const blob = await canvas.convertToBlob({ type: OUTPUT_TYPE, quality });
-
-  // Replace extension with .webp
   const baseName = file.name.replace(/\.[^.]+$/, "");
   return new File([blob], `${baseName}.webp`, { type: OUTPUT_TYPE });
 }

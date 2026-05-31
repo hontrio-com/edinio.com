@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB (pre-compression limit)
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ALL_ALLOWED_TYPES = [...IMAGE_TYPES, "application/pdf", "image/gif"];
+const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const VALID_BUCKETS = ["logos", "covers", "gallery", "products", "avatars"];
 
 export async function POST(request: NextRequest) {
-  // Auth check
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Bucket invalid." }, { status: 400 });
   }
 
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: "Tipul de fisier nu este acceptat. Foloseste JPG, PNG sau WebP." }, { status: 400 });
+  if (!ALL_ALLOWED_TYPES.includes(file.type)) {
+    return NextResponse.json({ error: "Tipul de fisier nu este acceptat." }, { status: 400 });
   }
 
   if (file.size > MAX_SIZE) {

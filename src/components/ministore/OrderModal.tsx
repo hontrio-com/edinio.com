@@ -42,10 +42,7 @@ interface NetopiaConfig {
   sandbox?: boolean;
   pos_signature?: string;
   title?: string;
-  live_public_key?: string;
-  live_private_key?: string;
-  sandbox_public_key?: string;
-  sandbox_private_key?: string;
+  api_key?: string;
 }
 
 interface Props {
@@ -165,7 +162,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
         setStripeEnabled(stripeOk);
         const nc = data?.netopia_config as NetopiaConfig | null;
-        const netopiaOk = !!(nc?.enabled && nc?.pos_signature && (nc.sandbox ? (nc.sandbox_public_key && nc.sandbox_private_key) : (nc.live_public_key && nc.live_private_key)));
+        const netopiaOk = !!(nc?.enabled && nc?.pos_signature && nc?.api_key);
         setNetopiaEnabled(netopiaOk);
         if (nc?.title) setNetopiaTitle(nc.title);
         if (!stripeOk) setPaymentMethod("cash_on_delivery");
@@ -275,21 +272,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId: result.orderId, businessId: business.id }),
         });
-        const np = await res.json() as { envKey?: string; data?: string; iv?: string; url?: string; error?: string };
-        if (np.envKey && np.data && np.url) {
-          const form = document.createElement("form");
-          form.method = "POST";
-          form.action = np.url;
-          const fields = { env_key: np.envKey, data: np.data, cipher: "aes-256-cbc", iv: np.iv ?? "" };
-          for (const [k, v] of Object.entries(fields)) {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = k;
-            input.value = v;
-            form.appendChild(input);
-          }
-          document.body.appendChild(form);
-          form.submit();
+        const np = await res.json() as { redirectUrl?: string; error?: string };
+        if (np.redirectUrl) {
+          window.location.href = np.redirectUrl;
           return;
         }
         setErrors({ _: np.error ?? "Eroare la initierea platii Netopia." });

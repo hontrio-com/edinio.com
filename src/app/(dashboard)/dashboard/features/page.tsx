@@ -100,7 +100,7 @@ export default async function IntegrationsPage() {
     const sc = settings?.stripe_config as StripeConfig | null;
     stripeActive = !!(sc?.enabled && sc?.charges_enabled);
     const nc = settings?.netopia_config as NetopiaConfig | null;
-    netopiaActive = !!(nc?.enabled && nc?.pos_signature && (nc.sandbox ? (nc.sandbox_public_key && nc.sandbox_private_key) : (nc.live_public_key && nc.live_private_key)));
+    netopiaActive = !!(nc?.enabled && nc?.pos_signature && nc?.api_key);
     const wc = settings?.woot_config as WootConfig | null;
     wootActive = !!(wc?.enabled && wc?.public_key && wc?.secret_key);
     const cc = settings?.colete_config as COConfig | null;

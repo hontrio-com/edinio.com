@@ -1,76 +1,27 @@
-import {
-  randomBytes,
-  publicEncrypt,
-  privateDecrypt,
-  createCipheriv,
-  createDecipheriv,
-  constants,
-} from "crypto";
+/**
+ * Netopia Payments v2 — REST/JSON API
+ * https://netopia-payments.com/
+ *
+ * v2 uses API keys (no more XML/certificate encryption).
+ * Auth: Authorization header with the API key.
+ */
 
-export function encryptForNetopia(
-  xml: string,
-  publicCertPem: string
-): { envKey: string; data: string; iv: string } {
-  const aesKey = randomBytes(32);
-  const iv = randomBytes(16);
+export type NetopiaConfig = {
+  enabled: boolean;
+  sandbox: boolean;
+  pos_signature: string;
+  title: string;
+  api_key: string;
+};
 
-  const cipher = createCipheriv("aes-256-cbc", aesKey, iv);
-  const encrypted = Buffer.concat([cipher.update(xml, "utf8"), cipher.final()]);
+export const NETOPIA_SANDBOX_URL = "https://secure.sandbox.netopia-payments.com";
+export const NETOPIA_PRODUCTION_URL = "https://secure.mobilpay.ro";
 
-  const encryptedKey = publicEncrypt(
-    { key: publicCertPem, padding: constants.RSA_PKCS1_PADDING },
-    aesKey
-  );
-
-  return {
-    envKey: encryptedKey.toString("base64"),
-    data: encrypted.toString("base64"),
-    iv: iv.toString("base64"),
-  };
+function getBaseUrl(sandbox: boolean) {
+  return sandbox ? NETOPIA_SANDBOX_URL : NETOPIA_PRODUCTION_URL;
 }
 
-export function decryptFromNetopia(
-  envKey: string,
-  data: string,
-  iv: string,
-  privateKeyPem: string
-): string {
-  const aesKey = privateDecrypt(
-    { key: privateKeyPem, padding: constants.RSA_PKCS1_PADDING },
-    Buffer.from(envKey, "base64")
-  );
-
-  const ivBuffer = Buffer.from(iv, "base64");
-  const decipher = createDecipheriv("aes-256-cbc", aesKey, ivBuffer);
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(data, "base64")),
-    decipher.final(),
-  ]);
-
-  return decrypted.toString("utf8");
-}
-
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-function formatTimestamp(date: Date): string {
-  return (
-    date.getFullYear().toString() +
-    String(date.getMonth() + 1).padStart(2, "0") +
-    String(date.getDate()).padStart(2, "0") +
-    String(date.getHours()).padStart(2, "0") +
-    String(date.getMinutes()).padStart(2, "0") +
-    String(date.getSeconds()).padStart(2, "0")
-  );
-}
-
-export function buildPaymentXml(params: {
+export interface NetopiaStartParams {
   orderId: string;
   posSignature: string;
   amount: number;
@@ -81,64 +32,169 @@ export function buildPaymentXml(params: {
   email: string;
   phone: string;
   address: string;
-  confirmUrl: string;
-  returnUrl: string;
-}): string {
-  const timestamp = formatTimestamp(new Date());
-  const amount = params.amount.toFixed(2);
-
-  return `<?xml version="1.0" encoding="utf-8"?>
-<order type="card" id="${escapeXml(params.orderId)}" timestamp="${timestamp}">
-  <signature>${escapeXml(params.posSignature)}</signature>
-  <invoice currency="${escapeXml(params.currency)}" amount="${amount}">
-    <details>${escapeXml(params.description)}</details>
-    <contact_info>
-      <billing type="person">
-        <first_name>${escapeXml(params.firstName)}</first_name>
-        <last_name>${escapeXml(params.lastName)}</last_name>
-        <email>${escapeXml(params.email)}</email>
-        <address>${escapeXml(params.address)}</address>
-        <mobile_phone>${escapeXml(params.phone)}</mobile_phone>
-      </billing>
-    </contact_info>
-  </invoice>
-  <ipn_cipher>aes-256-cbc</ipn_cipher>
-  <url>
-    <confirm>${escapeXml(params.confirmUrl)}</confirm>
-    <return>${escapeXml(params.returnUrl)}</return>
-  </url>
-</order>`;
+  city: string;
+  county: string;
+  postalCode?: string;
+  notifyUrl: string;
+  redirectUrl: string;
 }
 
-export function parseIpnXml(xml: string): {
-  orderId: string;
-  crc: string;
-  action: string;
-  errorCode: string;
-} {
-  const orderIdMatch = xml.match(/<order[^>]+id="([^"]+)"/);
-  const crcMatch = xml.match(/<mobilpay[^>]+crc="([^"]+)"/);
-  const actionMatch = xml.match(/<action>([^<]+)<\/action>/);
-  const errorCodeMatch = xml.match(/<error\s+code="([^"]+)"/);
-
-  return {
-    orderId: orderIdMatch?.[1] ?? "",
-    crc: crcMatch?.[1] ?? "",
-    action: actionMatch?.[1]?.trim() ?? "",
-    errorCode: errorCodeMatch?.[1] ?? "99",
+export interface NetopiaStartResponse {
+  error?: { code: string; message: string };
+  payment?: {
+    paymentURL?: string;
+    ntpID?: string;
+    status?: number;
+    token?: string;
   };
 }
 
-export type NetopiaConfig = {
-  enabled: boolean;
-  sandbox: boolean;
-  pos_signature: string;
-  title: string;
-  live_public_key: string;
-  live_private_key: string;
-  sandbox_public_key: string;
-  sandbox_private_key: string;
-};
+/**
+ * Start a card payment via Netopia v2.
+ * POST /payment/card/start
+ */
+export async function startNetopiaPayment(
+  params: NetopiaStartParams,
+  apiKey: string,
+  sandbox: boolean
+): Promise<{ redirectUrl?: string; ntpID?: string; error?: string }> {
+  const baseUrl = getBaseUrl(sandbox);
 
-export const NETOPIA_SANDBOX_URL = "https://sandboxsecure.mobilpay.ro";
-export const NETOPIA_PRODUCTION_URL = "https://secure.mobilpay.ro";
+  const body = {
+    config: {
+      emailTemplate: "",
+      notifyUrl: params.notifyUrl,
+      redirectUrl: params.redirectUrl,
+      language: "ro",
+    },
+    payment: {
+      options: {
+        installments: 0,
+        bonus: 0,
+      },
+      instrument: {
+        type: "card",
+      },
+      data: {},
+    },
+    order: {
+      ntpID: "",
+      posSignature: params.posSignature,
+      dateTime: new Date().toISOString(),
+      description: params.description,
+      orderID: params.orderId,
+      amount: params.amount,
+      currency: params.currency,
+      billing: {
+        email: params.email,
+        phone: params.phone,
+        firstName: params.firstName,
+        lastName: params.lastName,
+        city: params.city,
+        country: 642, // Romania ISO 3166-1 numeric
+        countryName: "Romania",
+        state: params.county,
+        postalCode: params.postalCode || "000000",
+        details: params.address,
+      },
+      shipping: {
+        email: params.email,
+        phone: params.phone,
+        firstName: params.firstName,
+        lastName: params.lastName,
+        city: params.city,
+        country: 642,
+        countryName: "Romania",
+        state: params.county,
+        postalCode: params.postalCode || "000000",
+        details: params.address,
+      },
+      products: [
+        {
+          name: params.description,
+          code: params.orderId,
+          category: "order",
+          price: params.amount,
+          vat: 0,
+        },
+      ],
+      installments: {
+        selected: 0,
+        available: [0],
+      },
+      data: {},
+    },
+  };
+
+  try {
+    const res = await fetch(`${baseUrl}/payment/card/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = (await res.json()) as NetopiaStartResponse;
+
+    if (data.error?.code && data.error.code !== "00") {
+      return { error: data.error.message || `Netopia error: ${data.error.code}` };
+    }
+
+    if (data.payment?.paymentURL) {
+      return { redirectUrl: data.payment.paymentURL, ntpID: data.payment.ntpID };
+    }
+
+    return { error: "Nu s-a primit URL-ul de plata de la Netopia." };
+  } catch (err) {
+    console.error("[netopia] startPayment failed:", err);
+    return { error: "Eroare la comunicarea cu Netopia." };
+  }
+}
+
+/**
+ * Netopia v2 IPN notification payload.
+ */
+export interface NetopiaIpnPayload {
+  payment?: {
+    ntpID?: string;
+    status?: number;
+    token?: string;
+    amount?: number;
+    currency?: string;
+    data?: Record<string, unknown>;
+    error?: { code: string; message: string };
+  };
+  order?: {
+    orderID?: string;
+    ntpID?: string;
+    posSignature?: string;
+    amount?: number;
+  };
+}
+
+/**
+ * Netopia v2 payment statuses:
+ * 3 = paid/confirmed
+ * 5 = confirmed (captured)
+ * 12 = cancelled
+ * 15 = credit (refund)
+ * Other codes: pending, error, etc.
+ */
+export function resolveNetopiaStatus(status: number): {
+  orderStatus?: string;
+  paymentStatus?: string;
+} {
+  switch (status) {
+    case 3: // paid
+    case 5: // confirmed
+      return { orderStatus: "confirmed", paymentStatus: "paid" };
+    case 12: // cancelled
+      return { orderStatus: "cancelled" };
+    case 15: // credit/refund
+      return { paymentStatus: "refunded" };
+    default:
+      return {};
+  }
+}

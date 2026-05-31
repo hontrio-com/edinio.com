@@ -1,19 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { decryptFromNetopia, parseIpnXml, type NetopiaConfig } from "@/lib/netopia";
-
-function crcResponse(crc: string): Response {
-  return new Response(`<?xml version="1.0" encoding="utf-8"?><crc>${crc}</crc>`, {
-    status: 200,
-    headers: { "Content-Type": "text/xml" },
-  });
-}
+import { resolveNetopiaStatus, type NetopiaIpnPayload } from "@/lib/netopia";
 
 export async function POST(request: NextRequest) {
-  const orderId = request.nextUrl.searchParams.get("orderId");
-  if (!orderId) {
-    return new Response("Missing orderId", { status: 400 });
+  let payload: NetopiaIpnPayload;
+  try {
+    payload = (await request.json()) as NetopiaIpnPayload;
+  } catch {
+    return NextResponse.json({ errorCode: 1, errorMessage: "Invalid JSON" }, { status: 400 });
   }
+
+  const orderId = payload.order?.orderID;
+  const paymentStatus = payload.payment?.status;
+
+  if (!orderId || paymentStatus === undefined) {
+    return NextResponse.json({ errorCode: 0x01, errorMessage: "Missing order or status" });
+  }
+
+  console.log("[netopia/notify] IPN received:", {
+    orderId,
+    ntpID: payload.payment?.ntpID,
+    status: paymentStatus,
+  });
 
   const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,54 +35,22 @@ export async function POST(request: NextRequest) {
     .eq("id", orderId)
     .single();
 
-  if (!order) return new Response("Order not found", { status: 404 });
-
-  const { data: settings } = await admin
-    .from("store_settings")
-    .select("netopia_config")
-    .eq("business_id", order.business_id)
-    .single();
-
-  const config = settings?.netopia_config as NetopiaConfig | null;
-  const privateKey = config?.sandbox ? config?.sandbox_private_key : config?.live_private_key;
-  if (!privateKey) return new Response("Netopia not configured", { status: 400 });
-
-  const formData = await request.formData();
-  const envKey = formData.get("env_key") as string;
-  const data = formData.get("data") as string;
-  const iv = formData.get("iv") as string;
-
-  if (!envKey || !data) return new Response("Missing IPN data", { status: 400 });
-
-  let xml: string;
-  try {
-    xml = decryptFromNetopia(envKey, data, iv ?? "", privateKey);
-  } catch (err) {
-    console.error("[netopia/notify] Decrypt failed:", err);
-    return new Response("Decrypt error", { status: 500 });
+  if (!order) {
+    console.error("[netopia/notify] Order not found:", orderId);
+    return NextResponse.json({ errorCode: 0x01, errorMessage: "Order not found" });
   }
 
-  const { crc, action, errorCode } = parseIpnXml(xml);
+  const { orderStatus, paymentStatus: newPaymentStatus } = resolveNetopiaStatus(paymentStatus);
 
-  let newStatus: string | undefined;
-  let newPaymentStatus: string | undefined;
-
-  if (action === "paid" || (action === "confirmed" && errorCode === "0")) {
-    newStatus = "confirmed";
-    newPaymentStatus = "paid";
-  } else if (action === "canceled" || action === "rejected") {
-    newStatus = "cancelled";
-  } else if (action === "credit") {
-    newPaymentStatus = "refunded";
-  }
-
-  if (newStatus || newPaymentStatus) {
+  if (orderStatus || newPaymentStatus) {
     const update: Record<string, string> = { updated_at: new Date().toISOString() };
-    if (newStatus) update.status = newStatus;
+    if (orderStatus) update.status = orderStatus;
     if (newPaymentStatus) update.payment_status = newPaymentStatus;
 
     await admin.from("orders").update(update).eq("id", orderId);
+    console.log("[netopia/notify] Order updated:", { orderId, orderStatus, newPaymentStatus });
   }
 
-  return crcResponse(crc);
+  // Netopia v2 expects { errorCode: 0 } for success
+  return NextResponse.json({ errorCode: 0, errorMessage: "OK" });
 }

@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import {
-  buildPaymentXml,
-  encryptForNetopia,
-  NETOPIA_SANDBOX_URL,
-  NETOPIA_PRODUCTION_URL,
-  type NetopiaConfig,
-} from "@/lib/netopia";
+import { startNetopiaPayment, type NetopiaConfig } from "@/lib/netopia";
 
 export async function POST(request: NextRequest) {
   const { orderId, businessId } = (await request.json()) as { orderId: string; businessId: string };
@@ -28,7 +22,6 @@ export async function POST(request: NextRequest) {
 
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
-  // Prevent duplicate payment for already-paid or cancelled orders
   if (order.payment_status === "paid") {
     return NextResponse.json({ error: "Comanda a fost deja platita" }, { status: 400 });
   }
@@ -37,8 +30,7 @@ export async function POST(request: NextRequest) {
   }
 
   const config = settings?.netopia_config as NetopiaConfig | null;
-  const publicKey = config?.sandbox ? config?.sandbox_public_key : config?.live_public_key;
-  if (!config?.enabled || !config.pos_signature || !publicKey) {
+  if (!config?.enabled || !config.pos_signature || !config.api_key) {
     return NextResponse.json({ error: "Netopia not configured" }, { status: 400 });
   }
 
@@ -50,32 +42,35 @@ export async function POST(request: NextRequest) {
   const lastName = nameParts.slice(1).join(" ") || "-";
 
   const addr = order.shipping_address as { address?: string; city?: string; county?: string };
-  const addressStr = [addr.address, addr.city, addr.county].filter(Boolean).join(", ") || "-";
 
-  const confirmUrl = `${baseUrl}/api/netopia/notify?orderId=${encodeURIComponent(orderId)}`;
-  const returnUrl = `${baseUrl}/${slug}/confirm?orderId=${encodeURIComponent(orderId)}&name=${encodeURIComponent(order.customer_name as string)}&total=${order.total}`;
+  const notifyUrl = `${baseUrl}/api/netopia/notify`;
+  const redirectUrl = `${baseUrl}/${slug}/confirm?orderId=${encodeURIComponent(orderId)}&name=${encodeURIComponent(order.customer_name as string)}&total=${order.total}`;
 
-  const xml = buildPaymentXml({
-    orderId,
-    posSignature: config.pos_signature,
-    amount: Number(order.total),
-    currency: "RON",
-    description: `Comanda ${order.order_number as string}`,
-    firstName,
-    lastName,
-    email: (order.customer_email as string) || "client@edinio.com",
-    phone: order.customer_phone as string,
-    address: addressStr,
-    confirmUrl,
-    returnUrl,
-  });
+  const result = await startNetopiaPayment(
+    {
+      orderId,
+      posSignature: config.pos_signature,
+      amount: Number(order.total),
+      currency: "RON",
+      description: `Comanda ${order.order_number as string}`,
+      firstName,
+      lastName,
+      email: (order.customer_email as string) || "client@edinio.com",
+      phone: order.customer_phone as string,
+      address: addr.address || "-",
+      city: addr.city || "-",
+      county: addr.county || "-",
+      notifyUrl,
+      redirectUrl,
+    },
+    config.api_key,
+    config.sandbox
+  );
 
-  try {
-    const { envKey, data, iv } = encryptForNetopia(xml, publicKey);
-    const netopiaUrl = config.sandbox ? NETOPIA_SANDBOX_URL : NETOPIA_PRODUCTION_URL;
-    return NextResponse.json({ envKey, data, iv, url: netopiaUrl });
-  } catch (err) {
-    console.error("[netopia/start] Encryption failed:", err);
-    return NextResponse.json({ error: "Eroare la criptarea datelor. Verifica cheia publica." }, { status: 500 });
+  if (result.error) {
+    console.error("[netopia/start] Payment start failed:", result.error);
+    return NextResponse.json({ error: result.error }, { status: 500 });
   }
+
+  return NextResponse.json({ redirectUrl: result.redirectUrl });
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Loader2, Upload, CheckCircle, CreditCard, Info } from "lucide-react";
+import { ArrowLeft, Save, Loader2, CheckCircle, CreditCard, Info, Key } from "lucide-react";
 import { saveNetopiaConfig, disconnectNetopia } from "@/lib/actions/netopia.actions";
 import type { NetopiaConfig } from "@/lib/netopia";
 
@@ -12,70 +12,10 @@ const DEFAULT_CONFIG: NetopiaConfig = {
   sandbox: true,
   pos_signature: "",
   title: "Card online (Netopia)",
-  live_public_key: "",
-  live_private_key: "",
-  sandbox_public_key: "",
-  sandbox_private_key: "",
+  api_key: "",
 };
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
-
-function FileUploadField({
-  label,
-  accept,
-  value,
-  onChange,
-  hint,
-}: {
-  label: string;
-  accept: string;
-  value: string;
-  onChange: (content: string, filename: string) => void;
-  hint?: string;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [filename, setFilename] = useState<string>("");
-
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const content = ev.target?.result as string;
-      onChange(content, file.name);
-      setFilename(file.name);
-    };
-    reader.readAsText(file);
-    // reset so same file can be re-uploaded
-    e.target.value = "";
-  }
-
-  const hasValue = value.trim().length > 0;
-
-  return (
-    <div>
-      <label className="block text-sm font-medium text-foreground mb-1.5">{label}</label>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex items-center gap-2 px-3 py-2 text-sm border border-border rounded-lg bg-background hover:bg-muted transition-colors"
-        >
-          <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-          {hasValue ? "Schimba fisierul" : "Incarca fisier"}
-        </button>
-        {hasValue && (
-          <span className="flex items-center gap-1.5 text-xs text-green-700">
-            <CheckCircle className="h-3.5 w-3.5" />
-            {filename || "Fisier incarcat"}
-          </span>
-        )}
-        <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={handleFile} />
-      </div>
-      {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
-    </div>
-  );
-}
 
 export default function NetopiaConfigClient({
   businessId,
@@ -89,7 +29,7 @@ export default function NetopiaConfigClient({
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
-  const isConfigured = !!initialConfig?.pos_signature;
+  const isConfigured = !!initialConfig?.pos_signature && !!initialConfig?.api_key;
 
   function set<K extends keyof NetopiaConfig>(key: K, value: NetopiaConfig[K]) {
     setCfg(c => ({ ...c, [key]: value }));
@@ -100,16 +40,9 @@ export default function NetopiaConfigClient({
       toast.error("Account Signature este obligatoriu.");
       return;
     }
-    if (!cfg.sandbox) {
-      if (!cfg.live_public_key.trim() || !cfg.live_private_key.trim()) {
-        toast.error("Pentru modul live trebuie sa incarci Live public key si Live private key.");
-        return;
-      }
-    } else {
-      if (!cfg.sandbox_public_key.trim() || !cfg.sandbox_private_key.trim()) {
-        toast.error("Pentru sandbox trebuie sa incarci Sandbox public key si Sandbox private key.");
-        return;
-      }
+    if (!cfg.api_key.trim()) {
+      toast.error("API Key este obligatoriu.");
+      return;
     }
     startSave(async () => {
       const result = await saveNetopiaConfig(businessId, cfg);
@@ -159,7 +92,7 @@ export default function NetopiaConfigClient({
           <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
           <p className="text-xs text-muted-foreground leading-relaxed">
             Integreaza Netopia Payments pentru a accepta plati cu cardul. Clientii sunt redirectionati catre pagina securizata Netopia, fara a introduce datele cardului pe site-ul tau.
-            Ai nevoie de un cont de comerciant Netopia si de certificatele digitale (.cer si .key).
+            Ai nevoie de un cont de comerciant Netopia si de API Key-ul generat din panoul Netopia.
           </p>
         </div>
 
@@ -172,18 +105,18 @@ export default function NetopiaConfigClient({
             {[
               {
                 step: "1",
-                title: 'Mergi in contul Netopia',
-                desc: 'Logheaza-te pe netopia.ro si mergi la "Puncte de vanzare" → "Optiuni" (iconita cu 3 puncte) → "Setari tehnice".',
+                title: "Logheaza-te in contul Netopia",
+                desc: 'Mergi pe admin.netopia-payments.com si acceseaza "Puncte de vanzare" → "Setari tehnice".',
               },
               {
                 step: "2",
-                title: "Copiaza Account Signature",
-                desc: "Gasesti acolo Signature-ul contului tau. Copiaza-l si lipeste-l mai jos.",
+                title: "Copiaza POS Signature",
+                desc: "Gasesti Signature-ul punctului de vanzare. Copiaza-l si lipeste-l mai jos.",
               },
               {
                 step: "3",
-                title: "Descarca certificatele digitale",
-                desc: "Descarca fisierele .cer (public key) si .key (private key) pentru mediul Live si/sau Sandbox. Incarca-le mai jos.",
+                title: "Genereaza API Key",
+                desc: 'In sectiunea "Setari tehnice" → "API Key", genereaza un API Key nou. Copiaza-l si lipeste-l mai jos.',
               },
               {
                 step: "4",
@@ -226,7 +159,7 @@ export default function NetopiaConfigClient({
               <div>
                 <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {cfg.sandbox ? "Foloseste certificatele Sandbox — platile nu sunt reale" : "Mod Live — platile sunt reale"}
+                  {cfg.sandbox ? "Platile nu sunt reale — foloseste pentru testare" : "Mod Live — platile sunt reale"}
                 </p>
               </div>
               <button type="button" onClick={() => set("sandbox", !cfg.sandbox)}
@@ -253,7 +186,7 @@ export default function NetopiaConfigClient({
 
             {/* POS Signature */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Account Signature</label>
+              <label className="block text-sm font-medium text-foreground mb-1.5">POS Signature</label>
               <input
                 type="text"
                 value={cfg.pos_signature}
@@ -265,44 +198,24 @@ export default function NetopiaConfigClient({
                 Gasesti Signature-ul in Netopia → Puncte de vanzare → Setari tehnice
               </p>
             </div>
-          </div>
 
-          {/* Live keys */}
-          <div className="pt-4 border-t border-border space-y-4">
-            <p className="text-sm font-semibold text-foreground">Certificate digitale — Live</p>
-            <FileUploadField
-              label="Live public key (.cer)"
-              accept=".cer,.pem,.crt"
-              value={cfg.live_public_key}
-              onChange={(content) => set("live_public_key", content)}
-              hint="Fisierul Certificat digital mobilPay™ pentru mediul Live"
-            />
-            <FileUploadField
-              label="Live private key (.key)"
-              accept=".key,.pem"
-              value={cfg.live_private_key}
-              onChange={(content) => set("live_private_key", content)}
-              hint="Fisierul Private key pentru mediul Live"
-            />
-          </div>
-
-          {/* Sandbox keys */}
-          <div className="pt-4 border-t border-border space-y-4">
-            <p className="text-sm font-semibold text-foreground">Certificate digitale — Sandbox</p>
-            <FileUploadField
-              label="Sandbox public key (.cer)"
-              accept=".cer,.pem,.crt"
-              value={cfg.sandbox_public_key}
-              onChange={(content) => set("sandbox_public_key", content)}
-              hint="Fisierul Certificat digital mobilPay™ pentru mediul Sandbox"
-            />
-            <FileUploadField
-              label="Sandbox private key (.key)"
-              accept=".key,.pem"
-              value={cfg.sandbox_private_key}
-              onChange={(content) => set("sandbox_private_key", content)}
-              hint="Fisierul Private key pentru mediul Sandbox"
-            />
+            {/* API Key */}
+            <div>
+              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+                <Key className="h-3.5 w-3.5 text-muted-foreground" />
+                API Key
+              </label>
+              <input
+                type="password"
+                value={cfg.api_key}
+                onChange={e => set("api_key", e.target.value)}
+                placeholder="Introdu API Key-ul Netopia"
+                className={inputCls}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Genereaza un API Key din Netopia → Setari tehnice → API Key
+              </p>
+            </div>
           </div>
 
           {/* Actions */}

@@ -19,11 +19,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const displayName = business.store_name ?? business.business_name;
   const title = business.city ? `${displayName} - ${business.city}` : displayName;
   const description = business.tagline ?? business.description?.slice(0, 155) ?? `Cumpara din ${displayName} online.`;
+  const url = `https://edinio.com/${slug}`;
+  const images = business.cover_url ? [business.cover_url] : [];
   return {
     title,
     description,
-    openGraph: { title, description, images: business.cover_url ? [business.cover_url] : [] },
-    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/${slug}` },
+    openGraph: { title, description, url, images },
+    twitter: {
+      card: images.length ? "summary_large_image" : "summary",
+      title,
+      description,
+      ...(images.length ? { images } : {}),
+    },
+    alternates: { canonical: url },
   };
 }
 
@@ -98,11 +106,36 @@ export default async function SlugPage({ params }: Props) {
     supabase.from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
   }
 
+  const displayName = business.store_name ?? business.business_name;
+  const storeJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Store",
+    name: displayName,
+    url: `https://edinio.com/${business.slug}`,
+    ...(business.description ? { description: business.description.slice(0, 500) } : {}),
+    ...(business.cover_url ? { image: business.cover_url } : {}),
+    ...(business.logo_url ? { logo: business.logo_url } : {}),
+    ...(business.city ? {
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: business.city,
+        addressCountry: "RO",
+      },
+    } : {}),
+    ...(business.phone ? { telephone: business.phone } : {}),
+  };
+
   return (
-    <MiniStoreRenderer
-      business={business}
-      products={products ?? []}
-      storeSettings={storeSettings}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(storeJsonLd) }}
+      />
+      <MiniStoreRenderer
+        business={business}
+        products={products ?? []}
+        storeSettings={storeSettings}
+      />
+    </>
   );
 }

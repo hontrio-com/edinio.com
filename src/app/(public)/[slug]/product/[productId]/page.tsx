@@ -29,15 +29,43 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = seo?.description
     || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
   const images = product.images as string[] | null;
+  const url = `https://edinio.com/${slug}/product/${productId}`;
   return {
     title,
     description,
+    alternates: { canonical: url },
     openGraph: {
       title,
       description,
       type: "website",
-      url: `https://edinio.com/${slug}/product/${productId}`,
+      url,
       ...(images?.[0] ? { images: [{ url: images[0] }] } : {}),
+    },
+    twitter: {
+      card: images?.[0] ? "summary_large_image" : "summary",
+      title,
+      description,
+      ...(images?.[0] ? { images: [images[0]] } : {}),
+    },
+  };
+}
+
+function buildProductJsonLd(product: { name: string; description: string | null; price: number | null; images: unknown }, slug: string, productId: string) {
+  const images = product.images as string[] | null;
+  const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: desc,
+    url: `https://edinio.com/${slug}/product/${productId}`,
+    ...(images?.length ? { image: images } : {}),
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "RON",
+      price: product.price ?? 0,
+      availability: "https://schema.org/InStock",
+      url: `https://edinio.com/${slug}/product/${productId}`,
     },
   };
 }
@@ -64,11 +92,19 @@ export default async function ProductDetailPage({ params }: Props) {
   // business without the nested store_settings key (ProductPage doesn't expect it)
   const { store_settings: _ignored, ...business } = businessRaw as typeof businessRaw & { store_settings: unknown };
 
+  const jsonLd = buildProductJsonLd(product, slug, productId);
+
   return (
-    <ProductPage
-      business={business as never}
-      product={product}
-      storeSettings={storeSettings as never}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <ProductPage
+        business={business as never}
+        product={product}
+        storeSettings={storeSettings as never}
+      />
+    </>
   );
 }

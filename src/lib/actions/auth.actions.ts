@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { sendMfaOtpEmail } from "@/lib/email";
+import { sendMfaOtpEmail, sendAccountWelcomeEmail } from "@/lib/email";
 
 function generateOtp(): { otp: string; otpHash: string; expiresAt: string } {
   const otp = crypto.randomInt(100000, 1000000).toString();
@@ -150,6 +150,9 @@ export async function register(formData: {
     }
     return { error: "Inregistrarea a esuat. Incearca din nou." };
   }
+
+  // Send account welcome email (fire-and-forget)
+  sendAccountWelcomeEmail(formData.email, { name: formData.full_name }).catch(() => {});
 
   revalidatePath("/", "layout");
   redirect("/onboarding/details");

@@ -32,7 +32,7 @@ export function SiteStatusBar({
           </span>
         </div>
         <Link
-          href="/dashboard/editor"
+          href="/dashboard/editor#publish"
           className="flex-shrink-0 px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
         >
           Publica acum

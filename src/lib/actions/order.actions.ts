@@ -100,15 +100,25 @@ export async function placeOrder(data: {
   try {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("notifications_config, businesses(business_name)")
+      .select("notifications_config, businesses(business_name, user_id)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const businessName =
-        (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
+      const biz = settings.businesses as unknown as { business_name: string; user_id: string } | null;
+      const businessName = biz?.business_name ?? "";
+
+      // Fallback: if no notification email configured, use owner's auth email
+      let notifyEmail = config.notification_email;
+      if (!notifyEmail && biz?.user_id) {
+        const { createClient: createAdmin } = await import("@supabase/supabase-js");
+        const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+        const { data: authData } = await admin.auth.admin.getUserById(biz.user_id);
+        notifyEmail = authData?.user?.email ?? "";
+      }
+
       const emailPayload = {
         order_number: order.order_number,
         customer_name: data.customer_name,
@@ -120,8 +130,8 @@ export async function placeOrder(data: {
         order_id: order.id,
       };
       await Promise.all([
-        config.new_order && config.notification_email
-          ? sendNewOrderEmail(config.notification_email, emailPayload)
+        config.new_order !== false && notifyEmail
+          ? sendNewOrderEmail(notifyEmail, emailPayload)
           : null,
         data.customer_email
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)
@@ -270,15 +280,25 @@ export async function placeCartOrder(data: {
   try {
     const { data: settings } = await supabase
       .from("store_settings")
-      .select("notifications_config, businesses(business_name)")
+      .select("notifications_config, businesses(business_name, user_id)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const businessName =
-        (settings.businesses as unknown as { business_name: string } | null)?.business_name ?? "";
+      const biz = settings.businesses as unknown as { business_name: string; user_id: string } | null;
+      const businessName = biz?.business_name ?? "";
+
+      // Fallback: if no notification email configured, use owner's auth email
+      let notifyEmail = config.notification_email;
+      if (!notifyEmail && biz?.user_id) {
+        const { createClient: createAdmin } = await import("@supabase/supabase-js");
+        const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+        const { data: authData } = await admin.auth.admin.getUserById(biz.user_id);
+        notifyEmail = authData?.user?.email ?? "";
+      }
+
       const emailPayload = {
         order_number: order.order_number,
         customer_name: data.customer_name,
@@ -290,8 +310,8 @@ export async function placeCartOrder(data: {
         order_id: order.id,
       };
       await Promise.all([
-        config.new_order && config.notification_email
-          ? sendNewOrderEmail(config.notification_email, emailPayload)
+        config.new_order !== false && notifyEmail
+          ? sendNewOrderEmail(notifyEmail, emailPayload)
           : null,
         data.customer_email
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)

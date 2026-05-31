@@ -17,7 +17,7 @@ export function AuroraBackground({
   return (
     <div
       className={cn(
-        "transition-bg relative flex min-h-screen flex-col items-center justify-center bg-zinc-50 text-slate-950",
+        "transition-bg relative flex min-h-dvh flex-col items-center justify-center bg-zinc-50 text-slate-950",
         className,
       )}
       {...props}
@@ -59,7 +59,7 @@ export function AuroraBackground({
             after:mix-blend-difference
             after:content-[""]`,
             showRadialGradient &&
-              `[mask-image:radial-gradient(ellipse_at_100%_0%,black_10%,var(--transparent)_70%)]`,
+              `[mask-image:radial-gradient(ellipse_at_50%_0%,black_10%,var(--transparent)_70%)] md:[mask-image:radial-gradient(ellipse_at_100%_0%,black_10%,var(--transparent)_70%)]`,
           )}
         />
       </div>

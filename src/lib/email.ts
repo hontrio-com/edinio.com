@@ -144,6 +144,35 @@ export async function sendOrderConfirmationToCustomer(
   });
 }
 
+export async function sendAccountWelcomeEmail(
+  to: string,
+  data: { name: string }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const dashboardUrl = `${SITE_URL}/onboarding/details`;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Bine ai venit pe Edinio${data.name ? `, ${data.name}` : ""}!</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Contul tau a fost creat cu succes. Esti la un pas de a-ti lansa magazinul online.</p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Ce urmeaza?</p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">Configureaza-ti magazinul in cateva minute - adauga produse, personalizeaza designul si esti online.</p>
+    </div>
+
+    <div style="text-align:center;">
+      <a href="${dashboardUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Configureaza magazinul
+      </a>
+    </div>
+  `;
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Bine ai venit pe Edinio!",
+    html: baseTemplate(content),
+  });
+}
+
 export async function sendWelcomeEmail(
   to: string,
   data: { name: string; business_name: string; slug: string }

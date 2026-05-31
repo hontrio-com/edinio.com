@@ -253,7 +253,7 @@ function CartCheckoutModal({
   function validate() {
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
-    if (!/^(\+40|0)(7\d{8})$/.test(form.phone.trim())) e.phone = "Format valid: 07XXXXXXXX";
+    if (!/^(\+?40|0)7\d{8}$/.test(form.phone.replace(/[\s\-().]/g, ""))) e.phone = "Numar de telefon invalid";
     if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
     else if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalid";
     if (!form.county) e.county = "Selectati judetul";
@@ -277,7 +277,7 @@ function CartCheckoutModal({
         items: items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
         shipping_cost: shipping,
         customer_name: form.name,
-        customer_phone: form.phone,
+        customer_phone: form.phone.replace(/[\s\-().]/g, ""),
         customer_email: form.email.trim() || undefined,
         customer_county: form.county,
         customer_city: form.city,

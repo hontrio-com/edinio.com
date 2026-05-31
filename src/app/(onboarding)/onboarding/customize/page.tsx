@@ -8,7 +8,6 @@ import { Loader2, Upload, X, Check } from "lucide-react";
 import { toast } from "sonner";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { createBusiness } from "@/lib/actions/business.actions";
-import { createClient } from "@/lib/supabase/client";
 
 const COLOR_PRESETS = [
   { value: "#1AB554", label: "Verde Edinio" },
@@ -79,14 +78,10 @@ export default function OnboardingCustomizePage() {
   }, [router]);
 
   async function uploadImage(file: File, bucket: string): Promise<string | null> {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-    const path = `${user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from(bucket).upload(path, file);
-    if (error) return null;
-    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    const { uploadImage: upload } = await import("@/lib/upload");
+    const result = await upload(file, bucket);
+    if ("error" in result) return null;
+    return result.url;
   }
 
   async function handleCreate() {

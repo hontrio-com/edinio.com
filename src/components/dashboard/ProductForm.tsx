@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { createCategory } from "@/lib/actions/category.actions";
-import { createClient } from "@/lib/supabase/client";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -248,20 +247,15 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const supabase = createClient();
 
   async function handleFiles(files: FileList) {
     if (!files.length) return;
     setUploading(true);
+    const { uploadImage } = await import("@/lib/upload");
     const urls: string[] = [];
     for (const file of Array.from(files)) {
-      const ext = file.name.split(".").pop();
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from("products").upload(path, file, { upsert: true });
-      if (!error) {
-        const { data: { publicUrl } } = supabase.storage.from("products").getPublicUrl(path);
-        urls.push(publicUrl);
-      }
+      const result = await uploadImage(file, "products");
+      if ("url" in result) urls.push(result.url);
     }
     onChange([...images, ...urls]);
     setUploading(false);

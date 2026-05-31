@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  serverExternalPackages: ["@aws-sdk/client-s3"],
   experimental: {
     optimizePackageImports: [
       "lucide-react",
@@ -22,6 +23,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "rtefdpioqmowkdiybwrr.supabase.co",
         pathname: "/storage/v1/object/public/**",
+      },
+      {
+        protocol: "https",
+        hostname: "cdn.edinio.com",
+        pathname: "/**",
       },
     ],
   },

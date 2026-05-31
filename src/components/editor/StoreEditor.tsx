@@ -11,7 +11,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { updateBusiness } from "@/lib/actions/business.actions";
 import { updatePageContent } from "@/lib/actions/store.actions";
-import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -194,14 +193,10 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
 
   // Upload helper
   async function uploadFile(file: File, bucket: string): Promise<string | null> {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-    const path = `${user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from(bucket).upload(path, file);
-    if (error) return null;
-    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    const { uploadImage } = await import("@/lib/upload");
+    const result = await uploadImage(file, bucket);
+    if ("error" in result) return null;
+    return result.url;
   }
 
   async function save(section: string, data: Parameters<typeof updateBusiness>[1]) {

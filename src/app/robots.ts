@@ -20,6 +20,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: "https://edinio.ro/sitemap.xml",
+    sitemap: "https://edinio.com/sitemap.xml",
   };
 }

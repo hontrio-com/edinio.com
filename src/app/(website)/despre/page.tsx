@@ -7,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Edinio face comertul online accesibil pentru orice afacere locala din Romania. Creeaza-ti magazinul online in cateva minute, fara cunostinte tehnice, cu integrari complete.",
   alternates: {
-    canonical: "https://edinio.ro/despre",
+    canonical: "https://edinio.com/despre",
   },
   openGraph: {
     title: "Despre Edinio - Platforma de creare magazin online",
     description:
       "Misiunea noastra este sa facem comertul online accesibil pentru orice afacere locala din Romania.",
-    url: "https://edinio.ro/despre",
+    url: "https://edinio.com/despre",
   },
 };
 

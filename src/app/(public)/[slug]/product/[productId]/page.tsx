@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description,
       type: "website",
-      url: `https://edinio.ro/${slug}/product/${productId}`,
+      url: `https://edinio.com/${slug}/product/${productId}`,
       ...(images?.[0] ? { images: [{ url: images[0] }] } : {}),
     },
   };

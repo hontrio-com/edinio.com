@@ -5,7 +5,7 @@ import { Resend } from "resend";
 import { logAudit } from "@/lib/audit";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.EMAIL_FROM ?? "Edinio <noreply@edinio.ro>";
+const FROM = process.env.EMAIL_FROM ?? "Edinio <noreply@edinio.com>";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdminApi();

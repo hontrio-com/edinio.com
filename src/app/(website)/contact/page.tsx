@@ -7,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Contacteaza echipa Edinio pentru orice intrebare despre creare magazin online. Suport 7 zile din 7, raspuns rapid.",
   alternates: {
-    canonical: "https://edinio.ro/contact",
+    canonical: "https://edinio.com/contact",
   },
   openGraph: {
     title: "Contact Edinio - Suport creare magazin online",
     description:
       "Contacteaza echipa Edinio. Suntem aici sa te ajutam cu orice intrebare.",
-    url: "https://edinio.ro/contact",
+    url: "https://edinio.com/contact",
   },
 };
 
@@ -21,7 +21,7 @@ const CONTACT_INFO = [
   {
     icon: Mail,
     title: "Email",
-    detail: "contact@edinio.ro",
+    detail: "contact@edinio.com",
   },
   {
     icon: MapPin,

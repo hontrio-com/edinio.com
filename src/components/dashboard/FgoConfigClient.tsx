@@ -217,7 +217,7 @@ export function FgoConfigClient({
               type="url"
               value={form.platforma_url}
               onChange={e => set("platforma_url", e.target.value.trim())}
-              placeholder="https://edinio.ro"
+              placeholder="https://edinio.com"
               className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
             />
             <p className="text-[11px] text-muted-foreground mt-1">URL-ul root al platformei tale</p>

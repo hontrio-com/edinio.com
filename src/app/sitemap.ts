@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://edinio.ro";
+const SITE_URL = "https://edinio.com";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

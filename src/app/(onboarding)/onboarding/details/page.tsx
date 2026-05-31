@@ -307,7 +307,7 @@ export default function OnboardingDetailsPage() {
             {slug && (
               <div className="mt-2 px-3 py-2 bg-muted rounded-lg">
                 <span className="text-xs font-mono text-muted-foreground">
-                  edinio.ro/<span className="text-foreground font-semibold">{slug}</span>
+                  edinio.com/<span className="text-foreground font-semibold">{slug}</span>
                 </span>
               </div>
             )}

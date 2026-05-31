@@ -3,7 +3,7 @@ import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.ro";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
 
 export async function POST(req: NextRequest) {
   const admin = await requireAdminApi();

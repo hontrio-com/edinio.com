@@ -926,8 +926,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
               <p className="text-xs text-muted-foreground text-center">
                 Pentru upgrade sau mai multe informatii contactati-ne la{" "}
-                <a href="mailto:contact@edinio.ro" className="text-primary font-medium hover:underline">
-                  contact@edinio.ro
+                <a href="mailto:contact@edinio.com" className="text-primary font-medium hover:underline">
+                  contact@edinio.com
                 </a>
               </p>
             </div>

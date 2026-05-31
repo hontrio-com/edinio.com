@@ -4,7 +4,7 @@ import { formatPrice } from "@/lib/utils/format";
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 const FROM = `Edinio.com <${FROM_EMAIL}>`;
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.ro";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
 
 export interface NotificationsConfig {
   notification_email: string;
@@ -48,7 +48,7 @@ function baseTemplate(content: string): string {
           <td align="center" style="padding-top:20px;">
             <p style="margin:0;font-size:12px;color:#a1a1aa;">
               Edinio &mdash; Platforma ta de e-commerce &middot;
-              <a href="${SITE_URL}" style="color:#1AB554;text-decoration:none;">edinio.ro</a>
+              <a href="${SITE_URL}" style="color:#1AB554;text-decoration:none;">edinio.com</a>
             </p>
           </td>
         </tr>
@@ -183,7 +183,7 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
   });
 }
 
-const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.ro";
+const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.com";
 
 export async function sendNewSupportTicketToAdmin(data: {
   ticketId: string;

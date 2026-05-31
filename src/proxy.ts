@@ -6,8 +6,8 @@ import type { Database } from "@/types/database.types";
 // Hostnames that belong to the platform itself (not custom domains)
 const PLATFORM_HOSTS = new Set([
   "localhost",
-  "edinio.ro",
-  "www.edinio.ro",
+  "edinio.com",
+  "www.edinio.com",
   "edinio.com",
   "www.edinio.com",
 ]);

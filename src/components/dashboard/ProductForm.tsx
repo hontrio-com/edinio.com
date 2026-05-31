@@ -450,7 +450,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
   const seoBarColor = seoScore >= 81 ? "bg-green-500" : seoScore >= 61 ? "bg-blue-500" : seoScore >= 31 ? "bg-amber-500" : "bg-red-500";
 
   const serp = {
-    url: `edinio.ro/magazin/${form.slug || "produs"}`,
+    url: `edinio.com/magazin/${form.slug || "produs"}`,
     title: (form.seo_title.trim() || form.name || "Titlu produs").slice(0, 60),
     desc: (form.seo_description.trim() || form.description.replace(/<[^>]+>/g, "").slice(0, 160) || "Fara descriere.").slice(0, 160),
   };
@@ -581,7 +581,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
                   </label>
                   <div className="flex items-center gap-0 border border-border rounded-xl overflow-hidden focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-colors bg-surface">
                     <span className="px-3 text-sm text-muted-foreground bg-muted/50 border-r border-border py-2.5 whitespace-nowrap hidden sm:inline">
-                      edinio.ro/magazin/
+                      edinio.com/magazin/
                     </span>
                     <input type="text" value={form.slug}
                       onChange={(e) => {

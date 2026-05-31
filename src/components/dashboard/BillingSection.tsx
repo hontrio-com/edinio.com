@@ -243,8 +243,8 @@ export function BillingSection({ plan, planExpiresAt }: Props) {
       <p className="text-xs text-muted-foreground text-center leading-relaxed">
         Facturile sunt emise in numele companiei si trimise automat pe email la fiecare plata.
         Pentru probleme de facturare contactati{" "}
-        <a href="mailto:contact@edinio.ro" className="text-primary font-medium hover:underline">
-          contact@edinio.ro
+        <a href="mailto:contact@edinio.com" className="text-primary font-medium hover:underline">
+          contact@edinio.com
         </a>
         .
       </p>

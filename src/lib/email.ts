@@ -476,3 +476,208 @@ export async function sendNewOrderEmail(
   });
 }
 
+// ── Order status change → Customer ──────────────────────────────────────────
+
+const STATUS_CONFIG: Record<string, { label: string; subject: string; color: string; bgColor: string; borderColor: string; message: string }> = {
+  confirmed: {
+    label: "Confirmata",
+    subject: "Comanda ta a fost confirmata",
+    color: "#2563eb",
+    bgColor: "#eff6ff",
+    borderColor: "#bfdbfe",
+    message: "Comanda ta a fost confirmata si este in curs de pregatire. Te vom notifica cand va fi expediata.",
+  },
+  shipped: {
+    label: "Expediata",
+    subject: "Comanda ta a fost expediata",
+    color: "#9333ea",
+    bgColor: "#faf5ff",
+    borderColor: "#e9d5ff",
+    message: "Comanda ta a fost expediata si este in drum spre tine.",
+  },
+  delivered: {
+    label: "Livrata",
+    subject: "Comanda ta a fost livrata",
+    color: "#16a34a",
+    bgColor: "#f0fdf4",
+    borderColor: "#bbf7d0",
+    message: "Comanda ta a fost livrata cu succes. Multumim ca ai cumparat de la noi!",
+  },
+  cancelled: {
+    label: "Anulata",
+    subject: "Comanda ta a fost anulata",
+    color: "#dc2626",
+    bgColor: "#fef2f2",
+    borderColor: "#fecaca",
+    message: "Comanda ta a fost anulata. Daca ai intrebari, te rugam sa ne contactezi.",
+  },
+};
+
+export async function sendOrderStatusToCustomer(
+  to: string,
+  order: {
+    order_number: string;
+    customer_name: string;
+    total: number;
+    status: string;
+    business_name: string;
+    awb?: string | null;
+  }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+
+  const cfg = STATUS_CONFIG[order.status];
+  if (!cfg) return;
+
+  const awbSection = order.status === "shipped" && order.awb
+    ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
+        <p style="margin:0;font-size:13px;color:#71717a;">Numar AWB: <strong style="color:#18181b;font-family:monospace;">${order.awb}</strong></p>
+      </div>`
+    : "";
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${cfg.subject}</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${order.customer_name}</strong>! Iti trimitem un update despre comanda ta la <strong>${order.business_name}</strong>.</p>
+
+    <div style="background:${cfg.bgColor};border:1px solid ${cfg.borderColor};border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>
+            <p style="margin:0;font-size:13px;color:${cfg.color};font-weight:600;">Comanda ${order.order_number}</p>
+            <p style="margin:4px 0 0 0;font-size:13px;color:${cfg.color};">Status: <strong>${cfg.label}</strong></p>
+          </td>
+          <td style="text-align:right;vertical-align:top;">
+            <p style="margin:0;font-size:15px;font-weight:700;color:${cfg.color};">${formatPrice(order.total)}</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="margin:0;font-size:14px;color:#71717a;line-height:1.6;">${cfg.message}</p>
+    ${awbSection}
+  `;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `${cfg.subject} — ${order.order_number}`,
+    html: baseTemplate(content),
+  });
+}
+
+// ── Subscription activated → User ───────────────────────────────────────────
+
+export async function sendSubscriptionActivatedEmail(
+  to: string,
+  data: { name: string; plan: string; expiresAt: string }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+
+  const formattedDate = new Date(data.expiresAt).toLocaleDateString("ro-RO", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Abonamentul tau este activ!</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Felicitari${data.name ? `, ${data.name}` : ""}! Plata a fost procesata cu succes.</p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td>
+            <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${data.plan}</p>
+            <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Activ pana la: <strong>${formattedDate}</strong></p>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Acum ai acces la toate functionalitatile incluse in planul tau. Succes cu vanzarile!</p>
+
+    <div style="text-align:center;">
+      <a href="${SITE_URL}/dashboard" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Mergi la dashboard
+      </a>
+    </div>
+  `;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `Abonamentul ${data.plan} a fost activat`,
+    html: baseTemplate(content),
+  });
+}
+
+// ── Payment failed → User ───────────────────────────────────────────────────
+
+export async function sendPaymentFailedEmail(
+  to: string,
+  data: { name: string; plan: string }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Plata nu a putut fi procesata</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Am incercat sa procesam plata pentru abonamentul tau <strong>${data.plan}</strong>, dar aceasta nu a reusit.</p>
+
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">Plata esuata</p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#b91c1c;">Te rugam sa actualizezi metoda de plata pentru a evita suspendarea magazinului.</p>
+    </div>
+
+    <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Stripe va reincerca automat plata in urmatoarele zile. Daca problema persista, actualizeaza datele cardului din setari.</p>
+
+    <div style="text-align:center;">
+      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Actualizeaza metoda de plata
+      </a>
+    </div>
+  `;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Plata pentru abonamentul Edinio nu a reusit",
+    html: baseTemplate(content),
+  });
+}
+
+// ── Store suspended → User ──────────────────────────────────────────────────
+
+export async function sendStoreSuspendedEmail(
+  to: string,
+  data: { name: string; graceUntil: string }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+
+  const formattedDate = new Date(data.graceUntil).toLocaleDateString("ro-RO", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Magazinul tau va fi suspendat</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Abonamentul tau Edinio a fost anulat din cauza unei plati esuate.</p>
+
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">Perioada de gratie: pana la ${formattedDate}</p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#b91c1c;">Dupa aceasta data, magazinul tau nu va mai fi vizibil pentru clienti.</p>
+    </div>
+
+    <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Pentru a reactiva magazinul, reaboneaza-te din panoul de control. Toate datele tale (produse, comenzi, setari) sunt pastrate.</p>
+
+    <div style="text-align:center;">
+      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Reaboneaza-te acum
+      </a>
+    </div>
+  `;
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Magazinul tau Edinio va fi suspendat",
+    html: baseTemplate(content),
+  });
+}
+

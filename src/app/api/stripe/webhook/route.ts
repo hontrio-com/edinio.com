@@ -118,6 +118,19 @@ export async function POST(req: NextRequest) {
     // Clear any active grace period / suspension
     await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
 
+    // Send subscription activated email
+    const { data: authData } = await admin.auth.admin.getUserById(userId);
+    const { data: profileForEmail } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();
+    if (authData?.user?.email) {
+      import("@/lib/email").then(({ sendSubscriptionActivatedEmail }) => {
+        sendSubscriptionActivatedEmail(authData.user!.email!, {
+          name: profileForEmail?.full_name ?? "",
+          plan: capitalize(plan),
+          expiresAt: expiresAt.toISOString(),
+        }).catch((err) => console.error("[webhook] subscription email failed:", err));
+      }).catch(() => {});
+    }
+
     console.log("[webhook] checkout.session.completed — plan updated, suspension cleared:", { userId, plan });
   }
 
@@ -140,6 +153,18 @@ export async function POST(req: NextRequest) {
     if (graceError) {
       console.error("[webhook] Failed to set grace period:", graceError);
       return NextResponse.json({ error: "Grace period update failed" }, { status: 500 });
+    }
+
+    // Send store suspended email
+    const { data: suspAuthData } = await admin.auth.admin.getUserById(userId);
+    const { data: suspProfile } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();
+    if (suspAuthData?.user?.email) {
+      import("@/lib/email").then(({ sendStoreSuspendedEmail }) => {
+        sendStoreSuspendedEmail(suspAuthData.user!.email!, {
+          name: suspProfile?.full_name ?? "",
+          graceUntil: graceUntil.toISOString(),
+        }).catch((err) => console.error("[webhook] suspended email failed:", err));
+      }).catch(() => {});
     }
 
     console.log("[webhook] subscription.deleted — grace period set:", { userId, graceUntil });
@@ -265,6 +290,31 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("[webhook] invoice.payment_succeeded processed:", { userId, plan });
+  }
+
+  // ── invoice.payment_failed ───────────────────────────────────────────────
+  // Fires when Stripe fails to charge the customer's payment method.
+  if (event.type === "invoice.payment_failed") {
+    const invoice = event.data.object as Stripe.Invoice & {
+      subscription_details?: { metadata?: Record<string, string> };
+    };
+
+    const userId = invoice.subscription_details?.metadata?.user_id;
+    const plan = invoice.subscription_details?.metadata?.plan;
+
+    if (userId && plan) {
+      const { data: failedAuthData } = await admin.auth.admin.getUserById(userId);
+      const { data: failedProfile } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();
+      if (failedAuthData?.user?.email) {
+        import("@/lib/email").then(({ sendPaymentFailedEmail }) => {
+          sendPaymentFailedEmail(failedAuthData.user!.email!, {
+            name: failedProfile?.full_name ?? "",
+            plan: capitalize(plan),
+          }).catch((err) => console.error("[webhook] payment failed email failed:", err));
+        }).catch(() => {});
+      }
+      console.log("[webhook] invoice.payment_failed — email sent:", { userId, plan });
+    }
   }
 
   return NextResponse.json({ received: true });

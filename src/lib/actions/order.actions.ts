@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer } from "@/lib/email";
+import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer } from "@/lib/email";
 
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
@@ -134,19 +134,19 @@ export async function placeOrder(data: {
   return { success: true, orderId: order.id, orderNumber: order.order_number };
 }
 
-export async function updateOrder(orderId: string, data: { status: string; payment_status: string }) {
+export async function updateOrder(orderId: string, data: { status: string; payment_status: string; awb?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
   const { data: order } = await supabase
     .from("orders")
-    .select("business_id, order_number, customer_name, total, status, payment_status")
+    .select("business_id, order_number, customer_name, customer_email, total, status, payment_status")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
 
-  const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
+  const { data: biz } = await supabase.from("businesses").select("id, business_name").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
   const { error } = await supabase.from("orders")
@@ -155,9 +155,22 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   if (error) return { error: "Eroare la actualizare." };
 
-  // Auto-generate SmartBill invoice if configured (fire-and-forget)
   const statusChanged = data.status !== (order.status as string);
   const paymentChanged = data.payment_status !== (order.payment_status as string);
+
+  // Send status change email to customer
+  if (statusChanged && order.customer_email) {
+    sendOrderStatusToCustomer(order.customer_email, {
+      order_number: order.order_number,
+      customer_name: order.customer_name,
+      total: order.total,
+      status: data.status,
+      business_name: biz.business_name,
+      awb: data.awb,
+    }).catch(() => {});
+  }
+
+  // Auto-generate SmartBill invoice if configured (fire-and-forget)
   if (statusChanged || paymentChanged) {
     import("@/lib/actions/smartbill.actions").then(({ maybeAutoGenerateInvoice }) => {
       void maybeAutoGenerateInvoice(order.business_id, orderId, data.status, data.payment_status);

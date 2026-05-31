@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getProductLimit } from "@/lib/plan-limits";
+import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 
 interface ProductData {
   name: string;
@@ -101,6 +102,14 @@ export async function updateProduct(productId: string, businessId: string, data:
     .single();
   if (!biz) return { error: "Magazin negasit" };
 
+  // Fetch old images to detect removals
+  const { data: oldProduct } = await supabase
+    .from("products")
+    .select("images")
+    .eq("id", productId)
+    .eq("business_id", businessId)
+    .single();
+
   const { error } = await supabase.from("products").update({
     name: data.name.trim(),
     slug: data.slug?.trim() || null,
@@ -120,6 +129,18 @@ export async function updateProduct(productId: string, businessId: string, data:
   }).eq("id", productId).eq("business_id", businessId);
 
   if (error) return { error: "Eroare la salvare. Incearca din nou." };
+
+  // Clean up removed images from R2 (fire-and-forget)
+  if (oldProduct?.images && Array.isArray(oldProduct.images)) {
+    const newSet = new Set(data.images);
+    for (const url of oldProduct.images as string[]) {
+      if (!newSet.has(url)) {
+        const key = r2KeyFromUrl(url);
+        if (key) deleteFromR2(key).catch(() => {});
+      }
+    }
+  }
+
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -137,10 +158,27 @@ export async function deleteProduct(productId: string, businessId: string) {
     .single();
   if (!biz) return { error: "Magazin negasit" };
 
+  // Fetch images before deleting
+  const { data: product } = await supabase
+    .from("products")
+    .select("images")
+    .eq("id", productId)
+    .eq("business_id", businessId)
+    .single();
+
   const { error } = await supabase.from("products").delete()
     .eq("id", productId).eq("business_id", businessId);
 
   if (error) return { error: "Eroare la stergere." };
+
+  // Clean up R2 images (fire-and-forget)
+  if (product?.images && Array.isArray(product.images)) {
+    for (const url of product.images as string[]) {
+      const key = r2KeyFromUrl(url);
+      if (key) deleteFromR2(key).catch(() => {});
+    }
+  }
+
   revalidatePath("/dashboard/products");
   return { success: true };
 }

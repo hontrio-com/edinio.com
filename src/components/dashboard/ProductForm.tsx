@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus, X, Pencil, Loader2, Upload, Star, ArrowLeft, Trash2,
-  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon,
+  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, FolderOpen,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { createCategory } from "@/lib/actions/category.actions";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
@@ -244,8 +245,11 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
+function ImageUploader({ images, onChange, businessId }: { images: string[]; onChange: (imgs: string[]) => void; businessId: string }) {
   const [uploading, setUploading] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryImages, setLibraryImages] = useState<string[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFiles(files: FileList) {
@@ -259,6 +263,31 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
     }
     onChange([...images, ...urls]);
     setUploading(false);
+  }
+
+  async function openLibrary() {
+    setShowLibrary(true);
+    if (libraryImages.length > 0) return;
+    setLoadingLibrary(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("products")
+      .select("images")
+      .eq("business_id", businessId);
+    const allUrls = new Set<string>();
+    for (const p of data ?? []) {
+      if (Array.isArray(p.images)) {
+        for (const url of p.images as string[]) {
+          if (url && !images.includes(url)) allUrls.add(url);
+        }
+      }
+    }
+    setLibraryImages([...allUrls]);
+    setLoadingLibrary(false);
+  }
+
+  function selectFromLibrary(url: string) {
+    if (!images.includes(url)) onChange([...images, url]);
   }
 
   return (
@@ -292,7 +321,63 @@ function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs
       </div>
       <input ref={inputRef} type="file" accept="image/*" multiple className="hidden"
         onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-      <p className="text-xs text-muted-foreground">Prima imagine va fi afisata pe card. Accepta JPG, PNG, WebP.</p>
+      <div className="flex items-center gap-3">
+        <p className="text-xs text-muted-foreground">Prima imagine va fi afisata pe card. Accepta JPG, PNG, WebP.</p>
+        <button type="button" onClick={openLibrary}
+          className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors whitespace-nowrap">
+          <FolderOpen className="h-3 w-3" />
+          Biblioteca media
+        </button>
+      </div>
+
+      {/* Media library modal */}
+      {showLibrary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-background border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-sm font-bold text-foreground">Biblioteca media</h3>
+              <button type="button" onClick={() => setShowLibrary(false)}
+                className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1">
+              {loadingLibrary ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+                </div>
+              ) : libraryImages.length === 0 ? (
+                <div className="text-center py-12">
+                  <ImageIcon className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Nicio imagine disponibila in biblioteca</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {libraryImages.map((url) => {
+                    const isSelected = images.includes(url);
+                    return (
+                      <button key={url} type="button"
+                        onClick={() => { if (!isSelected) { selectFromLibrary(url); } }}
+                        disabled={isSelected}
+                        className={cn(
+                          "relative aspect-square rounded-xl overflow-hidden border-2 transition-all",
+                          isSelected ? "border-primary opacity-50 cursor-not-allowed" : "border-border hover:border-primary/50"
+                        )}>
+                        <img src={url} alt="" className="w-full h-full object-contain p-1" />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                            <Check className="h-5 w-5 text-primary" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -551,7 +636,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
                 <p className="text-sm font-semibold text-foreground">Imagini produs</p>
               </div>
               <div className="px-5 py-5">
-                <ImageUploader images={form.images} onChange={(imgs) => set("images", imgs)} />
+                <ImageUploader images={form.images} onChange={(imgs) => set("images", imgs)} businessId={businessId} />
               </div>
             </div>
 

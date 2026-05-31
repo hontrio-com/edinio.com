@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ChevronDown, Plus, Zap, Ticket, Tag, MessageSquare, LifeBuoy, ShieldCheck,
+  Package, ShoppingCart, ChevronDown, Zap, Ticket, Tag, MessageSquare, LifeBuoy, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
@@ -94,14 +94,6 @@ export function Sidebar({ businesses, currentBusiness, plan, smsoEnabled, unread
                   <span className="truncate text-foreground">{b.store_name ?? b.business_name}</span>
                 </button>
               ))}
-              <div className="border-t border-border">
-                <Link href="/onboarding/details"
-                  className="flex items-center gap-2 px-3 py-2 hover:bg-accent transition-colors text-sm text-muted-foreground"
-                  onClick={() => setSwitcherOpen(false)}>
-                  <Plus className="h-3.5 w-3.5" />
-                  Adauga magazin nou
-                </Link>
-              </div>
             </div>
           )}
         </div>

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Send, Loader2, CheckCircle2, XCircle, RotateCcw,
-  User, Headphones, FileText, Download, Paperclip, X,
+  User, FileText, Download, Paperclip, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { createClient } from "@/lib/supabase/client";
@@ -46,8 +46,10 @@ export function AdminSupportTicketClient({ ticket: initialTicket, initialMessage
   const [sending, setSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState(initialTicket.status);
+  const [attachFiles, setAttachFiles] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -77,23 +79,35 @@ export function AdminSupportTicketClient({ ticket: initialTicket, initialMessage
     if (!reply.trim()) return;
     setSending(true);
     try {
+      let uploadedUrls: { url: string; name: string }[] = [];
+      if (attachFiles.length > 0) {
+        const { uploadImage } = await import("@/lib/upload");
+        uploadedUrls = await Promise.all(
+          attachFiles.map(async (file) => {
+            const result = await uploadImage(file, "avatars", "support");
+            if ("error" in result) throw new Error(result.error);
+            return { url: result.url, name: file.name };
+          })
+        );
+      }
       const res = await fetch(`/api/admin/support/${ticket.id}/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: reply.trim(), status: newStatus }),
+        body: JSON.stringify({ content: reply.trim(), status: newStatus, attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined }),
       });
       if (!res.ok) throw new Error();
       const { message } = await res.json() as { message: Message };
       setMessages((prev) => prev.some((m) => m.id === message.id) ? prev : [...prev, message]);
       setTicket((prev) => ({ ...prev, status: newStatus }));
       setReply("");
+      setAttachFiles([]);
       toast.success("Raspuns trimis");
     } catch {
       toast.error("Eroare la trimiterea raspunsului");
     } finally {
       setSending(false);
     }
-  }, [reply, ticket.id, newStatus]);
+  }, [reply, ticket.id, newStatus, attachFiles]);
 
   async function handleStatusChange(status: string) {
     setUpdatingStatus(true);
@@ -181,7 +195,7 @@ export function AdminSupportTicketClient({ ticket: initialTicket, initialMessage
             <div key={msg.id} className={cn("flex gap-3", isUser ? "flex-row" : "flex-row-reverse")}>
               <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1",
                 isUser ? "bg-zinc-100 dark:bg-zinc-800" : "bg-primary/10")}>
-                {isUser ? <User className="h-4 w-4 text-zinc-500" /> : <Headphones className="h-4 w-4 text-primary" />}
+                {isUser ? <User className="h-4 w-4 text-zinc-500" /> : <img src="/logo.png" alt="Edinio" className="h-5 w-5 rounded-full object-cover" />}
               </div>
               <div className={cn("max-w-[75%] space-y-1 flex flex-col", isUser ? "items-start" : "items-end")}>
                 <div className={cn("px-4 py-3 rounded-2xl text-sm leading-relaxed",
@@ -217,7 +231,7 @@ export function AdminSupportTicketClient({ ticket: initialTicket, initialMessage
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 sticky bottom-4">
         <div className="flex items-center gap-3 mb-3">
           <div className="flex items-center gap-1.5">
-            <Headphones className="h-4 w-4 text-primary" />
+            <img src="/logo.png" alt="Edinio" className="h-4 w-4 rounded-full object-cover" />
             <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Raspuns ca echipa Edinio</span>
           </div>
           <div className="flex items-center gap-2 ml-auto">
@@ -231,20 +245,42 @@ export function AdminSupportTicketClient({ ticket: initialTicket, initialMessage
             </select>
           </div>
         </div>
-        <div className="flex items-end gap-3">
-          <textarea
-            ref={textareaRef}
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
-            placeholder="Scrie un raspuns... (Ctrl+Enter pentru trimitere)"
-            rows={3}
-            className="flex-1 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-          />
-          <button onClick={handleSend} disabled={sending || !reply.trim()}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors">
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </button>
+        <div className="space-y-2">
+          <div className="flex items-end gap-3">
+            <textarea
+              ref={textareaRef}
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
+              placeholder="Scrie un raspuns... (Ctrl+Enter pentru trimitere)"
+              rows={3}
+              className="flex-1 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+            <div className="flex flex-col gap-2">
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className="p-2.5 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors" aria-label="Ataseaza fisier">
+                <Paperclip className="h-4 w-4" />
+              </button>
+              <button onClick={handleSend} disabled={sending || !reply.trim()}
+                className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" className="hidden"
+            onChange={(e) => { if (e.target.files) setAttachFiles(prev => [...prev, ...Array.from(e.target.files!)].slice(0, 5)); e.target.value = ""; }} />
+          {attachFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {attachFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs">
+                  <FileText className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0" />
+                  <span className="truncate max-w-[120px] text-zinc-600">{f.name}</span>
+                  <button type="button" onClick={() => setAttachFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    className="text-zinc-400 hover:text-red-500 transition-colors"><X className="h-3 w-3" /></button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

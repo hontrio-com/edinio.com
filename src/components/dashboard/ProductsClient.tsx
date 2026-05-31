@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Package, Pencil, Search, Star, AlertTriangle } from "lucide-react";
+import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2 } from "lucide-react";
+import { duplicateProduct } from "@/lib/actions/product.actions";
+import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import type { Database } from "@/types/database.types";
@@ -21,6 +23,8 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
 }) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [, startDupTransition] = useTransition();
 
   const isAtLimit = productLimit !== Infinity && productCount >= productLimit;
   const isNearLimit = !isAtLimit && productLimit !== Infinity && productCount >= Math.floor(productLimit * 0.9);
@@ -207,14 +211,33 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                         </span>
                       </td>
                       <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/dashboard/products/${product.id}/edit`)}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ml-auto"
-                          aria-label="Editeaza"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 justify-end">
+                          <button
+                            type="button"
+                            disabled={duplicatingId === product.id}
+                            onClick={() => {
+                              setDuplicatingId(product.id);
+                              startDupTransition(async () => {
+                                const res = await duplicateProduct(product.id, businessId);
+                                setDuplicatingId(null);
+                                if ("error" in res) { toast.error(res.error); }
+                                else { toast.success("Produs duplicat"); router.refresh(); }
+                              });
+                            }}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                            aria-label="Duplica"
+                          >
+                            {duplicatingId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/dashboard/products/${product.id}/edit`)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            aria-label="Editeaza"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

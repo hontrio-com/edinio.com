@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, LifeBuoy, ChevronRight, Clock, CheckCircle2, XCircle,
-  Loader2, Paperclip, X, AlertCircle, FileText,
+  Loader2, Paperclip, X, AlertCircle, FileText, Phone, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { toast } from "sonner";
@@ -180,6 +180,26 @@ export function SupportClient({ tickets, businesses, userEmail }: {
           <Plus className="h-4 w-4" />
           Tichet nou
         </button>
+      </div>
+
+      {/* Urgent contact */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 px-5 py-4 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-blue-800 mb-0.5">Ai nevoie de ajutor urgent?</p>
+          <p className="text-xs text-blue-600">Pentru probleme urgente, contacteaza-ne direct prin telefon sau WhatsApp.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href="tel:0750456809"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+            <Phone className="h-3.5 w-3.5" />
+            0750 456 809
+          </a>
+          <a href="https://wa.me/40750456809" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+            <MessageCircle className="h-3.5 w-3.5" />
+            WhatsApp
+          </a>
+        </div>
       </div>
 
       {/* Stats */}

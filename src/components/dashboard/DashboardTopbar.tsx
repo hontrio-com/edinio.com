@@ -67,12 +67,22 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
   const planCls = PLAN_BADGE_STYLES[plan] ?? PLAN_BADGE_STYLES.free;
   const initials = userFullName?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "U";
 
-  // Load read IDs from localStorage (after hydration)
+  // Load read IDs from localStorage (after hydration) and clean up stale entries
   useEffect(() => {
     try {
       const stored = localStorage.getItem("edinio_read_notifs");
-      if (stored) setReadIds(new Set(JSON.parse(stored) as string[]));
+      if (stored) {
+        const parsed = JSON.parse(stored) as string[];
+        const currentIds = new Set(recentOrders.map(o => o.id));
+        // Keep only IDs that still exist in recentOrders to prevent bloat
+        const cleaned = parsed.filter(id => currentIds.has(id));
+        setReadIds(new Set(cleaned));
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem("edinio_read_notifs", JSON.stringify(cleaned));
+        }
+      }
     } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Close dropdowns on outside click
@@ -378,13 +388,6 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
                   <span className="truncate text-foreground">{b.store_name ?? b.business_name}</span>
                 </button>
               ))}
-              <div className="border-t border-border">
-                <Link href="/onboarding/details" onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 hover:bg-accent transition-colors text-sm text-muted-foreground">
-                  <Plus className="h-3.5 w-3.5" />
-                  Adauga magazin nou
-                </Link>
-              </div>
             </div>
           )}
         </div>

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: ticketId } = await params;
-  const body = await req.json() as { content?: string; status?: string };
+  const body = await req.json() as { content?: string; status?: string; attachments?: { url: string; name: string }[] };
 
   if (!body.content?.trim()) return NextResponse.json({ error: "Continut invalid" }, { status: 400 });
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ticket_id: ticketId,
     sender_type: "agent",
     content: body.content.trim(),
-    attachments: [],
+    attachments: body.attachments ?? [],
   }).select().single();
 
   if (error) return NextResponse.json({ error: "Eroare la salvarea mesajului" }, { status: 500 });

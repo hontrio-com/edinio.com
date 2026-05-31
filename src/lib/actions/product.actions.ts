@@ -145,6 +145,70 @@ export async function updateProduct(productId: string, businessId: string, data:
   return { success: true };
 }
 
+export async function duplicateProduct(productId: string, businessId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses")
+    .select("id")
+    .eq("id", businessId)
+    .eq("user_id", user.id)
+    .single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  // Check plan product limit
+  const { data: profile } = await supabase
+    .from("users_profile")
+    .select("plan")
+    .eq("id", user.id)
+    .single();
+
+  const plan = profile?.plan ?? "free";
+  const limit = getProductLimit(plan);
+
+  const { count } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+
+  if (limit !== Infinity && (count ?? 0) >= limit) {
+    return { error: `Ai atins limita de ${limit} produse. Upgradeaza planul.` };
+  }
+
+  const { data: original } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", productId)
+    .eq("business_id", businessId)
+    .single();
+
+  if (!original) return { error: "Produs negasit" };
+
+  const { error } = await supabase.from("products").insert({
+    business_id: businessId,
+    name: `${original.name} (copie)`,
+    slug: original.slug ? `${original.slug}-copie-${Date.now().toString(36)}` : null,
+    description: original.description,
+    price: original.price,
+    compare_at_price: original.compare_at_price,
+    category: original.category,
+    sku: original.sku ? `${original.sku}-COPY` : null,
+    images: original.images,
+    track_inventory: original.track_inventory,
+    stock_quantity: original.stock_quantity,
+    is_featured: false,
+    is_active: false,
+    weight_grams: original.weight_grams,
+    page_sections: original.page_sections as never,
+  });
+
+  if (error) return { error: "Eroare la duplicare." };
+  revalidatePath("/dashboard/products");
+  return { success: true };
+}
+
 export async function deleteProduct(productId: string, businessId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

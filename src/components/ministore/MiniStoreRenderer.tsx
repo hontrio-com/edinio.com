@@ -53,6 +53,7 @@ interface PageContent {
   sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };
   sticky_cart_bar?: { enabled: boolean };
   new_badge?: { enabled: boolean; days: number };
+  store_bg_color?: string;
 }
 
 interface StorePolicies {
@@ -260,8 +261,12 @@ function CartCheckoutModal({
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
     for (const field of customFields) {
-      if (field.required && field.type !== "checkbox" && !customValues[field.id]?.trim()) {
-        e[field.id] = "Camp obligatoriu";
+      if (field.required) {
+        if (field.type === "checkbox" && customValues[field.id] !== "da") {
+          e[field.id] = "Camp obligatoriu";
+        } else if (field.type !== "checkbox" && !customValues[field.id]?.trim()) {
+          e[field.id] = "Camp obligatoriu";
+        }
       }
     }
     setErrors(e);
@@ -951,15 +956,15 @@ function StoreContent({ business, products, storeSettings }: Props) {
   const hasPolicies = Object.values(storePolicies).some(v => v && v.trim().length > 0);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen" style={{ backgroundColor: pageContent.store_bg_color || "var(--color-background)" }}>
       {/* Announcement bar */}
       {showAnnouncementOnStore && announcementBar && (
         <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
           style={{ background: announcementBar.bg_color || color }}>
           <div className="flex whitespace-nowrap">
-            {[0, 1].map(i => (
+            {Array.from({ length: 8 }, (_, i) => (
               <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white">
-                {announcementBar.text}&nbsp;&nbsp;&nbsp;
+                {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               </span>
             ))}
           </div>

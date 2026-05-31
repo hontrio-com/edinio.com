@@ -565,9 +565,9 @@ export function ProductPage({ business, product, storeSettings }: {
         <div className="h-9 overflow-hidden flex items-center fixed top-0 left-0 right-0 z-50"
           style={{ background: announcementBar.bg_color || color }}>
           <div className="flex whitespace-nowrap">
-            {[0, 1].map(i => (
+            {Array.from({ length: 8 }, (_, i) => (
               <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white">
-                {announcementBar.text}&nbsp;&nbsp;&nbsp;
+                {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               </span>
             ))}
           </div>

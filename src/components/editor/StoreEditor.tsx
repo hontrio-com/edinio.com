@@ -46,6 +46,7 @@ interface PageContent {
   new_badge?: { enabled: boolean; days: number; };
   image_zoom?: { enabled: boolean; };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
+  store_bg_color?: string;
 }
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
@@ -296,6 +297,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
     new_badge: rawPageContent.new_badge ?? { enabled: true, days: 7 },
     image_zoom: rawPageContent.image_zoom ?? { enabled: true },
     delivery_estimate: rawPageContent.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
+    store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
   });
 
   async function savePageContent() {
@@ -527,6 +529,30 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
                 </div>
               </div>
             )}
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Store background color */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-foreground">Culoare fundal magazin</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {["#FFFFFF", "#FAFAFA", "#F5F5F4", "#F0FDF4", "#FDF2F8", "#FFF7ED", "#F0F9FF", "#FAF5FF"].map(c => (
+                <button key={c} type="button"
+                  onClick={() => setPageContent(p => ({ ...p, store_bg_color: c }))}
+                  className="w-7 h-7 rounded-full border-2 transition-all"
+                  style={{
+                    backgroundColor: c,
+                    borderColor: (pageContent.store_bg_color ?? "#FFFFFF") === c ? "var(--color-primary)" : "#e5e7eb",
+                    boxShadow: (pageContent.store_bg_color ?? "#FFFFFF") === c ? "0 0 0 2px var(--color-primary)" : "none",
+                    transform: (pageContent.store_bg_color ?? "#FFFFFF") === c ? "scale(1.15)" : "scale(1)",
+                  }} />
+              ))}
+              <input type="color" value={pageContent.store_bg_color ?? "#FFFFFF"}
+                onChange={e => setPageContent(p => ({ ...p, store_bg_color: e.target.value }))}
+                className="w-8 h-8 rounded border border-border cursor-pointer" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">Culoarea de fundal a intregului magazin</p>
           </div>
 
           <hr className="border-border" />

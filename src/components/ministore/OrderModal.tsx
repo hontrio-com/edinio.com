@@ -219,8 +219,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
     for (const field of customFields) {
-      if (field.required && field.type !== "checkbox" && !customValues[field.id]?.trim()) {
-        e[field.id] = "Camp obligatoriu";
+      if (field.required) {
+        if (field.type === "checkbox" && customValues[field.id] !== "da") {
+          e[field.id] = "Camp obligatoriu";
+        } else if (field.type !== "checkbox" && !customValues[field.id]?.trim()) {
+          e[field.id] = "Camp obligatoriu";
+        }
       }
     }
     setErrors(e);

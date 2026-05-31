@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Loader2, Paperclip, X, Send, CheckCircle2,
-  RotateCcw, FileText, Download, User, Headphones, XCircle,
+  RotateCcw, FileText, Download, User, XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { createClient } from "@/lib/supabase/client";
@@ -330,7 +330,7 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
               )}>
                 {isUser
                   ? <User className="h-4 w-4 text-primary" />
-                  : <Headphones className="h-4 w-4 text-muted-foreground" />
+                  : <img src="/logo.png" alt="Edinio" className="h-5 w-5 rounded-full object-cover" />
                 }
               </div>
 

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail,
-  RotateCcw, AlertTriangle, XCircle, FilePlus, ArrowRight,
+  RotateCcw, AlertTriangle, XCircle, FilePlus, ArrowRight, FileCheck,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { updateOrder } from "@/lib/actions/order.actions";
@@ -17,6 +17,14 @@ import {
   stornoOrderInvoice,
   resendSmartbillEmail,
 } from "@/lib/actions/smartbill.actions";
+import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
+import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
+import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
+import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
+import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
+import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
+import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
+import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -131,11 +139,27 @@ export function OrderDetailClient({
   businessId,
   smartbillEnabled,
   hasEstimateSeries,
+  wootEnabled,
+  coleteEnabled,
+  oblioEnabled,
+  fgoEnabled,
+  cargusEnabled,
+  dpdEnabled,
+  fanCourierEnabled,
+  samedayEnabled,
 }: {
   order: Order;
   businessId: string;
   smartbillEnabled: boolean;
   hasEstimateSeries: boolean;
+  wootEnabled?: boolean;
+  coleteEnabled?: boolean;
+  oblioEnabled?: boolean;
+  fgoEnabled?: boolean;
+  cargusEnabled?: boolean;
+  dpdEnabled?: boolean;
+  fanCourierEnabled?: boolean;
+  samedayEnabled?: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState(order.status as string);
@@ -172,6 +196,22 @@ export function OrderDetailClient({
 
   const customerEmail = (order.customer_email as string | null) ?? "";
   const canStorno = !stornoNumber && (status === "cancelled" || status === "refunded");
+
+  // Courier AWB modals
+  const [wootModalOpen, setWootModalOpen] = useState(false);
+  const [cargusModalOpen, setCargusModalOpen] = useState(false);
+  const [dpdModalOpen, setDpdModalOpen] = useState(false);
+  const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
+  const [samedayModalOpen, setSamedayModalOpen] = useState(false);
+  const [coleteModalOpen, setColeteModalOpen] = useState(false);
+
+  // Oblio state
+  const [oblioActionPending, startOblioTransition] = useTransition();
+  const [oblioAction, setOblioAction] = useState<"invoice" | "proforma" | "storno" | null>(null);
+
+  // fGO state
+  const [fgoActionPending, startFgoTransition] = useTransition();
+  const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
 
   function handleSave() {
     startTransition(async () => {
@@ -266,6 +306,44 @@ export function OrderDetailClient({
       setDownloadingPdf(null);
     }
   }
+
+  function handleOblioAction(action: "invoice" | "proforma" | "storno") {
+    setOblioAction(action);
+    startOblioTransition(async () => {
+      let result: { error: string } | { number: string; series: string } | { success: true };
+      if (action === "invoice") result = await generateOblioInvoice(businessId, order.id);
+      else if (action === "proforma") result = await generateOblioProforma(businessId, order.id);
+      else result = await stornoOblioInvoice(businessId, order.id);
+      setOblioAction(null);
+      if ("error" in result) { toast.error(result.error); return; }
+      if ("number" in result) {
+        const labels = { invoice: "Factura", proforma: "Proforma", storno: "Storno" };
+        toast.success(`${labels[action]} Oblio ${result.series}${result.number} generata`);
+      }
+      router.refresh();
+    });
+  }
+
+  function handleFgoAction(action: "invoice" | "storno") {
+    setFgoAction(action);
+    startFgoTransition(async () => {
+      const result = action === "invoice"
+        ? await generateFgoInvoice(businessId, order.id)
+        : await stornoFgoInvoiceAction(businessId, order.id);
+      setFgoAction(null);
+      if ("error" in result) { toast.error(result.error); return; }
+      if ("number" in result) {
+        const label = action === "invoice" ? "Factura fGO" : "Storno fGO";
+        toast.success(`${label} ${result.series}${result.number} generata`);
+      }
+      router.refresh();
+    });
+  }
+
+  const anyCourierEnabled = wootEnabled || cargusEnabled || dpdEnabled || fanCourierEnabled || samedayEnabled || coleteEnabled;
+
+  // Courier AWB data helpers
+  const ord = order as unknown as Record<string, unknown>;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -508,6 +586,201 @@ export function OrderDetailClient({
         </div>
       )}
 
+      {/* ── Courier AWB cards ── */}
+      {anyCourierEnabled && (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
+            <Package className="h-5 w-5 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">Expediere / AWB</span>
+          </div>
+          <div className="p-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {wootEnabled && (
+              <button type="button" onClick={() => setWootModalOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
+                <img src="/integrations/woot.svg" alt="Woot" className="h-6 w-auto object-contain flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground">Woot</p>
+                  {order.woot_awb_number
+                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {order.woot_awb_number}</p>
+                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
+                </div>
+              </button>
+            )}
+            {cargusEnabled && (
+              <button type="button" onClick={() => setCargusModalOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
+                <img src="/integrations/cargus.svg" alt="Cargus" className="h-6 w-auto object-contain flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground">Cargus</p>
+                  {order.cargus_awb_number
+                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {order.cargus_awb_number}</p>
+                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
+                </div>
+              </button>
+            )}
+            {dpdEnabled && (
+              <button type="button" onClick={() => setDpdModalOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
+                <img src="/integrations/dpd.svg" alt="DPD" className="h-6 w-auto object-contain flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground">DPD</p>
+                  {ord["dpd_awb_number"]
+                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["dpd_awb_number"] as string}</p>
+                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
+                </div>
+              </button>
+            )}
+            {fanCourierEnabled && (
+              <button type="button" onClick={() => setFanCourierModalOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
+                <img src="/integrations/fancourier.svg" alt="FAN Courier" className="h-6 w-auto object-contain flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground">FAN Courier</p>
+                  {ord["fan_courier_awb_number"]
+                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["fan_courier_awb_number"] as string}</p>
+                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
+                </div>
+              </button>
+            )}
+            {samedayEnabled && (
+              <button type="button" onClick={() => setSamedayModalOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
+                <img src="/integrations/sameday.svg" alt="Sameday" className="h-6 w-auto object-contain flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground">Sameday</p>
+                  {ord["sameday_awb_number"]
+                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["sameday_awb_number"] as string}</p>
+                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
+                </div>
+              </button>
+            )}
+            {coleteEnabled && (
+              <button type="button" onClick={() => setColeteModalOpen(true)}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
+                <img src="/integrations/coleteonline.svg" alt="Colete Online" className="h-6 w-auto object-contain flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground">Colete Online</p>
+                  {ord["colete_awb_number"]
+                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["colete_awb_number"] as string}</p>
+                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Oblio card ── */}
+      {oblioEnabled && (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
+            <img src="/integrations/oblio.svg" alt="Oblio" className="h-6 w-auto object-contain" />
+          </div>
+          <div className="p-5 space-y-3">
+            {order.oblio_storno_number ? (
+              <div className="flex items-center gap-2">
+                <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <p className="text-sm font-mono font-bold text-red-600">
+                  Storno {order.oblio_storno_series}{order.oblio_storno_number}
+                </p>
+              </div>
+            ) : order.oblio_invoice_number ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  <p className="text-sm font-mono font-bold text-foreground">
+                    Factura {order.oblio_invoice_series}{order.oblio_invoice_number}
+                  </p>
+                </div>
+                <button type="button" onClick={() => handleOblioAction("storno")}
+                  disabled={oblioActionPending}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+                  {oblioActionPending && oblioAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  Emite storno
+                </button>
+              </div>
+            ) : order.oblio_proforma_number ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                  <p className="text-sm font-mono font-bold text-foreground">
+                    Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}
+                  </p>
+                </div>
+                <button type="button" onClick={() => handleOblioAction("invoice")}
+                  disabled={oblioActionPending}
+                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                  {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+                  Genereaza factura
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => handleOblioAction("invoice")}
+                  disabled={oblioActionPending}
+                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                  {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+                  Genereaza factura
+                </button>
+                <button type="button" onClick={() => handleOblioAction("proforma")}
+                  disabled={oblioActionPending}
+                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                  {oblioActionPending && oblioAction === "proforma" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  Genereaza proforma
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── fGO card ── */}
+      {fgoEnabled && (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
+            <img src="/integrations/fgo.svg" alt="fGO" className="h-6 w-auto object-contain" />
+          </div>
+          <div className="p-5 space-y-3">
+            {(ord["fgo_storno_number"]) ? (
+              <div className="flex items-center gap-2">
+                <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <p className="text-sm font-mono font-bold text-red-600">
+                  Storno {ord["fgo_storno_series"] as string}{ord["fgo_storno_number"] as string}
+                </p>
+              </div>
+            ) : (ord["fgo_invoice_number"]) ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  <p className="text-sm font-mono font-bold text-foreground">
+                    Factura {ord["fgo_invoice_series"] as string}{ord["fgo_invoice_number"] as string}
+                  </p>
+                </div>
+                {!!(ord["fgo_invoice_link"]) && (
+                  <a href={ord["fgo_invoice_link"] as string} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </a>
+                )}
+                <button type="button" onClick={() => handleFgoAction("storno")}
+                  disabled={fgoActionPending}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+                  {fgoActionPending && fgoAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  Emite storno
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => handleFgoAction("invoice")}
+                disabled={fgoActionPending}
+                className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                {fgoActionPending && fgoAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+                Genereaza factura
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Edit order ── */}
       <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
         <h2 className="text-sm font-semibold text-foreground">Editeaza comanda</h2>
@@ -547,6 +820,26 @@ export function OrderDetailClient({
           </button>
         </div>
       </div>
+
+      {/* ── Courier AWB Modals ── */}
+      {wootEnabled && (
+        <WootAwbModal open={wootModalOpen} onClose={() => setWootModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setWootModalOpen(false); router.refresh(); }} />
+      )}
+      {cargusEnabled && (
+        <CargusAwbModal open={cargusModalOpen} onClose={() => setCargusModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setCargusModalOpen(false); router.refresh(); }} />
+      )}
+      {dpdEnabled && (
+        <DpdAwbModal open={dpdModalOpen} onClose={() => setDpdModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setDpdModalOpen(false); router.refresh(); }} />
+      )}
+      {fanCourierEnabled && (
+        <FanCourierAwbModal open={fanCourierModalOpen} onClose={() => setFanCourierModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setFanCourierModalOpen(false); router.refresh(); }} />
+      )}
+      {samedayEnabled && (
+        <SamedayAwbModal open={samedayModalOpen} onClose={() => setSamedayModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setSamedayModalOpen(false); router.refresh(); }} />
+      )}
+      {coleteEnabled && (
+        <ColeteAwbModal open={coleteModalOpen} onClose={() => setColeteModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setColeteModalOpen(false); router.refresh(); }} />
+      )}
     </div>
   );
 }

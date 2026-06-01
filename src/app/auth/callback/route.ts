@@ -19,9 +19,13 @@ export async function GET(request: NextRequest) {
           .single();
 
         if (!profile?.onboarding_completed) {
-          return NextResponse.redirect(`${origin}/onboarding/details`);
+          const res = NextResponse.redirect(`${origin}/onboarding/details`);
+          res.cookies.delete("onboarding_done");
+          return res;
         }
-        return NextResponse.redirect(`${origin}/dashboard`);
+        const dashRes = NextResponse.redirect(`${origin}/dashboard`);
+        dashRes.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
+        return dashRes;
       }
     }
   }

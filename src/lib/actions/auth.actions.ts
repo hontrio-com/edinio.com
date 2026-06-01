@@ -53,6 +53,8 @@ export async function login(formData: { email: string; password: string }) {
   }
 
   if (!profile?.onboarding_completed) {
+    const cookieStore = await cookies();
+    cookieStore.delete("onboarding_done");
     redirect("/onboarding/details");
   }
 
@@ -154,6 +156,10 @@ export async function register(formData: {
   // Send account welcome email (fire-and-forget)
   sendAccountWelcomeEmail(formData.email, { name: formData.full_name }).catch(() => {});
 
+  // Clear stale onboarding cookie from previous session
+  const cookieStore = await cookies();
+  cookieStore.delete("onboarding_done");
+
   revalidatePath("/", "layout");
   redirect("/onboarding/details");
 }
@@ -189,6 +195,7 @@ export async function logout() {
   await supabase.auth.signOut();
   const cookieStore = await cookies();
   cookieStore.delete("mfa_pending");
+  cookieStore.delete("onboarding_done");
   revalidatePath("/", "layout");
   redirect("/login");
 }
@@ -212,5 +219,7 @@ export async function deleteAccount() {
   if (error) return { error: "Eroare la stergerea contului. Incearca din nou." };
 
   await supabase.auth.signOut();
+  const cs = await cookies();
+  cs.delete("onboarding_done");
   redirect("/login");
 }

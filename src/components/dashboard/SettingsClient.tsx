@@ -40,6 +40,7 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
 
 const PLAN_BADGE_COLORS: Record<string, string> = {
   free: "bg-gray-100 text-gray-600 border-gray-200",
+  trial: "bg-green-50 text-green-700 border-green-200",
   basic: "bg-blue-50 text-blue-700 border-blue-200",
   premium: "bg-purple-50 text-purple-700 border-purple-200",
   ultra: "bg-amber-50 text-amber-700 border-amber-200",
@@ -935,7 +936,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
           {/* ── Facturare ── */}
           {activeSection === "facturare" && (
-            <BillingSection plan={profile.plan as "basic" | "premium" | "ultra" | "free"} planExpiresAt={profile.plan_expires_at} />
+            <BillingSection plan={profile.plan as "basic" | "premium" | "ultra" | "trial" | "free"} planExpiresAt={profile.plan_expires_at} />
           )}
           {activeSection === "livrare" && (
             <div className="space-y-6">

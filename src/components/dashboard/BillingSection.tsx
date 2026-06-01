@@ -10,7 +10,7 @@ import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
 type Invoice = Database["public"]["Tables"]["invoices"]["Row"];
 
 interface Props {
-  plan: "free" | "basic" | "premium" | "ultra";
+  plan: "free" | "trial" | "basic" | "premium" | "ultra";
   planExpiresAt: string | null;
 }
 
@@ -51,7 +51,7 @@ export function BillingSection({ plan, planExpiresAt }: Props) {
   return (
     <div className="space-y-5">
       {/* Active subscription card */}
-      {plan !== "free" ? (
+      {plan !== "free" && plan !== "trial" ? (
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-border">
             <p className="text-sm font-semibold text-foreground">Abonamentul tau</p>
@@ -96,6 +96,37 @@ export function BillingSection({ plan, planExpiresAt }: Props) {
               {portalLoading ? "Se redirectioneaza..." : "Gestioneaza abonamentul"}
               {!portalLoading && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
             </button>
+          </div>
+        </div>
+      ) : plan === "trial" ? (
+        <div className="bg-surface border border-border rounded-xl px-5 py-5 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-foreground mb-0.5">Testare gratuita</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {planExpiresAt ? (
+                <>
+                  Perioada de testare expira pe{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(planExpiresAt).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" })}
+                  </span>
+                  . Alege un plan din sectiunea{" "}
+                </>
+              ) : (
+                <>Alege un plan din sectiunea{" "}</>
+              )}
+              <button
+                type="button"
+                className="text-primary font-medium hover:underline"
+                onClick={() => {
+                  window.location.hash = "plan";
+                  window.dispatchEvent(new CustomEvent("navigate-settings", { detail: "plan" }));
+                }}
+              >
+                Plan
+              </button>{" "}
+              pentru a continua dupa expirare.
+            </p>
           </div>
         </div>
       ) : (

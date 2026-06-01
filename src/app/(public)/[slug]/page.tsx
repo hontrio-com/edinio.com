@@ -68,11 +68,30 @@ export default async function SlugPage({ params }: Props) {
     );
   }
 
-  // Check suspension: if grace period has fully expired, show suspended page to visitors.
+  // Check suspension or trial expiry — show suspended page to visitors.
   // Owners can still access their store to preview it.
-  if (business.suspended_until && !isOwner) {
-    const suspendedUntil = new Date(business.suspended_until);
-    if (suspendedUntil < new Date()) {
+  if (!isOwner) {
+    let isSuspended = false;
+
+    // Grace period expired (failed payment)
+    if (business.suspended_until) {
+      isSuspended = new Date(business.suspended_until) < new Date();
+    }
+
+    // Trial expired
+    if (!isSuspended) {
+      const { data: ownerProfile } = await supabase
+        .from("users_profile")
+        .select("plan, plan_expires_at")
+        .eq("id", business.user_id)
+        .single();
+
+      if (ownerProfile?.plan === "trial" && ownerProfile.plan_expires_at) {
+        isSuspended = new Date(ownerProfile.plan_expires_at) < new Date();
+      }
+    }
+
+    if (isSuspended) {
       return (
         <SuspendedStorePage
           businessName={business.store_name ?? business.business_name}

@@ -2,12 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import { Loader2, Upload, X, Check } from "lucide-react";
 import { toast } from "sonner";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
-import { createBusiness } from "@/lib/actions/business.actions";
 
 const COLOR_PRESETS = [
   { value: "#1AB554", label: "Verde Edinio" },
@@ -51,7 +49,7 @@ function ImageUpload({
             <span className="text-primary font-medium">Incarca</span> sau trage aici
           </p>
           <p className="text-xs text-muted-foreground">JPG, PNG, WebP - max 2MB</p>
-          <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+          <input ref={ref} type="file" accept="image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
         </div>
       )}
@@ -84,7 +82,7 @@ export default function OnboardingCustomizePage() {
     return result.url;
   }
 
-  async function handleCreate() {
+  async function handleContinue() {
     if (!details) return;
     setLoading(true);
 
@@ -95,34 +93,14 @@ export default function OnboardingCustomizePage() {
       if (logoFile) logoUrl = (await uploadImage(logoFile, "logos")) ?? undefined;
       if (coverFile) coverUrl = (await uploadImage(coverFile, "covers")) ?? undefined;
 
-      const result = await createBusiness({
-        business_name: String(details.business_name ?? ""),
-        tagline: String(details.tagline ?? "") || undefined,
-        phone: String(details.phone ?? ""),
-        whatsapp: String(details.whatsapp ?? "") || undefined,
-        email: String(details.email ?? "") || undefined,
-        address: String(details.address ?? ""),
-        city: String(details.city ?? ""),
-        county: String(details.county ?? ""),
-        slug: String(details.slug ?? ""),
+      sessionStorage.setItem("onboarding_customize", JSON.stringify({
         logo_url: logoUrl,
         cover_url: coverUrl,
         primary_color: primaryColor,
-      });
-
-      if (result.error) {
-        toast.error(result.error);
-        setLoading(false);
-        return;
-      }
-
-      sessionStorage.removeItem("onboarding_details");
-      localStorage.removeItem("onboarding_draft_v2");
-      toast.success("Magazinul tau a fost creat cu succes!");
-      confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
-      setTimeout(() => { window.location.href = "/dashboard"; }, 1800);
+      }));
+      router.push("/onboarding/plan");
     } catch {
-      toast.error("A aparut o eroare. Incearca din nou.");
+      toast.error("A aparut o eroare la incarcarea imaginilor.");
       setLoading(false);
     }
   }
@@ -222,11 +200,11 @@ export default function OnboardingCustomizePage() {
             className="py-3 sm:py-2.5 px-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors text-center sm:text-left disabled:opacity-40">
             Inapoi
           </button>
-          <button type="button" onClick={handleCreate} disabled={loading}
+          <button type="button" onClick={handleContinue} disabled={loading}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 sm:py-3 text-sm font-medium text-white rounded-lg
               bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all">
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {loading ? "Se creeaza..." : "Creeaza magazinul"}
+            {loading ? "Se incarca..." : "Continua"}
           </button>
         </div>
       </motion.div>

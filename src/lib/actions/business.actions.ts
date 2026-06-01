@@ -17,6 +17,7 @@ export async function createBusiness(data: {
   logo_url?: string;
   cover_url?: string;
   primary_color: string;
+  plan?: string;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -53,16 +54,29 @@ export async function createBusiness(data: {
   // Create store settings
   await supabase.from("store_settings").insert({ business_id: business.id });
 
-  // Mark onboarding complete (retry once on failure)
+  // Set plan + mark onboarding complete
+  const plan = data.plan ?? "trial";
+  const planExpiresAt = plan === "trial"
+    ? new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
   const { error: profileError } = await supabase
     .from("users_profile")
-    .update({ onboarding_completed: true })
+    .update({
+      onboarding_completed: true,
+      plan,
+      plan_expires_at: planExpiresAt,
+    })
     .eq("id", user.id);
 
   if (profileError) {
     await supabase
       .from("users_profile")
-      .update({ onboarding_completed: true })
+      .update({
+        onboarding_completed: true,
+        plan,
+        plan_expires_at: planExpiresAt,
+      })
       .eq("id", user.id);
   }
 

@@ -10,6 +10,7 @@ import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { businessSchema, type BusinessInput, ROMANIAN_COUNTIES } from "@/lib/validations/business";
 import { slugify } from "@/lib/utils/slugify";
 import { checkSlugAvailability } from "@/lib/actions/business.actions";
+import { platformFbq } from "@/components/platform/PlatformMetaPixel";
 
 const DRAFT_KEY = "onboarding_draft_v2";
 
@@ -70,6 +71,14 @@ export default function OnboardingDetailsPage() {
 
   const businessName = watch("business_name") ?? "";
   const slug = watch("slug") ?? "";
+
+  // Fire CompleteRegistration event for platform pixel
+  useEffect(() => {
+    if (sessionStorage.getItem("platform_registered") === "1") {
+      sessionStorage.removeItem("platform_registered");
+      platformFbq("CompleteRegistration");
+    }
+  }, []);
 
   // Load draft from localStorage on mount
   useEffect(() => {
@@ -172,6 +181,7 @@ export default function OnboardingDetailsPage() {
     };
 
     sessionStorage.setItem("onboarding_details", JSON.stringify(storeData));
+    platformFbq("Lead");
     router.push("/onboarding/customize");
   }
 

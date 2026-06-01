@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { createBusiness } from "@/lib/actions/business.actions";
+import { platformFbq } from "@/components/platform/PlatformMetaPixel";
 
 const PLANS = [
   {
@@ -176,6 +177,13 @@ function PlanPageContent() {
       sessionStorage.removeItem("onboarding_customize");
       sessionStorage.removeItem("onboarding_pending_plan");
       localStorage.removeItem("onboarding_draft_v2");
+
+      if (plan === "trial") {
+        platformFbq("StartTrial");
+      } else {
+        platformFbq("Subscribe", { value: plan === "basic" ? 99 : plan === "premium" ? 249 : 499, currency: "RON", predicted_ltv: 0 });
+      }
+
       toast.success("Magazinul tau a fost creat cu succes!");
       confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
       setTimeout(() => { window.location.href = "/dashboard"; }, 1800);

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
+import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -49,6 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-background">
+      <PlatformMetaPixel />
       <Sidebar
         businesses={allBusinesses}
         currentBusiness={currentBusiness}

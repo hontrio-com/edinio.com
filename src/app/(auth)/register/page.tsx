@@ -55,6 +55,7 @@ export default function RegisterPage() {
 
   async function onSubmit(data: RegisterInput) {
     setLoading(true);
+    sessionStorage.setItem("platform_registered", "1");
     try {
       const result = await registerAction({
         full_name: data.full_name,
@@ -62,6 +63,7 @@ export default function RegisterPage() {
         password: data.password,
       });
       if (result?.error) {
+        sessionStorage.removeItem("platform_registered");
         toast.error(result.error);
         setLoading(false);
       }

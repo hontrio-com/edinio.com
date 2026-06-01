@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
 import { Check, Loader2, Crown, Zap, Rocket, Gift } from "lucide-react";
@@ -84,30 +84,71 @@ const PLANS = [
 ];
 
 export default function OnboardingPlanPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+        <OnboardingProgress currentStep={3} />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    }>
+      <PlanPageContent />
+    </Suspense>
+  );
+}
+
+function PlanPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [details, setDetails] = useState<Record<string, unknown> | null>(null);
-  const [customize, setCustomize] = useState<Record<string, unknown> | null>(null);
+  const [creating, setCreating] = useState(false);
+  const createdRef = useRef(false);
 
+  const isSuccess = searchParams.get("success") === "1";
+  const isCancelled = searchParams.get("cancelled") === "1";
+
+  // On mount: validate sessionStorage data exists
   useEffect(() => {
     const storedDetails = sessionStorage.getItem("onboarding_details");
     const storedCustomize = sessionStorage.getItem("onboarding_customize");
     if (!storedDetails) { router.replace("/onboarding/details"); return; }
     if (!storedCustomize) { router.replace("/onboarding/customize"); return; }
-    try {
-      setDetails(JSON.parse(storedDetails));
-      setCustomize(JSON.parse(storedCustomize));
-    } catch {
-      router.replace("/onboarding/details");
-    }
   }, [router]);
 
-  async function handleCreate() {
-    if (!selectedPlan || !details || !customize) return;
-    setLoading(true);
+  // Handle return from Stripe success
+  useEffect(() => {
+    if (!isSuccess || createdRef.current) return;
+    createdRef.current = true;
+
+    const storedPlan = sessionStorage.getItem("onboarding_pending_plan");
+    if (!storedPlan) return;
+
+    setCreating(true);
+    finalizeBusiness(storedPlan);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess]);
+
+  // Show toast if payment was cancelled
+  useEffect(() => {
+    if (isCancelled) {
+      toast.error("Plata a fost anulata. Selecteaza un plan pentru a continua.");
+      // Restore previously selected plan
+      const storedPlan = sessionStorage.getItem("onboarding_pending_plan");
+      if (storedPlan) setSelectedPlan(storedPlan);
+    }
+  }, [isCancelled]);
+
+  async function finalizeBusiness(plan: string) {
+    const storedDetails = sessionStorage.getItem("onboarding_details");
+    const storedCustomize = sessionStorage.getItem("onboarding_customize");
+    if (!storedDetails || !storedCustomize) return;
 
     try {
+      const details = JSON.parse(storedDetails);
+      const customize = JSON.parse(storedCustomize);
+
       const result = await createBusiness({
         business_name: String(details.business_name ?? ""),
         tagline: String(details.tagline ?? "") || undefined,
@@ -121,25 +162,75 @@ export default function OnboardingPlanPage() {
         logo_url: String(customize.logo_url ?? "") || undefined,
         cover_url: String(customize.cover_url ?? "") || undefined,
         primary_color: String(customize.primary_color ?? "#1AB554"),
-        plan: selectedPlan,
+        plan,
       });
 
       if (result.error) {
         toast.error(result.error);
+        setCreating(false);
         setLoading(false);
         return;
       }
 
       sessionStorage.removeItem("onboarding_details");
       sessionStorage.removeItem("onboarding_customize");
+      sessionStorage.removeItem("onboarding_pending_plan");
       localStorage.removeItem("onboarding_draft_v2");
       toast.success("Magazinul tau a fost creat cu succes!");
       confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
       setTimeout(() => { window.location.href = "/dashboard"; }, 1800);
     } catch {
       toast.error("A aparut o eroare. Incearca din nou.");
+      setCreating(false);
       setLoading(false);
     }
+  }
+
+  async function handleCreate() {
+    if (!selectedPlan) return;
+    setLoading(true);
+
+    if (selectedPlan === "trial") {
+      // Trial: create business directly
+      await finalizeBusiness("trial");
+      return;
+    }
+
+    // Paid plan: redirect to Stripe Checkout
+    try {
+      sessionStorage.setItem("onboarding_pending_plan", selectedPlan);
+
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: selectedPlan, return_to: "onboarding" }),
+      });
+
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        toast.error(data.error ?? "Eroare la initializarea platii.");
+        setLoading(false);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      toast.error("Eroare la initializarea platii. Incearca din nou.");
+      setLoading(false);
+    }
+  }
+
+  // Show loading state when returning from Stripe
+  if (creating) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+        <OnboardingProgress currentStep={3} />
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Se creeaza magazinul tau...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -165,8 +256,9 @@ export default function OnboardingPlanPage() {
                 key={plan.id}
                 type="button"
                 onClick={() => setSelectedPlan(plan.id)}
+                disabled={loading}
                 className={cn(
-                  "relative flex flex-col p-5 rounded-2xl border-2 text-left transition-all",
+                  "relative flex flex-col p-5 rounded-2xl border-2 text-left transition-all disabled:opacity-60",
                   isSelected ? plan.selectedColor : plan.color
                 )}
               >
@@ -213,7 +305,6 @@ export default function OnboardingPlanPage() {
                   ))}
                 </ul>
 
-                {/* Selection indicator */}
                 <div className={cn(
                   "mt-4 pt-3 border-t flex items-center justify-center gap-2 text-sm font-semibold transition-colors",
                   isSelected ? "border-primary/20 text-primary" : "border-border text-muted-foreground"
@@ -243,7 +334,11 @@ export default function OnboardingPlanPage() {
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 sm:py-3 text-sm font-medium text-white rounded-lg
               bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all">
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {loading ? "Se creeaza..." : "Creeaza magazinul"}
+            {loading
+              ? (selectedPlan === "trial" ? "Se creeaza..." : "Redirectionare catre plata...")
+              : (selectedPlan && selectedPlan !== "trial"
+                ? "Plateste si creeaza magazinul"
+                : "Creeaza magazinul")}
           </button>
         </div>
       </motion.div>

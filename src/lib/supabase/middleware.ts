@@ -57,8 +57,13 @@ export async function updateSession(request: NextRequest) {
 
   const mfaPending = request.cookies.get("mfa_pending")?.value === "1";
 
-  // Authenticated on auth pages → redirect to dashboard (except /login/mfa when MFA pending)
+  // Authenticated on auth pages → redirect to dashboard
+  // EXCEPT: /reset-password (user needs session from recovery link to change password)
+  // EXCEPT: /login/mfa when MFA is pending
   if (isAuth && user) {
+    if (pathname.startsWith("/reset-password")) {
+      return supabaseResponse; // let through to complete password reset
+    }
     if (mfaPending && pathname.startsWith("/login/mfa")) {
       return supabaseResponse; // let through to complete MFA
     }

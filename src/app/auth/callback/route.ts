@@ -4,12 +4,18 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const next = searchParams.get("next");
 
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
+      // Password reset flow: redirect straight to /reset-password with active session
+      if (next === "/reset-password") {
+        return NextResponse.redirect(`${origin}/reset-password`);
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase

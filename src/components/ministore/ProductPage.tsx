@@ -328,7 +328,7 @@ export function ProductPage({ business, product, storeSettings }: {
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [zoomPos, setZoomPos] = useState<{x: number; y: number} | null>(null);
+  const [zoomPos] = useState<{x: number; y: number} | null>(null);
   const touchStartX = useRef<number>(0);
 
   const deliveryDates = useMemo(() => {
@@ -377,20 +377,9 @@ export function ProductPage({ business, product, storeSettings }: {
         ) : (
           slides.map((src, i) => (
             <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
-              style={{ opacity: i === activeSlide ? 1 : 0 }}
-              onMouseMove={(e) => {
-                if (!imageZoomEnabled) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                setZoomPos({ x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 });
-              }}
-              onMouseLeave={() => setZoomPos(null)}>
+              style={{ opacity: i === activeSlide ? 1 : 0 }}>
               <img src={src} alt={`${product.name} ${i + 1}`}
-                className="w-full h-full object-contain p-2 transition-transform duration-200"
-                style={zoomPos && i === activeSlide ? {
-                  transform: "scale(2.2)",
-                  transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
-                  cursor: "zoom-in",
-                } : { cursor: imageZoomEnabled ? "zoom-in" : "default" }}
+                className="w-full h-full object-contain p-2"
                 loading={i === 0 ? "eager" : "lazy"} fetchPriority={i === 0 ? "high" : "auto"} />
             </div>
           ))

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { CheckCircle, Package, Phone, ArrowLeft } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
@@ -17,10 +18,16 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
 
   const supabase = await createClient();
   const { data: business } = await supabase
-    .from("businesses").select("id, business_name, primary_color, logo_url, phone, slug").eq("slug", slug).single();
+    .from("businesses").select("id, business_name, primary_color, logo_url, phone, slug, custom_domain").eq("slug", slug).single();
   if (!business) notFound();
 
   const color = business.primary_color ?? "#1AB554";
+
+  // Detect custom domain access
+  const headersList = await headers();
+  const host = (headersList.get("host") ?? "").split(":")[0];
+  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   // Fetch order details for summary
   let orderItems: { name: string; price: number; quantity: number }[] = [];
@@ -172,7 +179,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
           </div>
         </div>
 
-        <a href={`/${business.slug}`}
+        <a href={`${basePath}/`}
           className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
           style={{ backgroundColor: color }}>
           <ArrowLeft className="h-4 w-4" />

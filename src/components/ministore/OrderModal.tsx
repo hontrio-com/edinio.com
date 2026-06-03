@@ -58,6 +58,7 @@ interface Props {
   business: {
     id: string;
     slug: string;
+    basePath: string;
     primary_color: string;
   };
   shippingCost: number;
@@ -286,7 +287,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       }
 
       onClose();
-      window.location.href = `/${business.slug}/confirm?orderId=${result.orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
+      window.location.href = `${business.basePath}/confirm?orderId=${result.orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
     });
   }
 

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
@@ -41,7 +42,7 @@ export default async function PolicyPage({ params }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, store_name, primary_color, logo_url, address, city, county, phone, email, cui")
+    .select("id, business_name, store_name, primary_color, logo_url, address, city, county, phone, email, cui, custom_domain")
     .eq("slug", slug)
     .single();
 
@@ -83,13 +84,19 @@ export default async function PolicyPage({ params }: Props) {
   const color = business.primary_color ?? "#1AB554";
   const showContent = enabled && content.trim() !== "";
 
+  // Detect custom domain access
+  const headersList = await headers();
+  const host = (headersList.get("host") ?? "").split(":")[0];
+  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const basePath = isCustomDomain ? "" : `/${slug}`;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
           <a
-            href={`/${slug}`}
+            href={`${basePath}/`}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />

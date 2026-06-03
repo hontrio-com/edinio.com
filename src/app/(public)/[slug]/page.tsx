@@ -117,20 +117,26 @@ export default async function SlugPage({ params }: Props) {
       .single(),
   ]);
 
+  // Detect custom domain access
+  const headersList = await headers();
+  const host = (headersList.get("host") ?? "").split(":")[0];
+  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const basePath = isCustomDomain ? "" : `/${business.slug}`;
+
   // Fire-and-forget analytics (skip for owner)
   if (!isOwner) {
-    const headersList = await headers();
     const ua = headersList.get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     supabase.from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
   }
 
   const displayName = business.store_name ?? business.business_name;
+  const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://edinio.com/${business.slug}`;
   const storeJsonLd = {
     "@context": "https://schema.org",
     "@type": "Store",
     name: displayName,
-    url: `https://edinio.com/${business.slug}`,
+    url: canonicalUrl,
     ...(business.description ? { description: business.description.slice(0, 500) } : {}),
     ...(business.cover_url ? { image: business.cover_url } : {}),
     ...(business.logo_url ? { logo: business.logo_url } : {}),
@@ -154,6 +160,7 @@ export default async function SlugPage({ params }: Props) {
         business={business}
         products={products ?? []}
         storeSettings={storeSettings}
+        basePath={basePath}
       />
     </>
   );

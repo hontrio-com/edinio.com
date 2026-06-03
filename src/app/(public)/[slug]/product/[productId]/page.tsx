@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { ProductPage } from "@/components/ministore/ProductPage";
 
@@ -92,6 +93,12 @@ export default async function ProductDetailPage({ params }: Props) {
   // business without the nested store_settings key (ProductPage doesn't expect it)
   const { store_settings: _ignored, ...business } = businessRaw as typeof businessRaw & { store_settings: unknown };
 
+  // Detect custom domain access
+  const headersList = await headers();
+  const host = (headersList.get("host") ?? "").split(":")[0];
+  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const basePath = isCustomDomain ? "" : `/${business.slug}`;
+
   const jsonLd = buildProductJsonLd(product, slug, productId);
 
   return (
@@ -104,6 +111,7 @@ export default async function ProductDetailPage({ params }: Props) {
         business={business as never}
         product={product}
         storeSettings={storeSettings as never}
+        basePath={basePath}
       />
     </>
   );

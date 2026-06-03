@@ -206,11 +206,13 @@ function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, effect, onCl
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings }: {
+export function ProductPage({ business, product, storeSettings, basePath: basePathProp }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
+  basePath?: string;
 }) {
+  const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
 
   const color = business.primary_color ?? "#1AB554";
@@ -566,7 +568,7 @@ export function ProductPage({ business, product, storeSettings }: {
       {/* Header */}
       <header className={`fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm transition-all ${announcementBar?.enabled ? "top-9" : "top-0"}`}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
-          <a href={`/${business.slug}`}
+          <a href={`${basePath}`}
             className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors shrink-0">
             <ArrowLeft size={16} />
             <span>Magazin</span>
@@ -773,7 +775,7 @@ export function ProductPage({ business, product, storeSettings }: {
             <div>
               <p className="font-semibold text-white text-sm mb-3 uppercase tracking-wide">Informatii</p>
               <ul className="space-y-2 text-sm text-gray-500">
-                <li><a href={`/${business.slug}`} className="hover:text-gray-300 transition-colors">Magazin</a></li>
+                <li><a href={`${basePath}`} className="hover:text-gray-300 transition-colors">Magazin</a></li>
               </ul>
             </div>
             <div>
@@ -831,7 +833,7 @@ export function ProductPage({ business, product, storeSettings }: {
           compare_at_price: displayComparePrice,
           images: slides,
         }}
-        business={{ id: business.id, slug: business.slug, primary_color: color }}
+        business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
         tiers={quantityTiers}

@@ -175,9 +175,9 @@ interface VatConfig {
 }
 
 function CartCheckoutModal({
-  open, onClose, color, slug, businessId, shippingCost, freeShippingThreshold, emailFieldConfig,
+  open, onClose, color, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig,
 }: {
-  open: boolean; onClose: () => void; color: string; slug: string; businessId: string;
+  open: boolean; onClose: () => void; color: string; basePath: string; businessId: string;
   shippingCost: number; freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
 }) {
@@ -327,7 +327,7 @@ function CartCheckoutModal({
 
       clear();
       onClose();
-      window.location.href = `/${slug}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${grandTotal}`;
+      window.location.href = `${basePath}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${grandTotal}`;
     });
   }
 
@@ -735,8 +735,8 @@ function CartDrawer({
   );
 }
 
-function ProductCard({ product, color, slug, onAddToCart, isAdded, newBadgeDays }: {
-  product: Product; color: string; slug: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number;
+function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays }: {
+  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number;
 }) {
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
@@ -749,7 +749,7 @@ function ProductCard({ product, color, slug, onAddToCart, isAdded, newBadgeDays 
 
   return (
     <div className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
-      <a href={`/${slug}/product/${product.id}`} className="block">
+      <a href={`${basePath}/product/${product.id}`} className="block">
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
           {imageUrl ? (
             <img
@@ -803,7 +803,7 @@ function ProductCard({ product, color, slug, onAddToCart, isAdded, newBadgeDays 
       </a>
 
       <div className="p-3 sm:p-4">
-        <a href={`/${slug}/product/${product.id}`}>
+        <a href={`${basePath}/product/${product.id}`}>
           <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
             {product.name}
           </h3>
@@ -854,9 +854,11 @@ interface Props {
   business: Business;
   products: Product[];
   storeSettings: StoreSettings | null;
+  basePath?: string;
 }
 
-function StoreContent({ business, products, storeSettings }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp }: Props) {
+  const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -1157,7 +1159,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
                   key={product.id}
                   product={product}
                   color={color}
-                  slug={business.slug}
+                  basePath={basePath}
                   onAddToCart={() => handleAddToCart(product)}
                   isAdded={addedId === product.id}
                   newBadgeDays={newBadgeDays}
@@ -1199,7 +1201,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
                   key={product.id}
                   product={product}
                   color={color}
-                  slug={business.slug}
+                  basePath={basePath}
                   onAddToCart={() => handleAddToCart(product)}
                   isAdded={addedId === product.id}
                   newBadgeDays={newBadgeDays}
@@ -1426,7 +1428,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
               <div className="flex flex-wrap gap-x-5 gap-y-1.5">
                 {POLICY_LINKS.map(({ slug: pSlug, label }) => (
-                  <a key={pSlug} href={`/${business.slug}/politici/${pSlug}`}
+                  <a key={pSlug} href={`${basePath}/politici/${pSlug}`}
                     className="text-[13px] text-white/50 hover:text-white transition-colors">
                     {label}
                   </a>
@@ -1524,7 +1526,7 @@ function StoreContent({ business, products, storeSettings }: Props) {
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
         color={color}
-        slug={business.slug}
+        basePath={basePath}
         businessId={business.id}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}

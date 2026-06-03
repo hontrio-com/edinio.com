@@ -135,7 +135,9 @@ export default async function DashboardPage() {
 
   const sevenDaysAgo = new Date(now.getTime() - 6 * 86400000).toISOString().split("T")[0];
 
-  const publicUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${business.slug}`;
+  const publicUrl = business.custom_domain
+    ? `https://${business.custom_domain}`
+    : `${process.env.NEXT_PUBLIC_SITE_URL}/${business.slug}`;
 
   const [
     { count: ordersToday },

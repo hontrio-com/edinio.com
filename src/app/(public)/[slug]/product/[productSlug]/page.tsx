@@ -11,12 +11,16 @@ interface Props {
 
 // React cache() deduplicates this call between generateMetadata and the page
 // — a single DB round trip serves both, per request.
+// UUID v4 pattern to detect legacy product links
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const getProductCached = cache(async (productSlug: string) => {
   const supabase = await createClient();
+  const col = UUID_RE.test(productSlug) ? "id" : "slug";
   const { data } = await supabase
     .from("products")
-    .select("name, description, page_sections, price, images")
-    .eq("slug", productSlug)
+    .select("name, description, page_sections, price, images, slug")
+    .eq(col, productSlug)
     .single();
   return data;
 });
@@ -30,7 +34,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = seo?.description
     || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
   const images = product.images as string[] | null;
-  const url = `https://edinio.com/${slug}/product/${productSlug}`;
+  const canonicalSlug = product.slug ?? productSlug;
+  const url = `https://edinio.com/${slug}/product/${canonicalSlug}`;
   return {
     title,
     description,
@@ -82,7 +87,7 @@ export default async function ProductDetailPage({ params }: Props) {
       .select("*, store_settings(*)")
       .eq("slug", slug)
       .single(),
-    supabase.from("products").select("*").eq("slug", productSlug).single(),
+    supabase.from("products").select("*").eq(UUID_RE.test(productSlug) ? "id" : "slug", productSlug).single(),
   ]);
 
   if (!businessRaw || !product || product.business_id !== businessRaw.id || !product.is_active) notFound();
@@ -99,7 +104,7 @@ export default async function ProductDetailPage({ params }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  const jsonLd = buildProductJsonLd(product, slug, productSlug);
+  const jsonLd = buildProductJsonLd(product, slug, product.slug ?? productSlug);
 
   return (
     <>

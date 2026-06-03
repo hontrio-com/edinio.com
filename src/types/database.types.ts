@@ -243,49 +243,49 @@ export type Database = {
       }
       domain_orders: {
         Row: {
-          id: string
+          admin_notes: string | null
           business_id: string
-          user_id: string
+          contact_info: Json
+          created_at: string
           domain: string
-          tld: string
+          id: string
           period: number
           price_per_year: number
-          total_price: number
           status: string
-          contact_info: Json
-          admin_notes: string | null
-          created_at: string
+          tld: string
+          total_price: number
           updated_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
+          admin_notes?: string | null
           business_id: string
-          user_id: string
+          contact_info?: Json
+          created_at?: string
           domain: string
-          tld: string
+          id?: string
           period?: number
           price_per_year?: number
-          total_price?: number
           status?: string
-          contact_info?: Json
-          admin_notes?: string | null
-          created_at?: string
+          tld: string
+          total_price?: number
           updated_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
+          admin_notes?: string | null
           business_id?: string
-          user_id?: string
+          contact_info?: Json
+          created_at?: string
           domain?: string
-          tld?: string
+          id?: string
           period?: number
           price_per_year?: number
-          total_price?: number
           status?: string
-          contact_info?: Json
-          admin_notes?: string | null
-          created_at?: string
+          tld?: string
+          total_price?: number
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -340,6 +340,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      error_logs: {
+        Row: {
+          action: string
+          business_id: string | null
+          created_at: string
+          details: Json | null
+          id: string
+          message: string
+          severity: string
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          business_id?: string | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          message: string
+          severity?: string
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          business_id?: string | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          message?: string
+          severity?: string
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       invoices: {
         Row: {

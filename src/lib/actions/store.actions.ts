@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { SmartbillConfig } from "@/lib/smartbill";
+import { logError } from "@/lib/error-logger";
 
 export async function updatePageContent(businessId: string, pageContent: Record<string, unknown>): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -26,7 +27,10 @@ export async function updatePageContent(businessId: string, pageContent: Record<
       .insert({ business_id: businessId, page_content: pageContent as never }));
   }
 
-  if (error) return { error: "Eroare la salvare." };
+  if (error) {
+    logError({ action: "updatePageContent", message: error.message, details: { code: error.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvare." };
+  }
 
   revalidatePath("/dashboard/editor");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
@@ -57,7 +61,10 @@ export async function updateGeneralSettings(
     cui: business.cui || null,
     updated_at: new Date().toISOString(),
   }).eq("id", businessId);
-  if (bizError) return { error: "Eroare la salvarea datelor magazinului." };
+  if (bizError) {
+    logError({ action: "updateGeneralSettings.business", message: bizError.message, details: { code: bizError.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea datelor magazinului." };
+  }
 
   const { data: existing } = await supabase
     .from("store_settings").select("id").eq("business_id", businessId).single();
@@ -71,7 +78,10 @@ export async function updateGeneralSettings(
     ({ error: settingsError } = await supabase.from("store_settings")
       .insert({ business_id: businessId, order_number_format: orderNumberFormat }));
   }
-  if (settingsError) return { error: "Eroare la salvarea setarilor." };
+  if (settingsError) {
+    logError({ action: "updateGeneralSettings.settings", message: settingsError.message, details: { code: settingsError.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea setarilor." };
+  }
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard", "layout");

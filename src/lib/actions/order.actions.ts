@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer } from "@/lib/email";
+import { logError } from "@/lib/error-logger";
 
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
@@ -77,7 +78,10 @@ export async function placeOrder(data: {
     status: "pending",
   }).select("id, order_number").single();
 
-  if (error) return { error: "Eroare la plasarea comenzii. Incearca din nou." };
+  if (error) {
+    logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
+    return { error: "Eroare la plasarea comenzii. Incearca din nou." };
+  }
 
   if (data.discount_id) {
     await supabase.rpc("increment_discount_uses", { p_discount_id: data.discount_id });
@@ -163,7 +167,10 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     .update({ status: data.status as never, payment_status: data.payment_status as never })
     .eq("id", orderId);
 
-  if (error) return { error: "Eroare la actualizare." };
+  if (error) {
+    logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
+    return { error: "Eroare la actualizare." };
+  }
 
   const statusChanged = data.status !== (order.status as string);
   const paymentChanged = data.payment_status !== (order.payment_status as string);
@@ -250,7 +257,10 @@ export async function placeCartOrder(data: {
     status: "pending",
   }).select("id, order_number, total").single();
 
-  if (error) return { error: "Eroare la plasarea comenzii. Incearca din nou." };
+  if (error) {
+    logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
+    return { error: "Eroare la plasarea comenzii. Incearca din nou." };
+  }
 
   if (data.discount_id) {
     await supabase.rpc("increment_discount_uses", { p_discount_id: data.discount_id });

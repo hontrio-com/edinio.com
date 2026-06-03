@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/error-logger";
 
 export interface DiscountData {
   code: string;
@@ -99,6 +100,7 @@ export async function createDiscount(businessId: string, data: DiscountData) {
 
   if (error) {
     if (error.code === "23505") return { error: "Acest cod exista deja." };
+    logError({ action: "createDiscount", message: error.message, details: { code: error.code, hint: error.hint, businessId }, userId: user.id });
     return { error: "Eroare la salvare. Incearca din nou." };
   }
 
@@ -136,6 +138,7 @@ export async function updateDiscount(discountId: string, businessId: string, dat
 
   if (error) {
     if (error.code === "23505") return { error: "Acest cod exista deja." };
+    logError({ action: "updateDiscount", message: error.message, details: { code: error.code, hint: error.hint, discountId, businessId }, userId: user.id });
     return { error: "Eroare la salvare. Incearca din nou." };
   }
 

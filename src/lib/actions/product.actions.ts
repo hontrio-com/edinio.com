@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getProductLimit } from "@/lib/plan-limits";
 import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
+import { logError } from "@/lib/error-logger";
 
 interface ProductData {
   name: string;
@@ -84,7 +85,10 @@ export async function createProduct(businessId: string, data: ProductData) {
     page_sections: (data.page_sections ?? {}) as never,
   });
 
-  if (error) return { error: "Eroare la salvare. Incearca din nou." };
+  if (error) {
+    logError({ action: "createProduct", message: error.message, details: { code: error.code, hint: error.hint, businessId }, userId: user.id });
+    return { error: "Eroare la salvare. Incearca din nou." };
+  }
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -128,7 +132,10 @@ export async function updateProduct(productId: string, businessId: string, data:
     updated_at: new Date().toISOString(),
   }).eq("id", productId).eq("business_id", businessId);
 
-  if (error) return { error: "Eroare la salvare. Incearca din nou." };
+  if (error) {
+    logError({ action: "updateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
+    return { error: "Eroare la salvare. Incearca din nou." };
+  }
 
   // Clean up removed images from R2 (fire-and-forget)
   if (oldProduct?.images && Array.isArray(oldProduct.images)) {
@@ -204,7 +211,10 @@ export async function duplicateProduct(productId: string, businessId: string) {
     page_sections: original.page_sections as never,
   });
 
-  if (error) return { error: "Eroare la duplicare." };
+  if (error) {
+    logError({ action: "duplicateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
+    return { error: "Eroare la duplicare." };
+  }
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -233,7 +243,10 @@ export async function deleteProduct(productId: string, businessId: string) {
   const { error } = await supabase.from("products").delete()
     .eq("id", productId).eq("business_id", businessId);
 
-  if (error) return { error: "Eroare la stergere." };
+  if (error) {
+    logError({ action: "deleteProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
+    return { error: "Eroare la stergere." };
+  }
 
   // Clean up R2 images (fire-and-forget)
   if (product?.images && Array.isArray(product.images)) {

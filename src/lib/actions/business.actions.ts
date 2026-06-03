@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { sendWelcomeEmail } from "@/lib/email";
+import { logError } from "@/lib/error-logger";
 
 export async function createBusiness(data: {
   business_name: string;
@@ -48,6 +49,7 @@ export async function createBusiness(data: {
     if (bizError.code === "23505") {
       return { error: "Aceasta adresa de magazin este deja folosita. Alege alta." };
     }
+    logError({ action: "createBusiness", message: bizError.message, details: { code: bizError.code, hint: bizError.hint, slug: data.slug }, userId: user.id, severity: "critical" });
     return { error: "Nu am putut crea magazinul. Incearca din nou." };
   }
 
@@ -142,7 +144,10 @@ export async function updateBusiness(
     .eq("id", businessId)
     .eq("user_id", user.id);
 
-  if (error) return { error: "Nu am putut salva modificarile." };
+  if (error) {
+    logError({ action: "updateBusiness", message: error.message, details: { code: error.code, hint: error.hint, businessId }, userId: user.id });
+    return { error: "Nu am putut salva modificarile." };
+  }
 
   // Clean up replaced/removed images from R2 (fire-and-forget)
   if (oldBiz) {

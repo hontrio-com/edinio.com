@@ -51,7 +51,7 @@ export default async function AdminPage() {
   const revenueThisMonth = (allInvoices ?? [])
     .filter((i) => i.created_at >= monthStart)
     .reduce((s, r) => s + r.amount, 0);
-  const mrr = (mrrInvoices ?? []).reduce((s, r) => s + r.amount, 0) / 100;
+  const mrr = (mrrInvoices ?? []).reduce((s, r) => s + r.amount, 0);
   const arr = mrr * 12;
 
   // Plan distribution
@@ -75,7 +75,7 @@ export default async function AdminPage() {
   }
   const revenueChart = Object.entries(revenueByMonth).map(([month, total]) => ({
     month: new Date(month + "-01").toLocaleDateString("ro-RO", { month: "short", year: "2-digit" }),
-    total: Math.round(total / 100),
+    total,
   }));
 
   return (
@@ -85,8 +85,8 @@ export default async function AdminPage() {
           totalUsers: totalUsers ?? 0,
           newUsersThisMonth: newUsersThisMonth ?? 0,
           newUsersLastMonth: newUsersLastMonth ?? 0,
-          totalRevenue: Math.round(totalRevenue / 100),
-          revenueThisMonth: Math.round(revenueThisMonth / 100),
+          totalRevenue,
+          revenueThisMonth,
           mrr,
           arr,
           activeBusinesses: activeBusinesses ?? 0,
@@ -99,7 +99,7 @@ export default async function AdminPage() {
         recentTickets={recentTickets ?? []}
         revenueChart={revenueChart}
         usersByPlan={usersByPlan}
-        allInvoices={(allInvoices ?? []).map((i) => ({ amount: Math.round(i.amount / 100), created_at: i.created_at }))}
+        allInvoices={(allInvoices ?? []).map((i) => ({ amount: i.amount, created_at: i.created_at }))}
         recentAudit={(recentAudit ?? []).map((a) => ({ action: a.action, target_type: a.target_type, created_at: a.created_at }))}
       />
     </div>

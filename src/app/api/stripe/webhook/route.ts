@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
         smartbill_number: sbNumber,
         smartbill_error: sbError,
         stripe_invoice_id: stripeInvoiceId,
-        status: "issued",
+        status: "paid",
       });
 
       if (invoiceError) {

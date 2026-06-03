@@ -140,7 +140,7 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
           { label: "Totale", value: invoices.length, color: "text-zinc-700" },
           { label: "Platite", value: invoices.filter((i) => i.status === "paid").length, color: "text-green-600" },
           { label: "Esuate", value: failedCount, color: failedCount > 0 ? "text-red-600" : "text-zinc-400" },
-          { label: "Venituri totale", value: `${(totalRevenue / 100).toLocaleString("ro-RO")} lei`, color: "text-primary" },
+          { label: "Venituri totale", value: `${totalRevenue.toLocaleString("ro-RO")} lei`, color: "text-primary" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
             <p className={cn("text-2xl font-black", color)}>{value}</p>
@@ -236,7 +236,7 @@ export function AdminInvoicesClient({ invoices: initialInvoices }: { invoices: I
                       <span className={cn("text-[10px] font-semibold px-2.5 py-1 rounded-full", sc.color)}>{sc.label}</span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold text-zinc-900 dark:text-white whitespace-nowrap">
-                      {(inv.amount / 100).toLocaleString("ro-RO", { minimumFractionDigits: 2 })} {inv.currency?.toUpperCase() ?? "RON"}
+                      {inv.amount.toLocaleString("ro-RO")} {inv.currency?.toUpperCase() ?? "RON"}
                     </td>
                     <td className="px-4 py-3 text-sm text-zinc-500 hidden sm:table-cell">
                       {new Date(inv.created_at).toLocaleDateString("ro-RO", { day: "numeric", month: "short", year: "numeric" })}

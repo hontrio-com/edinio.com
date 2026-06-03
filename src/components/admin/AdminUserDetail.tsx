@@ -283,7 +283,7 @@ export function AdminUserDetail({ profile, authUser, businesses, invoices, ticke
             { label: "Magazine", value: businesses.length, icon: Store },
             { label: "Comenzi", value: orders.length, icon: ShoppingCart },
             { label: "Facturi platite", value: invoices.filter((i) => i.status === "paid").length, icon: Receipt },
-            { label: "Venituri", value: `${(totalRevenue / 100).toLocaleString("ro-RO", { maximumFractionDigits: 0 })} lei`, icon: Receipt },
+            { label: "Venituri", value: `${totalRevenue.toLocaleString("ro-RO", { maximumFractionDigits: 0 })} lei`, icon: Receipt },
           ].map(({ label, value, icon: Icon }) => (
             <div key={label} className="text-center">
               <Icon className="h-5 w-5 text-zinc-400 mx-auto mb-1" />
@@ -409,7 +409,7 @@ export function AdminUserDetail({ profile, authUser, businesses, invoices, ticke
                   <p className="text-sm font-medium text-zinc-900 dark:text-white capitalize">{PLAN_LABELS[inv.plan] ?? inv.plan}</p>
                   <p className="text-xs text-zinc-400">{new Date(inv.created_at).toLocaleDateString("ro-RO")}</p>
                 </div>
-                <p className="text-sm font-semibold text-zinc-900 dark:text-white">{(inv.amount / 100).toLocaleString("ro-RO")} lei</p>
+                <p className="text-sm font-semibold text-zinc-900 dark:text-white">{inv.amount.toLocaleString("ro-RO")} lei</p>
                 <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0",
                   inv.status === "paid" ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-600"
                 )}>{inv.status === "paid" ? "Platit" : inv.status}</span>

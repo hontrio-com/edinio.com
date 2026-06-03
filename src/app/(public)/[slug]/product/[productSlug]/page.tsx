@@ -6,31 +6,31 @@ import { createClient } from "@/lib/supabase/server";
 import { ProductPage } from "@/components/ministore/ProductPage";
 
 interface Props {
-  params: Promise<{ slug: string; productId: string }>;
+  params: Promise<{ slug: string; productSlug: string }>;
 }
 
 // React cache() deduplicates this call between generateMetadata and the page
 // — a single DB round trip serves both, per request.
-const getProductCached = cache(async (productId: string, slug: string) => {
+const getProductCached = cache(async (productSlug: string) => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("products")
     .select("name, description, page_sections, price, images")
-    .eq("id", productId)
+    .eq("slug", productSlug)
     .single();
-  return data ? { ...data, slug } : null;
+  return data;
 });
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { productId, slug } = await params;
-  const product = await getProductCached(productId, slug);
+  const { productSlug, slug } = await params;
+  const product = await getProductCached(productSlug);
   if (!product) return {};
   const seo = (product.page_sections as { seo?: { title?: string; description?: string } } | null)?.seo;
   const title = seo?.title || product.name;
   const description = seo?.description
     || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
   const images = product.images as string[] | null;
-  const url = `https://edinio.com/${slug}/product/${productId}`;
+  const url = `https://edinio.com/${slug}/product/${productSlug}`;
   return {
     title,
     description,
@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function buildProductJsonLd(product: { name: string; description: string | null; price: number | null; images: unknown }, slug: string, productId: string) {
+function buildProductJsonLd(product: { name: string; description: string | null; price: number | null; images: unknown }, slug: string, productSlug: string) {
   const images = product.images as string[] | null;
   const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
   return {
@@ -59,20 +59,20 @@ function buildProductJsonLd(product: { name: string; description: string | null;
     "@type": "Product",
     name: product.name,
     description: desc,
-    url: `https://edinio.com/${slug}/product/${productId}`,
+    url: `https://edinio.com/${slug}/product/${productSlug}`,
     ...(images?.length ? { image: images } : {}),
     offers: {
       "@type": "Offer",
       priceCurrency: "RON",
       price: product.price ?? 0,
       availability: "https://schema.org/InStock",
-      url: `https://edinio.com/${slug}/product/${productId}`,
+      url: `https://edinio.com/${slug}/product/${productSlug}`,
     },
   };
 }
 
 export default async function ProductDetailPage({ params }: Props) {
-  const { slug, productId } = await params;
+  const { slug, productSlug } = await params;
   const supabase = await createClient();
 
   // business + store_settings in one query (join), product in parallel — 1 round trip
@@ -82,7 +82,7 @@ export default async function ProductDetailPage({ params }: Props) {
       .select("*, store_settings(*)")
       .eq("slug", slug)
       .single(),
-    supabase.from("products").select("*").eq("id", productId).single(),
+    supabase.from("products").select("*").eq("slug", productSlug).single(),
   ]);
 
   if (!businessRaw || !product || product.business_id !== businessRaw.id || !product.is_active) notFound();
@@ -99,7 +99,7 @@ export default async function ProductDetailPage({ params }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  const jsonLd = buildProductJsonLd(product, slug, productId);
+  const jsonLd = buildProductJsonLd(product, slug, productSlug);
 
   return (
     <>

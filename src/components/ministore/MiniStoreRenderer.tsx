@@ -749,7 +749,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
 
   return (
     <div className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
-      <a href={`${basePath}/product/${product.id}`} className="block">
+      <a href={`${basePath}/product/${product.slug}`} className="block">
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
           {imageUrl ? (
             <img
@@ -803,7 +803,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
       </a>
 
       <div className="p-3 sm:p-4">
-        <a href={`${basePath}/product/${product.id}`}>
+        <a href={`${basePath}/product/${product.slug}`}>
           <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
             {product.name}
           </h3>

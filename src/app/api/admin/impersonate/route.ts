@@ -25,10 +25,9 @@ export async function POST(req: NextRequest) {
   const { data, error } = await adminClient.auth.admin.generateLink({
     type: "magiclink",
     email,
-    options: { redirectTo: `${SITE_URL}/dashboard` },
   });
 
-  if (error || !data?.properties?.action_link) {
+  if (error || !data?.properties?.hashed_token) {
     return NextResponse.json({ error: error?.message ?? "Eroare la generarea linkului" }, { status: 500 });
   }
 
@@ -36,5 +35,7 @@ export async function POST(req: NextRequest) {
     email,
   });
 
-  return NextResponse.json({ url: data.properties.action_link });
+  // Route through /auth/callback for server-side token verification (sets session cookies properly)
+  const callbackUrl = `${SITE_URL}/auth/callback?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=magiclink`;
+  return NextResponse.json({ url: callbackUrl });
 }

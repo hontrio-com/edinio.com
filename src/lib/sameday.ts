@@ -163,16 +163,34 @@ export async function loadSamedayAccount(
     const token = await getSamedayToken(username, password, sandbox);
 
     const [ppRes, svcRes] = await Promise.all([
-      samedayGet<{ data: SamedayPickupPoint[] }>(
+      samedayGet<{ data: Record<string, unknown>[] }>(
         "api/client/pickup-points", token, sandbox, { page: "1", countPerPage: "50" }
       ),
-      samedayGet<{ data: SamedayService[] }>("api/client/services", token, sandbox),
+      samedayGet<{ data: Record<string, unknown>[] }>("api/client/services", token, sandbox),
     ]);
 
-    return {
-      pickupPoints: ppRes.data ?? [],
-      services: svcRes.data ?? [],
-    };
+    // Normalize pickup points — contactPersons may be missing or named differently
+    const pickupPoints: SamedayPickupPoint[] = (ppRes.data ?? []).map((pp: Record<string, unknown>) => ({
+      id: pp.id as number,
+      alias: (pp.alias ?? pp.name ?? "") as string,
+      address: pp.address as SamedayPickupPoint["address"] ?? { name: "", street: "", city: { name: "" }, county: { name: "" } },
+      contactPersons: Array.isArray(pp.contactPersons)
+        ? pp.contactPersons.map((cp: Record<string, unknown>) => ({
+            id: cp.id as number,
+            name: (cp.name ?? cp.fullName ?? "") as string,
+            isDefault: (cp.isDefault ?? cp.default ?? false) as boolean,
+          }))
+        : [],
+    }));
+
+    // Normalize services — API uses serviceCode, not code
+    const services: SamedayService[] = (svcRes.data ?? []).map((s: Record<string, unknown>) => ({
+      id: s.id as number,
+      name: (s.name ?? "") as string,
+      code: (s.serviceCode ?? s.code ?? "") as string,
+    }));
+
+    return { pickupPoints, services };
   } catch (e) {
     return { error: (e as Error).message };
   }

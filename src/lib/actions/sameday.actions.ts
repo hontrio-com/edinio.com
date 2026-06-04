@@ -63,19 +63,9 @@ export async function loadSamedayAccountAction(
   services: SamedayService[];
 } | { error: string }> {
   try {
-    const result = await loadSamedayAccount(username, password, sandbox);
-    const serialized = JSON.parse(JSON.stringify(result));
-    if ("error" in serialized) {
-      console.log("[sameday] action returning error:", serialized.error);
-    } else {
-      console.log("[sameday] action returning: pickupPoints=%d, services=%d", serialized.pickupPoints?.length, serialized.services?.length);
-      if (serialized.services?.length > 0) {
-        console.log("[sameday] first service:", JSON.stringify(serialized.services[0]));
-      }
-    }
-    return serialized;
+    return await loadSamedayAccount(username, password, sandbox);
   } catch (e) {
-    console.error("[sameday] loadSamedayAccountAction CRASH:", e);
+    console.error("[sameday] loadSamedayAccountAction error:", e);
     return { error: (e as Error).message ?? "Eroare necunoscuta" };
   }
 }

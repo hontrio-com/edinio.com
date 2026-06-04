@@ -68,7 +68,8 @@ export function SamedayConfigClient({
     if (result.pickupPoints.length > 0 && !selectedPickupPointId) {
       const first = result.pickupPoints[0];
       setSelectedPickupPointId(first.id);
-      const defaultContact = first.contactPersons.find(c => c.isDefault) ?? first.contactPersons[0];
+      const contacts = first.contactPersons ?? [];
+      const defaultContact = contacts.find(c => c.isDefault) ?? contacts[0];
       if (defaultContact) setSelectedContactPersonId(defaultContact.id);
     }
 
@@ -135,7 +136,8 @@ export function SamedayConfigClient({
     setSelectedPickupPointId(id);
     const pp = pickupPoints.find(p => p.id === id);
     if (pp) {
-      const defaultContact = pp.contactPersons.find(c => c.isDefault) ?? pp.contactPersons[0];
+      const contacts = pp.contactPersons ?? [];
+      const defaultContact = contacts.find(c => c.isDefault) ?? contacts[0];
       if (defaultContact) setSelectedContactPersonId(defaultContact.id);
     }
   }

@@ -62,7 +62,14 @@ export async function loadSamedayAccountAction(
   pickupPoints: SamedayPickupPoint[];
   services: SamedayService[];
 } | { error: string }> {
-  return loadSamedayAccount(username, password, sandbox);
+  try {
+    const result = await loadSamedayAccount(username, password, sandbox);
+    // Ensure plain serializable objects for server action response
+    return JSON.parse(JSON.stringify(result));
+  } catch (e) {
+    console.error("[sameday] loadSamedayAccountAction error:", e);
+    return { error: (e as Error).message ?? "Eroare necunoscuta" };
+  }
 }
 
 // ─── AWB actions ──────────────────────────────────────────────────────────────

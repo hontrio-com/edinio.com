@@ -91,7 +91,7 @@ export function SamedayConfigClient({
 
   async function handleSave() {
     if (!selectedPickupPointId) return toast.error("Selecteaza un punct de ridicare");
-    if (!selectedContactPersonId) return toast.error("Selecteaza o persoana de contact");
+    if (!selectedContactPersonId && contactPersons.length > 0) return toast.error("Selecteaza o persoana de contact");
     if (!selectedServiceId) return toast.error("Selecteaza un serviciu");
 
     const config: SamedayConfig = {

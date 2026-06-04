@@ -163,6 +163,7 @@ interface SmsoConfig {
 interface ShippingMethodConfig {
   enabled: boolean;
   price: number;
+  auto_price?: boolean;
   label?: string;
 }
 
@@ -970,53 +971,104 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     const isIntegrated = activeCourierIds.includes(method.id);
                     const canToggle = isIntegrated || !needsIntegration;
                     const zone = shippingZones[method.id] ?? { enabled: false, price: method.defaultPrice };
+                    const autoPrice = zone.auto_price ?? true;
                     return (
-                      <div key={method.id} className={`flex items-center gap-3 p-3.5 rounded-xl border transition-colors ${!canToggle ? "opacity-50 bg-surface border-border" : zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
-                        {/* Logo or icon */}
-                        <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-background border border-border">
-                          {method.logo ? (
-                            <img src={method.logo} alt={method.label} className="w-6 h-6 object-contain" style={method.filter ? { filter: method.filter } : undefined} />
-                          ) : (
-                            <Truck className="h-4 w-4 text-muted-foreground" />
-                          )}
+                      <div key={method.id} className={`rounded-xl border transition-colors ${!canToggle ? "opacity-50 bg-surface border-border" : zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
+                        <div className="flex items-center gap-3 p-3.5">
+                          {/* Logo or icon */}
+                          <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-background border border-border">
+                            {method.logo ? (
+                              <img src={method.logo} alt={method.label} className="w-6 h-6 object-contain" style={method.filter ? { filter: method.filter } : undefined} />
+                            ) : (
+                              <Truck className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+
+                          {/* Label + not configured hint */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">{method.label}</p>
+                            {needsIntegration && !isIntegrated && (
+                              <a href="/dashboard/features" className="text-[10px] text-primary hover:underline whitespace-nowrap">
+                                Configureaza integrarea
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Toggle */}
+                          <button
+                            type="button"
+                            disabled={!canToggle}
+                            onClick={() => setShippingZones(z => ({ ...z, [method.id]: { ...zone, enabled: !zone.enabled } }))}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:cursor-not-allowed ${zone.enabled && canToggle ? "bg-primary" : "bg-muted-foreground/30"}`}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${zone.enabled && canToggle ? "translate-x-4" : "translate-x-0.5"}`} />
+                          </button>
                         </div>
 
-                        {/* Label + not configured hint */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground">{method.label}</p>
-                          {needsIntegration && !isIntegrated && (
-                            <a href="/dashboard/features" className="text-[10px] text-primary hover:underline whitespace-nowrap">
-                              Configureaza integrarea
-                            </a>
-                          )}
-                        </div>
+                        {/* Price mode selector — only for enabled couriers with API integration */}
+                        {zone.enabled && canToggle && isIntegrated && (
+                          <div className="px-3.5 pb-3 space-y-2">
+                            <div className="flex items-center gap-4">
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`price-mode-${method.id}`}
+                                  checked={autoPrice}
+                                  onChange={() => setShippingZones(z => ({ ...z, [method.id]: { ...zone, auto_price: true } }))}
+                                  className="accent-primary w-3.5 h-3.5"
+                                />
+                                <span className="text-xs text-foreground">Pret automat (din contract)</span>
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`price-mode-${method.id}`}
+                                  checked={!autoPrice}
+                                  onChange={() => setShippingZones(z => ({ ...z, [method.id]: { ...zone, auto_price: false } }))}
+                                  className="accent-primary w-3.5 h-3.5"
+                                />
+                                <span className="text-xs text-foreground">Pret fix</span>
+                              </label>
+                              {!autoPrice && (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={zone.price}
+                                    onChange={(e) => {
+                                      const price = parseFloat(e.target.value) || 0;
+                                      setShippingZones(z => ({ ...z, [method.id]: { ...zone, price } }));
+                                    }}
+                                    className="w-20 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground text-right focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+                                  />
+                                  <span className="text-xs text-muted-foreground">lei</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
-                        {/* Price input */}
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={zone.price}
-                            onChange={(e) => {
-                              const price = parseFloat(e.target.value) || 0;
-                              setShippingZones(z => ({ ...z, [method.id]: { ...zone, price } }));
-                            }}
-                            disabled={!zone.enabled || !canToggle}
-                            className="w-20 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground text-right focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          />
-                          <span className="text-xs text-muted-foreground w-6">lei</span>
-                        </div>
-
-                        {/* Toggle */}
-                        <button
-                          type="button"
-                          disabled={!canToggle}
-                          onClick={() => setShippingZones(z => ({ ...z, [method.id]: { ...zone, enabled: !zone.enabled } }))}
-                          className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:cursor-not-allowed ${zone.enabled && canToggle ? "bg-primary" : "bg-muted-foreground/30"}`}
-                        >
-                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${zone.enabled && canToggle ? "translate-x-4" : "translate-x-0.5"}`} />
-                        </button>
+                        {/* Price input for non-API couriers */}
+                        {zone.enabled && canToggle && !isIntegrated && (
+                          <div className="px-3.5 pb-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-muted-foreground">Pret:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={zone.price}
+                                onChange={(e) => {
+                                  const price = parseFloat(e.target.value) || 0;
+                                  setShippingZones(z => ({ ...z, [method.id]: { ...zone, price } }));
+                                }}
+                                className="w-20 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground text-right focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+                              />
+                              <span className="text-xs text-muted-foreground">lei</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

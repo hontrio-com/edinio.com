@@ -57,7 +57,7 @@ export async function getShippingOptions(
 
   if (!settings) return [];
 
-  const zones = (settings.shipping_zones ?? {}) as Record<string, { enabled: boolean; price: number; label?: string }>;
+  const zones = (settings.shipping_zones ?? {}) as Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string }>;
   const enabledZones = Object.entries(zones).filter(([, z]) => z.enabled);
 
   // No courier enabled in shipping_zones — nothing to show
@@ -68,12 +68,16 @@ export async function getShippingOptions(
   const promises: Promise<void>[] = [];
 
   for (const [courierId, zone] of enabledZones) {
+    const useAutoPrice = zone.auto_price !== false; // default true
+
     if (courierId === "sameday") {
       const samedayConfig = settings.sameday_config as SamedayConfig | null;
-      if (samedayConfig?.enabled && samedayConfig.username && samedayConfig.pickup_point_id) {
-        // Has API config — try real tariff
+      const hasApi = !!(samedayConfig?.enabled && samedayConfig.username && samedayConfig.pickup_point_id);
+
+      if (hasApi && useAutoPrice) {
+        // API tariff
         promises.push(
-          estimateSamedayCost(samedayConfig, {
+          estimateSamedayCost(samedayConfig!, {
             recipientCounty: destination.county,
             recipientCity: destination.city,
             weightKg: weight,
@@ -84,7 +88,7 @@ export async function getShippingOptions(
               const days = r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`;
               options.push({
                 courier: "sameday",
-                courierLabel: samedayConfig.service_name || "Sameday Courier",
+                courierLabel: "Livrare prin Sameday",
                 deliveryType: "address",
                 price,
                 estimatedDays: days,
@@ -99,30 +103,41 @@ export async function getShippingOptions(
             })
             .catch((err) => {
               console.error("[shipping] Sameday estimate failed:", err.message);
-              // Fallback to flat price from shipping_zones
+              // Fallback to flat price
               options.push({
                 courier: "sameday",
-                courierLabel: zone.label || "Sameday Courier",
+                courierLabel: "Livrare prin Sameday",
                 deliveryType: "address",
                 price: zone.price,
               });
             }),
         );
       } else {
-        // No API config — flat price only
+        // Manual price or no API config
         options.push({
           courier: "sameday",
-          courierLabel: zone.label || "Sameday Courier",
+          courierLabel: "Livrare prin Sameday",
           deliveryType: "address",
           price: zone.price,
         });
+        // Offer locker option only if API is configured (lockers need API)
+        if (hasApi) {
+          options.push({
+            courier: "sameday",
+            courierLabel: "Sameday EasyBox (locker)",
+            deliveryType: "locker",
+            price: zone.price,
+          });
+        }
       }
     } else if (courierId === "fan-courier") {
       const fanConfig = settings.fan_courier_config as FanCourierConfig | null;
-      if (fanConfig?.enabled && fanConfig.username && fanConfig.client_id) {
+      const hasApi = !!(fanConfig?.enabled && fanConfig.username && fanConfig.client_id);
+
+      if (hasApi && useAutoPrice) {
         const service = destination.cod && destination.cod > 0 ? "Cont Colector" : "Standard";
         promises.push(
-          estimateFanCourierCost(fanConfig, {
+          estimateFanCourierCost(fanConfig!, {
             recipientCounty: destination.county,
             recipientLocality: destination.city,
             weightKg: weight,
@@ -132,7 +147,7 @@ export async function getShippingOptions(
               const price = Math.round(r.total * 100) / 100;
               options.push({
                 courier: "fan-courier",
-                courierLabel: `FAN Courier ${service}`,
+                courierLabel: "Livrare prin FAN Courier",
                 deliveryType: "address",
                 price,
               });
@@ -147,7 +162,7 @@ export async function getShippingOptions(
               console.error("[shipping] FanCourier estimate failed:", err.message);
               options.push({
                 courier: "fan-courier",
-                courierLabel: zone.label || "FAN Courier",
+                courierLabel: "Livrare prin FAN Courier",
                 deliveryType: "address",
                 price: zone.price,
               });
@@ -156,10 +171,18 @@ export async function getShippingOptions(
       } else {
         options.push({
           courier: "fan-courier",
-          courierLabel: zone.label || "FAN Courier",
+          courierLabel: "Livrare prin FAN Courier",
           deliveryType: "address",
           price: zone.price,
         });
+        if (hasApi) {
+          options.push({
+            courier: "fan-courier",
+            courierLabel: "FAN Courier FANbox (locker)",
+            deliveryType: "locker",
+            price: zone.price,
+          });
+        }
       }
     } else if (courierId === "pickup") {
       options.push({

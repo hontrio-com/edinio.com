@@ -247,7 +247,7 @@ export async function updateShippingConfig(
   config: {
     shipping_enabled: boolean;
     free_shipping_threshold: number | null;
-    shipping_zones: Record<string, { enabled: boolean; price: number; label?: string }>;
+    shipping_zones: Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string }>;
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();

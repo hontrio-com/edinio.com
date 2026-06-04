@@ -102,7 +102,7 @@ export default async function SlugPage({ params }: Props) {
     }
   }
 
-  const [{ data: products }, { data: storeSettings }] = await Promise.all([
+  const [{ data: products }, { data: storeSettings }, { data: categoriesData }] = await Promise.all([
     supabase
       .from("products")
       .select("*")
@@ -115,6 +115,11 @@ export default async function SlugPage({ params }: Props) {
       .select("*")
       .eq("business_id", business.id)
       .single(),
+    supabase
+      .from("categories")
+      .select("name, image_url")
+      .eq("business_id", business.id)
+      .order("sort_order"),
   ]);
 
   // Detect custom domain access
@@ -161,6 +166,7 @@ export default async function SlugPage({ params }: Props) {
         products={products ?? []}
         storeSettings={storeSettings}
         basePath={basePath}
+        categoryImages={categoriesData ?? []}
       />
     </>
   );

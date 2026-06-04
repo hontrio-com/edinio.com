@@ -49,7 +49,7 @@ export async function createCategory(data: {
 
 export async function updateCategory(
   id: string,
-  data: { name?: string; sort_order?: number },
+  data: { name?: string; sort_order?: number; image_url?: string | null },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

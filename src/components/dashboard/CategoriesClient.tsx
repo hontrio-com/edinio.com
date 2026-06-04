@@ -3,9 +3,10 @@
 import { useState, useTransition, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import {
-  Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, GripVertical, Tag,
+  Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, GripVertical, Tag, ImagePlus, Loader2,
 } from "lucide-react";
 import { createCategory, updateCategory, deleteCategory } from "@/lib/actions/category.actions";
+import { createClient } from "@/lib/supabase/client";
 
 interface Category {
   id: string;
@@ -13,6 +14,7 @@ interface Category {
   parent_id: string | null;
   name: string;
   sort_order: number;
+  image_url?: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -104,7 +106,7 @@ export function CategoriesClient({ initialCategories }: Props) {
       if ("error" in result) { toast.error(result.error); return; }
       setCategories(prev => [...prev, {
         id: result.id, business_id: "", parent_id: null,
-        name, sort_order, created_at: "", updated_at: "",
+        name, sort_order, image_url: null, created_at: "", updated_at: "",
       }]);
       setEditing(null);
       toast.success("Categorie adaugata.");
@@ -119,7 +121,7 @@ export function CategoriesClient({ initialCategories }: Props) {
       if ("error" in result) { toast.error(result.error); return; }
       setCategories(prev => [...prev, {
         id: result.id, business_id: "", parent_id: parentId,
-        name, sort_order, created_at: "", updated_at: "",
+        name, sort_order, image_url: null, created_at: "", updated_at: "",
       }]);
       setEditing(null);
       toast.success("Subcategorie adaugata.");
@@ -148,6 +150,37 @@ export function CategoriesClient({ initialCategories }: Props) {
       setCategories(prev => prev.filter(c => !toRemove.has(c.id)));
       setConfirmDelete(null);
       toast.success("Stearsa.");
+    });
+  }
+
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+
+  async function handleImageUpload(categoryId: string, file: File) {
+    if (!file.type.startsWith("image/")) { toast.error("Fisierul trebuie sa fie o imagine"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imaginea trebuie sa fie sub 5MB"); return; }
+    setUploadingId(categoryId);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `categories/${categoryId}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("products").upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from("products").getPublicUrl(path);
+      const url = `${publicUrl}?v=${Date.now()}`;
+      const result = await updateCategory(categoryId, { image_url: url });
+      if ("error" in result) throw new Error(result.error);
+      setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, image_url: url } : c));
+      toast.success("Imagine salvata");
+    } catch (e) { toast.error((e as Error).message ?? "Eroare la upload"); }
+    finally { setUploadingId(null); }
+  }
+
+  async function handleRemoveImage(categoryId: string) {
+    startTransition(async () => {
+      const result = await updateCategory(categoryId, { image_url: null });
+      if ("error" in result) { toast.error(result.error); return; }
+      setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, image_url: null } : c));
+      toast.success("Imagine stearsa");
     });
   }
 
@@ -233,6 +266,25 @@ export function CategoriesClient({ initialCategories }: Props) {
                       <Folder className="h-4 w-4" />
                     )}
                   </button>
+
+                  {/* Category image */}
+                  <label className="relative w-9 h-9 rounded-lg border border-border bg-muted flex items-center justify-center flex-shrink-0 cursor-pointer overflow-hidden group hover:border-primary/50 transition-colors">
+                    {uploadingId === cat.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : cat.image_url ? (
+                      <>
+                        <img src={cat.image_url} alt="" className="w-full h-full object-cover" />
+                        <button type="button" onClick={(e) => { e.preventDefault(); handleRemoveImage(cat.id); }}
+                          className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="h-3.5 w-3.5 text-white" />
+                        </button>
+                      </>
+                    ) : (
+                      <ImagePlus className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    )}
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(cat.id, f); e.target.value = ""; }} />
+                  </label>
 
                   {isEditing ? (
                     <EditableLabel

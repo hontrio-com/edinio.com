@@ -884,9 +884,10 @@ interface Props {
   products: Product[];
   storeSettings: StoreSettings | null;
   basePath?: string;
+  categoryImages?: { name: string; image_url: string | null }[];
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categoryImages }: Props) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -943,6 +944,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     return Array.from(cats).sort();
   }, [products]);
 
+  const catImageMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (categoryImages ?? []).forEach(c => { if (c.image_url) map[c.name] = c.image_url; });
+    return map;
+  }, [categoryImages]);
+  const hasAnyCategoryImage = categories.some(c => catImageMap[c]);
   const hasCategories = categories.length > 0;
 
   // Featured products
@@ -1143,7 +1150,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         </div>
 
         {/* Category filters */}
-        {hasCategories && (
+        {hasCategories && !hasAnyCategoryImage && (
           <div className="flex items-center gap-2 mb-6 flex-wrap">
             <button
               type="button"
@@ -1168,6 +1175,71 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 {cat}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Category image carousel */}
+        {hasCategories && hasAnyCategoryImage && (
+          <div className="mb-6 -mx-4 px-4 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-4 pb-1" style={{ minWidth: "min-content" }}>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter("toate")}
+                className="flex flex-col items-center gap-2 flex-shrink-0 group"
+              >
+                <div
+                  className="w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all border-2"
+                  style={{
+                    borderColor: categoryFilter === "toate" ? color : "var(--color-border)",
+                    backgroundColor: categoryFilter === "toate" ? `${color}15` : "var(--color-muted)",
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6" style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+                  </svg>
+                </div>
+                <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
+                  style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
+                  Toate
+                </span>
+              </button>
+              {categories.map(cat => {
+                const img = catImageMap[cat];
+                const active = categoryFilter === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategoryFilter(cat)}
+                    className="flex flex-col items-center gap-2 flex-shrink-0 group"
+                  >
+                    <div
+                      className="w-[72px] h-[72px] rounded-full overflow-hidden transition-all border-2"
+                      style={{
+                        borderColor: active ? color : "var(--color-border)",
+                        boxShadow: active ? `0 0 0 2px ${color}40` : "none",
+                      }}
+                    >
+                      {img ? (
+                        <img src={img} alt={cat} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center"
+                          style={{ backgroundColor: active ? `${color}15` : "var(--color-muted)" }}>
+                          <span className="text-lg font-bold" style={{ color: active ? color : "var(--color-muted-foreground)" }}>
+                            {cat[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
+                      style={{ color: active ? color : "var(--color-muted-foreground)" }}>
+                      {cat}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

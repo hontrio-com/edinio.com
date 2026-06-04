@@ -56,12 +56,16 @@ async function getFanCourierToken(username: string, password: string): Promise<s
     { method: "POST" },
   );
 
-  if (!res.ok) throw new Error(`FAN Courier login error: ${res.status} ${res.statusText}`);
-  const data = await res.json() as { token?: string; error?: string };
-  if (!data.token) throw new Error(data.error ?? "Token FAN Courier invalid");
+  const text = await res.text();
+  console.log("[fancourier] login response: status=%d, body=%s", res.status, text.slice(0, 500));
+  if (!res.ok) throw new Error(`FAN Courier login error: ${res.status} ${res.statusText} — ${text.slice(0, 200)}`);
+  let data: Record<string, unknown>;
+  try { data = JSON.parse(text); } catch { throw new Error(`FAN Courier login: raspuns invalid — ${text.slice(0, 200)}`); }
+  const token = (data.token ?? data.data ?? data.access_token) as string | undefined;
+  if (!token) throw new Error(`FAN Courier login: token absent din raspuns — ${text.slice(0, 200)}`);
 
-  tokenCache.set(key, { token: data.token, expiresAt: Date.now() + TOKEN_TTL_MS });
-  return data.token;
+  tokenCache.set(key, { token, expiresAt: Date.now() + TOKEN_TTL_MS });
+  return token;
 }
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────────

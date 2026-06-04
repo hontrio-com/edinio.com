@@ -170,6 +170,10 @@ export async function loadSamedayAccount(
     ]);
 
     // Normalize pickup points — structure varies between Sameday API versions
+    if ((ppRes.data ?? []).length > 0) {
+      console.log("[sameday] raw pickup point keys:", Object.keys(ppRes.data[0]));
+      console.log("[sameday] raw pickup point:", JSON.stringify(ppRes.data[0]).slice(0, 1000));
+    }
     const pickupPoints: SamedayPickupPoint[] = (ppRes.data ?? []).map((pp: Record<string, unknown>) => {
       const rawAddr = (pp.address ?? {}) as Record<string, unknown>;
       const rawCity = rawAddr.city;

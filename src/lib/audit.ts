@@ -16,6 +16,7 @@ export type AuditAction =
   | "invoice.cancel"
   | "invoice.delete"
   | "invoice.reissue"
+  | "invoice.smartbill_retry"
   | "ticket.delete"
   | "ticket.status_change"
   | "ticket.reply"

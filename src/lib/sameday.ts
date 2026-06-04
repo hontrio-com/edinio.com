@@ -169,30 +169,26 @@ export async function loadSamedayAccount(
       samedayGet<{ data: Record<string, unknown>[] }>("api/client/services", token, sandbox),
     ]);
 
-    // Normalize pickup points — structure varies between Sameday API versions
-    if ((ppRes.data ?? []).length > 0) {
-      console.log("[sameday] raw pickup point keys:", Object.keys(ppRes.data[0]));
-      console.log("[sameday] raw pickup point:", JSON.stringify(ppRes.data[0]).slice(0, 1000));
-    }
+    // Normalize pickup points — map Sameday API fields to our types
     const pickupPoints: SamedayPickupPoint[] = (ppRes.data ?? []).map((pp: Record<string, unknown>) => {
-      const rawAddr = (pp.address ?? {}) as Record<string, unknown>;
-      const rawCity = rawAddr.city;
-      const rawCounty = rawAddr.county;
+      const rawCity = pp.city as Record<string, unknown> | undefined;
+      const rawCounty = pp.county as Record<string, unknown> | undefined;
+      const rawContacts = (pp.pickupPointContactPerson ?? pp.contactPersons ?? []) as Record<string, unknown>[];
 
       return {
         id: pp.id as number,
         alias: (pp.alias ?? pp.name ?? "") as string,
         address: {
-          name: (rawAddr.name ?? rawAddr.street ?? "") as string,
-          street: (rawAddr.street ?? rawAddr.name ?? "") as string,
-          city: { name: typeof rawCity === "string" ? rawCity : (rawCity as Record<string, unknown>)?.name as string ?? "" },
-          county: { name: typeof rawCounty === "string" ? rawCounty : (rawCounty as Record<string, unknown>)?.name as string ?? "" },
+          name: typeof pp.address === "string" ? pp.address : "",
+          street: typeof pp.address === "string" ? pp.address : "",
+          city: { name: (rawCity?.name ?? "") as string },
+          county: { name: (rawCounty?.name ?? "") as string },
         },
-        contactPersons: Array.isArray(pp.contactPersons)
-          ? pp.contactPersons.map((cp: Record<string, unknown>) => ({
+        contactPersons: Array.isArray(rawContacts)
+          ? rawContacts.map((cp: Record<string, unknown>) => ({
               id: cp.id as number,
-              name: (cp.name ?? cp.fullName ?? "") as string,
-              isDefault: (cp.isDefault ?? cp.default ?? false) as boolean,
+              name: (cp.name ?? "") as string,
+              isDefault: (cp.defaultContactPerson ?? cp.isDefault ?? false) as boolean,
             }))
           : [],
       };

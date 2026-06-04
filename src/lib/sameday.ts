@@ -163,9 +163,14 @@ export async function loadSamedayAccount(
     const token = await getSamedayToken(username, password, sandbox);
 
     const [ppRes, svcRes] = await Promise.all([
-      samedayGet<{ data: SamedayPickupPoint[] }>("api/client/pickup-points", token, sandbox),
+      samedayGet<{ total: number; currentPage: number; pages: number; data: SamedayPickupPoint[] }>(
+        "api/client/pickup-points", token, sandbox, { page: "1", countPerPage: "50" }
+      ),
       samedayGet<{ data: SamedayService[] }>("api/client/services", token, sandbox),
     ]);
+
+    console.log("[sameday] pickup-points: total=%d, pages=%d, currentPage=%d, data.length=%d",
+      ppRes.total, ppRes.pages, ppRes.currentPage, ppRes.data?.length ?? 0);
 
     return {
       pickupPoints: ppRes.data ?? [],

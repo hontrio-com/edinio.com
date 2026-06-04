@@ -78,7 +78,7 @@ export function Navbar() {
       {/* ── Announcement bar ── */}
       <div className="relative bg-primary text-white overflow-hidden">
         <div className="flex items-center h-9">
-          <div className="flex animate-marquee whitespace-nowrap">
+          <div className="flex whitespace-nowrap" style={{ animation: "marquee 120s linear infinite" }}>
             {Array.from({ length: 10 }).map((_, i) => (
               <span key={i} className="inline-flex items-center gap-2.5 mx-10 text-xs font-medium tracking-wide uppercase">
                 <Sparkles className="h-3 w-3 opacity-70 flex-shrink-0" />

@@ -554,10 +554,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       {/* Announcement bar */}
       {announcementBar?.enabled && (
         <div className="h-9 overflow-hidden flex items-center fixed top-0 left-0 right-0 z-50"
-          style={{ background: announcementBar.bg_color || color, "--marquee-speed": `${[200, 150, 120, 80, 50][(announcementBar.speed ?? 3) - 1]}s` } as React.CSSProperties}>
+          style={{ background: announcementBar.bg_color || color }}>
           <div className="flex whitespace-nowrap">
             {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white">
+              <span key={i} className="inline-block text-xs font-medium tracking-wide text-white"
+                style={{ animation: `marquee ${[200, 150, 120, 80, 50][(announcementBar.speed ?? 3) - 1]}s linear infinite` }}>
                 {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               </span>
             ))}

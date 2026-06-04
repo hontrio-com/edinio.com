@@ -280,9 +280,6 @@
   100% { transform: translateX(-50%); }
 }
 
-.animate-marquee {
-  animation: marquee var(--marquee-speed, 120s) linear infinite;
-}
 
 /* ─── Liquid Glass Navbar ──────────────────────────────────────────────── */
 

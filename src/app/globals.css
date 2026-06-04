@@ -281,7 +281,10 @@
 }
 
 .animate-marquee {
-  animation: marquee 120s linear infinite;
+  animation-name: marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: 120s;
 }
 
 /* ─── Liquid Glass Navbar ──────────────────────────────────────────────── */

@@ -61,8 +61,9 @@ async function getFanCourierToken(username: string, password: string): Promise<s
   if (!res.ok) throw new Error(`FAN Courier login error: ${res.status} ${res.statusText} — ${text.slice(0, 200)}`);
   let data: Record<string, unknown>;
   try { data = JSON.parse(text); } catch { throw new Error(`FAN Courier login: raspuns invalid — ${text.slice(0, 200)}`); }
-  const token = (data.token ?? data.data ?? data.access_token) as string | undefined;
-  if (!token) throw new Error(`FAN Courier login: token absent din raspuns — ${text.slice(0, 200)}`);
+  const nested = data.data as Record<string, unknown> | undefined;
+  const token = (nested?.token ?? data.token ?? data.access_token) as string | undefined;
+  if (!token || typeof token !== "string") throw new Error(`FAN Courier login: token absent din raspuns — ${text.slice(0, 200)}`);
 
   tokenCache.set(key, { token, expiresAt: Date.now() + TOKEN_TTL_MS });
   return token;

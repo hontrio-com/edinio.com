@@ -558,7 +558,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           <div className="flex whitespace-nowrap">
             {Array.from({ length: 8 }, (_, i) => (
               <span key={i} className="inline-block text-xs font-medium tracking-wide text-white"
-                style={{ animation: `marquee ${[200, 150, 120, 80, 50][(announcementBar.speed ?? 3) - 1]}s linear infinite` }}>
+                style={{ animation: `marquee ${[80, 50, 30, 18, 10][(announcementBar.speed ?? 3) - 1]}s linear infinite` }}>
                 {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               </span>
             ))}

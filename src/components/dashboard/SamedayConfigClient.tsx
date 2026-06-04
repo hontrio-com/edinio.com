@@ -73,7 +73,11 @@ export function SamedayConfigClient({
       }
     }
 
-    toast.success(`Cont Sameday conectat — ${result.pickupPoints.length} punct(e) de ridicare`);
+    if (result.pickupPoints.length === 0) {
+      toast.warning("Cont conectat, dar nu exista puncte de ridicare. Adauga un punct de ridicare in panoul Sameday.");
+    } else {
+      toast.success(`Cont Sameday conectat — ${result.pickupPoints.length} punct(e) de ridicare`);
+    }
     setStep("settings");
   }
 
@@ -229,10 +233,12 @@ export function SamedayConfigClient({
                 ))}
               </select>
             ) : (
-              <div className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-muted/30 text-muted-foreground">
+              <div className={`w-full px-3 py-2 text-sm border rounded-lg ${step === "settings" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-border bg-muted/30 text-muted-foreground"}`}>
                 {initialConfig?.pickup_point_id
                   ? `Pickup ID: ${initialConfig.pickup_point_id}`
-                  : "Conecteaza contul pentru a incarca punctele de ridicare"}
+                  : step === "settings"
+                    ? "Nu exista puncte de ridicare in contul Sameday. Adauga unul din panoul Sameday si apasa din nou 'Conecteaza'."
+                    : "Conecteaza contul pentru a incarca punctele de ridicare"}
               </div>
             )}
           </div>

@@ -7,6 +7,7 @@ export const PLAN_LABELS: Record<string, string> = {
   basic: "Basic",
   premium: "Premium",
   ultra: "Ultra",
+  domain: "Domeniu",
 };
 
 export const PLAN_PRICES: Record<string, number> = {

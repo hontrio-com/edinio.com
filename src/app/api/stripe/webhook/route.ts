@@ -65,12 +65,70 @@ export async function POST(req: NextRequest) {
       } else {
         console.log("[webhook] domain_order created:", domain, createdOrder?.id);
 
-        // Fetch business name for admin email
-        const { data: bizData } = await admin
-          .from("businesses")
-          .select("business_name")
-          .eq("id", business_id)
-          .single();
+        // Fetch business info for admin email + invoice
+        const [{ data: bizData }, { data: profileData }, { data: authUserData }] = await Promise.all([
+          admin.from("businesses")
+            .select("business_name, address, city, county, cui")
+            .eq("id", business_id)
+            .single(),
+          admin.from("users_profile")
+            .select("full_name")
+            .eq("id", user_id)
+            .maybeSingle(),
+          admin.auth.admin.getUserById(user_id),
+        ]);
+
+        const userEmail = authUserData?.user?.email ?? "";
+        const clientName = bizData?.business_name || profileData?.full_name || userEmail || "Client";
+        const domainPrice = Number(total_price) || 0;
+
+        // Emit SmartBill invoice for domain purchase
+        let sbSeries: string | null = null;
+        let sbNumber: string | null = null;
+        let sbError: string | null = null;
+
+        const sbResult = await createSmartbillInvoice(
+          {
+            name: clientName,
+            email: userEmail,
+            vatCode: bizData?.cui ?? undefined,
+            address: bizData?.address ?? undefined,
+            city: bizData?.city ?? undefined,
+            county: bizData?.county ?? undefined,
+          },
+          {
+            name: `Domeniu ${domain} (${period} ${Number(period) === 1 ? "an" : "ani"})`,
+            price: domainPrice,
+            quantity: 1,
+          }
+        );
+
+        if (sbResult.error) {
+          sbError = sbResult.error;
+          console.error("[webhook] domain Smartbill failed:", sbError);
+        } else {
+          sbSeries = sbResult.series ?? null;
+          sbNumber = sbResult.number ?? null;
+        }
+
+        // Save invoice record
+        const { error: invoiceError } = await admin.from("invoices").insert({
+          user_id,
+          plan: "domain",
+          amount: domainPrice,
+          currency: "RON",
+          smartbill_series: sbSeries,
+          smartbill_number: sbNumber,
+          smartbill_error: sbError,
+          stripe_invoice_id: session.payment_intent as string ?? null,
+          status: "paid",
+        });
+
+        if (invoiceError) {
+          console.error("[webhook] domain invoice insert failed:", invoiceError);
+        } else {
+          console.log("[webhook] domain invoice saved:", { domain, sbSeries, sbNumber });
+        }
 
         // Send admin notification
         const { sendDomainOrderToAdmin } = await import("@/lib/email");
@@ -80,7 +138,7 @@ export async function POST(req: NextRequest) {
           domain,
           tld,
           period: Number(period) || 1,
-          totalPrice: Number(total_price) || 0,
+          totalPrice: domainPrice,
           customerName: `${ci.firstname ?? ""} ${ci.lastname ?? ""}`.trim(),
           customerEmail: ci.email ?? session.customer_email ?? "",
           businessName: bizData?.business_name ?? "N/A",

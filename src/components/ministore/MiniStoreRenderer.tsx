@@ -10,6 +10,7 @@ import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { createClient } from "@/lib/supabase/client";
+import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -196,8 +197,11 @@ function CartCheckoutModal({
   const emailField = checkoutConfig?.email_field ?? emailFieldConfig;
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
+  const [hasCouriers, setHasCouriers] = useState(false);
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
-  const shipping = freeShippingThreshold && total >= freeShippingThreshold ? 0 : shippingCost;
+  const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
+  const shipping = freeShippingThreshold && total >= freeShippingThreshold ? 0 : baseShippingCost;
 
   // VAT calculation
   const vatBase = total + extrasTotal;
@@ -226,7 +230,7 @@ function CartCheckoutModal({
     const supabase = createClient();
     supabase
       .from("store_settings")
-      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config, netopia_config")
+      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config, netopia_config, sameday_config, fan_courier_config")
       .eq("business_id", businessId)
       .single()
       .then(({ data }) => {
@@ -248,6 +252,9 @@ function CartCheckoutModal({
         setNetopiaEnabled(netopiaOk);
         if (nc?.title) setNetopiaTitle(nc.title);
         if (!stripeOk) setPaymentMethod("cash_on_delivery");
+        const sd = data?.sameday_config as { enabled?: boolean } | null;
+        const fc = data?.fan_courier_config as { enabled?: boolean } | null;
+        setHasCouriers(!!(sd?.enabled || fc?.enabled));
       });
   }, [open, businessId]);
 
@@ -259,7 +266,9 @@ function CartCheckoutModal({
     else if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalid";
     if (!form.county) e.county = "Selectati judetul";
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
-    if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
+    if (form.address.trim().length < 10 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 10 caractere";
+    if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
+    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
     for (const field of customFields) {
       if (field.required) {
         if (field.type === "checkbox" && customValues[field.id] !== "da") {
@@ -286,12 +295,19 @@ function CartCheckoutModal({
         customer_email: form.email.trim() || undefined,
         customer_county: form.county,
         customer_city: form.city,
-        customer_address: form.address,
+        customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
+          ? courierSelection.lockerAddress
+          : form.address,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
         vat_amount: vatAmount,
         vat_rate: vatConfig.vat_enabled ? vatConfig.vat_rate : 0,
         payment_method: paymentMethod,
+        selected_courier: courierSelection?.courier,
+        courier_label: courierSelection?.courierLabel,
+        delivery_type: courierSelection?.deliveryType,
+        locker_id: courierSelection?.lockerId,
+        locker_name: courierSelection?.lockerName,
       });
       if ("error" in result) { setErrors({ _: result.error as string }); return; }
 
@@ -419,6 +435,18 @@ function CartCheckoutModal({
             </FieldWrap>
             {errors.address && <p className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
           </div>
+          {/* Courier selection */}
+          {hasCouriers && (
+            <CourierSelector
+              businessId={businessId}
+              county={form.county}
+              city={form.city}
+              color={color}
+              cod={paymentMethod === "cash_on_delivery" ? total : 0}
+              onSelect={setCourierSelection}
+            />
+          )}
+          {errors.courier && <p className="text-xs text-red-500 mt-0.5">{errors.courier}</p>}
           {/* Custom fields */}
           {customFields.map(field => (
             <div key={field.id}>

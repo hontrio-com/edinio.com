@@ -38,6 +38,8 @@ export type FanCourierAwbInput = {
   cod: number;
   content: string;
   observation: string;
+  fanboxId?: string;              // FANbox locker ID
+  fanboxRoutingLocation?: string; // FANbox routing name (used in street + pickupLocation)
 };
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
@@ -140,8 +142,14 @@ export async function createFanCourierAwb(
 ): Promise<string> {
   const token = await getFanCourierToken(config.username, config.password);
 
-  // For COD orders, Fan Courier uses "Cont Colector" service
-  const service = input.cod > 0 ? "Cont Colector" : "Standard";
+  // Determine service: FANbox for locker, Cont Colector for COD, Standard otherwise
+  const isFanbox = !!input.fanboxRoutingLocation;
+  const service = isFanbox
+    ? (input.cod > 0 ? "FANbox Cont Colector" : "FANbox")
+    : (input.cod > 0 ? "Cont Colector" : "Standard");
+
+  // FANbox: option V = pickup from locker, ePOD (X) for non-locker
+  const options = isFanbox ? ["V"] : ["X"];
 
   const body = {
     clientId: config.client_id,
@@ -169,7 +177,7 @@ export async function createFanCourierAwb(
             width: input.width ?? 1,
           },
           costCenter: "",
-          options: ["X"], // ePOD default
+          options,
         },
         recipient: {
           name: input.recipientName,
@@ -178,8 +186,9 @@ export async function createFanCourierAwb(
           address: {
             county: input.recipientCounty,
             locality: input.recipientLocality,
-            street: input.recipientStreet || "Strada",
-            streetNo: input.recipientStreetNo || "1",
+            street: isFanbox ? input.fanboxRoutingLocation! : (input.recipientStreet || "Strada"),
+            streetNo: isFanbox ? "1" : (input.recipientStreetNo || "1"),
+            pickupLocation: isFanbox ? input.fanboxRoutingLocation : undefined,
             zipCode: input.recipientZipCode || undefined,
           },
         },
@@ -225,6 +234,93 @@ export async function deleteFanCourierAwb(
     `awb?clientId=${config.client_id}&awb=${encodeURIComponent(awbNumber)}`,
     token,
   );
+}
+
+// ─── Tariff estimation ───────────────────────────────────────────────────────
+
+export async function estimateFanCourierCost(
+  config: FanCourierConfig,
+  input: {
+    recipientCounty: string;
+    recipientLocality: string;
+    weightKg: number;
+    parcels?: number;
+    declaredValue?: number;
+    service?: string;
+  },
+): Promise<{ total: number }> {
+  const token = await getFanCourierToken(config.username, config.password);
+
+  const service = input.service ?? "Standard";
+  const params = new URLSearchParams({
+    clientId: String(config.client_id),
+    "info[service]": service,
+    "info[payment]": "expeditor",
+    "info[weight]": String(input.weightKg),
+    "info[packages][parcel]": String(input.parcels ?? 1),
+    "recipient[locality]": input.recipientLocality,
+    "recipient[county]": input.recipientCounty,
+  });
+
+  if (input.declaredValue) {
+    params.set("info[declaredValue]", String(input.declaredValue));
+  }
+
+  const res = await fetch(`${BASE_URL}/reports/awb/internal-tariff?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`FAN Courier tariff: ${res.status} — ${text}`);
+  }
+
+  const json = (await res.json()) as { status: string; data?: { total?: number }; message?: string };
+  if (json.status !== "success") throw new Error(json.message ?? "FAN Courier tariff failed");
+
+  return { total: json.data?.total ?? 0 };
+}
+
+// ─── Pickup points (FANbox / CollectPoint / Office) ─────────────────────────
+
+export type FanCourierPickupPoint = {
+  id: string;
+  name: string;
+  routingLocation: string;
+  address: {
+    locality: string;
+    county: string;
+    street: string;
+    streetNo: string;
+    zipCode: string;
+  };
+  latitude: string;
+  longitude: string;
+  type: "fanbox" | "paypoint" | "office";
+};
+
+export async function getFanCourierPickupPoints(
+  username: string,
+  password: string,
+  type: "fanbox" | "paypoint" | "office",
+): Promise<FanCourierPickupPoint[]> {
+  const token = await getFanCourierToken(username, password);
+  const data = await fanGet<Record<string, unknown>[]>(`reports/pickup-points?type=${type}`, token);
+  return (data ?? []).map((p) => ({
+    id: (p.id ?? "") as string,
+    name: (p.name ?? "") as string,
+    routingLocation: (p.routingLocation ?? p.name ?? "") as string,
+    address: {
+      locality: ((p.address as Record<string, unknown> | undefined)?.locality ?? "") as string,
+      county: ((p.address as Record<string, unknown> | undefined)?.county ?? "") as string,
+      street: ((p.address as Record<string, unknown> | undefined)?.street ?? "") as string,
+      streetNo: ((p.address as Record<string, unknown> | undefined)?.streetNo ?? "") as string,
+      zipCode: ((p.address as Record<string, unknown> | undefined)?.zipCode ?? "") as string,
+    },
+    latitude: (p.latitude ?? "0") as string,
+    longitude: (p.longitude ?? "0") as string,
+    type,
+  }));
 }
 
 // ─── AWB Label (PDF) ──────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import {
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { createClient } from "@/lib/supabase/client";
+import { CourierSelector, type CourierSelection } from "./CourierSelector";
 
 const JUDETE = [
   "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
@@ -101,6 +102,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [isPending, startTransition] = useTransition();
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
+  const [hasCouriers, setHasCouriers] = useState(false);
 
   // Discount state
   const [discountInput, setDiscountInput] = useState("");
@@ -117,13 +120,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const discountAmount = appliedDiscount ? appliedDiscount.discountAmount : 0;
   const discountedSubtotal = subtotal - discountAmount;
 
-  // Shipping: free_shipping discount overrides everything; otherwise check threshold against original subtotal
+  // Shipping: courier price > flat rate fallback; free_shipping discount overrides
+  const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
   const isFreeShipping = appliedDiscount?.type === "free_shipping";
   const shipping = isFreeShipping
     ? 0
     : freeShippingThreshold && subtotal >= freeShippingThreshold
       ? 0
-      : shippingCost;
+      : baseShippingCost;
 
   const total = discountedSubtotal + extrasTotal + shipping;
 
@@ -136,6 +140,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setDiscountInput("");
     setAppliedDiscount(null);
     setDiscountError("");
+    setCourierSelection(null);
+    setHasCouriers(false);
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     document.body.style.overflow = "hidden";
@@ -151,7 +157,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     const supabase = createClient();
     supabase
       .from("store_settings")
-      .select("page_content, stripe_config, netopia_config")
+      .select("page_content, stripe_config, netopia_config, sameday_config, fan_courier_config")
       .eq("business_id", business.id)
       .single()
       .then(({ data }) => {
@@ -167,6 +173,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         setNetopiaEnabled(netopiaOk);
         if (nc?.title) setNetopiaTitle(nc.title);
         if (!stripeOk) setPaymentMethod("cash_on_delivery");
+        // Check if any courier API is configured
+        const sd = data?.sameday_config as { enabled?: boolean } | null;
+        const fc = data?.fan_courier_config as { enabled?: boolean } | null;
+        setHasCouriers(!!(sd?.enabled || fc?.enabled));
       });
   }, [open, business.id]);
 
@@ -218,7 +228,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (emailField.enabled && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Format email invalid";
     if (!form.county) e.county = "Selectati judetul";
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
-    if (form.address.trim().length < 10) e.address = "Minim 10 caractere";
+    if (form.address.trim().length < 10 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 10 caractere";
+    if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
+    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
     for (const field of customFields) {
       if (field.required) {
         if (field.type === "checkbox" && customValues[field.id] !== "da") {
@@ -249,13 +261,20 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         customer_email: form.email.trim() || undefined,
         customer_county: form.county,
         customer_city: form.city,
-        customer_address: form.address,
+        customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
+          ? courierSelection.lockerAddress
+          : form.address,
         discount_id: appliedDiscount?.id,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
         payment_method: paymentMethod,
+        selected_courier: courierSelection?.courier,
+        courier_label: courierSelection?.courierLabel,
+        delivery_type: courierSelection?.deliveryType,
+        locker_id: courierSelection?.lockerId,
+        locker_name: courierSelection?.lockerName,
       });
       if (result.error) { setErrors({ _: result.error }); return; }
 
@@ -471,6 +490,19 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </IconInput>
                 {errors.address && <p className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
               </div>
+
+              {/* Courier selection */}
+              {hasCouriers && (
+                <CourierSelector
+                  businessId={business.id}
+                  county={form.county}
+                  city={form.city}
+                  color={color}
+                  cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
+                  onSelect={setCourierSelection}
+                />
+              )}
+              {errors.courier && <p className="text-xs text-red-500 mt-0.5">{errors.courier}</p>}
 
               {/* Custom fields */}
               {customFields.map(field => (

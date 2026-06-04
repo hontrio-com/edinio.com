@@ -41,6 +41,11 @@ export async function placeOrder(data: {
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
   payment_method?: string;
+  selected_courier?: string;
+  courier_label?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
 }) {
   const supabase = await createClient();
 
@@ -65,6 +70,15 @@ export async function placeOrder(data: {
       county: data.customer_county,
       city: data.customer_city.trim(),
       address: data.customer_address.trim(),
+      ...(data.selected_courier && {
+        courier: data.selected_courier,
+        courier_label: data.courier_label,
+        delivery_type: data.delivery_type,
+      }),
+      ...(data.locker_id && {
+        locker_id: data.locker_id,
+        locker_name: data.locker_name,
+      }),
     },
     items: allItems,
     subtotal,
@@ -217,6 +231,11 @@ export async function placeCartOrder(data: {
   vat_amount?: number;
   vat_rate?: number;
   payment_method?: string;
+  selected_courier?: string;
+  courier_label?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
 }) {
   const supabase = await createClient();
 
@@ -242,6 +261,15 @@ export async function placeCartOrder(data: {
       county: data.customer_county,
       city: data.customer_city.trim(),
       address: data.customer_address.trim(),
+      ...(data.selected_courier && {
+        courier: data.selected_courier,
+        courier_label: data.courier_label,
+        delivery_type: data.delivery_type,
+      }),
+      ...(data.locker_id && {
+        locker_id: data.locker_id,
+        locker_name: data.locker_name,
+      }),
     },
     items: allItems,
     subtotal,

@@ -51,6 +51,7 @@ export type SamedayAwbInput = {
   insuredValue: number;
   observation: string;
   clientInternalReference: string;
+  lockerId?: number;          // EasyBox locker ID for locker delivery
 };
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
@@ -246,6 +247,9 @@ export async function createSamedayAwb(
   if (input.clientInternalReference) {
     parts.push(`clientInternalReference=${enc(input.clientInternalReference)}`);
   }
+  if (input.lockerId) {
+    parts.push(`lockerLastMile=${input.lockerId}`);
+  }
 
   // Parcels details — distribui greutatea egal
   for (let i = 0; i < input.packageNumber; i++) {
@@ -265,6 +269,113 @@ export async function createSamedayAwb(
   }
 
   return data.awbNumber;
+}
+
+// ─── Cost estimation ─────────────────────────────────────────────────────────
+
+export async function estimateSamedayCost(
+  config: SamedayConfig,
+  input: {
+    recipientCounty: string;
+    recipientCity: string;
+    recipientAddress?: string;
+    weightKg: number;
+    packageType?: 0 | 1 | 2;
+    packageNumber?: number;
+    cashOnDelivery?: number;
+    insuredValue?: number;
+    lockerId?: number;
+  },
+): Promise<{ amount: number; currency: string; time: number }> {
+  const token = await getSamedayToken(config.username, config.password, config.sandbox);
+  const enc = encodeURIComponent;
+  const pkgNum = input.packageNumber ?? 1;
+  const perParcelWeight = input.weightKg / Math.max(pkgNum, 1);
+
+  const parts: string[] = [
+    `pickupPoint=${config.pickup_point_id}`,
+    `contactPerson=${config.contact_person_id}`,
+    `packageType=${input.packageType ?? 0}`,
+    `packageNumber=${pkgNum}`,
+    `packageWeight=${input.weightKg}`,
+    `service=${config.service_id}`,
+    `awbPayment=1`,
+    `cashOnDelivery=${input.cashOnDelivery ?? 0}`,
+    `insuredValue=${input.insuredValue ?? 0}`,
+    `thirdPartyPickup=0`,
+    `awbRecipient[name]=${enc("Estimare")}`,
+    `awbRecipient[phoneNumber]=${enc("0700000000")}`,
+    `awbRecipient[personType]=0`,
+    `awbRecipient[countyString]=${enc(input.recipientCounty)}`,
+    `awbRecipient[cityString]=${enc(input.recipientCity)}`,
+    `awbRecipient[address]=${enc(input.recipientAddress ?? "Strada 1")}`,
+  ];
+
+  if (input.lockerId) {
+    parts.push(`lockerLastMile=${input.lockerId}`);
+  }
+
+  for (let i = 0; i < pkgNum; i++) {
+    parts.push(`parcels[${i}][weight]=${perParcelWeight.toFixed(2)}`);
+  }
+
+  const data = await samedayPost<{ amount?: number; currency?: string; time?: number }>(
+    "api/awb/estimate-cost", token, config.sandbox, parts,
+  );
+
+  return {
+    amount: data.amount ?? 0,
+    currency: data.currency ?? "RON",
+    time: data.time ?? 24,
+  };
+}
+
+// ─── Lockers (EasyBox) ───────────────────────────────────────────────────────
+
+export type SamedayLocker = {
+  lockerId: number;
+  name: string;
+  address: string;
+  city: string;
+  county: string;
+  postalCode: string;
+  lat: number;
+  lng: number;
+};
+
+export async function getSamedayLockers(
+  config: SamedayConfig,
+): Promise<SamedayLocker[]> {
+  const token = await getSamedayToken(config.username, config.password, config.sandbox);
+
+  const allLockers: SamedayLocker[] = [];
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore && page <= 100) {
+    const res = await samedayGet<{ data: Record<string, unknown>[]; pages?: number; currentPage?: number }>(
+      "api/client/lockers", token, config.sandbox,
+      { page: String(page), countPerPage: "100" },
+    );
+
+    for (const l of res.data ?? []) {
+      allLockers.push({
+        lockerId: l.lockerId as number,
+        name: (l.name ?? "") as string,
+        address: (l.address ?? "") as string,
+        city: (l.city ?? "") as string,
+        county: (l.county ?? "") as string,
+        postalCode: (l.postalCode ?? "") as string,
+        lat: Number(l.lat ?? 0),
+        lng: Number(l.lng ?? 0),
+      });
+    }
+
+    hasMore = page < (res.pages ?? 1);
+    page++;
+  }
+
+  return allLockers;
 }
 
 // ─── AWB deletion ─────────────────────────────────────────────────────────────

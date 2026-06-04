@@ -15,6 +15,10 @@ type ShippingAddress = {
   street?: string;
   street_no?: string;
   postal_code?: string;
+  courier?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
 };
 
 export function SamedayAwbModal({
@@ -82,6 +86,9 @@ export function SamedayAwbModal({
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 
     setCreating(true);
+    const lockerId = addr?.delivery_type === "locker" && addr?.locker_id
+      ? parseInt(addr.locker_id)
+      : undefined;
     const result = await createSamedayAwbAction(businessId, order.id, {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),
@@ -99,6 +106,7 @@ export function SamedayAwbModal({
       insuredValue: parseFloat(insuredValue) || 0,
       observation: observation.trim(),
       clientInternalReference: order.order_number,
+      lockerId: lockerId && !isNaN(lockerId) ? lockerId : undefined,
     });
     setCreating(false);
 

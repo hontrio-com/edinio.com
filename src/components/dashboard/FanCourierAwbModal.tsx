@@ -15,6 +15,10 @@ type ShippingAddress = {
   street?: string;
   street_no?: string;
   postal_code?: string;
+  courier?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
 };
 
 export function FanCourierAwbModal({
@@ -81,6 +85,7 @@ export function FanCourierAwbModal({
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 
     setCreating(true);
+    const isFanboxDelivery = addr?.courier === "fancourier" && addr?.delivery_type === "locker" && addr?.locker_name;
     const result = await createFanCourierAwbAction(businessId, order.id, {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),
@@ -98,6 +103,8 @@ export function FanCourierAwbModal({
       cod: codNum,
       content: content.trim() || order.order_number,
       observation: observation.trim(),
+      fanboxId: isFanboxDelivery ? addr!.locker_id : undefined,
+      fanboxRoutingLocation: isFanboxDelivery ? addr!.locker_name : undefined,
     });
     setCreating(false);
 

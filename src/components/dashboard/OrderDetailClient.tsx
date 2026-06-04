@@ -40,6 +40,11 @@ interface ShippingAddress {
   county: string;
   city: string;
   address: string;
+  courier?: string;
+  courier_label?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
 }
 
 const STATUS_OPTIONS = [
@@ -382,6 +387,12 @@ export function OrderDetailClient({
                 <div className="text-muted-foreground leading-relaxed">
                   <div>{address.address}</div>
                   <div>{address.city}, {address.county}</div>
+                  {address.courier_label && (
+                    <div className="mt-1 text-xs font-medium text-primary">
+                      {address.courier_label}
+                      {address.delivery_type === "locker" && address.locker_name && ` — ${address.locker_name}`}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -47,7 +47,14 @@ export function SamedayConfigClient({
     if (!password.trim()) return toast.error("Completeaza parola");
 
     setLoading(true);
-    const result = await loadSamedayAccountAction(username.trim(), password.trim(), sandbox);
+    let result: Awaited<ReturnType<typeof loadSamedayAccountAction>>;
+    try {
+      result = await loadSamedayAccountAction(username.trim(), password.trim(), sandbox);
+    } catch (e) {
+      setLoading(false);
+      toast.error(`Eroare la conectare: ${(e as Error).message}`);
+      return;
+    }
     setLoading(false);
 
     if ("error" in result) {
@@ -55,8 +62,8 @@ export function SamedayConfigClient({
       return;
     }
 
-    setPickupPoints(result.pickupPoints);
-    setServices(result.services);
+    setPickupPoints(result.pickupPoints ?? []);
+    setServices(result.services ?? []);
 
     if (result.pickupPoints.length > 0 && !selectedPickupPointId) {
       const first = result.pickupPoints[0];

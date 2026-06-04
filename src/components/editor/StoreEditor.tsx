@@ -20,7 +20,7 @@ interface Social { facebook?: string; instagram?: string; tiktok?: string; youtu
 interface Features { floating_whatsapp?: boolean; floating_call?: boolean; }
 
 interface PageContent {
-  announcement_bar?: { enabled: boolean; text: string; bg_color: string; };
+  announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number; };
   trust_badges_enabled?: boolean;
   trust_badges?: Array<{ icon: string; title: string; desc: string; }>;
   show_trust_strip_on_store?: boolean;
@@ -526,6 +526,18 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
                     onChange={e => setPageContent(p => ({ ...p, announcement_bar: { ...p.announcement_bar!, bg_color: e.target.value } }))}
                     className="w-8 h-8 rounded border border-border cursor-pointer" />
                   <span className="text-xs text-muted-foreground">Culoare fundal banner</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Viteza de redare</span>
+                    <span className="text-xs font-medium text-foreground">
+                      {["Foarte lent", "Lent", "Normal", "Rapid", "Foarte rapid"][((pageContent.announcement_bar.speed ?? 3) - 1)]}
+                    </span>
+                  </div>
+                  <input type="range" min={1} max={5} step={1}
+                    value={pageContent.announcement_bar.speed ?? 3}
+                    onChange={e => setPageContent(p => ({ ...p, announcement_bar: { ...p.announcement_bar!, speed: Number(e.target.value) } }))}
+                    className="w-full h-1.5 accent-primary cursor-pointer" />
                 </div>
               </div>
             )}

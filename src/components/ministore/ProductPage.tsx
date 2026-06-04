@@ -25,7 +25,7 @@ interface FaqItem { q: string; a: string; }
 interface SpecItem { label: string; value: string; }
 
 interface PageContent {
-  announcement_bar?: { enabled: boolean; text: string; bg_color: string; };
+  announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number; };
   trust_badges_enabled?: boolean;
   trust_badges?: TrustBadge[];
   benefits_section?: { enabled: boolean; title: string; items: BenefitItem[]; };
@@ -557,7 +557,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           style={{ background: announcementBar.bg_color || color }}>
           <div className="flex whitespace-nowrap">
             {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white">
+              <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white"
+                style={{ animationDuration: `${[200, 150, 120, 80, 50][(announcementBar.speed ?? 3) - 1]}s` }}>
                 {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               </span>
             ))}

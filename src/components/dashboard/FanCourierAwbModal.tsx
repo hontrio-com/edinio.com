@@ -85,7 +85,7 @@ export function FanCourierAwbModal({
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 
     setCreating(true);
-    const isFanboxDelivery = addr?.courier === "fancourier" && addr?.delivery_type === "locker" && addr?.locker_name;
+    const isFanboxDelivery = (addr?.courier === "fan-courier" || addr?.courier === "fancourier") && addr?.delivery_type === "locker" && addr?.locker_name;
     const result = await createFanCourierAwbAction(businessId, order.id, {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),

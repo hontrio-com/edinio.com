@@ -966,10 +966,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Metode de livrare</p>
                 <div className="space-y-2">
                   {SHIPPING_METHODS.map((method) => {
+                    const needsIntegration = method.id !== "own" && method.id !== "pickup";
                     const isIntegrated = activeCourierIds.includes(method.id);
+                    const canToggle = isIntegrated || !needsIntegration;
                     const zone = shippingZones[method.id] ?? { enabled: false, price: method.defaultPrice };
                     return (
-                      <div key={method.id} className={`flex items-center gap-3 p-3.5 rounded-xl border transition-colors ${!isIntegrated ? "opacity-50 bg-surface border-border" : zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
+                      <div key={method.id} className={`flex items-center gap-3 p-3.5 rounded-xl border transition-colors ${!canToggle ? "opacity-50 bg-surface border-border" : zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
                         {/* Logo or icon */}
                         <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-background border border-border">
                           {method.logo ? (
@@ -982,7 +984,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         {/* Label + not configured hint */}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground">{method.label}</p>
-                          {!isIntegrated && method.id !== "own" && method.id !== "pickup" && (
+                          {needsIntegration && !isIntegrated && (
                             <a href="/dashboard/features" className="text-[10px] text-primary hover:underline whitespace-nowrap">
                               Configureaza integrarea
                             </a>
@@ -1000,7 +1002,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                               const price = parseFloat(e.target.value) || 0;
                               setShippingZones(z => ({ ...z, [method.id]: { ...zone, price } }));
                             }}
-                            disabled={!zone.enabled || !isIntegrated}
+                            disabled={!zone.enabled || !canToggle}
                             className="w-20 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground text-right focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           />
                           <span className="text-xs text-muted-foreground w-6">lei</span>
@@ -1009,11 +1011,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         {/* Toggle */}
                         <button
                           type="button"
-                          disabled={!isIntegrated}
+                          disabled={!canToggle}
                           onClick={() => setShippingZones(z => ({ ...z, [method.id]: { ...zone, enabled: !zone.enabled } }))}
-                          className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:cursor-not-allowed ${zone.enabled && isIntegrated ? "bg-primary" : "bg-muted-foreground/30"}`}
+                          className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:cursor-not-allowed ${zone.enabled && canToggle ? "bg-primary" : "bg-muted-foreground/30"}`}
                         >
-                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${zone.enabled && isIntegrated ? "translate-x-4" : "translate-x-0.5"}`} />
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${zone.enabled && canToggle ? "translate-x-4" : "translate-x-0.5"}`} />
                         </button>
                       </div>
                     );

@@ -7,7 +7,7 @@ import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfi
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ShippingOption = {
-  courier: string;        // "sameday" | "fancourier" | "cargus" | "dpd" | "colete" | "woot" | "flat"
+  courier: string;        // "sameday" | "fan-courier" | "cargus" | "dpd" | "colete" | "woot" | "own" | "pickup"
   courierLabel: string;   // Display name
   deliveryType: "address" | "locker";
   price: number;
@@ -24,6 +24,19 @@ export type LockerItem = {
   lng: number;
 };
 
+// ─── Courier labels ─────────────────────────────────────────────────────────
+
+const COURIER_LABELS: Record<string, string> = {
+  "fan-courier": "FAN Courier",
+  sameday: "Sameday Courier",
+  dpd: "DPD",
+  cargus: "Cargus",
+  woot: "Woot",
+  colete: "Colete Online",
+  own: "Curier propriu",
+  pickup: "Ridicare personala",
+};
+
 // ─── Get shipping options ────────────────────────────────────────────────────
 
 export async function getShippingOptions(
@@ -38,93 +51,137 @@ export async function getShippingOptions(
   const supabase = await createClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, default_shipping_cost")
+    .select("sameday_config, fan_courier_config, default_shipping_cost, shipping_zones")
     .eq("business_id", businessId)
     .single();
 
-  if (!settings) return [{ courier: "flat", courierLabel: "Curier standard", deliveryType: "address", price: 0 }];
+  if (!settings) return [];
+
+  const zones = (settings.shipping_zones ?? {}) as Record<string, { enabled: boolean; price: number; label?: string }>;
+  const enabledZones = Object.entries(zones).filter(([, z]) => z.enabled);
+
+  // No courier enabled in shipping_zones — nothing to show
+  if (enabledZones.length === 0) return [];
 
   const weight = destination.weightKg && destination.weightKg > 0 ? destination.weightKg : 1;
   const options: ShippingOption[] = [];
   const promises: Promise<void>[] = [];
 
-  // Sameday
-  const samedayConfig = settings.sameday_config as SamedayConfig | null;
-  if (samedayConfig?.enabled && samedayConfig.username && samedayConfig.pickup_point_id) {
-    // Address delivery
-    promises.push(
-      estimateSamedayCost(samedayConfig, {
-        recipientCounty: destination.county,
-        recipientCity: destination.city,
-        weightKg: weight,
-        cashOnDelivery: destination.cod ?? 0,
-      })
-        .then((r) => {
-          options.push({
-            courier: "sameday",
-            courierLabel: samedayConfig.service_name || "Sameday Courier",
-            deliveryType: "address",
-            price: Math.round(r.amount * 100) / 100,
-            estimatedDays: r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`,
-          });
-          // Also offer locker delivery
-          options.push({
-            courier: "sameday",
-            courierLabel: "Sameday EasyBox (locker)",
-            deliveryType: "locker",
-            price: Math.round(r.amount * 100) / 100,
-            estimatedDays: r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`,
-          });
-        })
-        .catch((err) => {
-          console.error("[shipping] Sameday estimate failed:", err.message);
-        }),
-    );
-  }
-
-  // FanCourier
-  const fanConfig = settings.fan_courier_config as FanCourierConfig | null;
-  if (fanConfig?.enabled && fanConfig.username && fanConfig.client_id) {
-    const service = destination.cod && destination.cod > 0 ? "Cont Colector" : "Standard";
-    promises.push(
-      estimateFanCourierCost(fanConfig, {
-        recipientCounty: destination.county,
-        recipientLocality: destination.city,
-        weightKg: weight,
-        service,
-      })
-        .then((r) => {
-          options.push({
-            courier: "fancourier",
-            courierLabel: `FAN Courier ${service}`,
-            deliveryType: "address",
-            price: Math.round(r.total * 100) / 100,
-          });
-          // Also offer FANbox
-          options.push({
-            courier: "fancourier",
-            courierLabel: "FAN Courier FANbox (locker)",
-            deliveryType: "locker",
-            price: Math.round(r.total * 100) / 100,
-          });
-        })
-        .catch((err) => {
-          console.error("[shipping] FanCourier estimate failed:", err.message);
-        }),
-    );
+  for (const [courierId, zone] of enabledZones) {
+    if (courierId === "sameday") {
+      const samedayConfig = settings.sameday_config as SamedayConfig | null;
+      if (samedayConfig?.enabled && samedayConfig.username && samedayConfig.pickup_point_id) {
+        // Has API config — try real tariff
+        promises.push(
+          estimateSamedayCost(samedayConfig, {
+            recipientCounty: destination.county,
+            recipientCity: destination.city,
+            weightKg: weight,
+            cashOnDelivery: destination.cod ?? 0,
+          })
+            .then((r) => {
+              const price = Math.round(r.amount * 100) / 100;
+              const days = r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`;
+              options.push({
+                courier: "sameday",
+                courierLabel: samedayConfig.service_name || "Sameday Courier",
+                deliveryType: "address",
+                price,
+                estimatedDays: days,
+              });
+              options.push({
+                courier: "sameday",
+                courierLabel: "Sameday EasyBox (locker)",
+                deliveryType: "locker",
+                price,
+                estimatedDays: days,
+              });
+            })
+            .catch((err) => {
+              console.error("[shipping] Sameday estimate failed:", err.message);
+              // Fallback to flat price from shipping_zones
+              options.push({
+                courier: "sameday",
+                courierLabel: zone.label || "Sameday Courier",
+                deliveryType: "address",
+                price: zone.price,
+              });
+            }),
+        );
+      } else {
+        // No API config — flat price only
+        options.push({
+          courier: "sameday",
+          courierLabel: zone.label || "Sameday Courier",
+          deliveryType: "address",
+          price: zone.price,
+        });
+      }
+    } else if (courierId === "fan-courier") {
+      const fanConfig = settings.fan_courier_config as FanCourierConfig | null;
+      if (fanConfig?.enabled && fanConfig.username && fanConfig.client_id) {
+        const service = destination.cod && destination.cod > 0 ? "Cont Colector" : "Standard";
+        promises.push(
+          estimateFanCourierCost(fanConfig, {
+            recipientCounty: destination.county,
+            recipientLocality: destination.city,
+            weightKg: weight,
+            service,
+          })
+            .then((r) => {
+              const price = Math.round(r.total * 100) / 100;
+              options.push({
+                courier: "fan-courier",
+                courierLabel: `FAN Courier ${service}`,
+                deliveryType: "address",
+                price,
+              });
+              options.push({
+                courier: "fan-courier",
+                courierLabel: "FAN Courier FANbox (locker)",
+                deliveryType: "locker",
+                price,
+              });
+            })
+            .catch((err) => {
+              console.error("[shipping] FanCourier estimate failed:", err.message);
+              options.push({
+                courier: "fan-courier",
+                courierLabel: zone.label || "FAN Courier",
+                deliveryType: "address",
+                price: zone.price,
+              });
+            }),
+        );
+      } else {
+        options.push({
+          courier: "fan-courier",
+          courierLabel: zone.label || "FAN Courier",
+          deliveryType: "address",
+          price: zone.price,
+        });
+      }
+    } else if (courierId === "pickup") {
+      options.push({
+        courier: "pickup",
+        courierLabel: zone.label || "Ridicare personala",
+        deliveryType: "address",
+        price: 0,
+      });
+    } else {
+      // Generic courier (dpd, cargus, woot, colete, own) — flat price
+      options.push({
+        courier: courierId,
+        courierLabel: zone.label || COURIER_LABELS[courierId] || courierId,
+        deliveryType: "address",
+        price: zone.price,
+      });
+    }
   }
 
   await Promise.all(promises);
 
-  // If no courier APIs succeeded, use flat rate
-  if (options.length === 0) {
-    return [{
-      courier: "flat",
-      courierLabel: "Curier standard",
-      deliveryType: "address",
-      price: Number(settings.default_shipping_cost ?? 0),
-    }];
-  }
+  if (options.length === 0) return [];
 
   // Sort: address first, then lockers, by price
   return options.sort((a, b) => {
@@ -174,7 +231,7 @@ export async function getLockers(
     }
   }
 
-  if (courier === "fancourier") {
+  if (courier === "fan-courier") {
     const config = settings.fan_courier_config as FanCourierConfig | null;
     if (!config?.enabled) return [];
     try {

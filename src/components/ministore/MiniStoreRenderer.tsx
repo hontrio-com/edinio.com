@@ -230,7 +230,7 @@ function CartCheckoutModal({
     const supabase = createClient();
     supabase
       .from("store_settings")
-      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config, netopia_config, sameday_config, fan_courier_config")
+      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config, netopia_config, shipping_zones")
       .eq("business_id", businessId)
       .single()
       .then(({ data }) => {
@@ -252,9 +252,10 @@ function CartCheckoutModal({
         setNetopiaEnabled(netopiaOk);
         if (nc?.title) setNetopiaTitle(nc.title);
         if (!stripeOk) setPaymentMethod("cash_on_delivery");
-        const sd = data?.sameday_config as { enabled?: boolean } | null;
-        const fc = data?.fan_courier_config as { enabled?: boolean } | null;
-        setHasCouriers(!!(sd?.enabled || fc?.enabled));
+        // Check if any courier is enabled in shipping_zones (Settings > Livrare)
+        const zones = data?.shipping_zones as Record<string, { enabled?: boolean }> | null;
+        const anyEnabled = zones && Object.values(zones).some(z => z?.enabled);
+        setHasCouriers(!!anyEnabled);
       });
   }, [open, businessId]);
 

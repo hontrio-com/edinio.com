@@ -169,19 +169,30 @@ export async function loadSamedayAccount(
       samedayGet<{ data: Record<string, unknown>[] }>("api/client/services", token, sandbox),
     ]);
 
-    // Normalize pickup points — contactPersons may be missing or named differently
-    const pickupPoints: SamedayPickupPoint[] = (ppRes.data ?? []).map((pp: Record<string, unknown>) => ({
-      id: pp.id as number,
-      alias: (pp.alias ?? pp.name ?? "") as string,
-      address: pp.address as SamedayPickupPoint["address"] ?? { name: "", street: "", city: { name: "" }, county: { name: "" } },
-      contactPersons: Array.isArray(pp.contactPersons)
-        ? pp.contactPersons.map((cp: Record<string, unknown>) => ({
-            id: cp.id as number,
-            name: (cp.name ?? cp.fullName ?? "") as string,
-            isDefault: (cp.isDefault ?? cp.default ?? false) as boolean,
-          }))
-        : [],
-    }));
+    // Normalize pickup points — structure varies between Sameday API versions
+    const pickupPoints: SamedayPickupPoint[] = (ppRes.data ?? []).map((pp: Record<string, unknown>) => {
+      const rawAddr = (pp.address ?? {}) as Record<string, unknown>;
+      const rawCity = rawAddr.city;
+      const rawCounty = rawAddr.county;
+
+      return {
+        id: pp.id as number,
+        alias: (pp.alias ?? pp.name ?? "") as string,
+        address: {
+          name: (rawAddr.name ?? rawAddr.street ?? "") as string,
+          street: (rawAddr.street ?? rawAddr.name ?? "") as string,
+          city: { name: typeof rawCity === "string" ? rawCity : (rawCity as Record<string, unknown>)?.name as string ?? "" },
+          county: { name: typeof rawCounty === "string" ? rawCounty : (rawCounty as Record<string, unknown>)?.name as string ?? "" },
+        },
+        contactPersons: Array.isArray(pp.contactPersons)
+          ? pp.contactPersons.map((cp: Record<string, unknown>) => ({
+              id: cp.id as number,
+              name: (cp.name ?? cp.fullName ?? "") as string,
+              isDefault: (cp.isDefault ?? cp.default ?? false) as boolean,
+            }))
+          : [],
+      };
+    });
 
     // Normalize services — API uses serviceCode, not code
     const services: SamedayService[] = (svcRes.data ?? []).map((s: Record<string, unknown>) => ({

@@ -237,7 +237,7 @@ export function SamedayConfigClient({
               >
                 {pickupPoints.map(pp => (
                   <option key={pp.id} value={pp.id}>
-                    {pp.alias} — {pp.address.city.name}, {pp.address.county.name}
+                    {pp.alias} — {pp.address?.city?.name ?? ""}{pp.address?.county?.name ? `, ${pp.address.county.name}` : ""}
                   </option>
                 ))}
               </select>

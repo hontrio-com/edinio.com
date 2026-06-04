@@ -991,11 +991,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       {/* Announcement bar */}
       {showAnnouncementOnStore && announcementBar && (
         <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
-          style={{ background: announcementBar.bg_color || color }}>
+          style={{ background: announcementBar.bg_color || color, "--marquee-speed": `${[200, 150, 120, 80, 50][(announcementBar.speed ?? 3) - 1]}s` } as React.CSSProperties}>
           <div className="flex whitespace-nowrap">
             {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white"
-                style={{ animationDuration: `${[200, 150, 120, 80, 50][(announcementBar.speed ?? 3) - 1]}s` }}>
+              <span key={i} className="inline-block text-xs font-medium tracking-wide animate-marquee text-white">
                 {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               </span>
             ))}

@@ -34,7 +34,7 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
     ? await admin.from("orders").select("id, order_number, total, status, created_at, business_id").in("business_id", bizIds).order("created_at", { ascending: false }).limit(20)
     : { data: [] };
 
-  const totalRevenue = (invoices ?? []).filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
+  const totalRevenue = (invoices ?? []).filter((i) => i.status === "paid" && i.plan !== "domain").reduce((s, i) => s + i.amount, 0);
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl mx-auto">

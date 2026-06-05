@@ -35,8 +35,8 @@ export default async function AdminPage() {
     admin.from("support_tickets").select("*", { count: "exact", head: true }).in("status", ["open", "in_progress"]),
     admin.from("users_profile").select("id, full_name, plan, role, created_at").order("created_at", { ascending: false }).limit(8),
     admin.from("support_tickets").select("id, subject, status, priority, created_at").order("created_at", { ascending: false }).limit(6),
-    admin.from("invoices").select("amount, created_at").eq("status", "paid").order("created_at", { ascending: false }),
-    admin.from("invoices").select("amount").eq("status", "paid").gte("created_at", thirtyDaysAgo),
+    admin.from("invoices").select("amount, created_at, plan").eq("status", "paid").order("created_at", { ascending: false }),
+    admin.from("invoices").select("amount").eq("status", "paid").neq("plan", "domain").gte("created_at", thirtyDaysAgo),
     admin.from("users_profile").select("plan"),
     // Payment health: users with expired plans
     admin.from("users_profile").select("id").neq("plan", "free").lt("plan_expires_at", now.toISOString()),
@@ -46,9 +46,10 @@ export default async function AdminPage() {
     admin.from("admin_audit_log").select("id, action, target_type, created_at").order("created_at", { ascending: false }).limit(5),
   ]);
 
-  // Revenue calculations
-  const totalRevenue = (allInvoices ?? []).reduce((s, r) => s + r.amount, 0);
-  const revenueThisMonth = (allInvoices ?? [])
+  // Revenue calculations — exclude domain invoices (one-time purchases)
+  const subscriptionInvoices = (allInvoices ?? []).filter((i) => i.plan !== "domain");
+  const totalRevenue = subscriptionInvoices.reduce((s, r) => s + r.amount, 0);
+  const revenueThisMonth = subscriptionInvoices
     .filter((i) => i.created_at >= monthStart)
     .reduce((s, r) => s + r.amount, 0);
   const mrr = (mrrInvoices ?? []).reduce((s, r) => s + r.amount, 0);
@@ -69,7 +70,7 @@ export default async function AdminPage() {
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     revenueByMonth[key] = 0;
   }
-  for (const inv of allInvoices ?? []) {
+  for (const inv of subscriptionInvoices) {
     const key = inv.created_at.slice(0, 7);
     if (key in revenueByMonth) revenueByMonth[key] += inv.amount;
   }
@@ -99,7 +100,7 @@ export default async function AdminPage() {
         recentTickets={recentTickets ?? []}
         revenueChart={revenueChart}
         usersByPlan={usersByPlan}
-        allInvoices={(allInvoices ?? []).map((i) => ({ amount: i.amount, created_at: i.created_at }))}
+        allInvoices={subscriptionInvoices.map((i) => ({ amount: i.amount, created_at: i.created_at }))}
         recentAudit={(recentAudit ?? []).map((a) => ({ action: a.action, target_type: a.target_type, created_at: a.created_at }))}
       />
     </div>

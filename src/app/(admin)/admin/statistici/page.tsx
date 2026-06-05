@@ -37,7 +37,7 @@ export default async function AdminStatsPage() {
   ] = await Promise.all([
     admin.from("users_profile").select("id, plan, created_at").gte("created_at", twelveMonthsAgo.toISOString()),
     admin.from("orders").select("id, total, status, created_at, business_id").gte("created_at", twelveMonthsAgo.toISOString()),
-    admin.from("invoices").select("id, amount, status, created_at").gte("created_at", twelveMonthsAgo.toISOString()),
+    admin.from("invoices").select("id, amount, status, created_at, plan").gte("created_at", twelveMonthsAgo.toISOString()),
     admin.from("businesses").select("id, store_name, business_name, niche_id, type"),
     admin.from("support_tickets").select("id, created_at").gte("created_at", twelveMonthsAgo.toISOString()),
   ]);
@@ -62,7 +62,7 @@ export default async function AdminStatsPage() {
 
   // Invoice revenue by month (paid only)
   const invoicesByMonth = months.map((m) => {
-    const mi = (invoices ?? []).filter((i) => monthKey(i.created_at) === m && i.status === "paid");
+    const mi = (invoices ?? []).filter((i) => monthKey(i.created_at) === m && i.status === "paid" && i.plan !== "domain");
     return {
       month: m,
       count: mi.length,
@@ -96,6 +96,7 @@ export default async function AdminStatsPage() {
     .from("invoices")
     .select("amount")
     .eq("status", "paid")
+    .neq("plan", "domain")
     .gte("created_at", thirtyDaysAgo.toISOString());
   const mrr = (recentPaidInvoices ?? []).reduce((s, i) => s + (i.amount ?? 0), 0) / 100;
   const arr = mrr * 12;
@@ -108,7 +109,7 @@ export default async function AdminStatsPage() {
   const mrrByPlan = (activePaidProfiles ?? []).reduce((s, p) => s + (PLAN_PRICES[p.plan] ?? 0), 0);
 
   // ARPU = total revenue / total paying users
-  const totalPaidInvoices = (invoices ?? []).filter((i) => i.status === "paid");
+  const totalPaidInvoices = (invoices ?? []).filter((i) => i.status === "paid" && i.plan !== "domain");
   const totalInvRevenue = totalPaidInvoices.reduce((s, i) => s + (i.amount ?? 0), 0) / 100;
   const uniquePayers = new Set(totalPaidInvoices.map((i) => i.id)).size; // approximate
   const arpu = uniquePayers > 0 ? totalInvRevenue / uniquePayers : 0;

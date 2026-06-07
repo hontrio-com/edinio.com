@@ -31,20 +31,21 @@ export default async function OrderDetailPage({ params }: Props) {
 
   if (!order) notFound();
 
-  const { data: biz } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("id", order.business_id)
-    .eq("user_id", user.id)
-    .single();
+  const [{ data: biz }, { data: settings }] = await Promise.all([
+    supabase
+      .from("businesses")
+      .select("id")
+      .eq("id", order.business_id)
+      .eq("user_id", user.id)
+      .single(),
+    supabase
+      .from("store_settings")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config")
+      .eq("business_id", order.business_id)
+      .single(),
+  ]);
 
   if (!biz) notFound();
-
-  const { data: settings } = await supabase
-    .from("store_settings")
-    .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config")
-    .eq("business_id", biz.id)
-    .single();
 
   const sbConfig = settings?.smartbill_config as SmartbillConfig | null;
   const smartbillEnabled = sbConfig?.enabled === true;

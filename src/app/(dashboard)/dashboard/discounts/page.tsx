@@ -10,7 +10,7 @@ export default async function DiscountsPage() {
 
   const { data: row } = await supabase
     .from("businesses")
-    .select("id, discounts(*)")
+    .select("id, discounts(id, business_id, code, type, value, min_order_amount, max_uses, uses_count, is_active, expires_at, created_at, updated_at)")
     .eq("user_id", user.id)
     .limit(1)
     .single();

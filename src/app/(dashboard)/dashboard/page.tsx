@@ -117,7 +117,7 @@ export default async function DashboardPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("*")
+    .select("id, slug, custom_domain, business_name, is_published")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)

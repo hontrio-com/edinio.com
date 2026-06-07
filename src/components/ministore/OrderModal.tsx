@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User, Phone, MapPin, Home, Loader2, Banknote, CreditCard,
   Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package, Mail,
+  Upload, Palette,
 } from "lucide-react";
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
@@ -23,6 +24,20 @@ export interface QuantityTier {
   qty: number;
   price: number;   // total bundle price
   badge?: string;
+}
+
+export interface CustomizationFieldDef {
+  id: string;
+  type: "text" | "textarea" | "image" | "select" | "color";
+  label: string;
+  placeholder?: string;
+  required: boolean;
+  max_length?: number;
+  max_files?: number;
+  max_file_size_mb?: number;
+  options?: string[];
+  default_color?: string;
+  helper_text?: string;
 }
 
 interface CheckoutConfig {
@@ -65,6 +80,7 @@ interface Props {
   shippingCost: number;
   freeShippingThreshold: number | null;
   tiers?: QuantityTier[];
+  customizationFields?: CustomizationFieldDef[];
 }
 
 const inputCls = "flex-1 px-3 py-2.5 text-sm text-gray-800 bg-white placeholder:text-gray-400 focus:outline-none";
@@ -82,9 +98,10 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, tiers }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, tiers, customizationFields }: Props) {
   const color = business.primary_color;
   const hasTiers = tiers && tiers.length > 0;
+  const hasCustomization = customizationFields && customizationFields.length > 0;
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
   const [stripeEnabled, setStripeEnabled] = useState(false);
   const [netopiaEnabled, setNetopiaEnabled] = useState(false);
@@ -104,6 +121,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
+
+  // Customization state
+  const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
+  const [custUploading, setCustUploading] = useState<Record<string, boolean>>({});
 
   // Discount state
   const [discountInput, setDiscountInput] = useState("");
@@ -142,6 +163,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setDiscountError("");
     setCourierSelection(null);
     setHasCouriers(false);
+    setCustValues(() => {
+      const defaults: Record<string, string | string[]> = {};
+      for (const f of customizationFields ?? []) {
+        if (f.type === "color") defaults[f.id] = f.default_color ?? "#000000";
+        else if (f.type === "image") defaults[f.id] = [];
+        else defaults[f.id] = "";
+      }
+      return defaults;
+    });
+    setCustUploading({});
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     document.body.style.overflow = "hidden";
@@ -240,6 +271,17 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         }
       }
     }
+    // Customization field validation
+    for (const field of customizationFields ?? []) {
+      if (field.required) {
+        const val = custValues[field.id];
+        if (field.type === "image") {
+          if (!val || (Array.isArray(val) && val.length === 0)) e[`cust_${field.id}`] = "Incarca cel putin o imagine";
+        } else if (!val || (typeof val === "string" && !val.trim())) {
+          e[`cust_${field.id}`] = "Camp obligatoriu";
+        }
+      }
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -249,6 +291,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!validate()) return;
     const unitPrice = hasTiers ? tiers![selectedTierIdx].price / tiers![selectedTierIdx].qty : product.price;
     startTransition(async () => {
+      // Build customization payload
+      const customizationPayload = hasCustomization
+        ? Object.fromEntries(
+            (customizationFields ?? []).map(f => [
+              f.id,
+              { type: f.type, label: f.label, value: custValues[f.id] ?? (f.type === "image" ? [] : "") },
+            ])
+          )
+        : undefined;
+
       const result = await placeOrder({
         business_id: business.id,
         product_id: product.id,
@@ -269,6 +321,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         discount_amount: discountAmount,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
+        customization: customizationPayload,
         payment_method: paymentMethod,
         selected_courier: courierSelection?.courier,
         courier_label: courierSelection?.courierLabel,
@@ -416,6 +469,143 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       <Plus size={12} />
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Customization fields */}
+              {hasCustomization && (
+                <div className="space-y-3 border border-gray-200 rounded-xl p-3.5 bg-gray-50/50">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                    <Palette size={13} />
+                    Personalizeaza produsul
+                  </p>
+                  {customizationFields!.map(field => (
+                    <div key={field.id}>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">
+                        {field.label || "Camp"} {field.required && <span className="text-red-500">*</span>}
+                      </label>
+
+                      {field.type === "text" && (
+                        <input
+                          value={(custValues[field.id] as string) ?? ""}
+                          onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
+                          placeholder={field.placeholder ?? ""}
+                          maxLength={field.max_length}
+                          className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400"
+                        />
+                      )}
+
+                      {field.type === "textarea" && (
+                        <div>
+                          <textarea
+                            value={(custValues[field.id] as string) ?? ""}
+                            onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
+                            placeholder={field.placeholder ?? ""}
+                            maxLength={field.max_length}
+                            rows={3}
+                            className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 resize-none"
+                          />
+                          {field.max_length && (
+                            <p className="text-[11px] text-gray-400 mt-0.5 text-right">
+                              {((custValues[field.id] as string) ?? "").length}/{field.max_length}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {field.type === "image" && (
+                        <div className="space-y-2">
+                          {/* Uploaded thumbnails */}
+                          {Array.isArray(custValues[field.id]) && (custValues[field.id] as string[]).length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {(custValues[field.id] as string[]).map((url, imgIdx) => (
+                                <div key={imgIdx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-white group">
+                                  <img src={url} alt={`Upload ${imgIdx + 1}`} className="w-full h-full object-cover" />
+                                  <button type="button" onClick={() => {
+                                    const current = (custValues[field.id] as string[]).filter((_, i) => i !== imgIdx);
+                                    setCustValues(v => ({ ...v, [field.id]: current }));
+                                  }} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Upload button */}
+                          {(!Array.isArray(custValues[field.id]) || (custValues[field.id] as string[]).length < (field.max_files ?? 5)) && (
+                            <label className="flex items-center gap-2 px-3 py-2.5 bg-white border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-colors">
+                              {custUploading[field.id]
+                                ? <Loader2 size={16} className="text-gray-500 animate-spin" />
+                                : <Upload size={16} className="text-gray-500" />}
+                              <span className="text-sm text-gray-600">
+                                {custUploading[field.id] ? "Se incarca..." : "Incarca imagine"}
+                              </span>
+                              <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+                                const files = e.target.files;
+                                if (!files?.length) return;
+                                setCustUploading(u => ({ ...u, [field.id]: true }));
+                                const maxSize = (field.max_file_size_mb ?? 10) * 1024 * 1024;
+                                const maxFiles = field.max_files ?? 5;
+                                const current = (custValues[field.id] as string[]) ?? [];
+                                const remaining = maxFiles - current.length;
+                                const toUpload = Array.from(files).slice(0, remaining);
+                                const urls: string[] = [];
+                                for (const f of toUpload) {
+                                  if (f.size > maxSize) continue;
+                                  const fd = new FormData();
+                                  fd.append("file", f);
+                                  fd.append("business_id", business.id);
+                                  const res = await fetch("/api/upload-customization", { method: "POST", body: fd });
+                                  const data = await res.json() as { url?: string };
+                                  if (data.url) urls.push(data.url);
+                                }
+                                setCustValues(v => ({ ...v, [field.id]: [...(v[field.id] as string[] ?? []), ...urls] }));
+                                setCustUploading(u => ({ ...u, [field.id]: false }));
+                                e.target.value = "";
+                              }} />
+                            </label>
+                          )}
+                          <p className="text-[11px] text-gray-400">
+                            Max {field.max_files ?? 5} imagini, {field.max_file_size_mb ?? 10}MB/fisier
+                          </p>
+                        </div>
+                      )}
+
+                      {field.type === "select" && (
+                        <select
+                          value={(custValues[field.id] as string) ?? ""}
+                          onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
+                          className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400"
+                        >
+                          <option value="">Selecteaza...</option>
+                          {(field.options ?? []).map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      {field.type === "color" && (
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={(custValues[field.id] as string) ?? field.default_color ?? "#000000"}
+                            onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
+                            className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-600 font-mono">
+                            {(custValues[field.id] as string) ?? field.default_color ?? "#000000"}
+                          </span>
+                        </div>
+                      )}
+
+                      {field.helper_text && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">{field.helper_text}</p>
+                      )}
+                      {errors[`cust_${field.id}`] && (
+                        <p className="text-xs text-red-500 mt-0.5">{errors[`cust_${field.id}`]}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 

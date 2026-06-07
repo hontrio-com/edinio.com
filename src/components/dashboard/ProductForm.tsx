@@ -25,6 +25,25 @@ export interface CategoryOption {
 
 interface SpecRow { label: string; value: string; }
 
+export interface CustomizationField {
+  id: string;
+  type: "text" | "textarea" | "image" | "select" | "color";
+  label: string;
+  placeholder: string;
+  required: boolean;
+  max_length?: number;
+  max_files?: number;
+  max_file_size_mb?: number;
+  options?: string[];
+  default_color?: string;
+  helper_text?: string;
+}
+
+interface CustomizationState {
+  enabled: boolean;
+  fields: CustomizationField[];
+}
+
 interface QuantityTiers {
   enabled: boolean;
   mode: "fixed" | "percent";
@@ -82,6 +101,7 @@ interface FormState {
   seo_title: string;
   seo_description: string;
   variants: VariantsState;
+  customization: CustomizationState;
 }
 
 function toSlug(name: string) {
@@ -159,6 +179,7 @@ const EMPTY_FORM: FormState = {
   dimensions: { length: "", width: "", height: "" },
   seo_title: "", seo_description: "",
   variants: { enabled: false, options: [], combinations: [] },
+  customization: { enabled: false, fields: [] },
 };
 
 type PageSections = {
@@ -169,6 +190,7 @@ type PageSections = {
   dimensions?: { length: number; width: number; height: number };
   seo?: { title: string; description: string };
   variants?: { enabled: boolean; options: Omit<VariantOption, "inputValue">[]; combinations: VariantCombination[] };
+  customization?: { enabled: boolean; fields: CustomizationField[] };
 };
 
 function productToForm(p: Product): FormState {
@@ -219,6 +241,9 @@ function productToForm(p: Product): FormState {
           combinations: vars.combinations,
         }
       : { enabled: false, options: [], combinations: [] },
+    customization: ps.customization
+      ? { enabled: ps.customization.enabled, fields: ps.customization.fields }
+      : { enabled: false, fields: [] },
   };
 }
 
@@ -581,6 +606,10 @@ export function ProductForm({ businessId, product, categories }: Props) {
           options: form.variants.options.map(({ inputValue: _iv, ...o }) => o),
           combinations: form.variants.combinations,
         },
+        customization: {
+          enabled: form.customization.enabled,
+          fields: form.customization.fields,
+        },
       },
     };
 
@@ -938,6 +967,181 @@ export function ProductForm({ businessId, product, categories }: Props) {
                         Pret gol = foloseste pretul de baza al produsului. Stocul se gestioneaza per varianta.
                       </p>
                     </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Customization */}
+            <div className={sectionCls}>
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Personalizare produs</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Clientii pot incarca imagini, text etc.</p>
+                </div>
+                <button type="button"
+                  onClick={() => set("customization", { ...form.customization, enabled: !form.customization.enabled })}
+                  className={cn("relative w-10 h-6 rounded-full transition-colors focus:outline-none flex-shrink-0",
+                    form.customization.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+                  <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                    form.customization.enabled ? "translate-x-4" : "translate-x-0")} />
+                </button>
+              </div>
+              {form.customization.enabled && (
+                <div className="px-5 py-4 space-y-4">
+                  {form.customization.fields.map((field, idx) => (
+                    <div key={field.id} className="border border-border rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Camp {idx + 1}
+                        </span>
+                        <button type="button" onClick={() => {
+                          set("customization", {
+                            ...form.customization,
+                            fields: form.customization.fields.filter((_, i) => i !== idx),
+                          });
+                        }}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Tip camp</label>
+                          <select value={field.type} onChange={e => {
+                            const fields = [...form.customization.fields];
+                            fields[idx] = { ...fields[idx], type: e.target.value as CustomizationField["type"] };
+                            set("customization", { ...form.customization, fields });
+                          }} className={smallInputCls}>
+                            <option value="text">Text scurt</option>
+                            <option value="textarea">Text lung</option>
+                            <option value="image">Imagine (upload)</option>
+                            <option value="select">Selectie (lista)</option>
+                            <option value="color">Culoare</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Obligatoriu</label>
+                          <button type="button" onClick={() => {
+                            const fields = [...form.customization.fields];
+                            fields[idx] = { ...fields[idx], required: !fields[idx].required };
+                            set("customization", { ...form.customization, fields });
+                          }}
+                            className={cn("w-full py-2 text-xs font-semibold rounded-lg border transition-colors",
+                              field.required
+                                ? "bg-primary/10 border-primary/30 text-primary"
+                                : "border-border text-muted-foreground hover:border-primary/30")}>
+                            {field.required ? "Da, obligatoriu" : "Nu, optional"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Eticheta</label>
+                        <input type="text" value={field.label} onChange={e => {
+                          const fields = [...form.customization.fields];
+                          fields[idx] = { ...fields[idx], label: e.target.value };
+                          set("customization", { ...form.customization, fields });
+                        }} placeholder="ex: Textul de gravat" className={smallInputCls} />
+                      </div>
+
+                      {(field.type === "text" || field.type === "textarea") && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">Placeholder</label>
+                            <input type="text" value={field.placeholder} onChange={e => {
+                              const fields = [...form.customization.fields];
+                              fields[idx] = { ...fields[idx], placeholder: e.target.value };
+                              set("customization", { ...form.customization, fields });
+                            }} placeholder="ex: Scrie textul aici..." className={smallInputCls} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">Caractere max</label>
+                            <input type="number" value={field.max_length ?? ""} onChange={e => {
+                              const fields = [...form.customization.fields];
+                              fields[idx] = { ...fields[idx], max_length: e.target.value ? parseInt(e.target.value) : undefined };
+                              set("customization", { ...form.customization, fields });
+                            }} placeholder="100" min="1" className={smallInputCls} />
+                          </div>
+                        </div>
+                      )}
+
+                      {field.type === "image" && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">Nr. max imagini</label>
+                            <input type="number" value={field.max_files ?? ""} onChange={e => {
+                              const fields = [...form.customization.fields];
+                              fields[idx] = { ...fields[idx], max_files: e.target.value ? parseInt(e.target.value) : undefined };
+                              set("customization", { ...form.customization, fields });
+                            }} placeholder="5" min="1" max="10" className={smallInputCls} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-muted-foreground mb-1">Max MB/fisier</label>
+                            <input type="number" value={field.max_file_size_mb ?? ""} onChange={e => {
+                              const fields = [...form.customization.fields];
+                              fields[idx] = { ...fields[idx], max_file_size_mb: e.target.value ? parseInt(e.target.value) : undefined };
+                              set("customization", { ...form.customization, fields });
+                            }} placeholder="10" min="1" max="25" className={smallInputCls} />
+                          </div>
+                        </div>
+                      )}
+
+                      {field.type === "select" && (
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Optiuni (cate una pe linie)</label>
+                          <textarea value={(field.options ?? []).join("\n")} onChange={e => {
+                            const fields = [...form.customization.fields];
+                            fields[idx] = { ...fields[idx], options: e.target.value.split("\n").filter(Boolean) };
+                            set("customization", { ...form.customization, fields });
+                          }} rows={3} placeholder={"Script\nSans-serif\nHandwriting"} className={smallInputCls + " resize-none"} />
+                        </div>
+                      )}
+
+                      {field.type === "color" && (
+                        <div>
+                          <label className="block text-xs font-medium text-muted-foreground mb-1">Culoare implicita</label>
+                          <input type="color" value={field.default_color ?? "#000000"} onChange={e => {
+                            const fields = [...form.customization.fields];
+                            fields[idx] = { ...fields[idx], default_color: e.target.value };
+                            set("customization", { ...form.customization, fields });
+                          }} className="w-10 h-8 rounded border border-border cursor-pointer" />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Text ajutator (optional)</label>
+                        <input type="text" value={field.helper_text ?? ""} onChange={e => {
+                          const fields = [...form.customization.fields];
+                          fields[idx] = { ...fields[idx], helper_text: e.target.value || undefined };
+                          set("customization", { ...form.customization, fields });
+                        }} placeholder="ex: Minim 300x300px, format PNG/JPG" className={smallInputCls} />
+                      </div>
+                    </div>
+                  ))}
+
+                  <button type="button" onClick={() => {
+                    const newField: CustomizationField = {
+                      id: crypto.randomUUID(),
+                      type: "text",
+                      label: "",
+                      placeholder: "",
+                      required: false,
+                    };
+                    set("customization", {
+                      ...form.customization,
+                      fields: [...form.customization.fields, newField],
+                    });
+                  }}
+                    className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+                    <Plus className="h-4 w-4" /> Adauga camp de personalizare
+                  </button>
+
+                  {form.customization.fields.length === 0 && (
+                    <p className="text-xs text-muted-foreground py-3 text-center border border-dashed border-border rounded-lg">
+                      Adauga campuri pe care clientii le vor completa la comanda
+                    </p>
                   )}
                 </div>
               )}

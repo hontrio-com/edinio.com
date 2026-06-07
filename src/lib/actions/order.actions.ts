@@ -40,6 +40,7 @@ export async function placeOrder(data: {
   discount_amount?: number;
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
+  customization?: Record<string, { type: string; label: string; value: string | string[] }>;
   payment_method?: string;
   selected_courier?: string;
   courier_label?: string;
@@ -56,7 +57,13 @@ export async function placeOrder(data: {
   const order_number = await buildOrderNumber(supabase, data.business_id);
 
   const allItems = [
-    { product_id: data.product_id, name: data.product_name, price: data.product_price, quantity: data.quantity },
+    {
+      product_id: data.product_id,
+      name: data.product_name,
+      price: data.product_price,
+      quantity: data.quantity,
+      ...(data.customization && { customization: data.customization }),
+    },
     ...(data.extras ?? []).map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 

@@ -32,6 +32,22 @@ interface ProductData {
       options: { id: string; name: string; values: string[] }[];
       combinations: { id: string; title: string; price: string; sku: string; enabled: boolean }[];
     };
+    customization?: {
+      enabled: boolean;
+      fields: {
+        id: string;
+        type: string;
+        label: string;
+        placeholder?: string;
+        required: boolean;
+        max_length?: number;
+        max_files?: number;
+        max_file_size_mb?: number;
+        options?: string[];
+        default_color?: string;
+        helper_text?: string;
+      }[];
+    };
   };
 }
 

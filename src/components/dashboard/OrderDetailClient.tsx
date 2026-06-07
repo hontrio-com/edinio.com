@@ -34,6 +34,7 @@ interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  customization?: Record<string, { type: string; label: string; value: string | string[] }>;
 }
 
 interface ShippingAddress {
@@ -410,15 +411,44 @@ export function OrderDetailClient({
           <h2 className="text-sm font-semibold text-foreground">Produse comandate</h2>
           <div className="space-y-2">
             {items.map((item, i) => (
-              <div key={i} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="text-foreground truncate">{item.name}</span>
-                  <span className="text-muted-foreground flex-shrink-0">x{item.quantity}</span>
+              <div key={i}>
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-foreground truncate">{item.name}</span>
+                    <span className="text-muted-foreground flex-shrink-0">x{item.quantity}</span>
+                  </div>
+                  <span className="font-medium text-foreground flex-shrink-0 ml-3">
+                    {formatPrice(item.price * item.quantity)}
+                  </span>
                 </div>
-                <span className="font-medium text-foreground flex-shrink-0 ml-3">
-                  {formatPrice(item.price * item.quantity)}
-                </span>
+                {/* Customization data */}
+                {item.customization && Object.keys(item.customization).length > 0 && (
+                  <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
+                    {Object.values(item.customization).map((field, fi) => (
+                      <div key={fi}>
+                        <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
+                        {field.type === "image" && Array.isArray(field.value) ? (
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {(field.value as string[]).map((url, imgI) => (
+                              <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
+                                className="block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
+                                <img src={url} alt={`Personalizare ${imgI + 1}`} className="w-full h-full object-cover" />
+                              </a>
+                            ))}
+                          </div>
+                        ) : field.type === "color" ? (
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="w-5 h-5 rounded border border-border" style={{ backgroundColor: field.value as string }} />
+                            <span className="text-xs text-muted-foreground font-mono">{field.value}</span>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-foreground">{field.value as string}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

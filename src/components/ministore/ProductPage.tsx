@@ -51,6 +51,20 @@ interface VariantCombo {
   enabled: boolean;
 }
 
+interface CustomizationFieldDef {
+  id: string;
+  type: "text" | "textarea" | "image" | "select" | "color";
+  label: string;
+  placeholder?: string;
+  required: boolean;
+  max_length?: number;
+  max_files?: number;
+  max_file_size_mb?: number;
+  options?: string[];
+  default_color?: string;
+  helper_text?: string;
+}
+
 interface PageSections {
   specifications?: SpecItem[];
   quantity_tiers?: {
@@ -69,6 +83,10 @@ interface PageSections {
     enabled: boolean;
     options: { id: string; name: string; values: string[] }[];
     combinations: VariantCombo[];
+  };
+  customization?: {
+    enabled: boolean;
+    fields: CustomizationFieldDef[];
   };
 }
 
@@ -452,6 +470,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
               <span className="text-lg text-gray-400 line-through">{formatPrice(displayComparePrice!)}</span>
               <span className="bg-amber-400 text-black text-xs font-black px-2.5 py-1 rounded-full">-{discountPct}%</span>
             </>
+          )}
+          {pageSections.customization?.enabled && pageSections.customization.fields.length > 0 && (
+            <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2.5 py-1 rounded-full">Personalizabil</span>
           )}
         </div>
 
@@ -838,6 +859,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
         tiers={quantityTiers}
+        customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
       />
     </div>
   );

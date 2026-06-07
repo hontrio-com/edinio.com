@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Loader2, Paperclip, X, Send, CheckCircle2,
@@ -70,7 +71,7 @@ function AttachmentItem({ att }: { att: { url: string; name: string } }) {
   if (isImage(att.url)) {
     return (
       <a href={att.url} target="_blank" rel="noopener noreferrer" className="block">
-        <img src={att.url} alt={att.name} className="max-h-48 rounded-lg border border-border object-cover cursor-pointer hover:opacity-90 transition-opacity" />
+        <Image src={att.url} alt={att.name} width={400} height={192} className="rounded-lg border border-border object-cover cursor-pointer hover:opacity-90 transition-opacity" />
       </a>
     );
   }
@@ -330,7 +331,7 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
               )}>
                 {isUser
                   ? <User className="h-4 w-4 text-primary" />
-                  : <img src="/logo.png" alt="Edinio" className="h-5 w-5 rounded-full object-cover" />
+                  : <Image src="/logo.png" alt="Edinio" width={20} height={20} className="rounded-full object-cover" />
                 }
               </div>
 

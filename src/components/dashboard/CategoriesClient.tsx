@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
 import {
   Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, GripVertical, Tag, ImagePlus, Loader2,
@@ -273,7 +274,7 @@ export function CategoriesClient({ initialCategories }: Props) {
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : cat.image_url ? (
                       <>
-                        <img src={cat.image_url} alt="" className="w-full h-full object-cover" />
+                        <Image src={cat.image_url} alt="" fill sizes="36px" className="object-cover" />
                         <button type="button" onClick={(e) => { e.preventDefault(); handleRemoveImage(cat.id); }}
                           className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <X className="h-3.5 w-3.5 text-white" />

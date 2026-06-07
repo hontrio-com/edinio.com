@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2 } from "lucide-react";
 import { duplicateProduct } from "@/lib/actions/product.actions";
@@ -166,8 +167,8 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           {images[0] ? (
-                            <img src={String(images[0])} alt={product.name}
-                              className="w-10 h-10 rounded-lg object-cover border border-border flex-shrink-0" />
+                            <Image src={String(images[0])} alt={product.name} width={40} height={40}
+                              className="rounded-lg object-cover border border-border flex-shrink-0" />
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                               <Package className="h-4 w-4 text-muted-foreground" />

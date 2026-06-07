@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -433,8 +434,8 @@ export function OrderDetailClient({
                           <div className="flex flex-wrap gap-1.5 mt-1">
                             {(field.value as string[]).map((url, imgI) => (
                               <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
-                                className="block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
-                                <img src={url} alt={`Personalizare ${imgI + 1}`} className="w-full h-full object-cover" />
+                                className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
+                                <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
                               </a>
                             ))}
                           </div>

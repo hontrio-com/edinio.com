@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef, type ReactNode } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -320,7 +321,7 @@ function ImageUploader({ images, onChange, businessId }: { images: string[]; onC
       <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-2">
         {images.map((url, i) => (
           <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border group bg-muted/30">
-            <img src={url} alt={`Imagine ${i + 1}`} className="w-full h-full object-contain p-1" />
+            <Image src={url} alt={`Imagine ${i + 1}`} fill sizes="(max-width: 640px) 33vw, 120px" className="object-contain p-1" />
             <button type="button" onClick={() => onChange(images.filter((_, j) => j !== i))}
               className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <X className="h-3 w-3" />
@@ -388,7 +389,7 @@ function ImageUploader({ images, onChange, businessId }: { images: string[]; onC
                           "relative aspect-square rounded-xl overflow-hidden border-2 transition-all",
                           isSelected ? "border-primary opacity-50 cursor-not-allowed" : "border-border hover:border-primary/50"
                         )}>
-                        <img src={url} alt="" className="w-full h-full object-contain p-1" />
+                        <Image src={url} alt="" fill sizes="80px" className="object-contain p-1" />
                         {isSelected && (
                           <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
                             <Check className="h-5 w-5 text-primary" />
@@ -413,9 +414,9 @@ function VariantImagePicker({ images, selected, onSelect }: { images: string[]; 
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-12 h-12 rounded-lg border border-border overflow-hidden flex-shrink-0 hover:border-primary transition-colors bg-muted/30">
+        className="relative w-12 h-12 rounded-lg border border-border overflow-hidden flex-shrink-0 hover:border-primary transition-colors bg-muted/30">
         {selected
-          ? <img src={selected} alt="" className="w-full h-full object-contain p-0.5" />
+          ? <Image src={selected} alt="" fill sizes="48px" className="object-contain p-0.5" />
           : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="h-4 w-4 text-muted-foreground" /></div>
         }
       </button>
@@ -431,9 +432,9 @@ function VariantImagePicker({ images, selected, onSelect }: { images: string[]; 
             )}
             {images.map((url, i) => (
               <button key={i} type="button" onClick={() => { onSelect(url); setOpen(false); }}
-                className={cn("aspect-square rounded-lg overflow-hidden border-2 transition-colors bg-muted/30",
+                className={cn("relative aspect-square rounded-lg overflow-hidden border-2 transition-colors bg-muted/30",
                   selected === url ? "border-primary" : "border-transparent hover:border-border")}>
-                <img src={url} alt="" className="w-full h-full object-contain p-0.5" />
+                <Image src={url} alt="" fill sizes="48px" className="object-contain p-0.5" />
               </button>
             ))}
           </div>

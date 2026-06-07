@@ -556,7 +556,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                                   fd.append("file", f);
                                   fd.append("business_id", business.id);
                                   const res = await fetch("/api/upload-customization", { method: "POST", body: fd });
-                                  const data = await res.json() as { url?: string };
+                                  const data = await res.json() as { url?: string; error?: string };
                                   if (data.url) urls.push(data.url);
                                 }
                                 setCustValues(v => ({ ...v, [field.id]: [...(v[field.id] as string[] ?? []), ...urls] }));

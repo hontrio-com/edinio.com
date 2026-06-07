@@ -425,6 +425,7 @@ export function OrderDetailClient({
                 {/* Customization data */}
                 {item.customization && Object.keys(item.customization).length > 0 && (
                   <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
+                    <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
                     {Object.values(item.customization).map((field, fi) => (
                       <div key={fi}>
                         <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>

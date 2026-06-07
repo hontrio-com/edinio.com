@@ -3,6 +3,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
+import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 
@@ -70,8 +71,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           businesses={allBusinesses}
           currentBusiness={currentBusiness}
         />
-        <main className="min-h-screen">{children}</main>
+        <main className="min-h-screen pb-20 lg:pb-0">{children}</main>
       </div>
+      <BottomNav isAdmin={profile.role === "admin"} />
     </div>
   );
 }

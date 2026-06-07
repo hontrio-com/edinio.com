@@ -66,7 +66,7 @@ export default async function AdminStatsPage() {
     return {
       month: m,
       count: mi.length,
-      total: mi.reduce((s, i) => s + (i.amount ?? 0), 0) / 100,
+      total: mi.reduce((s, i) => s + (i.amount ?? 0), 0),
     };
   });
 
@@ -98,7 +98,7 @@ export default async function AdminStatsPage() {
     .eq("status", "paid")
     .neq("plan", "domain")
     .gte("created_at", thirtyDaysAgo.toISOString());
-  const mrr = (recentPaidInvoices ?? []).reduce((s, i) => s + (i.amount ?? 0), 0) / 100;
+  const mrr = (recentPaidInvoices ?? []).reduce((s, i) => s + (i.amount ?? 0), 0);
   const arr = mrr * 12;
 
   // Plan-based MRR estimate: count active paid users x plan price
@@ -110,7 +110,7 @@ export default async function AdminStatsPage() {
 
   // ARPU = total revenue / total paying users
   const totalPaidInvoices = (invoices ?? []).filter((i) => i.status === "paid" && i.plan !== "domain");
-  const totalInvRevenue = totalPaidInvoices.reduce((s, i) => s + (i.amount ?? 0), 0) / 100;
+  const totalInvRevenue = totalPaidInvoices.reduce((s, i) => s + (i.amount ?? 0), 0);
   const uniquePayers = new Set(totalPaidInvoices.map((i) => i.id)).size; // approximate
   const arpu = uniquePayers > 0 ? totalInvRevenue / uniquePayers : 0;
 

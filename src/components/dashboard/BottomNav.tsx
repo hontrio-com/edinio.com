@@ -2,18 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Pencil, Package, ShoppingCart, Zap } from "lucide-react";
+import { LayoutDashboard, Pencil, Package, ShoppingCart, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Acasa" },
   { href: "/dashboard/editor", icon: Pencil, label: "Editor" },
-  { href: "/dashboard/features", icon: Zap, label: "Functii" },
   { href: "/dashboard/products", icon: Package, label: "Produse" },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
 ];
 
-export function BottomNav() {
+export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -30,6 +29,13 @@ export function BottomNav() {
             </Link>
           );
         })}
+        {isAdmin && (
+          <Link href="/admin"
+            className="flex-1 flex flex-col items-center justify-center gap-1 text-xs font-medium text-amber-600">
+            <ShieldCheck className="h-5 w-5" />
+            Admin
+          </Link>
+        )}
       </div>
     </nav>
   );

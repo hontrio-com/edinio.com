@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw, Phone,
@@ -130,7 +131,7 @@ function SocialProof() {
 function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boolean; onToggle: () => void }) {
   return (
     <div className="border-b border-gray-100 last:border-0">
-      <button type="button" onClick={onToggle}
+      <button type="button" onClick={onToggle} aria-expanded={isOpen}
         className="w-full flex items-start gap-4 py-5 text-left hover:text-gray-700 transition-colors">
         <span className="mt-0.5 shrink-0 w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center">
           {isOpen ? <Minus size={12} className="text-gray-900" /> : <Plus size={12} className="text-gray-500" />}
@@ -389,8 +390,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
             {slides.map((src, i) => (
               <div key={i} className="relative w-full h-full flex-shrink-0">
-                <img src={src} alt={`${product.name} ${i + 1}`} className="w-full h-full object-contain p-2"
-                  loading={i === 0 ? "eager" : "lazy"} fetchPriority={i === 0 ? "high" : "auto"} />
+                <Image src={src} alt={`${product.name} ${i + 1}`} fill sizes="100vw"
+                  className="object-contain p-2" priority={i === 0} />
               </div>
             ))}
           </div>
@@ -398,26 +399,25 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           slides.map((src, i) => (
             <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
               style={{ opacity: i === activeSlide ? 1 : 0 }}>
-              <img src={src} alt={`${product.name} ${i + 1}`}
-                className="w-full h-full object-contain p-2"
-                loading={i === 0 ? "eager" : "lazy"} fetchPriority={i === 0 ? "high" : "auto"} />
+              <Image src={src} alt={`${product.name} ${i + 1}`} fill sizes="50vw"
+                className="object-contain p-2" priority={i === 0} />
             </div>
           ))
         )}
 
         {slides.length > 1 && (
           <>
-            <button type="button" onClick={e => { e.stopPropagation(); goTo(activeSlide - 1); }}
+            <button type="button" aria-label="Imaginea anterioara" onClick={e => { e.stopPropagation(); goTo(activeSlide - 1); }}
               className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-white transition-colors">
               <ChevronLeft size={16} className="text-gray-700" />
             </button>
-            <button type="button" onClick={e => { e.stopPropagation(); goTo(activeSlide + 1); }}
+            <button type="button" aria-label="Imaginea urmatoare" onClick={e => { e.stopPropagation(); goTo(activeSlide + 1); }}
               className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-white transition-colors">
               <ChevronRight size={16} className="text-gray-700" />
             </button>
             <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
               {slides.map((_, i) => (
-                <button key={i} type="button" onClick={() => goTo(i)}
+                <button key={i} type="button" aria-label={`Imaginea ${i + 1}`} onClick={() => goTo(i)}
                   className="rounded-full transition-all duration-300"
                   style={i === activeSlide
                     ? { width: 24, height: 8, backgroundColor: color }
@@ -590,14 +590,14 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       {/* Header */}
       <header className={`fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm transition-all ${announcementBar?.enabled ? "top-9" : "top-0"}`}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
-          <a href={basePath || "/"}
+          <a href={basePath || "/"} aria-label="Inapoi la magazin"
             className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors shrink-0">
             <ArrowLeft size={16} />
             <span>Magazin</span>
           </a>
           <span className="text-gray-300">/</span>
           {business.logo_url ? (
-            <img src={business.logo_url} alt={business.store_name ?? business.business_name} className="h-7 w-auto object-contain" />
+            <Image src={business.logo_url} alt={business.store_name ?? business.business_name} width={80} height={28} className="object-contain" />
           ) : (
             <span className="font-bold text-sm text-gray-900 truncate">{business.store_name ?? business.business_name}</span>
           )}
@@ -622,10 +622,10 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             {slides.length > 1 && (
               <div className="flex gap-2 mt-3">
                 {slides.map((src, i) => (
-                  <button key={i} type="button" onClick={() => goTo(i)}
+                  <button key={i} type="button" aria-label={`Selecteaza imaginea ${i + 1}`} onClick={() => goTo(i)}
                     className="relative flex-1 rounded-lg overflow-hidden transition-all"
                     style={{ aspectRatio: "1/1", border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
-                    <img src={src} alt={`${product.name} ${i + 1}`} className="w-full h-full object-contain p-1" />
+                    <Image src={src} alt={`${product.name} ${i + 1}`} fill sizes="120px" className="object-contain p-1" />
                   </button>
                 ))}
               </div>
@@ -785,8 +785,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div>
               {business.logo_url ? (
-                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-                  className="h-7 w-auto mb-3 brightness-0 invert object-contain" />
+                <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
+                  width={80} height={28} className="mb-3 brightness-0 invert object-contain" />
               ) : (
                 <p className="font-bold text-white text-lg mb-3">{business.store_name ?? business.business_name}</p>
               )}

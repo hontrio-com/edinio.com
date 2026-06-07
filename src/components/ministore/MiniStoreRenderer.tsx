@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, createContext, useContext, useEffect, useTransition, useMemo } from "react";
+import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
   MapPin, Mail, Globe, ChevronRight, Package, User, Home, Loader2, Banknote, CreditCard,
@@ -364,7 +365,7 @@ function CartCheckoutModal({
           <div className="flex-1 text-center">
             <h2 className="text-lg font-black text-gray-900 tracking-tight">Finalizeaza comanda</h2>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 transition-colors shrink-0">
+          <button type="button" aria-label="Inchide formularul" onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 transition-colors shrink-0">
             <X className="h-[17px] w-[17px] text-gray-500" />
           </button>
         </div>
@@ -373,7 +374,7 @@ function CartCheckoutModal({
             {items.map((item) => (
               <div key={item.productId} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
                 {item.imageUrl && (
-                  <img src={item.imageUrl} alt={item.name} className="w-12 h-12 rounded-lg object-cover border border-gray-200 shrink-0" />
+                  <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="rounded-lg object-cover border border-gray-200 shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-gray-900 truncate">{item.name}</p>
@@ -415,7 +416,7 @@ function CartCheckoutModal({
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Judet <span className="text-red-500">*</span></label>
             <FieldWrap icon={MapPin} error={!!errors.county}>
-              <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-white`}>
+              <select aria-label="Judet" value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-white`}>
                 <option value="">Selecteaza judetul</option>
                 {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
               </select>
@@ -469,7 +470,7 @@ function CartCheckoutModal({
               )}
               {field.type === "select" && (
                 <FieldWrap icon={Package} error={!!errors[field.id]}>
-                  <select value={customValues[field.id] ?? ""}
+                  <select aria-label={field.label} value={customValues[field.id] ?? ""}
                     onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
                     className={`${fieldCls} bg-white`}>
                     <option value="">Selecteaza...</option>
@@ -657,6 +658,7 @@ function CartDrawer({
             <p className="text-xs text-muted-foreground">{count} {count === 1 ? "produs" : "produse"}</p>
           </div>
           <button
+            aria-label="Inchide cosul"
             onClick={onClose}
             className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
           >
@@ -699,9 +701,9 @@ function CartDrawer({
             <div className="space-y-4">
               {items.map((item) => (
                 <div key={item.productId} className="flex items-start gap-3">
-                  <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted border border-border">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted border border-border">
                     {item.imageUrl ? (
-                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                      <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <Package className="h-5 w-5 text-muted-foreground" />
@@ -712,18 +714,18 @@ function CartDrawer({
                     <p className="text-sm font-medium text-foreground leading-snug truncate">{item.name}</p>
                     <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(item.price)}</p>
                     <div className="flex items-center gap-2 mt-2">
-                      <button type="button" onClick={() => updateQty(item.productId, item.quantity - 1)}
+                      <button type="button" aria-label="Scade cantitatea" onClick={() => updateQty(item.productId, item.quantity - 1)}
                         className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                         <Minus className="h-3 w-3" />
                       </button>
                       <span className="text-sm font-semibold w-5 text-center tabular-nums">{item.quantity}</span>
-                      <button type="button" onClick={() => updateQty(item.productId, item.quantity + 1)}
+                      <button type="button" aria-label="Creste cantitatea" onClick={() => updateQty(item.productId, item.quantity + 1)}
                         className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                         <Plus className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
-                  <button type="button" onClick={() => removeItem(item.productId)}
+                  <button type="button" aria-label="Sterge produsul" onClick={() => removeItem(item.productId)}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors mt-0.5 rounded-md hover:bg-muted">
                     <X className="h-4 w-4" />
                   </button>
@@ -781,10 +783,12 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
       <a href={`${basePath}/product/${product.slug}`} className="block">
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
           {imageUrl ? (
-            <img
+            <Image
               src={imageUrl}
               alt={product.name}
-              className="w-full h-full object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              className="object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -1015,8 +1019,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <a href="#" className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
             {business.logo_url ? (
-              <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-                className="w-9 h-9 rounded-xl object-cover flex-shrink-0" />
+              <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
+                width={36} height={36} className="rounded-xl object-cover flex-shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                 style={{ backgroundColor: color }}>
@@ -1049,7 +1053,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 </svg>
               </a>
             )}
-            <button type="button" onClick={() => setCartOpen(true)}
+            <button type="button" aria-label="Deschide cosul de cumparaturi" onClick={() => setCartOpen(true)}
               className="relative flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-surface hover:bg-muted transition-colors">
               <ShoppingCart className="h-4 w-4 text-foreground" />
               {count > 0 ? (
@@ -1073,15 +1077,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <section className="relative overflow-hidden">
           <div className="absolute inset-0" style={{ backgroundColor: color }} />
           {business.cover_url && (
-            <div className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${business.cover_url})` }} />
+            <Image src={business.cover_url} alt="" fill className="object-cover" sizes="100vw" priority />
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/40 to-black/70" />
           <div className="relative z-10 max-w-3xl mx-auto px-4 py-20 sm:py-28 text-center text-white">
             {business.logo_url && (
-              <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-                className="w-18 h-18 rounded-2xl object-cover mx-auto mb-5 border-2 border-white/20 shadow-2xl"
-                style={{ width: 72, height: 72 }} />
+              <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
+                width={72} height={72}
+                className="rounded-2xl object-cover mx-auto mb-5 border-2 border-white/20 shadow-2xl" />
             )}
             <h1 className="text-3xl sm:text-4xl font-black mb-3 drop-shadow-sm tracking-tight">
               {business.store_name ?? business.business_name}
@@ -1138,7 +1141,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             />
           </div>
           {showSort && (
-            <select value={sort} onChange={e => setSort(e.target.value)}
+            <select aria-label="Sorteaza produsele" value={sort} onChange={e => setSort(e.target.value)}
               className="h-[46px] px-3 text-sm border border-border rounded-2xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
               <option value="newest">Cele mai noi</option>
               <option value="price_asc">Pret crescator</option>
@@ -1215,14 +1218,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                     className="flex flex-col items-center gap-2 flex-shrink-0 group"
                   >
                     <div
-                      className="w-[72px] h-[72px] rounded-full overflow-hidden transition-all border-2"
+                      className="relative w-[72px] h-[72px] rounded-full overflow-hidden transition-all border-2"
                       style={{
                         borderColor: active ? color : "var(--color-border)",
                         boxShadow: active ? `0 0 0 2px ${color}40` : "none",
                       }}
                     >
                       {img ? (
-                        <img src={img} alt={cat} className="w-full h-full object-cover" />
+                        <Image src={img} alt={cat} fill sizes="72px" className="object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center"
                           style={{ backgroundColor: active ? `${color}15` : "var(--color-muted)" }}>
@@ -1396,8 +1399,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {gallery.map((url, i) => (
                 <button key={i} type="button" onClick={() => setLightboxUrl(url)}
-                  className="aspect-square rounded-2xl overflow-hidden bg-muted border border-border hover:scale-[1.02] hover:shadow-md transition-all duration-200">
-                  <img src={url} alt={`Galerie ${i + 1}`} className="w-full h-full object-cover" loading="lazy" />
+                  aria-label={`Deschide imaginea ${i + 1} din galerie`}
+                  className="relative aspect-square rounded-2xl overflow-hidden bg-muted border border-border hover:scale-[1.02] hover:shadow-md transition-all duration-200">
+                  <Image src={url} alt={`Galerie ${i + 1}`} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" className="object-cover" />
                 </button>
               ))}
             </div>
@@ -1471,8 +1475,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           <div className="flex items-center justify-between gap-4 pb-8">
             <div className="flex items-center gap-3 min-w-0">
               {business.logo_url ? (
-                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-                  className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0" />
+                <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
+                  width={36} height={36} className="rounded-lg object-cover border border-white/10 shrink-0" />
               ) : (
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
                   style={{ backgroundColor: color }}>
@@ -1487,7 +1491,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             {(social.instagram || social.facebook || social.tiktok || social.website) && (
               <div className="flex items-center gap-1.5 shrink-0">
                 {social.instagram && (
-                  <a href={social.instagram} target="_blank" rel="noopener noreferrer"
+                  <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram"
                     className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
@@ -1495,7 +1499,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   </a>
                 )}
                 {social.facebook && (
-                  <a href={social.facebook} target="_blank" rel="noopener noreferrer"
+                  <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook"
                     className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
@@ -1503,7 +1507,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   </a>
                 )}
                 {social.tiktok && (
-                  <a href={social.tiktok} target="_blank" rel="noopener noreferrer"
+                  <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok"
                     className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
@@ -1511,7 +1515,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   </a>
                 )}
                 {social.website && (
-                  <a href={social.website} target="_blank" rel="noopener noreferrer"
+                  <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website"
                     className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
                     <Globe className="h-3.5 w-3.5" />
                   </a>
@@ -1544,11 +1548,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               <div className="flex items-center gap-3">
                 <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
                   className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
-                  <img src="/anpc-sal.avif" alt="SAL" className="h-10 w-auto rounded-md" />
+                  <Image src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
                 </a>
                 <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
                   className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
-                  <img src="/anpc-sol.avif" alt="SOL" className="h-10 w-auto rounded-md" />
+                  <Image src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
                 </a>
               </div>
             </div>
@@ -1639,11 +1643,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       {lightboxUrl && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setLightboxUrl(null)}>
-          <button type="button" onClick={() => setLightboxUrl(null)}
+          <button type="button" aria-label="Inchide galeria" onClick={() => setLightboxUrl(null)}
             className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">
             <X className="h-5 w-5" />
           </button>
-          <img src={lightboxUrl} alt="Galerie"
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="Imagine galerie marita"
             className="max-w-full max-h-full object-contain rounded-xl"
             onClick={(e) => e.stopPropagation()} />
         </div>

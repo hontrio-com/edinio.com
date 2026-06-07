@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User, Phone, MapPin, Home, Loader2, Banknote, CreditCard,
@@ -411,8 +412,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                         style={{ borderColor: selected ? color : "#E5E7EB", background: selected ? `${color}12` : "#fff" }}
                       >
                         {product.images[0] && (
-                          <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 bg-gray-50">
-                            <img src={product.images[0]} alt="" className="w-full h-full object-contain p-1" />
+                          <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 bg-gray-50">
+                            <Image src={product.images[0]} alt="" fill sizes="48px" className="object-contain p-1" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
@@ -450,8 +451,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               ) : (
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
                   {product.images[0] && (
-                    <div className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-gray-50 flex-shrink-0">
-                      <img src={product.images[0]} alt={product.name} className="w-full h-full object-contain p-1" />
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-gray-50 flex-shrink-0">
+                      <Image src={product.images[0]} alt={product.name} fill sizes="56px" className="object-contain p-1" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -573,6 +574,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
                       {field.type === "select" && (
                         <select
+                          aria-label={field.label}
                           value={(custValues[field.id] as string) ?? ""}
                           onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
                           className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400"
@@ -715,7 +717,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   )}
                   {field.type === "select" && (
                     <IconInput icon={Package} error={!!errors[field.id]}>
-                      <select value={customValues[field.id] ?? ""}
+                      <select aria-label={field.label} value={customValues[field.id] ?? ""}
                         onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
                         className={`${inputCls} bg-white`}>
                         <option value="">Selecteaza...</option>

@@ -23,7 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const currentBusiness = allBusinesses[0] ?? null;
   const businessIds = allBusinesses.map(b => b.id);
 
-  const [ordersResult, smsoResult, supportResult] = await Promise.all([
+  const [ordersResult, smsoResult, supportResult, notificationsResult] = await Promise.all([
     businessIds.length > 0
       ? supabase
           .from("orders")
@@ -41,11 +41,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("has_unread_reply", true),
+    supabase
+      .from("notifications")
+      .select("id, title, message, type, is_read, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const recentOrders = ordersResult.data ?? [];
   const smsoEnabled = (smsoResult.data?.smso_config as { enabled?: boolean } | null)?.enabled === true;
   const unreadSupportCount = supportResult.count ?? 0;
+  const notifications = notificationsResult.data ?? [];
 
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
 
@@ -67,6 +74,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           userFullName={profile.full_name}
           plan={profile.plan}
           recentOrders={recentOrders}
+          notifications={notifications}
           currentBusiness={currentBusiness}
         />
         <main className="min-h-screen pb-20 lg:pb-0">{children}</main>

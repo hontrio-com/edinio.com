@@ -42,25 +42,27 @@ export async function POST(req: NextRequest) {
 
   const recipientCount = users?.length ?? 0;
 
-  // Fetch emails from auth for the matched users
-  let recipientEmails: string[] = [];
+  // Insert notifications for each user
   if (recipientCount > 0) {
-    const userIds = users!.map((u) => u.id);
-    const { data: authList } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-    if (authList?.users) {
-      recipientEmails = authList.users
-        .filter((u) => userIds.includes(u.id) && u.email)
-        .map((u) => u.email!);
+    const rows = users!.map((u) => ({
+      user_id: u.id,
+      title: body.subject,
+      message: body.message,
+      type: "broadcast",
+    }));
+
+    // Insert in batches of 500
+    for (let i = 0; i < rows.length; i += 500) {
+      const batch = rows.slice(i, i + 500);
+      await adminClient.from("notifications").insert(batch);
     }
   }
 
-  // Log the broadcast attempt (email sending to be implemented when service is configured)
   await logAudit(admin.id, "broadcast.send", "broadcast", null, {
     subject: body.subject,
     message: body.message,
     filter: body.filter ?? null,
     recipients: recipientCount,
-    recipient_emails: recipientEmails,
   });
 
   return NextResponse.json({ success: true, recipients: recipientCount });

@@ -258,6 +258,10 @@ export async function updateShippingConfig(
     .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
+  // Compute default_shipping_cost from the first enabled courier
+  const enabledZone = Object.values(config.shipping_zones).find(z => z.enabled);
+  const defaultShippingCost = enabledZone ? enabledZone.price : 20;
+
   const { data: existing } = await supabase
     .from("store_settings").select("id").eq("business_id", businessId).single();
 
@@ -268,6 +272,7 @@ export async function updateShippingConfig(
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         shipping_zones: config.shipping_zones as never,
+        default_shipping_cost: defaultShippingCost,
         updated_at: new Date().toISOString(),
       })
       .eq("business_id", businessId));
@@ -278,6 +283,7 @@ export async function updateShippingConfig(
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         shipping_zones: config.shipping_zones as never,
+        default_shipping_cost: defaultShippingCost,
       }));
   }
 

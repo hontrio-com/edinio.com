@@ -1466,7 +1466,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
       </form>
 
       {/* Mobile sticky save bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-20 bg-surface/95 backdrop-blur-sm border-t border-border px-4 py-3 flex gap-3 lg:hidden">
+      <div className="fixed bottom-16 left-0 right-0 z-20 bg-background border-t border-border px-4 py-3 flex gap-3 lg:hidden">
         <button type="button" onClick={() => router.push("/dashboard/products")}
           className="flex-1 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors text-foreground">
           Anuleaza

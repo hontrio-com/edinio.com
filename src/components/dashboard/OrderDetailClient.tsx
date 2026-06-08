@@ -408,15 +408,15 @@ export function OrderDetailClient({
         </div>
 
         {/* Products */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+        <div className="bg-surface border border-border rounded-xl p-5 space-y-3 overflow-hidden">
           <h2 className="text-sm font-semibold text-foreground">Produse comandate</h2>
           <div className="space-y-2">
             {items.map((item, i) => (
               <div key={i}>
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="text-foreground truncate">{item.name}</span>
+                    <span className="text-foreground truncate min-w-0">{item.name}</span>
                     <span className="text-muted-foreground flex-shrink-0">x{item.quantity}</span>
                   </div>
                   <span className="font-medium text-foreground flex-shrink-0 ml-3">

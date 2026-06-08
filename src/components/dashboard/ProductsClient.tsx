@@ -175,8 +175,8 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="font-medium text-foreground flex items-center gap-1.5 flex-wrap">
-                              {product.name}
+                            <div className="font-medium text-foreground flex items-center gap-1.5">
+                              <span className="truncate max-w-[180px] sm:max-w-[280px] md:max-w-none">{product.name}</span>
                               {product.is_featured && (
                                 <Star className="h-3 w-3 text-amber-400 fill-amber-400 flex-shrink-0" />
                               )}

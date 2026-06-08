@@ -53,7 +53,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen bg-background">
       <PlatformMetaPixel />
       <Sidebar
-        businesses={allBusinesses}
         currentBusiness={currentBusiness}
         plan={profile.plan}
         smsoEnabled={smsoEnabled}

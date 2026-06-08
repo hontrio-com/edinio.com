@@ -28,6 +28,46 @@ const NAV_ITEMS = [
   { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },
 ];
 
+export function BusinessCard({ business }: { business: Business | null }) {
+  const color = business?.primary_color ?? "#1AB554";
+  const name = business?.store_name ?? business?.business_name ?? "Magazinul tau";
+  const initial = name[0]?.toUpperCase() ?? "M";
+  const domain = business?.custom_domain
+    ? business.custom_domain
+    : business?.slug
+      ? `edinio.com/${business.slug}`
+      : null;
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-xl p-3"
+      style={{ background: `linear-gradient(135deg, ${color}12, ${color}06)` }}
+    >
+      <div
+        className="absolute -right-3 -top-3 w-16 h-16 rounded-full"
+        style={{ backgroundColor: color, opacity: 0.06 }}
+      />
+      <div className="relative flex items-center gap-3">
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+          style={{ backgroundColor: color, boxShadow: `0 4px 12px ${color}30` }}
+        >
+          {initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-foreground truncate">{name}</div>
+          {domain && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+              <span className="text-[11px] text-muted-foreground truncate">{domain}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NavItem({ href, icon: Icon, label, active }: {
   href: string; icon: React.ComponentType<{ className?: string }>; label: string; active: boolean;
 }) {
@@ -61,17 +101,7 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
 
       {/* Business info */}
       <div className="px-3 py-3 border-b border-sidebar-border">
-        <div className="flex items-center gap-2.5 px-3 py-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-            style={{ backgroundColor: currentBusiness?.primary_color ?? "var(--color-brand)" }}>
-            {(currentBusiness?.store_name ?? currentBusiness?.business_name)?.[0]?.toUpperCase() ?? "M"}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-foreground truncate">
-              {currentBusiness?.store_name ?? currentBusiness?.business_name ?? "Magazinul tau"}
-            </div>
-          </div>
-        </div>
+        <BusinessCard business={currentBusiness} />
       </div>
 
       {/* Navigation */}

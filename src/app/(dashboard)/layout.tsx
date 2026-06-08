@@ -67,7 +67,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           userFullName={profile.full_name}
           plan={profile.plan}
           recentOrders={recentOrders}
-          businesses={allBusinesses}
           currentBusiness={currentBusiness}
         />
         <main className="min-h-screen pb-20 lg:pb-0">{children}</main>

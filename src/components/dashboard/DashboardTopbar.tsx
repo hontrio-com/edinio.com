@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { logout } from "@/lib/actions/auth.actions";
 import { Logo } from "@/components/ui/Logo";
+import { BusinessCard } from "@/components/dashboard/Sidebar";
 import { formatPrice } from "@/lib/utils/format";
 import { PLAN_LABELS as PLAN_NAMES } from "@/lib/plans";
 import type { Database } from "@/types/database.types";
@@ -45,18 +46,16 @@ interface Props {
   userFullName: string;
   plan: string;
   recentOrders: OrderNotif[];
-  businesses: Business[];
   currentBusiness: Business | null;
 }
 
-export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, currentBusiness }: Props) {
+export function DashboardTopbar({ userFullName, plan, recentOrders, currentBusiness }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [switcherOpen, setSwitcherOpen] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [unreadOnly, setUnreadOnly] = useState(false);
 
@@ -360,36 +359,9 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, businesses, 
           </button>
         </div>
 
-        {/* Business switcher */}
+        {/* Business info */}
         <div className="px-3 py-3 border-b border-sidebar-border">
-          <button onClick={() => setSwitcherOpen(!switcherOpen)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-accent/50 hover:bg-accent transition-colors text-left">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                style={{ backgroundColor: currentBusiness?.primary_color ?? "var(--color-brand)" }}>
-                {(currentBusiness?.store_name ?? currentBusiness?.business_name)?.[0]?.toUpperCase() ?? "M"}
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-foreground truncate">{currentBusiness?.store_name ?? currentBusiness?.business_name ?? "Magazinul tau"}</div>
-                <div className="text-xs text-muted-foreground">Mini-Store</div>
-              </div>
-            </div>
-            <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground flex-shrink-0 transition-transform", switcherOpen && "rotate-180")} />
-          </button>
-          {switcherOpen && (
-            <div className="mt-1 bg-popover border border-border rounded-lg shadow-sm overflow-hidden">
-              {businesses.map(b => (
-                <button key={b.id} onClick={() => setSwitcherOpen(false)}
-                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent transition-colors text-sm text-left">
-                  <div className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                    style={{ backgroundColor: b.primary_color }}>
-                    {(b.store_name ?? b.business_name)[0]?.toUpperCase()}
-                  </div>
-                  <span className="truncate text-foreground">{b.store_name ?? b.business_name}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <BusinessCard business={currentBusiness} />
         </div>
 
         {/* Navigation */}

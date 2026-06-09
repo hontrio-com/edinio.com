@@ -111,9 +111,7 @@ function TrustIcon({ icon, color }: { icon: string; color: string }) {
   return <ShieldCheck {...props} />;
 }
 
-function SocialProof() {
-  const [count, setCount] = useState(18);
-  useEffect(() => { setCount(18 + Math.floor(Math.random() * 10)); }, []);
+function SocialProof({ count }: { count: number }) {
   return (
     <div className="inline-flex items-center gap-2 bg-white border border-gray-100 shadow-sm rounded-full px-4 py-2 text-sm">
       <span className="relative flex h-2.5 w-2.5">
@@ -264,6 +262,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const buttonEffect = pageContent.button_effect ?? "none";
   const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
   const deliveryEstimate = pageContent.delivery_estimate;
+  const viewerCount = useRef(18 + Math.floor(Math.random() * 10)).current;
 
   // Variants
   const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
@@ -577,7 +576,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </div>
         )}
 
-        {!mobile && <SocialProof />}
+        {!mobile && <SocialProof count={viewerCount} />}
       </div>
     );
   }

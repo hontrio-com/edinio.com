@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw, Phone,
-  Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye, Calendar,
+  Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye, Calendar, Globe,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
@@ -223,6 +223,17 @@ function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, effect, onCl
   );
 }
 
+interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; website?: string; }
+
+const POLICY_LINKS = [
+  { slug: "termeni", label: "Termeni si conditii" },
+  { slug: "livrare", label: "Politica de livrare" },
+  { slug: "retur", label: "Politica de retur" },
+  { slug: "confidentialitate", label: "Politica de confidentialitate" },
+  { slug: "gdpr", label: "GDPR" },
+  { slug: "anulare", label: "Politica de anulare" },
+] as const;
+
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
 export function ProductPage({ business, product, storeSettings, basePath: basePathProp }: {
@@ -235,6 +246,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
 
   const color = business.primary_color ?? "#1AB554";
+  const social = (business.social as Social) ?? {};
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   const freeShippingThreshold = storeSettings?.free_shipping_threshold
@@ -780,39 +792,102 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       )}
 
       {/* Footer */}
-      <footer className="bg-gray-900 border-t border-white/5 py-10 px-4 md:px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-8 mb-8">
-            <div>
+      <footer className="bg-[#0A0A0A] text-white">
+        <div className="max-w-6xl mx-auto px-5 pt-10 pb-6 sm:pt-12">
+          {/* Top row: brand + social */}
+          <div className="flex items-center justify-between gap-4 pb-8">
+            <div className="flex items-center gap-3 min-w-0">
               {business.logo_url ? (
                 <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
-                  width={80} height={28} className="mb-3 brightness-0 invert object-contain" />
+                  width={36} height={36} className="rounded-lg object-cover border border-white/10 shrink-0" />
               ) : (
-                <p className="font-bold text-white text-lg mb-3">{business.store_name ?? business.business_name}</p>
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
+                  style={{ backgroundColor: color }}>
+                  {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
+                </div>
               )}
-              <p className="text-gray-500 text-sm leading-relaxed">
-                {business.tagline ?? "Produse de calitate. Livrare rapida in toata Romania."}
-              </p>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-white truncate">{business.store_name ?? business.business_name}</p>
+                {business.city && <p className="text-[11px] text-white/40">{business.city}</p>}
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-white text-sm mb-3 uppercase tracking-wide">Informatii</p>
-              <ul className="space-y-2 text-sm text-gray-500">
-                <li><a href={basePath || "/"} className="hover:text-gray-300 transition-colors">Magazin</a></li>
-              </ul>
+            {(social.instagram || social.facebook || social.tiktok || social.website) && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {social.instagram && (
+                  <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram"
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+                    </svg>
+                  </a>
+                )}
+                {social.facebook && (
+                  <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook"
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
+                    </svg>
+                  </a>
+                )}
+                {social.tiktok && (
+                  <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok"
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
+                    </svg>
+                  </a>
+                )}
+                {social.website && (
+                  <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website"
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    <Globe className="h-3.5 w-3.5" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="h-px bg-white/[0.06]" />
+
+          {/* Middle: policies + consumer protection */}
+          <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
+            <div className="flex-1">
+              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                {POLICY_LINKS.map(({ slug: pSlug, label }) => (
+                  <a key={pSlug} href={`${basePath}/politici/${pSlug}`}
+                    className="text-[13px] text-white/50 hover:text-white transition-colors">
+                    {label}
+                  </a>
+                ))}
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-white text-sm mb-3 uppercase tracking-wide">Contact</p>
-              <ul className="space-y-2 text-sm text-gray-500">
-                {business.phone && <li>Telefon: {business.phone}</li>}
-                {business.email && <li>Email: {business.email}</li>}
-                {business.city && <li>{business.city}{business.county ? `, ${business.county}` : ""}</li>}
-              </ul>
+            <div className="shrink-0">
+              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Protectia consumatorilor</p>
+              <div className="flex items-center gap-3">
+                <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
+                  <Image src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
+                </a>
+                <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
+                  <Image src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
+                </a>
+              </div>
             </div>
           </div>
-          <div className="border-t border-white/5 pt-6 text-center">
-            <p className="text-gray-600 text-xs">
-              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}. Creat cu{" "}
-              <span className="font-semibold" style={{ color }}>Edinio</span>
+
+          {/* Divider */}
+          <div className="h-px bg-white/[0.06]" />
+
+          {/* Bottom: copyright */}
+          <div className="pt-5 flex items-center justify-between gap-3">
+            <p className="text-[11px] text-white/25">
+              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
+            </p>
+            <p className="text-[11px] text-white/25">
+              Creat cu <span className="font-semibold" style={{ color }}>Edinio</span>
             </p>
           </div>
         </div>

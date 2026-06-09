@@ -119,8 +119,8 @@ function IntegrationOrbit() {
       <div className="absolute inset-[30px] sm:inset-[25px] rounded-full border border-dashed border-border/20" />
 
       {/* Center - Edinio logo (static) */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-primary flex items-center justify-center shadow-xl shadow-primary/25 z-10">
-        <Image src="/logo.png" alt="Edinio" width={56} height={56} className="w-10 h-10 sm:w-14 sm:h-14 object-contain" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center z-10">
+        <Image src="/logo.png" alt="Edinio" width={72} height={72} className="w-16 h-16 sm:w-20 sm:h-20 object-contain" />
       </div>
 
       {/* Subtle glow behind center */}

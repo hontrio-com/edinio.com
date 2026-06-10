@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Bell, LogOut, ChevronDown, X, Menu,
   LayoutDashboard, Pencil, Package, ShoppingCart, Settings,
@@ -63,10 +63,11 @@ interface Props {
 export function DashboardTopbar({ userFullName, plan, recentOrders, notifications, currentBusiness }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [readOrderIds, setReadOrderIds] = useState<Set<string>>(new Set());
   const [notifTab, setNotifTab] = useState<"all" | "orders" | "platform">("all");
   const [, startMarkRead] = useTransition();
@@ -105,6 +106,12 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
   }, []);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // Sync search input with URL param
+  useEffect(() => {
+    const urlSearch = searchParams.get("search") ?? "";
+    setSearch(urlSearch);
+  }, [searchParams]);
 
   const unreadOrderCount = recentOrders.filter(o => !readOrderIds.has(o.id)).length;
   const unreadPlatformCount = notifications.filter(n => !n.is_read).length;
@@ -161,7 +168,6 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
     e.preventDefault();
     if (search.trim()) {
       router.push(`/dashboard/products?search=${encodeURIComponent(search.trim())}`);
-      setSearch("");
     }
   }
 

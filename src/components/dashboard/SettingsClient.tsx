@@ -238,7 +238,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     const hash = window.location.hash.slice(1);
     if (!hash) return;
     const hashMap: Partial<Record<string, SectionId>> = {
-      abonament: "facturare",
+      abonament: "plan",
       facturare: "facturare",
       plan: "plan",
     };

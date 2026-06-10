@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Politica cookies | Edinio",
   description:
     "Informații despre cookie-urile și tehnologiile similare utilizate pe platforma Edinio.",
+  alternates: { canonical: "https://www.edinio.com/cookies" },
 };
 
 export default function CookiesPage() {

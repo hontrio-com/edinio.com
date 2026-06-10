@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Drepturile GDPR | Edinio",
   description:
     "Drepturile dumneavoastră privind protecția datelor personale conform Regulamentului (UE) 2016/679 (GDPR).",
+  alternates: { canonical: "https://www.edinio.com/gdpr" },
 };
 
 export default function GDPRPage() {

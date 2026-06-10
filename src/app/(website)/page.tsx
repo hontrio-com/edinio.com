@@ -10,12 +10,11 @@ import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
 
 export const metadata: Metadata = {
-  title:
-    "Creare magazin online in cateva minute | Edinio - Platforma eCommerce Romania",
+  title: "Creare magazin online rapid | Edinio",
   description:
-    "Creeaza un magazin online profesional la cheie, fara cunostinte tehnice. Plati online, integrari curierat, facturi si AWB-uri automate. Incepe gratuit, pret de la 99 lei/luna. Mentenanta gratuita pe viata.",
+    "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
   alternates: {
-    canonical: "https://edinio.com",
+    canonical: "https://www.edinio.com",
   },
 };
 
@@ -24,12 +23,12 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "https://edinio.com/#organization",
+      "@id": "https://www.edinio.com/#organization",
       name: "Edinio",
-      url: "https://edinio.com",
+      url: "https://www.edinio.com",
       logo: {
         "@type": "ImageObject",
-        url: "https://edinio.com/logo.png",
+        url: "https://www.edinio.com/logo.png",
       },
       contactPoint: {
         "@type": "ContactPoint",
@@ -41,19 +40,19 @@ const jsonLd = {
     },
     {
       "@type": "WebSite",
-      "@id": "https://edinio.com/#website",
-      url: "https://edinio.com",
+      "@id": "https://www.edinio.com/#website",
+      url: "https://www.edinio.com",
       name: "Edinio",
-      publisher: { "@id": "https://edinio.com/#organization" },
+      publisher: { "@id": "https://www.edinio.com/#organization" },
       inLanguage: "ro-RO",
     },
     {
       "@type": "WebPage",
-      "@id": "https://edinio.com/#webpage",
-      url: "https://edinio.com",
+      "@id": "https://www.edinio.com/#webpage",
+      url: "https://www.edinio.com",
       name: "Creare magazin online in cateva minute | Edinio",
-      isPartOf: { "@id": "https://edinio.com/#website" },
-      about: { "@id": "https://edinio.com/#organization" },
+      isPartOf: { "@id": "https://www.edinio.com/#website" },
+      about: { "@id": "https://www.edinio.com/#organization" },
       description:
         "Creeaza un magazin online profesional la cheie, fara cunostinte tehnice. Plati online, integrari curierat, facturi si AWB-uri automate.",
       inLanguage: "ro-RO",
@@ -63,7 +62,7 @@ const jsonLd = {
       name: "Edinio",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
-      url: "https://edinio.com",
+      url: "https://www.edinio.com",
       description:
         "Platforma de creare magazin online pentru afaceri locale din Romania. Fara cunostinte tehnice, cu integrari complete pentru curierat, plati si facturare.",
       offers: {

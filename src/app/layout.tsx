@@ -15,17 +15,16 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-const SITE_URL = "https://edinio.com";
+const SITE_URL = "https://www.edinio.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default:
-      "Creare magazin online in cateva minute | Edinio - Platforma eCommerce Romania",
+    default: "Creare magazin online rapid | Edinio",
     template: "%s | Edinio",
   },
   description:
-    "Creeaza un magazin online profesional la cheie, fara cunostinte tehnice. Integrari cu curierii, plati online, facturi si AWB-uri automate. Incepe gratuit, pret de la 99 lei/luna.",
+    "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
   keywords: [
     "creare magazin online",
     "realizare magazin online",
@@ -61,10 +60,9 @@ export const metadata: Metadata = {
     locale: "ro_RO",
     url: SITE_URL,
     siteName: "Edinio",
-    title:
-      "Creare magazin online in cateva minute | Edinio",
+    title: "Creare magazin online rapid | Edinio",
     description:
-      "Creeaza un magazin online profesional la cheie, fara cunostinte tehnice. Integrari cu curierii, plati online, facturi si AWB-uri automate. Incepe gratuit.",
+      "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
     images: [
       {
         url: "/og-image.png",
@@ -76,9 +74,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Creare magazin online in cateva minute | Edinio",
+    title: "Creare magazin online rapid | Edinio",
     description:
-      "Creeaza un magazin online profesional la cheie. Integrari cu curierii, plati, facturi. Incepe gratuit.",
+      "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
     images: ["/og-image.png"],
   },
   alternates: {

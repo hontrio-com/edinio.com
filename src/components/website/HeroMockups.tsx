@@ -80,7 +80,7 @@ export function HeroMockups({ className }: { className?: string }) {
               >
                 <Image
                   src={src}
-                  alt=""
+                  alt={`Exemplu magazin online creat cu Edinio - ${i + 1}`}
                   width={440}
                   height={880}
                   className="w-full h-auto"

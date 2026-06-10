@@ -20,6 +20,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: "https://edinio.com/sitemap.xml",
+    sitemap: "https://www.edinio.com/sitemap.xml",
   };
 }

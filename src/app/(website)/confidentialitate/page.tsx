@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Politica de confidențialitate | Edinio",
   description:
     "Informații despre cum colectăm, utilizăm și protejăm datele dumneavoastră personale pe platforma Edinio.",
+  alternates: { canonical: "https://www.edinio.com/confidentialitate" },
 };
 
 export default function ConfidentialitatePage() {

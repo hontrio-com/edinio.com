@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Termeni și condiții | Edinio",
   description:
     "Termenii și condițiile de utilizare a platformei Edinio pentru crearea magazinelor online.",
+  alternates: { canonical: "https://www.edinio.com/termeni" },
 };
 
 export default function TermeniPage() {

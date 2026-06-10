@@ -7,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Contacteaza echipa Edinio pentru orice intrebare despre creare magazin online. Suport 7 zile din 7, raspuns rapid.",
   alternates: {
-    canonical: "https://edinio.com/contact",
+    canonical: "https://www.edinio.com/contact",
   },
   openGraph: {
     title: "Contact Edinio - Suport creare magazin online",
     description:
       "Contacteaza echipa Edinio. Suntem aici sa te ajutam cu orice intrebare.",
-    url: "https://edinio.com/contact",
+    url: "https://www.edinio.com/contact",
   },
 };
 

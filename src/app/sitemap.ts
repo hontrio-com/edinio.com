@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { createClient } from "@/lib/supabase/server";
 
-const SITE_URL = "https://edinio.com";
+const SITE_URL = "https://www.edinio.com";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient();
@@ -71,22 +71,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  // Active products from published businesses
+  // Active products from published businesses — use slug URL (not ID)
   const { data: products } = await supabase
     .from("products")
-    .select("id, updated_at, businesses!inner(slug, is_published)")
+    .select("id, slug, updated_at, businesses!inner(slug, is_published)")
     .eq("is_active", true)
     .eq("businesses.is_published", true);
 
-  const productPages: MetadataRoute.Sitemap = (products ?? []).map((p) => {
-    const biz = p.businesses as unknown as { slug: string };
-    return {
-      url: `${SITE_URL}/${biz.slug}/product/${p.id}`,
-      lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    };
-  });
+  const productPages: MetadataRoute.Sitemap = (products ?? [])
+    .filter((p) => p.slug)
+    .map((p) => {
+      const biz = p.businesses as unknown as { slug: string };
+      return {
+        url: `${SITE_URL}/${biz.slug}/product/${p.slug}`,
+        lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
+        changeFrequency: "weekly" as const,
+        priority: 0.6,
+      };
+    });
 
   return [...staticPages, ...businessPages, ...productPages];
 }

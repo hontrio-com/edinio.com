@@ -23,6 +23,14 @@ function isPlatformHost(hostname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const hostname = request.headers.get("host") ?? "";
+  const bare = hostname.split(":")[0];
+
+  // SEO: redirect non-www to www (permanent 301)
+  if (bare === "edinio.com") {
+    const url = request.nextUrl.clone();
+    url.host = "www.edinio.com";
+    return NextResponse.redirect(url, 301);
+  }
 
   // Custom domain routing: rewrite to /{slug} for public site
   if (!isPlatformHost(hostname)) {

@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const displayName = business.store_name ?? business.business_name;
   const title = business.city ? `${displayName} - ${business.city}` : displayName;
   const description = business.tagline ?? business.description?.slice(0, 155) ?? `Cumpara din ${displayName} online.`;
-  const url = `https://edinio.com/${slug}`;
+  const url = `https://www.edinio.com/${slug}`;
   const images = business.cover_url ? [business.cover_url] : [];
   return {
     title,
@@ -136,7 +136,7 @@ export default async function SlugPage({ params }: Props) {
   }
 
   const displayName = business.store_name ?? business.business_name;
-  const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://edinio.com/${business.slug}`;
+  const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
   const storeJsonLd = {
     "@context": "https://schema.org",
     "@type": "Store",

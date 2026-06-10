@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
   const images = product.images as string[] | null;
   const canonicalSlug = product.slug ?? productSlug;
-  const url = `https://edinio.com/${slug}/product/${canonicalSlug}`;
+  const url = `https://www.edinio.com/${slug}/product/${canonicalSlug}`;
   return {
     title,
     description,
@@ -64,14 +64,14 @@ function buildProductJsonLd(product: { name: string; description: string | null;
     "@type": "Product",
     name: product.name,
     description: desc,
-    url: `https://edinio.com/${slug}/product/${productSlug}`,
+    url: `https://www.edinio.com/${slug}/product/${productSlug}`,
     ...(images?.length ? { image: images } : {}),
     offers: {
       "@type": "Offer",
       priceCurrency: "RON",
       price: product.price ?? 0,
       availability: "https://schema.org/InStock",
-      url: `https://edinio.com/${slug}/product/${productSlug}`,
+      url: `https://www.edinio.com/${slug}/product/${productSlug}`,
     },
   };
 }
@@ -91,6 +91,11 @@ export default async function ProductDetailPage({ params }: Props) {
   ]);
 
   if (!businessRaw || !product || product.business_id !== businessRaw.id || !product.is_active) notFound();
+
+  // SEO: redirect /product/{uuid} → /product/{slug} (301)
+  if (UUID_RE.test(productSlug) && product.slug) {
+    redirect(`/${slug}/product/${product.slug}`);
+  }
 
   const rawSettings = (businessRaw as unknown as { store_settings: unknown }).store_settings;
   const storeSettings = Array.isArray(rawSettings) ? (rawSettings[0] ?? null) : (rawSettings ?? null);

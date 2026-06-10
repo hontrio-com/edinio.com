@@ -260,7 +260,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (emailField.enabled && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Format email invalid";
     if (!form.county) e.county = "Selectati judetul";
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
-    if (form.address.trim().length < 10 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 10 caractere";
+    if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
     if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
     for (const field of customFields) {

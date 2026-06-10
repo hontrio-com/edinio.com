@@ -11,13 +11,13 @@ export const metadata: Metadata = {
   description:
     "Pret creare magazin online de la 99 lei/luna. Plan gratuit 15 zile, fara card de credit. Include mentenanta gratuita pe viata, integrari curierat, plati online si facturare.",
   alternates: {
-    canonical: "https://edinio.com/preturi",
+    canonical: "https://www.edinio.com/preturi",
   },
   openGraph: {
     title: "Preturi creare magazin online | Edinio",
     description:
       "Pret site magazin online de la 99 lei/luna. Testare gratuita 15 zile, fara card de credit. Mentenanta gratuita pe viata.",
-    url: "https://edinio.com/preturi",
+    url: "https://www.edinio.com/preturi",
   },
 };
 

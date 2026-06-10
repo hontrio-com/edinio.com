@@ -40,7 +40,7 @@ export default async function SlugPage({ params }: Props) {
   const supabase = await createClient();
 
   const [{ data: business }, { data: { user } }] = await Promise.all([
-    supabase.from("businesses").select("id, user_id, slug, type, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features, suspended_until").eq("slug", slug).single(),
+    supabase.from("businesses").select("*").eq("slug", slug).single(),
     supabase.auth.getUser(),
   ]);
 

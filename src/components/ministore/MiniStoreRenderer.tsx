@@ -15,8 +15,14 @@ import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
-type Product = Database["public"]["Tables"]["products"]["Row"];
-type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
+type Product = Pick<
+  Database["public"]["Tables"]["products"]["Row"],
+  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
+>;
+type StoreSettings = Pick<
+  Database["public"]["Tables"]["store_settings"]["Row"],
+  "id" | "business_id" | "page_content" | "store_policies" | "default_shipping_cost" | "free_shipping_threshold"
+>;
 
 interface Social {
   facebook?: string;

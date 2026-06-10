@@ -11,7 +11,10 @@ import { cn } from "@/lib/utils/cn";
 import type { Database } from "@/types/database.types";
 import type { CategoryOption } from "@/components/dashboard/ProductForm";
 
-type Product = Database["public"]["Tables"]["products"]["Row"];
+type Product = Pick<
+  Database["public"]["Tables"]["products"]["Row"],
+  "id" | "name" | "slug" | "sku" | "price" | "compare_at_price" | "images" | "category" | "is_active" | "is_featured" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
+>;
 
 export function ProductsClient({ products, businessId, initialSearch = "", categories = [], productLimit, productCount, plan }: {
   products: Product[];
@@ -155,6 +158,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
 
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
         {filtered.length > 0 ? (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -286,6 +290,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
               </div>
             </div>
           )}
+          </>
         ) : (
           <div className="py-16 text-center">
             <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">

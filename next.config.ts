@@ -18,18 +18,8 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "rtefdpioqmowkdiybwrr.supabase.co",
-        pathname: "/storage/v1/object/public/**",
-      },
-      {
-        protocol: "https",
-        hostname: "*.r2.dev",
-        pathname: "/**",
-      },
-    ],
+    loader: "custom",
+    loaderFile: "./src/lib/supabase-image-loader.ts",
   },
   async headers() {
     return [

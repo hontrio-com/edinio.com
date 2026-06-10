@@ -58,13 +58,18 @@ interface PageContent {
   store_bg_color?: string;
 }
 
+interface PolicyValue {
+  content?: string;
+  enabled?: boolean;
+}
+
 interface StorePolicies {
-  terms?: string;
-  delivery?: string;
-  return?: string;
-  privacy?: string;
-  gdpr?: string;
-  cancellation?: string;
+  terms?: string | PolicyValue;
+  delivery?: string | PolicyValue;
+  return?: string | PolicyValue;
+  privacy?: string | PolicyValue;
+  gdpr?: string | PolicyValue;
+  cancellation?: string | PolicyValue;
 }
 
 interface CartItem {
@@ -995,7 +1000,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   }
 
   // Has any policy text
-  const hasPolicies = Object.values(storePolicies).some(v => v && v.trim().length > 0);
+  const hasPolicies = Object.values(storePolicies).some(v => {
+    if (!v) return false;
+    if (typeof v === "string") return v.trim().length > 0;
+    return typeof v === "object" && !!v.content && v.enabled !== false;
+  });
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: pageContent.store_bg_color || "var(--color-background)" }}>

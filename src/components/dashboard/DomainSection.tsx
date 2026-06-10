@@ -664,7 +664,7 @@ export function DomainSection({
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Valoare</span>
                 </div>
                 {[
-                  { type: "A",     name: "@",   value: "76.76.21.21" },
+                  { type: "A",     name: "@",   value: "216.150.1.1" },
                   { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
                 ].map((rec) => (
                   <div

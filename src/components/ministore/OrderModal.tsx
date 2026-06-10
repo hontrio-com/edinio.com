@@ -111,7 +111,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? [];
-  const emailField = liveCheckoutConfig?.email_field ?? { enabled: false, required: false };
+  const emailField = liveCheckoutConfig?.email_field ?? { enabled: true, required: false };
 
   const [selectedTierIdx, setSelectedTierIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);

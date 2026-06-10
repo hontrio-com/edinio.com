@@ -98,6 +98,9 @@ export async function sendOrderConfirmationToCustomer(
     items: { name: string; quantity: number; price: number }[];
     shipping_cost: number;
     business_name: string;
+    discount_code?: string;
+    discount_amount?: number;
+    payment_method?: string;
   }
 ) {
   if (!process.env.RESEND_API_KEY) return;
@@ -112,6 +115,19 @@ export async function sendOrderConfirmationToCustomer(
     )
     .join("");
 
+  const discountRow = order.discount_code && order.discount_amount
+    ? `<tr>
+        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere (${order.discount_code})</td>
+        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.discount_amount)}</td>
+      </tr>`
+    : "";
+
+  const paymentLabel = order.payment_method === "stripe"
+    ? "Card online (Stripe)"
+    : order.payment_method === "netopia"
+      ? "Card online (Netopia)"
+      : "ramburs la livrare";
+
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda ta a fost plasata!</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${order.customer_name}</strong>! Comanda ta la <strong>${order.business_name}</strong> a fost primita si va fi procesata in curand.</p>
@@ -125,6 +141,7 @@ export async function sendOrderConfirmationToCustomer(
         <td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produsele tale</td>
       </tr>
       ${itemsRows}
+      ${discountRow}
       <tr>
         <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
         <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
@@ -136,7 +153,7 @@ export async function sendOrderConfirmationToCustomer(
     </table>
 
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:20px;">
-      <p style="margin:0;font-size:13px;color:#71717a;">Plata se face <strong>cash la livrare</strong>. Te rugam sa pregatesti suma exacta.</p>
+      <p style="margin:0;font-size:13px;color:#71717a;">Metoda de plata: <strong>${paymentLabel}</strong></p>
     </div>
   `;
 

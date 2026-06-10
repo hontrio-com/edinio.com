@@ -1705,7 +1705,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         businessId={business.id}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
-        emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: false, required: false }}
+        emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
       />
 
       {/* Gallery lightbox */}

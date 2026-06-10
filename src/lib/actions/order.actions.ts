@@ -142,6 +142,9 @@ export async function placeOrder(data: {
         shipping_cost: data.shipping_cost,
         business_name: businessName,
         order_id: order.id,
+        discount_code: data.discount_code,
+        discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
+        payment_method: data.payment_method ?? "cash_on_delivery",
       };
       await Promise.all([
         config.new_order !== false && notifyEmail
@@ -324,6 +327,9 @@ export async function placeCartOrder(data: {
         shipping_cost: data.shipping_cost,
         business_name: businessName,
         order_id: order.id,
+        discount_code: data.discount_code,
+        discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
+        payment_method: data.payment_method ?? "cash_on_delivery",
       };
       await Promise.all([
         config.new_order !== false && notifyEmail

@@ -784,7 +784,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
   const isOutOfStock = product.track_inventory && product.stock_quantity === 0;
 
   return (
-    <div className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
+    <div className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
       <a href={`${basePath}/product/${product.slug}`} className="block">
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
           {imageUrl ? (
@@ -840,8 +840,8 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
         </div>
       </a>
 
-      <div className="p-3 sm:p-4">
-        <a href={`${basePath}/product/${product.slug}`}>
+      <div className="p-3 sm:p-4 flex flex-col flex-1">
+        <a href={`${basePath}/product/${product.slug}`} className="flex-1">
           <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
             {product.name}
           </h3>

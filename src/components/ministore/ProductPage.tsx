@@ -607,11 +607,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             <span>Magazin</span>
           </a>
           <span className="text-gray-300">/</span>
-          {business.logo_url ? (
-            <Image src={business.logo_url} alt={business.store_name ?? business.business_name} width={80} height={28} className="object-contain" />
-          ) : (
-            <span className="font-bold text-sm text-gray-900 truncate">{business.store_name ?? business.business_name}</span>
-          )}
+          <span className="font-bold text-sm text-gray-900 truncate">{business.store_name ?? business.business_name}</span>
         </div>
       </header>
 

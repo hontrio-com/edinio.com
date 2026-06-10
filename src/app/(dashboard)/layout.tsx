@@ -6,6 +6,7 @@ import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
+import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -58,6 +59,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-background">
+      <ScrollToTop />
       <PlatformMetaPixel />
       <Sidebar
         currentBusiness={currentBusiness}

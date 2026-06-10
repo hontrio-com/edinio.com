@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
       "@tiptap/react",
       "@tiptap/starter-kit",
       "react-day-picker",
+      "framer-motion",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
     ],
     staleTimes: {
       dynamic: 30,

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
@@ -48,13 +49,14 @@ export async function placeOrder(data: {
   locker_id?: string;
   locker_name?: string;
 }) {
-  const supabase = await createClient();
+  // Use admin client for order creation — customers are anonymous, RLS requires service role
+  const admin = createAdminClient();
 
   const subtotal = data.product_price * data.quantity;
   const extrasTotal = (data.extras ?? []).reduce((s, e) => s + e.price, 0);
   const discountAmount = data.discount_amount ?? 0;
   const total = subtotal + extrasTotal - discountAmount + data.shipping_cost;
-  const order_number = await buildOrderNumber(supabase, data.business_id);
+  const order_number = await buildOrderNumber(admin, data.business_id);
 
   const allItems = [
     {
@@ -67,7 +69,7 @@ export async function placeOrder(data: {
     ...(data.extras ?? []).map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
-  const { data: order, error } = await supabase.from("orders").insert({
+  const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
     customer_name: data.customer_name.trim(),
@@ -105,25 +107,15 @@ export async function placeOrder(data: {
   }
 
   if (data.discount_id) {
-    await supabase.rpc("increment_discount_uses", { p_discount_id: data.discount_id });
+    await admin.rpc("increment_discount_uses", { p_discount_id: data.discount_id });
   }
 
-  const { data: product } = await supabase
-    .from("products")
-    .select("track_inventory, stock_quantity")
-    .eq("id", data.product_id)
-    .single();
-
-  if (product?.track_inventory && product.stock_quantity !== null) {
-    await supabase
-      .from("products")
-      .update({ stock_quantity: Math.max(0, product.stock_quantity - data.quantity) })
-      .eq("id", data.product_id);
-  }
+  // Atomic stock decrement — prevents race condition with concurrent orders
+  await admin.rpc("decrement_stock" as never, { p_product_id: data.product_id, p_quantity: data.quantity } as never);
 
   // Send emails
   try {
-    const { data: settings } = await supabase
+    const { data: settings } = await admin
       .from("store_settings")
       .select("notifications_config, businesses(business_name, user_id)")
       .eq("business_id", data.business_id)
@@ -135,11 +127,8 @@ export async function placeOrder(data: {
       const biz = settings.businesses as unknown as { business_name: string; user_id: string } | null;
       const businessName = biz?.business_name ?? "";
 
-      // Fallback: if no notification email configured, use owner's auth email
       let notifyEmail = config.notification_email;
       if (!notifyEmail && biz?.user_id) {
-        const { createClient: createAdmin } = await import("@supabase/supabase-js");
-        const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
         const { data: authData } = await admin.auth.admin.getUserById(biz.user_id);
         notifyEmail = authData?.user?.email ?? "";
       }
@@ -163,7 +152,7 @@ export async function placeOrder(data: {
           : null,
       ].filter(Boolean));
     }
-  } catch { /* ignore — email failure must not block the order */ }
+  } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 
   revalidatePath("/dashboard/orders");
   return { success: true, orderId: order.id, orderNumber: order.order_number };
@@ -244,21 +233,22 @@ export async function placeCartOrder(data: {
   locker_id?: string;
   locker_name?: string;
 }) {
-  const supabase = await createClient();
+  // Use admin client — customers are anonymous
+  const admin = createAdminClient();
 
   const extrasTotal = (data.extras ?? []).reduce((s, e) => s + e.price, 0);
   const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
   const discountAmount = data.discount_amount ?? 0;
   const vatAmount = data.vat_amount ?? 0;
   const total = subtotal + extrasTotal - discountAmount + data.shipping_cost + vatAmount;
-  const order_number = await buildOrderNumber(supabase, data.business_id);
+  const order_number = await buildOrderNumber(admin, data.business_id);
 
   const allItems = [
     ...data.items.map(i => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
     ...(data.extras ?? []).map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
-  const { data: order, error } = await supabase.from("orders").insert({
+  const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
     customer_name: data.customer_name.trim(),
@@ -298,32 +288,16 @@ export async function placeCartOrder(data: {
   }
 
   if (data.discount_id) {
-    await supabase.rpc("increment_discount_uses", { p_discount_id: data.discount_id });
+    await admin.rpc("increment_discount_uses", { p_discount_id: data.discount_id });
   }
 
-  const productIds = data.items.map(i => i.product_id);
-  const { data: products } = await supabase
-    .from("products")
-    .select("id, track_inventory, stock_quantity")
-    .in("id", productIds);
-
-  if (products) {
-    await Promise.all(
-      products
-        .filter(p => p.track_inventory && p.stock_quantity !== null)
-        .map(p => {
-          const ordered = data.items.find(i => i.product_id === p.id)?.quantity ?? 0;
-          return supabase
-            .from("products")
-            .update({ stock_quantity: Math.max(0, (p.stock_quantity as number) - ordered) })
-            .eq("id", p.id);
-        })
-    );
-  }
+  // Atomic batch stock decrement — prevents race conditions
+  const stockItems = data.items.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+  await admin.rpc("decrement_stock_batch" as never, { p_items: stockItems } as never);
 
   // Send emails
   try {
-    const { data: settings } = await supabase
+    const { data: settings } = await admin
       .from("store_settings")
       .select("notifications_config, businesses(business_name, user_id)")
       .eq("business_id", data.business_id)
@@ -335,11 +309,8 @@ export async function placeCartOrder(data: {
       const biz = settings.businesses as unknown as { business_name: string; user_id: string } | null;
       const businessName = biz?.business_name ?? "";
 
-      // Fallback: if no notification email configured, use owner's auth email
       let notifyEmail = config.notification_email;
       if (!notifyEmail && biz?.user_id) {
-        const { createClient: createAdmin } = await import("@supabase/supabase-js");
-        const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
         const { data: authData } = await admin.auth.admin.getUserById(biz.user_id);
         notifyEmail = authData?.user?.email ?? "";
       }
@@ -363,7 +334,7 @@ export async function placeCartOrder(data: {
           : null,
       ].filter(Boolean));
     }
-  } catch { /* ignore — email failure must not block the order */ }
+  } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 
   revalidatePath("/dashboard/orders");
   return { success: true, orderId: order.id, orderNumber: order.order_number };

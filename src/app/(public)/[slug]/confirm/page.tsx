@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { CheckCircle, Package, Phone, ArrowLeft } from "lucide-react";
@@ -29,7 +30,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  // Fetch order details for summary
+  // Fetch order details via admin client (orders RLS restricts anonymous SELECT)
   let orderItems: { name: string; price: number; quantity: number }[] = [];
   let shippingCost = 0;
   let discountAmount = 0;
@@ -37,10 +38,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let orderNumber: string | null = null;
 
   if (orderId) {
-    const { data: order } = await supabase
+    const adminClient = createAdminClient();
+    const { data: order } = await adminClient
       .from("orders")
       .select("order_number, items, shipping_cost, discount_amount, discount_code, subtotal, total")
       .eq("id", orderId)
+      .eq("business_id", business.id)
       .single();
 
     if (order) {

@@ -5,7 +5,11 @@ import { Resend } from "resend";
 import { logAudit } from "@/lib/audit";
 import { buildAdminNotifyHtml } from "@/lib/email";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM = process.env.EMAIL_FROM ?? "Edinio <noreply@edinio.com>";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -25,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!authUser?.user?.email) return NextResponse.json({ error: "Email negasit" }, { status: 404 });
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM,
     to: authUser.user.email,
     subject: body.subject.trim(),

@@ -1,7 +1,11 @@
 import { Resend } from "resend";
 import { formatPrice } from "@/lib/utils/format";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 const FROM = `Edinio.com <${FROM_EMAIL}>`;
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
@@ -136,7 +140,7 @@ export async function sendOrderConfirmationToCustomer(
     </div>
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `Comanda ta ${order.order_number} a fost primita`,
@@ -165,7 +169,7 @@ export async function sendAccountWelcomeEmail(
       </a>
     </div>
   `;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: "Bine ai venit pe Edinio!",
@@ -199,7 +203,7 @@ export async function sendWelcomeEmail(
       </a>
     </div>
   `;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `Magazinul tau ${data.business_name} este live!`,
@@ -217,7 +221,7 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;text-align:center;">Codul este valabil <strong>10 minute</strong>. Daca nu ai initiat tu aceasta autentificare, ignora acest email.</p>
   `;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `${otp} — Codul tau de verificare Edinio`,
@@ -287,7 +291,7 @@ export async function sendNewSupportTicketToAdmin(data: {
       </a>
     </div>
   `;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
     subject: `[Suport] ${data.subject} — ${data.userEmail}`,
@@ -314,7 +318,7 @@ export async function sendSupportReplyToAdmin(data: {
       </a>
     </div>
   `;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
     subject: `[Suport] RE: ${data.subject} — ${data.userEmail}`,
@@ -342,7 +346,7 @@ export async function sendAgentReplyToUser(data: {
       </a>
     </div>
   `;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: data.to,
     subject: `Raspuns la tichetul tau: ${data.subject}`,
@@ -416,7 +420,7 @@ export async function sendDomainOrderToAdmin(data: {
       </a>
     </div>
   `;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
     subject: `[Domeniu] Comanda noua: ${data.domain} — ${data.customerName}`,
@@ -497,7 +501,7 @@ export async function sendNewOrderEmail(
     </div>
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `Comanda noua ${order.order_number} - ${order.customer_name}`,
@@ -586,7 +590,7 @@ export async function sendOrderStatusToCustomer(
     ${awbSection}
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `${cfg.subject} — ${order.order_number}`,
@@ -630,7 +634,7 @@ export async function sendSubscriptionActivatedEmail(
     </div>
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `Abonamentul ${data.plan} a fost activat`,
@@ -664,7 +668,7 @@ export async function sendPaymentFailedEmail(
     </div>
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: "Plata pentru abonamentul Edinio nu a reusit",
@@ -702,7 +706,7 @@ export async function sendStoreSuspendedEmail(
     </div>
   `;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: "Magazinul tau Edinio va fi suspendat",

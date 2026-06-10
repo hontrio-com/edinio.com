@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: "Fisierul este prea mare. Limita este 5MB." }, { status: 400 });
+    return NextResponse.json({ error: "Fisierul este prea mare. Limita este 10MB." }, { status: 400 });
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "webp";

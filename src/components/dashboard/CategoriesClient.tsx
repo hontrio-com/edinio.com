@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import {
-  Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, GripVertical, Tag, ImagePlus, Loader2,
+  Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, Tag, ImagePlus, Loader2,
 } from "lucide-react";
 import { createCategory, updateCategory, deleteCategory } from "@/lib/actions/category.actions";
 import { createClient } from "@/lib/supabase/client";
@@ -99,58 +99,56 @@ export function CategoriesClient({ initialCategories }: Props) {
     });
   }
 
-  // ── Create root category
+  // ── Create root category (optimistic)
   function handleCreateRoot(name: string) {
+    const sort_order = roots.length;
+    const tempId = `temp-${Date.now()}`;
+    setCategories(prev => [...prev, { id: tempId, business_id: "", parent_id: null, name, sort_order, image_url: null, created_at: "", updated_at: "" }]);
+    setEditing(null);
+    toast.success("Categorie adaugata.");
     startTransition(async () => {
-      const sort_order = roots.length;
       const result = await createCategory({ name, sort_order });
-      if ("error" in result) { toast.error(result.error); return; }
-      setCategories(prev => [...prev, {
-        id: result.id, business_id: "", parent_id: null,
-        name, sort_order, image_url: null, created_at: "", updated_at: "",
-      }]);
-      setEditing(null);
-      toast.success("Categorie adaugata.");
+      if ("error" in result) { toast.error(result.error); setCategories(prev => prev.filter(c => c.id !== tempId)); return; }
+      setCategories(prev => prev.map(c => c.id === tempId ? { ...c, id: result.id } : c));
     });
   }
 
-  // ── Create subcategory
+  // ── Create subcategory (optimistic)
   function handleCreateSub(parentId: string, name: string) {
+    const sort_order = getChildren(parentId).length;
+    const tempId = `temp-${Date.now()}`;
+    setCategories(prev => [...prev, { id: tempId, business_id: "", parent_id: parentId, name, sort_order, image_url: null, created_at: "", updated_at: "" }]);
+    setEditing(null);
+    toast.success("Subcategorie adaugata.");
     startTransition(async () => {
-      const sort_order = getChildren(parentId).length;
       const result = await createCategory({ name, parent_id: parentId, sort_order });
-      if ("error" in result) { toast.error(result.error); return; }
-      setCategories(prev => [...prev, {
-        id: result.id, business_id: "", parent_id: parentId,
-        name, sort_order, image_url: null, created_at: "", updated_at: "",
-      }]);
-      setEditing(null);
-      toast.success("Subcategorie adaugata.");
+      if ("error" in result) { toast.error(result.error); setCategories(prev => prev.filter(c => c.id !== tempId)); return; }
+      setCategories(prev => prev.map(c => c.id === tempId ? { ...c, id: result.id } : c));
     });
   }
 
-  // ── Rename
+  // ── Rename (optimistic)
   function handleRename(id: string, name: string) {
+    setCategories(prev => prev.map(c => c.id === id ? { ...c, name } : c));
+    setEditing(null);
+    toast.success("Redenumit.");
     startTransition(async () => {
       const result = await updateCategory(id, { name });
-      if ("error" in result) { toast.error(result.error); return; }
-      setCategories(prev => prev.map(c => c.id === id ? { ...c, name } : c));
-      setEditing(null);
-      toast.success("Redenumit.");
+      if ("error" in result) { toast.error(result.error); }
     });
   }
 
-  // ── Delete
+  // ── Delete (optimistic)
   function handleDelete(id: string) {
     const children = getChildren(id);
+    const toRemove = new Set([id, ...children.map(c => c.id)]);
+    const backup = categories.filter(c => toRemove.has(c.id));
+    setCategories(prev => prev.filter(c => !toRemove.has(c.id)));
+    setConfirmDelete(null);
+    toast.success("Stearsa.");
     startTransition(async () => {
       const result = await deleteCategory(id);
-      if ("error" in result) { toast.error(result.error); return; }
-      // Remove category + its children (cascade handled by DB)
-      const toRemove = new Set([id, ...children.map(c => c.id)]);
-      setCategories(prev => prev.filter(c => !toRemove.has(c.id)));
-      setConfirmDelete(null);
-      toast.success("Stearsa.");
+      if ("error" in result) { toast.error(result.error); setCategories(prev => [...prev, ...backup]); }
     });
   }
 
@@ -253,8 +251,6 @@ export function CategoriesClient({ initialCategories }: Props) {
               <div key={cat.id} className="border border-border rounded-xl overflow-hidden">
                 {/* Root category row */}
                 <div className={`flex items-center gap-2 px-3 py-2.5 bg-surface hover:bg-muted/40 transition-colors ${isEditing ? "bg-muted/40" : ""}`}>
-                  <GripVertical className="h-4 w-4 text-muted-foreground/40 flex-shrink-0 cursor-grab" />
-
                   {/* Expand toggle */}
                   <button
                     type="button"
@@ -359,7 +355,6 @@ export function CategoriesClient({ initialCategories }: Props) {
                       return (
                         <div key={sub.id}
                           className="flex items-center gap-2 px-3 py-2 pl-10 border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors">
-                          <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 flex-shrink-0 cursor-grab" />
                           <Tag className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
 
                           {isEditingSub ? (

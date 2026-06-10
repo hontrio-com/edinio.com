@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useCallback } from "react";
 import { toast } from "sonner";
 import {
   Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Ticket,
-  Percent, Banknote, Truck, Copy, RefreshCw, X,
+  Percent, Banknote, Truck, Copy, Check, RefreshCw, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { formatDate } from "@/lib/utils/format";
@@ -70,7 +70,7 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
           is_active: editing.is_active,
           expires_at: editing.expires_at ? editing.expires_at.slice(0, 10) : null,
         }
-      : { ...EMPTY_FORM, code: generateCode() }
+      : { ...EMPTY_FORM, code: "" }
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
@@ -88,21 +88,22 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
+    const payload: DiscountData = {
+      ...form,
+      code: form.code.trim().toUpperCase(),
+      value: form.type === "free_shipping" ? 0 : Number(form.value),
+      min_order_amount: form.min_order_amount ? Number(form.min_order_amount) : null,
+      max_uses: form.max_uses ? Number(form.max_uses) : null,
+      expires_at: form.expires_at || null,
+    };
+    // Close modal immediately for instant feel
+    toast.success(editing ? "Discount actualizat." : "Discount creat.");
+    onClose();
     startTransition(async () => {
-      const payload: DiscountData = {
-        ...form,
-        code: form.code.trim().toUpperCase(),
-        value: form.type === "free_shipping" ? 0 : Number(form.value),
-        min_order_amount: form.min_order_amount ? Number(form.min_order_amount) : null,
-        max_uses: form.max_uses ? Number(form.max_uses) : null,
-        expires_at: form.expires_at || null,
-      };
       const result = editing
         ? await updateDiscount(editing.id, businessId, payload)
         : await createDiscount(businessId, payload);
-      if ("error" in result) { toast.error(result.error); return; }
-      toast.success(editing ? "Discount actualizat." : "Discount creat.");
-      onClose();
+      if ("error" in result) { toast.error(result.error); }
     });
   }
 
@@ -345,6 +346,7 @@ export function DiscountsClient({ discounts, businessId }: {
   const [editing, setEditing] = useState<Discount | null>(null);
   const [deleting, setDeleting] = useState<Discount | null>(null);
   const [, startToggle] = useTransition();
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   function handleEdit(d: Discount) {
     setEditing(d);
@@ -363,10 +365,12 @@ export function DiscountsClient({ discounts, businessId }: {
     });
   }
 
-  function copyCode(code: string) {
+  const copyCode = useCallback((code: string) => {
     navigator.clipboard.writeText(code);
     toast.success("Cod copiat!");
-  }
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 500);
+  }, []);
 
   const isExpired = (d: Discount) => !!d.expires_at && new Date(d.expires_at) < new Date();
 
@@ -441,9 +445,9 @@ export function DiscountsClient({ discounts, businessId }: {
                             <button
                               type="button"
                               onClick={() => copyCode(d.code)}
-                              className="text-muted-foreground hover:text-foreground transition-colors"
+                              className={cn("transition-colors", copiedCode === d.code ? "text-green-500" : "text-muted-foreground hover:text-foreground")}
                             >
-                              <Copy className="h-3.5 w-3.5" />
+                              {copiedCode === d.code ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                             </button>
                           </div>
                           {d.min_order_amount && (

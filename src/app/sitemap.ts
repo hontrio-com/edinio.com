@@ -1,6 +1,9 @@
 import type { MetadataRoute } from "next";
 import { createClient } from "@/lib/supabase/server";
 
+// Regenerate sitemap at most once per hour (3600s)
+export const revalidate = 3600;
+
 const SITE_URL = "https://www.edinio.com";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

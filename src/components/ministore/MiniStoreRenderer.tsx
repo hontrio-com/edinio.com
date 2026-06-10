@@ -904,6 +904,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [categoryFilter, setCategoryFilter] = useState("toate");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const { addItem, count, total } = useCart();
 
   const color = business.primary_color ?? "#1AB554";
@@ -983,6 +984,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     }
     return list;
   }, [products, search, categoryFilter, sort]);
+
+  const PRODUCTS_PER_PAGE = 20;
+  const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
+  const paginatedProducts = filteredProducts.slice(
+    (currentPage - 1) * PRODUCTS_PER_PAGE,
+    currentPage * PRODUCTS_PER_PAGE,
+  );
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [search, categoryFilter, sort]);
 
   function handleAddToCart(product: Product) {
     const images = Array.isArray(product.images) ? product.images : [];
@@ -1309,19 +1320,62 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {filteredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  color={color}
-                  basePath={basePath}
-                  onAddToCart={() => handleAddToCart(product)}
-                  isAdded={addedId === product.id}
-                  newBadgeDays={newBadgeDays}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {paginatedProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    color={color}
+                    basePath={basePath}
+                    onAddToCart={() => handleAddToCart(product)}
+                    isAdded={addedId === product.id}
+                    newBadgeDays={newBadgeDays}
+                  />
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-8">
+                  <button
+                    onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    disabled={currentPage === 1}
+                    className="px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors"
+                  >
+                    Inapoi
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                    .reduce<(number | "dots")[]>((acc, p, i, arr) => {
+                      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("dots");
+                      acc.push(p);
+                      return acc;
+                    }, [])
+                    .map((p, i) =>
+                      p === "dots" ? (
+                        <span key={`dots-${i}`} className="px-1 text-muted-foreground">...</span>
+                      ) : (
+                        <button
+                          key={p}
+                          onClick={() => { setCurrentPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                          className="min-w-[36px] h-9 text-sm rounded-lg border transition-colors"
+                          style={currentPage === p
+                            ? { backgroundColor: color, borderColor: color, color: "#fff" }
+                            : { borderColor: "var(--color-border)" }}
+                        >
+                          {p}
+                        </button>
+                      )
+                    )}
+                  <button
+                    onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors"
+                  >
+                    Inainte
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </section>
 

@@ -15,7 +15,7 @@ export default async function StoreLayout({ children, params }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, store_settings(marketing_config)")
     .eq("slug", slug)
     .single();
 
@@ -24,13 +24,9 @@ export default async function StoreLayout({ children, params }: Props) {
   let googleTagId: string | null = null;
 
   if (business) {
-    const { data: settings } = await supabase
-      .from("store_settings")
-      .select("marketing_config")
-      .eq("business_id", business.id)
-      .single();
-
-    const mc = settings?.marketing_config as MarketingConfig | null;
+    const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown } | { marketing_config: unknown }[] | null }).store_settings;
+    const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
+    const mc = (settings?.marketing_config ?? null) as MarketingConfig | null;
     fbPixelId = mc?.facebook_pixel_id?.trim() || null;
     ttPixelId = mc?.tiktok_pixel_id?.trim() || null;
     googleTagId = mc?.google_tag_id?.trim() || null;

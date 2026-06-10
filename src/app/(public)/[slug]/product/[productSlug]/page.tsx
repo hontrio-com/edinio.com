@@ -84,7 +84,7 @@ export default async function ProductDetailPage({ params }: Props) {
   const [{ data: businessRaw }, { data: product }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("*, store_settings(*)")
+      .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features, store_settings(page_content, store_policies, default_shipping_cost, free_shipping_threshold)")
       .eq("slug", slug)
       .single(),
     supabase.from("products").select("*").eq(UUID_RE.test(productSlug) ? "id" : "slug", productSlug).single(),

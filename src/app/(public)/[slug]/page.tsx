@@ -40,7 +40,7 @@ export default async function SlugPage({ params }: Props) {
   const supabase = await createClient();
 
   const [{ data: business }, { data: { user } }] = await Promise.all([
-    supabase.from("businesses").select("*").eq("slug", slug).single(),
+    supabase.from("businesses").select("id, user_id, slug, type, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features, suspended_until").eq("slug", slug).single(),
     supabase.auth.getUser(),
   ]);
 
@@ -105,14 +105,14 @@ export default async function SlugPage({ params }: Props) {
   const [{ data: products }, { data: storeSettings }, { data: categoriesData }] = await Promise.all([
     supabase
       .from("products")
-      .select("*")
+      .select("id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, track_inventory, stock_quantity, sort_order, created_at, business_id")
       .eq("business_id", business.id)
       .eq("is_active", true)
       .order("is_featured", { ascending: false })
       .order("sort_order"),
     supabase
       .from("store_settings")
-      .select("*")
+      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold")
       .eq("business_id", business.id)
       .single(),
     supabase

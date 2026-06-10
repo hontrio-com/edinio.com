@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2 } from "lucide-react";
@@ -26,10 +26,13 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDupTransition] = useTransition();
+  const [page, setPage] = useState(1);
 
   const isAtLimit = productLimit !== Infinity && productCount >= productLimit;
   const isNearLimit = !isAtLimit && productLimit !== Infinity && productCount >= Math.floor(productLimit * 0.9);
   const limitPercent = productLimit === Infinity ? 0 : Math.min(100, Math.round((productCount / productLimit) * 100));
+
+  const PAGE_SIZE = 25;
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -40,6 +43,12 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
       (p.sku ?? "").toLowerCase().includes(q)
     );
   }, [products, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => { setPage(1); }, [searchQuery]);
 
   return (
     <>
@@ -159,7 +168,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((product) => {
+                {paginated.map((product) => {
                   const images = Array.isArray(product.images) ? product.images : [];
                   return (
                     <tr key={product.id} className="hover:bg-muted/30 transition-colors cursor-pointer"
@@ -246,6 +255,37 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} produse
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors">Inapoi</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce<(number | "dots")[]>((acc, p, i, arr) => {
+                    if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("dots");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === "dots" ? (
+                      <span key={`d${i}`} className="px-1 text-muted-foreground text-xs">...</span>
+                    ) : (
+                      <button key={p} onClick={() => setPage(p)}
+                        className={cn("min-w-[28px] h-7 text-xs rounded-lg border transition-colors",
+                          currentPage === p ? "bg-foreground text-background border-foreground" : "border-border hover:bg-muted")}>
+                        {p}
+                      </button>
+                    )
+                  )}
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors">Inainte</button>
+              </div>
+            </div>
+          )}
         ) : (
           <div className="py-16 text-center">
             <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">

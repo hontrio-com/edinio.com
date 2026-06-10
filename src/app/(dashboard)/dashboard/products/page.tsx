@@ -16,7 +16,7 @@ export default async function ProductsPage({
   const [{ data: bizRow }, { search: searchQuery }, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id, products(*), categories(id, name, parent_id, sort_order)")
+      .select("id, products(id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, track_inventory, stock_quantity, sort_order, created_at, business_id), categories(id, name, parent_id, sort_order)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)

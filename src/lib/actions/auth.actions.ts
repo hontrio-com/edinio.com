@@ -153,8 +153,11 @@ export async function register(formData: {
     return { error: "Inregistrarea a esuat. Incearca din nou." };
   }
 
-  // Send account welcome email (fire-and-forget)
+  // Send account welcome email + notify admin (fire-and-forget)
   sendAccountWelcomeEmail(formData.email, { name: formData.full_name }).catch(() => {});
+  import("@/lib/email").then(({ sendAdminNewUserNotification }) => {
+    sendAdminNewUserNotification({ name: formData.full_name, email: formData.email, createdAt: new Date().toISOString() }).catch(() => {});
+  }).catch(() => {});
 
   // Clear stale onboarding cookie from previous session
   const cookieStore = await cookies();

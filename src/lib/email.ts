@@ -445,6 +445,56 @@ export async function sendDomainOrderToAdmin(data: {
   });
 }
 
+export async function sendAdminNewUserNotification(data: {
+  name: string;
+  email: string;
+  createdAt: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const date = new Date(data.createdAt).toLocaleString("ro-RO", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cont nou creat</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un utilizator nou s-a inregistrat pe Edinio.</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${data.name}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${data.email}</p>
+      <p style="margin:4px 0 0 0;font-size:12px;color:#a1a1aa;">${date}</p>
+    </div>
+  `;
+  await getResend().emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: `[Edinio] Cont nou: ${data.name} (${data.email})`,
+    html: baseTemplate(content),
+  });
+}
+
+export async function sendAdminNewStoreNotification(data: {
+  ownerName: string;
+  ownerEmail: string;
+  businessName: string;
+  slug: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Magazin nou creat</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un utilizator si-a creat magazinul pe Edinio.</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${data.businessName}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${data.ownerName} (${data.ownerEmail})</p>
+      <p style="margin:6px 0 0 0;font-size:13px;">
+        <a href="${SITE_URL}/${data.slug}" style="color:#1AB554;text-decoration:none;font-weight:600;">edinio.com/${data.slug}</a>
+      </p>
+    </div>
+  `;
+  await getResend().emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: `[Edinio] Magazin nou: ${data.businessName} (${data.ownerEmail})`,
+    html: baseTemplate(content),
+  });
+}
+
 export async function sendNewOrderEmail(
   to: string,
   order: {

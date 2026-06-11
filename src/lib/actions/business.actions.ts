@@ -83,17 +83,26 @@ export async function createBusiness(data: {
       .eq("id", user.id);
   }
 
-  // Send welcome email (non-blocking)
+  // Send welcome email + notify admin (non-blocking)
   if (user.email) {
     const { data: profile } = await supabase
       .from("users_profile")
       .select("full_name")
       .eq("id", user.id)
       .single();
+    const ownerName = profile?.full_name ?? "";
     sendWelcomeEmail(user.email, {
-      name: profile?.full_name ?? "",
+      name: ownerName,
       business_name: data.business_name,
       slug: business.slug,
+    }).catch(() => {});
+    import("@/lib/email").then(({ sendAdminNewStoreNotification }) => {
+      sendAdminNewStoreNotification({
+        ownerName,
+        ownerEmail: user.email!,
+        businessName: data.business_name,
+        slug: business.slug,
+      }).catch(() => {});
     }).catch(() => {});
   }
 

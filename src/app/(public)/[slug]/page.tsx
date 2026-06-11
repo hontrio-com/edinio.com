@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { headers } from "next/headers";
@@ -78,9 +79,10 @@ export default async function SlugPage({ params }: Props) {
       isSuspended = new Date(business.suspended_until) < new Date();
     }
 
-    // Trial expired
+    // Trial expired — use admin client to bypass RLS (anonymous visitors can't read users_profile)
     if (!isSuspended) {
-      const { data: ownerProfile } = await supabase
+      const admin = createAdminClient();
+      const { data: ownerProfile } = await admin
         .from("users_profile")
         .select("plan, plan_expires_at")
         .eq("id", business.user_id)

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Eye, EyeOff, Check, X } from "lucide-react";
@@ -38,6 +39,8 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function RegisterPage() {
+  const searchParams = useSearchParams();
+  const preselectedPlan = searchParams.get("plan");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -56,6 +59,9 @@ export default function RegisterPage() {
   async function onSubmit(data: RegisterInput) {
     setLoading(true);
     sessionStorage.setItem("platform_registered", "1");
+    if (preselectedPlan && ["basic", "premium", "ultra"].includes(preselectedPlan)) {
+      sessionStorage.setItem("preselected_plan", preselectedPlan);
+    }
     try {
       const result = await registerAction({
         full_name: data.full_name,

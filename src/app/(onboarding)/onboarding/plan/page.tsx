@@ -111,10 +111,32 @@ function PlanPageContent() {
   const isSuccess = searchParams.get("success") === "1";
   const isCancelled = searchParams.get("cancelled") === "1";
 
-  // On mount: validate sessionStorage data exists
+  // On mount: validate sessionStorage data exists + handle preselected plan
   useEffect(() => {
     const storedDetails = sessionStorage.getItem("onboarding_details");
     if (!storedDetails) { router.replace("/onboarding/details"); return; }
+
+    // If coming from a campaign with ?plan=basic (saved in register page)
+    const preselected = sessionStorage.getItem("preselected_plan");
+    if (preselected && ["basic", "premium", "ultra"].includes(preselected) && !isSuccess && !isCancelled) {
+      sessionStorage.removeItem("preselected_plan");
+      setSelectedPlan(preselected);
+      // Auto-start Stripe checkout
+      setLoading(true);
+      sessionStorage.setItem("onboarding_pending_plan", preselected);
+      fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: preselected, return_to: "onboarding" }),
+      })
+        .then(r => r.json())
+        .then((data: { url?: string; error?: string }) => {
+          if (data.url) { window.location.href = data.url; }
+          else { toast.error(data.error ?? "Eroare la plata"); setLoading(false); }
+        })
+        .catch(() => { toast.error("Eroare la plata"); setLoading(false); });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // Track step
@@ -324,7 +346,7 @@ function PlanPageContent() {
         </div>
 
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-8 pt-6 border-t border-border">
-          <button type="button" onClick={() => router.push("/onboarding/customize")} disabled={loading}
+          <button type="button" onClick={() => router.push("/onboarding/details")} disabled={loading}
             className="py-3 sm:py-2.5 px-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors text-center sm:text-left disabled:opacity-40">
             Inapoi
           </button>

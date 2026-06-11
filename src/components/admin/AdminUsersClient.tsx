@@ -23,7 +23,17 @@ interface User {
   businesses_count: number;
   plan_expires_at: string | null;
   suspended_until: string | null;
+  onboarding_step: string;
+  onboarding_completed: boolean;
 }
+
+const STEP_LABELS: Record<string, { label: string; color: string }> = {
+  registered: { label: "Doar cont creat", color: "text-red-500" },
+  details: { label: "Blocat la detalii", color: "text-orange-500" },
+  customize: { label: "Blocat la personalizare", color: "text-amber-500" },
+  plan: { label: "Blocat la alegere plan", color: "text-blue-500" },
+  completed: { label: "Finalizat", color: "text-green-600" },
+};
 
 type StatusFilter = "all" | "active" | "past_due" | "suspended" | "unconfirmed";
 
@@ -307,13 +317,14 @@ export function AdminUsersClient({ users }: { users: User[] }) {
                 <SortTh label="Inregistrat" k="created_at" />
                 <SortTh label="Ultima accesare" k="last_sign_in_at" />
                 <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Onboarding</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-sm text-zinc-400">Niciun utilizator gasit</td>
+                  <td colSpan={9} className="text-center py-12 text-sm text-zinc-400">Niciun utilizator gasit</td>
                 </tr>
               ) : paged.map((u) => {
                 const planLabel = PLAN_LABELS[u.plan] ?? u.plan;
@@ -398,6 +409,14 @@ export function AdminUsersClient({ users }: { users: User[] }) {
                           <div className="flex items-center gap-1 text-xs text-zinc-400"><XCircle className="h-3.5 w-3.5" /> Neconfirmat</div>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const step = STEP_LABELS[u.onboarding_step] ?? STEP_LABELS.registered;
+                        return u.onboarding_completed
+                          ? <span className="text-xs text-green-600 font-medium">Finalizat</span>
+                          : <span className={cn("text-xs font-medium", step.color)}>{step.label}</span>;
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link href={`/admin/utilizatori/${u.id}`}

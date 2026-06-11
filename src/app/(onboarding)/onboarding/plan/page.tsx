@@ -9,11 +9,12 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { createBusiness } from "@/lib/actions/business.actions";
+import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { platformFbq } from "@/components/platform/PlatformMetaPixel";
 
 const PLANS = [
   {
-    id: "trial",
+    id: "free",
     name: "Testare gratuita",
     price: 0,
     priceSuffix: "15 zile",
@@ -118,6 +119,9 @@ function PlanPageContent() {
     if (!storedCustomize) { router.replace("/onboarding/customize"); return; }
   }, [router]);
 
+  // Track step
+  useEffect(() => { trackOnboardingStep("plan"); }, []);
+
   // Handle return from Stripe success
   useEffect(() => {
     if (!isSuccess || createdRef.current) return;
@@ -178,7 +182,7 @@ function PlanPageContent() {
       sessionStorage.removeItem("onboarding_pending_plan");
       localStorage.removeItem("onboarding_draft_v2");
 
-      if (plan === "trial") {
+      if (plan === "free") {
         platformFbq("StartTrial");
       } else {
         platformFbq("Subscribe", { value: plan === "basic" ? 99 : plan === "premium" ? 249 : 499, currency: "RON", predicted_ltv: 0 });

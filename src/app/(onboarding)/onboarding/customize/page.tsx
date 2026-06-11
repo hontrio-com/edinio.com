@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Loader2, Upload, X, Check } from "lucide-react";
 import { toast } from "sonner";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
+import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 
 const COLOR_PRESETS = [
   { value: "#1AB554", label: "Verde Edinio" },
@@ -70,6 +71,7 @@ export default function OnboardingCustomizePage() {
   const [customHex, setCustomHex] = useState("#1AB554");
 
   useEffect(() => {
+    trackOnboardingStep("customize");
     const stored = sessionStorage.getItem("onboarding_details");
     if (!stored) { router.replace("/onboarding/details"); return; }
     try { setDetails(JSON.parse(stored)); } catch { router.replace("/onboarding/details"); }

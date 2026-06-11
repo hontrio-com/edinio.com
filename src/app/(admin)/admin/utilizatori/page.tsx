@@ -8,7 +8,7 @@ export default async function AdminUsersPage() {
 
   const { data: profiles } = await admin
     .from("users_profile")
-    .select("id, full_name, plan, role, created_at, avatar_url, plan_expires_at, suspended_until")
+    .select("id, full_name, plan, role, created_at, avatar_url, plan_expires_at, suspended_until, onboarding_step, onboarding_completed" as "id, full_name, plan, role, created_at, avatar_url, plan_expires_at, suspended_until")
     .order("created_at", { ascending: false });
 
   // Get auth users (email, last_sign_in)
@@ -35,6 +35,8 @@ export default async function AdminUsersPage() {
       businesses_count: bizCountMap[p.id] ?? 0,
       plan_expires_at: p.plan_expires_at ?? null,
       suspended_until: p.suspended_until ?? null,
+      onboarding_step: ((p as unknown as Record<string, unknown>).onboarding_step as string) ?? "registered",
+      onboarding_completed: ((p as unknown as Record<string, unknown>).onboarding_completed as boolean) ?? false,
     };
   });
 

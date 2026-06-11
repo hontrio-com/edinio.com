@@ -223,3 +223,18 @@ export async function deleteAccount() {
   cs.delete("onboarding_done");
   redirect("/login");
 }
+
+export async function trackOnboardingStep(step: "details" | "customize" | "plan") {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  // Use admin client (onboarding_step not in generated types yet, and RLS may block)
+  const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
+  const admin = getAdmin();
+  const stepOrder: Record<string, number> = { registered: 0, details: 1, customize: 2, plan: 3, completed: 4 };
+  const { data } = await admin.from("users_profile").select("onboarding_step").eq("id", user.id).single();
+  const currentStep = (data as unknown as { onboarding_step?: string })?.onboarding_step ?? "registered";
+  if (stepOrder[step] > (stepOrder[currentStep] ?? 0)) {
+    await admin.from("users_profile").update({ onboarding_step: step } as never).eq("id", user.id);
+  }
+}

@@ -10,6 +10,7 @@ import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { businessSchema, type BusinessInput, ROMANIAN_COUNTIES } from "@/lib/validations/business";
 import { slugify } from "@/lib/utils/slugify";
 import { checkSlugAvailability } from "@/lib/actions/business.actions";
+import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { platformFbq } from "@/components/platform/PlatformMetaPixel";
 
 const DRAFT_KEY = "onboarding_draft_v2";
@@ -72,8 +73,9 @@ export default function OnboardingDetailsPage() {
   const businessName = watch("business_name") ?? "";
   const slug = watch("slug") ?? "";
 
-  // Fire CompleteRegistration event for platform pixel
+  // Track onboarding step + fire CompleteRegistration event
   useEffect(() => {
+    trackOnboardingStep("details");
     if (sessionStorage.getItem("platform_registered") === "1") {
       sessionStorage.removeItem("platform_registered");
       platformFbq("CompleteRegistration");

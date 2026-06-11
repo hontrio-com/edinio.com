@@ -202,9 +202,9 @@ function PlanPageContent() {
     if (!selectedPlan) return;
     setLoading(true);
 
-    if (selectedPlan === "trial") {
-      // Trial: create business directly
-      await finalizeBusiness("trial");
+    if (selectedPlan === "free") {
+      // Free trial: create business directly (no payment needed)
+      await finalizeBusiness("free");
       return;
     }
 

@@ -1,9 +1,9 @@
-export const PLANS = ["free", "trial", "basic", "premium", "ultra"] as const;
+export const PLANS = ["free", "basic", "premium", "ultra"] as const;
 export type PlanId = (typeof PLANS)[number];
 
 export const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit",
-  trial: "Testare gratuita",
+  free: "Gratuit (15 zile)",
+  trial: "Gratuit (15 zile)",
   basic: "Basic",
   premium: "Premium",
   ultra: "Ultra",

@@ -86,7 +86,7 @@ export default async function SlugPage({ params }: Props) {
         .eq("id", business.user_id)
         .single();
 
-      if (ownerProfile?.plan === "trial" && ownerProfile.plan_expires_at) {
+      if ((ownerProfile?.plan === "free" || ownerProfile?.plan === "trial") && ownerProfile?.plan_expires_at) {
         isSuspended = new Date(ownerProfile.plan_expires_at) < new Date();
       }
     }

@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
+import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 
@@ -14,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
-    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed").eq("id", user.id).single(),
+    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at").eq("id", user.id).single(),
     supabase.from("businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
   ]);
 
@@ -69,6 +70,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         isAdmin={profile.role === "admin"}
       />
       <div className="lg:pl-[var(--sidebar-width)]">
+        {profile.plan === "free" && profile.plan_expires_at && (
+          <TrialBanner planExpiresAt={profile.plan_expires_at} />
+        )}
         {suspendedBusiness?.suspended_until && (
           <GracePeriodBanner suspendedUntil={suspendedBusiness.suspended_until} />
         )}

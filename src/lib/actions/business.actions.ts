@@ -56,9 +56,9 @@ export async function createBusiness(data: {
   // Create store settings
   await supabase.from("store_settings").insert({ business_id: business.id });
 
-  // Set plan + mark onboarding complete
-  const plan = data.plan ?? "trial";
-  const planExpiresAt = plan === "trial"
+  // Set plan + mark onboarding complete (free = 15-day trial)
+  const plan = data.plan ?? "free";
+  const planExpiresAt = plan === "free"
     ? new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString()
     : null;
 

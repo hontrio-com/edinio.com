@@ -40,8 +40,12 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (!profile?.onboarding_completed) {
+        const plan = searchParams.get("plan");
         const res = NextResponse.redirect(`${origin}/onboarding/details`);
         res.cookies.delete("onboarding_done");
+        if (plan && ["basic", "premium", "ultra"].includes(plan)) {
+          res.cookies.set("preselected_plan", plan, { httpOnly: false, path: "/", maxAge: 600, sameSite: "lax" });
+        }
         return res;
       }
       const dashRes = NextResponse.redirect(`${origin}/dashboard`);

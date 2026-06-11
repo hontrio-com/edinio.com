@@ -6,18 +6,22 @@ import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   label?: string;
+  preselectedPlan?: string | null;
 }
 
-export function GoogleAuthButton({ label = "Continua cu Google" }: Props) {
+export function GoogleAuthButton({ label = "Continua cu Google", preselectedPlan }: Props) {
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
     setLoading(true);
     const supabase = createClient();
+    const callbackUrl = preselectedPlan
+      ? `${window.location.origin}/auth/callback?plan=${preselectedPlan}`
+      : `${window.location.origin}/auth/callback`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
       },
     });
   }

@@ -243,7 +243,7 @@ function RegisterForm() {
           <div className="flex-1 h-px bg-border" />
         </div>
         <div className="mt-3">
-          <GoogleAuthButton label="Inregistrare cu Google" />
+          <GoogleAuthButton label="Inregistrare cu Google" preselectedPlan={preselectedPlan} />
         </div>
       </div>
 

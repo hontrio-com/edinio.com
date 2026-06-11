@@ -43,12 +43,18 @@ export default function OnboardingDetailsPage() {
   const businessName = watch("business_name") ?? "";
   const slug = watch("slug") ?? "";
 
-  // Track step + fire pixel
+  // Track step + fire pixel + transfer plan from cookie (Google OAuth flow)
   useEffect(() => {
     trackOnboardingStep("details");
     if (sessionStorage.getItem("platform_registered") === "1") {
       sessionStorage.removeItem("platform_registered");
       platformFbq("CompleteRegistration");
+    }
+    // Google OAuth: plan comes via cookie since sessionStorage doesn't survive redirect
+    const cookieMatch = document.cookie.match(/preselected_plan=(\w+)/);
+    if (cookieMatch && ["basic", "premium", "ultra"].includes(cookieMatch[1])) {
+      sessionStorage.setItem("preselected_plan", cookieMatch[1]);
+      document.cookie = "preselected_plan=; path=/; max-age=0";
     }
   }, []);
 

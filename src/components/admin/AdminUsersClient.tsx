@@ -34,6 +34,7 @@ const STEP_LABELS: Record<string, { label: string; color: string }> = {
   plan: { label: "Blocat la alegere plan", color: "text-blue-500" },
   completed: { label: "Finalizat", color: "text-green-600" },
 };
+// Note: "customize" kept for backward compat with old data
 
 type StatusFilter = "all" | "active" | "past_due" | "suspended" | "unconfirmed";
 

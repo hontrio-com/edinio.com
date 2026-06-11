@@ -5,9 +5,8 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const STEPS = [
-  { number: 1, label: "Informatii", shortLabel: "Info" },
-  { number: 2, label: "Personalizare", shortLabel: "Design" },
-  { number: 3, label: "Alege planul", shortLabel: "Plan" },
+  { number: 1, label: "Magazinul tau", shortLabel: "Magazin" },
+  { number: 2, label: "Alege planul", shortLabel: "Plan" },
 ];
 
 export function OnboardingProgress({ currentStep }: { currentStep: number }) {

@@ -89,7 +89,7 @@ export default function OnboardingPlanPage() {
   return (
     <Suspense fallback={
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
-        <OnboardingProgress currentStep={3} />
+        <OnboardingProgress currentStep={2} />
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -114,9 +114,7 @@ function PlanPageContent() {
   // On mount: validate sessionStorage data exists
   useEffect(() => {
     const storedDetails = sessionStorage.getItem("onboarding_details");
-    const storedCustomize = sessionStorage.getItem("onboarding_customize");
     if (!storedDetails) { router.replace("/onboarding/details"); return; }
-    if (!storedCustomize) { router.replace("/onboarding/customize"); return; }
   }, [router]);
 
   // Track step
@@ -147,26 +145,16 @@ function PlanPageContent() {
 
   async function finalizeBusiness(plan: string) {
     const storedDetails = sessionStorage.getItem("onboarding_details");
-    const storedCustomize = sessionStorage.getItem("onboarding_customize");
-    if (!storedDetails || !storedCustomize) return;
+    if (!storedDetails) return;
 
     try {
       const details = JSON.parse(storedDetails);
-      const customize = JSON.parse(storedCustomize);
 
       const result = await createBusiness({
         business_name: String(details.business_name ?? ""),
-        tagline: String(details.tagline ?? "") || undefined,
         phone: String(details.phone ?? ""),
-        whatsapp: String(details.whatsapp ?? "") || undefined,
-        email: String(details.email ?? "") || undefined,
-        address: String(details.address ?? ""),
-        city: String(details.city ?? ""),
-        county: String(details.county ?? ""),
         slug: String(details.slug ?? ""),
-        logo_url: String(customize.logo_url ?? "") || undefined,
-        cover_url: String(customize.cover_url ?? "") || undefined,
-        primary_color: String(customize.primary_color ?? "#1AB554"),
+        primary_color: "#1AB554",
         plan,
       });
 
@@ -178,9 +166,7 @@ function PlanPageContent() {
       }
 
       sessionStorage.removeItem("onboarding_details");
-      sessionStorage.removeItem("onboarding_customize");
       sessionStorage.removeItem("onboarding_pending_plan");
-      localStorage.removeItem("onboarding_draft_v2");
 
       if (plan === "free") {
         platformFbq("StartTrial");
@@ -236,7 +222,7 @@ function PlanPageContent() {
   if (creating) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
-        <OnboardingProgress currentStep={3} />
+        <OnboardingProgress currentStep={2} />
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Se creeaza magazinul tau...</p>

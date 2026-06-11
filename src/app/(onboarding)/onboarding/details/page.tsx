@@ -4,76 +4,46 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { motion } from "framer-motion";
-import { Check, X, Loader2, Globe } from "lucide-react";
+import { Check, X, Loader2, Store } from "lucide-react";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
-import { businessSchema, type BusinessInput, ROMANIAN_COUNTIES } from "@/lib/validations/business";
 import { slugify } from "@/lib/utils/slugify";
 import { checkSlugAvailability } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { platformFbq } from "@/components/platform/PlatformMetaPixel";
 
-const DRAFT_KEY = "onboarding_draft_v2";
+const schema = z.object({
+  business_name: z.string().min(2, "Minim 2 caractere").max(100),
+  phone: z.string().regex(/^07[0-9]{8}$/, "Format invalid: 07XXXXXXXX"),
+  slug: z
+    .string()
+    .min(3, "Minim 3 caractere")
+    .max(50, "Maxim 50 caractere")
+    .regex(/^[a-z0-9-]+$/, "Doar litere mici, cifre si liniute"),
+});
+
+type FormData = z.infer<typeof schema>;
 
 const inputCls = (invalid: boolean) =>
-  `w-full px-3 py-3 text-sm border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground transition-colors
+  `w-full px-4 py-3.5 text-sm border rounded-xl bg-surface text-foreground placeholder:text-muted-foreground transition-colors
   focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
   ${invalid ? "border-destructive ring-destructive/20" : "border-border"}`;
-
-function Field({
-  label, htmlFor, error, helper, children,
-}: {
-  label: string; htmlFor: string; error?: string; helper?: string; children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={htmlFor} className="block text-sm font-medium text-foreground mb-1.5">{label}</label>
-      {children}
-      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-      {helper && !error && <p className="mt-1 text-xs text-muted-foreground">{helper}</p>}
-    </div>
-  );
-}
-
-function Checkbox({ checked, onChange, label, size = "md" }: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-  size?: "sm" | "md";
-}) {
-  const dim = size === "sm" ? "w-4 h-4" : "w-5 h-5";
-  const icon = size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3";
-  return (
-    <label className="flex items-center gap-3 cursor-pointer select-none group">
-      <div className="relative flex-shrink-0">
-        <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <div className={`${dim} rounded border-2 flex items-center justify-center transition-colors ${checked ? "bg-primary border-primary" : "border-border bg-surface group-hover:border-primary/50"}`}>
-          {checked && <Check className={`${icon} text-white`} strokeWidth={3} />}
-        </div>
-      </div>
-      <span className={`text-foreground ${size === "sm" ? "text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors" : "text-sm"}`}>{label}</span>
-    </label>
-  );
-}
 
 export default function OnboardingDetailsPage() {
   const router = useRouter();
   const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const slugTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [onlineOnly, setOnlineOnly] = useState(false);
-  const [whatsappSame, setWhatsappSame] = useState(false);
 
   const {
-    register, handleSubmit, watch, setValue, reset, setError, clearErrors,
+    register, handleSubmit, watch, setValue,
     formState: { errors },
-  } = useForm<BusinessInput>({
-    resolver: zodResolver(businessSchema),
-  });
+  } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const businessName = watch("business_name") ?? "";
   const slug = watch("slug") ?? "";
 
-  // Track onboarding step + fire CompleteRegistration event
+  // Track step + fire pixel
   useEffect(() => {
     trackOnboardingStep("details");
     if (sessionStorage.getItem("platform_registered") === "1") {
@@ -82,53 +52,6 @@ export default function OnboardingDetailsPage() {
     }
   }, []);
 
-  // Load draft from localStorage on mount
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      reset({
-        business_name: draft.business_name ?? "",
-        tagline: draft.tagline ?? "",
-        phone: draft.phone ?? "",
-        email: draft.email ?? "",
-        address: draft.address ?? "",
-        city: draft.city ?? "",
-        county: draft.county ?? "",
-        slug: draft.slug ?? "",
-      });
-      if (draft.online_only) setOnlineOnly(true);
-      if (draft.whatsapp_same) setWhatsappSame(true);
-    } catch {}
-  }, [reset]);
-
-  // Autosave to localStorage on every form change
-  useEffect(() => {
-    const { unsubscribe } = watch((values) => {
-      try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({
-          ...values,
-          online_only: onlineOnly,
-          whatsapp_same: whatsappSame,
-        }));
-      } catch {}
-    });
-    return unsubscribe;
-  }, [watch, onlineOnly, whatsappSame]);
-
-  // Save when checkboxes change
-  useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        ...watch(),
-        online_only: onlineOnly,
-        whatsapp_same: whatsappSame,
-      }));
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlineOnly, whatsappSame]);
-
   // Auto-generate slug from business name
   useEffect(() => {
     if (businessName) {
@@ -136,7 +59,7 @@ export default function OnboardingDetailsPage() {
     }
   }, [businessName, setValue]);
 
-  // Debounced slug availability check
+  // Debounced slug check
   const checkSlug = useCallback((value: string) => {
     if (slugTimerRef.current) clearTimeout(slugTimerRef.current);
     if (!value || value.length < 3 || !/^[a-z0-9-]+$/.test(value)) {
@@ -152,152 +75,76 @@ export default function OnboardingDetailsPage() {
 
   useEffect(() => { checkSlug(slug); }, [slug, checkSlug]);
 
-  function onSubmit(data: BusinessInput) {
+  function onSubmit(data: FormData) {
     if (slugStatus === "taken") return;
 
-    // Conditional address validation (Zod allows empty; we validate manually when not online-only)
-    if (!onlineOnly) {
-      let hasError = false;
-      if (!data.address || data.address.trim().length < 5) {
-        setError("address", { message: "Minim 5 caractere" });
-        hasError = true;
-      }
-      if (!data.city || data.city.trim().length < 2) {
-        setError("city", { message: "Minim 2 caractere" });
-        hasError = true;
-      }
-      if (!data.county) {
-        setError("county", { message: "Selecteaza judetul" });
-        hasError = true;
-      }
-      if (hasError) return;
-    }
+    sessionStorage.setItem("onboarding_details", JSON.stringify({
+      business_name: data.business_name,
+      phone: data.phone,
+      slug: data.slug,
+    }));
 
-    const storeData = {
-      ...data,
-      whatsapp: whatsappSame ? data.phone : undefined,
-      address: onlineOnly ? undefined : data.address,
-      city: onlineOnly ? undefined : data.city,
-      county: onlineOnly ? undefined : data.county,
-      online_only: onlineOnly,
-    };
-
-    sessionStorage.setItem("onboarding_details", JSON.stringify(storeData));
     platformFbq("Lead");
-    router.push("/onboarding/customize");
+    router.push("/onboarding/plan");
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 sm:py-10">
+    <div className="max-w-lg mx-auto px-4 py-6 sm:py-10">
       <OnboardingProgress currentStep={1} />
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
-            Informatii despre magazinul tau
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <Store className="h-7 w-7 text-primary" />
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+            Creeaza-ti magazinul
           </h1>
-          <p className="mt-2 text-sm sm:text-base text-muted-foreground">
-            Completeaza datele de baza - le poti modifica oricand
+          <p className="mt-2 text-sm text-muted-foreground">
+            Doar 2 informatii si magazinul tau e online
           </p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Identitate */}
-          <div className="bg-surface border border-border rounded-xl p-4 sm:p-6 space-y-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identitate</h2>
-
-            <Field label="Numele magazinului" htmlFor="business_name" error={errors.business_name?.message}>
-              <input id="business_name" type="text" placeholder="ex: Floraria Mirei"
-                {...register("business_name")} className={inputCls(!!errors.business_name)} />
-            </Field>
-
-            <Field label="Slogan (optional)" htmlFor="tagline" error={errors.tagline?.message}>
-              <input id="tagline" type="text" placeholder="ex: Flori proaspete, livrare rapida"
-                {...register("tagline")} className={inputCls(!!errors.tagline)} maxLength={120} />
-            </Field>
-          </div>
-
-          {/* Contact */}
-          <div className="bg-surface border border-border rounded-xl p-4 sm:p-6 space-y-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact</h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Telefon" htmlFor="phone" error={errors.phone?.message}>
-                <input id="phone" type="tel" placeholder="0712 345 678"
-                  {...register("phone", {
-                    setValueAs: (v: string) => v.replace(/[\s\-().+]/g, ""),
-                  })}
-                  className={inputCls(!!errors.phone)} />
-              </Field>
-              <div className="sm:col-span-2">
-                <Field label="Email (optional)" htmlFor="email" error={errors.email?.message}>
-                  <input id="email" type="email" placeholder="contact@magazinul-tau.ro"
-                    {...register("email")} className={inputCls(!!errors.email)} />
-                </Field>
-              </div>
-            </div>
-
-            <Checkbox
-              checked={whatsappSame}
-              onChange={setWhatsappSame}
-              label="Disponibil si pe WhatsApp (acelasi numar de telefon)"
-            />
-          </div>
-
-          {/* Locatie */}
-          <div className="bg-surface border border-border rounded-xl p-4 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Locatie</h2>
-              <Checkbox
-                checked={onlineOnly}
-                onChange={(v) => {
-                  setOnlineOnly(v);
-                  if (v) {
-                    clearErrors(["address", "city", "county"]);
-                    setValue("address", "");
-                    setValue("city", "");
-                    setValue("county", "");
-                  }
-                }}
-                label="Activitate exclusiv online"
-                size="sm"
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6 space-y-5">
+            {/* Numele magazinului */}
+            <div>
+              <label htmlFor="business_name" className="block text-sm font-semibold text-foreground mb-1.5">
+                Numele magazinului
+              </label>
+              <input
+                id="business_name"
+                type="text"
+                placeholder="ex: Floraria Mirei"
+                {...register("business_name")}
+                className={inputCls(!!errors.business_name)}
+                autoFocus
               />
+              {errors.business_name && <p className="mt-1 text-xs text-destructive">{errors.business_name.message}</p>}
             </div>
 
-            {onlineOnly ? (
-              <div className="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
-                <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <p className="text-sm text-muted-foreground">
-                  Adresa fizica nu este necesara. Clientii iti vor putea comanda online.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <Field label="Strada si numarul" htmlFor="address" error={errors.address?.message}>
-                    <input id="address" type="text" placeholder="ex: Calea Victoriei 42"
-                      {...register("address")} className={inputCls(!!errors.address)} />
-                  </Field>
-                </div>
-                <Field label="Oras sau comuna" htmlFor="city" error={errors.city?.message}>
-                  <input id="city" type="text" placeholder="ex: Bucuresti"
-                    {...register("city")} className={inputCls(!!errors.city)} />
-                </Field>
-                <Field label="Judet" htmlFor="county" error={errors.county?.message}>
-                  <select id="county" {...register("county")} className={inputCls(!!errors.county) + " cursor-pointer"}>
-                    <option value="">Selecteaza</option>
-                    {ROMANIAN_COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </Field>
-              </div>
-            )}
+            {/* Telefon */}
+            <div>
+              <label htmlFor="phone" className="block text-sm font-semibold text-foreground mb-1.5">
+                Numarul de telefon
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                placeholder="0712 345 678"
+                {...register("phone", { setValueAs: (v: string) => v.replace(/[\s\-().+]/g, "") })}
+                className={inputCls(!!errors.phone)}
+              />
+              {errors.phone && <p className="mt-1 text-xs text-destructive">{errors.phone.message}</p>}
+              <p className="mt-1 text-xs text-muted-foreground">Clientii te vor contacta la acest numar</p>
+            </div>
           </div>
 
           {/* Adresa magazin online */}
-          <div className="bg-surface border border-border rounded-xl p-4 sm:p-6">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6">
+            <label htmlFor="slug" className="block text-sm font-semibold text-foreground mb-1.5">
               Adresa magazinului online
-            </h2>
+            </label>
             <div className="relative">
               <input
                 id="slug"
@@ -328,20 +175,22 @@ export default function OnboardingDetailsPage() {
               <p className="mt-1 text-xs text-destructive">Aceasta adresa este deja folosita.</p>
             )}
             {slugStatus === "available" && (
-              <p className="mt-1 text-xs text-green-700">Adresa este disponibila.</p>
+              <p className="mt-1 text-xs text-green-700">Adresa este disponibila!</p>
             )}
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={slugStatus === "taken" || slugStatus === "checking"}
-              className="w-full sm:w-auto px-8 py-3.5 sm:py-3 text-sm font-medium text-white rounded-lg transition-all
-                bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Continua
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={slugStatus === "taken" || slugStatus === "checking"}
+            className="w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all
+              bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Continua
+          </button>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Poti adauga logo, descriere si toate detaliile din dashboard dupa creare
+          </p>
         </form>
       </motion.div>
     </div>

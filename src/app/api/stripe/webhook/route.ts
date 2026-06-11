@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createSmartbillInvoice } from "@/lib/smartbill";
@@ -189,6 +190,9 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
+    // Revalidate dashboard so user sees updated plan immediately
+    revalidatePath("/dashboard", "layout");
+
     console.log("[webhook] checkout.session.completed — plan updated, suspension cleared:", { userId, plan });
   }
 
@@ -254,6 +258,9 @@ export async function POST(req: NextRequest) {
 
     // 2. Clear suspension
     await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
+
+    // 3. Revalidate dashboard
+    revalidatePath("/dashboard", "layout");
 
     // 3. Check for existing invoice record for this Stripe payment
     const { data: existingInvoice } = await admin

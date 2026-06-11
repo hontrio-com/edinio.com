@@ -347,10 +347,10 @@ function PlanPageContent() {
               bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all">
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             {loading
-              ? (selectedPlan === "trial" ? "Se creeaza..." : "Redirectionare catre plata...")
-              : (selectedPlan && selectedPlan !== "trial"
+              ? (selectedPlan === "free" ? "Se creeaza..." : "Redirectionare catre plata...")
+              : (selectedPlan && selectedPlan !== "free"
                 ? "Plateste si creeaza magazinul"
-                : "Creeaza magazinul")}
+                : "Creeaza magazinul gratuit")}
           </button>
         </div>
       </motion.div>

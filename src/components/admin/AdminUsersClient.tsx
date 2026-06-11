@@ -354,7 +354,7 @@ export function AdminUsersClient({ users }: { users: User[] }) {
                           </span>
                         )}
                       </div>
-                      {u.plan_expires_at && (() => {
+                      {u.plan === "free" && u.plan_expires_at && (() => {
                         const days = Math.ceil((new Date(u.plan_expires_at).getTime() - Date.now()) / 86400000);
                         if (days > 365) return null;
                         if (days <= 0) return <p className="text-[10px] text-red-500 font-medium mt-0.5">Expirat</p>;

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWelcomeEmail } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 
@@ -190,11 +191,13 @@ export async function getUserBusiness() {
 }
 
 export async function checkSlugAvailability(slug: string): Promise<boolean> {
-  const supabase = await createClient();
-  const { data } = await supabase
+  // Use admin client to bypass RLS — unpublished businesses are hidden from anon
+  // but the UNIQUE constraint still blocks the INSERT
+  const admin = createAdminClient();
+  const { data } = await admin
     .from("businesses")
     .select("id")
     .eq("slug", slug)
-    .single();
+    .maybeSingle();
   return !data;
 }

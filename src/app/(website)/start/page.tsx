@@ -175,6 +175,7 @@ export default function StartPage() {
               <div className="my-5">
                 <span className="text-4xl font-black text-gray-900">{plan.price}</span>
                 <span className="text-gray-500 ml-1">lei/luna</span>
+                <p className="text-[11px] text-primary font-semibold mt-1">Pretul tau ramane fix pe viata. Garantat.</p>
               </div>
 
               <ul className="space-y-2.5 flex-1 mb-6">

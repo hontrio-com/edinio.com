@@ -120,6 +120,9 @@ export function PricingSection() {
                     {plan.priceSuffix}
                   </span>
                 )}
+                {plan.price > 0 && (
+                  <p className="text-[11px] text-primary font-semibold mt-1">Pretul tau ramane fix pe viata.</p>
+                )}
               </div>
 
               <ul className="space-y-3 mb-8 flex-1">

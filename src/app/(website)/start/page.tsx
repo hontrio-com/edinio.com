@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Check, Zap, Rocket, Crown, ArrowRight, ShieldCheck, Headset, Wrench } from "lucide-react";
+import { HeroMockups } from "@/components/website/HeroMockups";
 
 export const metadata: Metadata = {
   title: "Creeaza magazin online - de la 99 lei/luna | Edinio",
@@ -82,7 +83,7 @@ export default function StartPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
       {/* Hero */}
-      <section className="pt-16 pb-12 px-4 text-center max-w-4xl mx-auto">
+      <section className="pt-16 pb-6 px-4 text-center max-w-4xl mx-auto">
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 tracking-tight leading-tight">
           Magazinul tau online,{" "}
           <span className="text-primary">gata in cateva minute</span>
@@ -100,6 +101,11 @@ export default function StartPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Mockups carousel - same as homepage */}
+      <section className="pb-12 overflow-hidden">
+        <HeroMockups />
       </section>
 
       {/* Plans */}

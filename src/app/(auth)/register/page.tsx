@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -39,6 +39,10 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function RegisterPage() {
+  return <Suspense><RegisterForm /></Suspense>;
+}
+
+function RegisterForm() {
   const searchParams = useSearchParams();
   const preselectedPlan = searchParams.get("plan");
   const [showPassword, setShowPassword] = useState(false);

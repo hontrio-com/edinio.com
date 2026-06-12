@@ -121,7 +121,7 @@ export default async function SlugPage({ params }: Props) {
       .single(),
     supabase
       .from("categories")
-      .select("name, image_url")
+      .select("id, name, parent_id, image_url, sort_order")
       .eq("business_id", business.id)
       .order("sort_order"),
   ]);
@@ -170,7 +170,7 @@ export default async function SlugPage({ params }: Props) {
         products={products ?? []}
         storeSettings={storeSettings}
         basePath={basePath}
-        categoryImages={categoriesData ?? []}
+        categories={categoriesData ?? []}
       />
     </>
   );

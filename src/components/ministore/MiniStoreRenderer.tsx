@@ -4,7 +4,7 @@ import { useState, createContext, useContext, useEffect, useTransition, useMemo 
 import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
-  MapPin, Mail, Globe, ChevronRight, Package, User, Home, Loader2, Banknote, CreditCard,
+  MapPin, Mail, Globe, ChevronRight, ChevronLeft, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
   Truck, ShieldCheck, RotateCcw, Check,
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
@@ -885,15 +885,17 @@ const POLICY_LINKS = [
   { slug: "anulare", label: "Politica de anulare" },
 ] as const;
 
+type CategoryNode = { id: string; name: string; parent_id: string | null; image_url: string | null; sort_order: number };
+
 interface Props {
   business: Business;
   products: Product[];
   storeSettings: StoreSettings | null;
   basePath?: string;
-  categoryImages?: { name: string; image_url: string | null }[];
+  categories?: CategoryNode[];
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categoryImages }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories }: Props) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -944,20 +946,76 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   const hasCoverOrTagline = !!(business.cover_url || business.tagline);
 
-  // Categories
-  const categories = useMemo(() => {
-    const cats = new Set<string>();
-    products.forEach(p => { if (p.category) cats.add(p.category); });
-    return Array.from(cats).sort();
-  }, [products]);
+  // Category hierarchy — built from the categories table (parent_id) + product
+  // assignments. Only categories whose subtree contains products are shown.
+  const catTree = useMemo(() => {
+    type Item = { key: string; id: string | null; name: string; image: string | null; hasChildren: boolean };
+    const list = categories ?? [];
+    const productCatNames = new Set<string>();
+    products.forEach(p => { if (p.category) productCatNames.add(p.category); });
 
-  const catImageMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    (categoryImages ?? []).forEach(c => { if (c.image_url) map[c.name] = c.image_url; });
-    return map;
-  }, [categoryImages]);
-  const hasAnyCategoryImage = categories.some(c => catImageMap[c]);
-  const hasCategories = categories.length > 0;
+    const byId = new Map(list.map(c => [c.id, c]));
+    const childrenOf = new Map<string, CategoryNode[]>();
+    for (const c of list) {
+      if (c.parent_id) {
+        const arr = childrenOf.get(c.parent_id) ?? [];
+        arr.push(c);
+        childrenOf.set(c.parent_id, arr);
+      }
+    }
+    for (const arr of childrenOf.values()) arr.sort((a, b) => a.sort_order - b.sort_order);
+
+    const subtreeNames = (c: CategoryNode): string[] => {
+      const out = [c.name];
+      for (const ch of childrenOf.get(c.id) ?? []) out.push(...subtreeNames(ch));
+      return out;
+    };
+    const hasProducts = (c: CategoryNode): boolean => subtreeNames(c).some(n => productCatNames.has(n));
+    const toItem = (c: CategoryNode): Item => ({
+      key: c.id, id: c.id, name: c.name, image: c.image_url,
+      hasChildren: (childrenOf.get(c.id) ?? []).some(hasProducts),
+    });
+
+    const subtreeByName: Record<string, string[]> = {};
+    for (const c of list) subtreeByName[c.name] = subtreeNames(c);
+
+    const childItemsById: Record<string, Item[]> = {};
+    for (const c of list) {
+      const kids = (childrenOf.get(c.id) ?? []).filter(hasProducts).map(toItem);
+      if (kids.length) childItemsById[c.id] = kids;
+    }
+
+    const topCats = list.filter(c => !c.parent_id && hasProducts(c)).sort((a, b) => a.sort_order - b.sort_order);
+    const tableNames = new Set(list.map(c => c.name));
+    const orphanItems: Item[] = Array.from(productCatNames)
+      .filter(n => !tableNames.has(n)).sort()
+      .map(n => ({ key: `orphan:${n}`, id: null, name: n, image: null, hasChildren: false }));
+    const topItems: Item[] = [...topCats.map(toItem), ...orphanItems];
+
+    const hasAnyImage = topItems.some(i => i.image) || Object.values(childItemsById).some(arr => arr.some(i => i.image));
+    return { topItems, childItemsById, subtreeByName, byId, hasAnyImage };
+  }, [categories, products]);
+
+  const [drillParentId, setDrillParentId] = useState<string | null>(null);
+  const drillParent = drillParentId ? catTree.byId.get(drillParentId) ?? null : null;
+  const currentItems = drillParentId ? (catTree.childItemsById[drillParentId] ?? []) : catTree.topItems;
+  const hasCategories = catTree.topItems.length > 0;
+  const hasAnyCategoryImage = catTree.hasAnyImage;
+
+  function selectCategoryItem(item: { id: string | null; name: string; hasChildren: boolean }) {
+    // Drill into a category that has subcategories; otherwise just filter by it.
+    if (item.hasChildren && item.id) setDrillParentId(item.id);
+    setCategoryFilter(item.name);
+  }
+  function resetCategory() {
+    setCategoryFilter("toate");
+    setDrillParentId(null);
+  }
+  function goBackCategory() {
+    const backTo = drillParent?.parent_id ?? null;
+    setDrillParentId(backTo);
+    setCategoryFilter(backTo ? (catTree.byId.get(backTo)?.name ?? "toate") : "toate");
+  }
 
   // Featured products
   const featuredProducts = useMemo(() => products.filter(p => p.is_featured), [products]);
@@ -968,7 +1026,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       const matchesSearch = search === "" ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         (p.description ?? "").toLowerCase().includes(search.toLowerCase());
-      const matchesCategory = categoryFilter === "toate" || p.category === categoryFilter;
+      const matchesCategory = categoryFilter === "toate"
+        || (catTree.subtreeByName[categoryFilter] ?? [categoryFilter]).includes(p.category ?? "");
       return matchesSearch && matchesCategory;
     });
     // Sort
@@ -1169,69 +1228,102 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           )}
         </div>
 
-        {/* Category filters */}
+        {/* Category filters — pills (no category images), hierarchy-aware */}
         {hasCategories && !hasAnyCategoryImage && (
           <div className="flex items-center gap-2 mb-6 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setCategoryFilter("toate")}
-              className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
-              style={categoryFilter === "toate"
-                ? { backgroundColor: color, color: "white" }
-                : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
-            >
-              Toate
-            </button>
-            {categories.map(cat => (
+            {drillParentId ? (
               <button
-                key={cat}
                 type="button"
-                onClick={() => setCategoryFilter(cat)}
+                onClick={goBackCategory}
+                className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
+                style={{ backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
+              >
+                <ChevronLeft size={14} /> {drillParent?.name ?? "Inapoi"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={resetCategory}
                 className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
-                style={categoryFilter === cat
+                style={categoryFilter === "toate"
                   ? { backgroundColor: color, color: "white" }
                   : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
               >
-                {cat}
+                Toate
               </button>
-            ))}
+            )}
+            {currentItems.map(item => {
+              const active = categoryFilter === item.name;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => selectCategoryItem(item)}
+                  className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
+                  style={active
+                    ? { backgroundColor: color, color: "white" }
+                    : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
+                >
+                  {item.name}{item.hasChildren && <ChevronRight size={13} className="opacity-70" />}
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* Category image carousel */}
+        {/* Category image carousel — circles, hierarchy-aware (drill into subcategories) */}
         {hasCategories && hasAnyCategoryImage && (
           <div className="mb-6 -mx-4 px-4 overflow-x-auto scrollbar-hide">
             <div className="flex gap-4 pb-1" style={{ minWidth: "min-content" }}>
-              <button
-                type="button"
-                onClick={() => setCategoryFilter("toate")}
-                className="flex flex-col items-center gap-2 flex-shrink-0 group"
-              >
-                <div
-                  className="w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all border-2"
-                  style={{
-                    borderColor: categoryFilter === "toate" ? color : "var(--color-border)",
-                    backgroundColor: categoryFilter === "toate" ? `${color}15` : "var(--color-muted)",
-                  }}
+              {/* Leading control: Toate (top level) or Inapoi (drilled into a category) */}
+              {drillParentId ? (
+                <button
+                  type="button"
+                  onClick={goBackCategory}
+                  className="flex flex-col items-center gap-2 flex-shrink-0 group"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6" style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
-                    <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
-                    <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
-                  </svg>
-                </div>
-                <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
-                  style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
-                  Toate
-                </span>
-              </button>
-              {categories.map(cat => {
-                const img = catImageMap[cat];
-                const active = categoryFilter === cat;
+                  <div
+                    className="w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all border-2"
+                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-muted)" }}
+                  >
+                    <ChevronLeft className="w-6 h-6" style={{ color: "var(--color-muted-foreground)" }} />
+                  </div>
+                  <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
+                    style={{ color: "var(--color-muted-foreground)" }}>
+                    {drillParent?.name ?? "Inapoi"}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={resetCategory}
+                  className="flex flex-col items-center gap-2 flex-shrink-0 group"
+                >
+                  <div
+                    className="w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all border-2"
+                    style={{
+                      borderColor: categoryFilter === "toate" ? color : "var(--color-border)",
+                      backgroundColor: categoryFilter === "toate" ? `${color}15` : "var(--color-muted)",
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6" style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
+                      <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+                    </svg>
+                  </div>
+                  <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
+                    style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
+                    Toate
+                  </span>
+                </button>
+              )}
+              {currentItems.map(item => {
+                const active = categoryFilter === item.name;
                 return (
                   <button
-                    key={cat}
+                    key={item.key}
                     type="button"
-                    onClick={() => setCategoryFilter(cat)}
+                    onClick={() => selectCategoryItem(item)}
                     className="flex flex-col items-center gap-2 flex-shrink-0 group"
                   >
                     <div
@@ -1241,20 +1333,25 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                         boxShadow: active ? `0 0 0 2px ${color}40` : "none",
                       }}
                     >
-                      {img ? (
-                        <Image src={img} alt={cat} fill sizes="72px" className="object-cover" />
+                      {item.image ? (
+                        <Image src={item.image} alt={item.name} fill sizes="72px" className="object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center"
                           style={{ backgroundColor: active ? `${color}15` : "var(--color-muted)" }}>
                           <span className="text-lg font-bold" style={{ color: active ? color : "var(--color-muted-foreground)" }}>
-                            {cat[0]?.toUpperCase()}
+                            {item.name[0]?.toUpperCase()}
                           </span>
                         </div>
+                      )}
+                      {item.hasChildren && (
+                        <span className="absolute bottom-0.5 right-0.5 rounded-full bg-white/95 p-0.5 shadow-sm flex items-center justify-center" style={{ color }}>
+                          <Layers className="w-3 h-3" />
+                        </span>
                       )}
                     </div>
                     <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
                       style={{ color: active ? color : "var(--color-muted-foreground)" }}>
-                      {cat}
+                      {item.name}
                     </span>
                   </button>
                 );

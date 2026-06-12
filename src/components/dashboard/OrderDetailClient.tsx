@@ -7,10 +7,10 @@ import { toast } from "sonner";
 import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail,
-  RotateCcw, AlertTriangle, XCircle, FilePlus, ArrowRight, FileCheck,
+  RotateCcw, AlertTriangle, XCircle, FilePlus, ArrowRight, FileCheck, Trash2,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
-import { updateOrder } from "@/lib/actions/order.actions";
+import { updateOrder, deleteOrder, sendCustomerNotification } from "@/lib/actions/order.actions";
 import {
   generateOrderInvoice,
   generateOrderEstimate,
@@ -201,7 +201,18 @@ export function OrderDetailClient({
   const [showResendInvoice, setShowResendInvoice] = useState(false);
   const [showResendEstimate, setShowResendEstimate] = useState(false);
 
+  // Status/payment change confirmation + delete + customer notifications
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, startDeleteTransition] = useTransition();
+  const [notifTemplate, setNotifTemplate] = useState("");
+  const [notifSubject, setNotifSubject] = useState("");
+  const [notifMessage, setNotifMessage] = useState("");
+  const [sendingNotif, startNotifTransition] = useTransition();
+
   const customerEmail = (order.customer_email as string | null) ?? "";
+  const customerName = (order.customer_name as string | null) ?? "client";
+  const orderNumber = order.order_number as string;
   const canStorno = !stornoNumber && (status === "cancelled" || status === "refunded");
 
   // Courier AWB modals
@@ -220,13 +231,45 @@ export function OrderDetailClient({
   const [fgoActionPending, startFgoTransition] = useTransition();
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
 
-  function handleSave() {
+  const NOTIF_TEMPLATES: Record<string, { label: string; subject: string; body: string }> = {
+    confirmed: { label: "Comanda confirmata", subject: `Comanda ${orderNumber} a fost confirmata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost confirmata si intra in pregatire. Te anuntam imediat ce este expediata.\n\nMultumim pentru comanda!` },
+    shipped: { label: "Comanda expediata", subject: `Comanda ${orderNumber} a fost expediata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost predata curierului si este pe drum. O vei primi in cel mai scurt timp.\n\nMultumim!` },
+    delivered: { label: "Comanda livrata", subject: `Comanda ${orderNumber} a fost livrata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost livrata. Speram sa te bucuri de produse!\n\nDaca ai intrebari, suntem aici pentru tine.` },
+    delay: { label: "Intarziere livrare", subject: `Update despre comanda ${orderNumber}`, body: `Buna ${customerName},\n\nIti scriem in legatura cu comanda ${orderNumber}. Din pacate intampinam o mica intarziere, dar lucram sa o expediem cat mai repede. Iti multumim pentru rabdare!` },
+    info: { label: "Solicitare informatii", subject: `Avem nevoie de cateva detalii pentru comanda ${orderNumber}`, body: `Buna ${customerName},\n\nPentru a procesa comanda ${orderNumber} avem nevoie de cateva informatii suplimentare. Te rugam sa ne raspunzi la acest email.\n\nMultumim!` },
+  };
+
+  function applyTemplate(key: string) {
+    setNotifTemplate(key);
+    const t = NOTIF_TEMPLATES[key];
+    if (t) { setNotifSubject(t.subject); setNotifMessage(t.body); }
+  }
+
+  function confirmSave() {
+    setShowSaveConfirm(false);
     startTransition(async () => {
       const result = await updateOrder(order.id, { status, payment_status: paymentStatus });
       if ("error" in result) { toast.error(result.error); } else {
         toast.success("Comanda actualizata.");
         router.refresh();
       }
+    });
+  }
+
+  function handleDelete() {
+    startDeleteTransition(async () => {
+      const result = await deleteOrder(order.id);
+      if (result.error) { toast.error(result.error); return; }
+      toast.success("Comanda a fost stearsa.");
+      router.push("/dashboard/orders");
+    });
+  }
+
+  function handleSendNotification() {
+    startNotifTransition(async () => {
+      const result = await sendCustomerNotification(order.id, notifSubject, notifMessage);
+      if (result.error) { toast.error(result.error); return; }
+      toast.success("Notificarea a fost trimisa clientului.");
     });
   }
 
@@ -857,11 +900,67 @@ export function OrderDetailClient({
         </div>
 
         <div className="flex justify-end">
-          <button type="button" onClick={handleSave} disabled={isPending || !hasChanges}
+          <button type="button" onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges}
             className="px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             {isPending ? "Se salveaza..." : "Salveaza modificarile"}
           </button>
         </div>
+      </div>
+
+      {/* ── Customer notifications ── */}
+      <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Notificari client</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Trimite un email direct clientului. Alege un sablon sau scrie mesajul tau.</p>
+        </div>
+        {customerEmail ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(NOTIF_TEMPLATES).map(([key, t]) => (
+                <button key={key} type="button" onClick={() => applyTemplate(key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    notifTemplate === key ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:bg-muted/40"
+                  }`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Subiect</label>
+              <input type="text" value={notifSubject} onChange={e => setNotifSubject(e.target.value)}
+                placeholder="Subiectul emailului"
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj</label>
+              <textarea value={notifMessage} onChange={e => setNotifMessage(e.target.value)} rows={5}
+                placeholder="Scrie mesajul pentru client..."
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none" />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerEmail}</strong></p>
+              <button type="button" onClick={handleSendNotification} disabled={sendingNotif || !notifSubject.trim() || !notifMessage.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
+                {sendingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                Trimite email
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Clientul nu a lasat o adresa de email, asa ca nu poti trimite notificari pe email pentru aceasta comanda.</p>
+        )}
+      </div>
+
+      {/* ── Danger zone ── */}
+      <div className="bg-surface border border-red-200 rounded-xl p-5 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Sterge comanda</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Stergerea este definitiva si nu poate fi anulata.</p>
+        </div>
+        <button type="button" onClick={() => setShowDeleteConfirm(true)} disabled={deleting}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex-shrink-0 disabled:opacity-50">
+          <Trash2 className="h-4 w-4" /> Sterge definitiv
+        </button>
       </div>
 
       {/* ── Courier AWB Modals ── */}
@@ -882,6 +981,46 @@ export function OrderDetailClient({
       )}
       {coleteEnabled && (
         <ColeteAwbModal open={coleteModalOpen} onClose={() => setColeteModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setColeteModalOpen(false); router.refresh(); }} />
+      )}
+
+      {/* ── Status/payment change confirmation ── */}
+      {showSaveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSaveConfirm(false)}>
+          <div className="bg-surface rounded-2xl border border-border shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-foreground mb-2">Confirmi modificarile?</h3>
+            <div className="text-sm text-muted-foreground mb-4 space-y-1">
+              <p>Status comanda: <strong className="text-foreground">{currentStatus.label}</strong></p>
+              <p>Status plata: <strong className="text-foreground">{currentPayment.label}</strong></p>
+              {status !== order.status && customerEmail && (
+                <p className="text-xs mt-2">Clientul va fi notificat automat pe email despre schimbarea statusului.</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowSaveConfirm(false)}
+                className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors">Anuleaza</button>
+              <button type="button" onClick={confirmSave} disabled={isPending}
+                className="px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">Confirma</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirmation ── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-surface rounded-2xl border border-border shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-foreground mb-2">Stergi comanda {orderNumber}?</h3>
+            <p className="text-sm text-muted-foreground mb-4">Aceasta actiune este definitiva si nu poate fi anulata.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors">Anuleaza</button>
+              <button type="button" onClick={handleDelete} disabled={deleting}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors">
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Sterge definitiv
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

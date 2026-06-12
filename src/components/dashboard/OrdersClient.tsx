@@ -346,8 +346,8 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                           <div className="text-xs">{order.customer_phone}</div>
                         </td>
                         <td className="px-5 py-3.5 font-medium text-foreground">{formatPrice(Number(order.total))}</td>
-                        <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium", status.className)}>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap", status.className)}>
                             {status.label}
                           </span>
                         </td>

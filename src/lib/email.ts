@@ -665,6 +665,35 @@ export async function sendOrderStatusToCustomer(
   });
 }
 
+// ── Custom message from merchant → Customer ─────────────────────────────────
+
+export async function sendCustomerMessage(
+  to: string,
+  data: { subject: string; message: string; businessName: string; orderNumber: string }
+): Promise<{ success: true } | { error: string }> {
+  if (!process.env.RESEND_API_KEY) return { error: "Serviciul de email nu este configurat." };
+
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const bodyHtml = esc(data.message).replace(/\n/g, "<br />");
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${esc(data.subject)}</h2>
+    <p style="margin:0 0 20px 0;font-size:12px;color:#a1a1aa;">Mesaj de la <strong>${esc(data.businessName)}</strong> · Comanda ${esc(data.orderNumber)}</p>
+    <p style="margin:0;font-size:14px;color:#3f3f46;line-height:1.7;">${bodyHtml}</p>
+  `;
+
+  try {
+    await getResend().emails.send({
+      from: FROM,
+      to,
+      subject: data.subject,
+      html: baseTemplate(content),
+    });
+    return { success: true };
+  } catch {
+    return { error: "Trimiterea emailului a esuat. Incearca din nou." };
+  }
+}
+
 // ── Subscription activated → User ───────────────────────────────────────────
 
 export async function sendSubscriptionActivatedEmail(

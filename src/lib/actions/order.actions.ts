@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer } from "@/lib/email";
+import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 
@@ -336,6 +336,56 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);
+  return { success: true };
+}
+
+export async function deleteOrder(orderId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: order } = await supabase.from("orders").select("business_id").eq("id", orderId).single();
+  if (!order) return { error: "Comanda negasita" };
+
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  const { error } = await supabase.from("orders").delete().eq("id", orderId);
+  if (error) {
+    logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, userId: user.id });
+    return { error: "Eroare la stergerea comenzii." };
+  }
+
+  revalidatePath("/dashboard/orders");
+  return { success: true };
+}
+
+export async function sendCustomerNotification(orderId: string, subject: string, message: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  if (!subject.trim() || !message.trim()) return { error: "Completeaza subiectul si mesajul." };
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("business_id, order_number, customer_email")
+    .eq("id", orderId)
+    .single();
+  if (!order) return { error: "Comanda negasita" };
+
+  const { data: biz } = await supabase.from("businesses").select("business_name").eq("id", order.business_id).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  if (!order.customer_email) return { error: "Clientul nu a lasat o adresa de email." };
+
+  const res = await sendCustomerMessage(order.customer_email, {
+    subject: subject.trim(),
+    message: message.trim(),
+    businessName: biz.business_name,
+    orderNumber: order.order_number,
+  });
+  if ("error" in res) return { error: res.error };
   return { success: true };
 }
 

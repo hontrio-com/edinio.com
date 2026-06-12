@@ -30,6 +30,9 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDupTransition] = useTransition();
   const [page, setPage] = useState(1);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all");
 
   const isAtLimit = productLimit !== Infinity && productCount >= productLimit;
   const isNearLimit = !isAtLimit && productLimit !== Infinity && productCount >= Math.floor(productLimit * 0.9);
@@ -37,21 +40,58 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
 
   const PAGE_SIZE = 25;
 
+  const parentCategories = useMemo(() => categories.filter(c => !c.parent_id), [categories]);
+
+  // category name -> [name, ...child names], so picking a parent includes its subcategories
+  const subtreeByName = useMemo(() => {
+    const childrenByParent = new Map<string, string[]>();
+    for (const c of categories) {
+      if (c.parent_id) {
+        const arr = childrenByParent.get(c.parent_id) ?? [];
+        arr.push(c.name);
+        childrenByParent.set(c.parent_id, arr);
+      }
+    }
+    const map: Record<string, string[]> = {};
+    for (const c of categories) map[c.name] = [c.name, ...(childrenByParent.get(c.id) ?? [])];
+    return map;
+  }, [categories]);
+
+  const hasActiveFilters = searchQuery.trim() !== "" || categoryFilter !== "" || statusFilter !== "all" || stockFilter !== "all";
+
+  function resetFilters() {
+    setSearchQuery("");
+    setCategoryFilter("");
+    setStatusFilter("all");
+    setStockFilter("all");
+  }
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      (p.category ?? "").toLowerCase().includes(q) ||
-      (p.sku ?? "").toLowerCase().includes(q)
-    );
-  }, [products, searchQuery]);
+    const catNames = categoryFilter ? (subtreeByName[categoryFilter] ?? [categoryFilter]) : null;
+    return products.filter(p => {
+      if (q && !(
+        p.name.toLowerCase().includes(q) ||
+        (p.category ?? "").toLowerCase().includes(q) ||
+        (p.sku ?? "").toLowerCase().includes(q)
+      )) return false;
+      if (catNames && !catNames.includes(p.category ?? "")) return false;
+      if (statusFilter === "active" && !p.is_active) return false;
+      if (statusFilter === "inactive" && p.is_active) return false;
+      if (stockFilter !== "all") {
+        const out = !!p.track_inventory && (p.stock_quantity ?? 0) <= 0;
+        if (stockFilter === "out" && !out) return false;
+        if (stockFilter === "in" && out) return false;
+      }
+      return true;
+    });
+  }, [products, searchQuery, categoryFilter, statusFilter, stockFilter, subtreeByName]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  useEffect(() => { setPage(1); }, [searchQuery]);
+  useEffect(() => { setPage(1); }, [searchQuery, categoryFilter, statusFilter, stockFilter]);
 
   return (
     <>
@@ -104,6 +144,47 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {parentCategories.length > 0 && (
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
+            <option value="">Toate categoriile</option>
+            {parentCategories.map((parent) => {
+              const children = categories.filter((c) => c.parent_id === parent.id);
+              return children.length > 0 ? (
+                <optgroup key={parent.id} label={parent.name}>
+                  <option value={parent.name}>{parent.name} (toate)</option>
+                  {children.map((ch) => (
+                    <option key={ch.id} value={ch.name}>{`  ↳ ${ch.name}`}</option>
+                  ))}
+                </optgroup>
+              ) : (
+                <option key={parent.id} value={parent.name}>{parent.name}</option>
+              );
+            })}
+          </select>
+        )}
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
+          <option value="all">Toate statusurile</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value as typeof stockFilter)}
+          className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
+          <option value="all">Tot stocul</option>
+          <option value="in">In stoc</option>
+          <option value="out">Epuizate</option>
+        </select>
+        {hasActiveFilters && (
+          <button type="button" onClick={resetFilters}
+            className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground border border-border rounded-xl transition-colors">
+            <X className="h-3.5 w-3.5" /> Reseteaza
+          </button>
+        )}
+      </div>
+
       {/* Plan limit indicator */}
       {productLimit !== Infinity && (
         <div className={cn(
@@ -148,11 +229,11 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
         </div>
       )}
 
-      {searchQuery.trim() && (
+      {hasActiveFilters && (
         <p className="text-sm text-muted-foreground mb-3">
           {filtered.length === 0
-            ? `Niciun rezultat pentru "${searchQuery}"`
-            : `${filtered.length} ${filtered.length === 1 ? "rezultat" : "rezultate"} pentru "${searchQuery}"`}
+            ? "Niciun produs gasit cu filtrele selectate"
+            : `${filtered.length} ${filtered.length === 1 ? "produs gasit" : "produse gasite"}`}
         </p>
       )}
 

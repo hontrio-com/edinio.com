@@ -66,6 +66,7 @@ interface CustomizationFieldDef {
 }
 
 interface PageSections {
+  short_description?: string;
   specifications?: SpecItem[];
   quantity_tiers?: {
     enabled: boolean;
@@ -251,6 +252,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
   const pageSections = (product.page_sections as PageSections) ?? {};
+
+  // Short description = blurb under the title; long description = "Descriere" section.
+  const shortDesc = (pageSections.short_description ?? "").trim();
+  const hasShortDesc = shortDesc !== "" && shortDesc !== "<p></p>";
+  const hasLongDesc = !!product.description && product.description !== "<p></p>";
+  const topBlurb = hasShortDesc ? shortDesc : (hasLongDesc ? product.description : null);
 
   const announcementBar = pageContent.announcement_bar;
   const trustBadgesEnabled = pageContent.trust_badges_enabled !== false;
@@ -463,11 +470,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           {product.name}
         </h1>
 
-        {product.description && product.description !== "<p></p>" && (
+        {topBlurb && (
           <div
             className={`policy-content text-gray-500 leading-relaxed ${mobile ? "text-sm" : "text-base"}`}
-            // Already sanitized server-side (see product route) before reaching the client.
-            dangerouslySetInnerHTML={{ __html: product.description }}
+            // Sanitized server-side (see product route) before reaching the client.
+            dangerouslySetInnerHTML={{ __html: topBlurb }}
           />
         )}
 
@@ -737,6 +744,20 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 </motion.div>
               ))}
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* Long description */}
+      {hasShortDesc && hasLongDesc && (
+        <section className="py-20 md:py-28 px-4 md:px-6 bg-white">
+          <div className="max-w-3xl mx-auto">
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">Descriere</h2>
+            </motion.div>
+            <div className="policy-content text-gray-600 leading-relaxed text-base"
+              dangerouslySetInnerHTML={{ __html: product.description ?? "" }} />
           </div>
         </section>
       )}

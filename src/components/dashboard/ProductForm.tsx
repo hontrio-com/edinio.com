@@ -84,6 +84,7 @@ interface FormState {
   name: string;
   slug: string;
   description: string;
+  short_description: string;
   price: string;
   compare_at_price: string;
   category: string;
@@ -169,7 +170,7 @@ const EMPTY_TIERS: QuantityTiers = {
 };
 
 const EMPTY_FORM: FormState = {
-  name: "", slug: "", description: "", price: "", compare_at_price: "",
+  name: "", slug: "", description: "", short_description: "", price: "", compare_at_price: "",
   category: "", sku: "", images: [],
   track_inventory: false, stock_quantity: "", low_stock_threshold: "",
   stock_status: "in_stock",
@@ -189,6 +190,7 @@ type PageSections = {
   stock_status?: string;
   low_stock_threshold?: number;
   dimensions?: { length: number; width: number; height: number };
+  short_description?: string;
   seo?: { title: string; description: string };
   variants?: { enabled: boolean; options: Omit<VariantOption, "inputValue">[]; combinations: VariantCombination[] };
   customization?: { enabled: boolean; fields: CustomizationField[] };
@@ -203,6 +205,7 @@ function productToForm(p: Product): FormState {
     name: p.name,
     slug: p.slug ?? "",
     description: p.description ?? "",
+    short_description: ps.short_description ?? "",
     price: String(p.price),
     compare_at_price: p.compare_at_price ? String(p.compare_at_price) : "",
     category: p.category ?? "",
@@ -554,10 +557,17 @@ export function ProductForm({ businessId, product, categories }: Props) {
   const seoLabel = seoScore >= 81 ? "Excelent" : seoScore >= 61 ? "Bun" : seoScore >= 31 ? "Mediu" : "Slab";
   const seoBarColor = seoScore >= 81 ? "bg-green-500" : seoScore >= 61 ? "bg-blue-500" : seoScore >= 31 ? "bg-amber-500" : "bg-red-500";
 
+  // Auto-fill SEO from the product title + (short, then long) description.
+  function autofillSeo() {
+    const plain = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    set("seo_title", (form.name || "").trim().slice(0, 60));
+    set("seo_description", (plain(form.short_description) || plain(form.description)).slice(0, 160));
+  }
+
   const serp = {
     url: `edinio.com/magazin/${form.slug || "produs"}`,
     title: (form.seo_title.trim() || form.name || "Titlu produs").slice(0, 60),
-    desc: (form.seo_description.trim() || form.description.replace(/<[^>]+>/g, "").slice(0, 160) || "Fara descriere.").slice(0, 160),
+    desc: (form.seo_description.trim() || form.short_description.replace(/<[^>]+>/g, "").trim() || form.description.replace(/<[^>]+>/g, "").slice(0, 160) || "Fara descriere.").slice(0, 160),
   };
 
   function handleSubmit(e: React.FormEvent) {
@@ -601,6 +611,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
           width: parseFloat(form.dimensions.width) || 0,
           height: parseFloat(form.dimensions.height) || 0,
         },
+        short_description: form.short_description,
         seo: { title: form.seo_title, description: form.seo_description },
         variants: {
           enabled: form.variants.enabled,
@@ -704,9 +715,16 @@ export function ProductForm({ businessId, product, categories }: Props) {
                   <p className="text-xs text-muted-foreground mt-1">Generat automat din nume. Poti modifica manual.</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1.5">Descriere</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">Descriere scurta</label>
+                  <p className="text-xs text-muted-foreground mb-1.5">Apare sub titlul produsului si ca descriere in Google (meta). Tine-o concisa, 1-2 fraze.</p>
+                  <RichTextEditor content={form.short_description} onChange={(html) => set("short_description", html)}
+                    placeholder="Pe scurt, de ce sa cumpere acest produs..." />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Descriere lunga</label>
+                  <p className="text-xs text-muted-foreground mb-1.5">Apare in sectiunea de detalii a paginii de produs. Descrie produsul pe larg.</p>
                   <RichTextEditor content={form.description} onChange={(html) => set("description", html)}
-                    placeholder="Descrie produsul tau..." />
+                    placeholder="Descrie produsul tau in detaliu..." />
                 </div>
               </div>
             </div>
@@ -1338,6 +1356,12 @@ export function ProductForm({ businessId, product, categories }: Props) {
                   <div className="text-[15px] font-normal text-blue-700 hover:underline cursor-pointer truncate leading-snug">{serp.title}</div>
                   <div className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{serp.desc}</div>
                 </div>
+
+                <button type="button" onClick={autofillSeo}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
+                  <BarChart2 className="h-3.5 w-3.5" />
+                  Auto-completeaza din titlu si descriere
+                </button>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">

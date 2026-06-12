@@ -31,9 +31,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { productSlug, slug } = await params;
   const product = await getProductCached(productSlug);
   if (!product) return {};
-  const seo = (product.page_sections as { seo?: { title?: string; description?: string } } | null)?.seo;
+  const ps = product.page_sections as { seo?: { title?: string; description?: string }; short_description?: string } | null;
+  const seo = ps?.seo;
   const title = seo?.title || product.name;
   const description = seo?.description
+    || (ps?.short_description ? ps.short_description.replace(/<[^>]+>/g, "").slice(0, 155) : "")
     || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
   const images = product.images as string[] | null;
   const canonicalSlug = product.slug ?? productSlug;
@@ -108,6 +110,10 @@ export default async function ProductDetailPage({ params }: Props) {
 
   // Sanitize rich-text server-side so the client renders trusted HTML only.
   product.description = sanitizeHtml(product.description);
+  const psRaw = product.page_sections as Record<string, unknown> | null;
+  if (psRaw && typeof psRaw.short_description === "string") {
+    psRaw.short_description = sanitizeHtml(psRaw.short_description);
+  }
 
   // Detect custom domain access
   const headersList = await headers();

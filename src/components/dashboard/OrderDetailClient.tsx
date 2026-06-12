@@ -985,8 +985,8 @@ export function OrderDetailClient({
 
       {/* ── Status/payment change confirmation ── */}
       {showSaveConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSaveConfirm(false)}>
-          <div className="bg-surface rounded-2xl border border-border shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowSaveConfirm(false)}>
+          <div className="bg-background rounded-2xl border border-border shadow-2xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-foreground mb-2">Confirmi modificarile?</h3>
             <div className="text-sm text-muted-foreground mb-4 space-y-1">
               <p>Status comanda: <strong className="text-foreground">{currentStatus.label}</strong></p>
@@ -1007,8 +1007,8 @@ export function OrderDetailClient({
 
       {/* ── Delete confirmation ── */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="bg-surface rounded-2xl border border-border shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-background rounded-2xl border border-border shadow-2xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-foreground mb-2">Stergi comanda {orderNumber}?</h3>
             <p className="text-sm text-muted-foreground mb-4">Aceasta actiune este definitiva si nu poate fi anulata.</p>
             <div className="flex justify-end gap-2">

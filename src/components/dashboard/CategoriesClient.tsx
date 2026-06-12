@@ -7,7 +7,7 @@ import {
   Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, Tag, ImagePlus, Loader2,
 } from "lucide-react";
 import { createCategory, updateCategory, deleteCategory } from "@/lib/actions/category.actions";
-import { createClient } from "@/lib/supabase/client";
+import { uploadImage } from "@/lib/actions/upload.actions";
 
 interface Category {
   id: string;
@@ -159,16 +159,13 @@ export function CategoriesClient({ initialCategories }: Props) {
     if (file.size > 5 * 1024 * 1024) { toast.error("Imaginea trebuie sa fie sub 5MB"); return; }
     setUploadingId(categoryId);
     try {
-      const supabase = createClient();
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `categories/${categoryId}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("products").upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from("products").getPublicUrl(path);
-      const url = `${publicUrl}?v=${Date.now()}`;
-      const result = await updateCategory(categoryId, { image_url: url });
+      // Upload to R2 via the shared server action (same as product images) —
+      // avoids the Supabase Storage RLS limits on re-upload.
+      const uploaded = await uploadImage(file, "products", "categories");
+      if ("error" in uploaded) throw new Error(uploaded.error);
+      const result = await updateCategory(categoryId, { image_url: uploaded.url });
       if ("error" in result) throw new Error(result.error);
-      setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, image_url: url } : c));
+      setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, image_url: uploaded.url } : c));
       toast.success("Imagine salvata");
     } catch (e) { toast.error((e as Error).message ?? "Eroare la upload"); }
     finally { setUploadingId(null); }

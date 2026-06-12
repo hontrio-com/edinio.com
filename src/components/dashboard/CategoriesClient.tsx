@@ -355,7 +355,24 @@ export function CategoriesClient({ initialCategories }: Props) {
                       return (
                         <div key={sub.id}
                           className="flex items-center gap-2 px-3 py-2 pl-10 border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors">
-                          <Tag className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                          {/* Subcategory image upload (same as root categories) */}
+                          <label className="relative w-8 h-8 rounded-lg border border-border bg-muted flex items-center justify-center flex-shrink-0 cursor-pointer overflow-hidden group hover:border-primary/50 transition-colors">
+                            {uploadingId === sub.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                            ) : sub.image_url ? (
+                              <>
+                                <Image src={sub.image_url} alt="" fill sizes="32px" className="object-cover" />
+                                <button type="button" onClick={(e) => { e.preventDefault(); handleRemoveImage(sub.id); }}
+                                  className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <X className="h-3 w-3 text-white" />
+                                </button>
+                              </>
+                            ) : (
+                              <ImagePlus className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                            )}
+                            <input type="file" accept="image/*" className="hidden"
+                              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(sub.id, f); e.target.value = ""; }} />
+                          </label>
 
                           {isEditingSub ? (
                             <EditableLabel

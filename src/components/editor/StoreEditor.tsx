@@ -181,7 +181,7 @@ function EffectPreview({ id, label, color, selected, onClick }: {
 // ─── Main component ───────────────────────────────────────────
 
 export function StoreEditor({ business, storeSettings }: { business: Business; storeSettings: StoreSettings | null }) {
-  const [open, setOpen] = useState<string | null>("general");
+  const [open, setOpen] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [isPublished, setIsPublished] = useState(business.is_published);
@@ -190,7 +190,10 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
   const [previewKey, setPreviewKey] = useState(0);
 
   const previewUrl = `/${business.slug}`;
-  const publicUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/${business.slug}`;
+  // Show the connected custom domain when present; otherwise the edinio.com URL.
+  const publicUrl = business.custom_domain
+    ? `https://${business.custom_domain}`
+    : `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/${business.slug}`;
 
   // Upload helper
   async function uploadFile(file: File, bucket: string): Promise<string | null> {
@@ -217,6 +220,10 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
     whatsapp: business.whatsapp ?? "",
     email: business.email ?? "",
   });
+  // WhatsApp = same number as phone unless an explicitly different one is set.
+  const [whatsappSameAsPhone, setWhatsappSameAsPhone] = useState(
+    () => !business.whatsapp || business.whatsapp === business.phone,
+  );
 
   // ── Features state
   const rawFeatures = (business.features as Features) ?? {};
@@ -353,18 +360,25 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
               onChange={(e) => setGeneral((p) => ({ ...p, description: e.target.value }))}
               placeholder="Descrie pe scurt ce vinzi si ce te face special..." />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Telefon</label>
-              <input type="tel" value={general.phone} className={inputCls}
-                onChange={(e) => setGeneral((p) => ({ ...p, phone: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">WhatsApp</label>
-              <input type="tel" value={general.whatsapp} className={inputCls}
-                onChange={(e) => setGeneral((p) => ({ ...p, whatsapp: e.target.value }))} />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Telefon</label>
+            <input type="tel" value={general.phone} className={inputCls}
+              onChange={(e) => setGeneral((p) => ({ ...p, phone: e.target.value }))} />
+            <label className="mt-2 flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={whatsappSameAsPhone}
+                onChange={(e) => setWhatsappSameAsPhone(e.target.checked)}
+                className="h-4 w-4 accent-primary cursor-pointer flex-shrink-0" />
+              <span className="text-xs text-foreground">Numarul este disponibil si pe WhatsApp</span>
+            </label>
           </div>
+          {!whatsappSameAsPhone && (
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Numar WhatsApp (diferit)</label>
+              <input type="tel" value={general.whatsapp} className={inputCls}
+                onChange={(e) => setGeneral((p) => ({ ...p, whatsapp: e.target.value }))}
+                placeholder="ex: 07xx xxx xxx" />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
             <input type="email" value={general.email} className={inputCls}
@@ -401,7 +415,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
               tagline: general.tagline || null,
               description: general.description || null,
               phone: general.phone || null,
-              whatsapp: general.whatsapp || null,
+              whatsapp: (whatsappSameAsPhone ? general.phone : general.whatsapp) || null,
               email: general.email || null,
               features: { ...rawFeatures, ...features } as Record<string, boolean>,
             })} />
@@ -1254,7 +1268,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
           </div>
           <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg">
             <span className="text-xs font-mono text-muted-foreground truncate flex-1">{publicUrl}</span>
-            <a href={previewUrl} target="_blank" rel="noopener noreferrer"
+            <a href={publicUrl} target="_blank" rel="noopener noreferrer"
               className="text-primary hover:text-primary/80 transition-colors flex-shrink-0">
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -1309,7 +1323,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
             </button>
             <span className="text-sm font-medium text-foreground">Previzualizare</span>
           </div>
-          <a href={previewUrl} target="_blank" rel="noopener noreferrer"
+          <a href={publicUrl} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-xs text-primary hover:underline">
             <ExternalLink className="h-3.5 w-3.5" />
             Deschide in tab nou

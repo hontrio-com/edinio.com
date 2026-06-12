@@ -578,7 +578,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const current = NAV_SECTIONS.find(s => s.id === activeSection)!;
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)]">
+    <div className="flex min-h-[calc(100vh-3.5rem)]">
       {/* Left nav */}
       <aside className="hidden lg:flex flex-col flex-shrink-0 w-52 border-r border-border py-6">
         <p className="px-4 mb-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Setari</p>
@@ -601,27 +601,28 @@ export function SettingsClient({ profile, email, businessId, businessData, store
         </nav>
       </aside>
 
-      {/* Mobile nav */}
-      <div className="lg:hidden fixed top-[3.5rem] left-0 right-0 z-10 bg-background border-b border-border px-3 py-2 flex gap-1 overflow-x-auto">
-        {NAV_SECTIONS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setActiveSection(id)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              activeSection === id
-                ? "bg-primary text-white"
-                : "text-muted-foreground hover:bg-accent"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       {/* Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl px-8 py-8 lg:pt-8 pt-16">
+      <main className="flex-1 min-w-0">
+        {/* Mobile nav — sticky under the topbar, in normal flow so it respects the
+            trial / grace-period banner above the topbar instead of overlapping it. */}
+        <div className="lg:hidden sticky top-14 z-20 bg-background/95 backdrop-blur-sm border-b border-border px-3 py-2 flex gap-1 overflow-x-auto">
+          {NAV_SECTIONS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveSection(id)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                activeSection === id
+                  ? "bg-primary text-white"
+                  : "text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="max-w-2xl px-8 py-8">
           {/* Section heading */}
           <div className="flex items-center gap-2.5 mb-6">
             <current.icon className="h-5 w-5 text-foreground" />

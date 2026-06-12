@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { FanCourierConfigClient } from "@/components/dashboard/FanCourierConfigClient";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { FanCourierConfig } from "@/lib/fancourier";
 
 export default async function FanCourierPage() {
@@ -14,20 +15,7 @@ export default async function FanCourierPage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <img
-          src="/integrations/fan-courier.svg"
-          alt="FAN Courier"
-          className="h-8 w-auto object-contain"
-        />
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">FAN Courier</h1>
-          <p className="text-sm text-muted-foreground">
-            Genereaza AWB-uri FAN Courier direct din comenzile magazinului tau.
-          </p>
-        </div>
-      </div>
-
+      <IntegrationHeader id="fan-courier" description="Genereaza AWB-uri FAN Courier direct din comenzile magazinului tau." />
       <FanCourierConfigClient businessId={business.id} initialConfig={config} />
     </div>
   );

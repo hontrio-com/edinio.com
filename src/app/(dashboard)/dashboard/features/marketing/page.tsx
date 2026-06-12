@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { MarketingConfigClient } from "@/components/dashboard/MarketingConfigClient";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { MarketingConfig } from "@/lib/marketing";
 
 export default async function MarketingPage() {
@@ -14,20 +15,7 @@ export default async function MarketingPage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <img
-          src="/integrations/facebook-pixel.svg"
-          alt="Facebook Pixel"
-          className="h-8 w-auto object-contain"
-        />
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Marketing</h1>
-          <p className="text-sm text-muted-foreground">
-            Conecteaza pixelii de tracking pentru a optimiza campaniile tale publicitare.
-          </p>
-        </div>
-      </div>
-
+      <IntegrationHeader id="marketing" description="Conecteaza pixelii de tracking pentru a optimiza campaniile tale publicitare." />
       <MarketingConfigClient businessId={business.id} initialConfig={config} />
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Loader2, CheckCircle, CreditCard, Info, Key } from "lucide-react";
 import { saveNetopiaConfig, disconnectNetopia } from "@/lib/actions/netopia.actions";
@@ -64,27 +65,7 @@ export default function NetopiaConfigClient({
 
   return (
     <div className="p-6 max-w-2xl">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard/features")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Integrari
-        </button>
-        <span className="text-muted-foreground">/</span>
-        <div className="flex items-center gap-2">
-          <img src="/integrations/netopia.svg" alt="Netopia" className="h-5 w-auto object-contain" style={{ filter: "invert(1)" }} />
-          <span className="text-sm font-semibold text-foreground">Netopia Payments</span>
-        </div>
-        {cfg.enabled && isConfigured && (
-          <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-            <CheckCircle className="h-2.5 w-2.5" />Activ
-          </span>
-        )}
-      </div>
+      <IntegrationHeader id="netopia" description="Accepta plati cu cardul prin Netopia Payments." />
 
       <div className="space-y-5">
         {/* Info */}

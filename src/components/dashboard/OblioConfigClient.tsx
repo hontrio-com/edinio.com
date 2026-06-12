@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle, Loader2, Plug, PlugZap, RefreshCw, Info, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveOblioConfig, disconnectOblio, loadOblioAccountData, loadOblioSeriesForCif } from "@/lib/actions/oblio.actions";
 import type { OblioConfig } from "@/lib/oblio";
 
@@ -134,23 +135,7 @@ export default function OblioConfigClient({
 
   return (
     <div className="p-6 max-w-2xl">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/dashboard/features" className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <img
-          src="/integrations/oblio.webp"
-          alt="Oblio"
-          className="h-6 w-auto object-contain"
-          style={{ filter: "invert(1)" }}
-        />
-        {isConnected && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-            <CheckCircle className="h-3 w-3" />Activ
-          </span>
-        )}
-      </div>
+      <IntegrationHeader id="oblio" description="Genereaza automat facturi Oblio pentru comenzile din magazinul tau." />
 
       <div className="space-y-4">
         {/* Info */}

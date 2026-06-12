@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { SamedayConfigClient } from "@/components/dashboard/SamedayConfigClient";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { SamedayConfig } from "@/lib/sameday";
 
 export default async function SamedayPage() {
@@ -14,20 +15,7 @@ export default async function SamedayPage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <img
-          src="/integrations/sameday.svg"
-          alt="Sameday"
-          className="h-8 w-auto object-contain"
-        />
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Sameday</h1>
-          <p className="text-sm text-muted-foreground">
-            Genereaza AWB-uri Sameday direct din comenzile magazinului tau.
-          </p>
-        </div>
-      </div>
-
+      <IntegrationHeader id="sameday" description="Genereaza AWB-uri Sameday direct din comenzile magazinului tau." />
       <SamedayConfigClient businessId={business.id} initialConfig={config} />
     </div>
   );

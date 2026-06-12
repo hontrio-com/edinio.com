@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { CargusConfigClient } from "@/components/dashboard/CargusConfigClient";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { CargusConfig } from "@/lib/cargus";
 
 export default async function CargusPage() {
@@ -14,20 +15,7 @@ export default async function CargusPage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <img
-          src="/integrations/cargus.svg"
-          alt="Cargus"
-          className="h-8 w-auto object-contain"
-        />
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Cargus</h1>
-          <p className="text-sm text-muted-foreground">
-            Genereaza AWB-uri Cargus direct din comenzile magazinului tau.
-          </p>
-        </div>
-      </div>
-
+      <IntegrationHeader id="cargus" description="Genereaza AWB-uri Cargus direct din comenzile magazinului tau." />
       <CargusConfigClient businessId={business.id} initialConfig={config} />
     </div>
   );

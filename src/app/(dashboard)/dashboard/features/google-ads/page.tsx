@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { GoogleAdsConfigClient } from "@/components/dashboard/GoogleAdsConfigClient";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { MarketingConfig } from "@/lib/marketing";
 
 export default async function GoogleAdsPage() {
@@ -14,20 +15,7 @@ export default async function GoogleAdsPage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <img
-          src="/integrations/google-ads.svg"
-          alt="Google Ads"
-          className="h-8 w-auto object-contain"
-        />
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Google Ads / GA4</h1>
-          <p className="text-sm text-muted-foreground">
-            Urmareste conversiile si optimizeaza campaniile tale pe Google.
-          </p>
-        </div>
-      </div>
-
+      <IntegrationHeader id="google-ads" description="Urmareste conversiile si optimizeaza campaniile tale pe Google." />
       <GoogleAdsConfigClient businessId={business.id} initialConfig={config} />
     </div>
   );

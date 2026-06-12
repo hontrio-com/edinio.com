@@ -61,14 +61,14 @@ export function FeaturesClient({ business }: { business: Business }) {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Functii</h1>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Integrari</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Activeaza sau dezactiveaza functiile disponibile pe mini-store-ul tau.
         </p>
       </div>
 
       <section className="mb-10">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Functii active</h2>
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Integrari active</h2>
         <div className="space-y-3">
           {ACTIVE_FEATURES.map((feature) => {
             const Icon = feature.icon;

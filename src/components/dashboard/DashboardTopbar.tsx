@@ -38,7 +38,7 @@ type PlatformNotif = {
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Panou principal" },
   { href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul" },
-  { href: "/dashboard/features", icon: Zap, label: "Functii" },
+  { href: "/dashboard/features", icon: Zap, label: "Integrari" },
   { href: "/dashboard/products", icon: Package, label: "Produse" },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },

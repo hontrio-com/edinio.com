@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Save, Loader2, MessageSquare, Phone,
@@ -59,27 +60,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
 
   return (
     <div className="p-6 max-w-2xl">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard/features")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Integrari
-        </button>
-        <span className="text-muted-foreground">/</span>
-        <div className="flex items-center gap-2">
-          <img src="/integrations/smso.svg" alt="SMSO" className="h-5 w-auto object-contain" style={{ transform: "scale(1.3)", transformOrigin: "center" }} />
-          <span className="text-sm font-semibold text-foreground">Smso.ro</span>
-        </div>
-        {smso.enabled && (
-          <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-            <CheckCircle className="h-2.5 w-2.5" />Activ
-          </span>
-        )}
-      </div>
+      <IntegrationHeader id="smso" description="Trimite SMS-uri tranzactionale si de marketing prin Smso.ro." />
 
       <div className="space-y-6">
         {/* Info */}

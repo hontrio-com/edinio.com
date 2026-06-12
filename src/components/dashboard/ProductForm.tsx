@@ -757,9 +757,9 @@ export function ProductForm({ businessId, product, categories }: Props) {
                         const children = localCategories.filter(c => c.parent_id === parent.id);
                         return children.length > 0 ? (
                           <optgroup key={parent.id} label={parent.name}>
-                            <option value={parent.name}>{parent.name}</option>
+                            <option value={parent.name}>{parent.name} (toate)</option>
                             {children.map(child => (
-                              <option key={child.id} value={child.name}>{child.name}</option>
+                              <option key={child.id} value={child.name}>{`  ↳ ${child.name}`}</option>
                             ))}
                           </optgroup>
                         ) : (

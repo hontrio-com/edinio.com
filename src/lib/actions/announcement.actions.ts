@@ -12,6 +12,11 @@ function adminDb(): SupabaseClient {
   return createAdminClient() as unknown as SupabaseClient;
 }
 
+// Only one announcement is shown to users at a time: publishing one unpublishes the rest.
+async function unpublishOthers(exceptId: string) {
+  await adminDb().from("announcements").update({ is_published: false }).neq("id", exceptId).eq("is_published", true);
+}
+
 export type AnnouncementInput = {
   title: string;
   excerpt?: string | null;
@@ -57,8 +62,10 @@ export async function createAnnouncement(data: AnnouncementInput) {
   }).select("id").single();
 
   if (error) return { error: "Eroare la salvare. Incearca din nou." };
+  const newId = (row as { id: string }).id;
+  if (data.is_published) await unpublishOthers(newId);
   revalidate();
-  return { success: true as const, id: (row as { id: string }).id };
+  return { success: true as const, id: newId };
 }
 
 export async function updateAnnouncement(id: string, data: AnnouncementInput) {
@@ -84,6 +91,7 @@ export async function updateAnnouncement(id: string, data: AnnouncementInput) {
   }).eq("id", id);
 
   if (error) return { error: "Eroare la salvare. Incearca din nou." };
+  if (willPublish) await unpublishOthers(id);
   revalidate();
   return { success: true as const };
 }
@@ -109,6 +117,7 @@ export async function togglePublishAnnouncement(id: string, publish: boolean) {
     updated_at: new Date().toISOString(),
   }).eq("id", id);
   if (error) return { error: "Eroare la actualizare." };
+  if (publish) await unpublishOthers(id);
   revalidate();
   return { success: true as const };
 }

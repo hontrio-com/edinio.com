@@ -70,7 +70,7 @@ export function AnnouncementArticle({ data, dateLabel }: { data: ArticleData; da
     <article className="bg-surface border border-border rounded-2xl overflow-hidden">
       {data.cover_url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={data.cover_url} alt="" className="w-full max-h-64 object-cover" />
+        <img src={data.cover_url} alt="" className="w-full aspect-[16/9] object-cover" />
       )}
       <div className="p-5 sm:p-6 space-y-3">
         <div className="flex items-center gap-2 flex-wrap">

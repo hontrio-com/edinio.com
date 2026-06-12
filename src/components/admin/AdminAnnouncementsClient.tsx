@@ -146,6 +146,7 @@ export function AdminAnnouncementsClient({ initial }: { initial: Announcement[] 
           {/* Cover */}
           <div>
             <label className="block text-xs font-medium text-zinc-500 mb-1">Imagine de copertă (optional)</label>
+            <p className="text-[11px] text-zinc-400 mb-2">Recomandat: 1600×900 px (raport 16:9) — se afiseaza complet, la fel pe toate dispozitivele.</p>
             {editing.cover_url ? (
               <div className="relative w-full max-w-md">
                 {/* eslint-disable-next-line @next/next/no-img-element */}

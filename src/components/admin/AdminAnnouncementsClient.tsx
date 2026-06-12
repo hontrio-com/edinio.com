@@ -6,9 +6,10 @@ import { toast } from "sonner";
 import {
   Megaphone, Plus, Pencil, Trash2, Pin, PinOff, Eye, EyeOff, ArrowLeft,
   ArrowUp, ArrowDown, X, Loader2, Type, Heading1, Image as ImageIcon,
-  Video, MousePointerClick, Minus, Upload,
+  Video, MousePointerClick, Minus, Upload, Monitor, Smartphone,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { AnnouncementArticle } from "@/components/dashboard/AnnouncementArticle";
 import { uploadImage } from "@/lib/upload";
 import {
   createAnnouncement, updateAnnouncement, deleteAnnouncement,
@@ -46,6 +47,8 @@ export function AdminAnnouncementsClient({ initial }: { initial: Announcement[] 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploadTarget, setUploadTarget] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
 
   function startNew() { setEditing({ ...EMPTY, blocks: [{ type: "text", html: "" }] }); }
   function startEdit(a: Announcement) {
@@ -268,16 +271,48 @@ export function AdminAnnouncementsClient({ initial }: { initial: Announcement[] 
             </label>
           </div>
 
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setEditing(null)}
-              className="px-4 py-2 text-sm font-medium border border-zinc-300 rounded-lg hover:bg-zinc-50">Anuleaza</button>
-            <button type="button" onClick={handleSave} disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50">
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {editing.is_published ? "Salveaza si publica" : "Salveaza ca draft"}
+          <div className="flex flex-col sm:flex-row justify-between gap-2">
+            <button type="button" onClick={() => setShowPreview(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-zinc-300 rounded-lg hover:bg-zinc-50">
+              <Eye className="h-4 w-4" /> Previzualizare
             </button>
+            <div className="flex gap-2 sm:justify-end">
+              <button type="button" onClick={() => setEditing(null)}
+                className="px-4 py-2 text-sm font-medium border border-zinc-300 rounded-lg hover:bg-zinc-50">Anuleaza</button>
+              <button type="button" onClick={handleSave} disabled={saving}
+                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50">
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {editing.is_published ? "Salveaza si publica" : "Salveaza ca draft"}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Responsive preview — exactly how users see it (desktop + mobile) */}
+        {showPreview && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col" onClick={() => setShowPreview(false)}>
+            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-zinc-200" onClick={(e) => e.stopPropagation()}>
+              <span className="text-sm font-semibold text-zinc-900">Previzualizare</span>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-zinc-100 rounded-lg p-1 gap-0.5">
+                  <button type="button" onClick={() => setPreviewDevice("desktop")}
+                    className={`p-1.5 rounded-md transition-colors ${previewDevice === "desktop" ? "bg-white shadow text-zinc-900" : "text-zinc-500"}`}><Monitor className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => setPreviewDevice("mobile")}
+                    className={`p-1.5 rounded-md transition-colors ${previewDevice === "mobile" ? "bg-white shadow text-zinc-900" : "text-zinc-500"}`}><Smartphone className="h-4 w-4" /></button>
+                </div>
+                <button type="button" onClick={() => setShowPreview(false)} className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100"><X className="h-4 w-4" /></button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-8 flex justify-center" onClick={(e) => e.stopPropagation()}>
+              <div className={previewDevice === "mobile" ? "w-[390px] max-w-full" : "w-full max-w-3xl"}>
+                <AnnouncementArticle
+                  data={{ title: editing.title, excerpt: editing.excerpt, cover_url: editing.cover_url, blocks: editing.blocks, is_pinned: editing.is_pinned }}
+                  dateLabel="Acum"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

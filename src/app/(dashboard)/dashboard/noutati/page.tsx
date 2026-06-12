@@ -1,12 +1,27 @@
 import { redirect } from "next/navigation";
-import { Megaphone, Pin } from "lucide-react";
+import { Megaphone } from "lucide-react";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { getPublishedAnnouncements } from "@/lib/actions/announcement.actions";
-import { AnnouncementBlocks } from "@/components/dashboard/AnnouncementBlocks";
+import { AnnouncementArticle, type ArticleData } from "@/components/dashboard/AnnouncementArticle";
 import { AnnouncementsSeenMarker } from "@/components/dashboard/AnnouncementsSeenMarker";
-import { formatDate } from "@/lib/utils/format";
+import { sanitizeHtml } from "@/lib/utils/sanitize-html";
+import type { Announcement } from "@/lib/announcements";
 
 export const metadata = { title: "Noutati" };
+
+// Sanitize text-block HTML server-side before it reaches the client renderer.
+function toArticle(a: Announcement): ArticleData {
+  return {
+    title: a.title,
+    excerpt: a.excerpt,
+    cover_url: a.cover_url,
+    is_pinned: a.is_pinned,
+    published_at: a.published_at,
+    blocks: (Array.isArray(a.blocks) ? a.blocks : []).map((b) =>
+      b.type === "text" ? { ...b, html: sanitizeHtml(b.html) } : b
+    ),
+  };
+}
 
 export default async function NoutatiPage() {
   const user = await getCachedUser();
@@ -32,25 +47,7 @@ export default async function NoutatiPage() {
       ) : (
         <div className="space-y-6">
           {announcements.map((a) => (
-            <article key={a.id} className="bg-surface border border-border rounded-2xl overflow-hidden">
-              {a.cover_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={a.cover_url} alt="" className="w-full max-h-64 object-cover" />
-              )}
-              <div className="p-5 sm:p-6 space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {a.is_pinned && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                      <Pin className="h-3 w-3" /> Important
-                    </span>
-                  )}
-                  {a.published_at && <span className="text-xs text-muted-foreground">{formatDate(a.published_at)}</span>}
-                </div>
-                <h2 className="text-xl font-bold text-foreground">{a.title}</h2>
-                {a.excerpt && <p className="text-sm text-muted-foreground">{a.excerpt}</p>}
-                <AnnouncementBlocks blocks={Array.isArray(a.blocks) ? a.blocks : []} />
-              </div>
-            </article>
+            <AnnouncementArticle key={a.id} data={toArticle(a)} />
           ))}
         </div>
       )}

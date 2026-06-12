@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  ShoppingCart, Wallet, Package, Clock, AlertCircle,
+  ShoppingCart, Wallet, Package, Clock, AlertCircle, Megaphone, Pin, ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { formatPrice } from "@/lib/utils/format";
+import { getLatestAnnouncement } from "@/lib/actions/announcement.actions";
+import { formatPrice, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
@@ -199,6 +200,8 @@ export default async function DashboardPage() {
     };
   });
 
+  const latestAnnouncement = await getLatestAnnouncement().catch(() => null);
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <SiteStatusBar
@@ -324,6 +327,40 @@ export default async function DashboardPage() {
           )}
         </div>
       </div>
+
+      {latestAnnouncement && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Megaphone className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Ultima noutate</h2>
+            </div>
+            <Link href="/dashboard/noutati" className="text-xs font-medium text-primary hover:underline">Vezi toate</Link>
+          </div>
+          <Link href="/dashboard/noutati"
+            className="block bg-surface border border-border rounded-2xl overflow-hidden hover:border-primary/40 transition-colors">
+            {latestAnnouncement.cover_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={latestAnnouncement.cover_url} alt="" className="w-full max-h-40 object-cover" />
+            )}
+            <div className="p-5 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {latestAnnouncement.is_pinned && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                    <Pin className="h-3 w-3" /> Important
+                  </span>
+                )}
+                {latestAnnouncement.published_at && (
+                  <span className="text-xs text-muted-foreground">{formatDate(latestAnnouncement.published_at)}</span>
+                )}
+              </div>
+              <h3 className="text-base font-bold text-foreground">{latestAnnouncement.title}</h3>
+              {latestAnnouncement.excerpt && <p className="text-sm text-muted-foreground line-clamp-2">{latestAnnouncement.excerpt}</p>}
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">Citeste <ChevronRight className="h-3.5 w-3.5" /></span>
+            </div>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

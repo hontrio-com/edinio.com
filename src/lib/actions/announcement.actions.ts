@@ -136,6 +136,18 @@ export async function getPublishedAnnouncements(): Promise<Announcement[]> {
   return (data ?? []) as Announcement[];
 }
 
+export async function getLatestAnnouncement(): Promise<Announcement | null> {
+  const supabase = (await createClient()) as unknown as SupabaseClient;
+  const { data } = await supabase
+    .from("announcements")
+    .select("*")
+    .eq("is_published", true)
+    .order("published_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data ?? null) as Announcement | null;
+}
+
 export async function markAnnouncementsSeen() {
   const supabase = (await createClient()) as unknown as SupabaseClient;
   const { data: { user } } = await supabase.auth.getUser();

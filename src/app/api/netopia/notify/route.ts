@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { resolveNetopiaStatus, type NetopiaIpnPayload } from "@/lib/netopia";
+import { verifyNetopiaIpn } from "@/lib/netopia-ipn";
 
 export async function POST(request: NextRequest) {
   let payload: NetopiaIpnPayload;
@@ -15,6 +16,13 @@ export async function POST(request: NextRequest) {
 
   if (!orderId || paymentStatus === undefined) {
     return NextResponse.json({ errorCode: 0x01, errorMessage: "Missing order or status" });
+  }
+
+  // Authenticate the callback: the signed token is bound to this order at
+  // payment-start time. Without it anyone could POST a fake "paid" status.
+  if (!verifyNetopiaIpn(orderId, request.nextUrl.searchParams.get("t"))) {
+    console.error("[netopia/notify] IPN signature verification failed:", { orderId });
+    return NextResponse.json({ errorCode: 1, errorMessage: "Invalid signature" }, { status: 403 });
   }
 
   console.log("[netopia/notify] IPN received:", {

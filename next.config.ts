@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["@aws-sdk/client-s3"],
+  serverExternalPackages: ["@aws-sdk/client-s3", "sanitize-html"],
   experimental: {
     optimizePackageImports: [
       "lucide-react",
@@ -25,6 +25,23 @@ const nextConfig: NextConfig = {
     loaderFile: "./src/lib/supabase-image-loader.ts",
   },
   async headers() {
+    // Permissive where third parties need it (Stripe, Netopia, FB/TikTok/Google
+    // pixels, Supabase realtime), but locks the dangerous directives: no plugins,
+    // base-uri/form-action pinned to self, framing restricted to same origin.
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
+      "style-src 'self' 'unsafe-inline' https:",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data: https:",
+      "connect-src 'self' https: wss:",
+      "frame-src 'self' https:",
+      "worker-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self' https:",
+      "frame-ancestors 'self'",
+    ].join("; ");
     return [
       {
         source: "/(.*)",
@@ -33,6 +50,7 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Content-Security-Policy", value: csp },
         ],
       },
       {

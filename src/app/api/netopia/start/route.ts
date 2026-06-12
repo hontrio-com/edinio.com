@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { startNetopiaPayment, type NetopiaConfig } from "@/lib/netopia";
+import { signNetopiaIpn } from "@/lib/netopia-ipn";
 
 export async function POST(request: NextRequest) {
   const { orderId, businessId } = (await request.json()) as { orderId: string; businessId: string };
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
 
   const addr = order.shipping_address as { address?: string; city?: string; county?: string };
 
-  const notifyUrl = `${baseUrl}/api/netopia/notify`;
+  const notifyUrl = `${baseUrl}/api/netopia/notify?t=${signNetopiaIpn(orderId)}`;
   const redirectUrl = `${baseUrl}/${slug}/confirm?orderId=${encodeURIComponent(orderId)}&name=${encodeURIComponent(order.customer_name as string)}&total=${order.total}`;
 
   const result = await startNetopiaPayment(

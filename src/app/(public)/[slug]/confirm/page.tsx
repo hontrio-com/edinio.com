@@ -59,7 +59,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const computedTotal = subtotal + shippingCost - discountAmount;
   const displayTotal = computedTotal || Number(total) || 0;
 
-  const { data: storeSettings } = await supabase
+  const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
     .select("marketing_config")
     .eq("business_id", business.id)

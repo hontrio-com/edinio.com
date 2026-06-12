@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { FacebookPixel } from "@/components/public/FacebookPixel";
 import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { GoogleTag } from "@/components/public/GoogleTag";
@@ -11,9 +11,11 @@ interface Props {
 
 export default async function StoreLayout({ children, params }: Props) {
   const { slug } = await params;
-  const supabase = await createClient();
+  // Service role: marketing_config (public pixel IDs) lives in store_settings,
+  // which is no longer anon-readable. Read it server-side and pass only pixel IDs.
+  const admin = createAdminClient();
 
-  const { data: business } = await supabase
+  const { data: business } = await admin
     .from("businesses")
     .select("id, store_settings(marketing_config)")
     .eq("slug", slug)

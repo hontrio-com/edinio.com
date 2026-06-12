@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
-import { createClient } from "@/lib/supabase/client";
+import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 
 const JUDETE = [
@@ -46,20 +46,6 @@ interface CheckoutConfig {
   extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
   hidden_fields?: string[];
   email_field?: { enabled: boolean; required: boolean };
-}
-
-interface StripeConfig {
-  account_id?: string;
-  enabled?: boolean;
-  charges_enabled?: boolean;
-}
-
-interface NetopiaConfig {
-  enabled?: boolean;
-  sandbox?: boolean;
-  pos_signature?: string;
-  title?: string;
-  api_key?: string;
 }
 
 interface Props {
@@ -183,33 +169,24 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     };
   }, [open, onClose]);
 
-  // Fetch checkout config + stripe config fresh from DB when modal opens
+  // Fetch checkout config fresh when modal opens — via a secret-free server action.
   useEffect(() => {
     if (!open) return;
-    const supabase = createClient();
-    supabase
-      .from("store_settings")
-      .select("page_content, stripe_config, netopia_config, shipping_zones")
-      .eq("business_id", business.id)
-      .single()
-      .then(({ data }) => {
-        if (data?.page_content) {
-          const pc = data.page_content as { checkout_config?: CheckoutConfig };
-          setLiveCheckoutConfig(pc.checkout_config);
-        }
-        const sc = data?.stripe_config as StripeConfig | null;
-        const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
-        setStripeEnabled(stripeOk);
-        const nc = data?.netopia_config as NetopiaConfig | null;
-        const netopiaOk = !!(nc?.enabled && nc?.pos_signature && nc?.api_key);
-        setNetopiaEnabled(netopiaOk);
-        if (nc?.title) setNetopiaTitle(nc.title);
-        if (!stripeOk) setPaymentMethod("cash_on_delivery");
-        // Check if any courier is enabled in shipping_zones (Settings > Livrare)
-        const zones = data?.shipping_zones as Record<string, { enabled?: boolean }> | null;
-        const anyEnabled = zones && Object.values(zones).some(z => z?.enabled);
-        setHasCouriers(!!anyEnabled);
-      });
+    getPublicStoreConfig(business.id).then((data) => {
+      if (!data) return;
+      if (data.page_content) {
+        const pc = data.page_content as { checkout_config?: CheckoutConfig };
+        setLiveCheckoutConfig(pc.checkout_config);
+      }
+      setStripeEnabled(data.stripe_ready);
+      setNetopiaEnabled(data.netopia_ready);
+      if (data.netopia_title) setNetopiaTitle(data.netopia_title);
+      if (!data.stripe_ready) setPaymentMethod("cash_on_delivery");
+      // Check if any courier is enabled in shipping_zones (Settings > Livrare)
+      const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
+      const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
+      setHasCouriers(!!anyEnabled);
+    });
   }, [open, business.id]);
 
   // Re-validate discount when quantity/tier changes (min_order_amount may no longer be met)

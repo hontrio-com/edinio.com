@@ -9,8 +9,8 @@ import {
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";
+import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
-import { createClient } from "@/lib/supabase/client";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import type { Database } from "@/types/database.types";
 
@@ -239,36 +239,27 @@ function CartCheckoutModal({
 
   useEffect(() => {
     if (!open) return;
-    const supabase = createClient();
-    supabase
-      .from("store_settings")
-      .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, stripe_config, netopia_config, shipping_zones")
-      .eq("business_id", businessId)
-      .single()
-      .then(({ data }) => {
-        if (data?.page_content) {
-          const pc = data.page_content as { checkout_config?: PageContent["checkout_config"] };
-          setCheckoutConfig(prev => ({ ...prev, ...pc.checkout_config }));
-        }
-        setVatConfig({
-          vat_enabled: data?.vat_enabled ?? false,
-          vat_rate: Number(data?.vat_rate ?? 19),
-          prices_include_vat: data?.prices_include_vat ?? true,
-          show_vat_breakdown: data?.show_vat_breakdown ?? true,
-        });
-        const sc = data?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
-        const stripeOk = !!(sc?.enabled && sc?.charges_enabled && sc?.account_id);
-        setStripeEnabled(stripeOk);
-        const nc = data?.netopia_config as { enabled?: boolean; pos_signature?: string; title?: string; api_key?: string } | null;
-        const netopiaOk = !!(nc?.enabled && nc?.pos_signature && nc?.api_key);
-        setNetopiaEnabled(netopiaOk);
-        if (nc?.title) setNetopiaTitle(nc.title);
-        if (!stripeOk) setPaymentMethod("cash_on_delivery");
-        // Check if any courier is enabled in shipping_zones (Settings > Livrare)
-        const zones = data?.shipping_zones as Record<string, { enabled?: boolean }> | null;
-        const anyEnabled = zones && Object.values(zones).some(z => z?.enabled);
-        setHasCouriers(!!anyEnabled);
+    getPublicStoreConfig(businessId).then((data) => {
+      if (!data) return;
+      if (data.page_content) {
+        const pc = data.page_content as { checkout_config?: PageContent["checkout_config"] };
+        setCheckoutConfig(prev => ({ ...prev, ...pc.checkout_config }));
+      }
+      setVatConfig({
+        vat_enabled: data.vat_enabled,
+        vat_rate: data.vat_rate,
+        prices_include_vat: data.prices_include_vat,
+        show_vat_breakdown: data.show_vat_breakdown,
       });
+      setStripeEnabled(data.stripe_ready);
+      setNetopiaEnabled(data.netopia_ready);
+      if (data.netopia_title) setNetopiaTitle(data.netopia_title);
+      if (!data.stripe_ready) setPaymentMethod("cash_on_delivery");
+      // Check if any courier is enabled in shipping_zones (Settings > Livrare)
+      const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
+      const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
+      setHasCouriers(!!anyEnabled);
+    });
   }, [open, businessId]);
 
   function validate() {

@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday";
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
 
@@ -48,7 +48,9 @@ export async function getShippingOptions(
     cod?: number;
   },
 ): Promise<ShippingOption[]> {
-  const supabase = await createClient();
+  // Service role: anonymous customers trigger this; courier secrets are read
+  // server-side only and never returned to the client (only computed prices are).
+  const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
     .select("sameday_config, fan_courier_config, default_shipping_cost, shipping_zones")
@@ -220,7 +222,7 @@ export async function getLockers(
   courier: string,
   city?: string,
 ): Promise<LockerItem[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
     .select("sameday_config, fan_courier_config")

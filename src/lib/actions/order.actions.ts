@@ -6,6 +6,91 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
+import { validateDiscount } from "@/lib/actions/discount.actions";
+
+function round2(n: number): number {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+// ── Server-authoritative pricing ─────────────────────────────────────────────
+// Customers are anonymous and prices arrive from the browser; they must NEVER be
+// trusted. We reload the product and recompute every legitimate price from the
+// product's own configuration, then match the submitted amount against it.
+
+type OrderProduct = {
+  id: string;
+  price: number;
+  is_active: boolean;
+  business_id: string;
+  page_sections: unknown;
+};
+
+// All legitimate per-unit prices: base price + every enabled variant combination.
+function legitUnitPrices(product: OrderProduct): number[] {
+  const set = new Set<number>([round2(product.price)]);
+  const ps = (product.page_sections ?? {}) as {
+    variants?: { enabled?: boolean; combinations?: Array<{ enabled?: boolean; price?: number | null }> };
+  };
+  if (ps.variants?.enabled && Array.isArray(ps.variants.combinations)) {
+    for (const c of ps.variants.combinations) {
+      if (c?.enabled && c.price != null) set.add(round2(Number(c.price)));
+    }
+  }
+  return [...set];
+}
+
+// Legitimate bundle totals for a given unit price and quantity (mirrors ProductPage
+// quantity-tier math: plain qty*unit is always valid; tiers 2/3 add bundle prices).
+function legitBundleTotals(product: OrderProduct, unit: number, quantity: number): number[] {
+  const totals = [round2(unit * quantity)];
+  const ps = (product.page_sections ?? {}) as {
+    quantity_tiers?: { enabled?: boolean; mode?: string; tier2_price?: number; tier3_price?: number; tier2_percent?: number; tier3_percent?: number };
+  };
+  const t = ps.quantity_tiers;
+  if (t?.enabled) {
+    const isPercent = t.mode === "percent";
+    if (quantity === 2) {
+      const p = isPercent ? unit * 2 * (1 - (t.tier2_percent ?? 0) / 100) : Number(t.tier2_price ?? 0);
+      if (p > 0) totals.push(round2(p));
+    } else if (quantity === 3) {
+      const p = isPercent ? unit * 3 * (1 - (t.tier3_percent ?? 0) / 100) : Number(t.tier3_price ?? 0);
+      if (p > 0) totals.push(round2(p));
+    }
+  }
+  return totals;
+}
+
+// Returns the authoritative pre-discount subtotal, or null if the claimed unit
+// price cannot be reconciled with any legitimate configuration.
+function authoritativeSubtotal(product: OrderProduct, claimedUnit: number, quantity: number): number | null {
+  if (!Number.isFinite(claimedUnit) || quantity < 1) return null;
+  const claimed = round2(claimedUnit * quantity);
+  let best: number | null = null;
+  let bestDiff = Infinity;
+  for (const unit of legitUnitPrices(product)) {
+    for (const candidate of legitBundleTotals(product, unit, quantity)) {
+      const d = Math.abs(candidate - claimed);
+      if (d < bestDiff) { bestDiff = d; best = candidate; }
+    }
+  }
+  // Tolerance absorbs rounding only; real tampering is orders of magnitude away.
+  return best !== null && bestDiff <= 0.5 ? best : null;
+}
+
+type CheckoutExtra = { id: string; label: string; price: number };
+
+// Load and validate the store-defined checkout extras (server-authoritative prices).
+function validateExtras(
+  pageContent: unknown,
+  clientExtras: { id: string; label: string; price: number }[] | undefined,
+): CheckoutExtra[] {
+  const serverExtras = ((pageContent as { checkout_config?: { extras?: CheckoutExtra[] } } | null)?.checkout_config?.extras) ?? [];
+  const byId = new Map(serverExtras.map((e) => [e.id, e]));
+  return (clientExtras ?? [])
+    .map((e) => byId.get(e.id))
+    .filter((e): e is CheckoutExtra => !!e)
+    .map((e) => ({ id: e.id, label: e.label, price: round2(Number(e.price)) }));
+}
 
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
@@ -52,21 +137,63 @@ export async function placeOrder(data: {
   // Use admin client for order creation — customers are anonymous, RLS requires service role
   const admin = createAdminClient();
 
-  const subtotal = data.product_price * data.quantity;
-  const extrasTotal = (data.extras ?? []).reduce((s, e) => s + e.price, 0);
-  const discountAmount = data.discount_amount ?? 0;
-  const total = subtotal + extrasTotal - discountAmount + data.shipping_cost;
+  // Reload product + store config and recompute every price server-side.
+  const [{ data: product }, { data: cfgRow }] = await Promise.all([
+    admin.from("products")
+      .select("id, price, is_active, business_id, page_sections")
+      .eq("id", data.product_id)
+      .eq("business_id", data.business_id)
+      .single(),
+    admin.from("store_settings")
+      .select("page_content, free_shipping_threshold")
+      .eq("business_id", data.business_id)
+      .single(),
+  ]);
+
+  if (!product || !product.is_active) {
+    return { error: "Produsul nu mai este disponibil. Reincarca pagina." };
+  }
+
+  const subtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, data.quantity);
+  if (subtotal === null) {
+    logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity }, severity: "warning" });
+    return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
+  }
+
+  const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
+  const extrasTotal = validatedExtras.reduce((s, e) => s + e.price, 0);
+
+  // Re-validate the discount server-side against the authoritative subtotal.
+  let discountAmount = 0;
+  let validDiscountId: string | undefined;
+  let isFreeShipping = false;
+  if (data.discount_code) {
+    const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
+    if (dres.valid) {
+      discountAmount = Math.min(dres.discount.discountAmount, subtotal);
+      validDiscountId = dres.discount.id;
+      isFreeShipping = dres.discount.type === "free_shipping";
+    }
+  }
+
+  // Shipping clamped non-negative; zeroed when free-shipping rules apply.
+  const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
+  let shipping = Math.max(0, round2(data.shipping_cost));
+  if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
+
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount + shipping));
   const order_number = await buildOrderNumber(admin, data.business_id);
 
+  const unitPrice = round2(subtotal / data.quantity);
   const allItems = [
     {
       product_id: data.product_id,
       name: data.product_name,
-      price: data.product_price,
+      price: unitPrice,
       quantity: data.quantity,
       ...(data.customization && { customization: data.customization }),
     },
-    ...(data.extras ?? []).map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
+    ...validatedExtras.map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
   const { data: order, error } = await admin.from("orders").insert({
@@ -91,8 +218,8 @@ export async function placeOrder(data: {
     },
     items: allItems,
     subtotal,
-    shipping_cost: data.shipping_cost,
-    discount_code: data.discount_code ?? null,
+    shipping_cost: shipping,
+    discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
     total,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
@@ -106,8 +233,8 @@ export async function placeOrder(data: {
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 
-  if (data.discount_id) {
-    await admin.rpc("increment_discount_uses", { p_discount_id: data.discount_id });
+  if (validDiscountId) {
+    await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
   }
 
   // Atomic stock decrement — prevents race condition with concurrent orders
@@ -239,16 +366,74 @@ export async function placeCartOrder(data: {
   // Use admin client — customers are anonymous
   const admin = createAdminClient();
 
-  const extrasTotal = (data.extras ?? []).reduce((s, e) => s + e.price, 0);
-  const subtotal = data.items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const discountAmount = data.discount_amount ?? 0;
-  const vatAmount = data.vat_amount ?? 0;
-  const total = subtotal + extrasTotal - discountAmount + data.shipping_cost + vatAmount;
+  // Reload every product + store config; recompute all prices server-side.
+  const productIds = [...new Set(data.items.map((i) => i.product_id))];
+  const [{ data: dbProducts }, { data: cfgRow }] = await Promise.all([
+    admin.from("products")
+      .select("id, price, is_active")
+      .in("id", productIds)
+      .eq("business_id", data.business_id),
+    admin.from("store_settings")
+      .select("page_content, free_shipping_threshold, vat_enabled, vat_rate, prices_include_vat")
+      .eq("business_id", data.business_id)
+      .single(),
+  ]);
+
+  const priceMap = new Map(
+    (dbProducts ?? []).filter((p) => p.is_active).map((p) => [p.id, round2(Number(p.price))]),
+  );
+  if (data.items.some((i) => !priceMap.has(i.product_id))) {
+    logError({ action: "placeCartOrder.itemUnavailable", message: "Cart item missing/inactive for business", details: { businessId: data.business_id, productIds }, severity: "warning" });
+    return { error: "Unul dintre produse nu mai este disponibil. Reincarca cosul." };
+  }
+
+  const validatedItems = data.items.map((i) => ({
+    product_id: i.product_id,
+    name: i.name,
+    price: priceMap.get(i.product_id)!,
+    quantity: i.quantity,
+  }));
+  const subtotal = round2(validatedItems.reduce((s, i) => s + i.price * i.quantity, 0));
+
+  const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
+  const extrasTotal = validatedExtras.reduce((s, e) => s + e.price, 0);
+
+  // Re-validate discount server-side (guard even though cart has no discount UI today).
+  let discountAmount = 0;
+  let validDiscountId: string | undefined;
+  let isFreeShipping = false;
+  if (data.discount_code) {
+    const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
+    if (dres.valid) {
+      discountAmount = Math.min(dres.discount.discountAmount, subtotal);
+      validDiscountId = dres.discount.id;
+      isFreeShipping = dres.discount.type === "free_shipping";
+    }
+  }
+
+  // Recompute VAT from store config (mirrors MiniStoreRenderer) so it cannot be forged.
+  const vatEnabled = cfgRow?.vat_enabled ?? false;
+  const vatRate = Number(cfgRow?.vat_rate ?? 19);
+  const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
+  const vatBase = subtotal + extrasTotal;
+  const vatAmount = vatEnabled
+    ? pricesIncludeVat
+      ? round2(vatBase - vatBase / (1 + vatRate / 100))
+      : round2(vatBase * (vatRate / 100))
+    : 0;
+  // Only VAT-exclusive pricing adds VAT on top of the total (matches the storefront grand total).
+  const vatAddOn = vatEnabled && !pricesIncludeVat ? vatAmount : 0;
+
+  const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
+  let shipping = Math.max(0, round2(data.shipping_cost));
+  if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
+
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount + shipping + vatAddOn));
   const order_number = await buildOrderNumber(admin, data.business_id);
 
   const allItems = [
-    ...data.items.map(i => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
-    ...(data.extras ?? []).map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
+    ...validatedItems,
+    ...validatedExtras.map((e) => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
   const { data: order, error } = await admin.from("orders").insert({
@@ -273,12 +458,12 @@ export async function placeCartOrder(data: {
     },
     items: allItems,
     subtotal,
-    shipping_cost: data.shipping_cost,
-    discount_code: data.discount_code ?? null,
+    shipping_cost: shipping,
+    discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
     total,
     vat_amount: vatAmount,
-    vat_rate: data.vat_rate ?? 0,
+    vat_rate: vatEnabled ? vatRate : 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
     payment_method: data.payment_method ?? "cash_on_delivery",
     payment_status: "unpaid",
@@ -290,12 +475,12 @@ export async function placeCartOrder(data: {
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 
-  if (data.discount_id) {
-    await admin.rpc("increment_discount_uses", { p_discount_id: data.discount_id });
+  if (validDiscountId) {
+    await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
   }
 
   // Atomic batch stock decrement — prevents race conditions
-  const stockItems = data.items.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+  const stockItems = validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockItems } as never);
 
   // Send emails

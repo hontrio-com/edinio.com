@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { ProductPage } from "@/components/ministore/ProductPage";
 
 interface Props {
@@ -80,28 +82,32 @@ export default async function ProductDetailPage({ params }: Props) {
   const { slug, productSlug } = await params;
   const supabase = await createClient();
 
-  // business + store_settings in one query (join), product in parallel — 1 round trip
-  const [{ data: businessRaw }, { data: product }] = await Promise.all([
+  // business + product in parallel (publication gated by RLS on both tables).
+  const [{ data: business }, { data: product }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features, store_settings(page_content, store_policies, default_shipping_cost, free_shipping_threshold)")
+      .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
       .eq("slug", slug)
       .single(),
     supabase.from("products").select("*").eq(UUID_RE.test(productSlug) ? "id" : "slug", productSlug).single(),
   ]);
 
-  if (!businessRaw || !product || product.business_id !== businessRaw.id || !product.is_active) notFound();
+  if (!business || !product || product.business_id !== business.id || !product.is_active) notFound();
 
   // SEO: redirect /product/{uuid} → /product/{slug} (301)
   if (UUID_RE.test(productSlug) && product.slug) {
     redirect(`/${slug}/product/${product.slug}`);
   }
 
-  const rawSettings = (businessRaw as unknown as { store_settings: unknown }).store_settings;
-  const storeSettings = Array.isArray(rawSettings) ? (rawSettings[0] ?? null) : (rawSettings ?? null);
+  // store_settings is no longer anon-readable — fetch the public-safe columns via service role.
+  const { data: storeSettings } = await createAdminClient()
+    .from("store_settings")
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold")
+    .eq("business_id", business.id)
+    .single();
 
-  // business without the nested store_settings key (ProductPage doesn't expect it)
-  const { store_settings: _ignored, ...business } = businessRaw as typeof businessRaw & { store_settings: unknown };
+  // Sanitize rich-text server-side so the client renders trusted HTML only.
+  product.description = sanitizeHtml(product.description);
 
   // Detect custom domain access
   const headersList = await headers();

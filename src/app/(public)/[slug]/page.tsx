@@ -13,14 +13,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("business_name, store_name, tagline, description, city, cover_url")
+    .select("business_name, store_name, tagline, description, city, cover_url, custom_domain")
     .eq("slug", slug)
     .single();
   if (!business) return {};
   const displayName = business.store_name ?? business.business_name;
   const title = business.city ? `${displayName} - ${business.city}` : displayName;
   const description = business.tagline ?? business.description?.slice(0, 155) ?? `Cumpara din ${displayName} online.`;
-  const url = `https://www.edinio.com/${slug}`;
+  // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
+  // also points its canonical at the store's own domain).
+  const url = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
   const images = business.cover_url ? [business.cover_url] : [];
   return {
     title,
@@ -112,7 +114,7 @@ export default async function SlugPage({ params }: Props) {
       .eq("is_active", true)
       .order("is_featured", { ascending: false })
       .order("sort_order"),
-    supabase
+    createAdminClient()
       .from("store_settings")
       .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold")
       .eq("business_id", business.id)

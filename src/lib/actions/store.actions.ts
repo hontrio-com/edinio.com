@@ -2,8 +2,51 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
+import type { Json } from "@/types/database.types";
+
+/**
+ * Public, secret-free view of a store's checkout configuration.
+ * Used by the anonymous storefront (checkout modals). Reads via the service role
+ * so it works regardless of who is viewing, and returns ONLY non-sensitive fields
+ * plus readiness booleans — raw payment/courier credentials never leave the server.
+ */
+export async function getPublicStoreConfig(businessId: string): Promise<{
+  page_content: Json | null;
+  vat_enabled: boolean;
+  vat_rate: number;
+  prices_include_vat: boolean;
+  show_vat_breakdown: boolean;
+  shipping_zones: Json | null;
+  stripe_ready: boolean;
+  netopia_ready: boolean;
+  netopia_title: string | null;
+} | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("store_settings")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, stripe_config, netopia_config")
+    .eq("business_id", businessId)
+    .single();
+  if (!data) return null;
+
+  const sc = data.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
+  const nc = data.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string; title?: string } | null;
+
+  return {
+    page_content: (data.page_content as Json) ?? null,
+    vat_enabled: data.vat_enabled ?? false,
+    vat_rate: Number(data.vat_rate ?? 19),
+    prices_include_vat: data.prices_include_vat ?? true,
+    show_vat_breakdown: data.show_vat_breakdown ?? true,
+    shipping_zones: (data.shipping_zones as Json) ?? null,
+    stripe_ready: !!(sc?.enabled && sc?.charges_enabled && sc?.account_id),
+    netopia_ready: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
+    netopia_title: nc?.title ?? null,
+  };
+}
 
 export async function updatePageContent(businessId: string, pageContent: Record<string, unknown>): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();

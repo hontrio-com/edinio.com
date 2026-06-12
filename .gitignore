@@ -33,6 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local secrets / credentials (do NOT match .env*)
+*.r2env
+.r2env
+scripts/.r2env
+
 # vercel
 .vercel
 

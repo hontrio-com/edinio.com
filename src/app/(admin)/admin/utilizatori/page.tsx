@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, listAllAuthUsers } from "@/lib/supabase/admin";
 import { AdminUsersClient } from "@/components/admin/AdminUsersClient";
 
 export const metadata = { title: "Utilizatori" };
@@ -11,9 +11,9 @@ export default async function AdminUsersPage() {
     .select("id, full_name, plan, role, created_at, avatar_url, plan_expires_at, suspended_until, onboarding_step, onboarding_completed" as "id, full_name, plan, role, created_at, avatar_url, plan_expires_at, suspended_until")
     .order("created_at", { ascending: false });
 
-  // Get auth users (email, last_sign_in)
-  const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const authMap = new Map(authData?.users?.map((u) => [u.id, u]) ?? []);
+  // Get auth users (email, last_sign_in) — paginated past the 1000 cap
+  const authUsers = await listAllAuthUsers(admin);
+  const authMap = new Map(authUsers.map((u) => [u.id, u]));
 
   // Get business counts per user
   const { data: bizCounts } = await admin

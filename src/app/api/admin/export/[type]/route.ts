@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, listAllAuthUsers } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 import type { AuditAction } from "@/lib/audit";
 
@@ -30,14 +30,12 @@ async function exportUsers(adminClient: ReturnType<typeof createAdminClient>): P
   // Fetch auth users for emails and last sign in
   const authUsers: Record<string, { email: string; last_sign_in_at: string | null }> = {};
   if (profiles && profiles.length > 0) {
-    const { data: authList } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
-    if (authList?.users) {
-      for (const u of authList.users) {
-        authUsers[u.id] = {
-          email: u.email ?? "",
-          last_sign_in_at: u.last_sign_in_at ?? null,
-        };
-      }
+    const authList = await listAllAuthUsers(adminClient);
+    for (const u of authList) {
+      authUsers[u.id] = {
+        email: u.email ?? "",
+        last_sign_in_at: u.last_sign_in_at ?? null,
+      };
     }
   }
 

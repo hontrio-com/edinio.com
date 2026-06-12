@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, listAllAuthUsers } from "@/lib/supabase/admin";
 import { AdminSupportClient } from "@/components/admin/AdminSupportClient";
 
 export const metadata = { title: "Suport" };
@@ -13,9 +13,9 @@ export default async function AdminSupportPage() {
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  // Get emails from auth
-  const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const emailMap = new Map(authData?.users?.map((u) => [u.id, u.email ?? ""]) ?? []);
+  // Get emails from auth — paginated past the 1000 cap
+  const authUsers = await listAllAuthUsers(admin);
+  const emailMap = new Map(authUsers.map((u) => [u.id, u.email ?? ""]));
 
   const enriched = (tickets ?? []).map((t) => ({
     ...t,

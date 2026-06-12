@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { ArrowLeft } from "lucide-react";
@@ -48,7 +49,7 @@ export default async function PolicyPage({ params }: Props) {
 
   if (!business) notFound();
 
-  const { data: storeSettings } = await supabase
+  const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
     .select("store_policies")
     .eq("business_id", business.id)

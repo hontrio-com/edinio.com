@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { listAllAuthUsers } from "@/lib/supabase/admin";
 import {
   sendAutomationEmail,
   emailOnboardingNotStarted, emailOnboardingStuck, emailOnboardingHelp, emailOnboardingLastChance,
@@ -56,8 +57,8 @@ export async function GET(req: NextRequest) {
     .from("users_profile")
     .select("id, full_name, plan, plan_expires_at, onboarding_step, onboarding_completed, created_at");
 
-  const { data: authList } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const authMap = new Map((authList?.users ?? []).map(u => [u.id, u]));
+  const authList = await listAllAuthUsers(admin);
+  const authMap = new Map(authList.map(u => [u.id, u]));
 
   // ── Fetch businesses + product counts + order counts ───────────────────────
   const { data: businesses } = await admin.from("businesses").select("id, user_id, slug, business_name, created_at");

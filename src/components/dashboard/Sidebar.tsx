@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, Zap, Ticket, Tag, MessageSquare, LifeBuoy, ShieldCheck,
+  Package, ShoppingCart, Zap, Ticket, Tag, MessageSquare, LifeBuoy, ShieldCheck, Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
   { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },
+  { href: "/dashboard/noutati", icon: Megaphone, label: "Noutati" },
 ];
 
 export function BusinessCard({ business }: { business: Business | null }) {
@@ -82,11 +83,12 @@ function NavItem({ href, icon: Icon, label, active }: {
   );
 }
 
-export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount = 0, isAdmin = false }: {
+export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount = 0, unreadAnnouncements = 0, isAdmin = false }: {
   currentBusiness: Business | null;
   plan: string;
   smsoEnabled?: boolean;
   unreadSupportCount?: number;
+  unreadAnnouncements?: number;
   isAdmin?: boolean;
 }) {
   const pathname = usePathname();
@@ -139,7 +141,14 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
           }
 
           return (
-            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive} />
+            <div key={item.href} className="relative">
+              <NavItem href={item.href} icon={item.icon} label={item.label} active={isActive} />
+              {item.href === "/dashboard/noutati" && unreadAnnouncements > 0 && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">
+                  {unreadAnnouncements > 9 ? "9+" : unreadAnnouncements}
+                </span>
+              )}
+            </div>
           );
         })}
 

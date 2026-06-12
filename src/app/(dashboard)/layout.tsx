@@ -6,6 +6,7 @@ import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
+import { getUnreadAnnouncementsCount } from "@/lib/actions/announcement.actions";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 
@@ -55,6 +56,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const smsoEnabled = (smsoResult.data?.smso_config as { enabled?: boolean } | null)?.enabled === true;
   const unreadSupportCount = supportResult.count ?? 0;
   const notifications = notificationsResult.data ?? [];
+  const unreadAnnouncements = await getUnreadAnnouncementsCount().catch(() => 0);
 
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
 
@@ -67,6 +69,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         plan={profile.plan}
         smsoEnabled={smsoEnabled}
         unreadSupportCount={unreadSupportCount}
+        unreadAnnouncements={unreadAnnouncements}
         isAdmin={profile.role === "admin"}
       />
       <div className="lg:pl-[var(--sidebar-width)]">

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Store, Receipt,
   LifeBuoy, BarChart2, Shield, ChevronRight, LogOut, Menu, X,
-  History, Settings2, Globe, FileText,
+  History, Settings2, Globe, FileText, Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -20,6 +20,7 @@ const NAV = [
   { href: "/admin/domenii", icon: Globe, label: "Domenii" },
   { href: "/admin/facturi", icon: Receipt, label: "Facturi" },
   { href: "/admin/suport", icon: LifeBuoy, label: "Suport" },
+  { href: "/admin/noutati", icon: Megaphone, label: "Noutati" },
   { href: "/admin/statistici", icon: BarChart2, label: "Statistici" },
   { href: "/admin/activitate", icon: History, label: "Activitate" },
   { href: "/admin/logs", icon: FileText, label: "Logs" },

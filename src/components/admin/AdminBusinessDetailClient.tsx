@@ -188,15 +188,18 @@ export function AdminBusinessDetailClient({
     }
   }
 
-  // Payment methods helper
-  const paymentMethods = settings?.payment_methods;
-  const paymentList: { key: string; label: string; enabled: boolean }[] = [];
-  if (paymentMethods && typeof paymentMethods === "object" && !Array.isArray(paymentMethods)) {
-    const pm = paymentMethods as Record<string, unknown>;
-    if (pm.cash !== undefined) paymentList.push({ key: "cash", label: "Numerar / Ramburs", enabled: !!pm.cash });
-    if (pm.card !== undefined) paymentList.push({ key: "card", label: "Card online", enabled: !!pm.card });
-    if (pm.transfer !== undefined) paymentList.push({ key: "transfer", label: "Transfer bancar", enabled: !!pm.transfer });
-  }
+  // Payment methods helper (new format: [{ type, enabled, label }]; tolerates legacy strings)
+  const paymentMethodsRaw = settings?.payment_methods;
+  const paymentList: { key: string; label: string; enabled: boolean }[] = Array.isArray(paymentMethodsRaw)
+    ? (paymentMethodsRaw as unknown[]).flatMap((m) => {
+        if (m && typeof m === "object" && "type" in m) {
+          const o = m as { type?: string; label?: string; enabled?: boolean };
+          return [{ key: String(o.type ?? ""), label: o.label || String(o.type ?? ""), enabled: o.enabled !== false }];
+        }
+        if (typeof m === "string") return [{ key: m, label: m, enabled: true }];
+        return [];
+      })
+    : [];
 
   return (
     <div className="space-y-6">

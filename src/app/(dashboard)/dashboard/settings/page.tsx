@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
+import { resolvePaymentMethods } from "@/lib/payment-methods";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
@@ -17,7 +18,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config)")
+      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -49,6 +50,16 @@ export default async function SettingsPage({ searchParams }: Props) {
     "pickup",
   ];
 
+  const ncfg = storeSettings?.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
+  const scfg = storeSettings?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
+  const icfg = storeSettings?.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
+  const paymentReadiness = {
+    netopia: !!(ncfg?.enabled && ncfg?.pos_signature && ncfg?.api_key),
+    stripe: !!(scfg?.enabled && scfg?.charges_enabled && scfg?.account_id),
+    ipay: !!(icfg?.enabled && icfg?.username && icfg?.password),
+  };
+  const paymentMethods = resolvePaymentMethods(storeSettings?.payment_methods, paymentReadiness);
+
   return (
     <SettingsClient
       profile={profile}
@@ -78,6 +89,8 @@ export default async function SettingsPage({ searchParams }: Props) {
         shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
       }}
       activeCourierIds={activeCourierIds}
+      paymentMethods={paymentMethods}
+      paymentReadiness={paymentReadiness}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={plan_success === "1"}
       domainSuccess={domain_success === "1"}

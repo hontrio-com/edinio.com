@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
-import { CheckCircle, Package, Phone, ArrowLeft } from "lucide-react";
+import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
@@ -10,12 +10,12 @@ import type { MarketingConfig } from "@/lib/marketing";
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ orderId?: string; name?: string; total?: string }>;
+  searchParams: Promise<{ orderId?: string; name?: string; total?: string; status?: string; motiv?: string }>;
 }
 
 export default async function ConfirmPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { orderId, name, total } = await searchParams;
+  const { orderId, name, total, status, motiv } = await searchParams;
 
   const supabase = await createClient();
   const { data: business } = await supabase
@@ -65,6 +65,37 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     .eq("business_id", business.id)
     .single();
   const marketingConfig = (storeSettings?.marketing_config as MarketingConfig | null) ?? null;
+
+  // Payment failure screen (used by iPay declines, where the reason is shown to the customer).
+  if (status === "esuat") {
+    return (
+      <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="px-8 py-10 text-center">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 bg-red-50">
+                <XCircle className="h-10 w-10 text-red-500" />
+              </div>
+              <h1 className="text-2xl font-black text-gray-900 mb-2 tracking-tight">Plata nu a reusit</h1>
+              <p className="text-gray-500 text-sm leading-relaxed">
+                {motiv || "Tranzactia a fost refuzata. Te rugam incearca din nou sau foloseste alt card."}
+              </p>
+              {orderNumber && <p className="text-xs text-gray-400 font-medium mt-3">{orderNumber}</p>}
+            </div>
+          </div>
+          <a href={`${basePath}/`}
+            className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
+            style={{ backgroundColor: color }}>
+            <ArrowLeft className="h-4 w-4" />
+            Inapoi la magazin
+          </a>
+          <p className="text-center text-xs text-gray-400 mt-4">
+            Creat cu <span className="font-semibold" style={{ color }}>Edinio</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center px-4 py-12">

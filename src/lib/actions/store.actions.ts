@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
+import { checkoutPaymentMethods, sanitizePaymentMethods, type PaymentMethodEntry, type PaymentMethodType } from "@/lib/payment-methods";
 
 /**
  * Public, secret-free view of a store's checkout configuration.
@@ -20,20 +21,25 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   prices_include_vat: boolean;
   show_vat_breakdown: boolean;
   shipping_zones: Json | null;
-  stripe_ready: boolean;
-  netopia_ready: boolean;
-  netopia_title: string | null;
+  payment_methods: { type: PaymentMethodType; label: string }[];
 } | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, stripe_config, netopia_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, stripe_config, netopia_config, ipay_config, payment_methods")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
 
   const sc = data.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
-  const nc = data.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string; title?: string } | null;
+  const nc = data.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
+  const ic = data.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
+
+  const ready = {
+    netopia: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
+    stripe: !!(sc?.enabled && sc?.charges_enabled && sc?.account_id),
+    ipay: !!(ic?.enabled && ic?.username && ic?.password),
+  };
 
   return {
     page_content: (data.page_content as Json) ?? null,
@@ -42,10 +48,40 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     prices_include_vat: data.prices_include_vat ?? true,
     show_vat_breakdown: data.show_vat_breakdown ?? true,
     shipping_zones: (data.shipping_zones as Json) ?? null,
-    stripe_ready: !!(sc?.enabled && sc?.charges_enabled && sc?.account_id),
-    netopia_ready: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
-    netopia_title: nc?.title ?? null,
+    payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
   };
+}
+
+/**
+ * Save the merchant's "Metode de plata" config (order, enabled, labels).
+ * Sanitized server-side; COD is always guaranteed and at least one method stays enabled.
+ */
+export async function updatePaymentMethods(
+  businessId: string,
+  methods: PaymentMethodEntry[],
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const sanitized = sanitizePaymentMethods(methods);
+  const { error } = await supabase
+    .from("store_settings")
+    .update({ payment_methods: sanitized as never })
+    .eq("business_id", businessId);
+
+  if (error) {
+    logError({ action: "updatePaymentMethods", message: error.message, details: { code: error.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea metodelor de plata." };
+  }
+
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  revalidatePath("/dashboard/settings");
+  return { success: true };
 }
 
 export async function updatePageContent(businessId: string, pageContent: Record<string, unknown>): Promise<{ error: string } | { success: true }> {

@@ -477,6 +477,7 @@ export type Database = {
           smartbill_storno_number: string | null
           smartbill_storno_series: string | null
           status: string
+          ipay_order_id: string | null
           stripe_session_id: string | null
           subtotal: number
           total: number
@@ -533,6 +534,7 @@ export type Database = {
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string
+          ipay_order_id?: string | null
           stripe_session_id?: string | null
           subtotal: number
           total: number
@@ -589,6 +591,7 @@ export type Database = {
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string
+          ipay_order_id?: string | null
           stripe_session_id?: string | null
           subtotal?: number
           total?: number
@@ -841,6 +844,7 @@ export type Database = {
           fgo_config: Json | null
           free_shipping_threshold: number | null
           id: string
+          ipay_config: Json | null
           marketing_config: Json | null
           min_order_amount: number | null
           netopia_config: Json | null
@@ -876,6 +880,7 @@ export type Database = {
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           id?: string
+          ipay_config?: Json | null
           marketing_config?: Json | null
           min_order_amount?: number | null
           netopia_config?: Json | null
@@ -911,6 +916,7 @@ export type Database = {
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           id?: string
+          ipay_config?: Json | null
           marketing_config?: Json | null
           min_order_amount?: number | null
           netopia_config?: Json | null

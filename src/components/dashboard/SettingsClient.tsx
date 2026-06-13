@@ -6,11 +6,12 @@ import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
-  ShieldCheck, ShieldOff, Mail,
+  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods } from "@/lib/actions/store.actions";
+import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType } from "@/lib/payment-methods";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
@@ -22,7 +23,7 @@ type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
 type SectionId =
   | "general" | "plan" | "facturare" | "livrare"
-  | "taxe" | "domeniu" | "notificari" | "politici" | "securitate";
+  | "taxe" | "plati" | "domeniu" | "notificari" | "politici" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
@@ -30,11 +31,19 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "facturare",  label: "Facturare",   icon: Receipt   },
   { id: "livrare",    label: "Livrare",     icon: Truck     },
   { id: "taxe",       label: "Taxe",        icon: Percent   },
+  { id: "plati",      label: "Metode de plata", icon: Wallet },
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
   { id: "notificari", label: "Notificari",  icon: Bell      },
   { id: "politici",   label: "Politici",    icon: FileText  },
   { id: "securitate", label: "Securitate",  icon: Lock      },
 ];
+
+const PAYMENT_TYPE_NAMES: Record<PaymentMethodType, string> = {
+  cash_on_delivery: "Ramburs",
+  netopia: "Netopia",
+  stripe: "Stripe",
+  ipay: "BT iPay",
+};
 
 // PLAN_LABELS, PLAN_PRICES imported from @/lib/plans
 
@@ -204,6 +213,8 @@ interface Props {
   smsoConfig: SmsoConfig;
   shippingConfig: ShippingConfig;
   activeCourierIds: string[];
+  paymentMethods: PaymentMethodEntry[];
+  paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean };
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
   domainSuccess?: boolean;
@@ -221,7 +232,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -353,6 +364,41 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [savingShipping, startShippingTransition] = useTransition();
 
   const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+
+  // Payment methods ("Metode de plata")
+  const [methods, setMethods] = useState<PaymentMethodEntry[]>(paymentMethods);
+  const [savingMethods, startMethodsTransition] = useTransition();
+
+  function moveMethod(i: number, dir: -1 | 1) {
+    setMethods((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+  function toggleMethod(i: number) {
+    setMethods((prev) => {
+      const next = prev.map((m, j) => (j === i ? { ...m, enabled: !m.enabled } : m));
+      if (!next.some((m) => m.enabled)) {
+        toast.error("Trebuie sa ramana cel putin o metoda de plata activa.");
+        return prev;
+      }
+      return next;
+    });
+  }
+  function renameMethod(i: number, label: string) {
+    setMethods((prev) => prev.map((m, j) => (j === i ? { ...m, label } : m)));
+  }
+  function saveMethods() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    startMethodsTransition(async () => {
+      const result = await updatePaymentMethods(businessId, methods);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Metodele de plata au fost salvate.");
+    });
+  }
 
   async function saveProfile() {
     setSavingName(true);
@@ -1282,6 +1328,61 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
             </div>
           )}
+          {activeSection === "plati" && (
+            <div className="space-y-4">
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border">
+                  <p className="text-sm font-semibold text-foreground">Metode de plata</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Activeaza, reordoneaza si redenumeste metodele afisate clientilor in formularul de comanda.
+                    Ramburs la curier este activ implicit. Cand integrezi Netopia, Stripe sau BT iPay din Integrari, apar automat si aici.
+                  </p>
+                </div>
+                <div className="px-5 py-5 space-y-3">
+                  {methods.map((m, i) => {
+                    const isCod = m.type === "cash_on_delivery";
+                    const ready = isCod || paymentReadiness[m.type as "netopia" | "stripe" | "ipay"];
+                    return (
+                      <div key={m.type} className="border border-border rounded-xl p-3 flex items-start gap-3">
+                        <div className="flex flex-col gap-1 pt-1 flex-shrink-0">
+                          <button type="button" onClick={() => moveMethod(i, -1)} disabled={i === 0}
+                            className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed" aria-label="Muta mai sus">
+                            <ArrowUp className="h-4 w-4" />
+                          </button>
+                          <button type="button" onClick={() => moveMethod(i, 1)} disabled={i === methods.length - 1}
+                            className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed" aria-label="Muta mai jos">
+                            <ArrowDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            {isCod ? <Wallet className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <CreditCard className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                            <span className="text-xs font-semibold text-muted-foreground">{PAYMENT_TYPE_NAMES[m.type]}</span>
+                          </div>
+                          <input type="text" value={m.label} maxLength={40}
+                            onChange={(e) => renameMethod(i, e.target.value)}
+                            placeholder={PAYMENT_METHOD_DEFAULT_LABELS[m.type]} className={inputCls} />
+                          {!ready && !isCod && (
+                            <p className="text-[11px] text-amber-600 mt-1">Neconfigurat. Nu apare la checkout pana nu il configurezi in Integrari.</p>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => toggleMethod(i)} aria-label={m.enabled ? "Dezactiveaza" : "Activeaza"}
+                          className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-1 ${m.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                          <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${m.enabled ? "translate-x-4" : "translate-x-0"}`} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button type="button" onClick={saveMethods} disabled={savingMethods}
+                    className="mt-2 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-60">
+                    {savingMethods ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Salveaza
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeSection === "domeniu" && (
             <DomainSection
               businessId={businessId}

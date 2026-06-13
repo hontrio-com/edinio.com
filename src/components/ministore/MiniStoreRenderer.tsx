@@ -920,7 +920,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   const showGallery = features.show_gallery !== false && gallery.length > 0;
   const showAbout = features.show_about !== false && !!business.description;
-  const showContact = features.show_contact !== false && !!(business.phone || business.email || business.address);
+  const showContact = features.show_contact !== false && !!(business.phone || business.email || business.store_address);
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const showCall = features.floating_call === true && !!business.phone;
 
@@ -1606,7 +1606,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   </div>
                 </a>
               )}
-              {business.address && (
+              {business.store_address && (
                 <div className="flex items-center gap-3 p-4 bg-surface border border-border rounded-2xl">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: `${color}20`, color }}>
@@ -1615,7 +1615,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   <div>
                     <p className="text-xs text-muted-foreground mb-0.5">Adresa</p>
                     <p className="text-sm font-semibold text-foreground">
-                      {business.address}{business.city ? `, ${business.city}` : ""}
+                      {business.store_address}{business.store_city ? `, ${business.store_city}` : ""}
                     </p>
                   </div>
                 </div>
@@ -1642,7 +1642,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               )}
               <div className="min-w-0">
                 <p className="font-semibold text-sm text-white truncate">{business.store_name ?? business.business_name}</p>
-                {business.city && <p className="text-[11px] text-white/40">{business.city}</p>}
+                {business.store_city && <p className="text-[11px] text-white/40">{business.store_city}</p>}
               </div>
             </div>
             {(social.instagram || social.facebook || social.tiktok || social.website) && (

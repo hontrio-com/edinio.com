@@ -68,6 +68,9 @@ export type Database = {
           primary_color: string
           slug: string
           social: Json
+          store_address: string | null
+          store_city: string | null
+          store_county: string | null
           store_name: string | null
           suspended_until: string | null
           tagline: string | null
@@ -100,6 +103,9 @@ export type Database = {
           primary_color?: string
           slug: string
           social?: Json
+          store_address?: string | null
+          store_city?: string | null
+          store_county?: string | null
           store_name?: string | null
           suspended_until?: string | null
           tagline?: string | null
@@ -132,6 +138,9 @@ export type Database = {
           primary_color?: string
           slug?: string
           social?: Json
+          store_address?: string | null
+          store_city?: string | null
+          store_county?: string | null
           store_name?: string | null
           suspended_until?: string | null
           tagline?: string | null

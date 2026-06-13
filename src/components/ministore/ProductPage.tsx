@@ -824,7 +824,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
               )}
               <div className="min-w-0">
                 <p className="font-semibold text-sm text-white truncate">{business.store_name ?? business.business_name}</p>
-                {business.city && <p className="text-[11px] text-white/40">{business.city}</p>}
+                {business.store_city && <p className="text-[11px] text-white/40">{business.store_city}</p>}
               </div>
             </div>
             {(social.instagram || social.facebook || social.tiktok || social.website) && (

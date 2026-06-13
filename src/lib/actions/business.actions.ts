@@ -39,6 +39,9 @@ export async function createBusiness(data: {
       address: data.address || null,
       city: data.city || null,
       county: data.county || null,
+      store_address: data.address || null,
+      store_city: data.city || null,
+      store_county: data.county || null,
       logo_url: data.logo_url || null,
       cover_url: data.cover_url || null,
       primary_color: data.primary_color,
@@ -124,6 +127,9 @@ export async function updateBusiness(
     address: string | null;
     city: string | null;
     county: string | null;
+    store_address: string | null;
+    store_city: string | null;
+    store_county: string | null;
     lat: number | null;
     lng: number | null;
     logo_url: string | null;

@@ -13,12 +13,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("business_name, store_name, tagline, description, city, cover_url, custom_domain")
+    .select("business_name, store_name, tagline, description, store_city, cover_url, custom_domain")
     .eq("slug", slug)
     .single();
   if (!business) return {};
   const displayName = business.store_name ?? business.business_name;
-  const title = business.city ? `${displayName} - ${business.city}` : displayName;
+  const title = business.store_city ? `${displayName} - ${business.store_city}` : displayName;
   const description = business.tagline ?? business.description?.slice(0, 155) ?? `Cumpara din ${displayName} online.`;
   // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
   // also points its canonical at the store's own domain).
@@ -149,10 +149,10 @@ export default async function SlugPage({ params }: Props) {
     ...(business.description ? { description: business.description.slice(0, 500) } : {}),
     ...(business.cover_url ? { image: business.cover_url } : {}),
     ...(business.logo_url ? { logo: business.logo_url } : {}),
-    ...(business.city ? {
+    ...(business.store_city ? {
       address: {
         "@type": "PostalAddress",
-        addressLocality: business.city,
+        addressLocality: business.store_city,
         addressCountry: "RO",
       },
     } : {}),

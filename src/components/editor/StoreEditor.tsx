@@ -256,9 +256,9 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
 
   // ── Location section state
   const [location, setLocation] = useState({
-    address: business.address ?? "",
-    city: business.city ?? "",
-    county: business.county ?? "",
+    address: business.store_address ?? "",
+    city: business.store_city ?? "",
+    county: business.store_county ?? "",
   });
 
   // ── Social section state
@@ -488,9 +488,9 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
           </div>
           <SaveBtn loading={saving === "location"} saved={saved === "location"}
             onSave={() => save("location", {
-              address: location.address || null,
-              city: location.city || null,
-              county: location.county || null,
+              store_address: location.address || null,
+              store_city: location.city || null,
+              store_county: location.county || null,
             })} />
         </div>
       ),

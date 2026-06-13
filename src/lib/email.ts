@@ -495,72 +495,124 @@ export async function sendAdminNewStoreNotification(data: {
   });
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash_on_delivery: "Ramburs la curier",
+  stripe: "Card online (Stripe)",
+  netopia: "Card online (Netopia)",
+  ipay: "Card bancar (BT iPay)",
+};
+
 export async function sendNewOrderEmail(
   to: string,
   order: {
     order_number: string;
     customer_name: string;
     customer_phone: string;
+    customer_email?: string | null;
     total: number;
+    subtotal?: number;
     items: { name: string; quantity: number; price: number }[];
     shipping_cost: number;
+    discount_code?: string | null;
+    discount_amount?: number;
+    vat_amount?: number;
+    payment_method?: string;
     business_name: string;
     order_id: string;
+    address?: string | null;
+    city?: string | null;
+    county?: string | null;
+    courier_label?: string | null;
+    delivery_type?: string | null;
+    locker_name?: string | null;
+    custom_fields?: Record<string, string> | null;
   }
 ) {
   if (!process.env.RESEND_API_KEY) return;
+
+  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const sectionLabel = (t: string) =>
+    `<tr><td colspan="2" style="font-size:13px;color:#a1a1aa;padding:18px 0 8px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid #f4f4f5;">${t}</td></tr>`;
+  const infoRow = (label: string, value: string) =>
+    `<tr><td style="padding:3px 0;font-size:14px;color:#71717a;width:140px;vertical-align:top;">${label}</td><td style="padding:3px 0;font-size:14px;color:#18181b;font-weight:500;vertical-align:top;">${value}</td></tr>`;
+  const totalRow = (label: string, value: string, opts: { bold?: boolean; color?: string; border?: boolean } = {}) => {
+    const fs = opts.bold ? "16px" : "14px";
+    const fw = opts.bold ? "font-weight:700;" : "";
+    const col = opts.color ?? "#71717a";
+    const bd = opts.border ? "border-top:2px solid #e4e4e7;" : "";
+    return `<tr><td style="padding-top:10px;font-size:${fs};${fw}color:${col};${bd}">${label}</td><td style="padding-top:10px;font-size:${fs};${fw}color:${col};text-align:right;${bd}white-space:nowrap;">${value}</td></tr>`;
+  };
 
   const itemsRows = order.items
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${i.name} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
     .join("");
 
+  const addrParts = [order.address, order.city, order.county]
+    .map((x) => (x ? String(x).trim() : ""))
+    .filter(Boolean)
+    .map(esc)
+    .join(", ");
+  const deliveryRows = [
+    addrParts ? infoRow("Adresa", addrParts) : "",
+    order.courier_label ? infoRow("Curier", esc(order.courier_label)) : "",
+    order.locker_name ? infoRow("Punct ridicare", esc(order.locker_name)) : "",
+  ].join("");
+
+  const pmLabel = order.payment_method
+    ? PAYMENT_METHOD_LABELS[order.payment_method] ?? esc(order.payment_method)
+    : "—";
+  const pmStatus = order.payment_method === "cash_on_delivery"
+    ? "Se incaseaza la livrare"
+    : "In asteptarea confirmarii platii";
+
+  const customerRows = [
+    infoRow("Nume", esc(order.customer_name)),
+    infoRow("Telefon", esc(order.customer_phone)),
+    order.customer_email ? infoRow("Email", esc(order.customer_email)) : "",
+  ].join("");
+
+  const customRows = order.custom_fields && Object.keys(order.custom_fields).length
+    ? Object.entries(order.custom_fields).map(([k, v]) => infoRow(esc(k), esc(v))).join("")
+    : "";
+
   const dashboardUrl = `${SITE_URL}/dashboard/orders/${order.order_id}`;
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda noua!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Ai primit o comanda noua la magazinul <strong>${order.business_name}</strong>.</p>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Ai primit o comanda noua la magazinul <strong>${esc(order.business_name)}</strong>.</p>
 
-    <!-- Order badge -->
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;box-sizing:border-box;overflow:hidden;">
-      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${order.order_number}</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:8px;box-sizing:border-box;overflow:hidden;">
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${esc(order.order_number)}</p>
     </div>
 
-    <!-- Customer info -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-      <tr>
-        <td style="font-size:13px;color:#a1a1aa;padding-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Client</td>
-      </tr>
-      <tr>
-        <td style="font-size:15px;color:#18181b;font-weight:600;">${order.customer_name}</td>
-      </tr>
-      <tr>
-        <td style="font-size:14px;color:#71717a;">${order.customer_phone}</td>
-      </tr>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      ${sectionLabel("Client")}
+      ${customerRows}
+      ${deliveryRows ? sectionLabel("Livrare") + deliveryRows : ""}
+      ${sectionLabel("Plata")}
+      ${infoRow("Metoda", pmLabel)}
+      ${infoRow("Status", pmStatus)}
+      ${customRows ? sectionLabel("Detalii suplimentare") + customRows : ""}
     </table>
 
-    <!-- Items -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;">
       <tr>
         <td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produse</td>
       </tr>
       ${itemsRows}
-      <tr>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
-      </tr>
-      <tr>
-        <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total</td>
-        <td style="padding-top:10px;font-size:16px;font-weight:700;color:#1AB554;text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(order.total)}</td>
-      </tr>
+      ${order.subtotal != null ? totalRow("Subtotal", formatPrice(order.subtotal)) : ""}
+      ${order.discount_amount && order.discount_amount > 0 ? totalRow(`Reducere${order.discount_code ? ` (${esc(order.discount_code)})` : ""}`, `- ${formatPrice(order.discount_amount)}`, { color: "#16a34a" }) : ""}
+      ${totalRow("Transport", order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost))}
+      ${totalRow("Total", formatPrice(order.total), { bold: true, color: "#1AB554", border: true })}
+      ${order.vat_amount && order.vat_amount > 0 ? `<tr><td colspan="2" style="padding-top:6px;font-size:12px;color:#a1a1aa;text-align:right;">din care TVA: ${formatPrice(order.vat_amount)}</td></tr>` : ""}
     </table>
 
-    <!-- CTA -->
     <div style="text-align:center;margin-top:28px;">
       <a href="${dashboardUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi comanda in dashboard

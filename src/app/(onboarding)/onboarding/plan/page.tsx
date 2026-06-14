@@ -140,8 +140,15 @@ function PlanPageContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  // Track step
-  useEffect(() => { trackOnboardingStep("plan"); }, []);
+  // Track step + ensure the page opens at the top. The App Router can keep the
+  // previous step's scroll position (bottom) when navigating into this Suspense
+  // route, so we force scroll to top on mount (immediately + after first paint).
+  useEffect(() => {
+    trackOnboardingStep("plan");
+    window.scrollTo(0, 0);
+    const id = requestAnimationFrame(() => window.scrollTo(0, 0));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   // Handle return from Stripe success
   useEffect(() => {

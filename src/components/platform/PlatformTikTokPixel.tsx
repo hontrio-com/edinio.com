@@ -2,7 +2,9 @@
 
 import Script from "next/script";
 
-const PIXEL_ID = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID;
+// Platform TikTok Pixel ID for edinio.com. Public by nature (exposed in the browser).
+// Can be overridden via env without a code change.
+const PIXEL_ID = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID ?? "D8N5ATBC77UA0GPRAUBG";
 
 export function PlatformTikTokPixel() {
   if (!PIXEL_ID) return null;

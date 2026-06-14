@@ -51,6 +51,42 @@ interface ProductData {
   };
 }
 
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+// Garanteaza slug unic per magazin: daca "tricou" e luat, returneaza "tricou-2", "tricou-3", etc.
+// excludeProductId: la editare, ignora produsul curent (ca sa nu se auto-incrementeze inutil).
+async function resolveUniqueSlug(
+  supabase: ServerClient,
+  businessId: string,
+  rawSlug: string | null | undefined,
+  excludeProductId?: string,
+): Promise<string | null> {
+  const base = rawSlug?.trim() || null;
+  if (!base) return null;
+
+  const { data: rows } = await supabase
+    .from("products")
+    .select("id, slug")
+    .eq("business_id", businessId)
+    .like("slug", `${base}%`);
+
+  const taken = new Set(
+    (rows ?? [])
+      .filter((r) => r.id !== excludeProductId && r.slug)
+      .map((r) => r.slug as string),
+  );
+
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+// Mesaj prietenos cand o coliziune de slug scapa de dedup (ex. race intre 2 salvari).
+function isSlugConflict(error: { code?: string | null; message: string }) {
+  return error.code === "23505" && error.message.includes("slug");
+}
+
 export async function createProduct(businessId: string, data: ProductData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -83,10 +119,12 @@ export async function createProduct(businessId: string, data: ProductData) {
     return { error: `Ai atins limita de ${limit} produse pentru planul tau. Upgradeaza planul pentru mai multe produse.` };
   }
 
+  const slug = await resolveUniqueSlug(supabase, businessId, data.slug);
+
   const { error } = await supabase.from("products").insert({
     business_id: businessId,
     name: data.name.trim(),
-    slug: data.slug?.trim() || null,
+    slug,
     description: data.description?.trim() || null,
     price: data.price,
     compare_at_price: data.compare_at_price || null,
@@ -103,7 +141,7 @@ export async function createProduct(businessId: string, data: ProductData) {
 
   if (error) {
     logError({ action: "createProduct", message: error.message, details: { code: error.code, hint: error.hint, businessId }, userId: user.id });
-    return { error: "Eroare la salvare. Incearca din nou." };
+    return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
   }
   revalidatePath("/dashboard/products");
   return { success: true };
@@ -130,9 +168,11 @@ export async function updateProduct(productId: string, businessId: string, data:
     .eq("business_id", businessId)
     .single();
 
+  const slug = await resolveUniqueSlug(supabase, businessId, data.slug, productId);
+
   const { error } = await supabase.from("products").update({
     name: data.name.trim(),
-    slug: data.slug?.trim() || null,
+    slug,
     description: data.description?.trim() || null,
     price: data.price,
     compare_at_price: data.compare_at_price || null,
@@ -150,7 +190,7 @@ export async function updateProduct(productId: string, businessId: string, data:
 
   if (error) {
     logError({ action: "updateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
-    return { error: "Eroare la salvare. Incearca din nou." };
+    return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
   }
 
   // Clean up removed images from R2 (fire-and-forget)
@@ -209,10 +249,16 @@ export async function duplicateProduct(productId: string, businessId: string) {
 
   if (!original) return { error: "Produs negasit" };
 
+  const slug = await resolveUniqueSlug(
+    supabase,
+    businessId,
+    original.slug ? `${original.slug}-copie` : null,
+  );
+
   const { error } = await supabase.from("products").insert({
     business_id: businessId,
     name: `${original.name} (copie)`,
-    slug: original.slug ? `${original.slug}-copie-${Date.now().toString(36)}` : null,
+    slug,
     description: original.description,
     price: original.price,
     compare_at_price: original.compare_at_price,
@@ -229,7 +275,7 @@ export async function duplicateProduct(productId: string, businessId: string) {
 
   if (error) {
     logError({ action: "duplicateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
-    return { error: "Eroare la duplicare." };
+    return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la duplicare." };
   }
   revalidatePath("/dashboard/products");
   return { success: true };

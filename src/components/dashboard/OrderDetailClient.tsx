@@ -10,7 +10,7 @@ import {
   RotateCcw, AlertTriangle, XCircle, FilePlus, ArrowRight, FileCheck, Trash2,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
-import { updateOrder, deleteOrder, sendCustomerNotification, resendOrderNotification } from "@/lib/actions/order.actions";
+import { updateOrder, deleteOrder, sendCustomerNotification } from "@/lib/actions/order.actions";
 import {
   generateOrderInvoice,
   generateOrderEstimate,
@@ -209,7 +209,6 @@ export function OrderDetailClient({
   const [notifSubject, setNotifSubject] = useState("");
   const [notifMessage, setNotifMessage] = useState("");
   const [sendingNotif, startNotifTransition] = useTransition();
-  const [resendingNotif, startResendNotifTransition] = useTransition();
 
   const customerEmail = (order.customer_email as string | null) ?? "";
   const customerName = (order.customer_name as string | null) ?? "client";
@@ -333,15 +332,6 @@ export function OrderDetailClient({
     });
   }
 
-  // TEMP: re-send the "Comanda noua" notification to the store's current notification email.
-  function handleResendNotif() {
-    startResendNotifTransition(async () => {
-      const result = await resendOrderNotification(order.id);
-      if ("error" in result) { toast.error(result.error); return; }
-      toast.success(`Notificarea a fost retrimisa pe ${result.sentTo}.`);
-    });
-  }
-
   async function handleDownloadPdf(docType: "invoice" | "estimate" | "storno") {
     setDownloadingPdf(docType);
     try {
@@ -421,16 +411,6 @@ export function OrderDetailClient({
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">{formatDate(new Date(order.created_at))}</p>
         </div>
-        <button
-          type="button"
-          onClick={handleResendNotif}
-          disabled={resendingNotif}
-          title="Retrimite emailul de comanda noua catre adresa de notificare setata acum"
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50 mt-0.5 flex-shrink-0"
-        >
-          {resendingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-          Retrimite notificarea
-        </button>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

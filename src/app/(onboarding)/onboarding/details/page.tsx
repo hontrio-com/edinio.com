@@ -12,6 +12,7 @@ import { slugify } from "@/lib/utils/slugify";
 import { checkSlugAvailability } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { platformFbq } from "@/components/platform/PlatformMetaPixel";
+import { platformTtq } from "@/components/platform/PlatformTikTokPixel";
 
 const schema = z.object({
   business_name: z.string().min(2, "Minim 2 caractere").max(100),
@@ -49,6 +50,7 @@ export default function OnboardingDetailsPage() {
     if (sessionStorage.getItem("platform_registered") === "1") {
       sessionStorage.removeItem("platform_registered");
       platformFbq("CompleteRegistration");
+      platformTtq("CompleteRegistration");
     }
     // Google OAuth: plan comes via cookie since sessionStorage doesn't survive redirect
     const cookieMatch = document.cookie.match(/preselected_plan=(\w+)/);
@@ -91,6 +93,7 @@ export default function OnboardingDetailsPage() {
     }));
 
     platformFbq("Lead");
+    platformTtq("SubmitForm");
     router.push("/onboarding/plan");
   }
 

@@ -7,6 +7,7 @@ import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
+import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -62,6 +63,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen bg-background">
       <ScrollToTop />
       <PlatformMetaPixel />
+      <PlatformTikTokPixel />
       <Sidebar
         currentBusiness={currentBusiness}
         plan={profile.plan}

@@ -8,6 +8,7 @@ import { HowItWorksSection } from "@/components/website/HowItWorksSection";
 import { DemoSection } from "@/components/website/DemoSection";
 import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
+import { PlatformEvent } from "@/components/platform/PlatformEvent";
 
 export const metadata: Metadata = {
   title: "Creare magazin online rapid | Edinio",
@@ -145,6 +146,7 @@ export default function LandingPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
       <HeroSection />
       <FeaturesSection />
       <HowItWorksSection />

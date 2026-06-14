@@ -147,7 +147,13 @@ function PlanPageContent() {
     trackOnboardingStep("plan");
     window.scrollTo(0, 0);
     const id = requestAnimationFrame(() => window.scrollTo(0, 0));
+    // Start-of-funnel event (skip when returning from a successful Stripe payment).
+    if (!isSuccess) {
+      platformFbq("InitiateCheckout");
+      platformTtq("InitiateCheckout");
+    }
     return () => cancelAnimationFrame(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle return from Stripe success
@@ -243,6 +249,8 @@ function PlanPageContent() {
         return;
       }
 
+      platformFbq("AddPaymentInfo");
+      platformTtq("AddPaymentInfo");
       window.location.href = data.url;
     } catch {
       toast.error("Eroare la initializarea platii. Incearca din nou.");

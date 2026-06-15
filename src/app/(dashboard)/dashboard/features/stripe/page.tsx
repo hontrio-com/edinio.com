@@ -14,7 +14,7 @@ export default async function StripeFeaturePage() {
   return (
     <div className="p-6 max-w-2xl">
       <IntegrationHeader id="stripe" description="Procesator de plati cu cardul." />
-      <StripeConnectClient config={stripeConfig} />
+      <StripeConnectClient config={stripeConfig} businessId={business?.id ?? ""} />
     </div>
   );
 }

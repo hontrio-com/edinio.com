@@ -44,8 +44,7 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
   if (!data.enabled) {
     return (
       <div className="flex flex-col items-center justify-center text-center py-12 px-4 min-h-[60vh]">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-          style={{ backgroundColor: `${data.primaryColor}1a`, color: data.primaryColor }}>
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 bg-primary/10 text-primary">
           <ShoppingBag className="h-8 w-8" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Recuperează coșurile abandonate</h1>
@@ -61,7 +60,7 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
             { icon: ShieldCheck, title: "Activat doar de tine", desc: "Oprit implicit, pornești când vrei" },
           ].map((b) => (
             <div key={b.title} className="rounded-xl border border-border bg-card p-4 text-left">
-              <b.icon className="h-5 w-5 mb-2" style={{ color: data.primaryColor }} />
+              <b.icon className="h-5 w-5 mb-2 text-primary" />
               <p className="text-sm font-semibold text-foreground">{b.title}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{b.desc}</p>
             </div>
@@ -76,8 +75,7 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
             router.refresh();
           })}
           disabled={activating}
-          className="inline-flex items-center justify-center gap-2 px-8 py-4 text-base font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 shadow-lg"
-          style={{ backgroundColor: data.primaryColor, boxShadow: `0 8px 24px ${data.primaryColor}40` }}
+          className="inline-flex items-center justify-center gap-2 px-8 py-4 text-base font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 shadow-lg shadow-primary/30 bg-primary"
         >
           {activating ? <><Loader2 className="h-5 w-5 animate-spin" /> Se activează...</> : <><Sparkles className="h-5 w-5" /> ACTIVEAZĂ FUNCȚIA</>}
         </button>
@@ -92,13 +90,18 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
 }
 
 function KpiCard({ icon: Icon, label, value, sub, accent }: {
-  icon: React.ElementType; label: string; value: string; sub?: string; accent?: string;
+  icon: React.ElementType; label: string; value: string; sub?: string;
+  accent?: string; // hex for semantic colors, "primary" for the platform accent, omit for neutral
 }) {
+  const isPrimary = accent === "primary";
+  const isHex = !!accent && accent !== "primary";
   return (
     <div className="rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center gap-2 mb-2">
-        <span className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ backgroundColor: accent ? `${accent}1a` : "var(--muted)", color: accent ?? "currentColor" }}>
+        <span
+          className={`w-8 h-8 rounded-lg flex items-center justify-center ${isPrimary ? "bg-primary/10 text-primary" : isHex ? "" : "bg-muted text-muted-foreground"}`}
+          style={isHex ? { backgroundColor: `${accent}1a`, color: accent } : undefined}
+        >
           <Icon className="h-4 w-4" />
         </span>
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -111,7 +114,6 @@ function KpiCard({ icon: Icon, label, value, sub, accent }: {
 
 function ActiveDashboard({ businessId, data }: { businessId: string; data: AbandonedCartsData }) {
   const router = useRouter();
-  const color = data.primaryColor;
   const { kpis } = data;
 
   const [recover, setRecover] = useState<{ cart: AbandonedCartRow; channel: "email" | "sms" } | null>(null);
@@ -173,8 +175,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
       </div>
 
       {/* Motivational banner */}
-      <div className="relative overflow-hidden rounded-2xl p-6 text-white"
-        style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}>
+      <div className="relative overflow-hidden rounded-2xl p-6 text-white bg-gradient-to-br from-primary to-primary/85">
         <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-white/10" />
         <div className="absolute right-10 bottom-[-3rem] w-40 h-40 rounded-full bg-white/5" />
         <div className="relative">
@@ -190,7 +191,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <KpiCard icon={ShoppingBag} label="Coșuri abandonate" value={String(kpis.abandonedCount)} accent={color} />
+        <KpiCard icon={ShoppingBag} label="Coșuri abandonate" value={String(kpis.abandonedCount)} accent="primary" />
         <KpiCard icon={Banknote} label="Valoare abandonată" value={formatPrice(kpis.abandonedValue)} accent="#ef4444" />
         <KpiCard icon={Percent} label="Rată abandon" value={`${kpis.abandonRate}%`} sub="luna aceasta" accent="#f59e0b" />
         <KpiCard icon={RotateCcw} label="Recuperate" value={String(kpis.recoveredCount)} sub={formatPrice(kpis.recoveredValue)} accent="#16a34a" />
@@ -238,7 +239,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
             <ol className="relative border-l border-border ml-1 space-y-4">
               {data.carts.slice(0, 8).map((c) => (
                 <li key={c.id} className="ml-4">
-                  <span className="absolute -left-1.5 w-3 h-3 rounded-full border-2 border-card" style={{ backgroundColor: color }} />
+                  <span className="absolute -left-1.5 w-3 h-3 rounded-full border-2 border-card bg-primary" />
                   <p className="text-sm text-foreground">
                     <span className="font-medium">{c.customer_name || "Client anonim"}</span>{" "}
                     a lăsat {c.item_count} {c.item_count === 1 ? "produs" : "produse"} ({formatPrice(c.subtotal)})
@@ -302,8 +303,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                       onClick={() => openRecover(c, "sms")}
                       disabled={!c.phone}
                       title={c.phone ? "Trimite SMS" : "Clientul nu a lăsat telefon"}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg text-white transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ backgroundColor: color }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg text-white bg-primary transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <MessageSquare className="h-3.5 w-3.5" /> SMS
                     </button>
@@ -368,8 +368,8 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                 Anulează
               </button>
               <button onClick={send} disabled={sending || (recover.channel === "sms" && !message.trim())}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-60"
-                style={{ backgroundColor: color }}>
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg transition-all hover:opacity-90 disabled:opacity-60">
+
                 {sending ? <><Loader2 className="h-4 w-4 animate-spin" /> Se trimite...</> : <><Send className="h-4 w-4" /> Trimite</>}
               </button>
             </div>

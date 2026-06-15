@@ -64,6 +64,7 @@ interface PageContent {
   new_badge?: { enabled: boolean; days: number };
   store_bg_color?: string;
   hero_show_content?: boolean;
+  hero_banners?: string[];
 }
 
 interface PolicyValue {
@@ -856,6 +857,114 @@ interface Props {
   categories?: CategoryNode[];
 }
 
+// Hero banners. One banner keeps the molded look (complete image, any ratio).
+// Two to five render as a swipeable carousel with dots, auto-advance and arrows.
+function HeroBanners({ banners, alt }: { banners: string[]; alt: string }) {
+  if (banners.length === 0) return null;
+  if (banners.length === 1) {
+    return (
+      <section className="relative overflow-hidden md:pt-6">
+        <div className="mx-auto md:max-w-6xl md:px-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={banners[0]} alt={alt}
+            className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl" />
+        </div>
+      </section>
+    );
+  }
+  return <BannerCarousel banners={banners} alt={alt} />;
+}
+
+function BannerCarousel({ banners, alt }: { banners: string[]; alt: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
+  const paused = useRef(false);
+  const [index, setIndex] = useState(0);
+  const count = banners.length;
+
+  const onScroll = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setIndex(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+  }, []);
+
+  const goTo = useCallback((i: number) => {
+    const el = ref.current;
+    if (!el) return;
+    const target = ((i % count) + count) % count;
+    el.scrollTo({ left: el.clientWidth * target, behavior: "smooth" });
+  }, [count]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (paused.current) return;
+      const el = ref.current;
+      if (!el) return;
+      const cur = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+      el.scrollTo({ left: el.clientWidth * ((cur + 1) % count), behavior: "smooth" });
+    }, 5000);
+    return () => clearInterval(id);
+  }, [count]);
+
+  const arrow =
+    "hidden md:flex absolute top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full items-center justify-center bg-black/35 text-white hover:bg-black/55 transition-colors";
+
+  return (
+    <section
+      className="relative overflow-hidden md:pt-6"
+      onPointerEnter={() => { paused.current = true; }}
+      onPointerLeave={() => { paused.current = false; }}
+    >
+      <div className="mx-auto md:max-w-6xl md:px-4">
+        <div className="relative md:rounded-2xl md:overflow-hidden">
+          <div
+            ref={ref}
+            onScroll={onScroll}
+            className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide select-none md:cursor-grab"
+            onPointerDown={(e) => {
+              if (e.pointerType !== "mouse") return;
+              const el = ref.current;
+              if (!el) return;
+              drag.current = { down: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
+            }}
+            onPointerMove={(e) => {
+              if (e.pointerType !== "mouse" || !drag.current.down) return;
+              const el = ref.current;
+              if (!el) return;
+              const dx = e.clientX - drag.current.startX;
+              if (Math.abs(dx) > 4) drag.current.moved = true;
+              el.scrollLeft = drag.current.startLeft - dx;
+            }}
+            onPointerUp={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
+            onPointerLeave={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
+          >
+            {banners.map((src, i) => (
+              <div key={i} className="shrink-0 w-full snap-center aspect-[16/9] bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={alt} draggable={false} className="w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
+
+          <button type="button" aria-label="Banner anterior" onClick={() => goTo(index - 1)} className={`${arrow} left-2`}>
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <button type="button" aria-label="Banner urmator" onClick={() => goTo(index + 1)} className={`${arrow} right-2`}>
+            <ChevronRight className="h-5 w-5" />
+          </button>
+
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex gap-1.5">
+            {banners.map((_, i) => (
+              <button key={i} type="button" aria-label={`Mergi la banner ${i + 1}`} onClick={() => goTo(i)}
+                className={`h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-white" : "w-1.5 bg-white/60 hover:bg-white/80"}`} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // Horizontal category strip with desktop affordances: mouse drag-to-scroll
 // (gated to pointerType="mouse" so mobile keeps native touch scroll) + prev/next
 // arrows shown on md+ when there's more to scroll.
@@ -986,11 +1095,17 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [sort, setSort] = useState<string>(sortOption ?? "newest");
   const showSort = pageContent.sort_options?.enabled !== false;
 
-  const hasCoverOrTagline = !!(business.cover_url || business.tagline);
-  // When a banner image is uploaded, by default show ONLY the banner, molded to
-  // its real dimensions (full image, never cropped) with no overlay content.
-  // The merchant can opt back in to overlaying logo/name/tagline/button.
-  const heroImageOnly = !!business.cover_url && pageContent.hero_show_content !== true;
+  // Banner source: up to 5 hero_banners (page_content), else the legacy single cover_url.
+  const heroBanners = (() => {
+    const raw = pageContent.hero_banners;
+    const list = Array.isArray(raw) ? raw.filter((u): u is string => typeof u === "string" && !!u) : [];
+    const resolved = list.length ? list : business.cover_url ? [business.cover_url] : [];
+    return resolved.slice(0, 5);
+  })();
+  const hasHero = heroBanners.length > 0 || !!business.tagline;
+  // By default a banner shows on its own (molded, no overlay); the merchant can
+  // opt in to overlaying logo/name/tagline/button.
+  const heroImageOnly = heroBanners.length > 0 && pageContent.hero_show_content !== true;
 
   // Category hierarchy — built from the categories table (parent_id) + product
   // assignments. Only categories whose subtree contains products are shown.
@@ -1198,27 +1313,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
       {/* Hero */}
       {heroImageOnly ? (
-        /* Banner-only: mold the hero to the uploaded image so any dimension is
-           shown completely (full width, natural height, never cropped). */
-        <section className="relative overflow-hidden md:pt-6">
-          {/* Mobile: full-width, edge-to-edge. Desktop: align the banner to the
-              same container as the store content (max-w-6xl + px-4) so its edges
-              line up with the search bar / categories / products below; cap the
-              height so a large banner doesn't fill the screen. */}
-          <div className="mx-auto md:max-w-6xl md:px-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={business.cover_url!}
-              alt={business.store_name ?? business.business_name}
-              className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl"
-            />
-          </div>
-        </section>
-      ) : hasCoverOrTagline ? (
+        <HeroBanners banners={heroBanners} alt={business.store_name ?? business.business_name} />
+      ) : hasHero ? (
         <section className="relative overflow-hidden">
           <div className="absolute inset-0" style={{ backgroundColor: color }} />
-          {business.cover_url && (
-            <Image src={business.cover_url} alt="" fill className="object-cover" sizes="100vw" priority />
+          {heroBanners[0] && (
+            <Image src={heroBanners[0]} alt="" fill className="object-cover" sizes="100vw" priority />
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/40 to-black/70" />
           <div className="relative z-10 max-w-3xl mx-auto px-4 py-20 sm:py-28 text-center text-white">
@@ -1459,7 +1559,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
         {/* Products */}
         <section id="produse" className="mb-16">
-          {!hasCoverOrTagline && !showFeaturedSection && (
+          {!hasHero && !showFeaturedSection && (
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-foreground">Produse</h2>
             </div>

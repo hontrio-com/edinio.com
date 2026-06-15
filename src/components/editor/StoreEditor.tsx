@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Info, Palette, MapPin, Share2, Globe,
-  ChevronDown, Save, Loader2, Check, ExternalLink, Upload, X, Plus,
+  ChevronDown, ChevronUp, Save, Loader2, Check, ExternalLink, Upload, X, Plus,
   Layout, Smartphone, Monitor, Home, ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
 
 interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; }
 interface Features { floating_whatsapp?: boolean; floating_call?: boolean; }
+interface BannerItem { id: string; url: string; file: File | null; }
 
 interface PageContent {
   announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number; };
@@ -48,6 +49,7 @@ interface PageContent {
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
   store_bg_color?: string;
   hero_show_content?: boolean;
+  hero_banners?: string[];
 }
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
@@ -236,26 +238,63 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
   // ── Branding section state
   const [logoPreview, setLogoPreview] = useState<string | null>(business.logo_url);
   const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState<string | null>(business.cover_url);
-  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const initialBanners: BannerItem[] = (() => {
+    const raw = (storeSettings?.page_content as PageContent)?.hero_banners;
+    const urls = Array.isArray(raw) ? raw.filter((u): u is string => typeof u === "string" && !!u) : [];
+    const list = (urls.length ? urls : business.cover_url ? [business.cover_url] : []).slice(0, 5);
+    return list.map((url, i) => ({ id: `init-${i}`, url, file: null }));
+  })();
+  const [bannerItems, setBannerItems] = useState<BannerItem[]>(initialBanners);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  function addBannerFile(file: File) {
+    setBannerItems((prev) =>
+      prev.length >= 5 ? prev : [...prev, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, url: URL.createObjectURL(file), file }],
+    );
+  }
+  function removeBanner(id: string) {
+    setBannerItems((prev) => prev.filter((b) => b.id !== id));
+  }
+  function moveBanner(id: string, dir: -1 | 1) {
+    setBannerItems((prev) => {
+      const i = prev.findIndex((b) => b.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
   const [primaryColor, setPrimaryColor] = useState(business.primary_color);
   const [customHex, setCustomHex] = useState(business.primary_color);
 
   async function saveBranding() {
     setSaving("branding");
     let logo_url = business.logo_url;
-    let cover_url = business.cover_url;
     if (logoFile) logo_url = (await uploadFile(logoFile, "logos")) ?? logo_url;
-    if (coverFile) cover_url = (await uploadFile(coverFile, "covers")) ?? cover_url;
     if (logoPreview === null) logo_url = null;
-    if (coverPreview === null) cover_url = null;
+
+    // Resolve banners in order: upload new files, keep already-hosted URLs.
+    const bannerUrls: string[] = [];
+    for (const b of bannerItems) {
+      if (b.file) { const u = await uploadFile(b.file, "covers"); if (u) bannerUrls.push(u); }
+      else if (b.url) bannerUrls.push(b.url);
+    }
+    const cover_url = bannerUrls[0] ?? null;
+
     const result = await updateBusiness(business.id, { logo_url, cover_url, primary_color: primaryColor });
-    // The hero overlay toggle lives in page_content; persist it with the branding save.
-    const pcResult = await updatePageContent(business.id, pageContent as Record<string, unknown>);
+    // Banners + hero overlay toggle live in page_content; persist with the branding save.
+    const pcResult = await updatePageContent(business.id, { ...pageContent, hero_banners: bannerUrls } as Record<string, unknown>);
     setSaving(null);
     if (result.error) { toast.error(result.error); }
     else if ("error" in pcResult) { toast.error(pcResult.error); }
-    else { setSaved("branding"); setLogoFile(null); setCoverFile(null); setPreviewKey(k => k + 1); setTimeout(() => setSaved(null), 2000); }
+    else {
+      setSaved("branding");
+      setLogoFile(null);
+      setBannerItems(bannerUrls.map((url, i) => ({ id: `saved-${i}`, url, file: null })));
+      setPreviewKey(k => k + 1);
+      setTimeout(() => setSaved(null), 2000);
+    }
   }
 
   // ── Location section state
@@ -433,15 +472,49 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
       title: "Identitate vizuala",
       content: (
         <div className="px-5 pb-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="max-w-[180px]">
             <ImageUploadField label="Logo" aspectRatio="1/1" preview={logoPreview}
               onFile={(f) => { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); }}
               onRemove={() => { setLogoFile(null); setLogoPreview(null); }} />
-            <ImageUploadField label="Banner / Cover" aspectRatio="16/9" preview={coverPreview}
-              onFile={(f) => { setCoverFile(f); setCoverPreview(URL.createObjectURL(f)); }}
-              onRemove={() => { setCoverFile(null); setCoverPreview(null); }} />
           </div>
-          {coverPreview && (
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Bannere magazin (max 5)</label>
+            <div className="space-y-2">
+              {bannerItems.map((b, i) => (
+                <div key={b.id} className="flex items-center gap-2">
+                  <div className="relative flex-1 h-24 rounded-lg overflow-hidden border border-border bg-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={b.url} alt="" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button type="button" aria-label="Muta sus" disabled={i === 0} onClick={() => moveBanner(b.id, -1)}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" aria-label="Muta jos" disabled={i === bannerItems.length - 1} onClick={() => moveBanner(b.id, 1)}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" aria-label="Sterge banner" onClick={() => removeBanner(b.id)}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-red-500 hover:bg-red-50">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {bannerItems.length < 5 && (
+                <button type="button" onClick={() => bannerInputRef.current?.click()}
+                  className="w-full h-20 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary hover:bg-primary/5 transition-colors">
+                  <Upload className="h-4 w-4" />
+                  <span className="text-xs">Adauga banner ({bannerItems.length}/5)</span>
+                </button>
+              )}
+              <input ref={bannerInputRef} type="file" accept="image/*" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) addBannerFile(f); e.target.value = ""; }} />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">Recomandat 16:9 (ex. 1920x1080). Cu mai multe bannere, se afiseaza ca un carusel pe magazin.</p>
+          </div>
+          {bannerItems.length > 0 && (
             <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
               <div className="min-w-0">
                 <label className="text-xs font-semibold text-foreground">Afiseaza continutul peste banner</label>

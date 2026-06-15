@@ -1285,11 +1285,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <div className="flex items-center gap-2">
           <input type="number" inputMode="numeric" min={0} placeholder={`De la ${facets.priceMin}`}
             value={priceMin} onChange={(e) => setPriceMin(e.target.value)}
-            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-white text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
           <span className="text-muted-foreground">-</span>
           <input type="number" inputMode="numeric" min={0} placeholder={`Pana la ${facets.priceMax}`}
             value={priceMax} onChange={(e) => setPriceMax(e.target.value)}
-            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-white text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
         </div>
       </div>
 
@@ -1543,7 +1543,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
         {/* Filters — desktop: inline panel */}
         {filtersOpen && (
-          <div className="hidden md:block mb-6 rounded-2xl border border-border bg-surface p-4 space-y-4">
+          <div className="hidden md:block mb-6 rounded-2xl border border-border bg-white p-4 space-y-4">
             {filterFields}
             {activeFilterCount > 0 && (
               <button type="button" onClick={resetFilters}
@@ -1558,7 +1558,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         {filtersOpen && (
           <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
             <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
-            <div className="relative bg-surface rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="relative bg-white rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <p className="text-base font-semibold text-foreground">
                   Filtre{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}

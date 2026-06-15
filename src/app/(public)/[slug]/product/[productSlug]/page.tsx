@@ -70,21 +70,41 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function buildProductJsonLd(product: { name: string; description: string | null; price: number | null; images: unknown }, productUrl: string) {
+// Computed once at module load (not during render — keeps the component pure).
+const PRICE_VALID_UNTIL = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+function buildProductJsonLd(
+  product: {
+    name: string;
+    description: string | null;
+    price: number | null;
+    images: unknown;
+    sku?: string | null;
+    track_inventory?: boolean;
+    stock_quantity?: number | null;
+  },
+  productUrl: string,
+  brand: string,
+) {
   const images = product.images as string[] | null;
   const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
+  const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
   return {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
     description: desc,
     url: productUrl,
+    ...(product.sku ? { sku: product.sku } : {}),
+    brand: { "@type": "Brand", name: brand },
     ...(images?.length ? { image: images } : {}),
     offers: {
       "@type": "Offer",
       priceCurrency: "RON",
       price: product.price ?? 0,
-      availability: "https://schema.org/InStock",
+      itemCondition: "https://schema.org/NewCondition",
+      availability: inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      priceValidUntil: PRICE_VALID_UNTIL,
       url: productUrl,
     },
   };
@@ -132,7 +152,7 @@ export default async function ProductDetailPage({ params }: Props) {
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   const productUrl = `${storeBaseUrl(business)}/product/${product.slug ?? productSlug}`;
-  const jsonLd = buildProductJsonLd(product, productUrl);
+  const jsonLd = buildProductJsonLd(product, productUrl, business.store_name ?? business.business_name);
 
   // Card payment available? (same resolver as checkout — only counts a processor
   // that is actually configured/usable). Drives the CTA label.

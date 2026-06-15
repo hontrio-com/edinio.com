@@ -866,7 +866,7 @@ function HeroBanners({ banners, alt }: { banners: string[]; alt: string }) {
       <section className="relative overflow-hidden md:pt-6">
         <div className="mx-auto md:max-w-6xl md:px-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={banners[0]} alt={alt}
+          <img src={banners[0]} alt={alt} fetchPriority="high"
             className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl" />
         </div>
       </section>
@@ -941,7 +941,7 @@ function BannerCarousel({ banners, alt }: { banners: string[]; alt: string }) {
             {banners.map((src, i) => (
               <div key={i} className="shrink-0 w-full snap-center aspect-[16/9] bg-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt={alt} draggable={false} className="w-full h-full object-cover" />
+                <img src={src} alt={alt} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
               </div>
             ))}
           </div>
@@ -1310,6 +1310,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           </div>
         </div>
       </header>
+
+      {/* Exactly one H1 per page: hidden when the overlay hero already shows one. */}
+      {(heroImageOnly || !hasHero) && (
+        <h1 className="sr-only">
+          {business.store_name ?? business.business_name}
+          {business.tagline ? ` - ${business.tagline}` : ""}
+        </h1>
+      )}
 
       {/* Hero */}
       {heroImageOnly ? (

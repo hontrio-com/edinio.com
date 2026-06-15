@@ -295,16 +295,16 @@ function UploadStep({ dragging, uploading, fileInputRef, onDragOver, onDragLeave
         <SourceCard
           icon={
             // eslint-disable-next-line @next/next/no-img-element
-            <img src="/import_icons/shopify.svg" alt="Shopify" className="h-5 w-5 object-contain" />
+            <img src="/import_icons/shopify.svg" alt="Shopify" className="h-8 w-auto object-contain" />
           }
           title="Shopify" desc="Admin → Products → Export → CSV" />
         <SourceCard
           icon={
             // eslint-disable-next-line @next/next/no-img-element
-            <img src="/import_icons/woocommerce.svg" alt="WooCommerce" className="h-5 w-5 object-contain" />
+            <img src="/import_icons/woocommerce.svg" alt="WooCommerce" className="h-8 w-auto object-contain" />
           }
           title="WooCommerce" desc="Products → Export → Genereaza CSV" />
-        <SourceCard icon={<FileSpreadsheet className="h-5 w-5" />} title="Alt magazin" desc="Orice CSV cu produse" />
+        <SourceCard icon={<FileSpreadsheet className="h-7 w-7 text-muted-foreground" />} title="Alt magazin" desc="Orice CSV cu produse" />
       </div>
 
       <div
@@ -355,7 +355,7 @@ function UploadStep({ dragging, uploading, fileInputRef, onDragOver, onDragLeave
 function SourceCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
     <div className="border border-border rounded-xl p-4 bg-surface">
-      <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center text-foreground mb-2">{icon}</div>
+      <div className="h-8 flex items-center mb-3">{icon}</div>
       <p className="text-sm font-semibold text-foreground">{title}</p>
       <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
     </div>

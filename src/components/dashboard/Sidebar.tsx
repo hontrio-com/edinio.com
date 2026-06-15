@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ShoppingBag, Zap, Ticket, Tag, MessageSquare, LifeBuoy, ShieldCheck,
+  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
     href: "/dashboard/products", icon: Package, label: "Produse",
     children: [
       { href: "/dashboard/products", label: "Toate produsele" },
+      { href: "/dashboard/products/bundles", label: "Pachete" },
       { href: "/dashboard/products/categories", label: "Categorii" },
     ],
   },
@@ -129,7 +130,6 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
                             : "text-muted-foreground hover:text-foreground hover:bg-accent"
                         )}
                       >
-                        {child.label === "Categorii" && <Tag className="h-3 w-3 flex-shrink-0" />}
                         {child.label}
                       </Link>
                     ))}

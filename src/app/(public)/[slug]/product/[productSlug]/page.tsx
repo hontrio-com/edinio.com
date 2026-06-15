@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { storeBaseUrl } from "@/lib/seo";
+import { readBundleConfig } from "@/lib/bundles";
 import { ProductPage } from "@/components/ministore/ProductPage";
 
 interface Props {
@@ -197,6 +198,32 @@ export default async function ProductDetailPage({ params }: Props) {
   const publicConfig = await getPublicStoreConfig(business.id);
   const hasCardPayment = !!publicConfig?.payment_methods?.some((m) => m.type !== "cash_on_delivery");
 
+  // For bundles, load the component products so the page can list "what's inside".
+  const bundleCfg = product.is_bundle ? readBundleConfig(product.page_sections) : null;
+  let bundleComponents: {
+    id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean;
+  }[] = [];
+  if (bundleCfg) {
+    const { data: comps } = await supabase
+      .from("products")
+      .select("id, name, slug, price, images, track_inventory, stock_quantity")
+      .eq("business_id", business.id)
+      .in("id", bundleCfg.items.map((i) => i.product_id));
+    const cmap = new Map((comps ?? []).map((c) => [c.id, c]));
+    bundleComponents = bundleCfg.items.map((it) => {
+      const c = cmap.get(it.product_id);
+      return {
+        id: it.product_id,
+        name: c?.name ?? "Produs",
+        slug: c?.slug ?? null,
+        price: Number(c?.price) || 0,
+        image_url: c && Array.isArray(c.images) && c.images.length ? (c.images[0] as string) : null,
+        quantity: it.quantity,
+        out_of_stock: !!(c && c.track_inventory && (c.stock_quantity ?? 0) < it.quantity),
+      };
+    });
+  }
+
   return (
     <>
       <script
@@ -213,6 +240,7 @@ export default async function ProductDetailPage({ params }: Props) {
         storeSettings={storeSettings as never}
         basePath={basePath}
         hasCardPayment={hasCardPayment}
+        bundleComponents={bundleComponents}
       />
     </>
   );

@@ -236,12 +236,13 @@ const POLICY_LINKS = [
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false }: {
+export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [] }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
+  bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -763,6 +764,40 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             </motion.div>
             <div className="policy-content text-gray-600 leading-relaxed text-base"
               dangerouslySetInnerHTML={{ __html: product.description ?? "" }} />
+          </div>
+        </section>
+      )}
+
+      {/* Bundle contents */}
+      {product.is_bundle && bundleComponents.length > 0 && (
+        <section className="py-16 md:py-24 px-4 md:px-6 bg-white">
+          <div className="max-w-4xl mx-auto">
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-12">
+              <p className="text-xs uppercase tracking-widest text-gray-400 font-mono mb-3">Pachet</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">Ce conține pachetul</h2>
+            </motion.div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {bundleComponents.map((c) => (
+                <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-white shadow-sm">
+                  <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 shrink-0">
+                    {c.image_url
+                      ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
+                      : <div className="w-full h-full flex items-center justify-center"><Package className="h-5 w-5 text-gray-300" /></div>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900 leading-snug">{c.quantity > 1 ? `${c.quantity}x ` : ""}{c.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{formatPrice(c.price)}{c.out_of_stock ? " · indisponibil" : ""}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {Number(product.compare_at_price) > Number(product.price) && (
+              <p className="text-center text-sm text-gray-600 mt-6">
+                Cumpărate separat: <span className="line-through">{formatPrice(Number(product.compare_at_price))}</span>
+                {" · "}în pachet plătești <span className="font-bold" style={{ color }}>{formatPrice(Number(product.price))}</span>
+              </p>
+            )}
           </div>
         </section>
       )}

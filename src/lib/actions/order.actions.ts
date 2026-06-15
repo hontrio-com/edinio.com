@@ -8,6 +8,7 @@ import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCus
 import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
+import { expandBundleStock } from "@/lib/bundles";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -190,6 +191,12 @@ export async function placeOrder(data: {
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount + shipping));
+
+  // Bundle-aware stock: expand a bundle into its components + validate availability
+  // before creating the order (prevents overselling components).
+  const stockExp = await expandBundleStock(admin, data.business_id, [{ product_id: data.product_id, quantity: data.quantity }]);
+  if ("error" in stockExp) return { error: stockExp.error };
+
   const order_number = await buildOrderNumber(admin, data.business_id);
 
   const unitPrice = round2(subtotal / data.quantity);
@@ -245,8 +252,8 @@ export async function placeOrder(data: {
     await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
   }
 
-  // Atomic stock decrement — prevents race condition with concurrent orders
-  await admin.rpc("decrement_stock" as never, { p_product_id: data.product_id, p_quantity: data.quantity } as never);
+  // Atomic stock decrement — bundle components when ordering a bundle, else the product itself.
+  await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.
@@ -512,6 +519,12 @@ export async function placeCartOrder(data: {
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount + shipping + vatAddOn));
+
+  // Bundle-aware stock: expand any bundle into its components + validate availability
+  // before creating the order (prevents overselling components).
+  const stockExp = await expandBundleStock(admin, data.business_id, validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })));
+  if ("error" in stockExp) return { error: stockExp.error };
+
   const order_number = await buildOrderNumber(admin, data.business_id);
 
   const allItems = [
@@ -562,9 +575,8 @@ export async function placeCartOrder(data: {
     await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
   }
 
-  // Atomic batch stock decrement — prevents race conditions
-  const stockItems = validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
-  await admin.rpc("decrement_stock_batch" as never, { p_items: stockItems } as never);
+  // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.
+  await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.

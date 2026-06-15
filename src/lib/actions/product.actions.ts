@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProductLimit } from "@/lib/plan-limits";
 import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
+import { resolveUniqueProductSlug } from "@/lib/slug";
 
 interface ProductData {
   name: string;
@@ -61,25 +62,7 @@ async function resolveUniqueSlug(
   rawSlug: string | null | undefined,
   excludeProductId?: string,
 ): Promise<string | null> {
-  const base = rawSlug?.trim() || null;
-  if (!base) return null;
-
-  const { data: rows } = await supabase
-    .from("products")
-    .select("id, slug")
-    .eq("business_id", businessId)
-    .like("slug", `${base}%`);
-
-  const taken = new Set(
-    (rows ?? [])
-      .filter((r) => r.id !== excludeProductId && r.slug)
-      .map((r) => r.slug as string),
-  );
-
-  if (!taken.has(base)) return base;
-  let n = 2;
-  while (taken.has(`${base}-${n}`)) n++;
-  return `${base}-${n}`;
+  return resolveUniqueProductSlug(supabase, businessId, rawSlug, excludeProductId);
 }
 
 // Mesaj prietenos cand o coliziune de slug scapa de dedup (ex. race intre 2 salvari).

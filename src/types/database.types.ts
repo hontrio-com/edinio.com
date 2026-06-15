@@ -948,6 +948,7 @@ export type Database = {
           id: string
           images: Json
           is_active: boolean
+          is_bundle: boolean
           is_featured: boolean
           name: string
           page_sections: Json
@@ -972,6 +973,7 @@ export type Database = {
           id?: string
           images?: Json
           is_active?: boolean
+          is_bundle?: boolean
           is_featured?: boolean
           name: string
           page_sections?: Json
@@ -996,6 +998,7 @@ export type Database = {
           id?: string
           images?: Json
           is_active?: boolean
+          is_bundle?: boolean
           is_featured?: boolean
           name?: string
           page_sections?: Json

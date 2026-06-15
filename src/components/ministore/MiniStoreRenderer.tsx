@@ -12,6 +12,7 @@ import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
+import { readBundleConfig } from "@/lib/bundles";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import type { Database } from "@/types/database.types";
@@ -20,7 +21,7 @@ import type { PaymentMethodType } from "@/lib/payment-methods";
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Pick<
   Database["public"]["Tables"]["products"]["Row"],
-  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id" | "page_sections"
+  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "is_bundle" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id" | "page_sections"
 >;
 type StoreSettings = Pick<
   Database["public"]["Tables"]["store_settings"]["Row"],
@@ -765,8 +766,8 @@ function CartDrawer({
   );
 }
 
-function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays }: {
-  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number;
+function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock }: {
+  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean;
 }) {
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
@@ -775,7 +776,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
   const discountPct = hasDiscount
     ? Math.round((1 - Number(product.price) / Number(product.compare_at_price)) * 100)
     : 0;
-  const isOutOfStock = product.track_inventory && product.stock_quantity === 0;
+  const isOutOfStock = outOfStock ?? (product.track_inventory && product.stock_quantity === 0);
 
   return (
     <div className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
@@ -797,6 +798,11 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
 
           {/* Top badges */}
           <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
+            {product.is_bundle && (
+              <span className="bg-gray-900 text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm inline-flex items-center gap-1">
+                <Layers className="h-3 w-3" /> Pachet
+              </span>
+            )}
             {hasDiscount && (
               <span className="bg-red-500 text-white text-[11px] font-black px-2 py-0.5 rounded-lg shadow-sm">
                 -{discountPct}%
@@ -1090,6 +1096,22 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Bundle availability is derived from components (best-effort on the storefront;
+  // the authoritative check happens at order time). Resolve components from the
+  // loaded product list; unknown components are treated as available.
+  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  function isProductOutOfStock(p: Product): boolean {
+    if (p.is_bundle) {
+      const cfg = readBundleConfig(p.page_sections);
+      if (!cfg || cfg.items.length === 0) return false;
+      return cfg.items.some((it) => {
+        const comp = productById.get(it.product_id);
+        return !!(comp && comp.track_inventory && (comp.stock_quantity ?? 0) < it.quantity);
+      });
+    }
+    return !!(p.track_inventory && p.stock_quantity === 0);
+  }
 
   // Product filters (price range, variant options, on-sale, in-stock)
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1782,6 +1804,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   onAddToCart={() => handleAddToCart(product)}
                   isAdded={addedId === product.id}
                   newBadgeDays={newBadgeDays}
+                  outOfStock={isProductOutOfStock(product)}
                 />
               ))}
             </div>
@@ -1825,6 +1848,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                     onAddToCart={() => handleAddToCart(product)}
                     isAdded={addedId === product.id}
                     newBadgeDays={newBadgeDays}
+                    outOfStock={isProductOutOfStock(product)}
                   />
                 ))}
               </div>

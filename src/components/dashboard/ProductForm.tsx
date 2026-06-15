@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus, X, Pencil, Loader2, Upload, Star, ArrowLeft, Trash2,
-  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, FolderOpen,
+  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, FolderOpen, Info,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
@@ -451,6 +451,31 @@ const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-xl bg-
 const smallInputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20";
 const sectionCls = "bg-surface border border-border rounded-xl overflow-hidden";
 
+// Small "( i )" toggle next to a section title; opens an inline explanatory card.
+function InfoBtn({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Cum functioneaza?"
+      className={cn(
+        "inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border transition-colors flex-shrink-0",
+        open ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-primary hover:border-primary",
+      )}
+    >
+      <Info className="h-3 w-3" />
+    </button>
+  );
+}
+
+function HelpCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-5 py-4 bg-primary/5 border-b border-border">
+      <div className="text-xs text-foreground/80 leading-relaxed space-y-2">{children}</div>
+    </div>
+  );
+}
+
 interface Props {
   businessId: string;
   product?: Product;
@@ -461,6 +486,8 @@ export function ProductForm({ businessId, product, categories }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [form, setForm] = useState<FormState>(product ? productToForm(product) : EMPTY_FORM);
+  const [helpOpen, setHelpOpen] = useState<string | null>(null);
+  const toggleHelp = (k: string) => setHelpOpen((p) => (p === k ? null : k));
   const [isPending, startTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -841,7 +868,10 @@ export function ProductForm({ businessId, product, categories }: Props) {
             <div className={sectionCls}>
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Produse variabile</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-foreground">Produse variabile</p>
+                    <InfoBtn open={helpOpen === "variants"} onClick={() => toggleHelp("variants")} />
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">Culori, marimi, materiale etc.</p>
                 </div>
                 <button type="button"
@@ -852,6 +882,17 @@ export function ProductForm({ businessId, product, categories }: Props) {
                     form.variants.enabled ? "translate-x-4" : "translate-x-0")} />
                 </button>
               </div>
+              {helpOpen === "variants" && (
+                <HelpCard>
+                  <p><strong className="text-foreground">Optiune</strong> = o caracteristica a produsului. Ex: Marime, Culoare, Material.</p>
+                  <p><strong className="text-foreground">Valoare</strong> = optiunile concrete ale unei caracteristici. Ex: la Marime &rarr; S, M, L; la Culoare &rarr; Rosu, Albastru.</p>
+                  <p><strong className="text-foreground">Varianta</strong> = combinatia rezultata din optiuni, fiecare cu pretul, codul (SKU) si stocul ei. Ex: &laquo;M / Rosu&raquo;.</p>
+                  <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
+                    <p className="font-medium text-foreground mb-1">Exemplu</p>
+                    <p>Un tricou cu Marime (S, M, L) si Culoare (Rosu, Albastru) genereaza 6 variante: S/Rosu, S/Albastru, M/Rosu, M/Albastru, L/Rosu, L/Albastru. Clientul alege marimea si culoarea, iar tu poti pune pret si stoc diferit pentru fiecare combinatie.</p>
+                  </div>
+                </HelpCard>
+              )}
               {form.variants.enabled && (
                 <div className="px-5 py-4 space-y-4">
                   {form.variants.options.map((option, idx) => (
@@ -995,7 +1036,10 @@ export function ProductForm({ businessId, product, categories }: Props) {
             <div className={sectionCls}>
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Personalizare produs</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-foreground">Personalizare produs</p>
+                    <InfoBtn open={helpOpen === "customization"} onClick={() => toggleHelp("customization")} />
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">Clientii pot incarca imagini, text etc.</p>
                 </div>
                 <button type="button"
@@ -1006,6 +1050,23 @@ export function ProductForm({ businessId, product, categories }: Props) {
                     form.customization.enabled ? "translate-x-4" : "translate-x-0")} />
                 </button>
               </div>
+              {helpOpen === "customization" && (
+                <HelpCard>
+                  <p>Permiti clientului sa-ti trimita informatii sau personalizari direct la comanda. Adaugi campuri pe care le completeaza el:</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li><strong className="text-foreground">Text</strong> &rarr; un rand scurt (ex: numele de gravat).</li>
+                    <li><strong className="text-foreground">Paragraf</strong> &rarr; text mai lung (ex: un mesaj).</li>
+                    <li><strong className="text-foreground">Alegere</strong> &rarr; o lista de optiuni (ex: font Clasic / Modern).</li>
+                    <li><strong className="text-foreground">Culoare</strong> &rarr; clientul alege o culoare.</li>
+                    <li><strong className="text-foreground">Imagine</strong> &rarr; clientul incarca un fisier (ex: un logo de printat).</li>
+                  </ul>
+                  <p>Poti marca un camp drept obligatoriu. Ce completeaza clientul apare la tine in detaliile comenzii.</p>
+                  <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
+                    <p className="font-medium text-foreground mb-1">Exemplu</p>
+                    <p>Cana personalizata: un camp Text &laquo;Numele de gravat&raquo; (obligatoriu) si un camp Imagine &laquo;Incarca logo&raquo;.</p>
+                  </div>
+                </HelpCard>
+              )}
               {form.customization.enabled && (
                 <div className="px-5 py-4 space-y-4">
                   {form.customization.fields.map((field, idx) => (
@@ -1238,7 +1299,10 @@ export function ProductForm({ businessId, product, categories }: Props) {
             <div className={sectionCls}>
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Upsell cantitate</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-foreground">Upsell cantitate</p>
+                    <InfoBtn open={helpOpen === "tiers"} onClick={() => toggleHelp("tiers")} />
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">Ofera pret mai bun la 2 sau 3 bucati</p>
                 </div>
                 <button type="button"
@@ -1249,6 +1313,16 @@ export function ProductForm({ businessId, product, categories }: Props) {
                     form.quantity_tiers.enabled ? "translate-x-4" : "translate-x-0")} />
                 </button>
               </div>
+              {helpOpen === "tiers" && (
+                <HelpCard>
+                  <p>Oferi un pret mai mic cand clientul cumpara mai multe bucati din acelasi produs, ca sa-l incurajezi sa comande mai mult.</p>
+                  <p>Setezi pana la 2 praguri (la 2 buc. si la 3 buc.), fie ca pret fix pe bucata, fie ca procent de reducere. Poti adauga si o eticheta (ex: &laquo;Cel mai bun pret&raquo;).</p>
+                  <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
+                    <p className="font-medium text-foreground mb-1">Exemplu</p>
+                    <p>Pret normal 50 lei/buc. La 2 buc. &rarr; 45 lei/buc, la 3 buc. &rarr; 40 lei/buc. Clientul vede economia pe pagina produsului si e tentat sa ia mai multe.</p>
+                  </div>
+                </HelpCard>
+              )}
               {form.quantity_tiers.enabled && (
                 <div className="px-5 py-4 space-y-4">
                   {/* Mode selector */}

@@ -153,16 +153,18 @@ function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boolean; onT
 
 const BTN_CLS = "w-full py-4 text-base font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide";
 
-function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, effect, onClick }: {
-  color: string; isOutOfStock: boolean; isPreorder: boolean; needsVariant: boolean; effect: string; onClick: () => void;
+function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayment, effect, onClick }: {
+  color: string; isOutOfStock: boolean; isPreorder: boolean; needsVariant: boolean; hasCardPayment: boolean; effect: string; onClick: () => void;
 }) {
+  // Drop the "- Plata la livrare" suffix when card payment is available.
+  const codSuffix = hasCardPayment ? "" : " - Plata la livrare";
   const label = (
     <>
       <ShoppingBag size={18} />
       {isOutOfStock ? "Stoc epuizat"
         : needsVariant ? "Selecteaza optiunile"
-        : isPreorder ? "Precomanda - Plata la livrare"
-        : "Comanda acum - Plata la livrare"}
+        : isPreorder ? `Precomanda${codSuffix}`
+        : `Comanda acum${codSuffix}`}
     </>
   );
   const base = { backgroundColor: color, boxShadow: `0px 4px 16px ${color}55` };
@@ -234,11 +236,12 @@ const POLICY_LINKS = [
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp }: {
+export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
   basePath?: string;
+  hasCardPayment?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -565,7 +568,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
 
         {/* CTA */}
-        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} effect={buttonEffect} onClick={() => setModalOpen(true)} />
+        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => setModalOpen(true)} />
 
         {/* Trust mini */}
         {trustBadgesEnabled && (
@@ -814,8 +817,10 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           <div className="flex items-center justify-between gap-4 pb-8">
             <div className="flex items-center gap-3 min-w-0">
               {business.logo_url ? (
-                <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
-                  width={36} height={36} className="rounded-lg object-cover border border-white/10 shrink-0" />
+                /* Free logo: full image at any ratio, fixed height, no box/crop. */
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
+                  className="h-9 w-auto max-w-[150px] object-contain shrink-0" />
               ) : (
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
                   style={{ backgroundColor: color }}>

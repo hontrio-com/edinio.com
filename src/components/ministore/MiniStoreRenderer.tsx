@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, createContext, useContext, useEffect, useTransition, useMemo } from "react";
+import { useState, createContext, useContext, useEffect, useTransition, useMemo, useRef, useCallback, type ReactNode } from "react";
 import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
@@ -856,6 +856,80 @@ interface Props {
   categories?: CategoryNode[];
 }
 
+// Horizontal category strip with desktop affordances: mouse drag-to-scroll
+// (gated to pointerType="mouse" so mobile keeps native touch scroll) + prev/next
+// arrows shown on md+ when there's more to scroll.
+function CategoryScroller({ children, className }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    update();
+    const el = ref.current;
+    if (!el) return;
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [update]);
+
+  const arrowCls =
+    "hidden md:flex absolute top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full items-center justify-center bg-surface/95 border border-border shadow-sm hover:bg-muted transition-colors";
+
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      {canLeft && (
+        <button type="button" aria-label="Categorii anterioare" onClick={() => ref.current?.scrollBy({ left: -240, behavior: "smooth" })}
+          className={`${arrowCls} left-0`}>
+          <ChevronLeft className="h-4 w-4 text-foreground" />
+        </button>
+      )}
+      <div
+        ref={ref}
+        className="overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0"
+        onPointerDown={(e) => {
+          if (e.pointerType !== "mouse") return;
+          const el = ref.current;
+          if (!el) return;
+          drag.current = { down: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
+        }}
+        onPointerMove={(e) => {
+          if (e.pointerType !== "mouse" || !drag.current.down) return;
+          const el = ref.current;
+          if (!el) return;
+          const dx = e.clientX - drag.current.startX;
+          if (Math.abs(dx) > 4) drag.current.moved = true;
+          el.scrollLeft = drag.current.startLeft - dx;
+        }}
+        onPointerUp={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
+        onPointerLeave={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
+        onClickCapture={(e) => {
+          if (drag.current.moved) { e.preventDefault(); e.stopPropagation(); drag.current.moved = false; }
+        }}
+      >
+        {children}
+      </div>
+      {canRight && (
+        <button type="button" aria-label="Categorii urmatoare" onClick={() => ref.current?.scrollBy({ left: 240, behavior: "smooth" })}
+          className={`${arrowCls} right-0`}>
+          <ChevronRight className="h-4 w-4 text-foreground" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories }: Props) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
@@ -1060,8 +1134,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <a href="#" className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
             {business.logo_url ? (
-              <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
-                width={36} height={36} className="rounded-xl object-cover flex-shrink-0" />
+              /* Free logo: full image at any ratio, fixed height, no box/crop. */
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={business.logo_url} alt={business.store_name ?? business.business_name}
+                className="h-9 w-auto max-w-[150px] object-contain flex-shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                 style={{ backgroundColor: color }}>
@@ -1214,7 +1290,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             Single horizontally-scrollable row (carousel) so a long list of
             categories doesn't sprawl into many wrapped rows. */}
         {hasCategories && !hasAnyCategoryImage && (
-          <div className="mb-6 -mx-4 px-4 overflow-x-auto scrollbar-hide">
+          <CategoryScroller className="mb-6">
             <div className="flex items-center gap-2 pb-1" style={{ minWidth: "min-content" }}>
               {drillParentId ? (
                 <button
@@ -1254,12 +1330,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 );
               })}
             </div>
-          </div>
+          </CategoryScroller>
         )}
 
         {/* Category image carousel — circles, hierarchy-aware (drill into subcategories) */}
         {hasCategories && hasAnyCategoryImage && (
-          <div className="mb-6 -mx-4 px-4 overflow-x-auto scrollbar-hide">
+          <CategoryScroller className="mb-6">
             <div className="flex gap-4 pb-1" style={{ minWidth: "min-content" }}>
               {/* Leading control: Toate (top level) or Inapoi (drilled into a category) */}
               {drillParentId ? (
@@ -1343,7 +1419,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 );
               })}
             </div>
-          </div>
+          </CategoryScroller>
         )}
 
         {/* Shipping progress bar */}

@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
+import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { ProductPage } from "@/components/ministore/ProductPage";
 
 interface Props {
@@ -123,6 +124,11 @@ export default async function ProductDetailPage({ params }: Props) {
 
   const jsonLd = buildProductJsonLd(product, slug, product.slug ?? productSlug);
 
+  // Card payment available? (same resolver as checkout — only counts a processor
+  // that is actually configured/usable). Drives the CTA label.
+  const publicConfig = await getPublicStoreConfig(business.id);
+  const hasCardPayment = !!publicConfig?.payment_methods?.some((m) => m.type !== "cash_on_delivery");
+
   return (
     <>
       <script
@@ -134,6 +140,7 @@ export default async function ProductDetailPage({ params }: Props) {
         product={product}
         storeSettings={storeSettings as never}
         basePath={basePath}
+        hasCardPayment={hasCardPayment}
       />
     </>
   );

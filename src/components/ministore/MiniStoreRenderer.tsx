@@ -1277,6 +1277,57 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     return list;
   }, [products, search, categoryFilter, sort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
 
+  // Shared filter fields — reused by the desktop inline panel and the mobile sheet.
+  const filterFields = (
+    <>
+      <div>
+        <p className="text-xs font-semibold text-foreground mb-2">Pret (lei)</p>
+        <div className="flex items-center gap-2">
+          <input type="number" inputMode="numeric" min={0} placeholder={`De la ${facets.priceMin}`}
+            value={priceMin} onChange={(e) => setPriceMin(e.target.value)}
+            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+          <span className="text-muted-foreground">-</span>
+          <input type="number" inputMode="numeric" min={0} placeholder={`Pana la ${facets.priceMax}`}
+            value={priceMax} onChange={(e) => setPriceMax(e.target.value)}
+            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+        </div>
+      </div>
+
+      {facets.options.map((opt) => (
+        <div key={opt.name}>
+          <p className="text-xs font-semibold text-foreground mb-2">{opt.name}</p>
+          <div className="flex flex-wrap gap-2">
+            {opt.values.map((v) => {
+              const active = (selectedOptions[opt.name] ?? []).includes(v);
+              return (
+                <button key={v} type="button" onClick={() => toggleOption(opt.name, v)}
+                  className="px-3 py-1.5 rounded-full text-sm border transition-colors"
+                  style={active
+                    ? { backgroundColor: color, color: "white", borderColor: color }
+                    : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
+                  {v}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <button type="button" onClick={() => setOnSaleOnly((v) => !v)}
+          className="px-3 py-1.5 rounded-full text-sm border transition-colors"
+          style={onSaleOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
+          Doar reduceri
+        </button>
+        <button type="button" onClick={() => setInStockOnly((v) => !v)}
+          className="px-3 py-1.5 rounded-full text-sm border transition-colors"
+          style={inStockOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
+          Doar in stoc
+        </button>
+      </div>
+    </>
+  );
+
   const PRODUCTS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
   const paginatedProducts = filteredProducts.slice(
@@ -1477,7 +1528,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           <button
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
-            className="h-[46px] px-4 inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"
+            className="h-[46px] px-4 w-full md:w-auto justify-center inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"
             style={filtersOpen || activeFilterCount > 0 ? { borderColor: color, color } : { color: "var(--color-foreground)" }}
           >
             <Filter className="h-4 w-4" />
@@ -1490,59 +1541,47 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           </button>
         </div>
 
-        {/* Filter panel */}
+        {/* Filters — desktop: inline panel */}
         {filtersOpen && (
-          <div className="mb-6 rounded-2xl border border-border bg-surface p-4 space-y-4">
-            <div>
-              <p className="text-xs font-semibold text-foreground mb-2">Pret (lei)</p>
-              <div className="flex items-center gap-2">
-                <input type="number" inputMode="numeric" min={0} placeholder={`De la ${facets.priceMin}`}
-                  value={priceMin} onChange={(e) => setPriceMin(e.target.value)}
-                  className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
-                <span className="text-muted-foreground">-</span>
-                <input type="number" inputMode="numeric" min={0} placeholder={`Pana la ${facets.priceMax}`}
-                  value={priceMax} onChange={(e) => setPriceMax(e.target.value)}
-                  className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
-              </div>
-            </div>
-
-            {facets.options.map((opt) => (
-              <div key={opt.name}>
-                <p className="text-xs font-semibold text-foreground mb-2">{opt.name}</p>
-                <div className="flex flex-wrap gap-2">
-                  {opt.values.map((v) => {
-                    const active = (selectedOptions[opt.name] ?? []).includes(v);
-                    return (
-                      <button key={v} type="button" onClick={() => toggleOption(opt.name, v)}
-                        className="px-3 py-1.5 rounded-full text-sm border transition-colors"
-                        style={active
-                          ? { backgroundColor: color, color: "white", borderColor: color }
-                          : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
-                        {v}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <button type="button" onClick={() => setOnSaleOnly((v) => !v)}
-                className="px-3 py-1.5 rounded-full text-sm border transition-colors"
-                style={onSaleOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
-                Doar reduceri
+          <div className="hidden md:block mb-6 rounded-2xl border border-border bg-surface p-4 space-y-4">
+            {filterFields}
+            {activeFilterCount > 0 && (
+              <button type="button" onClick={resetFilters}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2">
+                Reseteaza filtrele
               </button>
-              <button type="button" onClick={() => setInStockOnly((v) => !v)}
-                className="px-3 py-1.5 rounded-full text-sm border transition-colors"
-                style={inStockOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
-                Doar in stoc
-              </button>
-              {activeFilterCount > 0 && (
-                <button type="button" onClick={resetFilters}
-                  className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2">
-                  Reseteaza filtrele
+            )}
+          </div>
+        )}
+
+        {/* Filters — mobile: bottom sheet */}
+        {filtersOpen && (
+          <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
+            <div className="relative bg-surface rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <p className="text-base font-semibold text-foreground">
+                  Filtre{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+                </p>
+                <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Inchide"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted">
+                  <X className="h-4 w-4" />
                 </button>
-              )}
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                {filterFields}
+              </div>
+              <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
+                <button type="button" onClick={resetFilters}
+                  className="px-4 py-2.5 text-sm font-medium border border-border rounded-xl text-foreground hover:bg-muted transition-colors">
+                  Reseteaza
+                </button>
+                <button type="button" onClick={() => setFiltersOpen(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: color }}>
+                  Vezi {filteredProducts.length} {filteredProducts.length === 1 ? "produs" : "produse"}
+                </button>
+              </div>
             </div>
           </div>
         )}

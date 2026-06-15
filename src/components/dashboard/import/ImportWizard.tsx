@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Upload, FileSpreadsheet, ArrowLeft, ArrowRight, Loader2, CheckCircle2,
-  AlertTriangle, Package, Download, X, ShoppingBag, Store,
+  AlertTriangle, Package, Download, X,
 } from "lucide-react";
 import {
   createImportJob, previewMapping, startImport, processImportChunk, cancelImport,
@@ -13,6 +13,7 @@ import {
 import { OUR_FIELDS, DEFAULT_OPTIONS, EMPTY_TOTALS } from "@/lib/import/types";
 import type { ColumnMapping, ImportOptions, ImportSource, ImportStatus, ImportTotals, StagedProduct, ValidationSummary } from "@/lib/import/types";
 import { SOURCE_LABELS } from "@/lib/import/presets";
+import { IMPORT_TEMPLATES } from "@/lib/import/templates";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -291,8 +292,18 @@ function UploadStep({ dragging, uploading, fileInputRef, onDragOver, onDragLeave
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <SourceCard icon={<ShoppingBag className="h-5 w-5" />} title="Shopify" desc="Admin → Products → Export → CSV" />
-        <SourceCard icon={<Store className="h-5 w-5" />} title="WooCommerce" desc="Products → Export → Genereaza CSV" />
+        <SourceCard
+          icon={
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/import_icons/shopify.svg" alt="Shopify" className="h-5 w-5 object-contain" />
+          }
+          title="Shopify" desc="Admin → Products → Export → CSV" />
+        <SourceCard
+          icon={
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/import_icons/woocommerce.svg" alt="WooCommerce" className="h-5 w-5 object-contain" />
+          }
+          title="WooCommerce" desc="Products → Export → Genereaza CSV" />
         <SourceCard icon={<FileSpreadsheet className="h-5 w-5" />} title="Alt magazin" desc="Orice CSV cu produse" />
       </div>
 
@@ -325,10 +336,17 @@ function UploadStep({ dragging, uploading, fileInputRef, onDragOver, onDragLeave
             </div>
             <div>
               <p className="text-sm font-medium text-foreground">Trage fisierul CSV aici sau apasa pentru a alege</p>
-              <p className="text-xs text-muted-foreground mt-1">Recunoastem automat formatul Shopify si WooCommerce. Maximum 15MB.</p>
+              <p className="text-xs text-muted-foreground mt-1">Recunoastem automat formatul Shopify si WooCommerce. Maximum 8MB.</p>
             </div>
           </div>
         )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+        <span className="text-xs text-muted-foreground">Nu ai un fisier? Descarca un sablon:</span>
+        <TemplateButton label="Generic" onClick={() => downloadTemplate(IMPORT_TEMPLATES.generic)} />
+        <TemplateButton label="Shopify" onClick={() => downloadTemplate(IMPORT_TEMPLATES.shopify)} />
+        <TemplateButton label="WooCommerce" onClick={() => downloadTemplate(IMPORT_TEMPLATES.woo)} />
       </div>
     </div>
   );
@@ -342,6 +360,32 @@ function SourceCard({ icon, title, desc }: { icon: React.ReactNode; title: strin
       <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
     </div>
   );
+}
+
+function TemplateButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors text-foreground"
+    >
+      <Download className="h-3 w-3" />
+      {label}
+    </button>
+  );
+}
+
+function downloadTemplate(t: { filename: string; csv: string }) {
+  // Prepend a UTF-8 BOM so Excel opens Romanian diacritics correctly.
+  const blob = new Blob(["﻿" + t.csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = t.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ── Mapping step ────────────────────────────────────────────────────────────────

@@ -85,10 +85,12 @@ function buildProductJsonLd(
   },
   productUrl: string,
   brand: string,
+  shipping: { cost: number; min: number; max: number },
 ) {
   const images = product.images as string[] | null;
   const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
   const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
+  const freeReturn = shipping.cost <= 0;
   return {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -106,7 +108,37 @@ function buildProductJsonLd(
       availability: inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       priceValidUntil: PRICE_VALID_UNTIL,
       url: productUrl,
+      shippingDetails: {
+        "@type": "OfferShippingDetails",
+        shippingRate: { "@type": "MonetaryAmount", value: shipping.cost, currency: "RON" },
+        shippingDestination: { "@type": "DefinedRegion", addressCountry: "RO" },
+        deliveryTime: {
+          "@type": "ShippingDeliveryTime",
+          handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 1, unitCode: "DAY" },
+          transitTime: { "@type": "QuantitativeValue", minValue: shipping.min, maxValue: shipping.max, unitCode: "DAY" },
+        },
+      },
+      hasMerchantReturnPolicy: {
+        "@type": "MerchantReturnPolicy",
+        applicableCountry: "RO",
+        returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
+        merchantReturnDays: 14,
+        returnMethod: "https://schema.org/ReturnByMail",
+        returnFees: freeReturn ? "https://schema.org/FreeReturn" : "https://schema.org/ReturnShippingFees",
+        ...(freeReturn ? {} : { returnShippingFeesAmount: { "@type": "MonetaryAmount", value: shipping.cost, currency: "RON" } }),
+      },
     },
+  };
+}
+
+function buildBreadcrumbJsonLd(storeName: string, storeUrl: string, productName: string, productUrl: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: storeName, item: storeUrl },
+      { "@type": "ListItem", position: 2, name: productName, item: productUrl },
+    ],
   };
 }
 
@@ -151,8 +183,14 @@ export default async function ProductDetailPage({ params }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  const productUrl = `${storeBaseUrl(business)}/product/${product.slug ?? productSlug}`;
-  const jsonLd = buildProductJsonLd(product, productUrl, business.store_name ?? business.business_name);
+  const brand = business.store_name ?? business.business_name;
+  const storeBase = storeBaseUrl(business);
+  const productUrl = `${storeBase}/product/${product.slug ?? productSlug}`;
+  const shippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
+  const de = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
+  const delivery = de?.enabled ? { min: de.min_days ?? 1, max: de.max_days ?? 3 } : { min: 1, max: 3 };
+  const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max });
+  const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
 
   // Card payment available? (same resolver as checkout — only counts a processor
   // that is actually configured/usable). Drives the CTA label.
@@ -164,6 +202,10 @@ export default async function ProductDetailPage({ params }: Props) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
       <ProductPage
         business={business as never}

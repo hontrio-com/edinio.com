@@ -7,6 +7,10 @@ import { formatPrice } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
 import type { MarketingConfig } from "@/lib/marketing";
+import type { Metadata } from "next";
+
+// Order confirmation is personal + transient — keep it out of search.
+export const metadata: Metadata = { robots: { index: false } };
 
 interface Props {
   params: Promise<{ slug: string }>;

@@ -223,6 +223,7 @@ export default async function DashboardPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <SiteStatusBar
         isPublished={business.is_published}
+        businessId={business.id}
         businessName={business.business_name}
         publicUrl={publicUrl}
       />

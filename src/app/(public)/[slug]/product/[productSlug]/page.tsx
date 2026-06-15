@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
+import { storeBaseUrl } from "@/lib/seo";
 import { ProductPage } from "@/components/ministore/ProductPage";
 
 interface Props {
@@ -28,6 +29,13 @@ const getProductCached = cache(async (productSlug: string) => {
   return data;
 });
 
+// Custom domain of a store (cached per request) — needed for the canonical URL.
+const getBusinessDomainCached = cache(async (slug: string) => {
+  const supabase = await createClient();
+  const { data } = await supabase.from("businesses").select("custom_domain").eq("slug", slug).single();
+  return data?.custom_domain ?? null;
+});
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { productSlug, slug } = await params;
   const product = await getProductCached(productSlug);
@@ -40,7 +48,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
   const images = product.images as string[] | null;
   const canonicalSlug = product.slug ?? productSlug;
-  const url = `https://www.edinio.com/${slug}/product/${canonicalSlug}`;
+  const customDomain = await getBusinessDomainCached(slug);
+  const url = `${storeBaseUrl({ slug, custom_domain: customDomain })}/product/${canonicalSlug}`;
   return {
     title,
     description,
@@ -61,7 +70,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function buildProductJsonLd(product: { name: string; description: string | null; price: number | null; images: unknown }, slug: string, productSlug: string) {
+function buildProductJsonLd(product: { name: string; description: string | null; price: number | null; images: unknown }, productUrl: string) {
   const images = product.images as string[] | null;
   const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
   return {
@@ -69,14 +78,14 @@ function buildProductJsonLd(product: { name: string; description: string | null;
     "@type": "Product",
     name: product.name,
     description: desc,
-    url: `https://www.edinio.com/${slug}/product/${productSlug}`,
+    url: productUrl,
     ...(images?.length ? { image: images } : {}),
     offers: {
       "@type": "Offer",
       priceCurrency: "RON",
       price: product.price ?? 0,
       availability: "https://schema.org/InStock",
-      url: `https://www.edinio.com/${slug}/product/${productSlug}`,
+      url: productUrl,
     },
   };
 }
@@ -122,7 +131,8 @@ export default async function ProductDetailPage({ params }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  const jsonLd = buildProductJsonLd(product, slug, product.slug ?? productSlug);
+  const productUrl = `${storeBaseUrl(business)}/product/${product.slug ?? productSlug}`;
+  const jsonLd = buildProductJsonLd(product, productUrl);
 
   // Card payment available? (same resolver as checkout — only counts a processor
   // that is actually configured/usable). Drives the CTA label.

@@ -1,92 +1,90 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { PLATFORM_ORIGIN, isPlatformHost } from "@/lib/seo";
 
-// Regenerate sitemap at most once per hour (3600s)
-export const revalidate = 3600;
-
-const SITE_URL = "https://www.edinio.com";
+// Host-aware. Using headers() makes this dynamic (per request), so:
+//  - a merchant custom domain gets a sitemap of ONLY that store's pages, on its
+//    own domain;
+//  - the platform sitemap (www.edinio.com) lists marketing pages + stores that
+//    do NOT have a custom domain (those live on, and index under, their domain).
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const host = (await headers()).get("host")?.split(":")[0].toLowerCase() ?? "";
   const supabase = await createClient();
 
-  // Static marketing pages
+  // ── Custom domain: only this store's pages, on its own domain ──────────────
+  if (!isPlatformHost(host)) {
+    const { data: biz } = await supabase
+      .from("businesses")
+      .select("id, updated_at")
+      .eq("custom_domain", host)
+      .eq("is_published", true)
+      .single();
+    if (!biz) return [];
+
+    const base = `https://${host}`;
+    const entries: MetadataRoute.Sitemap = [
+      { url: base, lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(), changeFrequency: "weekly", priority: 1 },
+    ];
+
+    const { data: products } = await supabase
+      .from("products")
+      .select("slug, updated_at")
+      .eq("business_id", biz.id)
+      .eq("is_active", true)
+      .not("slug", "is", null);
+
+    for (const p of products ?? []) {
+      if (!p.slug) continue;
+      entries.push({
+        url: `${base}/product/${p.slug}`,
+        lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
+        changeFrequency: "weekly",
+        priority: 0.7,
+      });
+    }
+    return entries;
+  }
+
+  // ── Platform (www.edinio.com): marketing + stores WITHOUT a custom domain ──
   const staticPages: MetadataRoute.Sitemap = [
-    {
-      url: SITE_URL,
-      lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 1,
-    },
-    {
-      url: `${SITE_URL}/preturi`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.9,
-    },
-    {
-      url: `${SITE_URL}/despre`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.7,
-    },
-    {
-      url: `${SITE_URL}/contact`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.7,
-    },
-    {
-      url: `${SITE_URL}/termeni`,
-      lastModified: new Date(),
-      changeFrequency: "yearly",
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/confidentialitate`,
-      lastModified: new Date(),
-      changeFrequency: "yearly",
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/cookies`,
-      lastModified: new Date(),
-      changeFrequency: "yearly",
-      priority: 0.3,
-    },
-    {
-      url: `${SITE_URL}/gdpr`,
-      lastModified: new Date(),
-      changeFrequency: "yearly",
-      priority: 0.3,
-    },
+    { url: PLATFORM_ORIGIN, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+    { url: `${PLATFORM_ORIGIN}/preturi`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
+    { url: `${PLATFORM_ORIGIN}/despre`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.7 },
+    { url: `${PLATFORM_ORIGIN}/contact`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.7 },
+    { url: `${PLATFORM_ORIGIN}/termeni`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
+    { url: `${PLATFORM_ORIGIN}/confidentialitate`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
+    { url: `${PLATFORM_ORIGIN}/cookies`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
+    { url: `${PLATFORM_ORIGIN}/gdpr`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
   ];
 
-  // Published businesses
   const { data: businesses } = await supabase
     .from("businesses")
-    .select("slug, updated_at")
+    .select("slug, updated_at, custom_domain")
     .eq("is_published", true);
 
-  const businessPages: MetadataRoute.Sitemap = (businesses ?? []).map((b) => ({
-    url: `${SITE_URL}/${b.slug}`,
-    lastModified: b.updated_at ? new Date(b.updated_at) : new Date(),
-    changeFrequency: "weekly" as const,
-    priority: 0.8,
-  }));
+  const businessPages: MetadataRoute.Sitemap = (businesses ?? [])
+    .filter((b) => !b.custom_domain)
+    .map((b) => ({
+      url: `${PLATFORM_ORIGIN}/${b.slug}`,
+      lastModified: b.updated_at ? new Date(b.updated_at) : new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.8,
+    }));
 
-  // Active products from published businesses — use slug URL (not ID)
   const { data: products } = await supabase
     .from("products")
-    .select("id, slug, updated_at, businesses!inner(slug, is_published)")
+    .select("slug, updated_at, businesses!inner(slug, is_published, custom_domain)")
     .eq("is_active", true)
     .eq("businesses.is_published", true);
 
   const productPages: MetadataRoute.Sitemap = (products ?? [])
-    .filter((p) => p.slug)
+    .filter((p) => p.slug && !(p.businesses as unknown as { custom_domain: string | null }).custom_domain)
     .map((p) => {
       const biz = p.businesses as unknown as { slug: string };
       return {
-        url: `${SITE_URL}/${biz.slug}/product/${p.slug}`,
+        url: `${PLATFORM_ORIGIN}/${biz.slug}/product/${p.slug}`,
         lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
         changeFrequency: "weekly" as const,
         priority: 0.6,

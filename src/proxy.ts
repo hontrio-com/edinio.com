@@ -38,6 +38,12 @@ export async function proxy(request: NextRequest) {
 
     const { pathname } = request.nextUrl;
 
+    // Metadata routes are served by the host-aware root handlers (sitemap.ts /
+    // robots.ts), so don't rewrite them onto /{slug}.
+    if (pathname === "/sitemap.xml" || pathname === "/robots.txt") {
+      return NextResponse.next();
+    }
+
     // Look up business by custom_domain
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

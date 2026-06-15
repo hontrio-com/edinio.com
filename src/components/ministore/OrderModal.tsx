@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,6 +11,8 @@ import {
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
+import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
+import { getCartSessionId } from "@/lib/cart-session";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import type { PaymentMethodType } from "@/lib/payment-methods";
 
@@ -141,6 +143,32 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
+
+  // Abandoned-cart capture (buy-now / single product). Server ignores it unless
+  // the store opted in; debounced + fire-and-forget.
+  const [sessionId, setSessionId] = useState("");
+  useEffect(() => { setSessionId(getCartSessionId(business.slug)); }, [business.slug]);
+
+  const trackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!open || !sessionId) return;
+    const phoneDigits = form.phone.replace(/\D/g, "");
+    if (!form.email.includes("@") && phoneDigits.length < 6) return;
+    const unit = effectiveQty > 0 ? Math.round((subtotal / effectiveQty) * 100) / 100 : product.price;
+    if (trackTimer.current) clearTimeout(trackTimer.current);
+    trackTimer.current = setTimeout(() => {
+      void trackAbandonedCart({
+        businessId: business.id,
+        sessionId,
+        source: "buy_now",
+        name: form.name.trim() || undefined,
+        email: form.email.trim() || undefined,
+        phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
+        items: [{ product_id: product.id, name: product.name, price: unit, quantity: effectiveQty, image_url: product.images?.[0] ?? null }],
+      });
+    }, 1500);
+    return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
+  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, subtotal, effectiveQty, product.id, product.name, product.price, product.images]);
 
   // Reset on open
   useEffect(() => {
@@ -283,6 +311,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
       const result = await placeOrder({
         business_id: business.id,
+        cart_session_id: sessionId || undefined,
         product_id: product.id,
         product_name: product.name,
         product_price: unitPrice,

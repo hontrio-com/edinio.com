@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
+import { markCartConverted } from "@/lib/abandoned-cart";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -110,6 +111,7 @@ async function buildOrderNumber(supabase: SupabaseClient, businessId: string): P
 
 export async function placeOrder(data: {
   business_id: string;
+  cart_session_id?: string;
   product_id: string;
   product_name: string;
   product_price: number;
@@ -245,6 +247,15 @@ export async function placeOrder(data: {
 
   // Atomic stock decrement — prevents race condition with concurrent orders
   await admin.rpc("decrement_stock" as never, { p_product_id: data.product_id, p_quantity: data.quantity } as never);
+
+  // Close the matching abandoned cart (if any) so it leaves the abandoned set
+  // and counts as recovered when a recovery message had been sent.
+  await markCartConverted(admin, data.business_id, {
+    sessionId: data.cart_session_id,
+    email: data.customer_email?.trim() || null,
+    phone: data.customer_phone.trim(),
+    orderId: order.id,
+  });
 
   // Send emails
   try {
@@ -406,6 +417,7 @@ export async function sendCustomerNotification(orderId: string, subject: string,
 
 export async function placeCartOrder(data: {
   business_id: string;
+  cart_session_id?: string;
   items: { product_id: string; name: string; price: number; quantity: number }[];
   shipping_cost: number;
   customer_name: string;
@@ -553,6 +565,15 @@ export async function placeCartOrder(data: {
   // Atomic batch stock decrement — prevents race conditions
   const stockItems = validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockItems } as never);
+
+  // Close the matching abandoned cart (if any) so it leaves the abandoned set
+  // and counts as recovered when a recovery message had been sent.
+  await markCartConverted(admin, data.business_id, {
+    sessionId: data.cart_session_id,
+    email: data.customer_email?.trim() || null,
+    phone: data.customer_phone.trim(),
+    orderId: order.id,
+  });
 
   // Send emails
   try {

@@ -165,6 +165,62 @@ export async function sendOrderConfirmationToCustomer(
   });
 }
 
+export async function sendAbandonedCartRecovery(
+  to: string,
+  data: {
+    storeName: string;
+    storeUrl: string;
+    customerName?: string | null;
+    items: { name: string; quantity: number; price: number; image_url?: string | null }[];
+    total: number;
+    color?: string;
+    message?: string;
+  }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const color = data.color || "#1AB554";
+  const first = data.customerName?.trim().split(/\s+/)[0];
+
+  const itemsRows = data.items
+    .map(
+      (i) =>
+        `<tr>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${i.name} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const intro = data.message?.trim()
+    ? `<p style="margin:0 0 24px 0;font-size:14px;color:#3f3f46;line-height:1.6;white-space:pre-wrap;">${data.message.trim()}</p>`
+    : `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${first}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${data.storeName}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`;
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Ti-au ramas produse in cos</h2>
+    ${intro}
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+      <tr><td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cosul tau</td></tr>
+      ${itemsRows}
+      <tr>
+        <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total</td>
+        <td style="padding-top:10px;font-size:16px;font-weight:700;color:${color};text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(data.total)}</td>
+      </tr>
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+      <tr><td align="center">
+        <a href="${data.storeUrl}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">Finalizeaza comanda</a>
+      </td></tr>
+    </table>
+  `;
+
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`,
+    html: baseTemplate(content),
+  });
+}
+
 export async function sendAccountWelcomeEmail(
   to: string,
   data: { name: string }

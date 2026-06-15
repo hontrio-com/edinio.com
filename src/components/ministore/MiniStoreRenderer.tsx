@@ -10,6 +10,8 @@ import {
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
+import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
+import { getCartSessionId } from "@/lib/cart-session";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import type { Database } from "@/types/database.types";
@@ -97,6 +99,7 @@ interface CartContextValue {
   total: number;
   count: number;
   clear: () => void;
+  sessionId: string;
 }
 
 const JUDETE = [
@@ -138,13 +141,15 @@ function useCart() {
 function CartProvider({ children, slug }: { children: React.ReactNode; slug: string }) {
   const STORAGE_KEY = `cart_${slug}`;
   const [items, setItems] = useState<CartItem[]>([]);
+  const [sessionId, setSessionId] = useState("");
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) setItems(JSON.parse(stored));
     } catch {}
-  }, [STORAGE_KEY]);
+    setSessionId(getCartSessionId(slug));
+  }, [STORAGE_KEY, slug]);
 
   function save(next: CartItem[]) {
     setItems(next);
@@ -177,7 +182,7 @@ function CartProvider({ children, slug }: { children: React.ReactNode; slug: str
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, total, count, clear }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, total, count, clear, sessionId }}>
       {children}
     </CartContext.Provider>
   );
@@ -197,7 +202,7 @@ function CartCheckoutModal({
   shippingCost: number; freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
 }) {
-  const { items, total, clear } = useCart();
+  const { items, total, clear, sessionId } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(
     { email_field: emailFieldConfig } as PageContent["checkout_config"]
   );
@@ -262,6 +267,29 @@ function CartCheckoutModal({
     });
   }, [open, businessId]);
 
+  // Abandoned-cart capture: debounced, fire-and-forget. The server ignores it
+  // unless the store opted in. Only fires once a contact channel is present.
+  const trackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!open || !sessionId || items.length === 0) return;
+    const phoneDigits = form.phone.replace(/\D/g, "");
+    const hasContact = form.email.includes("@") || phoneDigits.length >= 6;
+    if (!hasContact) return;
+    if (trackTimer.current) clearTimeout(trackTimer.current);
+    trackTimer.current = setTimeout(() => {
+      void trackAbandonedCart({
+        businessId,
+        sessionId,
+        source: "cart",
+        name: form.name.trim() || undefined,
+        email: form.email.trim() || undefined,
+        phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
+        items: items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, image_url: i.imageUrl })),
+      });
+    }, 1500);
+    return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
+  }, [open, sessionId, businessId, form.name, form.phone, form.email, items]);
+
   function validate() {
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
@@ -292,6 +320,7 @@ function CartCheckoutModal({
     startTransition(async () => {
       const result = await placeCartOrder({
         business_id: businessId,
+        cart_session_id: sessionId || undefined,
         items: items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
         shipping_cost: shipping,
         customer_name: form.name,

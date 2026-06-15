@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      abandoned_carts: {
+        Row: {
+          business_id: string
+          converted_at: string | null
+          created_at: string
+          customer_name: string | null
+          email: string | null
+          id: string
+          item_count: number
+          items: Json
+          last_activity_at: string
+          order_id: string | null
+          phone: string | null
+          recovery_count: number
+          recovery_email_sent_at: string | null
+          recovery_sms_sent_at: string | null
+          session_id: string
+          source: string
+          status: string
+          subtotal: number
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          converted_at?: string | null
+          created_at?: string
+          customer_name?: string | null
+          email?: string | null
+          id?: string
+          item_count?: number
+          items?: Json
+          last_activity_at?: string
+          order_id?: string | null
+          phone?: string | null
+          recovery_count?: number
+          recovery_email_sent_at?: string | null
+          recovery_sms_sent_at?: string | null
+          session_id: string
+          source?: string
+          status?: string
+          subtotal?: number
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          converted_at?: string | null
+          created_at?: string
+          customer_name?: string | null
+          email?: string | null
+          id?: string
+          item_count?: number
+          items?: Json
+          last_activity_at?: string
+          order_id?: string | null
+          phone?: string | null
+          recovery_count?: number
+          recovery_email_sent_at?: string | null
+          recovery_sms_sent_at?: string | null
+          session_id?: string
+          source?: string
+          status?: string
+          subtotal?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abandoned_carts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "abandoned_carts_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_audit_log: {
         Row: {
           action: string
@@ -41,6 +122,48 @@ export type Database = {
           id?: string
           target_id?: string | null
           target_type?: string
+        }
+        Relationships: []
+      }
+      announcements: {
+        Row: {
+          blocks: Json
+          cover_url: string | null
+          created_at: string
+          created_by: string | null
+          excerpt: string | null
+          id: string
+          is_pinned: boolean
+          is_published: boolean
+          published_at: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          blocks?: Json
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          excerpt?: string | null
+          id?: string
+          is_pinned?: boolean
+          is_published?: boolean
+          published_at?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          blocks?: Json
+          cover_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          excerpt?: string | null
+          id?: string
+          is_pinned?: boolean
+          is_published?: boolean
+          published_at?: string | null
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -353,6 +476,27 @@ export type Database = {
           },
         ]
       }
+      email_automations: {
+        Row: {
+          email_key: string
+          id: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          email_key: string
+          id?: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          email_key?: string
+          id?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       error_logs: {
         Row: {
           action: string
@@ -431,6 +575,36 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           business_id: string
@@ -456,6 +630,7 @@ export type Database = {
           fgo_storno_series: string | null
           id: string
           internal_notes: string | null
+          ipay_order_id: string | null
           items: Json
           notes: string | null
           oblio_invoice_number: string | null
@@ -477,7 +652,6 @@ export type Database = {
           smartbill_storno_number: string | null
           smartbill_storno_series: string | null
           status: string
-          ipay_order_id: string | null
           stripe_session_id: string | null
           subtotal: number
           total: number
@@ -513,6 +687,7 @@ export type Database = {
           fgo_storno_series?: string | null
           id?: string
           internal_notes?: string | null
+          ipay_order_id?: string | null
           items: Json
           notes?: string | null
           oblio_invoice_number?: string | null
@@ -534,7 +709,6 @@ export type Database = {
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string
-          ipay_order_id?: string | null
           stripe_session_id?: string | null
           subtotal: number
           total: number
@@ -570,6 +744,7 @@ export type Database = {
           fgo_storno_series?: string | null
           id?: string
           internal_notes?: string | null
+          ipay_order_id?: string | null
           items?: Json
           notes?: string | null
           oblio_invoice_number?: string | null
@@ -591,7 +766,6 @@ export type Database = {
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string
-          ipay_order_id?: string | null
           stripe_session_id?: string | null
           subtotal?: number
           total?: number
@@ -633,6 +807,135 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      product_import_rows: {
+        Row: {
+          business_id: string
+          error: string | null
+          external_id: string | null
+          id: string
+          images_done: boolean
+          import_id: string
+          parsed: Json | null
+          product_id: string | null
+          raw: Json | null
+          row_index: number
+          status: string
+        }
+        Insert: {
+          business_id: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          images_done?: boolean
+          import_id: string
+          parsed?: Json | null
+          product_id?: string | null
+          raw?: Json | null
+          row_index: number
+          status?: string
+        }
+        Update: {
+          business_id?: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          images_done?: boolean
+          import_id?: string
+          parsed?: Json | null
+          product_id?: string | null
+          raw?: Json | null
+          row_index?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_import_rows_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "product_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_import_rows_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_imports: {
+        Row: {
+          business_id: string
+          created_at: string
+          error: string | null
+          error_report_url: string | null
+          file_name: string | null
+          file_url: string | null
+          finished_at: string | null
+          id: string
+          mapping: Json
+          options: Json
+          source: string
+          started_at: string | null
+          status: string
+          totals: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          error?: string | null
+          error_report_url?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          finished_at?: string | null
+          id?: string
+          mapping?: Json
+          options?: Json
+          source: string
+          started_at?: string | null
+          status?: string
+          totals?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          error?: string | null
+          error_report_url?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          finished_at?: string | null
+          id?: string
+          mapping?: Json
+          options?: Json
+          source?: string
+          started_at?: string | null
+          status?: string
+          totals?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_imports_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       products: {
         Row: {
@@ -710,128 +1013,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "products_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      product_imports: {
-        Row: {
-          business_id: string
-          created_at: string
-          error: string | null
-          error_report_url: string | null
-          file_name: string | null
-          file_url: string | null
-          finished_at: string | null
-          id: string
-          mapping: Json
-          options: Json
-          source: string
-          started_at: string | null
-          status: string
-          totals: Json
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          business_id: string
-          created_at?: string
-          error?: string | null
-          error_report_url?: string | null
-          file_name?: string | null
-          file_url?: string | null
-          finished_at?: string | null
-          id?: string
-          mapping?: Json
-          options?: Json
-          source: string
-          started_at?: string | null
-          status?: string
-          totals?: Json
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          business_id?: string
-          created_at?: string
-          error?: string | null
-          error_report_url?: string | null
-          file_name?: string | null
-          file_url?: string | null
-          finished_at?: string | null
-          id?: string
-          mapping?: Json
-          options?: Json
-          source?: string
-          started_at?: string | null
-          status?: string
-          totals?: Json
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_imports_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      product_import_rows: {
-        Row: {
-          business_id: string
-          error: string | null
-          external_id: string | null
-          id: string
-          images_done: boolean
-          import_id: string
-          parsed: Json | null
-          product_id: string | null
-          raw: Json | null
-          row_index: number
-          status: string
-        }
-        Insert: {
-          business_id: string
-          error?: string | null
-          external_id?: string | null
-          id?: string
-          images_done?: boolean
-          import_id: string
-          parsed?: Json | null
-          product_id?: string | null
-          raw?: Json | null
-          row_index: number
-          status?: string
-        }
-        Update: {
-          business_id?: string
-          error?: string | null
-          external_id?: string | null
-          id?: string
-          images_done?: boolean
-          import_id?: string
-          parsed?: Json | null
-          product_id?: string | null
-          raw?: Json | null
-          row_index?: number
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_import_rows_import_id_fkey"
-            columns: ["import_id"]
-            isOneToOne: false
-            referencedRelation: "product_imports"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_import_rows_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
@@ -961,6 +1142,7 @@ export type Database = {
       }
       store_settings: {
         Row: {
+          abandoned_cart_enabled: boolean
           business_id: string
           cargus_config: Json | null
           colete_config: Json | null
@@ -997,6 +1179,7 @@ export type Database = {
           woot_config: Json | null
         }
         Insert: {
+          abandoned_cart_enabled?: boolean
           business_id: string
           cargus_config?: Json | null
           colete_config?: Json | null
@@ -1033,6 +1216,7 @@ export type Database = {
           woot_config?: Json | null
         }
         Update: {
+          abandoned_cart_enabled?: boolean
           business_id?: string
           cargus_config?: Json | null
           colete_config?: Json | null
@@ -1160,39 +1344,10 @@ export type Database = {
           },
         ]
       }
-      notifications: {
-        Row: {
-          id: string
-          user_id: string
-          title: string
-          message: string
-          type: string
-          is_read: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          title: string
-          message: string
-          type?: string
-          is_read?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          message?: string
-          type?: string
-          is_read?: boolean
-          created_at?: string
-        }
-        Relationships: []
-      }
       users_profile: {
         Row: {
           admin_notes: string | null
+          announcements_seen_at: string | null
           avatar_url: string | null
           created_at: string
           full_name: string
@@ -1201,6 +1356,7 @@ export type Database = {
           mfa_otp: string | null
           mfa_otp_expires_at: string | null
           onboarding_completed: boolean
+          onboarding_step: string
           plan: string
           plan_expires_at: string | null
           role: string
@@ -1210,6 +1366,7 @@ export type Database = {
         }
         Insert: {
           admin_notes?: string | null
+          announcements_seen_at?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string
@@ -1218,6 +1375,7 @@ export type Database = {
           mfa_otp?: string | null
           mfa_otp_expires_at?: string | null
           onboarding_completed?: boolean
+          onboarding_step?: string
           plan?: string
           plan_expires_at?: string | null
           role?: string
@@ -1227,6 +1385,7 @@ export type Database = {
         }
         Update: {
           admin_notes?: string | null
+          announcements_seen_at?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string
@@ -1235,6 +1394,7 @@ export type Database = {
           mfa_otp?: string | null
           mfa_otp_expires_at?: string | null
           onboarding_completed?: boolean
+          onboarding_step?: string
           plan?: string
           plan_expires_at?: string | null
           role?: string
@@ -1249,6 +1409,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      decrement_stock: {
+        Args: { p_product_id: string; p_quantity: number }
+        Returns: undefined
+      }
+      decrement_stock_batch: { Args: { p_items: Json }; Returns: undefined }
       increment_discount_uses: {
         Args: { p_discount_id: string }
         Returns: undefined

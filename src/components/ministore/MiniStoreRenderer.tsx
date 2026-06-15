@@ -5,7 +5,7 @@ import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
   MapPin, Mail, Globe, ChevronRight, ChevronLeft, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
-  Truck, ShieldCheck, RotateCcw, Check,
+  Truck, ShieldCheck, RotateCcw, Check, Filter,
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";
@@ -18,7 +18,7 @@ import type { PaymentMethodType } from "@/lib/payment-methods";
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Pick<
   Database["public"]["Tables"]["products"]["Row"],
-  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
+  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id" | "page_sections"
 >;
 type StoreSettings = Pick<
   Database["public"]["Tables"]["store_settings"]["Row"],
@@ -1055,6 +1055,37 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Product filters (price range, variant options, on-sale, in-stock)
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
+  const [onSaleOnly, setOnSaleOnly] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
+
+  function toggleOption(name: string, value: string) {
+    setSelectedOptions((prev) => {
+      const cur = prev[name] ?? [];
+      const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+      const out = { ...prev };
+      if (next.length) out[name] = next;
+      else delete out[name];
+      return out;
+    });
+  }
+  function resetFilters() {
+    setPriceMin("");
+    setPriceMax("");
+    setSelectedOptions({});
+    setOnSaleOnly(false);
+    setInStockOnly(false);
+  }
+  const activeFilterCount =
+    (priceMin.trim() || priceMax.trim() ? 1 : 0) +
+    Object.values(selectedOptions).reduce((s, v) => s + v.length, 0) +
+    (onSaleOnly ? 1 : 0) +
+    (inStockOnly ? 1 : 0);
   const { addItem, count, total } = useCart();
 
   const color = business.primary_color ?? "#1AB554";
@@ -1181,15 +1212,59 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Featured products
   const featuredProducts = useMemo(() => products.filter(p => p.is_featured), [products]);
 
+  // Filter facets: variant options + price bounds across the products.
+  const facets = useMemo(() => {
+    const opts = new Map<string, Set<string>>();
+    let min = Infinity;
+    let max = 0;
+    for (const p of products) {
+      const price = Number(p.price);
+      if (Number.isFinite(price)) {
+        if (price < min) min = price;
+        if (price > max) max = price;
+      }
+      const ps = p.page_sections as { variants?: { enabled?: boolean; options?: { name: string; values: string[] }[] } } | null;
+      if (ps?.variants?.enabled && Array.isArray(ps.variants.options)) {
+        for (const o of ps.variants.options) {
+          if (!o?.name || !Array.isArray(o.values)) continue;
+          const set = opts.get(o.name) ?? new Set<string>();
+          for (const v of o.values) if (v != null && String(v).trim()) set.add(String(v));
+          opts.set(o.name, set);
+        }
+      }
+    }
+    const options = [...opts.entries()]
+      .map(([name, set]) => ({ name, values: [...set].sort((a, b) => a.localeCompare(b, "ro", { numeric: true })) }))
+      .filter((o) => o.values.length > 0);
+    return { options, priceMin: min === Infinity ? 0 : Math.floor(min), priceMax: Math.ceil(max) };
+  }, [products]);
+
   // Filtered products
   const filteredProducts = useMemo(() => {
+    const pMin = priceMin.trim() ? parseFloat(priceMin) : null;
+    const pMax = priceMax.trim() ? parseFloat(priceMax) : null;
+    const activeOpts = Object.entries(selectedOptions).filter(([, v]) => v.length > 0);
     let list = products.filter(p => {
       const matchesSearch = search === "" ||
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         (p.description ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesCategory = categoryFilter === "toate"
         || (catTree.subtreeByName[categoryFilter] ?? [categoryFilter]).includes(p.category ?? "");
-      return matchesSearch && matchesCategory;
+      const price = Number(p.price);
+      const matchesPrice = (pMin == null || price >= pMin) && (pMax == null || price <= pMax);
+      const matchesSale = !onSaleOnly || (p.compare_at_price != null && Number(p.compare_at_price) > price);
+      const matchesStock = !inStockOnly || !p.track_inventory || (p.stock_quantity ?? 0) > 0;
+      let matchesOptions = true;
+      if (activeOpts.length) {
+        const ps = p.page_sections as { variants?: { options?: { name: string; values: string[] }[] } } | null;
+        const prodOpts = new Map<string, Set<string>>();
+        for (const o of ps?.variants?.options ?? []) prodOpts.set(o.name, new Set((o.values ?? []).map(String)));
+        matchesOptions = activeOpts.every(([name, vals]) => {
+          const s = prodOpts.get(name);
+          return s ? vals.some((v) => s.has(v)) : false;
+        });
+      }
+      return matchesSearch && matchesCategory && matchesPrice && matchesSale && matchesStock && matchesOptions;
     });
     // Sort
     switch (sort) {
@@ -1200,7 +1275,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       case "newest": default: list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
     }
     return list;
-  }, [products, search, categoryFilter, sort]);
+  }, [products, search, categoryFilter, sort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
 
   const PRODUCTS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
@@ -1210,7 +1285,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   );
 
   // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, categoryFilter, sort]);
+  useEffect(() => { setCurrentPage(1); }, [search, categoryFilter, sort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
 
   function handleAddToCart(product: Product) {
     const images = Array.isArray(product.images) ? product.images : [];
@@ -1377,9 +1452,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       )}
 
       <main className="max-w-6xl mx-auto px-4 py-10">
-        {/* Search + Sort */}
-        <div className="flex items-center gap-3 mb-5 max-w-2xl">
-          <div className="relative flex-1">
+        {/* Search + Sort + Filters */}
+        <div className="flex flex-wrap items-center gap-3 mb-5 max-w-2xl">
+          <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="search"
@@ -1399,7 +1474,78 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               <option value="name_asc">Alfabetic A-Z</option>
             </select>
           )}
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className="h-[46px] px-4 inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"
+            style={filtersOpen || activeFilterCount > 0 ? { borderColor: color, color } : { color: "var(--color-foreground)" }}
+          >
+            <Filter className="h-4 w-4" />
+            Filtre
+            {activeFilterCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: color }}>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
         </div>
+
+        {/* Filter panel */}
+        {filtersOpen && (
+          <div className="mb-6 rounded-2xl border border-border bg-surface p-4 space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-2">Pret (lei)</p>
+              <div className="flex items-center gap-2">
+                <input type="number" inputMode="numeric" min={0} placeholder={`De la ${facets.priceMin}`}
+                  value={priceMin} onChange={(e) => setPriceMin(e.target.value)}
+                  className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+                <span className="text-muted-foreground">-</span>
+                <input type="number" inputMode="numeric" min={0} placeholder={`Pana la ${facets.priceMax}`}
+                  value={priceMax} onChange={(e) => setPriceMax(e.target.value)}
+                  className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+              </div>
+            </div>
+
+            {facets.options.map((opt) => (
+              <div key={opt.name}>
+                <p className="text-xs font-semibold text-foreground mb-2">{opt.name}</p>
+                <div className="flex flex-wrap gap-2">
+                  {opt.values.map((v) => {
+                    const active = (selectedOptions[opt.name] ?? []).includes(v);
+                    return (
+                      <button key={v} type="button" onClick={() => toggleOption(opt.name, v)}
+                        className="px-3 py-1.5 rounded-full text-sm border transition-colors"
+                        style={active
+                          ? { backgroundColor: color, color: "white", borderColor: color }
+                          : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
+                        {v}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button type="button" onClick={() => setOnSaleOnly((v) => !v)}
+                className="px-3 py-1.5 rounded-full text-sm border transition-colors"
+                style={onSaleOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
+                Doar reduceri
+              </button>
+              <button type="button" onClick={() => setInStockOnly((v) => !v)}
+                className="px-3 py-1.5 rounded-full text-sm border transition-colors"
+                style={inStockOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
+                Doar in stoc
+              </button>
+              {activeFilterCount > 0 && (
+                <button type="button" onClick={resetFilters}
+                  className="ml-auto text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2">
+                  Reseteaza filtrele
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Category filters — pills (no category images), hierarchy-aware.
             Single horizontally-scrollable row (carousel) so a long list of

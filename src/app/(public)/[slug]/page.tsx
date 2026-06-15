@@ -109,7 +109,7 @@ export default async function SlugPage({ params }: Props) {
   const [{ data: products }, { data: storeSettings }, { data: categoriesData }] = await Promise.all([
     supabase
       .from("products")
-      .select("id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, track_inventory, stock_quantity, sort_order, created_at, business_id")
+      .select("id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, track_inventory, stock_quantity, sort_order, created_at, business_id, page_sections")
       .eq("business_id", business.id)
       .eq("is_active", true)
       .order("is_featured", { ascending: false })

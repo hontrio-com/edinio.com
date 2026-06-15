@@ -252,6 +252,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   const freeShippingThreshold = storeSettings?.free_shipping_threshold
     ? Number(storeSettings.free_shipping_threshold) : null;
+  const minOrderAmount = storeSettings?.min_order_amount
+    ? Number(storeSettings.min_order_amount) : null;
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
   const pageSections = (product.page_sections as PageSections) ?? {};
@@ -954,6 +956,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
+        minOrderAmount={minOrderAmount}
         tiers={quantityTiers}
         customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
       />

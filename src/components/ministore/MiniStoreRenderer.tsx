@@ -22,7 +22,7 @@ type Product = Pick<
 >;
 type StoreSettings = Pick<
   Database["public"]["Tables"]["store_settings"]["Row"],
-  "id" | "business_id" | "page_content" | "store_policies" | "default_shipping_cost" | "free_shipping_threshold"
+  "id" | "business_id" | "page_content" | "store_policies" | "default_shipping_cost" | "free_shipping_threshold" | "min_order_amount"
 >;
 
 interface Social {
@@ -598,14 +598,15 @@ function CartCheckoutModal({
 }
 
 function CartDrawer({
-  open, onClose, color, onCheckout, shippingCost, freeShippingThreshold,
+  open, onClose, color, onCheckout, shippingCost, freeShippingThreshold, minOrderAmount,
 }: {
   open: boolean; onClose: () => void; color: string; onCheckout: () => void;
-  shippingCost: number; freeShippingThreshold: number | null;
+  shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null;
 }) {
   const { items, removeItem, updateQty, total, count } = useCart();
   const shipping = freeShippingThreshold && total >= freeShippingThreshold ? 0 : shippingCost;
   const grandTotal = total + shipping;
+  const belowMinOrder = minOrderAmount !== null && total < minOrderAmount;
   const progressPct = freeShippingThreshold && total < freeShippingThreshold
     ? Math.round((total / freeShippingThreshold) * 100)
     : 100;
@@ -717,8 +718,13 @@ function CartDrawer({
                 <span style={{ color }}>{formatPrice(grandTotal)}</span>
               </div>
             </div>
-            <button type="button" onClick={onCheckout}
-              className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98]"
+            {belowMinOrder && (
+              <p className="text-xs text-center text-muted-foreground">
+                Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderAmount! - total)}</strong> pentru a finaliza.
+              </p>
+            )}
+            <button type="button" onClick={onCheckout} disabled={belowMinOrder}
+              className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
               style={{ backgroundColor: color }}>
               Finalizeaza comanda
               <ChevronRight className="h-4 w-4" />
@@ -1092,6 +1098,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   const freeShippingThreshold = storeSettings?.free_shipping_threshold
     ? Number(storeSettings.free_shipping_threshold)
+    : null;
+  const minOrderAmount = storeSettings?.min_order_amount
+    ? Number(storeSettings.min_order_amount)
     : null;
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
@@ -2144,6 +2153,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count }); ttqTrack("InitiateCheckout", { value: total, currency: "RON" }); gtagEvent("begin_checkout", { currency: "RON", value: total }); }}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
+        minOrderAmount={minOrderAmount}
       />
 
       {/* Checkout modal */}

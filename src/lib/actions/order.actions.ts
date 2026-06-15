@@ -145,7 +145,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold")
+      .select("page_content, free_shipping_threshold, min_order_amount")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -158,6 +158,12 @@ export async function placeOrder(data: {
   if (subtotal === null) {
     logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity }, severity: "warning" });
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
+  }
+
+  // Enforce the merchant's minimum order value (Setari > Livrare) against the authoritative subtotal.
+  const minOrder = cfgRow?.min_order_amount != null ? Number(cfgRow.min_order_amount) : null;
+  if (minOrder !== null && subtotal < minOrder) {
+    return { error: `Comanda minima este de ${minOrder} lei. Mai adauga produse pentru a finaliza comanda.` };
   }
 
   const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
@@ -433,7 +439,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, vat_enabled, vat_rate, prices_include_vat")
+      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -453,6 +459,12 @@ export async function placeCartOrder(data: {
     quantity: i.quantity,
   }));
   const subtotal = round2(validatedItems.reduce((s, i) => s + i.price * i.quantity, 0));
+
+  // Enforce the merchant's minimum order value (Setari > Livrare) against the authoritative subtotal.
+  const minOrder = cfgRow?.min_order_amount != null ? Number(cfgRow.min_order_amount) : null;
+  if (minOrder !== null && subtotal < minOrder) {
+    return { error: `Comanda minima este de ${minOrder} lei. Mai adauga produse pentru a finaliza comanda.` };
+  }
 
   const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
   const extrasTotal = validatedExtras.reduce((s, e) => s + e.price, 0);

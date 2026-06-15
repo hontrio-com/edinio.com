@@ -116,7 +116,7 @@ export default async function SlugPage({ params }: Props) {
       .order("sort_order"),
     createAdminClient()
       .from("store_settings")
-      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold")
+      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
       .eq("business_id", business.id)
       .single(),
     supabase

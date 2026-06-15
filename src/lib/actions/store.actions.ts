@@ -21,12 +21,13 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   prices_include_vat: boolean;
   show_vat_breakdown: boolean;
   shipping_zones: Json | null;
+  min_order_amount: number | null;
   payment_methods: { type: PaymentMethodType; label: string }[];
 } | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, stripe_config, netopia_config, ipay_config, payment_methods")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, payment_methods")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -48,6 +49,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     prices_include_vat: data.prices_include_vat ?? true,
     show_vat_breakdown: data.show_vat_breakdown ?? true,
     shipping_zones: (data.shipping_zones as Json) ?? null,
+    min_order_amount: data.min_order_amount != null ? Number(data.min_order_amount) : null,
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
   };
 }
@@ -326,6 +328,7 @@ export async function updateShippingConfig(
   config: {
     shipping_enabled: boolean;
     free_shipping_threshold: number | null;
+    min_order_amount: number | null;
     shipping_zones: Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string }>;
   },
 ): Promise<{ error: string } | { success: true }> {
@@ -350,6 +353,7 @@ export async function updateShippingConfig(
       .update({
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
+        min_order_amount: config.min_order_amount,
         shipping_zones: config.shipping_zones as never,
         default_shipping_cost: defaultShippingCost,
         updated_at: new Date().toISOString(),
@@ -361,6 +365,7 @@ export async function updateShippingConfig(
         business_id: businessId,
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
+        min_order_amount: config.min_order_amount,
         shipping_zones: config.shipping_zones as never,
         default_shipping_cost: defaultShippingCost,
       }));

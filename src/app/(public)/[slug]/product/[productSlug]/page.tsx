@@ -166,7 +166,7 @@ export default async function ProductDetailPage({ params }: Props) {
   // store_settings is no longer anon-readable — fetch the public-safe columns via service role.
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold")
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
     .eq("business_id", business.id)
     .single();
 

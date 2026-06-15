@@ -67,6 +67,7 @@ interface Props {
   };
   shippingCost: number;
   freeShippingThreshold: number | null;
+  minOrderAmount?: number | null;
   tiers?: QuantityTier[];
   customizationFields?: CustomizationFieldDef[];
 }
@@ -86,7 +87,7 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, tiers, customizationFields }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, customizationFields }: Props) {
   const color = business.primary_color;
   const hasTiers = tiers && tiers.length > 0;
   const hasCustomization = customizationFields && customizationFields.length > 0;
@@ -137,6 +138,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       : baseShippingCost;
 
   const total = discountedSubtotal + extrasTotal + shipping;
+
+  // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
+  const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
 
   // Reset on open
   useEffect(() => {
@@ -857,15 +861,23 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {errors._ && <p className="text-sm text-red-500 text-center">{errors._}</p>}
 
+              {belowMinOrder && (
+                <p className="text-sm text-center text-gray-500">
+                  Comanda minima este <strong className="text-gray-800">{minOrderAmount} lei</strong>. Mai adauga <strong className="text-gray-800">{(minOrderAmount! - subtotal).toFixed(2).replace(".00", "")} lei</strong> pentru a comanda.
+                </p>
+              )}
+
               {/* Submit */}
-              <button type="submit" disabled={isPending}
-                className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+              <button type="submit" disabled={isPending || belowMinOrder}
+                className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
                 style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
                 {isPending
                   ? <><Loader2 size={18} className="animate-spin" />Se proceseaza...</>
-                  : paymentMethod === "cash_on_delivery"
-                    ? <><Banknote size={20} />Plata la livrare - {total.toFixed(2).replace(".00", "")} lei</>
-                    : <><CreditCard size={20} />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {total.toFixed(2).replace(".00", "")} lei</>
+                  : belowMinOrder
+                    ? <>Comanda minima {minOrderAmount} lei</>
+                    : paymentMethod === "cash_on_delivery"
+                      ? <><Banknote size={20} />Plata la livrare - {total.toFixed(2).replace(".00", "")} lei</>
+                      : <><CreditCard size={20} />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {total.toFixed(2).replace(".00", "")} lei</>
                 }
               </button>
 

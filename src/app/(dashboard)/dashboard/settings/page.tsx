@@ -18,7 +18,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config)")
+      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -86,6 +86,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       shippingConfig={{
         shipping_enabled: storeSettings?.shipping_enabled ?? false,
         free_shipping_threshold: storeSettings?.free_shipping_threshold ?? null,
+        min_order_amount: storeSettings?.min_order_amount ?? null,
         shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
       }}
       activeCourierIds={activeCourierIds}

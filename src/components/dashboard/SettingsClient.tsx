@@ -179,6 +179,7 @@ interface ShippingMethodConfig {
 interface ShippingConfig {
   shipping_enabled: boolean;
   free_shipping_threshold: number | null;
+  min_order_amount: number | null;
   shipping_zones: Record<string, ShippingMethodConfig>;
 }
 
@@ -358,6 +359,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [freeThreshold, setFreeThreshold] = useState<string>(
     shippingConfig.free_shipping_threshold != null ? String(shippingConfig.free_shipping_threshold) : ""
   );
+  const [minOrder, setMinOrder] = useState<string>(
+    shippingConfig.min_order_amount != null ? String(shippingConfig.min_order_amount) : ""
+  );
   const [shippingZones, setShippingZones] = useState<Record<string, ShippingMethodConfig>>(
     () => buildDefaultZones(shippingConfig.shipping_zones)
   );
@@ -467,10 +471,16 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       toast.error("Pragul pentru transport gratuit trebuie sa fie un numar pozitiv.");
       return;
     }
+    const minOrderValue = minOrder.trim() ? parseFloat(minOrder) : null;
+    if (minOrderValue !== null && (isNaN(minOrderValue) || minOrderValue < 0)) {
+      toast.error("Comanda minima trebuie sa fie un numar pozitiv.");
+      return;
+    }
     startShippingTransition(async () => {
       const result = await updateShippingConfig(businessId, {
         shipping_enabled: shippingEnabled,
         free_shipping_threshold: threshold,
+        min_order_amount: minOrderValue,
         shipping_zones: shippingZones,
       });
       if ("error" in result) toast.error(result.error);
@@ -1136,6 +1146,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     placeholder="ex: 200"
                     value={freeThreshold}
                     onChange={(e) => setFreeThreshold(e.target.value)}
+                    className={`${inputCls} w-40`}
+                  />
+                  <span className="text-sm text-muted-foreground">lei</span>
+                </div>
+              </div>
+
+              {/* Minimum order value */}
+              <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Comanda minima</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Valoarea minima a produselor pentru a putea plasa o comanda. Clientii nu vor putea finaliza comanda sub aceasta suma. Lasa gol pentru a dezactiva.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="ex: 50"
+                    value={minOrder}
+                    onChange={(e) => setMinOrder(e.target.value)}
                     className={`${inputCls} w-40`}
                   />
                   <span className="text-sm text-muted-foreground">lei</span>

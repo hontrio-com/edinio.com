@@ -1117,16 +1117,19 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       {heroImageOnly ? (
         /* Banner-only: mold the hero to the uploaded image so any dimension is
            shown completely (full width, natural height, never cropped). */
-        <section className="relative overflow-hidden">
-          {/* Mobile: full-width, molded to the image. Desktop: keep the whole
-              image (no crop) but cap the height + center it so a large banner
-              doesn't fill the entire screen. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={business.cover_url!}
-            alt={business.store_name ?? business.business_name}
-            className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh]"
-          />
+        <section className="relative overflow-hidden md:pt-6">
+          {/* Mobile: full-width, edge-to-edge. Desktop: align the banner to the
+              same container as the store content (max-w-6xl + px-4) so its edges
+              line up with the search bar / categories / products below; cap the
+              height so a large banner doesn't fill the screen. */}
+          <div className="mx-auto md:max-w-6xl md:px-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={business.cover_url!}
+              alt={business.store_name ?? business.business_name}
+              className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl"
+            />
+          </div>
         </section>
       ) : hasCoverOrTagline ? (
         <section className="relative overflow-hidden">

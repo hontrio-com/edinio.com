@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2 } from "lucide-react";
+import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload } from "lucide-react";
 import { duplicateProduct } from "@/lib/actions/product.actions";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
@@ -120,6 +120,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
               </button>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard/products/import")}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-muted rounded-xl transition-colors whitespace-nowrap"
+          >
+            <Upload className="h-4 w-4" />
+            Importa
+          </button>
           {isAtLimit ? (
             <div className="flex items-center gap-2">
               <button
@@ -388,14 +396,21 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
             ) : (
               <>
                 <p className="text-sm font-medium text-foreground mb-1">Niciun produs inca</p>
-                <p className="text-xs text-muted-foreground mb-5">Adauga primul produs pentru a-l afisa in magazin</p>
-                {!isAtLimit && (
-                  <button type="button" onClick={() => router.push("/dashboard/products/new")}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors">
-                    <Plus className="h-4 w-4" />
-                    Adauga produs
+                <p className="text-xs text-muted-foreground mb-5">Adauga primul produs sau importa-le din Shopify / WooCommerce</p>
+                <div className="flex items-center justify-center gap-2">
+                  {!isAtLimit && (
+                    <button type="button" onClick={() => router.push("/dashboard/products/new")}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors">
+                      <Plus className="h-4 w-4" />
+                      Adauga produs
+                    </button>
+                  )}
+                  <button type="button" onClick={() => router.push("/dashboard/products/import")}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-muted rounded-xl transition-colors">
+                    <Upload className="h-4 w-4" />
+                    Importa produse
                   </button>
-                )}
+                </div>
               </>
             )}
           </div>

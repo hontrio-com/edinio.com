@@ -641,6 +641,7 @@ export type Database = {
           compare_at_price: number | null
           created_at: string
           description: string | null
+          external_id: string | null
           id: string
           images: Json
           is_active: boolean
@@ -651,6 +652,7 @@ export type Database = {
           sku: string | null
           slug: string | null
           sort_order: number
+          source: string | null
           stock_quantity: number | null
           tags: Json
           track_inventory: boolean
@@ -663,6 +665,7 @@ export type Database = {
           compare_at_price?: number | null
           created_at?: string
           description?: string | null
+          external_id?: string | null
           id?: string
           images?: Json
           is_active?: boolean
@@ -673,6 +676,7 @@ export type Database = {
           sku?: string | null
           slug?: string | null
           sort_order?: number
+          source?: string | null
           stock_quantity?: number | null
           tags?: Json
           track_inventory?: boolean
@@ -685,6 +689,7 @@ export type Database = {
           compare_at_price?: number | null
           created_at?: string
           description?: string | null
+          external_id?: string | null
           id?: string
           images?: Json
           is_active?: boolean
@@ -695,6 +700,7 @@ export type Database = {
           sku?: string | null
           slug?: string | null
           sort_order?: number
+          source?: string | null
           stock_quantity?: number | null
           tags?: Json
           track_inventory?: boolean
@@ -704,6 +710,128 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "products_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_imports: {
+        Row: {
+          business_id: string
+          created_at: string
+          error: string | null
+          error_report_url: string | null
+          file_name: string | null
+          file_url: string | null
+          finished_at: string | null
+          id: string
+          mapping: Json
+          options: Json
+          source: string
+          started_at: string | null
+          status: string
+          totals: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          error?: string | null
+          error_report_url?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          finished_at?: string | null
+          id?: string
+          mapping?: Json
+          options?: Json
+          source: string
+          started_at?: string | null
+          status?: string
+          totals?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          error?: string | null
+          error_report_url?: string | null
+          file_name?: string | null
+          file_url?: string | null
+          finished_at?: string | null
+          id?: string
+          mapping?: Json
+          options?: Json
+          source?: string
+          started_at?: string | null
+          status?: string
+          totals?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_imports_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_import_rows: {
+        Row: {
+          business_id: string
+          error: string | null
+          external_id: string | null
+          id: string
+          images_done: boolean
+          import_id: string
+          parsed: Json | null
+          product_id: string | null
+          raw: Json | null
+          row_index: number
+          status: string
+        }
+        Insert: {
+          business_id: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          images_done?: boolean
+          import_id: string
+          parsed?: Json | null
+          product_id?: string | null
+          raw?: Json | null
+          row_index: number
+          status?: string
+        }
+        Update: {
+          business_id?: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          images_done?: boolean
+          import_id?: string
+          parsed?: Json | null
+          product_id?: string | null
+          raw?: Json | null
+          row_index?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "product_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_import_rows_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"

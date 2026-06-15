@@ -884,48 +884,55 @@ function CategoryScroller({ children, className }: { children: ReactNode; classN
     };
   }, [update]);
 
-  const arrowCls =
-    "hidden md:flex absolute top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full items-center justify-center bg-surface/95 border border-border shadow-sm hover:bg-muted transition-colors";
+  // Arrows are shown only when the strip overflows; both slots stay present while
+  // it does (the inactive one just fades) so scrolling never shifts the layout.
+  const hasOverflow = canLeft || canRight;
+  const arrowBtn =
+    "hidden md:flex shrink-0 w-8 h-8 rounded-full items-center justify-center border border-border bg-surface transition-opacity";
 
   return (
-    <div className={`relative ${className ?? ""}`}>
-      {canLeft && (
-        <button type="button" aria-label="Categorii anterioare" onClick={() => ref.current?.scrollBy({ left: -240, behavior: "smooth" })}
-          className={`${arrowCls} left-0`}>
-          <ChevronLeft className="h-4 w-4 text-foreground" />
-        </button>
-      )}
-      <div
-        ref={ref}
-        className="overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0"
-        onPointerDown={(e) => {
-          if (e.pointerType !== "mouse") return;
-          const el = ref.current;
-          if (!el) return;
-          drag.current = { down: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
-        }}
-        onPointerMove={(e) => {
-          if (e.pointerType !== "mouse" || !drag.current.down) return;
-          const el = ref.current;
-          if (!el) return;
-          const dx = e.clientX - drag.current.startX;
-          if (Math.abs(dx) > 4) drag.current.moved = true;
-          el.scrollLeft = drag.current.startLeft - dx;
-        }}
-        onPointerUp={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
-        onPointerLeave={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
-        onClickCapture={(e) => {
-          if (drag.current.moved) { e.preventDefault(); e.stopPropagation(); drag.current.moved = false; }
-        }}
-      >
-        {children}
+    <div className={className}>
+      <div className="flex items-center md:gap-1.5">
+        {hasOverflow && (
+          <button type="button" aria-label="Categorii anterioare" disabled={!canLeft}
+            onClick={() => ref.current?.scrollBy({ left: -240, behavior: "smooth" })}
+            className={`${arrowBtn} ${canLeft ? "opacity-100 hover:bg-muted" : "opacity-30 pointer-events-none"}`}>
+            <ChevronLeft className="h-4 w-4 text-foreground" />
+          </button>
+        )}
+        <div
+          ref={ref}
+          className="flex-1 min-w-0 overflow-x-auto scrollbar-hide select-none -mx-4 px-4 md:mx-0 md:px-0 md:cursor-grab"
+          onPointerDown={(e) => {
+            if (e.pointerType !== "mouse") return;
+            const el = ref.current;
+            if (!el) return;
+            drag.current = { down: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
+          }}
+          onPointerMove={(e) => {
+            if (e.pointerType !== "mouse" || !drag.current.down) return;
+            const el = ref.current;
+            if (!el) return;
+            const dx = e.clientX - drag.current.startX;
+            if (Math.abs(dx) > 4) drag.current.moved = true;
+            el.scrollLeft = drag.current.startLeft - dx;
+          }}
+          onPointerUp={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
+          onPointerLeave={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
+          onClickCapture={(e) => {
+            if (drag.current.moved) { e.preventDefault(); e.stopPropagation(); drag.current.moved = false; }
+          }}
+        >
+          {children}
+        </div>
+        {hasOverflow && (
+          <button type="button" aria-label="Categorii urmatoare" disabled={!canRight}
+            onClick={() => ref.current?.scrollBy({ left: 240, behavior: "smooth" })}
+            className={`${arrowBtn} ${canRight ? "opacity-100 hover:bg-muted" : "opacity-30 pointer-events-none"}`}>
+            <ChevronRight className="h-4 w-4 text-foreground" />
+          </button>
+        )}
       </div>
-      {canRight && (
-        <button type="button" aria-label="Categorii urmatoare" onClick={() => ref.current?.scrollBy({ left: 240, behavior: "smooth" })}
-          className={`${arrowCls} right-0`}>
-          <ChevronRight className="h-4 w-4 text-foreground" />
-        </button>
-      )}
     </div>
   );
 }

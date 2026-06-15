@@ -1188,46 +1188,50 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           )}
         </div>
 
-        {/* Category filters — pills (no category images), hierarchy-aware */}
+        {/* Category filters — pills (no category images), hierarchy-aware.
+            Single horizontally-scrollable row (carousel) so a long list of
+            categories doesn't sprawl into many wrapped rows. */}
         {hasCategories && !hasAnyCategoryImage && (
-          <div className="flex items-center gap-2 mb-6 flex-wrap">
-            {drillParentId ? (
-              <button
-                type="button"
-                onClick={goBackCategory}
-                className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
-                style={{ backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
-              >
-                <ChevronLeft size={14} /> {drillParent?.name ?? "Inapoi"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={resetCategory}
-                className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
-                style={categoryFilter === "toate"
-                  ? { backgroundColor: color, color: "white" }
-                  : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
-              >
-                Toate
-              </button>
-            )}
-            {currentItems.map(item => {
-              const active = categoryFilter === item.name;
-              return (
+          <div className="mb-6 -mx-4 px-4 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-2 pb-1" style={{ minWidth: "min-content" }}>
+              {drillParentId ? (
                 <button
-                  key={item.key}
                   type="button"
-                  onClick={() => selectCategoryItem(item)}
-                  className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
-                  style={active
+                  onClick={goBackCategory}
+                  className="flex-shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
+                  style={{ backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
+                >
+                  <ChevronLeft size={14} /> {drillParent?.name ?? "Inapoi"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={resetCategory}
+                  className="flex-shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
+                  style={categoryFilter === "toate"
                     ? { backgroundColor: color, color: "white" }
                     : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
                 >
-                  {item.name}{item.hasChildren && <ChevronRight size={13} className="opacity-70" />}
+                  Toate
                 </button>
-              );
-            })}
+              )}
+              {currentItems.map(item => {
+                const active = categoryFilter === item.name;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => selectCategoryItem(item)}
+                    className="flex-shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
+                    style={active
+                      ? { backgroundColor: color, color: "white" }
+                      : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
+                  >
+                    {item.name}{item.hasChildren && <ChevronRight size={13} className="opacity-70" />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

@@ -63,6 +63,7 @@ interface PageContent {
   sticky_cart_bar?: { enabled: boolean };
   new_badge?: { enabled: boolean; days: number };
   store_bg_color?: string;
+  hero_show_content?: boolean;
 }
 
 interface PolicyValue {
@@ -905,6 +906,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const showSort = pageContent.sort_options?.enabled !== false;
 
   const hasCoverOrTagline = !!(business.cover_url || business.tagline);
+  // When a banner image is uploaded, by default show ONLY the banner, molded to
+  // its real dimensions (full image, never cropped) with no overlay content.
+  // The merchant can opt back in to overlaying logo/name/tagline/button.
+  const heroImageOnly = !!business.cover_url && pageContent.hero_show_content !== true;
 
   // Category hierarchy — built from the categories table (parent_id) + product
   // assignments. Only categories whose subtree contains products are shown.
@@ -1109,7 +1114,18 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       </header>
 
       {/* Hero */}
-      {hasCoverOrTagline && (
+      {heroImageOnly ? (
+        /* Banner-only: mold the hero to the uploaded image so any dimension is
+           shown completely (full width, natural height, never cropped). */
+        <section className="relative overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={business.cover_url!}
+            alt={business.store_name ?? business.business_name}
+            className="block w-full h-auto"
+          />
+        </section>
+      ) : hasCoverOrTagline ? (
         <section className="relative overflow-hidden">
           <div className="absolute inset-0" style={{ backgroundColor: color }} />
           {business.cover_url && (
@@ -1136,7 +1152,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             </a>
           </div>
         </section>
-      )}
+      ) : null}
 
       {/* Trust strip */}
       {showTrustStrip && pageContent.store_trust_badges && (

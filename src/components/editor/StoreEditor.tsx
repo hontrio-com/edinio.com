@@ -47,6 +47,7 @@ interface PageContent {
   image_zoom?: { enabled: boolean; };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
   store_bg_color?: string;
+  hero_show_content?: boolean;
 }
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
@@ -249,9 +250,12 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
     if (logoPreview === null) logo_url = null;
     if (coverPreview === null) cover_url = null;
     const result = await updateBusiness(business.id, { logo_url, cover_url, primary_color: primaryColor });
+    // The hero overlay toggle lives in page_content; persist it with the branding save.
+    const pcResult = await updatePageContent(business.id, pageContent as Record<string, unknown>);
     setSaving(null);
     if (result.error) { toast.error(result.error); }
-    else { setSaved("branding"); setLogoFile(null); setCoverFile(null); setTimeout(() => setSaved(null), 2000); }
+    else if ("error" in pcResult) { toast.error(pcResult.error); }
+    else { setSaved("branding"); setLogoFile(null); setCoverFile(null); setPreviewKey(k => k + 1); setTimeout(() => setSaved(null), 2000); }
   }
 
   // ── Location section state
@@ -305,6 +309,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
     image_zoom: rawPageContent.image_zoom ?? { enabled: true },
     delivery_estimate: rawPageContent.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
+    hero_show_content: rawPageContent.hero_show_content ?? false,
   });
 
   async function savePageContent() {
@@ -436,6 +441,21 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
               onFile={(f) => { setCoverFile(f); setCoverPreview(URL.createObjectURL(f)); }}
               onRemove={() => { setCoverFile(null); setCoverPreview(null); }} />
           </div>
+          {coverPreview && (
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+              <div className="min-w-0">
+                <label className="text-xs font-semibold text-foreground">Afiseaza continutul peste banner</label>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Implicit, cand ai un banner se afiseaza doar imaginea (completa, fara taiere). Activeaza ca sa suprapui logo-ul, numele, descrierea si butonul peste banner.
+                </p>
+              </div>
+              <button type="button"
+                onClick={() => setPageContent(p => ({ ...p, hero_show_content: !p.hero_show_content }))}
+                className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5", pageContent.hero_show_content ? "bg-primary" : "bg-muted-foreground/30")}>
+                <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.hero_show_content ? "translate-x-4" : "translate-x-0")} />
+              </button>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-2">Culoare principala</label>
             <div className="flex items-center gap-2 flex-wrap mb-2">

@@ -23,7 +23,7 @@ import {
   type ValidationSummary,
 } from "@/lib/import/types";
 
-const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const SAMPLE_SIZE = 5;
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -59,7 +59,7 @@ export async function createImportJob(
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Niciun fisier incarcat" };
   if (file.size === 0) return { error: "Fisierul este gol" };
-  if (file.size > MAX_FILE_BYTES) return { error: "Fisierul este prea mare (maximum 15MB)" };
+  if (file.size > MAX_FILE_BYTES) return { error: "Fisierul este prea mare (maximum 8MB)" };
 
   const nameOk = file.name.toLowerCase().endsWith(".csv");
   if (!nameOk) return { error: "Momentan acceptam doar fisiere CSV" };
@@ -71,7 +71,12 @@ export async function createImportJob(
     return { error: "Nu am putut citi fisierul" };
   }
 
-  const parsed = parseCsv(text);
+  let parsed: ReturnType<typeof parseCsv>;
+  try {
+    parsed = parseCsv(text);
+  } catch {
+    return { error: "Nu am putut citi fisierul CSV. Verifica formatul." };
+  }
   if (parsed.headers.length === 0) return { error: "Fisierul nu are un antet valid" };
   if (parsed.rows.length === 0) return { error: "Fisierul nu contine produse" };
 
@@ -90,7 +95,13 @@ export async function createImportJob(
   const totalRows = staged.length;
 
   // Store the raw CSV (non-guessable key) so later steps + the cron can re-read it.
-  const admin = createAdminClient();
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch (e) {
+    logError({ action: "createImportJob.admin", message: e instanceof Error ? e.message : "admin client init failed", userId: user.id });
+    return { error: "Eroare de configurare a serverului" };
+  }
   const { data: job, error: jobErr } = await admin
     .from("product_imports")
     .insert({

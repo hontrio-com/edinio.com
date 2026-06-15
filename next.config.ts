@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["@aws-sdk/client-s3", "sanitize-html"],
   experimental: {
+    serverActions: {
+      // Product-import CSV uploads go through a Server Action; the default 1MB
+      // body cap silently rejects real feeds (a 500-product CSV is ~1.2MB).
+      bodySizeLimit: "8mb",
+    },
     optimizePackageImports: [
       "lucide-react",
       "date-fns",

@@ -50,27 +50,32 @@ export function ImportWizard({ plan, productLimit, productCount }: { plan: strin
       return;
     }
     setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await createImportJob(fd);
-    setUploading(false);
-    if ("error" in res) {
-      toast.error(res.error);
-      return;
-    }
-    importIdRef.current = res.importId;
-    setFileName(file.name);
-    setSource(res.preview.source);
-    setHeaders(res.preview.headers);
-    setMapping(res.preview.mapping);
-    setSample(res.preview.sampleProducts);
-    setTotalRows(res.preview.totalRows);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await createImportJob(fd);
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      importIdRef.current = res.importId;
+      setFileName(file.name);
+      setSource(res.preview.source);
+      setHeaders(res.preview.headers);
+      setMapping(res.preview.mapping);
+      setSample(res.preview.sampleProducts);
+      setTotalRows(res.preview.totalRows);
 
-    if (res.preview.source === "generic_csv") {
-      setStep("mapping");
-    } else {
-      setStep("review");
-      void refreshPreview(res.preview.mapping, DEFAULT_OPTIONS);
+      if (res.preview.source === "generic_csv") {
+        setStep("mapping");
+      } else {
+        setStep("review");
+        void refreshPreview(res.preview.mapping, DEFAULT_OPTIONS);
+      }
+    } catch {
+      toast.error("Fisierul nu a putut fi incarcat. Poate fi prea mare sau conexiunea a cazut. Incearca din nou.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -78,14 +83,19 @@ export function ImportWizard({ plan, productLimit, productCount }: { plan: strin
   async function refreshPreview(m: ColumnMapping, o: ImportOptions) {
     if (!importIdRef.current) return;
     setPreviewLoading(true);
-    const res = await previewMapping(importIdRef.current, m, o);
-    setPreviewLoading(false);
-    if ("error" in res) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await previewMapping(importIdRef.current, m, o);
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      setSample(res.sample);
+      setSummary(res.summary);
+    } catch {
+      toast.error("Nu am putut genera previzualizarea. Incearca din nou.");
+    } finally {
+      setPreviewLoading(false);
     }
-    setSample(res.sample);
-    setSummary(res.summary);
   }
 
   function updateMapping(field: string, header: string) {
@@ -108,17 +118,22 @@ export function ImportWizard({ plan, productLimit, productCount }: { plan: strin
   async function beginImport() {
     if (!importIdRef.current) return;
     setBusy(true);
-    const res = await startImport(importIdRef.current, mapping, options);
-    setBusy(false);
-    if ("error" in res) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await startImport(importIdRef.current, mapping, options);
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      cancelledRef.current = false;
+      setTotals({ ...EMPTY_TOTALS, total: summary?.valid ?? totalRows });
+      setStatus("importing");
+      setStep("progress");
+      void runLoop();
+    } catch {
+      toast.error("Nu am putut porni importul. Incearca din nou.");
+    } finally {
+      setBusy(false);
     }
-    cancelledRef.current = false;
-    setTotals({ ...EMPTY_TOTALS, total: summary?.valid ?? totalRows });
-    setStatus("importing");
-    setStep("progress");
-    void runLoop();
   }
 
   async function runLoop() {
@@ -126,7 +141,15 @@ export function ImportWizard({ plan, productLimit, productCount }: { plan: strin
     loopRef.current = true;
     try {
       while (!cancelledRef.current) {
-        const res = await processImportChunk(importIdRef.current);
+        let res: Awaited<ReturnType<typeof processImportChunk>>;
+        try {
+          res = await processImportChunk(importIdRef.current);
+        } catch {
+          toast.error("Eroare la procesarea importului. Reincarca pagina pentru status.");
+          setStatus("failed");
+          setStep("done");
+          break;
+        }
         if ("error" in res) {
           toast.error(res.error);
           setStatus("failed");
@@ -149,8 +172,12 @@ export function ImportWizard({ plan, productLimit, productCount }: { plan: strin
   async function handleCancel() {
     if (!importIdRef.current) return;
     cancelledRef.current = true;
-    await cancelImport(importIdRef.current);
-    toast.success("Import anulat");
+    try {
+      await cancelImport(importIdRef.current);
+      toast.success("Import anulat");
+    } catch {
+      toast.error("Nu am putut anula importul.");
+    }
     router.push("/dashboard/products");
   }
 

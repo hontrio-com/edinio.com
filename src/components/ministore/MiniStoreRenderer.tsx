@@ -1118,11 +1118,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         /* Banner-only: mold the hero to the uploaded image so any dimension is
            shown completely (full width, natural height, never cropped). */
         <section className="relative overflow-hidden">
+          {/* Mobile: full-width, molded to the image. Desktop: keep the whole
+              image (no crop) but cap the height + center it so a large banner
+              doesn't fill the entire screen. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={business.cover_url!}
             alt={business.store_name ?? business.business_name}
-            className="block w-full h-auto"
+            className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh]"
           />
         </section>
       ) : hasCoverOrTagline ? (

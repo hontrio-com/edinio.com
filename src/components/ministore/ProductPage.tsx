@@ -500,6 +500,28 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           )}
         </div>
 
+        {/* Bundle contents — shown prominently in the buy box */}
+        {product.is_bundle && bundleComponents.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Pachetul conține</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {bundleComponents.map((c, i) => (
+                <div key={c.id} className="flex items-center gap-1.5">
+                  {i > 0 && <Plus size={14} className="text-gray-400 shrink-0" />}
+                  <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg pl-1 pr-2 py-1">
+                    <div className="relative w-7 h-7 rounded-md overflow-hidden bg-gray-50 shrink-0">
+                      {c.image_url
+                        ? <Image src={c.image_url} alt={c.name} fill sizes="28px" className="object-contain" />
+                        : <div className="w-full h-full flex items-center justify-center"><Package size={12} className="text-gray-300" /></div>}
+                    </div>
+                    <span className="text-xs font-medium text-gray-800 max-w-[140px] truncate">{c.quantity > 1 ? `${c.quantity}× ` : ""}{c.name}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {deliveryDates && (
           <div className="flex items-center gap-2.5 bg-green-50 border border-green-200 rounded-xl px-3.5 py-2.5">
             <Calendar size={16} className="text-green-600 flex-shrink-0" />

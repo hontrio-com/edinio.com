@@ -112,15 +112,21 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle }:
   }
 
   async function handleFiles(files: FileList) {
-    if (!files.length) return;
+    // Capture synchronously — the input value is cleared right after this call,
+    // which would otherwise empty the live FileList before we read it.
+    const selected = Array.from(files);
+    if (!selected.length) return;
     setUploading(true);
     const { uploadImage } = await import("@/lib/upload");
     const urls: string[] = [];
-    for (const file of Array.from(files)) {
+    let failed = 0;
+    for (const file of selected) {
       const result = await uploadImage(file, "products");
       if ("url" in result) urls.push(result.url);
+      else failed++;
     }
-    setImages((prev) => [...prev, ...urls]);
+    if (urls.length) setImages((prev) => [...prev, ...urls]);
+    if (failed) toast.error(`${failed} ${failed === 1 ? "imagine nu a putut fi încărcată" : "imagini nu au putut fi încărcate"}.`);
     setUploading(false);
   }
 

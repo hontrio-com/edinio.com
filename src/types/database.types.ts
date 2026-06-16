@@ -539,6 +539,111 @@ export type Database = {
         }
         Relationships: []
       }
+      gmc_products: {
+        Row: {
+          business_id: string
+          created_at: string
+          destinations: Json
+          error: string | null
+          id: string
+          issues: Json
+          last_status_at: string | null
+          last_synced_at: string | null
+          offer_id: string
+          product_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          destinations?: Json
+          error?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          offer_id: string
+          product_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          destinations?: Json
+          error?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          offer_id?: string
+          product_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmc_products_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gmc_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gmc_sync_queue: {
+        Row: {
+          attempts: number
+          business_id: string
+          created_at: string
+          id: string
+          offer_id: string
+          op: string
+          product_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          business_id: string
+          created_at?: string
+          id?: string
+          offer_id: string
+          op?: string
+          product_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          business_id?: string
+          created_at?: string
+          id?: string
+          offer_id?: string
+          op?: string
+          product_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gmc_sync_queue_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gmc_sync_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           amount: number
@@ -1192,6 +1297,7 @@ export type Database = {
           fan_courier_config: Json | null
           fgo_config: Json | null
           free_shipping_threshold: number | null
+          google_merchant_config: Json
           id: string
           ipay_config: Json | null
           marketing_config: Json | null
@@ -1230,6 +1336,7 @@ export type Database = {
           fan_courier_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
+          google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null
           marketing_config?: Json | null
@@ -1268,6 +1375,7 @@ export type Database = {
           fan_courier_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
+          google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null
           marketing_config?: Json | null

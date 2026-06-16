@@ -20,6 +20,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   "facebook-pixel": { src: "/integrations/facebook-pixel.svg", alt: "Facebook Pixel" },
   "tiktok-pixel": { src: "/integrations/tiktok-pixel.svg", alt: "TikTok Pixel" },
   "google-ads": { src: "/integrations/google-ads.svg", alt: "Google Ads" },
+  "google-merchant": { src: "/integrations/google-merchant.svg", alt: "Google Merchant Center" },
   marketing: { src: "/integrations/facebook-pixel.svg", alt: "Marketing" },
 };
 

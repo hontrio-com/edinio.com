@@ -7,7 +7,8 @@ import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { storeBaseUrl } from "@/lib/seo";
-import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
+import { isPremiumPlan } from "@/lib/plans";
+import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 
 type CartRow = Database["public"]["Tables"]["abandoned_carts"]["Row"];
@@ -162,6 +163,17 @@ export async function getAbandonedCartsData(
 
   const { data: settings } = await supabase
     .from("store_settings").select("abandoned_cart_enabled, smso_config, abandoned_cart_automation").eq("business_id", businessId).single();
+
+  const [{ data: profile }, { data: discountRows }] = await Promise.all([
+    supabase.from("users_profile").select("plan").eq("id", user.id).single(),
+    supabase.from("discounts").select("code, type, value, expires_at").eq("business_id", businessId).eq("is_active", true).order("code"),
+  ]);
+  const isPremium = isPremiumPlan(profile?.plan);
+  const nowMs = Date.now();
+  const discounts = (discountRows ?? [])
+    .filter((d) => !d.expires_at || new Date(d.expires_at).getTime() > nowMs)
+    .map((d) => ({ code: d.code, type: d.type, value: Number(d.value) || 0 }));
+
   const enabled = settings?.abandoned_cart_enabled ?? false;
   const smso = settings?.smso_config as SmsoConfig | null;
   const smsoEnabled = !!(smso?.enabled && smso?.api_key && smso?.sender_id);
@@ -246,6 +258,8 @@ export async function getAbandonedCartsData(
       recovery_count: r.recovery_count,
     })),
     automation: readAutomationConfig(settings?.abandoned_cart_automation),
+    isPremium,
+    discounts,
   };
 }
 
@@ -261,6 +275,11 @@ export async function saveAbandonedCartAutomation(
   const { data: biz } = await supabase
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
+
+  const { data: profile } = await supabase.from("users_profile").select("plan").eq("id", user.id).single();
+  if (!isPremiumPlan(profile?.plan)) {
+    return { error: "Automatizarile sunt disponibile doar pe planurile Premium." };
+  }
 
   const clean = readAutomationConfig(config);
 
@@ -313,7 +332,7 @@ export async function sendAbandonedCartEmail(
       items: (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[],
       total: Number(cart.subtotal || 0),
       color: biz.primary_color ?? "#1AB554",
-      message: message?.trim() || undefined,
+      message: message?.trim() ? interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name }) : undefined,
       discountCode: discountCode?.trim() || undefined,
     });
   } catch {
@@ -362,7 +381,7 @@ export async function sendAbandonedCartSms(
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
   const recoverUrl = buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null);
   const body = message?.trim()
-    ? `${message.trim()} ${recoverUrl}`
+    ? `${interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name })} ${recoverUrl}`
     : defaultRecoverySms({
         name: cart.customer_name,
         storeName: biz.store_name ?? biz.business_name,

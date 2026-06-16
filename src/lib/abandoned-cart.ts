@@ -55,6 +55,8 @@ export interface AbandonedCartsData {
   abandonedProducts: AbandonedProduct[];
   carts: AbandonedCartRow[];
   automation: AbandonedAutomationConfig;
+  isPremium: boolean;
+  discounts: { code: string; type: string; value: number }[];
 }
 
 // How long without activity before an open cart is considered "abandoned".
@@ -91,6 +93,27 @@ export async function markCartConverted(
   } catch {
     // Recovery bookkeeping must never break an order.
   }
+}
+
+// Standard recovery message templates (with {nume}/{magazin} placeholders that are
+// filled in per customer). Shown pre-filled in the UI so the merchant sees exactly
+// what will be sent, and editable.
+export const STANDARD_SMS_TEMPLATE = "Salut {nume}! Ai uitat produse in cosul tau la {magazin}. Finalizeaza comanda mai jos.";
+export const STANDARD_EMAIL_TEMPLATE = "Buna {nume}! Ai lasat cateva produse in cosul tau la {magazin}. Le-am pastrat pentru tine, finalizeaza comanda inainte sa se epuizeze.";
+
+export function standardRecoveryTemplate(channel: RecoveryChannel): string {
+  return channel === "sms" ? STANDARD_SMS_TEMPLATE : STANDARD_EMAIL_TEMPLATE;
+}
+
+// Fill {nume}/{magazin} and tidy up spacing/punctuation if the name is empty.
+export function interpolateRecoveryMessage(tpl: string, opts: { name?: string | null; store: string }): string {
+  const first = opts.name?.trim().split(/\s+/)[0] ?? "";
+  return tpl
+    .replace(/\{nume\}/gi, first)
+    .replace(/\{magazin\}/gi, opts.store)
+    .replace(/\s+([!,.?])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 // Default recovery SMS body (editable by the merchant before sending).

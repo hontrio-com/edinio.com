@@ -1,6 +1,11 @@
 export const PLANS = ["free", "basic", "premium", "ultra"] as const;
 export type PlanId = (typeof PLANS)[number];
 
+// Premium-tier features (e.g. abandoned-cart automations) require Premium or Ultra.
+export function isPremiumPlan(plan: string | null | undefined): boolean {
+  return plan === "premium" || plan === "ultra";
+}
+
 export const PLAN_LABELS: Record<string, string> = {
   free: "Gratuit (15 zile)",
   trial: "Gratuit (15 zile)",

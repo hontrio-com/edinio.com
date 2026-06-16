@@ -4,8 +4,9 @@ import type { Database } from "@/types/database.types";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { sendSms, type SmsoConfig } from "@/lib/smso";
 import { storeBaseUrl, PLATFORM_ORIGIN } from "@/lib/seo";
+import { isPremiumPlan } from "@/lib/plans";
 import {
-  readAutomationConfig, isQuietHour, buildRecoverUrl, defaultRecoverySms,
+  readAutomationConfig, isQuietHour, buildRecoverUrl, defaultRecoverySms, interpolateRecoveryMessage,
   ABANDON_MINUTES, type AbandonedCartItem,
 } from "@/lib/abandoned-cart";
 
@@ -69,8 +70,15 @@ export async function GET(req: NextRequest) {
 
   const bizIds = active.map((a) => a.businessId);
   const { data: businesses } = await admin
-    .from("businesses").select("id, slug, custom_domain, store_name, business_name, primary_color").in("id", bizIds);
+    .from("businesses").select("id, user_id, slug, custom_domain, store_name, business_name, primary_color").in("id", bizIds);
   const bizMap = new Map((businesses ?? []).map((b) => [b.id, b]));
+
+  // Automations are a Premium feature — skip stores whose owner isn't on Premium/Ultra.
+  const ownerIds = [...new Set((businesses ?? []).map((b) => b.user_id))];
+  const { data: profiles } = ownerIds.length
+    ? await admin.from("users_profile").select("id, plan").in("id", ownerIds)
+    : { data: [] as { id: string; plan: string }[] };
+  const planMap = new Map((profiles ?? []).map((p) => [p.id, p.plan]));
 
   const { data: optouts } = await admin
     .from("recovery_optout").select("business_id, email").in("business_id", bizIds);
@@ -79,13 +87,14 @@ export async function GET(req: NextRequest) {
   for (const store of active) {
     const biz = bizMap.get(store.businessId);
     if (!biz) continue;
+    if (!isPremiumPlan(planMap.get(biz.user_id))) continue; // Premium-only
     const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
     const storeName = biz.store_name ?? biz.business_name;
     const smsoReady = !!(store.smso?.enabled && store.smso.api_key && store.smso.sender_id);
 
     const { data: carts } = await admin
       .from("abandoned_carts")
-      .select("id, customer_name, email, phone, items, subtotal, created_at, automation_step, recovery_count")
+      .select("id, customer_name, email, phone, items, subtotal, created_at, automation_step, recovery_count, last_recovery_at")
       .eq("business_id", store.businessId)
       .eq("status", "open")
       .lt("last_activity_at", thresholdIso)
@@ -98,6 +107,9 @@ export async function GET(req: NextRequest) {
       if (store.automation.min_cart_value && Number(cart.subtotal || 0) < store.automation.min_cart_value) continue;
       const hoursOld = (now.getTime() - new Date(cart.created_at).getTime()) / 3_600_000;
       if (hoursOld < step.delay_hours) continue;
+      // Anti-spam: never send two automation messages within an hour of each other
+      // (matters when automation is enabled on already-old carts that catch up).
+      if (cart.last_recovery_at && now.getTime() - new Date(cart.last_recovery_at).getTime() < 3_600_000) continue;
 
       const recoverUrl = buildRecoverUrl(storeUrl, cart.id, step.discount_code ?? null);
 
@@ -112,7 +124,7 @@ export async function GET(req: NextRequest) {
             items: (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[],
             total: Number(cart.subtotal || 0),
             color: biz.primary_color ?? "#1AB554",
-            message: step.message,
+            message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,
             unsubscribeUrl: `${PLATFORM_ORIGIN}/api/recovery/unsubscribe?b=${store.businessId}&e=${encodeURIComponent(cart.email)}`,
           });
@@ -123,7 +135,7 @@ export async function GET(req: NextRequest) {
         if (!cart.phone || !smsoReady) { await advance(admin, cart.id, cart, now); continue; }
         if (isQuietHour(store.automation.quiet_hours, nowHour)) continue; // defer SMS
         const body = step.message
-          ? `${step.message} ${recoverUrl}`
+          ? `${interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName })} ${recoverUrl}`
           : defaultRecoverySms({ name: cart.customer_name, storeName, url: recoverUrl, code: step.discount_code ?? null });
         const res = await sendSms(store.smso!.api_key, {
           to: cart.phone, sender: store.smso!.sender_id, body, type: "marketing", remove_special_chars: true,

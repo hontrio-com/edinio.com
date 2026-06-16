@@ -2,10 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Trash2, Mail, MessageSquare, Loader2, Save, Clock, Sparkles, Zap, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Mail, MessageSquare, Loader2, Save, Clock, Sparkles, Zap, AlertTriangle, Lock, Tag } from "lucide-react";
 import { saveAbandonedCartAutomation } from "@/lib/actions/abandoned-cart.actions";
-import type { AbandonedCartsData, AbandonedAutomationStep } from "@/lib/abandoned-cart";
+import { standardRecoveryTemplate, STANDARD_EMAIL_TEMPLATE, STANDARD_SMS_TEMPLATE } from "@/lib/abandoned-cart";
+import type { AbandonedCartsData, AbandonedAutomationStep, RecoveryChannel } from "@/lib/abandoned-cart";
+
+function discountLabel(d: { type: string; value: number }): string {
+  if (d.type === "percent") return ` (${d.value}%)`;
+  if (d.type === "fixed") return ` (${d.value} lei)`;
+  if (d.type === "free_shipping") return " (transport gratuit)";
+  return "";
+}
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
@@ -30,11 +39,22 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
   const [steps, setSteps] = useState<AbandonedAutomationStep[]>(a.steps);
 
   function addStep(seed?: Omit<AbandonedAutomationStep, "id">) {
-    setSteps((p) => [...p, { id: uid(), delay_hours: seed?.delay_hours ?? 24, channel: seed?.channel ?? "email", message: seed?.message, discount_code: seed?.discount_code }]);
+    const channel = seed?.channel ?? "email";
+    setSteps((p) => [...p, { id: uid(), delay_hours: seed?.delay_hours ?? 24, channel, message: seed?.message ?? standardRecoveryTemplate(channel), discount_code: seed?.discount_code }]);
   }
-  function seedRecommended() { setSteps(RECOMMENDED.map((s) => ({ id: uid(), ...s }))); }
+  function seedRecommended() {
+    setSteps(RECOMMENDED.map((s) => ({ id: uid(), ...s, message: s.message ?? standardRecoveryTemplate(s.channel) })));
+  }
   function updateStep(id: string, patch: Partial<AbandonedAutomationStep>) {
     setSteps((p) => p.map((s) => s.id === id ? { ...s, ...patch } : s));
+  }
+  // Swap the standard template along with the channel when the message is untouched.
+  function setChannel(id: string, channel: RecoveryChannel) {
+    setSteps((p) => p.map((s) => {
+      if (s.id !== id) return s;
+      const untouched = !s.message?.trim() || s.message === STANDARD_EMAIL_TEMPLATE || s.message === STANDARD_SMS_TEMPLATE;
+      return { ...s, channel, message: untouched ? standardRecoveryTemplate(channel) : s.message };
+    }));
   }
   function removeStep(id: string) { setSteps((p) => p.filter((s) => s.id !== id)); }
 
@@ -56,6 +76,22 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
       toast.success("Automatizarea a fost salvată.");
       router.refresh();
     });
+  }
+
+  if (!data.isPremium) {
+    return (
+      <div className="flex flex-col items-center text-center py-14 px-4">
+        <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-5"><Lock className="h-6 w-6" /></div>
+        <h3 className="text-lg font-bold text-foreground mb-2">Automatizările sunt o funcție Premium</h3>
+        <p className="text-sm text-muted-foreground max-w-md mb-6">
+          Trimite automat secvențe de recuperare (email/SMS) programate, fără efort. Disponibil pe planurile Premium și Ultra.
+        </p>
+        <Link href="/dashboard/settings#abonament"
+          className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-primary rounded-xl hover:opacity-90 transition-all">
+          <Sparkles className="h-4 w-4" /> Upgrade la Premium
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -104,11 +140,11 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
                     className={`${inputCls} w-20`} />
                   <span className="text-sm text-muted-foreground">ore</span>
                   <div className="flex items-center gap-1.5 ml-auto">
-                    <button onClick={() => updateStep(s.id, { channel: "email" })}
+                    <button onClick={() => setChannel(s.id, "email")}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${s.channel === "email" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
                       <Mail className="h-3.5 w-3.5" /> Email
                     </button>
-                    <button onClick={() => updateStep(s.id, { channel: "sms" })}
+                    <button onClick={() => setChannel(s.id, "sms")}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${s.channel === "sms" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
                       <MessageSquare className="h-3.5 w-3.5" /> SMS
                     </button>
@@ -124,18 +160,26 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
 
                 <div className="grid sm:grid-cols-2 gap-2">
                   <textarea value={s.message ?? ""} onChange={(e) => updateStep(s.id, { message: e.target.value })}
-                    rows={2} placeholder="Mesaj (opțional). Lasă gol pentru textul standard." className={`${inputCls} resize-none`} />
-                  <input value={s.discount_code ?? ""} onChange={(e) => updateStep(s.id, { discount_code: e.target.value.toUpperCase() })}
-                    placeholder="Cod reducere (opțional)" className={`${inputCls} uppercase h-fit`} />
+                    rows={2} placeholder="Mesajul trimis. {nume} și {magazin} se completează automat." className={`${inputCls} resize-none`} />
+                  <select value={s.discount_code ?? ""} onChange={(e) => updateStep(s.id, { discount_code: e.target.value || undefined })}
+                    className={`${inputCls} bg-background h-fit`}>
+                    <option value="">Fără cod reducere</option>
+                    {data.discounts.map((d) => <option key={d.code} value={d.code}>{d.code}{discountLabel(d)}</option>)}
+                  </select>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        <button onClick={() => addStep()} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:opacity-80">
-          <Plus className="h-4 w-4" /> Adaugă pas
-        </button>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <button onClick={() => addStep()} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:opacity-80">
+            <Plus className="h-4 w-4" /> Adaugă pas
+          </button>
+          <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+            <Tag className="h-3 w-3" /> Codurile vin din <Link href="/dashboard/discounts" className="text-primary underline underline-offset-2">Discounturi</Link>
+          </p>
+        </div>
       </div>
 
       {/* Rules */}

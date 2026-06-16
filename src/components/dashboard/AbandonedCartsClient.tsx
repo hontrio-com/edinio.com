@@ -2,17 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { toast } from "sonner";
 import {
   ShoppingBag, TrendingDown, Percent, RotateCcw, Mail, MessageSquare,
-  Clock, Package, Trash2, X, Sparkles, Send, Banknote, ShieldCheck, Bell, Loader2,
+  Clock, Package, Trash2, X, Sparkles, Send, Banknote, ShieldCheck, Bell, Loader2, Lock,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
 } from "@/lib/actions/abandoned-cart.actions";
+import { standardRecoveryTemplate, interpolateRecoveryMessage } from "@/lib/abandoned-cart";
 import type { AbandonedCartsData, AbandonedCartRow } from "@/lib/abandoned-cart";
 
 function timeAgo(iso: string): string {
@@ -23,10 +25,6 @@ function timeAgo(iso: string): string {
   if (h < 24) return `acum ${h} ${h === 1 ? "ora" : "ore"}`;
   const d = Math.floor(h / 24);
   return `acum ${d} ${d === 1 ? "zi" : "zile"}`;
-}
-
-function firstName(name: string | null): string {
-  return (name?.trim().split(/\s+/)[0]) ?? "";
 }
 
 export function AbandonedCartsClient({ businessId, data }: { businessId: string; data: AbandonedCartsData | null }) {
@@ -91,12 +89,14 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-1 border-b border-border">
-        {([["carts", "Coșuri"], ["automation", "Automatizări"]] as const).map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-            {label}
-          </button>
-        ))}
+        <button onClick={() => setTab("carts")}
+          className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === "carts" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+          Coșuri
+        </button>
+        <button onClick={() => setTab("automation")}
+          className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1.5 ${tab === "automation" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+          Automatizări{!data.isPremium && <Lock className="h-3 w-3" />}
+        </button>
       </div>
       {tab === "carts"
         ? <ActiveDashboard businessId={businessId} data={data} />
@@ -141,11 +141,9 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
   function openRecover(cart: AbandonedCartRow, channel: "email" | "sms") {
     setRecover({ cart, channel });
     setDiscountCode("");
-    // The restore link (which rebuilds the cart + applies the code) is added by
-    // the server, so we don't hardcode a URL in the draft.
-    setMessage(channel === "sms"
-      ? `Salut ${firstName(cart.customer_name)}! Ai uitat produse in cosul tau la ${data.storeName}.`
-      : "");
+    // Pre-fill the actual standard message so the merchant sees exactly what's sent
+    // (the restore link is appended by the server).
+    setMessage(interpolateRecoveryMessage(standardRecoveryTemplate(channel), { name: cart.customer_name, store: data.storeName }));
   }
 
   function send() {
@@ -383,14 +381,22 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
 
             <div className="mt-3">
               <label className="block text-xs font-medium text-foreground mb-1">Cod reducere (opțional)</label>
-              <input
+              <select
                 value={discountCode}
-                onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
-                placeholder="ex: REVINO10"
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors uppercase"
-              />
+                onChange={(e) => setDiscountCode(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+              >
+                <option value="">Fără cod reducere</option>
+                {data.discounts.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.code}{d.type === "percent" ? ` (${d.value}%)` : d.type === "fixed" ? ` (${d.value} lei)` : " (transport gratuit)"}
+                  </option>
+                ))}
+              </select>
               <p className="text-[11px] text-muted-foreground mt-1">
-                Un cod din discounturile tale. Apare în mesaj și se aplică automat când clientul revine prin link (linkul reconstruiește coșul).
+                {data.discounts.length === 0
+                  ? <>Niciun cod activ. Creează unul în <Link href="/dashboard/discounts" className="text-primary underline underline-offset-2">Discounturi</Link>.</>
+                  : "Apare în mesaj și se aplică automat când clientul revine prin link."}
               </p>
             </div>
 

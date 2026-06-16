@@ -292,6 +292,13 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     return variantsData.combinations.find(c => c.title === selectedComboTitle && c.enabled) ?? null;
   }, [variantsData, selectedComboTitle]);
 
+  // Title reflects the selected variation(s) live (e.g. "Saltea - 80*180").
+  const displayName = useMemo(() => {
+    if (!variantsData) return product.name;
+    const selected = variantsData.options.map(o => selectedOptions[o.name]).filter(Boolean);
+    return selected.length > 0 ? `${product.name} - ${selected.join(" / ")}` : product.name;
+  }, [variantsData, selectedOptions, product.name]);
+
   // Check if a variant value leads to any available combination
   function isValueAvailable(optionName: string, value: string): boolean {
     if (!variantsData) return true;
@@ -473,7 +480,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
         {/* Title */}
         <h1 className={`tracking-tight font-black text-gray-900 leading-tight ${mobile ? "text-2xl" : "text-3xl lg:text-4xl"}`}>
-          {product.name}
+          {displayName}
         </h1>
 
         {topBlurb && (
@@ -998,7 +1005,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-gray-500 truncate">
-                {product.name}{selectedCombo ? ` - ${selectedCombo.title}` : ""}
+                {displayName}
               </p>
               <div className="flex items-baseline gap-2">
                 <span className="text-lg font-bold text-gray-900">{formatPrice(displayPrice)}</span>

@@ -7,7 +7,7 @@ import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { storeBaseUrl } from "@/lib/seo";
-import { ABANDON_MINUTES, defaultRecoverySms, type AbandonedCartItem, type AbandonedCartsData } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, type AbandonedCartItem, type AbandonedCartsData } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 
 type CartRow = Database["public"]["Tables"]["abandoned_carts"]["Row"];
@@ -75,6 +75,44 @@ export async function trackAbandonedCart(input: {
     );
   } catch {
     // Capture must never break the checkout flow.
+  }
+}
+
+// ── Restore cart (storefront, anonymous) ──────────────────────────────────────
+// Returns the cart's items refreshed against current products, for the "restore
+// cart" recovery link. No personal data exposed; cartId is an unguessable uuid.
+export async function getRecoverableCart(cartId: string): Promise<AbandonedCartItem[]> {
+  try {
+    if (!cartId) return [];
+    const admin = createAdminClient();
+    const { data: cart } = await admin
+      .from("abandoned_carts").select("business_id, items, status").eq("id", cartId).single();
+    if (!cart || cart.status === "converted") return [];
+
+    const stored = (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[];
+    const ids = stored.map((i) => i.product_id).filter(Boolean);
+    if (ids.length === 0) return [];
+
+    const { data: products } = await admin
+      .from("products").select("id, name, price, images, is_active")
+      .eq("business_id", cart.business_id).in("id", ids);
+    const pmap = new Map((products ?? []).map((p) => [p.id, p]));
+
+    const items: AbandonedCartItem[] = [];
+    for (const it of stored) {
+      const p = pmap.get(it.product_id);
+      if (!p || !p.is_active) continue;
+      items.push({
+        product_id: p.id,
+        name: p.name,
+        price: Number(p.price) || 0,
+        quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
+        image_url: (Array.isArray(p.images) && p.images.length ? (p.images[0] as string) : it.image_url) ?? null,
+      });
+    }
+    return items;
+  } catch {
+    return [];
   }
 }
 
@@ -215,6 +253,7 @@ export async function sendAbandonedCartEmail(
   businessId: string,
   cartId: string,
   message?: string,
+  discountCode?: string,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -233,14 +272,16 @@ export async function sendAbandonedCartEmail(
   if (!cart.email) return { error: "Clientul nu a lasat un email." };
 
   try {
+    const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
     await sendAbandonedCartRecovery(cart.email, {
       storeName: biz.store_name ?? biz.business_name,
-      storeUrl: storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain }),
+      recoverUrl: buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null),
       customerName: cart.customer_name,
       items: (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[],
       total: Number(cart.subtotal || 0),
       color: biz.primary_color ?? "#1AB554",
       message: message?.trim() || undefined,
+      discountCode: discountCode?.trim() || undefined,
     });
   } catch {
     return { error: "Emailul nu a putut fi trimis." };
@@ -263,6 +304,7 @@ export async function sendAbandonedCartSms(
   businessId: string,
   cartId: string,
   message?: string,
+  discountCode?: string,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -284,11 +326,16 @@ export async function sendAbandonedCartSms(
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.phone) return { error: "Clientul nu a lasat un numar de telefon." };
 
-  const body = message?.trim() || defaultRecoverySms({
-    name: cart.customer_name,
-    storeName: biz.store_name ?? biz.business_name,
-    url: storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain }),
-  });
+  const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
+  const recoverUrl = buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null);
+  const body = message?.trim()
+    ? `${message.trim()} ${recoverUrl}`
+    : defaultRecoverySms({
+        name: cart.customer_name,
+        storeName: biz.store_name ?? biz.business_name,
+        url: recoverUrl,
+        code: discountCode?.trim() || null,
+      });
 
   const res = await sendSms(smso.api_key, {
     to: cart.phone, sender: smso.sender_id, body, type: "marketing", remove_special_chars: true,

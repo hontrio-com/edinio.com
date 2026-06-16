@@ -118,25 +118,28 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
 
   const [recover, setRecover] = useState<{ cart: AbandonedCartRow; channel: "email" | "sms" } | null>(null);
   const [message, setMessage] = useState("");
+  const [discountCode, setDiscountCode] = useState("");
   const [sending, startSend] = useTransition();
   const [togglingOff, startToggleOff] = useTransition();
 
   function openRecover(cart: AbandonedCartRow, channel: "email" | "sms") {
     setRecover({ cart, channel });
-    if (channel === "sms") {
-      setMessage(`Salut ${firstName(cart.customer_name)}! Ai uitat produse in cosul tau la ${data.storeName}. Finalizeaza comanda aici: ${data.storeUrl}`);
-    } else {
-      setMessage("");
-    }
+    setDiscountCode("");
+    // The restore link (which rebuilds the cart + applies the code) is added by
+    // the server, so we don't hardcode a URL in the draft.
+    setMessage(channel === "sms"
+      ? `Salut ${firstName(cart.customer_name)}! Ai uitat produse in cosul tau la ${data.storeName}.`
+      : "");
   }
 
   function send() {
     if (!recover) return;
     const { cart, channel } = recover;
+    const code = discountCode.trim() || undefined;
     startSend(async () => {
       const res = channel === "email"
-        ? await sendAbandonedCartEmail(businessId, cart.id, message.trim() || undefined)
-        : await sendAbandonedCartSms(businessId, cart.id, message.trim() || undefined);
+        ? await sendAbandonedCartEmail(businessId, cart.id, message.trim() || undefined, code)
+        : await sendAbandonedCartSms(businessId, cart.id, message.trim() || undefined, code);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(channel === "email" ? "Email trimis." : "SMS trimis.");
       setRecover(null);
@@ -359,8 +362,21 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
               className="w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors resize-none"
             />
             {recover.channel === "sms" && (
-              <p className="text-[11px] text-muted-foreground mt-1">{message.length} caractere · {Math.max(1, Math.ceil(message.length / 160))} SMS</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{message.length} caractere · {Math.max(1, Math.ceil(message.length / 160))} SMS (+ linkul de recuperare)</p>
             )}
+
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-foreground mb-1">Cod reducere (opțional)</label>
+              <input
+                value={discountCode}
+                onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+                placeholder="ex: REVINO10"
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors uppercase"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Un cod din discounturile tale. Apare în mesaj și se aplică automat când clientul revine prin link (linkul reconstruiește coșul).
+              </p>
+            </div>
 
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setRecover(null)} disabled={sending}

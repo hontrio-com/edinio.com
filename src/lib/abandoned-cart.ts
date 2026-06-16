@@ -93,8 +93,23 @@ export async function markCartConverted(
 }
 
 // Default recovery SMS body (editable by the merchant before sending).
-export function defaultRecoverySms(opts: { name?: string | null; storeName: string; url: string }): string {
+export function defaultRecoverySms(opts: { name?: string | null; storeName: string; url: string; code?: string | null }): string {
   const first = opts.name?.trim().split(/\s+/)[0];
   const hi = first ? `Salut ${first}! ` : "Salut! ";
-  return `${hi}Ai uitat produse in cosul tau la ${opts.storeName}. Finalizeaza comanda aici: ${opts.url}`;
+  const codePart = opts.code ? ` Foloseste codul ${opts.code} pentru reducere.` : "";
+  return `${hi}Ai uitat produse in cosul tau la ${opts.storeName}.${codePart} Finalizeaza comanda aici: ${opts.url}`;
+}
+
+// Build the "restore cart" link: opening it rebuilds the customer's cart and
+// jumps to checkout (handled on the storefront), optionally pre-applying a code.
+export function buildRecoverUrl(storeUrl: string, cartId: string, discountCode?: string | null): string {
+  try {
+    const u = new URL(storeUrl);
+    u.searchParams.set("recover", cartId);
+    if (discountCode) u.searchParams.set("code", discountCode);
+    return u.toString();
+  } catch {
+    const sep = storeUrl.includes("?") ? "&" : "?";
+    return `${storeUrl}${sep}recover=${encodeURIComponent(cartId)}${discountCode ? `&code=${encodeURIComponent(discountCode)}` : ""}`;
+  }
 }

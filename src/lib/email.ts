@@ -169,12 +169,14 @@ export async function sendAbandonedCartRecovery(
   to: string,
   data: {
     storeName: string;
-    storeUrl: string;
+    recoverUrl: string;
     customerName?: string | null;
     items: { name: string; quantity: number; price: number; image_url?: string | null }[];
     total: number;
     color?: string;
     message?: string;
+    discountCode?: string | null;
+    unsubscribeUrl?: string | null;
   }
 ) {
   if (!process.env.RESEND_API_KEY) return;
@@ -206,11 +208,23 @@ export async function sendAbandonedCartRecovery(
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:${color};text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(data.total)}</td>
       </tr>
     </table>
+    ${data.discountCode ? `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+      <tr><td align="center" style="background:#f0fdf4;border:1px dashed #86efac;border-radius:10px;padding:14px;">
+        <p style="margin:0 0 2px 0;font-size:12px;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cod reducere</p>
+        <p style="margin:0;font-size:22px;font-weight:800;color:#15803d;letter-spacing:1px;">${data.discountCode}</p>
+        <p style="margin:4px 0 0 0;font-size:12px;color:#16a34a;">Se aplica automat la finalizare.</p>
+      </td></tr>
+    </table>` : ""}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
       <tr><td align="center">
-        <a href="${data.storeUrl}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">Finalizeaza comanda</a>
+        <a href="${data.recoverUrl}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">Finalizeaza comanda</a>
       </td></tr>
     </table>
+    ${data.unsubscribeUrl ? `
+    <p style="margin:24px 0 0 0;font-size:11px;color:#a1a1aa;text-align:center;">
+      Nu mai vrei aceste mesaje? <a href="${data.unsubscribeUrl}" style="color:#a1a1aa;">Dezaboneaza-te</a>
+    </p>` : ""}
   `;
 
   await getResend().emails.send({

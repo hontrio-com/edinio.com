@@ -10,7 +10,8 @@ import {
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
-import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
+import { trackAbandonedCart, getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
+import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { readBundleConfig } from "@/lib/bundles";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
@@ -100,6 +101,7 @@ interface CartContextValue {
   total: number;
   count: number;
   clear: () => void;
+  restoreCart: (items: CartItem[]) => void;
   sessionId: string;
 }
 
@@ -178,12 +180,13 @@ function CartProvider({ children, slug }: { children: React.ReactNode; slug: str
   }
 
   function clear() { save([]); }
+  function restoreCart(next: CartItem[]) { save(next); }
 
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, total, count, clear, sessionId }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, total, count, clear, restoreCart, sessionId }}>
       {children}
     </CartContext.Provider>
   );
@@ -197,11 +200,12 @@ interface VatConfig {
 }
 
 function CartCheckoutModal({
-  open, onClose, color, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig,
+  open, onClose, color, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode,
 }: {
   open: boolean; onClose: () => void; color: string; basePath: string; businessId: string;
   shippingCost: number; freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
+  initialDiscountCode?: string | null;
 }) {
   const { items, total, clear, sessionId } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(
@@ -218,9 +222,12 @@ function CartCheckoutModal({
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
+  const [appliedDiscount, setAppliedDiscount] = useState<ValidatedDiscount | null>(null);
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
-  const shipping = freeShippingThreshold && total >= freeShippingThreshold ? 0 : baseShippingCost;
+  const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, total) : 0;
+  const isFreeShippingDiscount = appliedDiscount?.type === "free_shipping";
+  const shipping = (isFreeShippingDiscount || (freeShippingThreshold && total >= freeShippingThreshold)) ? 0 : baseShippingCost;
 
   // VAT calculation
   const vatBase = total + extrasTotal;
@@ -230,11 +237,22 @@ function CartCheckoutModal({
       : Math.round(vatBase * (vatConfig.vat_rate / 100) * 100) / 100
     : 0;
   const vatAddOn = vatConfig.vat_enabled && !vatConfig.prices_include_vat ? vatAmount : 0;
-  const grandTotal = total + extrasTotal + shipping + vatAddOn;
+  const grandTotal = Math.max(0, total + extrasTotal - discountAmount + shipping + vatAddOn);
 
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+
+  // Auto-apply a recovery discount code passed via the restore link (?code=).
+  useEffect(() => {
+    if (!open || !initialDiscountCode) return;
+    let cancelled = false;
+    validateDiscount(initialDiscountCode, businessId, total).then((r) => {
+      if (!cancelled) setAppliedDiscount(r.valid ? r.discount : null);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialDiscountCode, businessId]);
 
   useEffect(() => {
     if (!open) return;
@@ -324,6 +342,8 @@ function CartCheckoutModal({
         cart_session_id: sessionId || undefined,
         items: items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
         shipping_cost: shipping,
+        discount_code: appliedDiscount?.code,
+        discount_amount: discountAmount,
         customer_name: form.name,
         customer_phone: form.phone.replace(/[\s\-().]/g, ""),
         customer_email: form.email.trim() || undefined,
@@ -571,6 +591,12 @@ function CartCheckoutModal({
               <div className="flex justify-between text-gray-500">
                 <span>TVA ({vatConfig.vat_rate}%){vatConfig.prices_include_vat ? " inclus" : ""}</span>
                 <span className="font-medium text-gray-900">{vatAmount.toFixed(2)} lei</span>
+              </div>
+            )}
+            {appliedDiscount && (discountAmount > 0 || isFreeShippingDiscount) && (
+              <div className="flex justify-between text-green-600">
+                <span>Reducere ({appliedDiscount.code})</span>
+                <span className="font-medium">{isFreeShippingDiscount && discountAmount === 0 ? "Transport gratuit" : `-${discountAmount} lei`}</span>
               </div>
             )}
             {freeShippingThreshold && total < freeShippingThreshold && (
@@ -1091,6 +1117,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [recoverDiscountCode, setRecoverDiscountCode] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("toate");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -1143,7 +1170,30 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     Object.values(selectedOptions).reduce((s, v) => s + v.length, 0) +
     (onSaleOnly ? 1 : 0) +
     (inStockOnly ? 1 : 0);
-  const { addItem, count, total } = useCart();
+  const { addItem, count, total, restoreCart } = useCart();
+
+  // Cart recovery: a ?recover=<cartId> link rebuilds the saved cart and opens
+  // checkout (optionally pre-applying a discount code from &code=).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cartId = params.get("recover");
+    if (!cartId) return;
+    const code = params.get("code");
+    let cancelled = false;
+    getRecoverableCart(cartId).then((items) => {
+      if (cancelled || items.length === 0) return;
+      restoreCart(items.map((i) => ({ productId: i.product_id, name: i.name, price: i.price, imageUrl: i.image_url ?? null, quantity: i.quantity })));
+      if (code) setRecoverDiscountCode(code);
+      setCheckoutOpen(true);
+    });
+    // Clean the URL so a refresh doesn't re-trigger recovery.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("recover");
+    url.searchParams.delete("code");
+    window.history.replaceState({}, "", url.toString());
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const color = business.primary_color ?? "#1AB554";
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
@@ -2219,6 +2269,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
         emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
+        initialDiscountCode={recoverDiscountCode}
       />
 
       {/* Gallery lightbox */}

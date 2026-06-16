@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 32" fill="none">
-  <g>
-    <path d="M14 6h12.5l-1.4 9.6a2 2 0 0 1-2 1.7H17.2a2 2 0 0 1-2-1.7L14 6Z" fill="#4285F4"/>
-    <path d="M12.6 6 11 3.4A1.6 1.6 0 0 0 9.6 2.6H5v2.2h4l3.1 5.4 1-4.2Z" fill="#34A853"/>
-    <circle cx="17.4" cy="22.4" r="2.2" fill="#EA4335"/>
-    <circle cx="24" cy="22.4" r="2.2" fill="#FBBC04"/>
-  </g>
-  <text x="34" y="21" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#3c4043">Merchant</text>
-</svg>

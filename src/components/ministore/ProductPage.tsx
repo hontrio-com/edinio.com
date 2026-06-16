@@ -504,7 +504,25 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         {product.is_bundle && bundleComponents.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3">
             <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Pachetul conține</p>
-            <div className="flex items-center gap-1.5 flex-wrap">
+
+            {/* Mobile: clean stacked list (full names, no truncation) */}
+            <div className="space-y-1.5 sm:hidden">
+              {bundleComponents.map((c) => (
+                <div key={c.id} className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-lg p-1.5">
+                  <div className="relative w-9 h-9 rounded-md overflow-hidden bg-gray-50 shrink-0">
+                    {c.image_url
+                      ? <Image src={c.image_url} alt={c.name} fill sizes="36px" className="object-contain p-0.5" />
+                      : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-gray-300" /></div>}
+                  </div>
+                  <span className="text-sm text-gray-800 leading-snug flex-1 min-w-0">
+                    {c.quantity > 1 && <span className="font-bold">{c.quantity}× </span>}{c.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: inline "A + B + C" chips */}
+            <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
               {bundleComponents.map((c, i) => (
                 <div key={c.id} className="flex items-center gap-1.5">
                   {i > 0 && <Plus size={14} className="text-gray-400 shrink-0" />}
@@ -514,7 +532,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                         ? <Image src={c.image_url} alt={c.name} fill sizes="28px" className="object-contain" />
                         : <div className="w-full h-full flex items-center justify-center"><Package size={12} className="text-gray-300" /></div>}
                     </div>
-                    <span className="text-xs font-medium text-gray-800 max-w-[140px] truncate">{c.quantity > 1 ? `${c.quantity}× ` : ""}{c.name}</span>
+                    <span className="text-xs font-medium text-gray-800 max-w-[160px] truncate">{c.quantity > 1 ? `${c.quantity}× ` : ""}{c.name}</span>
                   </div>
                 </div>
               ))}

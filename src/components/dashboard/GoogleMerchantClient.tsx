@@ -49,27 +49,24 @@ export function GoogleMerchantClient({ businessId, status, products, categories 
     );
   }
 
-  // Google requires product links on a domain the merchant claims — edinio.com/slug can't be claimed.
-  if (!status.hasDomain) {
-    return (
-      <Panel icon={Globe} title="Ai nevoie de un domeniu propriu">
-        Google Merchant cere ca link-urile produselor să fie pe un domeniu pe care îl deții (ex: <strong>magazinultau.ro</strong>).
-        Pe adresa edinio.com/numele-tău nu se poate. Conectează un domeniu propriu, apoi revino aici.
-        <div className="mt-5">
-          <Link href="/dashboard/settings" className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-all">
-            <Globe className="h-4 w-4" /> Conectează un domeniu
-          </Link>
-        </div>
-      </Panel>
-    );
-  }
+  // Google requires product links on a claimed domain (edinio.com/slug can't be
+  // claimed). We don't block — we warn — so the merchant can connect & demo.
+  const domainWarning = !status.hasDomain ? (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-4 flex items-start gap-2.5">
+      <Globe className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+      <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+        Pentru ca produsele să fie aprobate de Google, magazinul are nevoie de un <strong>domeniu propriu</strong> conectat
+        (Google nu acceptă listarea pe adresa edinio.com/numele-tău). Te poți conecta și acum, dar produsele nu vor fi
+        aprobate până nu adaugi un domeniu. <Link href="/dashboard/settings" className="underline font-medium">Conectează un domeniu</Link>.
+      </p>
+    </div>
+  ) : null;
 
+  let body: React.ReactNode;
   if (!status.connected && status.needsAccount) {
-    return <AccountPicker businessId={businessId} />;
-  }
-
-  if (!status.connected) {
-    return (
+    body = <AccountPicker businessId={businessId} />;
+  } else if (!status.connected) {
+    body = (
       <Panel icon={ShoppingBag} title="Conectează Google Merchant Center">
         Listează-ți produsele gratuit pe Google (Shopping + free listings) și pregătește campaniile Google Ads.
         Sincronizăm automat produsele, stocul și prețurile.
@@ -91,9 +88,11 @@ export function GoogleMerchantClient({ businessId, status, products, categories 
         </button>
       </Panel>
     );
+  } else {
+    body = <ConnectedDashboard businessId={businessId} status={status} products={products} categories={categories} />;
   }
 
-  return <ConnectedDashboard businessId={businessId} status={status} products={products} categories={categories} />;
+  return <div className="space-y-4">{domainWarning}{body}</div>;
 }
 
 function Panel({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {

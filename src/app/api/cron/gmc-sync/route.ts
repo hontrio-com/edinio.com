@@ -139,7 +139,7 @@ async function loadBusinessContext(admin: Admin, businessId: string): Promise<
   if (!token) return null;
   const { data: biz } = await admin
     .from("businesses").select("slug, custom_domain, store_name, business_name").eq("id", businessId).single();
-  if (!biz || !biz.custom_domain) return null; // Google requires a claimed custom domain
+  if (!biz) return null;
   return { token, config, business: biz as MappableBusiness };
 }
 

@@ -136,7 +136,6 @@ export async function startGoogleMerchantOAuth(businessId: string): Promise<{ ur
   const biz = await ownedBusiness(supabase, businessId, user.id);
   if (!biz) return { error: "Magazin negasit" };
   if (!googleMerchantConfigured()) return { error: "Integrarea Google nu este configurata pe server." };
-  if (!biz.custom_domain) return { error: "Ai nevoie de un domeniu propriu conectat inainte de a folosi Google Merchant." };
   return { url: buildAuthUrl(signState(businessId)) };
 }
 

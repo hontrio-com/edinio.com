@@ -15,7 +15,7 @@ export default function ConfidentialitatePage() {
         Politica de confidențialitate
       </h1>
       <p className="text-sm text-muted-foreground mb-12">
-        Ultima actualizare: 30 mai 2026
+        Ultima actualizare: 16 iunie 2026
       </p>
 
       <div className="prose prose-gray max-w-none space-y-10 text-foreground/90 leading-relaxed">
@@ -307,6 +307,35 @@ export default function ConfidentialitatePage() {
             Datele pot fi dezvăluite autorităților competente în cazul în care
             există o obligație legală în acest sens, conform legislației
             române sau europene.
+          </p>
+
+          <h3 className="text-base font-semibold text-foreground mt-4 mb-2">
+            5.8. Google Merchant Center (Google Shopping)
+          </h3>
+          <p>
+            Utilizatorul poate conecta, prin autentificare Google (OAuth), propriul
+            cont Google Merchant Center pentru a-și sincroniza catalogul de produse
+            (titlu, descriere, preț, disponibilitate, imagini, link) în vederea
+            listării pe Google Shopping și a campaniilor Google Ads. Edinio accesează
+            exclusiv contul Merchant Center pe care Utilizatorul îl autorizează în mod
+            explicit și acționează doar la cererea acestuia. Nu vindem și nu transferăm
+            aceste informații către terți.
+          </p>
+          <p className="mt-3">
+            Utilizarea și transferul de către Edinio a informațiilor primite prin
+            API-urile Google respectă{" "}
+            <a
+              href="https://developers.google.com/terms/api-services-user-data-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Google API Services User Data Policy
+            </a>
+            , inclusiv cerințele privind utilizarea limitată (Limited Use). Textul în
+            original: <em>&quot;Edinio&apos;s use and transfer to any other app of
+            information received from Google APIs will adhere to the Google API Services
+            User Data Policy, including the Limited Use requirements.&quot;</em>
           </p>
         </section>
 

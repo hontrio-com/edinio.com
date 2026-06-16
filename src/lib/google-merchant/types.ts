@@ -18,6 +18,11 @@ export interface GoogleMerchantConfig {
   last_sync_at?: string;
 }
 
+// Public availability switch. While false, the feature shows "Disponibil în
+// curând" to everyone EXCEPT admins (so the owner can still test/connect while
+// Google OAuth verification is pending). Flip to true once verified.
+export const GOOGLE_MERCHANT_LIVE = false;
+
 export const DEFAULT_FEED_LABEL = "RO";
 export const DEFAULT_CONTENT_LANGUAGE = "ro";
 export const DEFAULT_COUNTRY = "RO";

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
+import { GOOGLE_MERCHANT_LIVE } from "@/lib/google-merchant/types";
 import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -87,6 +89,12 @@ export default async function IntegrationsPage() {
 
   const { business, settings: preloadedSettings } = await getCachedBusinessWithSettings(user.id);
 
+  // Google Merchant is hidden (locked) for the public while OAuth verification is
+  // pending; admins keep access to test. Flip GOOGLE_MERCHANT_LIVE once verified.
+  const supabase = await createClient();
+  const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
+  const gmcAvailable = GOOGLE_MERCHANT_LIVE || profile?.role === "admin";
+
   let smsoActive = false;
   let smartbillActive = false;
   let stripeActive = false;
@@ -159,7 +167,7 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "ipay" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday" || integration.id === "facebook-pixel" || integration.id === "tiktok-pixel" || integration.id === "google-ads" || integration.id === "google-merchant";
+                const isUnlocked = integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "ipay" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday" || integration.id === "facebook-pixel" || integration.id === "tiktok-pixel" || integration.id === "google-ads" || (integration.id === "google-merchant" && gmcAvailable);
                 const isActive = integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "ipay" ? ipayActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : integration.id === "sameday" ? samedayActive : integration.id === "facebook-pixel" ? fbActive : integration.id === "tiktok-pixel" ? ttActive : integration.id === "google-ads" ? googleActive : integration.id === "google-merchant" ? googleMerchantActive : false;
                 const href = integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "ipay" ? "/dashboard/features/ipay" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : integration.id === "sameday" ? "/dashboard/features/sameday" : integration.id === "facebook-pixel" ? "/dashboard/features/facebook-pixel" : integration.id === "tiktok-pixel" ? "/dashboard/features/tiktok-pixel" : integration.id === "google-ads" ? "/dashboard/features/google-ads" : integration.id === "google-merchant" ? "/dashboard/features/google-merchant" : "#";
 

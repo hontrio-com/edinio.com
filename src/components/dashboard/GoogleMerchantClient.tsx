@@ -17,11 +17,12 @@ import { GOOGLE_CATEGORIES } from "@/lib/google-merchant/taxonomy";
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
-export function GoogleMerchantClient({ businessId, status, products, categories }: {
+export function GoogleMerchantClient({ businessId, status, products, categories, available = true }: {
   businessId: string;
   status: MerchantStatus | null;
   products: MerchantProductRow[];
   categories: string[];
+  available?: boolean;
 }) {
   const [busy, startBusy] = useTransition();
 
@@ -40,8 +41,9 @@ export function GoogleMerchantClient({ businessId, status, products, categories 
     return <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
   }
 
-  // Platform hasn't configured Google OAuth credentials yet.
-  if (!status.configured) {
+  // Not yet live for the public (OAuth verification pending), or platform
+  // hasn't configured Google OAuth credentials yet.
+  if (!available || !status.configured) {
     return (
       <Panel icon={Clock} title="Disponibil în curând">
         Integrarea Google Merchant se activează în curând pentru magazinul tău. Revino mai târziu.

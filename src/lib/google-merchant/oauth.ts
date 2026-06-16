@@ -12,7 +12,9 @@ function clientId(): string { return process.env.GOOGLE_MERCHANT_CLIENT_ID ?? ""
 function clientSecret(): string { return process.env.GOOGLE_MERCHANT_CLIENT_SECRET ?? ""; }
 
 export function redirectUri(): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.edinio.com";
+  // Canonical www host (the proxy 301-redirects non-www -> www, and Google OAuth
+  // redirect URIs must resolve without a redirect). Override only if needed.
+  const base = process.env.GOOGLE_MERCHANT_REDIRECT_BASE || "https://www.edinio.com";
   return `${base.replace(/\/$/, "")}/api/google-merchant/oauth/callback`;
 }
 

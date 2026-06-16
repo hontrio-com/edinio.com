@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     if (upsertIds.length) {
       const { data: prods } = await admin
         .from("products")
-        .select("id, name, slug, description, price, compare_at_price, images, category, is_active, track_inventory, stock_quantity, weight_grams")
+        .select("id, name, slug, description, price, compare_at_price, images, category, is_active, track_inventory, stock_quantity, weight_grams, page_sections")
         .in("id", upsertIds);
       for (const p of prods ?? []) if (p.is_active) productMap.set(p.id, p as MappableProduct);
     }

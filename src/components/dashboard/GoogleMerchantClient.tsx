@@ -10,16 +10,18 @@ import {
 } from "lucide-react";
 import {
   startGoogleMerchantOAuth, listMerchantAccounts, selectMerchantAccount,
-  disconnectMerchant, setMerchantSettings, queueSyncAll,
+  disconnectMerchant, setMerchantSettings, queueSyncAll, setCategoryMap,
   type MerchantStatus, type MerchantProductRow,
 } from "@/lib/actions/google-merchant.actions";
+import { GOOGLE_CATEGORIES } from "@/lib/google-merchant/taxonomy";
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
-export function GoogleMerchantClient({ businessId, status, products }: {
+export function GoogleMerchantClient({ businessId, status, products, categories }: {
   businessId: string;
   status: MerchantStatus | null;
   products: MerchantProductRow[];
+  categories: string[];
 }) {
   const [busy, startBusy] = useTransition();
 
@@ -91,7 +93,7 @@ export function GoogleMerchantClient({ businessId, status, products }: {
     );
   }
 
-  return <ConnectedDashboard businessId={businessId} status={status} products={products} />;
+  return <ConnectedDashboard businessId={businessId} status={status} products={products} categories={categories} />;
 }
 
 function Panel({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
@@ -157,8 +159,8 @@ function AccountPicker({ businessId }: { businessId: string }) {
   );
 }
 
-function ConnectedDashboard({ businessId, status, products }: {
-  businessId: string; status: MerchantStatus; products: MerchantProductRow[];
+function ConnectedDashboard({ businessId, status, products, categories }: {
+  businessId: string; status: MerchantStatus; products: MerchantProductRow[]; categories: string[];
 }) {
   const router = useRouter();
   const [syncing, startSync] = useTransition();
@@ -252,6 +254,9 @@ function ConnectedDashboard({ businessId, status, products }: {
         </div>
       )}
 
+      {/* Category mapping */}
+      <CategoryMapping businessId={businessId} categories={categories} initialMap={status.categoryMap} />
+
       {/* Product status table */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
@@ -330,4 +335,49 @@ function StatusBadge({ status }: { status: string }) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="block text-xs font-medium text-foreground mb-1">{label}</label>{children}</div>;
+}
+
+function CategoryMapping({ businessId, categories, initialMap }: {
+  businessId: string; categories: string[]; initialMap: Record<string, string>;
+}) {
+  const router = useRouter();
+  const [map, setMap] = useState<Record<string, string>>(initialMap);
+  const [saving, startSave] = useTransition();
+  if (categories.length === 0) return null;
+
+  const mapped = categories.filter((c) => map[c]).length;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Mapare categorii</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">Asociază categoriile tale cu cele Google pentru o listare corectă ({mapped}/{categories.length} mapate).</p>
+      </div>
+      <div className="space-y-2 max-h-80 overflow-y-auto">
+        {categories.map((cat) => (
+          <div key={cat} className="flex items-center gap-3">
+            <span className="text-sm text-foreground w-2/5 truncate" title={cat}>{cat}</span>
+            <select value={map[cat] ?? ""} onChange={(e) => setMap((m) => ({ ...m, [cat]: e.target.value }))}
+              className={`${inputCls} flex-1 bg-background`}>
+              <option value="">— alege categoria Google —</option>
+              {GOOGLE_CATEGORIES.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end">
+        <button
+          onClick={() => startSave(async () => {
+            const res = await setCategoryMap(businessId, map);
+            if ("error" in res) { toast.error(res.error); return; }
+            toast.success("Mapare salvată. Re-sincronizează pentru a aplica.");
+            router.refresh();
+          })}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 disabled:opacity-60">
+          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Se salvează...</> : "Salvează maparea"}
+        </button>
+      </div>
+    </div>
+  );
 }

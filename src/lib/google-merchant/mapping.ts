@@ -22,6 +22,21 @@ export interface MappableProduct {
   track_inventory: boolean;
   stock_quantity: number | null;
   weight_grams: number | null;
+  page_sections?: unknown;
+}
+
+// Optional per-product Google overrides, stored in page_sections.google.
+interface GoogleAttrs {
+  brand?: string;
+  gtin?: string;
+  mpn?: string;
+  condition?: string;
+  google_product_category?: string;
+  gender?: string;
+  age_group?: string;
+  color?: string;
+  size?: string;
+  material?: string;
 }
 
 function priceMicros(value: number) {
@@ -49,22 +64,32 @@ export function toGoogleProductInput(
   const compare = product.compare_at_price != null ? Number(product.compare_at_price) : null;
   const hasSale = compare != null && compare > base;
 
+  const g = ((product.page_sections as { google?: GoogleAttrs } | null)?.google) ?? {};
+  const hasIdentifier = !!(g.gtin || g.mpn);
+
   const attributes: Record<string, unknown> = {
     title: product.name.slice(0, 150),
     description: plainText(product.description, product.name),
     link,
     availability: inStock ? "in_stock" : "out_of_stock",
-    condition: config.condition_default || "new",
-    brand: config.brand_default || business.store_name || business.business_name,
+    condition: g.condition || config.condition_default || "new",
+    brand: g.brand || config.brand_default || business.store_name || business.business_name,
     // List price shows as the strike-through price when a sale price is present.
     price: hasSale ? priceMicros(compare!) : priceMicros(base),
-    identifierExists: false,
+    identifierExists: hasIdentifier,
   };
   if (hasSale) attributes.salePrice = priceMicros(base);
   if (images[0]) attributes.imageLink = images[0];
   if (images.length > 1) attributes.additionalImageLinks = images.slice(1, 10);
-  const googleCat = product.category ? config.category_map?.[product.category] : undefined;
+  const googleCat = g.google_product_category || (product.category ? config.category_map?.[product.category] : undefined);
   if (googleCat) attributes.googleProductCategory = googleCat;
+  if (g.gtin) attributes.gtin = g.gtin;
+  if (g.mpn) attributes.mpn = g.mpn;
+  if (g.gender) attributes.gender = g.gender;
+  if (g.age_group) attributes.ageGroup = g.age_group;
+  if (g.color) attributes.color = g.color;
+  if (g.size) attributes.sizes = [g.size];
+  if (g.material) attributes.material = g.material;
   if (product.weight_grams) attributes.shipping = [{ country: config.country || "RO" }];
 
   return {

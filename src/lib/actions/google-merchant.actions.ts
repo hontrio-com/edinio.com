@@ -61,6 +61,7 @@ export interface MerchantStatus {
   brandDefault?: string;
   conditionDefault: string;
   lastSyncAt?: string;
+  categoryMap: Record<string, string>;
   counts: { total: number; synced: number; active: number; pending: number; disapproved: number; queued: number };
 }
 
@@ -104,8 +105,27 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
     brandDefault: config.brand_default,
     conditionDefault: config.condition_default || "new",
     lastSyncAt: config.last_sync_at,
+    categoryMap: config.category_map ?? {},
     counts,
   };
+}
+
+// ── Category mapping (Edinio category -> Google product category) ────────────────
+export async function setCategoryMap(
+  businessId: string, map: Record<string, string>,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const config = await loadConfig(supabase, businessId);
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) if (k && v) clean[k] = v;
+  const ok = await saveConfig(supabase, businessId, { ...config, category_map: clean });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath("/dashboard/features/google-merchant");
+  return { success: true };
 }
 
 // ── OAuth start ──────────────────────────────────────────────────────────────────

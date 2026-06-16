@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Image, MapPin, MessageCircle, Mail, Smartphone, Star, Zap, Lock, ShoppingBag, Truck, CreditCard } from "lucide-react";
-import Link from "next/link";
+import { Image, MapPin, MessageCircle, Mail, Smartphone, Star, Globe, Zap, Lock, ShoppingBag, Truck, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { updateBusiness } from "@/lib/actions/business.actions";
@@ -36,6 +35,7 @@ const COMING_SOON = [
   { icon: Mail, title: "Email confirmare comanda", description: "Clientul primeste email de confirmare dupa fiecare comanda." },
   { icon: Smartphone, title: "SMS notificari", description: "Primesti SMS instant la fiecare comanda noua." },
   { icon: Star, title: "Recenzii produse", description: "Clientii pot lasa recenzii verificate pentru produse." },
+  { icon: Globe, title: "Google Shopping", description: "Sincronizeaza produsele cu Google Shopping." },
 ];
 
 export function FeaturesClient({ business }: { business: Business }) {
@@ -104,25 +104,6 @@ export function FeaturesClient({ business }: { business: Business }) {
             );
           })}
         </div>
-      </section>
-
-      <section className="mb-10">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">Vanzari pe Google</h2>
-        <Link href="/dashboard/features/google-merchant"
-          className="flex items-start gap-4 p-5 rounded-xl border border-border bg-surface hover:border-primary/40 hover:bg-primary/5 transition-all">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-primary/10 text-primary">
-            <ShoppingBag className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Google Merchant Center</p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Listeaza produsele pe Google Shopping si sincronizeaza stoc + pret automat.</p>
-              </div>
-              <span className="text-xs font-semibold text-primary shrink-0">Configureaza →</span>
-            </div>
-          </div>
-        </Link>
       </section>
 
       <section>

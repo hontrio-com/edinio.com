@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildAuthUrl, signState, googleMerchantConfigured, getAccessToken } from "@/lib/google-merchant/oauth";
-import { listAccounts, listDataSources, createApiDataSource, deleteNotificationSubscription } from "@/lib/google-merchant/client";
+import { listAccounts, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription } from "@/lib/google-merchant/client";
+import { PLATFORM_ORIGIN } from "@/lib/seo";
 import {
   DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig,
 } from "@/lib/google-merchant/types";
@@ -172,12 +173,20 @@ export async function selectMerchantAccount(
     dataSourceName = created.data.name;
   }
 
+  // Subscribe to product-status-change push notifications (real-time statuses).
+  let subscriptionName = config.notification_subscription_name;
+  if (!subscriptionName) {
+    const sub = await createNotificationSubscription(token, accountId, `${PLATFORM_ORIGIN}/api/google-merchant/webhook`);
+    if (!("error" in sub)) subscriptionName = sub.data.name;
+  }
+
   const ok = await saveConfig(supabase, businessId, {
     ...config,
     connected: true,
     account_id: accountId,
     account_name: accountName ?? config.account_name,
     data_source_name: dataSourceName,
+    notification_subscription_name: subscriptionName,
     feed_label: feedLabel,
     content_language: lang,
     country: config.country || DEFAULT_COUNTRY,

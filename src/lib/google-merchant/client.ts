@@ -97,6 +97,19 @@ export function getProduct(accessToken: string, accountId: string, lang: string,
   return call<MerchantProductStatus & Record<string, unknown>>(accessToken, "GET", `/${V.products}/${name}`);
 }
 
+// Normalize a Merchant API product status into our simplified shape.
+export function mapProductStatus(data: Record<string, unknown>): { status: string; issues: unknown[]; destinations: unknown[] } {
+  const ps = (data?.productStatus ?? {}) as {
+    destinationStatuses?: { reportingContext?: string; status?: string }[];
+    itemLevelIssues?: { code?: string; severity?: string; description?: string }[];
+  };
+  const issues = ps.itemLevelIssues ?? [];
+  const destinations = ps.destinationStatuses ?? [];
+  const disapproved = issues.some((i) => String(i.severity ?? "").toLowerCase() === "error" || String(i.severity ?? "").toLowerCase() === "disapproval");
+  const approved = destinations.some((d) => String(d.status ?? "").toLowerCase() === "approved");
+  return { status: disapproved ? "disapproved" : approved ? "active" : "pending", issues, destinations };
+}
+
 // ── Notifications (webhooks) ─────────────────────────────────────────────────────
 export function createNotificationSubscription(accessToken: string, accountId: string, callbackUri: string) {
   return call<{ name: string }>(

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyState, exchangeCode } from "@/lib/google-merchant/oauth";
-import { listAccounts, listDataSources, createApiDataSource } from "@/lib/google-merchant/client";
+import { listAccounts, listDataSources, createApiDataSource, createNotificationSubscription } from "@/lib/google-merchant/client";
 import { DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
+import { PLATFORM_ORIGIN } from "@/lib/seo";
 
 const FEATURE = "/dashboard/features/google-merchant";
 
@@ -57,6 +58,10 @@ export async function GET(req: NextRequest) {
     if (!dataSourceName) {
       const created = await createApiDataSource(tok.accessToken, acc.id, "Edinio", config.feed_label, config.content_language);
       if (!("error" in created)) dataSourceName = created.data.name;
+    }
+    if (dataSourceName && !config.notification_subscription_name) {
+      const sub = await createNotificationSubscription(tok.accessToken, acc.id, `${PLATFORM_ORIGIN}/api/google-merchant/webhook`);
+      if (!("error" in sub)) config.notification_subscription_name = sub.data.name;
     }
     config.connected = !!dataSourceName;
     config.account_id = acc.id;

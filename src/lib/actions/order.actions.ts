@@ -9,6 +9,7 @@ import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import { expandBundleStock } from "@/lib/bundles";
+import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -254,6 +255,9 @@ export async function placeOrder(data: {
 
   // Atomic stock decrement — bundle components when ordering a bundle, else the product itself.
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+
+  // Reflect stock/availability changes in Google Merchant (if connected).
+  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id]);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.
@@ -577,6 +581,9 @@ export async function placeCartOrder(data: {
 
   // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+
+  // Reflect stock/availability changes in Google Merchant (if connected).
+  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.

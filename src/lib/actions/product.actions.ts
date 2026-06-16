@@ -6,6 +6,7 @@ import { getProductLimit } from "@/lib/plan-limits";
 import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
+import { enqueueGmcSync } from "@/lib/google-merchant/queue";
 
 interface ProductData {
   name: string;
@@ -104,7 +105,7 @@ export async function createProduct(businessId: string, data: ProductData) {
 
   const slug = await resolveUniqueSlug(supabase, businessId, data.slug);
 
-  const { error } = await supabase.from("products").insert({
+  const { data: created, error } = await supabase.from("products").insert({
     business_id: businessId,
     name: data.name.trim(),
     slug,
@@ -120,12 +121,13 @@ export async function createProduct(businessId: string, data: ProductData) {
     is_active: data.is_active,
     weight_grams: data.weight_grams ?? null,
     page_sections: (data.page_sections ?? {}) as never,
-  });
+  }).select("id").single();
 
   if (error) {
     logError({ action: "createProduct", message: error.message, details: { code: error.code, hint: error.hint, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
   }
+  if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -187,6 +189,7 @@ export async function updateProduct(productId: string, businessId: string, data:
     }
   }
 
+  void enqueueGmcSync(businessId, productId, productId, "upsert");
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -301,6 +304,8 @@ export async function deleteProduct(productId: string, businessId: string) {
     }
   }
 
+  // Remove from Google Merchant too (product_id is null — the row is now gone).
+  void enqueueGmcSync(businessId, null, productId, "delete");
   revalidatePath("/dashboard/products");
   return { success: true };
 }

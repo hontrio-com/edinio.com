@@ -7,6 +7,7 @@ import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
 import { computeBundlePricing, type BundleConfig, type BundleComponent, type BundlePricingMode } from "@/lib/bundles";
+import { enqueueGmcSync } from "@/lib/google-merchant/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -129,7 +130,7 @@ export async function createBundle(
   const slug = await resolveUniqueProductSlug(supabase, businessId, data.slug);
   const { price, compareAt, page_sections } = buildBundleWrite(data, components);
 
-  const { error } = await supabase.from("products").insert({
+  const { data: created, error } = await supabase.from("products").insert({
     business_id: businessId,
     name: data.name.trim(),
     slug,
@@ -144,12 +145,13 @@ export async function createBundle(
     is_featured: data.is_featured,
     is_active: data.is_active,
     page_sections: page_sections as never,
-  });
+  }).select("id").single();
 
   if (error) {
     logError({ action: "createBundle", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea pachetului. Incearca din nou." };
   }
+  if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
   revalidatePath("/dashboard/products/bundles");
   return { success: true };
 }
@@ -205,6 +207,7 @@ export async function updateBundle(
     }
   }
 
+  void enqueueGmcSync(businessId, bundleId, bundleId, "upsert");
   revalidatePath("/dashboard/products/bundles");
   revalidatePath(`/dashboard/products/bundles/${bundleId}/edit`);
   return { success: true };

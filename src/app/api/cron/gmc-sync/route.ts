@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { getAccessToken } from "@/lib/google-merchant/oauth";
-import { insertProductInput, deleteProductInput, getProduct } from "@/lib/google-merchant/client";
+import { insertProductInput, deleteProductInput, getProduct, mapProductStatus } from "@/lib/google-merchant/client";
 import { toGoogleProductInput, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 
@@ -13,20 +13,6 @@ const MAX_ATTEMPTS = 5;
 
 function verifyCron(req: NextRequest): boolean {
   return req.headers.get("authorization")?.replace("Bearer ", "") === process.env.CRON_SECRET;
-}
-
-// Map a Merchant API product status into our simplified status + issues.
-function mapStatus(data: Record<string, unknown>): { status: string; issues: unknown[]; destinations: unknown[] } {
-  const ps = (data?.productStatus ?? {}) as {
-    destinationStatuses?: { reportingContext?: string; status?: string }[];
-    itemLevelIssues?: { code?: string; severity?: string; description?: string }[];
-  };
-  const issues = ps.itemLevelIssues ?? [];
-  const destinations = ps.destinationStatuses ?? [];
-  const disapproved = issues.some((i) => i.severity === "error" || i.severity === "ERROR" || i.severity === "DISAPPROVAL");
-  const approved = destinations.some((d) => (d.status ?? "").toLowerCase() === "approved");
-  const status = disapproved ? "disapproved" : approved ? "active" : "pending";
-  return { status, issues, destinations };
 }
 
 export async function GET(req: NextRequest) {
@@ -134,7 +120,7 @@ export async function GET(req: NextRequest) {
       await admin.from("gmc_products").update({ last_status_at: now }).eq("id", row.id);
       continue;
     }
-    const { status, issues, destinations } = mapStatus(res.data);
+    const { status, issues, destinations } = mapProductStatus(res.data);
     await admin.from("gmc_products").update({ status, issues: issues as never, destinations: destinations as never, last_status_at: now, updated_at: now }).eq("id", row.id);
   }
 

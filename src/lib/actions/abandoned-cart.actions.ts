@@ -7,7 +7,7 @@ import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { storeBaseUrl } from "@/lib/seo";
-import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, type AbandonedCartItem, type AbandonedCartsData } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 
 type CartRow = Database["public"]["Tables"]["abandoned_carts"]["Row"];
@@ -161,7 +161,7 @@ export async function getAbandonedCartsData(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: settings } = await supabase
-    .from("store_settings").select("abandoned_cart_enabled, smso_config").eq("business_id", businessId).single();
+    .from("store_settings").select("abandoned_cart_enabled, smso_config, abandoned_cart_automation").eq("business_id", businessId).single();
   const enabled = settings?.abandoned_cart_enabled ?? false;
   const smso = settings?.smso_config as SmsoConfig | null;
   const smsoEnabled = !!(smso?.enabled && smso?.api_key && smso?.sender_id);
@@ -245,7 +245,40 @@ export async function getAbandonedCartsData(
       recovery_sms_sent_at: r.recovery_sms_sent_at,
       recovery_count: r.recovery_count,
     })),
+    automation: readAutomationConfig(settings?.abandoned_cart_automation),
   };
+}
+
+// ── Save automation config (owner) ─────────────────────────────────────────────
+export async function saveAbandonedCartAutomation(
+  businessId: string,
+  config: AbandonedAutomationConfig,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const clean = readAutomationConfig(config);
+
+  const { data: existing } = await supabase
+    .from("store_settings").select("id").eq("business_id", businessId).single();
+
+  let error;
+  if (existing) {
+    ({ error } = await supabase.from("store_settings")
+      .update({ abandoned_cart_automation: clean as never, updated_at: new Date().toISOString() })
+      .eq("business_id", businessId));
+  } else {
+    ({ error } = await supabase.from("store_settings")
+      .insert({ business_id: businessId, abandoned_cart_automation: clean as never }));
+  }
+  if (error) return { error: "Eroare la salvarea automatizarii." };
+  revalidatePath("/dashboard/abandoned");
+  return { success: true };
 }
 
 // ── Recovery: email (owner) ────────────────────────────────────────────────────

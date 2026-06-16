@@ -54,6 +54,7 @@ export interface AbandonedCartsData {
   potentialRevenueThisMonth: number;
   abandonedProducts: AbandonedProduct[];
   carts: AbandonedCartRow[];
+  automation: AbandonedAutomationConfig;
 }
 
 // How long without activity before an open cart is considered "abandoned".
@@ -98,6 +99,58 @@ export function defaultRecoverySms(opts: { name?: string | null; storeName: stri
   const hi = first ? `Salut ${first}! ` : "Salut! ";
   const codePart = opts.code ? ` Foloseste codul ${opts.code} pentru reducere.` : "";
   return `${hi}Ai uitat produse in cosul tau la ${opts.storeName}.${codePart} Finalizeaza comanda aici: ${opts.url}`;
+}
+
+// ── Automations ────────────────────────────────────────────────────────────────
+export type RecoveryChannel = "email" | "sms";
+
+export interface AbandonedAutomationStep {
+  id: string;
+  delay_hours: number;
+  channel: RecoveryChannel;
+  message?: string;
+  discount_code?: string;
+}
+
+export interface AbandonedAutomationConfig {
+  enabled: boolean;
+  min_cart_value: number | null;
+  quiet_hours: { start: number; end: number } | null; // hours 0-23
+  steps: AbandonedAutomationStep[];
+}
+
+// Parse + sanitize a raw automation config from store_settings.
+export function readAutomationConfig(raw: unknown): AbandonedAutomationConfig {
+  const c = (raw ?? {}) as Partial<AbandonedAutomationConfig>;
+  const steps = Array.isArray(c.steps) ? c.steps : [];
+  const qh = c.quiet_hours;
+  return {
+    enabled: c.enabled === true,
+    min_cart_value: typeof c.min_cart_value === "number" && c.min_cart_value > 0 ? c.min_cart_value : null,
+    quiet_hours: qh && typeof qh.start === "number" && typeof qh.end === "number"
+      ? { start: clampHour(qh.start), end: clampHour(qh.end) } : null,
+    steps: steps
+      .filter((s): s is AbandonedAutomationStep => !!s && (s.channel === "email" || s.channel === "sms"))
+      .map((s) => ({
+        id: String(s.id ?? Math.random().toString(36).slice(2)),
+        delay_hours: Math.max(0, Number(s.delay_hours) || 0),
+        channel: s.channel,
+        message: typeof s.message === "string" && s.message.trim() ? s.message.trim() : undefined,
+        discount_code: typeof s.discount_code === "string" && s.discount_code.trim() ? s.discount_code.trim() : undefined,
+      })),
+  };
+}
+
+function clampHour(h: number): number {
+  return Math.min(23, Math.max(0, Math.floor(h)));
+}
+
+// Is `hour` within quiet hours? Handles ranges that wrap past midnight.
+export function isQuietHour(quiet: { start: number; end: number } | null, hour: number): boolean {
+  if (!quiet || quiet.start === quiet.end) return false;
+  return quiet.start < quiet.end
+    ? hour >= quiet.start && hour < quiet.end
+    : hour >= quiet.start || hour < quiet.end;
 }
 
 // Build the "restore cart" link: opening it rebuilds the customer's cart and

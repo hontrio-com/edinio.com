@@ -9,6 +9,7 @@ import {
   Clock, Package, Trash2, X, Sparkles, Send, Banknote, ShieldCheck, Bell, Loader2,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
+import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
 } from "@/lib/actions/abandoned-cart.actions";
@@ -31,6 +32,7 @@ function firstName(name: string | null): string {
 export function AbandonedCartsClient({ businessId, data }: { businessId: string; data: AbandonedCartsData | null }) {
   const router = useRouter();
   const [activating, startActivate] = useTransition();
+  const [tab, setTab] = useState<"carts" | "automation">("carts");
 
   if (!data) {
     return (
@@ -86,7 +88,21 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
     );
   }
 
-  return <ActiveDashboard businessId={businessId} data={data} />;
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-1 border-b border-border">
+        {([["carts", "Coșuri"], ["automation", "Automatizări"]] as const).map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "carts"
+        ? <ActiveDashboard businessId={businessId} data={data} />
+        : <AbandonedAutomationsTab businessId={businessId} data={data} />}
+    </div>
+  );
 }
 
 function KpiCard({ icon: Icon, label, value, sub, accent }: {

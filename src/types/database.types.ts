@@ -25,6 +25,8 @@ export type Database = {
           item_count: number
           items: Json
           last_activity_at: string
+          last_recovery_at: string | null
+          automation_step: number
           order_id: string | null
           phone: string | null
           recovery_count: number
@@ -46,6 +48,8 @@ export type Database = {
           item_count?: number
           items?: Json
           last_activity_at?: string
+          last_recovery_at?: string | null
+          automation_step?: number
           order_id?: string | null
           phone?: string | null
           recovery_count?: number
@@ -67,6 +71,8 @@ export type Database = {
           item_count?: number
           items?: Json
           last_activity_at?: string
+          last_recovery_at?: string | null
+          automation_step?: number
           order_id?: string | null
           phone?: string | null
           recovery_count?: number
@@ -1023,6 +1029,35 @@ export type Database = {
           },
         ]
       }
+      recovery_optout: {
+        Row: {
+          business_id: string
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recovery_optout_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_analytics: {
         Row: {
           business_id: string
@@ -1145,6 +1180,7 @@ export type Database = {
       }
       store_settings: {
         Row: {
+          abandoned_cart_automation: Json
           abandoned_cart_enabled: boolean
           business_id: string
           cargus_config: Json | null
@@ -1182,6 +1218,7 @@ export type Database = {
           woot_config: Json | null
         }
         Insert: {
+          abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           business_id: string
           cargus_config?: Json | null
@@ -1219,6 +1256,7 @@ export type Database = {
           woot_config?: Json | null
         }
         Update: {
+          abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           business_id?: string
           cargus_config?: Json | null

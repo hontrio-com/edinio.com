@@ -1810,9 +1810,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                       {item.image ? (
                         /* Plain <img> (not next/image fill): an absolutely-positioned
                            fill image inside the horizontal scroller fails to render on
-                           mobile browsers. The loader is a no-op, so no optimization is lost. */
+                           iOS Safari. Explicit dims + eager decode make it reliable.
+                           The loader is a no-op, so no optimization is lost. */
                         /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        <img src={item.image} alt={item.name} width={72} height={72} loading="eager" decoding="async" className="block w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center"
                           style={{ backgroundColor: active ? `${color}15` : "var(--color-muted)" }}>

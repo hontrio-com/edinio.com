@@ -1808,7 +1808,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                       }}
                     >
                       {item.image ? (
-                        <Image src={item.image} alt={item.name} fill sizes="72px" className="object-cover" />
+                        /* Plain <img> (not next/image fill): an absolutely-positioned
+                           fill image inside the horizontal scroller fails to render on
+                           mobile browsers. The loader is a no-op, so no optimization is lost. */
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center"
                           style={{ backgroundColor: active ? `${color}15` : "var(--color-muted)" }}>

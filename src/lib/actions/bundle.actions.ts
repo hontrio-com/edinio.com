@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getProductLimit } from "@/lib/plan-limits";
-import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
+import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
 import { computeBundlePricing, type BundleConfig, type BundleComponent, type BundlePricingMode } from "@/lib/bundles";
@@ -196,15 +196,12 @@ export async function updateBundle(
     return { error: "Eroare la salvarea pachetului. Incearca din nou." };
   }
 
-  // Clean up removed images from R2 (fire-and-forget).
+  // Clean up removed images from R2 — but only those no other product still
+  // references (duplicated products share the same image URLs).
   if (Array.isArray(oldRow.images)) {
     const keep = new Set(data.images);
-    for (const url of oldRow.images as string[]) {
-      if (!keep.has(url)) {
-        const key = r2KeyFromUrl(url);
-        if (key) deleteFromR2(key).catch(() => {});
-      }
-    }
+    const removed = (oldRow.images as string[]).filter((url) => !keep.has(url));
+    void deleteOrphanImages(supabase, businessId, removed, { excludeProductId: bundleId });
   }
 
   void enqueueGmcSync(businessId, bundleId, bundleId, "upsert");

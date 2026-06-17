@@ -175,7 +175,8 @@ export function PageBuilder({
       <div className="flex-1 flex min-h-0">
         {/* Canvas */}
         <div className="flex-1 overflow-y-auto" onClick={() => selectBlock(null)}>
-          <div className={`mx-auto bg-background min-h-full transition-all ${device === "mobile" ? "max-w-[390px] my-4 rounded-2xl border border-border shadow-sm overflow-hidden" : "max-w-full"}`}>
+          <div className={device === "mobile" ? "min-h-full flex justify-center items-start py-8 px-4" : "min-h-full"}>
+          <div className={`bg-background transition-all ${device === "mobile" ? "w-[400px] max-w-full rounded-[28px] border-4 border-gray-200 shadow-2xl overflow-hidden" : "max-w-full min-h-full"}`}>
             <InsertButton onClick={(e) => { e.stopPropagation(); setPaletteAt(0); }} />
             {blocks.map((block, i) => (
               <div key={block.id}>
@@ -219,6 +220,7 @@ export function PageBuilder({
                 </button>
               </div>
             )}
+          </div>
           </div>
         </div>
 

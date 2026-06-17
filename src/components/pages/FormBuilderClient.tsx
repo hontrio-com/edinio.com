@@ -102,8 +102,8 @@ export function FormBuilderClient({
               <GripVertical className="h-4 w-4 text-muted-foreground/40 mt-2.5 shrink-0 hidden sm:block" />
               <div className="flex-1 space-y-2.5 min-w-0">
                 <div className="flex gap-2">
-                  <input value={f.label} onChange={(e) => patchField(f.id, { label: e.target.value })} placeholder="Eticheta campului" className={`${inputCls} flex-1`} />
-                  <select value={f.type} onChange={(e) => changeType(f.id, e.target.value as FormFieldType)} className={`${inputCls} w-36 shrink-0`} aria-label="Tip camp">
+                  <input value={f.label} onChange={(e) => patchField(f.id, { label: e.target.value })} placeholder="Eticheta campului" className="flex-1 min-w-0 px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30" />
+                  <select value={f.type} onChange={(e) => changeType(f.id, e.target.value as FormFieldType)} className="w-32 sm:w-36 shrink-0 px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30" aria-label="Tip camp">
                     {FORM_FIELD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>

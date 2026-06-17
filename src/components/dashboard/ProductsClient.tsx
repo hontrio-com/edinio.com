@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo, useTransition, useEffect } from "react";
+import { useState, useMemo, useTransition, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download } from "lucide-react";
-import { duplicateProduct } from "@/lib/actions/product.actions";
+import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent } from "lucide-react";
+import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -34,6 +34,19 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all");
   const [exporting, setExporting] = useState(false);
+
+  // ── Bulk selection + actions ──
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkPanel, setBulkPanel] = useState<null | "price" | "category">(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [priceMode, setPriceMode] = useState<Extract<BulkAction, { kind: "price" }>["mode"]>("inc_pct");
+  const [priceAmount, setPriceAmount] = useState("");
+  const [bulkCategory, setBulkCategory] = useState("");
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  const bulkBtn = "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-foreground border border-border bg-surface hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+  const bulkSelect = "px-2.5 py-1.5 text-xs border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
 
   async function handleExport() {
     setExporting(true);
@@ -116,7 +129,49 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
   const currentPage = Math.min(page, totalPages);
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  useEffect(() => { setPage(1); }, [searchQuery, categoryFilter, statusFilter, stockFilter]);
+  // Reset paging + selection whenever the filtered set changes.
+  useEffect(() => {
+    setPage(1);
+    setSelected(new Set());
+    setBulkPanel(null);
+    setConfirmBulkDelete(false);
+  }, [searchQuery, categoryFilter, statusFilter, stockFilter]);
+
+  const allSelected = filtered.length > 0 && filtered.every(p => selected.has(p.id));
+  const someSelected = !allSelected && filtered.some(p => selected.has(p.id));
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected;
+  }, [someSelected]);
+
+  function toggleOne(id: string) {
+    setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(filtered.map(p => p.id)));
+  }
+  function clearSelection() { setSelected(new Set()); setBulkPanel(null); setConfirmBulkDelete(false); }
+
+  async function runBulk(action: BulkAction, successMsg: string) {
+    setBulkBusy(true);
+    const res = await bulkProductAction(businessId, [...selected], action);
+    setBulkBusy(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    toast.success(successMsg.replace("{n}", String(res.count)));
+    clearSelection();
+    setPriceAmount("");
+    setBulkCategory("");
+    router.refresh();
+  }
+  function applyPrice() {
+    const amt = Number(priceAmount);
+    if (priceAmount.trim() === "" || !Number.isFinite(amt) || amt < 0) { toast.error("Introdu o valoare valida."); return; }
+    runBulk({ kind: "price", mode: priceMode, amount: amt }, "Pret actualizat la {n} produse");
+  }
+  function applyCategory() {
+    if (bulkCategory === "") { toast.error("Alege o categorie."); return; }
+    runBulk({ kind: "category", value: bulkCategory === "__none__" ? null : bulkCategory }, "Categorie setata la {n} produse");
+  }
 
   return (
     <>
@@ -280,13 +335,81 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
         </p>
       )}
 
+      {/* Bulk actions bar */}
+      {selected.size > 0 && (
+        <div className="mb-3 rounded-xl border border-primary/30 bg-primary/5">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+            <span className="text-sm font-semibold text-foreground mr-1">{selected.size} selectate</span>
+            <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "active", value: true }, "{n} produse activate")} className={bulkBtn}>Activeaza</button>
+            <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "active", value: false }, "{n} produse dezactivate")} className={bulkBtn}>Dezactiveaza</button>
+            <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "featured", value: true }, "{n} produse recomandate")} className={bulkBtn}><Star className="h-3.5 w-3.5" /> Recomanda</button>
+            <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "featured", value: false }, "Recomandat eliminat de la {n} produse")} className={bulkBtn}>Scoate recomandat</button>
+            <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "price" ? null : "price"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "price" && "border-primary ring-1 ring-primary/30")}><Percent className="h-3.5 w-3.5" /> Pret</button>
+            <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "category" ? null : "category"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "category" && "border-primary ring-1 ring-primary/30")}><Tag className="h-3.5 w-3.5" /> Categorie</button>
+            <button type="button" disabled={bulkBusy} onClick={() => { setConfirmBulkDelete(true); setBulkPanel(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 bg-surface hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Sterge</button>
+            <div className="flex-1" />
+            {bulkBusy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            <button type="button" disabled={bulkBusy} onClick={clearSelection} className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"><X className="h-3.5 w-3.5" /> Deselecteaza</button>
+          </div>
+
+          {bulkPanel === "price" && (
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-primary/15">
+              <select value={priceMode} onChange={e => setPriceMode(e.target.value as typeof priceMode)} className={bulkSelect}>
+                <option value="inc_pct">Mareste cu %</option>
+                <option value="dec_pct">Micsoreaza cu %</option>
+                <option value="inc_amt">Mareste cu suma (lei)</option>
+                <option value="dec_amt">Micsoreaza cu suma (lei)</option>
+                <option value="set">Seteaza pretul la (lei)</option>
+              </select>
+              <input type="number" min="0" step="0.01" value={priceAmount} onChange={e => setPriceAmount(e.target.value)}
+                placeholder={priceMode.includes("pct") ? "%" : "lei"}
+                className="w-28 px-2.5 py-1.5 text-xs border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30" />
+              <button type="button" disabled={bulkBusy} onClick={applyPrice} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50">Aplica</button>
+              <span className="text-[11px] text-muted-foreground">Se aplica la cele {selected.size} produse selectate.</span>
+            </div>
+          )}
+
+          {bulkPanel === "category" && (
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-primary/15">
+              <select value={bulkCategory} onChange={e => setBulkCategory(e.target.value)} className={bulkSelect}>
+                <option value="">Alege categoria...</option>
+                <option value="__none__">— Fara categorie —</option>
+                {parentCategories.map(parent => {
+                  const children = categories.filter(c => c.parent_id === parent.id);
+                  return children.length > 0 ? (
+                    <optgroup key={parent.id} label={parent.name}>
+                      <option value={parent.name}>{parent.name}</option>
+                      {children.map(ch => <option key={ch.id} value={ch.name}>{`  ↳ ${ch.name}`}</option>)}
+                    </optgroup>
+                  ) : <option key={parent.id} value={parent.name}>{parent.name}</option>;
+                })}
+              </select>
+              <button type="button" disabled={bulkBusy} onClick={applyCategory} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50">Aplica</button>
+            </div>
+          )}
+
+          {confirmBulkDelete && (
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-red-200">
+              <span className="text-sm font-medium text-red-700">Stergi definitiv {selected.size} produse? Actiunea nu poate fi anulata.</span>
+              <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "delete" }, "{n} produse sterse")} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">{bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Da, sterge</button>
+              <button type="button" disabled={bulkBusy} onClick={() => setConfirmBulkDelete(false)} className={bulkBtn}>Anuleaza</button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
         {filtered.length > 0 ? (
           <>
           <table className="w-full text-sm table-fixed">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[40%] lg:w-[35%]">Produs</th>
+                <th className="px-3 py-3 w-10">
+                  <input ref={selectAllRef} type="checkbox" checked={allSelected} onChange={toggleAll}
+                    aria-label="Selecteaza toate produsele filtrate"
+                    className="h-4 w-4 rounded border-border accent-primary cursor-pointer align-middle" />
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[36%] lg:w-[32%]">Produs</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell w-[15%]">Categorie</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[14%] sm:w-[12%]">Pret</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell w-[12%]">Stoc</th>
@@ -298,8 +421,13 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
               {paginated.map((product) => {
                 const images = Array.isArray(product.images) ? product.images : [];
                 return (
-                  <tr key={product.id} className="hover:bg-muted/30 transition-colors cursor-pointer"
+                  <tr key={product.id} className={cn("hover:bg-muted/30 transition-colors cursor-pointer", selected.has(product.id) && "bg-primary/5")}
                     onClick={() => router.push(`/dashboard/products/${product.id}/edit`)}>
+                    <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selected.has(product.id)} onChange={() => toggleOne(product.id)}
+                        aria-label={`Selecteaza ${product.name}`}
+                        className="h-4 w-4 rounded border-border accent-primary cursor-pointer align-middle" />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3 min-w-0">
                         {images[0] ? (

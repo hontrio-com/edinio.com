@@ -6,7 +6,7 @@ import { getProductLimit } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
-import { enqueueGmcSync } from "@/lib/google-merchant/queue";
+import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 
 interface ProductData {
   name: string;
@@ -303,4 +303,116 @@ export async function deleteProduct(productId: string, businessId: string) {
   void enqueueGmcSync(businessId, null, productId, "delete");
   revalidatePath("/dashboard/products");
   return { success: true };
+}
+
+// ── Bulk actions (Produsele mele: select many → one action) ──────────────────
+export type BulkAction =
+  | { kind: "active"; value: boolean }
+  | { kind: "featured"; value: boolean }
+  | { kind: "category"; value: string | null }
+  | { kind: "price"; mode: "inc_pct" | "dec_pct" | "inc_amt" | "dec_amt" | "set"; amount: number }
+  | { kind: "delete" };
+
+const MAX_BULK = 1000;
+
+export async function bulkProductAction(
+  businessId: string,
+  productIds: string[],
+  action: BulkAction,
+): Promise<{ success: true; count: number } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const ids = [...new Set((productIds ?? []).filter(Boolean))];
+  if (ids.length === 0) return { error: "Niciun produs selectat." };
+  if (ids.length > MAX_BULK) return { error: `Poti modifica cel mult ${MAX_BULK} produse odata.` };
+
+  // Verify the business belongs to the user.
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const now = new Date().toISOString();
+
+  try {
+    if (action.kind === "active" || action.kind === "featured") {
+      const patch = action.kind === "active" ? { is_active: action.value } : { is_featured: action.value };
+      const { error, count } = await supabase
+        .from("products").update({ ...patch, updated_at: now }, { count: "exact" })
+        .eq("business_id", businessId).in("id", ids);
+      if (error) throw error;
+      void enqueueGmcSyncMany(businessId, ids);
+      revalidatePath("/dashboard/products");
+      return { success: true, count: count ?? ids.length };
+    }
+
+    if (action.kind === "category") {
+      const value = action.value?.trim() || null;
+      const { error, count } = await supabase
+        .from("products").update({ category: value, updated_at: now }, { count: "exact" })
+        .eq("business_id", businessId).in("id", ids);
+      if (error) throw error;
+      void enqueueGmcSyncMany(businessId, ids);
+      revalidatePath("/dashboard/products");
+      return { success: true, count: count ?? ids.length };
+    }
+
+    if (action.kind === "delete") {
+      const { data: rows } = await supabase
+        .from("products").select("id, images").eq("business_id", businessId).in("id", ids);
+      const { error } = await supabase
+        .from("products").delete().eq("business_id", businessId).in("id", ids);
+      if (error) throw error;
+      // Reference-safe R2 cleanup + remove from Google Merchant.
+      for (const r of rows ?? []) {
+        if (Array.isArray(r.images)) void deleteOrphanImages(supabase, businessId, r.images as string[]);
+      }
+      for (const id of ids) void enqueueGmcSync(businessId, null, id, "delete");
+      revalidatePath("/dashboard/products");
+      return { success: true, count: (rows ?? []).length || ids.length };
+    }
+
+    // Price: needs per-product computation, so read → compute → update.
+    if (action.kind === "price") {
+      const amt = Number(action.amount);
+      if (!Number.isFinite(amt) || amt < 0) return { error: "Valoare invalida." };
+      const { data: rows, error: readErr } = await supabase
+        .from("products").select("id, price").eq("business_id", businessId).in("id", ids);
+      if (readErr) throw readErr;
+
+      const compute = (price: number): number => {
+        let p = price;
+        switch (action.mode) {
+          case "inc_pct": p = price * (1 + amt / 100); break;
+          case "dec_pct": p = price * (1 - amt / 100); break;
+          case "inc_amt": p = price + amt; break;
+          case "dec_amt": p = price - amt; break;
+          case "set": p = amt; break;
+        }
+        return Math.max(0, Math.round(p * 100) / 100);
+      };
+
+      let count = 0;
+      // Update in small concurrent batches to avoid a long serial loop.
+      const batch = 20;
+      for (let i = 0; i < (rows ?? []).length; i += batch) {
+        const slice = (rows ?? []).slice(i, i + batch);
+        const results = await Promise.all(slice.map((r) =>
+          supabase.from("products")
+            .update({ price: compute(Number(r.price) || 0), updated_at: now })
+            .eq("id", r.id).eq("business_id", businessId),
+        ));
+        count += results.filter((res) => !res.error).length;
+      }
+      void enqueueGmcSyncMany(businessId, ids);
+      revalidatePath("/dashboard/products");
+      return { success: true, count };
+    }
+
+    return { error: "Actiune necunoscuta." };
+  } catch (e) {
+    logError({ action: "bulkProductAction", message: (e as Error).message, details: { businessId, kind: action.kind, n: ids.length }, userId: user.id });
+    return { error: "Eroare la actiunea in masa. Incearca din nou." };
+  }
 }

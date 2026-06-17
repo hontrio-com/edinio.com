@@ -48,6 +48,7 @@ interface PageContent {
   image_zoom?: { enabled: boolean; };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
   store_bg_color?: string;
+  logo_size?: number;
   hero_show_content?: boolean;
   hero_banners?: string[];
 }
@@ -348,6 +349,7 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
     image_zoom: rawPageContent.image_zoom ?? { enabled: true },
     delivery_estimate: rawPageContent.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
+    logo_size: rawPageContent.logo_size ?? 36,
     hero_show_content: rawPageContent.hero_show_content ?? false,
   });
 
@@ -477,6 +479,27 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
               onFile={(f) => { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); }}
               onRemove={() => { setLogoFile(null); setLogoPreview(null); }} />
           </div>
+          {logoPreview && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Marime logo</label>
+                <span className="text-[10px] font-semibold text-muted-foreground tabular-nums">{pageContent.logo_size ?? 36}px</span>
+              </div>
+              <input type="range" min={24} max={56} step={1}
+                value={pageContent.logo_size ?? 36}
+                onChange={(e) => setPageContent(p => ({ ...p, logo_size: Number(e.target.value) }))}
+                className="w-full accent-primary cursor-pointer" />
+              {/* Live preview of the store header logo at the chosen size. */}
+              <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 h-16 overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoPreview} alt=""
+                  style={{ height: pageContent.logo_size ?? 36, maxWidth: (pageContent.logo_size ?? 36) * 4.2 }}
+                  className="w-auto object-contain flex-shrink-0" />
+                <span className="text-sm font-semibold text-foreground truncate">{business.store_name ?? business.business_name}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1.5">Cum se vede logo-ul in antetul magazinului. Trage cursorul ca sa-l faci mai mare sau mai mic.</p>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">Bannere magazin (max 5)</label>
             <div className="space-y-2">

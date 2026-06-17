@@ -67,6 +67,7 @@ interface PageContent {
   sticky_cart_bar?: { enabled: boolean };
   new_badge?: { enabled: boolean; days: number };
   store_bg_color?: string;
+  logo_size?: number;
   hero_show_content?: boolean;
   hero_banners?: string[];
 }
@@ -1492,10 +1493,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <a href="#" className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
             {business.logo_url ? (
-              /* Free logo: full image at any ratio, fixed height, no box/crop. */
+              /* Free logo: full image at any ratio, merchant-set height, no box/crop. */
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-                className="h-9 w-auto max-w-[150px] object-contain flex-shrink-0" />
+                style={{ height: pageContent.logo_size ?? 36, maxWidth: (pageContent.logo_size ?? 36) * 4.2 }}
+                className="w-auto object-contain flex-shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                 style={{ backgroundColor: color }}>

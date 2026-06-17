@@ -1805,6 +1805,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                       style={{
                         borderColor: active ? color : "var(--color-border)",
                         boxShadow: active ? `0 0 0 2px ${color}40` : "none",
+                        // iOS Safari: force a compositing layer so border-radius +
+                        // overflow:hidden clips/paints the image inside the scroller.
+                        transform: "translateZ(0)",
+                        WebkitTransform: "translateZ(0)",
+                        isolation: "isolate",
                       }}
                     >
                       {item.image ? (

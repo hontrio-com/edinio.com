@@ -13,6 +13,9 @@ interface ShippingAddress {
   county?: string;
   city?: string;
   address?: string;
+  woot_service_id?: number;
+  woot_courier_name?: string;
+  woot_service_name?: string;
 }
 
 interface Props {
@@ -177,6 +180,11 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
     setPrices(sorted);
     setPricesFetched(true);
     if (sorted.length === 0) setPricesError("Niciun serviciu disponibil pentru aceasta ruta.");
+    // Pre-select the courier the customer chose at checkout, if still offered.
+    else if (addr.woot_service_id) {
+      const chosen = sorted.find((p) => p.service_id === addr.woot_service_id);
+      if (chosen) { setSelectedServiceId(chosen.service_id); setSelectedService(chosen); }
+    }
   }
 
   function handleSelectService(p: WootPriceResult) {
@@ -283,6 +291,18 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
               </div>
             ) : (
               <>
+                {/* Courier chosen by the customer at checkout */}
+                {addr.woot_courier_name && (
+                  <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <Truck className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-blue-700">
+                      Clientul a ales la comanda: <strong>{addr.woot_courier_name}</strong>
+                      {addr.woot_service_name ? ` — ${addr.woot_service_name}` : ""}. Apasa
+                      &nbsp;„Calculeaza preturi" ca sa se preselecteze automat.
+                    </p>
+                  </div>
+                )}
+
                 {/* Receiver section */}
                 <section className="space-y-3">
                   <p className="text-sm font-semibold text-foreground">Destinatar</p>

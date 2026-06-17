@@ -137,6 +137,9 @@ export async function placeOrder(data: {
   delivery_type?: string;
   locker_id?: string;
   locker_name?: string;
+  woot_service_id?: number;
+  woot_courier_name?: string;
+  woot_service_name?: string;
 }) {
   // Use admin client for order creation — customers are anonymous, RLS requires service role
   const admin = createAdminClient();
@@ -230,6 +233,11 @@ export async function placeOrder(data: {
       ...(data.locker_id && {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
+      }),
+      ...(data.woot_service_id && {
+        woot_service_id: data.woot_service_id,
+        woot_courier_name: data.woot_courier_name,
+        woot_service_name: data.woot_service_name,
       }),
     },
     items: allItems,
@@ -450,6 +458,9 @@ export async function placeCartOrder(data: {
   delivery_type?: string;
   locker_id?: string;
   locker_name?: string;
+  woot_service_id?: number;
+  woot_courier_name?: string;
+  woot_service_name?: string;
 }) {
   // Use admin client — customers are anonymous
   const admin = createAdminClient();
@@ -554,6 +565,11 @@ export async function placeCartOrder(data: {
       ...(data.locker_id && {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
+      }),
+      ...(data.woot_service_id && {
+        woot_service_id: data.woot_service_id,
+        woot_courier_name: data.woot_courier_name,
+        woot_service_name: data.woot_service_name,
       }),
     },
     items: allItems,

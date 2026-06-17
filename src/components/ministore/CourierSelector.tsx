@@ -12,6 +12,9 @@ export interface CourierSelection {
   lockerId?: string;
   lockerName?: string;
   lockerAddress?: string;
+  wootServiceId?: number;
+  wootCourierName?: string;
+  wootServiceName?: string;
 }
 
 interface Props {
@@ -70,6 +73,9 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             courierLabel: first.courierLabel,
             deliveryType: first.deliveryType,
             price: first.price,
+            wootServiceId: first.wootServiceId,
+            wootCourierName: first.wootCourierName,
+            wootServiceName: first.wootServiceName,
           });
         }
       })
@@ -104,7 +110,8 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
   }, [selectedKey]);
 
   function optionKey(o: ShippingOption) {
-    return `${o.courier}::${o.deliveryType}`;
+    // Woot returns several offers all under courier "woot" — disambiguate by service.
+    return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}`;
   }
 
   function handleSelect(opt: ShippingOption) {
@@ -120,6 +127,9 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         courierLabel: opt.courierLabel,
         deliveryType: "address",
         price: opt.price,
+        wootServiceId: opt.wootServiceId,
+        wootCourierName: opt.wootCourierName,
+        wootServiceName: opt.wootServiceName,
       });
     }
   }

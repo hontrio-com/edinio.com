@@ -337,6 +337,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         delivery_type: courierSelection?.deliveryType,
         locker_id: courierSelection?.lockerId,
         locker_name: courierSelection?.lockerName,
+        woot_service_id: courierSelection?.wootServiceId,
+        woot_courier_name: courierSelection?.wootCourierName,
+        woot_service_name: courierSelection?.wootServiceName,
       });
       if (result.error) { setErrors({ _: result.error }); return; }
 

@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday";
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
+import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,11 @@ export type ShippingOption = {
   deliveryType: "address" | "locker";
   price: number;
   estimatedDays?: string;
+  // Woot is a broker — each option is a specific courier offer; carry its ids so
+  // the customer's choice flows through to AWB creation.
+  wootServiceId?: number;
+  wootCourierName?: string;
+  wootServiceName?: string;
 };
 
 export type LockerItem = {
@@ -53,7 +59,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, default_shipping_cost, shipping_zones")
+    .select("sameday_config, fan_courier_config, woot_config, default_shipping_cost, shipping_zones")
     .eq("business_id", businessId)
     .single();
 
@@ -193,8 +199,34 @@ export async function getShippingOptions(
         deliveryType: "address",
         price: 0,
       });
+    } else if (courierId === "woot") {
+      const wootConfig = settings.woot_config as WootConfig | null;
+      const hasApi = !!(wootConfig?.enabled && wootConfig.public_key && wootConfig.secret_key && wootConfig.sender?.city_id);
+      const flat = (): ShippingOption => ({
+        courier: "woot",
+        courierLabel: zone.label || COURIER_LABELS.woot,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (hasApi && useAutoPrice) {
+        // Woot is a broker: fetch the live courier offers so the customer picks one.
+        promises.push(
+          buildWootOptions(wootConfig!, destination, weight)
+            .then((wootOpts) => {
+              if (wootOpts.length > 0) options.push(...wootOpts);
+              else options.push(flat()); // locality not matched / no offers
+            })
+            .catch((err) => {
+              console.error("[shipping] Woot estimate failed:", err.message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
     } else {
-      // Generic courier (dpd, cargus, woot, colete, own) — flat price
+      // Generic courier (dpd, cargus, colete, own) — flat price
       options.push({
         courier: courierId,
         courierLabel: zone.label || COURIER_LABELS[courierId] || courierId,
@@ -213,6 +245,64 @@ export async function getShippingOptions(
     if (a.deliveryType !== b.deliveryType) return a.deliveryType === "address" ? -1 : 1;
     return a.price - b.price;
   });
+}
+
+// ─── Woot live courier offers ────────────────────────────────────────────────
+
+function matchByName<T extends { name: string }>(list: T[], name: string): T | undefined {
+  const n = (name || "").trim().toLowerCase();
+  if (!n) return undefined;
+  return (
+    list.find((x) => x.name.toLowerCase() === n) ??
+    list.find((x) => x.name.toLowerCase().includes(n) || n.includes(x.name.toLowerCase()))
+  );
+}
+
+/**
+ * Resolve the destination locality to Woot ids and fetch the live courier offers.
+ * Returns one ShippingOption per courier; [] if the locality can't be matched
+ * (caller falls back to the flat price). Contact/phone are placeholders — the
+ * quote depends only on locality, weight and COD.
+ */
+async function buildWootOptions(
+  config: WootConfig,
+  destination: { county: string; city: string; cod?: number },
+  weightKg: number,
+): Promise<ShippingOption[]> {
+  const counties = await fetchWootCounties();
+  const county = matchByName(counties, destination.county);
+  if (!county) return [];
+  const cities = await fetchWootCities(county.id);
+  const city = matchByName(cities, destination.city);
+  if (!city) return [];
+
+  const token = await getWootToken(config.public_key, config.secret_key);
+  const prices = await fetchWootPrices(token, {
+    sender: { ...config.sender },
+    receiver: {
+      company: 0,
+      contact: "Client",
+      phone: "0700000000",
+      country_id: 189,
+      city_id: city.id,
+      address: destination.city,
+    },
+    parcels: [{ type: "package", weight: weightKg, length: 30, width: 20, height: 10, content: "Comanda" }],
+    repayment: destination.cod && destination.cod > 0 ? destination.cod : undefined,
+  });
+
+  return prices
+    .filter((p) => p.errors.length === 0)
+    .map((p): ShippingOption => ({
+      courier: "woot",
+      courierLabel: p.courier_name,
+      deliveryType: "address",
+      price: Math.round(p.final_total * 100) / 100,
+      wootServiceId: p.service_id,
+      wootCourierName: p.courier_name,
+      wootServiceName: p.service_name,
+    }))
+    .sort((a, b) => a.price - b.price);
 }
 
 // ─── Get lockers ─────────────────────────────────────────────────────────────

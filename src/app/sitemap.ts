@@ -44,6 +44,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.7,
       });
     }
+
+    const { data: pages } = await supabase
+      .from("custom_pages")
+      .select("slug, updated_at, seo")
+      .eq("business_id", biz.id)
+      .eq("is_published", true);
+    for (const pg of pages ?? []) {
+      if ((pg.seo as { noindex?: boolean } | null)?.noindex) continue;
+      entries.push({
+        url: `${base}/${pg.slug}`,
+        lastModified: pg.updated_at ? new Date(pg.updated_at) : new Date(),
+        changeFrequency: "monthly",
+        priority: 0.5,
+      });
+    }
     return entries;
   }
 
@@ -91,5 +106,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       };
     });
 
-  return [...staticPages, ...businessPages, ...productPages];
+  const { data: pages } = await supabase
+    .from("custom_pages")
+    .select("slug, updated_at, seo, businesses!inner(slug, is_published, custom_domain)")
+    .eq("is_published", true)
+    .eq("businesses.is_published", true);
+
+  const customPagePages: MetadataRoute.Sitemap = (pages ?? [])
+    .filter((p) => !(p.businesses as unknown as { custom_domain: string | null }).custom_domain)
+    .filter((p) => !(p.seo as { noindex?: boolean } | null)?.noindex)
+    .map((p) => {
+      const biz = p.businesses as unknown as { slug: string };
+      return {
+        url: `${PLATFORM_ORIGIN}/${biz.slug}/${p.slug}`,
+        lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
+        changeFrequency: "monthly" as const,
+        priority: 0.5,
+      };
+    });
+
+  return [...staticPages, ...businessPages, ...productPages, ...customPagePages];
 }

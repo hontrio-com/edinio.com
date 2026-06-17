@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       abandoned_carts: {
         Row: {
+          automation_step: number
           business_id: string
           converted_at: string | null
           created_at: string
@@ -26,7 +27,6 @@ export type Database = {
           items: Json
           last_activity_at: string
           last_recovery_at: string | null
-          automation_step: number
           order_id: string | null
           phone: string | null
           recovery_count: number
@@ -39,6 +39,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          automation_step?: number
           business_id: string
           converted_at?: string | null
           created_at?: string
@@ -49,7 +50,6 @@ export type Database = {
           items?: Json
           last_activity_at?: string
           last_recovery_at?: string | null
-          automation_step?: number
           order_id?: string | null
           phone?: string | null
           recovery_count?: number
@@ -62,6 +62,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          automation_step?: number
           business_id?: string
           converted_at?: string | null
           created_at?: string
@@ -72,7 +73,6 @@ export type Database = {
           items?: Json
           last_activity_at?: string
           last_recovery_at?: string | null
-          automation_step?: number
           order_id?: string | null
           phone?: string | null
           recovery_count?: number
@@ -325,6 +325,56 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_pages: {
+        Row: {
+          blocks: Json
+          business_id: string
+          created_at: string
+          id: string
+          is_published: boolean
+          page_css: string | null
+          seo: Json
+          slug: string
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          blocks?: Json
+          business_id: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          page_css?: string | null
+          seo?: Json
+          slug: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          blocks?: Json
+          business_id?: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          page_css?: string | null
+          seo?: Json
+          slug?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_pages_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
         ]
@@ -894,6 +944,51 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      page_form_submissions: {
+        Row: {
+          block_id: string | null
+          business_id: string
+          created_at: string
+          data: Json
+          id: string
+          is_read: boolean
+          page_id: string | null
+        }
+        Insert: {
+          block_id?: string | null
+          business_id: string
+          created_at?: string
+          data?: Json
+          id?: string
+          is_read?: boolean
+          page_id?: string | null
+        }
+        Update: {
+          block_id?: string | null
+          business_id?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          is_read?: boolean
+          page_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "page_form_submissions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "page_form_submissions_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "custom_pages"
             referencedColumns: ["id"]
           },
         ]

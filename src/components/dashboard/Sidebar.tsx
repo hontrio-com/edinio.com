@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck,
+  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -15,6 +15,13 @@ type Business = Database["public"]["Tables"]["businesses"]["Row"];
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Panou principal" },
   { href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul" },
+  {
+    href: "/dashboard/pages", icon: FileText, label: "Pagini",
+    children: [
+      { href: "/dashboard/pages", label: "Toate paginile" },
+      { href: "/dashboard/pages/messages", label: "Mesaje" },
+    ],
+  },
   { href: "/dashboard/features", icon: Zap, label: "Integrari" },
   {
     href: "/dashboard/products", icon: Package, label: "Produse",

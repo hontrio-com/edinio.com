@@ -16,6 +16,8 @@ import { getCartSessionId } from "@/lib/cart-session";
 import { readBundleConfig } from "@/lib/bundles";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
+import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
+import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
 import type { PaymentMethodType } from "@/lib/payment-methods";
 
@@ -70,6 +72,7 @@ interface PageContent {
   logo_size?: number;
   hero_show_content?: boolean;
   hero_banners?: string[];
+  menu?: MenuItem[];
 }
 
 interface PolicyValue {
@@ -1209,6 +1212,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     : null;
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
+  const menu = pageContent.menu ?? [];
   const storePolicies = (storeSettings?.store_policies as StorePolicies) ?? {};
   const social = (business.social as Social) ?? {};
   const gallery = Array.isArray(business.gallery) ? (business.gallery as string[]) : [];
@@ -1493,7 +1497,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
       {/* Sticky header */}
       <header className={`sticky ${showAnnouncementOnStore ? "top-9" : "top-0"} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
+          <StoreNavHamburger items={menu} basePath={basePath} color={color} logoUrl={business.logo_url} storeName={business.store_name ?? business.business_name} />
           <a href="#" className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
             {business.logo_url ? (
               /* Free logo: full image at any ratio, merchant-set height, no box/crop. */
@@ -1510,7 +1515,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             <span className="font-semibold text-sm text-foreground truncate hidden sm:block">{business.store_name ?? business.business_name}</span>
           </a>
 
-          <div className="flex items-center gap-2">
+          <StoreNavLinks items={menu} basePath={basePath} color={color} className="flex-1 justify-center" />
+
+          <div className="flex items-center gap-2 ml-auto">
             {showCall && (
               <a href={`tel:${business.phone}`}
                 className="hidden sm:flex items-center justify-center hover:opacity-80 transition-opacity">

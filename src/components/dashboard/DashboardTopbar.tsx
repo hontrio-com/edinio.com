@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Bell, LogOut, ChevronDown, X, Menu,
   LayoutDashboard, Pencil, Package, ShoppingCart, Settings,
-  BarChart2, Zap, Ticket, Megaphone,
+  BarChart2, Zap, Ticket, Megaphone, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { logout } from "@/lib/actions/auth.actions";
@@ -38,6 +38,7 @@ type PlatformNotif = {
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Panou principal" },
   { href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul" },
+  { href: "/dashboard/pages", icon: FileText, label: "Pagini" },
   { href: "/dashboard/features", icon: Zap, label: "Integrari" },
   { href: "/dashboard/products", icon: Package, label: "Produse" },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },

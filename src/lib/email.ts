@@ -316,6 +316,37 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
   });
 }
 
+/** Notify a merchant about a new submission from a custom-page contact form. */
+export async function sendPageFormEmail(
+  to: string,
+  data: { storeName: string; pageTitle: string; pageUrl?: string; fields: { label: string; value: string }[] },
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const rows = data.fields
+    .map(
+      (f) => `
+    <div style="margin:0 0 12px 0;">
+      <p style="margin:0;font-size:12px;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">${esc(f.label)}</p>
+      <p style="margin:2px 0 0 0;font-size:14px;color:#18181b;white-space:pre-wrap;">${esc(f.value) || "-"}</p>
+    </div>`,
+    )
+    .join("");
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj nou de pe ${esc(data.storeName)}</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Trimis din formularul paginii "${esc(data.pageTitle)}".</p>
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:18px;">${rows}</div>
+    ${data.pageUrl ? `<p style="margin:18px 0 0 0;font-size:13px;"><a href="${data.pageUrl}" style="color:#15803d;text-decoration:none;">Vezi pagina</a></p>` : ""}
+  `;
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `Mesaj nou de pe ${data.storeName}`,
+    html: baseTemplate(content),
+  });
+}
+
 const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.com";
 
 export async function sendNewSupportTicketToAdmin(data: {

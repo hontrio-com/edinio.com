@@ -96,16 +96,21 @@ export async function updatePageContent(businessId: string, pageContent: Record<
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+    .from("store_settings").select("id, page_content").eq("business_id", businessId).single();
+
+  // Shallow-merge over the existing JSON so keys managed by OTHER editors are not
+  // wiped — e.g. the nav menu set in /dashboard/pages, or hero_banners. Callers
+  // pass their full known set of fields, so overwriting per-key is the intent.
+  const merged = { ...((existing?.page_content as Record<string, unknown>) ?? {}), ...pageContent };
 
   let error;
   if (existing) {
     ({ error } = await supabase.from("store_settings")
-      .update({ page_content: pageContent as never, updated_at: new Date().toISOString() })
+      .update({ page_content: merged as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId));
   } else {
     ({ error } = await supabase.from("store_settings")
-      .insert({ business_id: businessId, page_content: pageContent as never }));
+      .insert({ business_id: businessId, page_content: merged as never }));
   }
 
   if (error) {

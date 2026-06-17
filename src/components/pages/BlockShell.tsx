@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { BlockStyle } from "@/lib/pages/blocks.types";
 
-const PAD: Record<NonNullable<BlockStyle["padding"]>, string> = {
+const PAD: Record<string, string> = {
   none: "py-0",
   sm: "py-4",
   md: "py-8",
@@ -20,9 +20,9 @@ const ALIGN: Record<NonNullable<BlockStyle["align"]>, string> = {
 };
 
 /**
- * Shared wrapper for content blocks. Applies padding, optional background color,
- * max width and text alignment from the block's `style`. Hero / spacer / divider
- * manage their own spacing and skip this shell.
+ * Shared wrapper for content blocks. Applies padding (preset or custom px),
+ * optional background color, max width, text alignment and optional text color
+ * from the block's `style`. Hero / spacer / divider manage their own spacing.
  */
 export function BlockShell({
   style,
@@ -33,12 +33,26 @@ export function BlockShell({
   children: ReactNode;
   innerClassName?: string;
 }) {
-  const pad = PAD[style?.padding ?? "md"];
+  const isCustomPad = style?.padding === "custom";
+  const pad = isCustomPad ? "" : (PAD[style?.padding ?? "md"] ?? PAD.md);
   const width = WIDTH[style?.width ?? "container"];
   const align = ALIGN[style?.align ?? "left"];
+
+  const sectionStyle: CSSProperties = {};
+  if (style?.bg) sectionStyle.backgroundColor = style.bg;
+  if (isCustomPad) {
+    const p = Math.max(0, style?.paddingCustom ?? 32);
+    sectionStyle.paddingTop = p;
+    sectionStyle.paddingBottom = p;
+  }
+
+  const innerStyle: CSSProperties | undefined = style?.textColor ? { color: style.textColor } : undefined;
+
   return (
-    <section className={pad} style={style?.bg ? { backgroundColor: style.bg } : undefined}>
-      <div className={`mx-auto w-full px-4 ${width} ${align} ${innerClassName ?? ""}`}>{children}</div>
+    <section className={pad} style={Object.keys(sectionStyle).length ? sectionStyle : undefined}>
+      <div className={`mx-auto w-full px-4 ${width} ${align} ${innerClassName ?? ""}`} style={innerStyle}>
+        {children}
+      </div>
     </section>
   );
 }

@@ -1,6 +1,6 @@
-import { Package } from "lucide-react";
 import { BlockShell } from "../BlockShell";
-import { formatPrice } from "@/lib/utils/format";
+import { PageProductCard } from "./PageProductCard";
+import { ProductCarousel } from "./ProductCarousel";
 import type { ProductsBlock } from "@/lib/pages/blocks.types";
 
 export interface PageProduct {
@@ -14,56 +14,45 @@ export interface PageProduct {
   is_featured: boolean;
 }
 
-function pick(products: PageProduct[], block: ProductsBlock): PageProduct[] {
+/**
+ * Editor-side filter from a (limited) product set — the fallback used by the live
+ * preview. On the PUBLIC route products are resolved per block server-side
+ * (resolve-products.ts) with a hard cap, so large catalogs never load fully.
+ */
+export function pickProducts(products: PageProduct[], block: ProductsBlock): PageProduct[] {
   const limit = block.limit ?? 8;
   let list = products;
   if (block.mode === "featured") list = products.filter((p) => p.is_featured);
   else if (block.mode === "category" && block.category) list = products.filter((p) => p.category === block.category);
   else if (block.mode === "selected" && block.productIds?.length) {
-    const set = new Set(block.productIds);
-    list = products.filter((p) => set.has(p.id));
+    const order = new Map(block.productIds.map((id, i) => [id, i]));
+    list = products.filter((p) => order.has(p.id)).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }
-  if (list.length === 0 && block.mode === "featured") list = products; // graceful fallback
+  if (list.length === 0 && block.mode === "featured") list = products;
   return list.slice(0, limit);
 }
 
-/** Pure presentational product grid; cards LINK to product pages (no cart needed here). */
-export function ProductsBlockView({ block, products, color, basePath }: {
-  block: ProductsBlock; products: PageProduct[]; color: string; basePath: string;
+export function ProductsBlockView({ block, products, color, basePath, storeSlug }: {
+  block: ProductsBlock; products: PageProduct[]; color: string; basePath: string; storeSlug: string;
 }) {
-  const list = pick(products, block);
-  if (list.length === 0) return null;
+  if (products.length === 0) return null;
+  const columns = block.columns ?? 4;
+  const grid = columns === 2 ? "grid-cols-2" : columns === 3 ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+  const addToCart = !!block.showAddToCart && !!storeSlug;
   return (
     <BlockShell style={block.style}>
       {block.title && (
         <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground text-center mb-8">{block.title}</h2>
       )}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 text-left">
-        {list.map((p) => {
-          const img = p.images?.[0] ?? null;
-          const hasDiscount = p.compare_at_price && p.compare_at_price > p.price;
-          return (
-            <a key={p.id} href={`${basePath}/product/${p.slug ?? p.id}`}
-              className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col">
-              <div className="relative aspect-square bg-gray-50 overflow-hidden">
-                {img ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={img} alt={p.name} className="w-full h-full object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center"><Package className="h-10 w-10 text-gray-200" /></div>
-                )}
-              </div>
-              <div className="p-3 sm:p-4 flex flex-col flex-1">
-                <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1.5 line-clamp-2">{p.name}</h3>
-                <div className="flex items-baseline gap-2 mt-auto">
-                  <span className="font-black text-lg" style={{ color }}>{formatPrice(p.price)}</span>
-                  {hasDiscount && <span className="text-sm text-gray-400 line-through">{formatPrice(p.compare_at_price!)}</span>}
-                </div>
-              </div>
-            </a>
-          );
-        })}
-      </div>
+      {block.layout === "carousel" ? (
+        <ProductCarousel products={products} color={color} basePath={basePath} storeSlug={storeSlug} columns={columns} addToCart={addToCart} />
+      ) : (
+        <div className={`grid ${grid} gap-3 sm:gap-4 text-left`}>
+          {products.map((p) => (
+            <PageProductCard key={p.id} p={p} color={color} basePath={basePath} storeSlug={storeSlug} addToCart={addToCart} />
+          ))}
+        </div>
+      )}
     </BlockShell>
   );
 }

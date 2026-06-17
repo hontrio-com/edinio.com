@@ -5,7 +5,7 @@ import {
   MapBlockView, TrustBlockView, SocialBlockView,
 } from "./blocks/StaticBlocks";
 import { FaqBlockView } from "./blocks/FaqBlock";
-import { ProductsBlockView, type PageProduct } from "./blocks/ProductsBlock";
+import { ProductsBlockView, pickProducts, type PageProduct } from "./blocks/ProductsBlock";
 import { HtmlBlockView } from "./blocks/HtmlBlockView";
 import { ContactFormBlockView } from "./blocks/ContactFormBlock";
 import type { PublicForm } from "@/lib/pages/forms.types";
@@ -15,8 +15,11 @@ interface Social { facebook?: string; instagram?: string; tiktok?: string; youtu
 export interface BlockRendererCtx {
   color: string;
   basePath: string;
+  storeSlug: string;
   social: Social;
   products: PageProduct[];
+  /** Products resolved per block server-side (public route, scale-safe). */
+  productsByBlock?: Record<string, PageProduct[]>;
   forms: PublicForm[];
   businessId: string;
   pageId?: string;
@@ -55,7 +58,7 @@ function BlockOne({ block, ctx }: { block: Block; ctx: BlockRendererCtx }) {
     case "faq":      return <FaqBlockView block={block} />;
     case "trust":    return <TrustBlockView block={block} color={ctx.color} />;
     case "social":   return <SocialBlockView block={block} social={ctx.social} color={ctx.color} />;
-    case "products": return <ProductsBlockView block={block} products={ctx.products} color={ctx.color} basePath={ctx.basePath} />;
+    case "products": return <ProductsBlockView block={block} products={ctx.productsByBlock?.[block.id] ?? pickProducts(ctx.products, block)} color={ctx.color} basePath={ctx.basePath} storeSlug={ctx.storeSlug} />;
     case "contact":  return <ContactFormBlockView block={block} form={block.formId ? ctx.forms.find((f) => f.id === block.formId) : undefined} businessId={ctx.businessId} pageId={ctx.pageId} color={ctx.color} disabled={ctx.preview} />;
     case "html":     return <HtmlBlockView block={block} />;
     default:         return null;

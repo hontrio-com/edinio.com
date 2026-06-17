@@ -168,7 +168,7 @@ export function PagesListClient({ business, pages, initialMenu }: {
           <MenuIcon className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Meniu de navigare</h2>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede in header-ul magazinului (inline pe desktop, hamburger pe mobil). Daca e gol, nu apare niciun meniu.</p>
+        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede in header-ul magazinului (inline pe desktop, hamburger pe mobil). Daca e gol, nu apare niciun meniu. „Magazin” = link catre pagina principala a magazinului; „link” = adresa externa.</p>
 
         <div className="space-y-2">
           {menu.map((m, i) => (
@@ -196,8 +196,8 @@ export function PagesListClient({ business, pages, initialMenu }: {
 
         <div className="flex items-center gap-2 mt-4">
           {!menu.some((m) => m.type === "home") && (
-            <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">
-              <Home className="h-3.5 w-3.5" /> Adauga „Magazin”
+            <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adauga in meniu un link catre pagina principala a magazinului">
+              <Home className="h-3.5 w-3.5" /> Adauga link catre magazin
             </button>
           )}
           <button type="button" onClick={addLink} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">

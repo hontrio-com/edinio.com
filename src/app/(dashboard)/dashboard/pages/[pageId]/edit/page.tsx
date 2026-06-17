@@ -28,7 +28,7 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
 
   const [{ data: productsRaw }, { data: cats }, { data: formsRaw }] = await Promise.all([
     supabase.from("products").select("id, name, slug, price, compare_at_price, images, category, is_featured")
-      .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order"),
+      .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order").limit(60),
     supabase.from("categories").select("name").eq("business_id", business.id).order("sort_order"),
     supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to")
       .eq("business_id", business.id).order("created_at"),

@@ -287,6 +287,21 @@
   100% { transform: translateX(-50%); }
 }
 
+/* ─── Custom-page button effects (CSS-only so blocks stay server-rendered) ─── */
+@keyframes edinio-fx-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes edinio-fx-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes edinio-fx-heartbeat { 0%, 60%, 100% { transform: scale(1); } 30% { transform: scale(1.07); } 45% { transform: scale(1.02); } }
+@keyframes edinio-fx-shake { 0%, 82%, 100% { transform: translateX(0); } 85% { transform: translateX(-4px); } 88% { transform: translateX(4px); } 91% { transform: translateX(-4px); } 94% { transform: translateX(4px); } }
+@keyframes edinio-fx-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+.fx-pulse { animation: edinio-fx-pulse 1.6s ease-in-out infinite; }
+.fx-bounce { animation: edinio-fx-bounce 1.4s ease-in-out infinite; }
+.fx-heartbeat { animation: edinio-fx-heartbeat 1.8s ease-in-out infinite; }
+.fx-shake { animation: edinio-fx-shake 3s ease-in-out infinite; }
+.fx-glow { animation: edinio-fx-glow 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .fx-pulse, .fx-bounce, .fx-heartbeat, .fx-shake, .fx-glow { animation: none; }
+}
+
 
 .scrollbar-hide {
   -ms-overflow-style: none;

@@ -11,7 +11,7 @@ import { StoreFooter } from "@/components/ministore/StoreFooter";
 import { BlockRenderer } from "@/components/pages/BlockRenderer";
 import { prepareBlocksForPublic } from "@/lib/pages/prepare-blocks";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
-import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
+import { resolveAllProductsBlocks } from "@/lib/pages/resolve-products";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { PublicForm, FormField } from "@/lib/pages/forms.types";
@@ -39,12 +39,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const seo = (page.seo ?? {}) as PageSeo;
   const title = `${seo.title || page.title} | ${business.store_name ?? business.business_name}`;
   const url = `${storeBaseUrl(business)}/${page.slug}`;
+  const ogImage = seo.ogImage?.trim() || business.cover_url || undefined;
   return {
     title,
     description: seo.description ?? undefined,
+    keywords: seo.keywords?.trim() || undefined,
     alternates: { canonical: url },
     robots: seo.noindex ? { index: false, follow: false } : undefined,
-    openGraph: { title, description: seo.description ?? undefined, url, type: "website" },
+    openGraph: { title, description: seo.description ?? undefined, url, type: "website", ...(ogImage ? { images: [{ url: ogImage }] } : {}) },
+    ...(ogImage ? { twitter: { card: "summary_large_image" as const, title, description: seo.description ?? undefined, images: [ogImage] } } : {}),
   };
 }
 
@@ -91,12 +94,8 @@ export default async function CustomPage({ params }: Props) {
   if (!page || (!page.is_published && !isOwner)) notFound();
 
   // store_settings (menu + logo size) and forms via service role — not anon-readable.
-  const [{ data: storeSettings }, { data: productsRaw }, { data: formsRaw }] = await Promise.all([
+  const [{ data: storeSettings }, { data: formsRaw }] = await Promise.all([
     createAdminClient().from("store_settings").select("page_content").eq("business_id", business.id).single(),
-    supabase
-      .from("products")
-      .select("id, name, slug, price, compare_at_price, images, category, is_featured")
-      .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order"),
     createAdminClient().from("forms").select("id, name, fields, submit_label, success_message").eq("business_id", business.id),
   ]);
 
@@ -112,17 +111,6 @@ export default async function CustomPage({ params }: Props) {
   const menu = pageContent.menu ?? [];
   const logoSize = pageContent.logo_size ?? 36;
 
-  const products: PageProduct[] = (productsRaw ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    slug: p.slug,
-    price: Number(p.price),
-    compare_at_price: p.compare_at_price != null ? Number(p.compare_at_price) : null,
-    images: Array.isArray(p.images) ? (p.images as unknown[]).map(String).filter(Boolean) : [],
-    category: p.category,
-    is_featured: !!p.is_featured,
-  }));
-
   // Custom domain detection (links honour basePath).
   const headersList = await headers();
   const host = (headersList.get("host") ?? "").split(":")[0];
@@ -130,6 +118,8 @@ export default async function CustomPage({ params }: Props) {
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   const blocks = prepareBlocksForPublic((page.blocks as unknown as Block[]) ?? []);
+  // Resolve each products-block server-side with a hard cap (scales to huge catalogs).
+  const productsByBlock = await resolveAllProductsBlocks(supabase, business.id, blocks);
   const color = business.primary_color ?? "#1AB554";
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
@@ -152,7 +142,7 @@ export default async function CustomPage({ params }: Props) {
       <main id={`edinio-page-${page.id}`} className="flex-1">
         <BlockRenderer
           blocks={blocks}
-          ctx={{ color, basePath, social, products, forms, businessId: business.id, pageId: page.id }}
+          ctx={{ color, basePath, storeSlug: business.slug, social, products: [], productsByBlock, forms, businessId: business.id, pageId: page.id }}
         />
       </main>
       <StoreFooter

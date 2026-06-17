@@ -6,7 +6,7 @@
  * Design rule: a page is a VERTICAL STACK of full-width blocks (no absolute /
  * free positioning). That keeps it far simpler than Elementor and responsive by
  * default. Multi-column layout is only available via the `columns` block, which
- * collapses on mobile.
+ * collapses on mobile. All new fields are optional for backward compatibility.
  */
 
 export type BlockType =
@@ -30,10 +30,12 @@ export type BlockType =
 
 /** Wrapper styling applied by the renderer shell to most content blocks. */
 export interface BlockStyle {
-  padding?: "none" | "sm" | "md" | "lg" | "xl";
-  bg?: string | null;            // background color (CSS color)
+  padding?: "none" | "sm" | "md" | "lg" | "xl" | "custom";
+  paddingCustom?: number; // px, used when padding === "custom"
+  bg?: string | null;     // background color (CSS color)
   width?: "narrow" | "container" | "full";
   align?: "left" | "center" | "right";
+  textColor?: string | null; // optional text color for the block content
 }
 
 interface BaseBlock {
@@ -53,13 +55,19 @@ export interface HeroBlock extends BaseBlock {
   textColor?: string | null;
   overlay?: boolean;
   align?: "left" | "center";
-  height?: "sm" | "md" | "lg";
+  height?: "sm" | "md" | "lg" | "custom";
+  heightCustom?: number;       // px, used when height === "custom"
+  buttonColor?: string | null;
+  buttonTextColor?: string | null;
 }
 
 export interface HeadingBlock extends BaseBlock {
   type: "heading";
   text?: string;
-  level?: 1 | 2 | 3;
+  level?: 1 | 2 | 3;           // semantic heading tag
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "custom";
+  sizeCustom?: number;         // px, used when size === "custom"
+  color?: string | null;       // text color
 }
 
 export interface TextBlock extends BaseBlock {
@@ -74,19 +82,36 @@ export interface ImageBlock extends BaseBlock {
   href?: string;
   caption?: string;
   rounded?: boolean;
+  widthPct?: number;           // 10-100, max width as % of container
+  align?: "left" | "center" | "right";
+}
+
+export interface GalleryItem {
+  src: string;
+  title?: string;
+  desc?: string;
 }
 
 export interface GalleryBlock extends BaseBlock {
   type: "gallery";
-  images?: string[];
+  images?: string[];            // legacy (plain URLs)
+  items?: GalleryItem[];        // new (with optional captions)
   columns?: 2 | 3 | 4;
+  gap?: "sm" | "md" | "lg";
+  captionMode?: "none" | "title" | "desc" | "both";
 }
 
 export interface ButtonBlock extends BaseBlock {
   type: "button";
   label?: string;
   href?: string;
-  variant?: "solid" | "outline";
+  variant?: "solid" | "outline" | "soft" | "ghost";
+  effect?: "none" | "pulse" | "shake" | "bounce" | "glow" | "heartbeat";
+  size?: "sm" | "md" | "lg";
+  rounded?: "sm" | "md" | "lg" | "full";
+  color?: string | null;       // override button color
+  textColor?: string | null;
+  fullWidth?: boolean;
   newTab?: boolean;
 }
 
@@ -102,18 +127,25 @@ export interface ColumnItem {
 export interface ColumnsBlock extends BaseBlock {
   type: "columns";
   count?: 2 | 3;
+  template?: string;           // ratio preset, e.g. "1-1", "1-2", "2-1", "1-1-1", "2-1-1"
   items?: ColumnItem[];
+  bordered?: boolean;
+  gap?: "sm" | "md" | "lg";
+  verticalAlign?: "top" | "center";
 }
 
 export interface SpacerBlock extends BaseBlock {
   type: "spacer";
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "custom";
+  sizeCustom?: number;         // px, used when size === "custom"
 }
 
 export interface DividerBlock extends BaseBlock {
   type: "divider";
-  lineStyle?: "solid" | "dashed";
+  lineStyle?: "solid" | "dashed" | "dotted";
   color?: string | null;
+  thickness?: number;          // px
+  widthPct?: number;           // 10-100
 }
 
 export interface VideoBlock extends BaseBlock {
@@ -136,6 +168,9 @@ export interface FaqBlock extends BaseBlock {
 export interface TrustBlock extends BaseBlock {
   type: "trust";
   items?: { icon: string; title: string; desc: string }[];
+  columns?: 2 | 3 | 4;
+  align?: "left" | "center";
+  card?: boolean;              // card-style items
 }
 
 export interface ProductsBlock extends BaseBlock {
@@ -145,6 +180,9 @@ export interface ProductsBlock extends BaseBlock {
   category?: string;
   productIds?: string[];
   limit?: number;
+  columns?: 2 | 3 | 4;
+  layout?: "grid" | "carousel";
+  showAddToCart?: boolean;
 }
 
 export interface SocialBlock extends BaseBlock {
@@ -190,6 +228,8 @@ export type Block =
 export interface PageSeo {
   title?: string;
   description?: string;
+  keywords?: string;
+  ogImage?: string | null;
   noindex?: boolean;
 }
 
@@ -234,9 +274,9 @@ export const BLOCK_PALETTE_ORDER: BlockType[] = [
 ];
 
 const DEFAULT_TRUST = [
-  { icon: "truck", title: "Livrare rapida", desc: "Livrare in toata Romania prin curier." },
-  { icon: "shield", title: "Plata la livrare", desc: "Platesti cash curierului. Zero riscuri." },
-  { icon: "rotate-ccw", title: "Retur 14 zile", desc: "Returnezi fara intrebari in 14 zile." },
+  { icon: "Truck", title: "Livrare rapida", desc: "Livrare in toata Romania prin curier." },
+  { icon: "ShieldCheck", title: "Plata la livrare", desc: "Platesti cash curierului. Zero riscuri." },
+  { icon: "RotateCcw", title: "Retur 14 zile", desc: "Returnezi fara intrebari in 14 zile." },
 ];
 
 let counter = 0;
@@ -253,21 +293,21 @@ export function createBlock(type: BlockType): Block {
     case "hero":
       return { id, type, title: "Titlul tau aici", subtitle: "Un subtitlu scurt si convingator.", buttonLabel: "Vezi produsele", buttonHref: "", align: "center", height: "md", overlay: true };
     case "heading":
-      return { id, type, text: "Un titlu de sectiune", level: 2, style: { align: "center", padding: "md" } };
+      return { id, type, text: "Un titlu de sectiune", level: 2, size: "lg", style: { align: "center", padding: "md" } };
     case "text":
       return { id, type, html: "<p>Scrie aici textul tau. Poti folosi <strong>bold</strong>, liste si linkuri.</p>", style: { padding: "md", width: "narrow" } };
     case "image":
-      return { id, type, src: null, alt: "", rounded: true, style: { padding: "md", width: "container" } };
+      return { id, type, src: null, alt: "", rounded: true, widthPct: 100, align: "center", style: { padding: "md", width: "container" } };
     case "gallery":
-      return { id, type, images: [], columns: 3, style: { padding: "md" } };
+      return { id, type, items: [], columns: 3, gap: "md", captionMode: "none", style: { padding: "md" } };
     case "button":
-      return { id, type, label: "Apasa aici", href: "", variant: "solid", style: { align: "center", padding: "md" } };
+      return { id, type, label: "Apasa aici", href: "", variant: "solid", effect: "none", size: "md", rounded: "lg", style: { align: "center", padding: "md" } };
     case "columns":
-      return { id, type, count: 2, items: [{ heading: "Coloana 1", html: "<p>Text coloana.</p>" }, { heading: "Coloana 2", html: "<p>Text coloana.</p>" }], style: { padding: "md" } };
+      return { id, type, count: 2, template: "1-1", gap: "md", items: [{ heading: "Coloana 1", html: "<p>Text coloana.</p>" }, { heading: "Coloana 2", html: "<p>Text coloana.</p>" }], style: { padding: "md" } };
     case "spacer":
       return { id, type, size: "md" };
     case "divider":
-      return { id, type, lineStyle: "solid", style: { padding: "sm" } };
+      return { id, type, lineStyle: "solid", thickness: 1, widthPct: 100, style: { padding: "sm" } };
     case "video":
       return { id, type, url: "", style: { padding: "md", width: "container" } };
     case "map":
@@ -275,9 +315,9 @@ export function createBlock(type: BlockType): Block {
     case "faq":
       return { id, type, title: "Intrebari frecvente", items: [{ q: "O intrebare?", a: "Raspunsul tau." }], style: { padding: "lg" } };
     case "trust":
-      return { id, type, items: DEFAULT_TRUST, style: { padding: "lg" } };
+      return { id, type, items: DEFAULT_TRUST, columns: 3, align: "center", card: true, style: { padding: "lg" } };
     case "products":
-      return { id, type, title: "Produsele noastre", mode: "featured", limit: 8, style: { padding: "lg" } };
+      return { id, type, title: "Produsele noastre", mode: "featured", limit: 8, columns: 4, layout: "grid", showAddToCart: false, style: { padding: "lg" } };
     case "social":
       return { id, type, title: "Urmareste-ne", style: { padding: "md", align: "center" } };
     case "contact":

@@ -224,7 +224,6 @@ export default async function DashboardPage() {
       <SiteStatusBar
         isPublished={business.is_published}
         businessId={business.id}
-        businessName={business.business_name}
         publicUrl={publicUrl}
       />
 

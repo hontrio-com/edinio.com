@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -74,6 +75,15 @@ export function PageBuilder({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
+  // Render through a portal to <body> so the full-screen editor is never trapped
+  // inside an ancestor stacking context (which was letting the dashboard topbar /
+  // trial banner bleed through behind the canvas).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   function selectBlock(id: string | null) {
     setSelectedId(id);
     setTab(id ? "block" : "page");
@@ -127,8 +137,10 @@ export function PageBuilder({
 
   const selected = blocks.find((b) => b.id === selectedId) ?? null;
 
-  return (
-    <div className="fixed inset-0 lg:left-[var(--sidebar-width)] flex flex-col bg-muted/30 z-40">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 lg:left-[var(--sidebar-width)] flex flex-col bg-muted/30 z-[60]">
       {/* Top bar */}
       <div className="h-14 bg-background border-b border-border flex items-center gap-2 px-3 shrink-0">
         <Link href="/dashboard/pages" className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted shrink-0">
@@ -265,7 +277,8 @@ export function PageBuilder({
           </div>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -136,6 +136,13 @@
 
 @theme {
   --animate-aurora: aurora 60s linear infinite;
+
+  /* Surfaces: registered here so Tailwind generates the utilities (bg-surface,
+     bg-surface-raised). The same values live in :root above for direct var()
+     use (e.g. gradients). Without this registration `bg-surface` produced no
+     background at all — every surface rendered transparent. */
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #F3F4F6;
 }
 
 @theme inline {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { menuItemHref, isExternalLink, type MenuItem } from "@/lib/pages/menu";
 
@@ -33,6 +34,13 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
   logoUrl?: string | null; storeName: string;
 }) {
   const [open, setOpen] = useState(false);
+  // Portal the panel to <body> so it escapes the sticky header's stacking context
+  // (otherwise the announcement bar / cart bar / cart drawer paint over it).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
@@ -47,10 +55,10 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
         <Menu className="h-4.5 w-4.5 text-foreground" size={18} />
       </button>
 
-      {open && (
+      {mounted && open && createPortal(
         <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] md:hidden" onClick={() => setOpen(false)} />
-          <div className="fixed inset-y-0 left-0 w-72 max-w-[82vw] bg-background z-[60] md:hidden flex flex-col shadow-2xl">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] md:hidden" onClick={() => setOpen(false)} />
+          <div className="fixed inset-y-0 left-0 w-72 max-w-[82vw] bg-background z-[70] md:hidden flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-4 h-16 border-b border-border">
               <div className="flex items-center gap-2 min-w-0">
                 {logoUrl ? (
@@ -84,7 +92,8 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
               })}
             </nav>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </>
   );

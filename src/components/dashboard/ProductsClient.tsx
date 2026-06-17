@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload } from "lucide-react";
+import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download } from "lucide-react";
 import { duplicateProduct } from "@/lib/actions/product.actions";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
@@ -33,6 +33,31 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all");
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/products/export");
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const filename = cd.match(/filename="?([^"]+)"?/)?.[1] ?? "produse.csv";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Export gata. Verifica fisierul descarcat.");
+    } catch {
+      toast.error("Export esuat. Incearca din nou.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const isAtLimit = productLimit !== Infinity && productCount >= productLimit;
   const isNearLimit = !isAtLimit && productLimit !== Infinity && productCount >= Math.floor(productLimit * 0.9);
@@ -127,6 +152,16 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
           >
             <Upload className="h-4 w-4" />
             Importa
+          </button>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting || products.length === 0}
+            title={products.length === 0 ? "Nu ai produse de exportat" : "Exporta toate produsele in CSV"}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-muted rounded-xl transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Exporta
           </button>
           {isAtLimit ? (
             <div className="flex items-center gap-2">

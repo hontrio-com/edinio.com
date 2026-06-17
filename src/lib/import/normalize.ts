@@ -106,6 +106,26 @@ export function splitTags(raw: unknown): string[] {
 }
 
 /**
+ * Parse a specifications cell into label/value rows.
+ * Format: "Eticheta: Valoare | Eticheta2: Valoare2" (pairs split on | or newline,
+ * label/value split on the first ":").
+ */
+export function parseSpecifications(raw: unknown): { label: string; value: string }[] {
+  if (raw == null) return [];
+  const s = String(raw).trim();
+  if (!s) return [];
+  const out: { label: string; value: string }[] = [];
+  for (const pair of s.split(/[|\n]+/)) {
+    const idx = pair.indexOf(":");
+    if (idx === -1) continue;
+    const label = cleanText(pair.slice(0, idx));
+    const value = cleanText(pair.slice(idx + 1));
+    if (label && value) out.push({ label, value });
+  }
+  return out.slice(0, 50);
+}
+
+/**
  * Parse a category cell into a hierarchy path. Takes the first category when
  * several are listed (our schema stores one category per product) and splits
  * the hierarchy on ">".

@@ -64,7 +64,7 @@ export async function GET() {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("products")
-      .select("name, price, compare_at_price, description, sku, category, tags, images, stock_quantity, track_inventory, weight_grams, is_active, is_featured, slug, external_id")
+      .select("name, price, compare_at_price, description, sku, category, tags, images, stock_quantity, track_inventory, weight_grams, is_active, is_featured, slug, external_id, page_sections")
       .eq("business_id", biz.id)
       .eq("is_bundle", false)
       .order("sort_order", { ascending: true })
@@ -75,9 +75,25 @@ export async function GET() {
     if (!data || data.length < PAGE) break;
   }
 
+  type PS = {
+    short_description?: string;
+    stock_status?: string;
+    low_stock_threshold?: number;
+    dimensions?: { length?: number; width?: number; height?: number };
+    specifications?: { label?: string; value?: string }[];
+    quantity_tiers?: { enabled?: boolean; mode?: string; tier2_price?: number; tier2_percent?: number; tier2_badge?: string; tier3_price?: number; tier3_percent?: number; tier3_badge?: string };
+    seo?: { title?: string; description?: string };
+  };
+  const ssOut: Record<string, string> = { in_stock: "in stoc", out_of_stock: "epuizat", preorder: "precomanda" };
+
+  // Full column set — keep in sync with the import template (src/lib/import/templates.ts).
   const header = [
-    "Nume", "Pret", "Pret vechi", "Descriere", "SKU", "Categorie", "Etichete",
-    "Imagini", "Stoc", "Greutate", "Publicat", "Recomandat", "Slug", "ID extern",
+    "Nume", "Pret", "Pret vechi", "Descriere scurta", "Descriere", "SKU", "Categorie",
+    "Etichete", "Imagini", "Stoc", "Prag stoc redus", "Status stoc", "Greutate",
+    "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Publicat", "Recomandat",
+    "Specificatii", "Upsell - mod", "Upsell 2 buc - valoare", "Upsell 2 buc - eticheta",
+    "Upsell 3 buc - valoare", "Upsell 3 buc - eticheta", "Slug", "ID extern",
+    "Titlu SEO", "Descriere SEO",
   ];
 
   const lines = [header.map(csvCell).join(",")];
@@ -85,21 +101,48 @@ export async function GET() {
     const images = Array.isArray(p.images) ? (p.images as string[]).filter(Boolean) : [];
     const tags = Array.isArray(p.tags) ? (p.tags as string[]).filter(Boolean) : [];
     const tracked = p.track_inventory === true;
+    const ps = (p.page_sections ?? {}) as PS;
+    const dim = ps.dimensions ?? {};
+    const specs = Array.isArray(ps.specifications)
+      ? ps.specifications.filter((s) => s?.label && s?.value).map((s) => `${s.label}: ${s.value}`).join(" | ")
+      : "";
+    const qt = ps.quantity_tiers;
+    const upsellOn = !!(qt && qt.enabled);
+    const isPct = qt?.mode === "percent";
+    const tierVal = (price?: number, pct?: number): string => {
+      if (!upsellOn) return "";
+      const v = isPct ? pct : price;
+      return v != null && v > 0 ? num(v) : "";
+    };
     lines.push([
       csvCell(p.name as string),
       num(p.price as number),
       num(p.compare_at_price as number | null),
+      csvCell(ps.short_description ?? ""),
       csvCell(p.description as string | null),
       csvCell(p.sku as string | null),
       csvCell(categoryPath(p.category as string | null)),
       csvCell(tags.join(", ")),
       csvCell(images.join(" | ")),
       tracked ? num(p.stock_quantity as number | null) : "",
+      ps.low_stock_threshold != null ? num(ps.low_stock_threshold) : "",
+      ps.stock_status ? (ssOut[ps.stock_status] ?? ps.stock_status) : "",
       p.weight_grams != null ? `${p.weight_grams} g` : "",
+      dim.length ? num(dim.length) : "",
+      dim.width ? num(dim.width) : "",
+      dim.height ? num(dim.height) : "",
       p.is_active ? "Da" : "Nu",
       p.is_featured ? "Da" : "Nu",
+      csvCell(specs),
+      upsellOn ? (isPct ? "procent" : "suma") : "",
+      tierVal(qt?.tier2_price, qt?.tier2_percent),
+      upsellOn ? csvCell(qt?.tier2_badge ?? "") : "",
+      tierVal(qt?.tier3_price, qt?.tier3_percent),
+      upsellOn ? csvCell(qt?.tier3_badge ?? "") : "",
       csvCell(p.slug as string | null),
       csvCell(p.external_id as string | null),
+      csvCell(ps.seo?.title ?? ""),
+      csvCell(ps.seo?.description ?? ""),
     ].join(","));
   }
 

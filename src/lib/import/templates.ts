@@ -2,7 +2,8 @@
 // adapter reads, so a filled-in template imports cleanly:
 //  - shopify: native Shopify product export columns (grouped by Handle).
 //  - woo: native WooCommerce product export columns.
-//  - generic: Edinio's simple columns (auto-mapped by header name).
+//  - generic: Edinio's full column set (auto-mapped by header name) — covers
+//    everything the product form has: specificatii, upsell, dimensiuni, SEO etc.
 // Rows use CRLF + are written with a UTF-8 BOM at download time (Excel-friendly).
 
 export interface ImportTemplate {
@@ -10,14 +11,44 @@ export interface ImportTemplate {
   csv: string;
 }
 
+function csvCell(v: string): string {
+  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+function toCsv(rows: string[][]): string {
+  return rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+}
+
+// Full generic column set — keep in sync with OUR_FIELDS / FIELD_SYNONYMS and the
+// export route (src/app/api/products/export/route.ts) for round-trip imports.
+const GENERIC_HEADERS = [
+  "Nume", "Pret", "Pret vechi", "Descriere scurta", "Descriere", "SKU", "Categorie",
+  "Etichete", "Imagini", "Stoc", "Prag stoc redus", "Status stoc", "Greutate",
+  "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Publicat", "Recomandat",
+  "Specificatii", "Upsell - mod", "Upsell 2 buc - valoare", "Upsell 2 buc - eticheta",
+  "Upsell 3 buc - valoare", "Upsell 3 buc - eticheta", "Slug", "ID extern",
+  "Titlu SEO", "Descriere SEO",
+];
+
 export const IMPORT_TEMPLATES: Record<"generic" | "shopify" | "woo", ImportTemplate> = {
   generic: {
     filename: "edinio-sablon-generic.csv",
-    csv: [
-      "Name,Price,Compare at price,Description,SKU,Category,Tags,Images,Stock,Weight (kg)",
-      'Tricou bumbac,79.99,99.99,"Tricou din bumbac 100%, comod.",TRICOU-001,Imbracaminte,"bumbac,vara","https://exemplu.ro/tricou-1.jpg,https://exemplu.ro/tricou-2.jpg",50,0.2',
-      "Cana ceramica,29.99,,Cana de 350 ml.,CANA-002,Accesorii,cadou,https://exemplu.ro/cana.jpg,100,0.3",
-    ].join("\r\n"),
+    csv: toCsv([
+      GENERIC_HEADERS,
+      [
+        "Tricou bumbac", "79.99", "99.99", "Tricou comod din bumbac",
+        "Tricou din bumbac 100%, comod si racoros.", "TRICOU-001", "Imbracaminte > Tricouri",
+        "bumbac,vara", "https://exemplu.ro/tricou-1.jpg | https://exemplu.ro/tricou-2.jpg",
+        "50", "5", "in stoc", "200 g", "70", "50", "1", "Da", "Da",
+        "Material: 100% bumbac | Model: Unisex", "procent", "10", "Popular", "15", "Cea mai buna oferta",
+        "tricou-bumbac", "TRICOU-001", "Tricou bumbac comod", "Tricou din bumbac 100%, comod.",
+      ],
+      [
+        "Cana ceramica", "29.99", "", "", "Cana de 350 ml.", "CANA-002", "Accesorii",
+        "cadou", "https://exemplu.ro/cana.jpg", "100", "", "in stoc", "300 g", "", "", "",
+        "Da", "Nu", "Capacitate: 350 ml | Material: Ceramica", "suma", "27", "2+ bucati", "", "",
+        "cana-ceramica", "CANA-002", "", "",
+      ],
+    ]),
   },
   shopify: {
     filename: "edinio-sablon-shopify.csv",

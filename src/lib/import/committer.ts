@@ -176,7 +176,7 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       existingId = ex?.id ?? null;
     }
 
-    const payload = buildPayload(p, businessId, source, category, options);
+    const payload = buildPayload(p, businessId, source, category);
 
     if (existingId) {
       // Keep the existing slug (avoid collisions); update everything else.
@@ -336,11 +336,16 @@ function buildPayload(
   businessId: string,
   source: string,
   category: string | null,
-  options: ImportOptions,
 ) {
   const page_sections: Record<string, unknown> = {};
   if (p.variants && p.variants.combinations.length > 0) page_sections.variants = p.variants;
   if (p.seo) page_sections.seo = p.seo;
+  if (p.short_description) page_sections.short_description = p.short_description;
+  if (p.stock_status) page_sections.stock_status = p.stock_status;
+  if (p.low_stock_threshold != null) page_sections.low_stock_threshold = p.low_stock_threshold;
+  if (p.dimensions && (p.dimensions.length || p.dimensions.width || p.dimensions.height)) page_sections.dimensions = p.dimensions;
+  if (p.specifications && p.specifications.length > 0) page_sections.specifications = p.specifications;
+  if (p.quantity_tiers) page_sections.quantity_tiers = p.quantity_tiers;
 
   return {
     business_id: businessId,
@@ -356,7 +361,9 @@ function buildPayload(
     track_inventory: p.track_inventory,
     stock_quantity: p.track_inventory ? p.stock_quantity ?? 0 : null,
     is_featured: p.is_featured,
-    is_active: options.default_active,
+    // Per-product when the source provides it (generic "Publicat" column); preset
+    // adapters set p.is_active = options.default_active, so they are unaffected.
+    is_active: p.is_active,
     weight_grams: p.weight_grams,
     page_sections: page_sections as unknown as never,
     tags: p.tags as unknown as never,

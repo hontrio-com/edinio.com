@@ -43,6 +43,28 @@ export interface StagedImage {
   position?: number;
 }
 
+export interface StagedSpec {
+  label: string;
+  value: string;
+}
+
+export interface StagedQuantityTiers {
+  enabled: boolean;
+  mode: "fixed" | "percent";
+  tier2_price: number;
+  tier2_percent: number;
+  tier2_badge: string;
+  tier3_price: number;
+  tier3_percent: number;
+  tier3_badge: string;
+}
+
+export interface StagedDimensions {
+  length: number;
+  width: number;
+  height: number;
+}
+
 export interface StagedProduct {
   external_id: string | null; // Shopify Handle / Woo SKU|ID, for dedupe + re-sync
   name: string;
@@ -61,6 +83,13 @@ export interface StagedProduct {
   is_featured: boolean;
   variants: StagedVariants | null;
   seo: { title: string; description: string } | null;
+  // Rich page_sections fields (generic CSV only; optional so preset adapters skip them).
+  short_description?: string | null;
+  stock_status?: "in_stock" | "out_of_stock" | "preorder" | null;
+  low_stock_threshold?: number | null;
+  dimensions?: StagedDimensions | null;
+  specifications?: StagedSpec[];
+  quantity_tiers?: StagedQuantityTiers | null;
 }
 
 // ── Fields the generic mapper can target ────────────────────────────────────
@@ -80,7 +109,19 @@ export type OurField =
   | "external_id"
   | "slug"
   | "seo_title"
-  | "seo_description";
+  | "seo_description"
+  | "short_description"
+  | "stock_status"
+  | "low_stock_threshold"
+  | "dim_length"
+  | "dim_width"
+  | "dim_height"
+  | "specifications"
+  | "upsell_mode"
+  | "upsell_qty2"
+  | "upsell_qty2_badge"
+  | "upsell_qty3"
+  | "upsell_qty3_badge";
 
 export interface FieldDef {
   key: OurField;
@@ -106,6 +147,18 @@ export const OUR_FIELDS: FieldDef[] = [
   { key: "slug", label: "Link produs (slug)", required: false },
   { key: "seo_title", label: "Titlu SEO", required: false },
   { key: "seo_description", label: "Descriere SEO", required: false },
+  { key: "short_description", label: "Descriere scurta", required: false },
+  { key: "stock_status", label: "Status stoc", required: false, hint: "in stoc / epuizat / precomanda" },
+  { key: "low_stock_threshold", label: "Prag stoc redus", required: false },
+  { key: "dim_length", label: "Lungime (cm)", required: false },
+  { key: "dim_width", label: "Latime (cm)", required: false },
+  { key: "dim_height", label: "Inaltime (cm)", required: false },
+  { key: "specifications", label: "Specificatii", required: false, hint: "Eticheta: Valoare, separate prin | (ex: Material: Bumbac | Greutate: 200g)" },
+  { key: "upsell_mode", label: "Upsell - mod", required: false, hint: "suma sau procent" },
+  { key: "upsell_qty2", label: "Upsell 2 buc - valoare", required: false, hint: "pret/buc (suma) sau reducere % (procent)" },
+  { key: "upsell_qty2_badge", label: "Upsell 2 buc - eticheta", required: false },
+  { key: "upsell_qty3", label: "Upsell 3 buc - valoare", required: false },
+  { key: "upsell_qty3_badge", label: "Upsell 3 buc - eticheta", required: false },
 ];
 
 // Maps an OurField key to the source column header the user picked.

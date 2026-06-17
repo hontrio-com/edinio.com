@@ -46,6 +46,18 @@ const FIELD_SYNONYMS: Record<OurField, string[]> = {
   slug: ["slug", "handle", "link", "permalink", "url key"],
   seo_title: ["seo title", "meta title", "titlu seo", "page title"],
   seo_description: ["seo description", "meta description", "descriere seo", "meta desc"],
+  short_description: ["descriere scurta", "short description", "scurta descriere", "rezumat", "excerpt", "short desc"],
+  stock_status: ["status stoc", "stock status", "disponibilitate", "availability", "stare stoc"],
+  low_stock_threshold: ["prag stoc redus", "prag stoc", "low stock threshold", "low stock", "stoc minim"],
+  dim_length: ["lungime (cm)", "lungime", "length", "lungime cm"],
+  dim_width: ["latime (cm)", "latime", "width", "latime cm"],
+  dim_height: ["inaltime (cm)", "inaltime", "height", "inaltime cm"],
+  specifications: ["specificatii", "specifications", "specs", "specificatie", "atribute", "attributes"],
+  upsell_mode: ["upsell - mod", "upsell mod", "mod upsell", "upsell mode"],
+  upsell_qty2: ["upsell 2 buc - valoare", "upsell 2 buc", "upsell 2", "upsell2"],
+  upsell_qty2_badge: ["upsell 2 buc - eticheta", "upsell 2 buc eticheta", "upsell 2 badge", "upsell2 eticheta"],
+  upsell_qty3: ["upsell 3 buc - valoare", "upsell 3 buc", "upsell 3", "upsell3"],
+  upsell_qty3_badge: ["upsell 3 buc - eticheta", "upsell 3 buc eticheta", "upsell 3 badge", "upsell3 eticheta"],
 };
 
 /** Best-guess mapping of source headers onto our fields (generic CSV). */

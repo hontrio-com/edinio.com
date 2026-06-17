@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useTransition, useEffect, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent } from "lucide-react";
 import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
@@ -494,14 +495,13 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                         >
                           {duplicatingId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/dashboard/products/${product.id}/edit`)}
+                        <Link
+                          href={`/dashboard/products/${product.id}/edit`}
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                           aria-label="Editeaza"
                         >
                           <Pencil className="h-3.5 w-3.5" />
-                        </button>
+                        </Link>
                       </div>
                     </td>
                   </tr>

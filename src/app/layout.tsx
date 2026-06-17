@@ -110,10 +110,9 @@ export default function RootLayout({
         <Toaster
           position="bottom-right"
           toastOptions={{
-            duration: 4000,
+            duration: 1800,
             classNames: {
               toast: "font-sans text-sm",
-              error: "!duration-6000",
             },
           }}
         />

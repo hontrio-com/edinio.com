@@ -1805,20 +1805,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                       style={{
                         borderColor: active ? color : "var(--color-border)",
                         boxShadow: active ? `0 0 0 2px ${color}40` : "none",
-                        // iOS Safari: force a compositing layer so border-radius +
-                        // overflow:hidden clips/paints the image inside the scroller.
-                        transform: "translateZ(0)",
-                        WebkitTransform: "translateZ(0)",
-                        isolation: "isolate",
                       }}
                     >
                       {item.image ? (
-                        /* Plain <img> (not next/image fill): an absolutely-positioned
-                           fill image inside the horizontal scroller fails to render on
-                           iOS Safari. Explicit dims + eager decode make it reliable.
-                           The loader is a no-op, so no optimization is lost. */
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={item.image} alt={item.name} width={72} height={72} loading="eager" decoding="async" className="block w-full h-full object-cover" />
+                        <Image src={item.image} alt={item.name} fill sizes="72px" className="object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center"
                           style={{ backgroundColor: active ? `${color}15` : "var(--color-muted)" }}>

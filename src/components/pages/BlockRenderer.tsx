@@ -8,6 +8,7 @@ import { FaqBlockView } from "./blocks/FaqBlock";
 import { ProductsBlockView, type PageProduct } from "./blocks/ProductsBlock";
 import { HtmlBlockView } from "./blocks/HtmlBlockView";
 import { ContactFormBlockView } from "./blocks/ContactFormBlock";
+import type { PublicForm } from "@/lib/pages/forms.types";
 
 interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; website?: string }
 
@@ -16,6 +17,7 @@ export interface BlockRendererCtx {
   basePath: string;
   social: Social;
   products: PageProduct[];
+  forms: PublicForm[];
   businessId: string;
   pageId?: string;
   /** Editor preview: disable live form submission. */
@@ -54,7 +56,7 @@ function BlockOne({ block, ctx }: { block: Block; ctx: BlockRendererCtx }) {
     case "trust":    return <TrustBlockView block={block} color={ctx.color} />;
     case "social":   return <SocialBlockView block={block} social={ctx.social} color={ctx.color} />;
     case "products": return <ProductsBlockView block={block} products={ctx.products} color={ctx.color} basePath={ctx.basePath} />;
-    case "contact":  return <ContactFormBlockView block={block} businessId={ctx.businessId} pageId={ctx.pageId} color={ctx.color} disabled={ctx.preview} />;
+    case "contact":  return <ContactFormBlockView block={block} form={block.formId ? ctx.forms.find((f) => f.id === block.formId) : undefined} businessId={ctx.businessId} pageId={ctx.pageId} color={ctx.color} disabled={ctx.preview} />;
     case "html":     return <HtmlBlockView block={block} />;
     default:         return null;
   }

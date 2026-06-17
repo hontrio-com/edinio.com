@@ -4,6 +4,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { PageBuilder } from "@/components/pages/PageBuilder";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
+import type { FormDef, FormField } from "@/lib/pages/forms.types";
 
 export default async function EditCustomPage({ params }: { params: Promise<{ pageId: string }> }) {
   const { pageId } = await params;
@@ -25,10 +26,12 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const isAdmin = profile?.role === "admin";
 
-  const [{ data: productsRaw }, { data: cats }] = await Promise.all([
+  const [{ data: productsRaw }, { data: cats }, { data: formsRaw }] = await Promise.all([
     supabase.from("products").select("id, name, slug, price, compare_at_price, images, category, is_featured")
       .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order"),
     supabase.from("categories").select("name").eq("business_id", business.id).order("sort_order"),
+    supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to")
+      .eq("business_id", business.id).order("created_at"),
   ]);
 
   const products: PageProduct[] = (productsRaw ?? []).map((p) => ({
@@ -36,6 +39,13 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
     price: Number(p.price), compare_at_price: p.compare_at_price != null ? Number(p.compare_at_price) : null,
     images: Array.isArray(p.images) ? (p.images as unknown[]).map(String).filter(Boolean) : [],
     category: p.category, is_featured: !!p.is_featured,
+  }));
+
+  const forms: FormDef[] = (formsRaw ?? []).map((f) => ({
+    id: f.id, name: f.name,
+    fields: Array.isArray(f.fields) ? (f.fields as unknown as FormField[]) : [],
+    submit_label: f.submit_label, success_message: f.success_message,
+    email_enabled: f.email_enabled, email_to: f.email_to,
   }));
 
   return (
@@ -55,6 +65,7 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
       }}
       products={products}
       categories={(cats ?? []).map((c) => c.name)}
+      forms={forms}
       isAdmin={isAdmin}
     />
   );

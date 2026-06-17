@@ -589,6 +589,53 @@ export type Database = {
         }
         Relationships: []
       }
+      forms: {
+        Row: {
+          business_id: string
+          created_at: string
+          email_enabled: boolean
+          email_to: string | null
+          fields: Json
+          id: string
+          name: string
+          submit_label: string
+          success_message: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          email_enabled?: boolean
+          email_to?: string | null
+          fields?: Json
+          id?: string
+          name: string
+          submit_label?: string
+          success_message?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          email_enabled?: boolean
+          email_to?: string | null
+          fields?: Json
+          id?: string
+          name?: string
+          submit_label?: string
+          success_message?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forms_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gmc_products: {
         Row: {
           business_id: string
@@ -954,6 +1001,7 @@ export type Database = {
           business_id: string
           created_at: string
           data: Json
+          form_id: string | null
           id: string
           is_read: boolean
           page_id: string | null
@@ -963,6 +1011,7 @@ export type Database = {
           business_id: string
           created_at?: string
           data?: Json
+          form_id?: string | null
           id?: string
           is_read?: boolean
           page_id?: string | null
@@ -972,6 +1021,7 @@ export type Database = {
           business_id?: string
           created_at?: string
           data?: Json
+          form_id?: string | null
           id?: string
           is_read?: boolean
           page_id?: string | null
@@ -982,6 +1032,13 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "page_form_submissions_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "forms"
             referencedColumns: ["id"]
           },
           {

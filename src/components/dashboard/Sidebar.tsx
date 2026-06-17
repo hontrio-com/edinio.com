@@ -19,6 +19,7 @@ const NAV_ITEMS = [
     href: "/dashboard/pages", icon: FileText, label: "Pagini",
     children: [
       { href: "/dashboard/pages", label: "Toate paginile" },
+      { href: "/dashboard/pages/forms", label: "Formulare" },
       { href: "/dashboard/pages/messages", label: "Mesaje" },
     ],
   },

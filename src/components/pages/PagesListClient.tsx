@@ -111,6 +111,12 @@ export function PagesListClient({ business, pages, initialMenu }: {
         </button>
       </div>
 
+      {/* Quick links (reachable on mobile where the sidebar submenu is hidden) */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        <Link href="/dashboard/pages/forms" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors">Formulare</Link>
+        <Link href="/dashboard/pages/messages" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors">Mesaje</Link>
+      </div>
+
       {/* Pages list */}
       {pages.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-border rounded-2xl">

@@ -238,6 +238,7 @@ export async function updateStoreMenu(
 
 export async function submitPageForm(input: {
   businessId: string;
+  formId?: string | null;
   pageId?: string;
   blockId?: string;
   fields: { label: string; value: string }[];
@@ -248,7 +249,7 @@ export async function submitPageForm(input: {
 
   const fields = (input.fields ?? [])
     .filter((f) => f && typeof f.label === "string")
-    .slice(0, 30)
+    .slice(0, 40)
     .map((f) => ({ label: String(f.label).slice(0, 120), value: String(f.value ?? "").slice(0, 5000) }));
   if (fields.length === 0) return { error: "Formular gol." };
 
@@ -270,10 +271,39 @@ export async function submitPageForm(input: {
     .single();
   if (!biz || !biz.is_published) return { error: "Magazin indisponibil." };
 
+  // Resolve email settings SERVER-SIDE. The recipient is never taken from the
+  // client (prevents using the form as an open relay / spam amplifier).
+  let emailEnabled = false;
+  let emailTo = "";
+  let title = "Formular";
+  let formId: string | null = null;
+
+  if (input.formId) {
+    const { data: form } = await admin
+      .from("forms").select("id, name, email_enabled, email_to")
+      .eq("id", input.formId).eq("business_id", biz.id).single();
+    if (form) {
+      formId = form.id;
+      title = form.name;
+      emailEnabled = form.email_enabled;
+      emailTo = (form.email_to ?? "").trim();
+    }
+  } else if (input.pageId && input.blockId) {
+    // Built-in contact block: read its opt-in flag from the stored page (trusted).
+    const { data: page } = await admin
+      .from("custom_pages").select("blocks, title")
+      .eq("id", input.pageId).eq("business_id", biz.id).single();
+    const blocks = (page?.blocks as Array<Record<string, unknown>> | null) ?? [];
+    const block = blocks.find((b) => b.id === input.blockId);
+    if (block && block.emailEnabled === true) emailEnabled = true;
+    if (page?.title) title = page.title;
+  }
+
   const { error } = await admin.from("page_form_submissions").insert({
     business_id: biz.id,
     page_id: input.pageId ?? null,
     block_id: input.blockId ?? null,
+    form_id: formId,
     data: { fields } as never,
   });
   if (error) {
@@ -281,22 +311,24 @@ export async function submitPageForm(input: {
     return { error: "Eroare la trimitere. Incearca din nou." };
   }
 
-  // Notify the merchant (best-effort; never blocks the submission result).
-  try {
-    let to = biz.email?.trim() || "";
-    if (!to) {
-      const { data: u } = await admin.auth.admin.getUserById(biz.user_id);
-      to = u.user?.email ?? "";
+  // Email the merchant ONLY when they opted in. Recipient is server-trusted.
+  if (emailEnabled) {
+    try {
+      let to = emailTo || biz.email?.trim() || "";
+      if (!to) {
+        const { data: u } = await admin.auth.admin.getUserById(biz.user_id);
+        to = u.user?.email ?? "";
+      }
+      if (to) {
+        const storeName = biz.store_name ?? biz.business_name;
+        const pageUrl = biz.custom_domain
+          ? `https://${biz.custom_domain}`
+          : `https://www.edinio.com/${biz.slug}`;
+        await sendPageFormEmail(to, { storeName, pageTitle: title, pageUrl, fields });
+      }
+    } catch (e) {
+      logError({ action: "submitPageForm.email", message: e instanceof Error ? e.message : "email failed", details: { businessId: input.businessId } });
     }
-    if (to) {
-      const storeName = biz.store_name ?? biz.business_name;
-      const pageUrl = biz.custom_domain
-        ? `https://${biz.custom_domain}`
-        : `https://www.edinio.com/${biz.slug}`;
-      await sendPageFormEmail(to, { storeName, pageTitle: "Contact", pageUrl, fields });
-    }
-  } catch (e) {
-    logError({ action: "submitPageForm.email", message: e instanceof Error ? e.message : "email failed", details: { businessId: input.businessId } });
   }
 
   return { success: true };

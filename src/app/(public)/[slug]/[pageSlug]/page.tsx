@@ -14,6 +14,7 @@ import { sanitizeCss } from "@/lib/pages/sanitize-css";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import type { MenuItem } from "@/lib/pages/menu";
+import type { PublicForm, FormField } from "@/lib/pages/forms.types";
 
 interface Props {
   params: Promise<{ slug: string; pageSlug: string }>;
@@ -89,14 +90,23 @@ export default async function CustomPage({ params }: Props) {
   // Page must exist; unpublished pages are visible only to the owner.
   if (!page || (!page.is_published && !isOwner)) notFound();
 
-  // store_settings (menu + logo size) via service role — not anon-readable.
-  const [{ data: storeSettings }, { data: productsRaw }] = await Promise.all([
+  // store_settings (menu + logo size) and forms via service role — not anon-readable.
+  const [{ data: storeSettings }, { data: productsRaw }, { data: formsRaw }] = await Promise.all([
     createAdminClient().from("store_settings").select("page_content").eq("business_id", business.id).single(),
     supabase
       .from("products")
       .select("id, name, slug, price, compare_at_price, images, category, is_featured")
       .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order"),
+    createAdminClient().from("forms").select("id, name, fields, submit_label, success_message").eq("business_id", business.id),
   ]);
+
+  const forms: PublicForm[] = (formsRaw ?? []).map((f) => ({
+    id: f.id,
+    name: f.name,
+    fields: Array.isArray(f.fields) ? (f.fields as unknown as FormField[]) : [],
+    submit_label: f.submit_label,
+    success_message: f.success_message,
+  }));
 
   const pageContent = (storeSettings?.page_content ?? {}) as { menu?: MenuItem[]; logo_size?: number };
   const menu = pageContent.menu ?? [];
@@ -142,7 +152,7 @@ export default async function CustomPage({ params }: Props) {
       <main id={`edinio-page-${page.id}`} className="flex-1">
         <BlockRenderer
           blocks={blocks}
-          ctx={{ color, basePath, social, products, businessId: business.id, pageId: page.id }}
+          ctx={{ color, basePath, social, products, forms, businessId: business.id, pageId: page.id }}
         />
       </main>
       <StoreFooter

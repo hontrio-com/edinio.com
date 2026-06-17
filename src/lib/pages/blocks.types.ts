@@ -159,6 +159,10 @@ export interface ContactBlock extends BaseBlock {
   successMessage?: string;
   showPhone?: boolean;
   showMessage?: boolean;
+  /** When set, render this merchant-built form instead of the built-in contact fields. */
+  formId?: string | null;
+  /** Built-in contact only: opt in to receive submissions by email (to the store email). */
+  emailEnabled?: boolean;
 }
 
 /**

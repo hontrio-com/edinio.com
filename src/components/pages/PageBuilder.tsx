@@ -20,6 +20,7 @@ import {
   type Block, type BlockType, type PageSeo,
 } from "@/lib/pages/blocks.types";
 import type { PageProduct } from "./blocks/ProductsBlock";
+import type { FormDef } from "@/lib/pages/forms.types";
 
 const ICONS: Record<string, React.ElementType> = {
   Sparkles, Heading, Type, Image: ImageIcon, Images, MousePointerClick, Columns3,
@@ -37,11 +38,11 @@ const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-su
 
 export function PageBuilder({
   pageId, initialTitle, initialSlug, initialPublished, initialBlocks, initialCss, initialSeo,
-  business, products, categories, isAdmin,
+  business, products, categories, forms, isAdmin,
 }: {
   pageId: string; initialTitle: string; initialSlug: string; initialPublished: boolean;
   initialBlocks: Block[]; initialCss: string; initialSeo: PageSeo;
-  business: BuilderBusiness; products: PageProduct[]; categories: string[]; isAdmin: boolean;
+  business: BuilderBusiness; products: PageProduct[]; categories: string[]; forms: FormDef[]; isAdmin: boolean;
 }) {
   const router = useRouter();
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
@@ -61,7 +62,7 @@ export function PageBuilder({
   const publicBase = business.custom_domain ? `https://${business.custom_domain}` : `https://edinio.com/${business.slug}`;
 
   const ctx: BlockRendererCtx = {
-    color, basePath: "", social: business.social, products,
+    color, basePath: "", social: business.social, products, forms,
     businessId: business.id, pageId, preview: true,
   };
 
@@ -229,7 +230,7 @@ export function PageBuilder({
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             {tab === "block" && selected ? (
-              <BlockSettings block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} products={products} isAdmin={isAdmin} />
+              <BlockSettings block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} products={products} forms={forms} isAdmin={isAdmin} />
             ) : (
               <PageSettings
                 title={title} slug={slug} seo={seo} css={css} publicBase={publicBase}
@@ -248,7 +249,7 @@ export function PageBuilder({
             <span className="text-sm font-semibold">{BLOCK_META[selected.type]?.label ?? selected.type}</span>
             <button type="button" onClick={() => selectBlock(null)} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
           </div>
-          <BlockSettings block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} products={products} isAdmin={isAdmin} />
+          <BlockSettings block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} products={products} forms={forms} isAdmin={isAdmin} />
         </div>
       )}
 

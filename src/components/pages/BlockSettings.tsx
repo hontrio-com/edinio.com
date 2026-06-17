@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Upload, X, Loader2, Plus, AlertTriangle } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { uploadImage } from "@/lib/upload";
@@ -10,6 +11,7 @@ import type {
   TrustBlock, ProductsBlock, SocialBlock, ContactBlock, HtmlBlock, ColumnItem,
 } from "@/lib/pages/blocks.types";
 import type { PageProduct } from "./blocks/ProductsBlock";
+import type { FormDef } from "@/lib/pages/forms.types";
 
 const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
 const COLORS = ["#1AB554", "#1E3A5F", "#8B1A1A", "#374151", "#D97706", "#6D28D9", "#E11D48", "#0891B2", "#000000", "#ffffff"];
@@ -122,8 +124,8 @@ function StyleControls({ style, onChange, hide }: { style?: BlockStyle; onChange
 
 /* ─── Main ─────────────────────────────────────────────────────────────────── */
 
-export function BlockSettings({ block, onChange, categories, products, isAdmin }: {
-  block: Block; onChange: (patch: Partial<Block>) => void; categories: string[]; products: PageProduct[]; isAdmin: boolean;
+export function BlockSettings({ block, onChange, categories, products, forms, isAdmin }: {
+  block: Block; onChange: (patch: Partial<Block>) => void; categories: string[]; products: PageProduct[]; forms: FormDef[]; isAdmin: boolean;
 }) {
   const patch = onChange as (p: Record<string, unknown>) => void;
   const setStyle = (style: BlockStyle) => patch({ style });
@@ -332,14 +334,32 @@ export function BlockSettings({ block, onChange, categories, products, isAdmin }
     }
     case "contact": {
       const b = block as ContactBlock;
+      const usingForm = !!b.formId && forms.some((f) => f.id === b.formId);
       return (
         <div className="space-y-4">
-          <Text label="Titlu" value={b.title} onChange={(v) => patch({ title: v })} />
-          <Text label="Text buton" value={b.buttonLabel} onChange={(v) => patch({ buttonLabel: v })} />
-          <Text label="Mesaj de confirmare" value={b.successMessage} onChange={(v) => patch({ successMessage: v })} />
-          <Toggle label="Camp telefon" checked={b.showPhone !== false} onChange={(v) => patch({ showPhone: v })} />
-          <Toggle label="Camp mesaj" checked={b.showMessage !== false} onChange={(v) => patch({ showMessage: v })} />
-          <p className="text-[11px] text-muted-foreground">Mesajele ajung pe email si in sectiunea „Mesaje”.</p>
+          <Text label="Titlu (deasupra formularului)" value={b.title} onChange={(v) => patch({ title: v })} />
+          <Select label="Formular" value={b.formId ?? ""} onChange={(v) => patch({ formId: v || null })}
+            options={[{ value: "", label: "Contact simplu (implicit)" }, ...forms.map((f) => ({ value: f.id, label: f.name }))]} />
+          {usingForm ? (
+            <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-[11px] text-muted-foreground">
+              Campurile, mesajul de confirmare si trimiterea pe email pentru acest formular se configureaza in{" "}
+              <Link href="/dashboard/pages/forms" target="_blank" rel="noopener noreferrer" className="text-primary font-medium">sectiunea Formulare</Link>.
+            </div>
+          ) : (
+            <>
+              <Text label="Text buton" value={b.buttonLabel} onChange={(v) => patch({ buttonLabel: v })} />
+              <Text label="Mesaj de confirmare" value={b.successMessage} onChange={(v) => patch({ successMessage: v })} />
+              <Toggle label="Camp telefon" checked={b.showPhone !== false} onChange={(v) => patch({ showPhone: v })} />
+              <Toggle label="Camp mesaj" checked={b.showMessage !== false} onChange={(v) => patch({ showMessage: v })} />
+              <div className="pt-3 border-t border-border">
+                <Toggle label="Trimite-mi completarile pe email" checked={!!b.emailEnabled} onChange={(v) => patch({ emailEnabled: v })} />
+                <p className="text-[11px] text-muted-foreground mt-1">Emailul ajunge la adresa magazinului. Completarile apar mereu si in „Mesaje”.</p>
+              </div>
+            </>
+          )}
+          {forms.length === 0 && (
+            <p className="text-[11px] text-muted-foreground">Vrei alte campuri? Creeaza-ti propriile formulare in sectiunea Formulare.</p>
+          )}
         </div>
       );
     }

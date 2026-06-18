@@ -247,7 +247,9 @@ function CartCheckoutModal({
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Shown live as the customer switches payment method.
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, total + extrasTotal - discountAmount);
-  const grandTotal = Math.max(0, total + extrasTotal - discountAmount - cardDiscountAmount + shipping + vatAddOn);
+  // Round to 2 decimals (cents): float subtraction like 199.29 - 19.93 would
+  // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
+  const grandTotal = Math.max(0, Math.round((total + extrasTotal - discountAmount - cardDiscountAmount + shipping + vatAddOn) * 100) / 100);
 
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});

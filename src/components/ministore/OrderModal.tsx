@@ -143,7 +143,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Updates live as the customer switches method.
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
-  const total = discountedSubtotal + extrasTotal + shipping - cardDiscountAmount;
+  // Round to 2 decimals (cents): float math would otherwise show e.g. 179.35999999999999.
+  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount) * 100) / 100);
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;

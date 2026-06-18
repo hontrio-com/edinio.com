@@ -2,15 +2,16 @@
 
 import { useState, useTransition } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
-  FileText, Receipt, Loader2, CheckCircle, Download, Mail,
-  RotateCcw, AlertTriangle, XCircle, FilePlus, ArrowRight, FileCheck, Trash2,
+  FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
+  RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck, ChevronDown,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
-import { updateOrder, deleteOrder, sendCustomerNotification } from "@/lib/actions/order.actions";
+import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
 import {
   generateOrderInvoice,
   generateOrderEstimate,
@@ -65,11 +66,49 @@ const PAYMENT_OPTIONS = [
   { value: "refunded", label: "Rambursat", cls: "bg-gray-100 text-gray-500 border-gray-200" },
 ];
 
+// Visible milestones for the fulfillment stepper. "processing" folds into "Confirmata".
+const STEPPER = [
+  { keys: ["pending"], label: "Primita" },
+  { keys: ["confirmed", "processing"], label: "Confirmata" },
+  { keys: ["shipped"], label: "Expediata" },
+  { keys: ["delivered"], label: "Livrata" },
+];
+
 function Badge({ cls, label }: { cls: string; label: string }) {
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${cls}`}>
       {label}
     </span>
+  );
+}
+
+function StatusStepper({ status }: { status: string }) {
+  if (status === "cancelled" || status === "refunded") {
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+        <span className="font-medium text-red-600">
+          {status === "cancelled" ? "Comanda anulata" : "Comanda rambursata"}
+        </span>
+      </div>
+    );
+  }
+  const current = STEPPER.findIndex(s => s.keys.includes(status));
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {STEPPER.map((s, i) => {
+        const done = i <= current;
+        return (
+          <div key={s.label} className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 rounded-full flex-shrink-0 ${done ? "bg-primary" : "bg-border"}`} />
+            <span className={`text-[11px] font-medium ${done ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</span>
+            {i < STEPPER.length - 1 && (
+              <span className={`h-px w-4 sm:w-7 ${i < current ? "bg-primary" : "bg-border"}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -109,12 +148,10 @@ function DocRow({
 
 function ResendEmailForm({
   defaultEmail,
-  docType,
   onSend,
   sending,
 }: {
   defaultEmail: string;
-  docType: "invoice" | "estimate";
   onSend: (email: string) => void;
   sending: boolean;
 }) {
@@ -141,6 +178,24 @@ function ResendEmailForm({
   );
 }
 
+// A compact courier option (logo + name + AWB state) used in the "alt curier" list and fallback grid.
+function CourierButton({ logo, name, awb, onClick }: { logo: string; name: string; awb: string | null; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick}
+      className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left w-full">
+      <img src={logo} alt={name} className="h-6 w-6 object-contain flex-shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-foreground">{name}</p>
+        {awb
+          ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {awb}</p>
+          : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
+      </div>
+    </button>
+  );
+}
+
+const CARD = "bg-surface border border-border rounded-xl";
+
 export function OrderDetailClient({
   order,
   businessId,
@@ -154,6 +209,7 @@ export function OrderDetailClient({
   dpdEnabled,
   fanCourierEnabled,
   samedayEnabled,
+  smsoEnabled,
 }: {
   order: Order;
   businessId: string;
@@ -167,6 +223,7 @@ export function OrderDetailClient({
   dpdEnabled?: boolean;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
+  smsoEnabled?: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState(order.status as string);
@@ -176,6 +233,7 @@ export function OrderDetailClient({
   const items = (order.items as unknown as OrderItem[]) ?? [];
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
   const notes = order.notes as Record<string, string> | null;
+  const ord = order as unknown as Record<string, unknown>;
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -205,12 +263,17 @@ export function OrderDetailClient({
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, startDeleteTransition] = useTransition();
+  const [notifChannel, setNotifChannel] = useState<"email" | "sms">("email");
   const [notifTemplate, setNotifTemplate] = useState("");
   const [notifSubject, setNotifSubject] = useState("");
   const [notifMessage, setNotifMessage] = useState("");
   const [sendingNotif, startNotifTransition] = useTransition();
+  const [smsTemplate, setSmsTemplate] = useState("");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [sendingSms, startSmsTransition] = useTransition();
 
   const customerEmail = (order.customer_email as string | null) ?? "";
+  const customerPhone = (order.customer_phone as string | null) ?? "";
   const customerName = (order.customer_name as string | null) ?? "client";
   const orderNumber = order.order_number as string;
   const canStorno = !stornoNumber && (status === "cancelled" || status === "refunded");
@@ -222,6 +285,7 @@ export function OrderDetailClient({
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
   const [coleteModalOpen, setColeteModalOpen] = useState(false);
+  const [showAltCouriers, setShowAltCouriers] = useState(false);
 
   // Oblio state
   const [oblioActionPending, startOblioTransition] = useTransition();
@@ -231,6 +295,36 @@ export function OrderDetailClient({
   const [fgoActionPending, startFgoTransition] = useTransition();
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
 
+  // ── Invoicing providers (unified card) ──
+  const invoicingProviders = ([
+    smartbillEnabled && { id: "smartbill" as const, name: "SmartBill", logo: "/integrations/smartbill.webp" },
+    oblioEnabled && { id: "oblio" as const, name: "Oblio", logo: "/integrations/oblio.webp" },
+    fgoEnabled && { id: "fgo" as const, name: "fGO", logo: "/integrations/fgo.svg" },
+  ].filter(Boolean)) as { id: "smartbill" | "oblio" | "fgo"; name: string; logo: string }[];
+
+  const smartbillHasDoc = !!(invoiceNumber || estimateNumber || stornoNumber);
+  const oblioHasDoc = !!(order.oblio_invoice_number || order.oblio_proforma_number || order.oblio_storno_number);
+  const fgoHasDoc = !!(ord["fgo_invoice_number"] || ord["fgo_storno_number"]);
+  const defaultProvider = smartbillHasDoc ? "smartbill" : oblioHasDoc ? "oblio" : fgoHasDoc ? "fgo" : invoicingProviders[0]?.id;
+  const [activeProvider, setActiveProvider] = useState<"smartbill" | "oblio" | "fgo" | undefined>(defaultProvider);
+  const activeProviderMeta = invoicingProviders.find(p => p.id === activeProvider) ?? invoicingProviders[0];
+
+  // ── Couriers (Expediere card) ──
+  const couriers = [
+    { id: "sameday", name: "Sameday", logo: "/integrations/sameday.webp", enabled: !!samedayEnabled, awb: (order.sameday_awb_number as string | null) ?? null, open: () => setSamedayModalOpen(true) },
+    { id: "fan-courier", name: "FAN Courier", logo: "/integrations/fan-courier.svg", enabled: !!fanCourierEnabled, awb: (order.fan_courier_awb_number as string | null) ?? null, open: () => setFanCourierModalOpen(true) },
+    { id: "cargus", name: "Cargus", logo: "/integrations/cargus.svg", enabled: !!cargusEnabled, awb: (order.cargus_awb_number as string | null) ?? null, open: () => setCargusModalOpen(true) },
+    { id: "dpd", name: "DPD", logo: "/integrations/dpd.svg", enabled: !!dpdEnabled, awb: (order.dpd_awb_number as string | null) ?? null, open: () => setDpdModalOpen(true) },
+    { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
+    { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
+  ];
+  const enabledCouriers = couriers.filter(c => c.enabled);
+  const shippedCourier = enabledCouriers.find(c => c.awb);
+  const chosenCourier = enabledCouriers.find(c => c.id === address.courier);
+  const primaryCourier = shippedCourier ?? chosenCourier ?? enabledCouriers[0];
+  const otherCouriers = enabledCouriers.filter(c => c.id !== primaryCourier?.id);
+  const deliveryInfo = address.delivery_type === "locker" && address.locker_name ? address.locker_name : null;
+
   const NOTIF_TEMPLATES: Record<string, { label: string; subject: string; body: string }> = {
     confirmed: { label: "Comanda confirmata", subject: `Comanda ${orderNumber} a fost confirmata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost confirmata si intra in pregatire. Te anuntam imediat ce este expediata.\n\nMultumim pentru comanda!` },
     shipped: { label: "Comanda expediata", subject: `Comanda ${orderNumber} a fost expediata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost predata curierului si este pe drum. O vei primi in cel mai scurt timp.\n\nMultumim!` },
@@ -239,10 +333,24 @@ export function OrderDetailClient({
     info: { label: "Solicitare informatii", subject: `Avem nevoie de cateva detalii pentru comanda ${orderNumber}`, body: `Buna ${customerName},\n\nPentru a procesa comanda ${orderNumber} avem nevoie de cateva informatii suplimentare. Te rugam sa ne raspunzi la acest email.\n\nMultumim!` },
   };
 
+  // Short SMS variants (kept under ~160 chars where possible).
+  const SMS_TEMPLATES: Record<string, { label: string; body: string }> = {
+    confirmed: { label: "Confirmata", body: `Comanda ${orderNumber} a fost confirmata. Multumim!` },
+    shipped: { label: "Expediata", body: `Comanda ${orderNumber} a fost expediata si este pe drum. Multumim!` },
+    delivered: { label: "Livrata", body: `Comanda ${orderNumber} a fost livrata. Iti multumim!` },
+    delay: { label: "Intarziere", body: `Comanda ${orderNumber} are o mica intarziere. Multumim pentru rabdare!` },
+  };
+
   function applyTemplate(key: string) {
     setNotifTemplate(key);
     const t = NOTIF_TEMPLATES[key];
     if (t) { setNotifSubject(t.subject); setNotifMessage(t.body); }
+  }
+
+  function applySmsTemplate(key: string) {
+    setSmsTemplate(key);
+    const t = SMS_TEMPLATES[key];
+    if (t) setSmsMessage(t.body);
   }
 
   function confirmSave() {
@@ -270,6 +378,14 @@ export function OrderDetailClient({
       const result = await sendCustomerNotification(order.id, notifSubject, notifMessage);
       if (result.error) { toast.error(result.error); return; }
       toast.success("Notificarea a fost trimisa clientului.");
+    });
+  }
+
+  function handleSendSms() {
+    startSmsTransition(async () => {
+      const result = await sendCustomerSms(order.id, smsMessage);
+      if ("error" in result) { toast.error(result.error); return; }
+      toast.success("SMS trimis clientului.");
     });
   }
 
@@ -390,569 +506,562 @@ export function OrderDetailClient({
     });
   }
 
-  const anyCourierEnabled = wootEnabled || cargusEnabled || dpdEnabled || fanCourierEnabled || samedayEnabled || coleteEnabled;
+  const smsLen = smsMessage.length;
+  const smsSegments = smsLen === 0 ? 0 : Math.ceil(smsLen / 160);
 
-  // Courier AWB data helpers
-  const ord = order as unknown as Record<string, unknown>;
+  // Mobile sticky action bar: single most relevant next action.
+  const mobileAction = hasChanges
+    ? { label: isPending ? "Se salveaza..." : "Salveaza modificarile", onClick: () => setShowSaveConfirm(true), disabled: isPending }
+    : (!shippedCourier && primaryCourier)
+      ? { label: `Creeaza AWB ${primaryCourier.name}`, onClick: primaryCourier.open, disabled: false }
+      : null;
+
+  // ── Provider bodies for the unified Facturare card ──
+  function renderSmartbill() {
+    return (
+      <div className="space-y-5">
+        {hasEstimateSeries && (
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Proforma</p>
+            {estimateNumber && estimateSeries ? (
+              <>
+                <DocRow label="Proforma emisa" docNumber={`${estimateSeries}${estimateNumber}`}
+                  onDownload={() => handleDownloadPdf("estimate")} downloading={downloadingPdf === "estimate"}>
+                  <button type="button" onClick={() => setShowResendEstimate(o => !o)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <Mail className="h-3.5 w-3.5" />Retrimite
+                  </button>
+                </DocRow>
+                {showResendEstimate && (
+                  <ResendEmailForm defaultEmail={customerEmail} onSend={handleResendEstimate} sending={resendingEstimate} />
+                )}
+                {!invoiceNumber && (
+                  <button type="button" onClick={handleConvert} disabled={converting}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors disabled:opacity-50">
+                    {converting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                    {converting ? "Se converteste..." : "Converteste in factura"}
+                  </button>
+                )}
+              </>
+            ) : (
+              !invoiceNumber && (
+                <button type="button" onClick={handleGenerateEstimate} disabled={generatingEstimate}
+                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                  {generatingEstimate ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  {generatingEstimate ? "Se genereaza..." : "Genereaza proforma"}
+                </button>
+              )
+            )}
+          </div>
+        )}
+
+        {hasEstimateSeries && <div className="border-t border-border" />}
+
+        <div className="space-y-3">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Factura</p>
+          {invoiceNumber && invoiceSeries ? (
+            <>
+              <DocRow label="Factura emisa" docNumber={`${invoiceSeries}${invoiceNumber}`}
+                onDownload={() => handleDownloadPdf("invoice")} downloading={downloadingPdf === "invoice"}>
+                <button type="button" onClick={() => setShowResendInvoice(o => !o)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                  <Mail className="h-3.5 w-3.5" />Retrimite
+                </button>
+              </DocRow>
+              {showResendInvoice && (
+                <ResendEmailForm defaultEmail={customerEmail} onSend={handleResendInvoice} sending={resendingInvoice} />
+              )}
+              {stornoNumber && stornoSeries ? (
+                <DocRow label="Factura stornata" docNumber={`${stornoSeries}${stornoNumber}`}
+                  onDownload={() => handleDownloadPdf("storno")} downloading={downloadingPdf === "storno"} />
+              ) : canStorno ? (
+                showStornoConfirm ? (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50 border border-red-200">
+                    <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                    <p className="text-xs text-red-700 flex-1">Aceasta actiune storneaza factura in SmartBill. Nu poate fi anulata.</p>
+                    <button type="button" onClick={handleStorno} disabled={stornoing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
+                      {stornoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                      Confirma storno
+                    </button>
+                    <button type="button" onClick={() => setShowStornoConfirm(false)}
+                      className="p-1.5 text-red-400 hover:text-red-600 transition-colors">
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowStornoConfirm(true)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+                    <RotateCcw className="h-4 w-4" />Emite storno
+                  </button>
+                )
+              ) : null}
+            </>
+          ) : (
+            <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice}
+              className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+              {generatingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+              {generatingInvoice ? "Se genereaza..." : "Genereaza factura"}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderOblio() {
+    return order.oblio_storno_number ? (
+      <div className="flex items-center gap-2">
+        <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+        <p className="text-sm font-mono font-bold text-red-600">Storno {order.oblio_storno_series}{order.oblio_storno_number}</p>
+      </div>
+    ) : order.oblio_invoice_number ? (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+          <p className="text-sm font-mono font-bold text-foreground">Factura {order.oblio_invoice_series}{order.oblio_invoice_number}</p>
+        </div>
+        <button type="button" onClick={() => handleOblioAction("storno")} disabled={oblioActionPending}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+          {oblioActionPending && oblioAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Emite storno
+        </button>
+      </div>
+    ) : order.oblio_proforma_number ? (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-blue-500 flex-shrink-0" />
+          <p className="text-sm font-mono font-bold text-foreground">Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}</p>
+        </div>
+        <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending}
+          className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+          {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+          Genereaza factura
+        </button>
+      </div>
+    ) : (
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending}
+          className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+          {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+          Genereaza factura
+        </button>
+        <button type="button" onClick={() => handleOblioAction("proforma")} disabled={oblioActionPending}
+          className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+          {oblioActionPending && oblioAction === "proforma" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+          Genereaza proforma
+        </button>
+      </div>
+    );
+  }
+
+  function renderFgo() {
+    return (ord["fgo_storno_number"]) ? (
+      <div className="flex items-center gap-2">
+        <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+        <p className="text-sm font-mono font-bold text-red-600">Storno {ord["fgo_storno_series"] as string}{ord["fgo_storno_number"] as string}</p>
+      </div>
+    ) : (ord["fgo_invoice_number"]) ? (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+          <p className="text-sm font-mono font-bold text-foreground">Factura {ord["fgo_invoice_series"] as string}{ord["fgo_invoice_number"] as string}</p>
+        </div>
+        {!!(ord["fgo_invoice_link"]) && (
+          <a href={ord["fgo_invoice_link"] as string} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
+            <Download className="h-3.5 w-3.5" /> PDF
+          </a>
+        )}
+        <button type="button" onClick={() => handleFgoAction("storno")} disabled={fgoActionPending}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+          {fgoActionPending && fgoAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Emite storno
+        </button>
+      </div>
+    ) : (
+      <button type="button" onClick={() => handleFgoAction("invoice")} disabled={fgoActionPending}
+        className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+        {fgoActionPending && fgoAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+        Genereaza factura
+      </button>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-start gap-4">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto pb-24 lg:pb-6">
+      {/* ── Header ── */}
+      <div className="flex items-start gap-4 mb-5">
         <button type="button" onClick={() => router.push("/dashboard/orders")}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-0.5">
           <ArrowLeft className="h-4 w-4" />Inapoi
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold text-foreground font-mono">{order.order_number}</h1>
             <Badge cls={currentStatus.cls} label={currentStatus.label} />
             <Badge cls={currentPayment.cls} label={currentPayment.label} />
+            <span className="text-sm text-muted-foreground">{formatDate(new Date(order.created_at))}</span>
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">{formatDate(new Date(order.created_at))}</p>
+          <StatusStepper status={status} />
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Client */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">Informatii client</h2>
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2.5 text-sm">
-              <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-foreground font-medium">{order.customer_name}</span>
+      {/* ── Two-column operational area (single column on mobile) ── */}
+      <div className="flex flex-col lg:flex-row lg:gap-5 lg:items-start gap-5">
+        {/* MAIN: order content */}
+        <div className="lg:flex-1 min-w-0 space-y-5">
+          {/* Client */}
+          <div className={`${CARD} p-5 space-y-3`}>
+            <h2 className="text-sm font-semibold text-foreground">Informatii client</h2>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2.5 text-sm">
+                <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-foreground font-medium">{order.customer_name}</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-sm">
+                <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <a href={`tel:${order.customer_phone}`} className="text-primary hover:underline">{order.customer_phone}</a>
+              </div>
+              {customerEmail && (
+                <div className="flex items-center gap-2.5 text-sm">
+                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <a href={`mailto:${customerEmail}`} className="text-primary hover:underline truncate">{customerEmail}</a>
+                </div>
+              )}
+              {address.county && (
+                <div className="flex items-start gap-2.5 text-sm">
+                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <div className="text-muted-foreground leading-relaxed">
+                    <div>{address.address}</div>
+                    <div>{address.city}, {address.county}</div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2.5 text-sm">
+                <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-muted-foreground">
+                  {order.payment_method === "cash_on_delivery" ? "Plata la livrare" : order.payment_method}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2.5 text-sm">
-              <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <a href={`tel:${order.customer_phone}`} className="text-primary hover:underline">{order.customer_phone}</a>
-            </div>
-            {address.county && (
-              <div className="flex items-start gap-2.5 text-sm">
-                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <div className="text-muted-foreground leading-relaxed">
-                  <div>{address.address}</div>
-                  <div>{address.city}, {address.county}</div>
-                  {address.courier_label && (
-                    <div className="mt-1 text-xs font-medium text-primary">
-                      {address.courier_label}
-                      {address.delivery_type === "locker" && address.locker_name && ` — ${address.locker_name}`}
+          </div>
+
+          {/* Products */}
+          <div className={`${CARD} p-5 space-y-3 overflow-hidden`}>
+            <h2 className="text-sm font-semibold text-foreground">Produse comandate</h2>
+            <div className="space-y-2">
+              {items.map((item, i) => (
+                <div key={i}>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="text-foreground truncate min-w-0">{item.name}</span>
+                      <span className="text-muted-foreground flex-shrink-0">x{item.quantity}</span>
+                    </div>
+                    <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
+                  </div>
+                  {item.customization && Object.keys(item.customization).length > 0 && (
+                    <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
+                      <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
+                      {Object.values(item.customization).map((field, fi) => (
+                        <div key={fi}>
+                          <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
+                          {field.type === "image" && Array.isArray(field.value) ? (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {(field.value as string[]).map((url, imgI) => (
+                                <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
+                                  className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
+                                  <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : field.type === "color" ? (
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="w-5 h-5 rounded border border-border" style={{ backgroundColor: field.value as string }} />
+                              <span className="text-xs text-muted-foreground font-mono">{field.value}</span>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-foreground">{field.value as string}</p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
+              ))}
+            </div>
+            <div className="border-t border-border pt-3 space-y-1.5 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal</span><span>{formatPrice(Number(order.subtotal))}</span>
               </div>
-            )}
-            <div className="flex items-center gap-2.5 text-sm">
-              <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-muted-foreground">
-                {order.payment_method === "cash_on_delivery" ? "Plata la livrare" : order.payment_method}
-              </span>
+              {Number(order.discount_amount) > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Discount {order.discount_code ? `(${order.discount_code})` : ""}</span>
+                  <span className="font-medium">-{formatPrice(Number(order.discount_amount))}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-muted-foreground">
+                <span>Transport</span>
+                <span>{Number(order.shipping_cost) === 0 ? "Gratuit" : formatPrice(Number(order.shipping_cost))}</span>
+              </div>
+              {Number(order.vat_amount) > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>TVA ({Number(order.vat_rate)}%)</span>
+                  <span>{formatPrice(Number(order.vat_amount))}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold text-foreground text-base pt-1 border-t border-border">
+                <span>Total</span><span>{formatPrice(Number(order.total))}</span>
+              </div>
             </div>
           </div>
+
+          {/* Custom fields / notes */}
+          {notes && Object.keys(notes).length > 0 && (
+            <div className={`${CARD} p-5 space-y-3`}>
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />Campuri aditionale
+              </h2>
+              <div className="divide-y divide-border">
+                {Object.entries(notes).map(([key, value]) => (
+                  <div key={key} className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">{key}</span>
+                    <span className="text-sm text-foreground text-right">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Products */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-3 overflow-hidden">
-          <h2 className="text-sm font-semibold text-foreground">Produse comandate</h2>
-          <div className="space-y-2">
-            {items.map((item, i) => (
-              <div key={i}>
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="text-foreground truncate min-w-0">{item.name}</span>
-                    <span className="text-muted-foreground flex-shrink-0">x{item.quantity}</span>
-                  </div>
-                  <span className="font-medium text-foreground flex-shrink-0 ml-3">
-                    {formatPrice(item.price * item.quantity)}
-                  </span>
+        {/* RAIL: operational actions (sticky on desktop) */}
+        <div className="lg:w-[360px] lg:shrink-0 lg:sticky lg:top-6 space-y-4">
+          {/* Status & plata */}
+          <div className={`${CARD} p-5 space-y-4`}>
+            <h2 className="text-sm font-semibold text-foreground">Status comanda</h2>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_OPTIONS.map(opt => (
+                <button key={opt.value} type="button" onClick={() => setStatus(opt.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    status === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
+                  }`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-2">Status plata</label>
+              <div className="flex flex-wrap gap-2">
+                {PAYMENT_OPTIONS.map(opt => (
+                  <button key={opt.value} type="button" onClick={() => setPaymentStatus(opt.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      paymentStatus === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
+                    }`}>
+                    <CreditCard className="h-3 w-3" />{opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button type="button" onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges}
+              className="w-full px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              {isPending ? "Se salveaza..." : "Salveaza modificarile"}
+            </button>
+          </div>
+
+          {/* Facturare (unified) */}
+          {invoicingProviders.length > 0 && (
+            <div className={`${CARD} overflow-hidden`}>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">Facturare</span>
+                {invoicingProviders.length === 1 && activeProviderMeta && (
+                  <img src={activeProviderMeta.logo} alt={activeProviderMeta.name} className="h-5 w-auto object-contain ml-auto" />
+                )}
+              </div>
+              {invoicingProviders.length > 1 && (
+                <div className="flex gap-1.5 p-2 border-b border-border bg-muted/10">
+                  {invoicingProviders.map(p => (
+                    <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        activeProvider === p.id ? "border-primary/40 bg-primary/5 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/40"
+                      }`}>
+                      <img src={p.logo} alt={p.name} className="h-4 w-4 object-contain" />{p.name}
+                    </button>
+                  ))}
                 </div>
-                {/* Customization data */}
-                {item.customization && Object.keys(item.customization).length > 0 && (
-                  <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
-                    <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
-                    {Object.values(item.customization).map((field, fi) => (
-                      <div key={fi}>
-                        <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
-                        {field.type === "image" && Array.isArray(field.value) ? (
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {(field.value as string[]).map((url, imgI) => (
-                              <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
-                                className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
-                                <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
-                              </a>
+              )}
+              <div className="p-4">
+                {activeProvider === "smartbill" && renderSmartbill()}
+                {activeProvider === "oblio" && renderOblio()}
+                {activeProvider === "fgo" && renderFgo()}
+              </div>
+            </div>
+          )}
+
+          {/* Expediere */}
+          {enabledCouriers.length > 0 && (
+            <div className={`${CARD} overflow-hidden`}>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
+                <Truck className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">Expediere</span>
+              </div>
+              <div className="p-4 space-y-3">
+                {shippedCourier ? (
+                  <>
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-green-50 border border-green-200">
+                      <img src={shippedCourier.logo} alt={shippedCourier.name} className="h-7 w-7 object-contain flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-green-700">Expediat cu {shippedCourier.name}</p>
+                        <p className="text-sm font-mono font-bold text-green-800 truncate">AWB: {shippedCourier.awb}</p>
+                      </div>
+                    </div>
+                    <button type="button" onClick={shippedCourier.open}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
+                      <Package className="h-4 w-4" />Gestioneaza AWB
+                    </button>
+                  </>
+                ) : primaryCourier ? (
+                  <>
+                    <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
+                      <p className="text-[11px] font-bold text-primary uppercase tracking-widest">
+                        {chosenCourier ? "Clientul a ales" : "Curier recomandat"}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <img src={primaryCourier.logo} alt={primaryCourier.name} className="h-7 w-7 object-contain flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">{address.courier_label ?? primaryCourier.name}</p>
+                          {deliveryInfo && <p className="text-xs text-muted-foreground truncate">{deliveryInfo}</p>}
+                        </div>
+                      </div>
+                      <button type="button" onClick={primaryCourier.open}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors">
+                        <Package className="h-4 w-4" />Creeaza AWB {primaryCourier.name}
+                      </button>
+                    </div>
+                    {otherCouriers.length > 0 && (
+                      <div>
+                        <button type="button" onClick={() => setShowAltCouriers(o => !o)}
+                          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAltCouriers ? "rotate-180" : ""}`} />
+                          Expediaza cu alt curier
+                        </button>
+                        {showAltCouriers && (
+                          <div className="mt-2 space-y-2">
+                            {otherCouriers.map(c => (
+                              <CourierButton key={c.id} logo={c.logo} name={c.name} awb={c.awb} onClick={c.open} />
                             ))}
                           </div>
-                        ) : field.type === "color" ? (
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="w-5 h-5 rounded border border-border" style={{ backgroundColor: field.value as string }} />
-                            <span className="text-xs text-muted-foreground font-mono">{field.value}</span>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-foreground">{field.value as string}</p>
                         )}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-border pt-3 space-y-1.5 text-sm">
-            <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal</span><span>{formatPrice(Number(order.subtotal))}</span>
-            </div>
-            {Number(order.discount_amount) > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>Discount {order.discount_code ? `(${order.discount_code})` : ""}</span>
-                <span className="font-medium">-{formatPrice(Number(order.discount_amount))}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-muted-foreground">
-              <span>Transport</span>
-              <span>{Number(order.shipping_cost) === 0 ? "Gratuit" : formatPrice(Number(order.shipping_cost))}</span>
-            </div>
-            {Number(order.vat_amount) > 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <span>TVA ({Number(order.vat_rate)}%)</span>
-                <span>{formatPrice(Number(order.vat_amount))}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-semibold text-foreground text-base pt-1 border-t border-border">
-              <span>Total</span><span>{formatPrice(Number(order.total))}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Custom fields / notes */}
-      {notes && Object.keys(notes).length > 0 && (
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />Campuri aditionale
-          </h2>
-          <div className="divide-y divide-border">
-            {Object.entries(notes).map(([key, value]) => (
-              <div key={key} className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">{key}</span>
-                <span className="text-sm text-foreground text-right">{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── SmartBill card ── */}
-      {smartbillEnabled && (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          {/* Card header */}
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
-            <img src="/integrations/smartbill.webp" alt="SmartBill" className="h-6 w-auto object-contain" />
-          </div>
-
-          <div className="p-5 space-y-5">
-            {/* ── PROFORMA section ── */}
-            {hasEstimateSeries && (
-              <div className="space-y-3">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Proforma</p>
-
-                {estimateNumber && estimateSeries ? (
-                  <>
-                    <DocRow
-                      label="Proforma emisa"
-                      docNumber={`${estimateSeries}${estimateNumber}`}
-                      onDownload={() => handleDownloadPdf("estimate")}
-                      downloading={downloadingPdf === "estimate"}
-                    >
-                      <button type="button" onClick={() => setShowResendEstimate(o => !o)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                        <Mail className="h-3.5 w-3.5" />Retrimite
-                      </button>
-                    </DocRow>
-                    {showResendEstimate && (
-                      <ResendEmailForm
-                        defaultEmail={customerEmail}
-                        docType="estimate"
-                        onSend={handleResendEstimate}
-                        sending={resendingEstimate}
-                      />
-                    )}
-                    {!invoiceNumber && (
-                      <button type="button" onClick={handleConvert} disabled={converting}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors disabled:opacity-50">
-                        {converting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                        {converting ? "Se converteste..." : "Converteste in factura"}
-                      </button>
                     )}
                   </>
-                ) : (
-                  !invoiceNumber && (
-                    <button type="button" onClick={handleGenerateEstimate} disabled={generatingEstimate}
-                      className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                      {generatingEstimate
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <img src="/integrations/smartbill.webp" alt="" className="h-4 w-auto object-contain" />}
-                      {generatingEstimate ? "Se genereaza..." : "Genereaza proforma"}
-                    </button>
-                  )
-                )}
+                ) : null}
               </div>
-            )}
-
-            {/* Divider between sections if both visible */}
-            {hasEstimateSeries && <div className="border-t border-border" />}
-
-            {/* ── INVOICE section ── */}
-            <div className="space-y-3">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Factura</p>
-
-              {invoiceNumber && invoiceSeries ? (
-                <>
-                  <DocRow
-                    label="Factura emisa"
-                    docNumber={`${invoiceSeries}${invoiceNumber}`}
-                    onDownload={() => handleDownloadPdf("invoice")}
-                    downloading={downloadingPdf === "invoice"}
-                  >
-                    <button type="button" onClick={() => setShowResendInvoice(o => !o)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                      <Mail className="h-3.5 w-3.5" />Retrimite
-                    </button>
-                  </DocRow>
-                  {showResendInvoice && (
-                    <ResendEmailForm
-                      defaultEmail={customerEmail}
-                      docType="invoice"
-                      onSend={handleResendInvoice}
-                      sending={resendingInvoice}
-                    />
-                  )}
-
-                  {/* Storno section */}
-                  {stornoNumber && stornoSeries ? (
-                    <DocRow
-                      label="Factura stornata"
-                      docNumber={`${stornoSeries}${stornoNumber}`}
-                      onDownload={() => handleDownloadPdf("storno")}
-                      downloading={downloadingPdf === "storno"}
-                    />
-                  ) : canStorno ? (
-                    showStornoConfirm ? (
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50 border border-red-200">
-                        <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                        <p className="text-xs text-red-700 flex-1">Aceasta actiune storneaza factura in SmartBill. Nu poate fi anulata.</p>
-                        <button type="button" onClick={handleStorno} disabled={stornoing}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
-                          {stornoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                          Confirma storno
-                        </button>
-                        <button type="button" onClick={() => setShowStornoConfirm(false)}
-                          className="p-1.5 text-red-400 hover:text-red-600 transition-colors">
-                          <XCircle className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button type="button" onClick={() => setShowStornoConfirm(true)}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
-                        <RotateCcw className="h-4 w-4" />Emite storno
-                      </button>
-                    )
-                  ) : null}
-                </>
-              ) : (
-                <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice}
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                  {generatingInvoice
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <img src="/integrations/smartbill.webp" alt="" className="h-4 w-auto object-contain" />}
-                  {generatingInvoice ? "Se genereaza..." : "Genereaza factura"}
-                </button>
-              )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Courier AWB cards ── */}
-      {anyCourierEnabled && (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
-            <Package className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">Expediere / AWB</span>
-          </div>
-          <div className="p-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {wootEnabled && (
-              <button type="button" onClick={() => setWootModalOpen(true)}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/woot.webp" alt="Woot" className="h-6 w-auto object-contain flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">Woot</p>
-                  {order.woot_awb_number
-                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {order.woot_awb_number}</p>
-                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
-                </div>
-              </button>
-            )}
-            {cargusEnabled && (
-              <button type="button" onClick={() => setCargusModalOpen(true)}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/cargus.svg" alt="Cargus" className="h-6 w-auto object-contain flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">Cargus</p>
-                  {order.cargus_awb_number
-                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {order.cargus_awb_number}</p>
-                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
-                </div>
-              </button>
-            )}
-            {dpdEnabled && (
-              <button type="button" onClick={() => setDpdModalOpen(true)}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/dpd.svg" alt="DPD" className="h-6 w-auto object-contain flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">DPD</p>
-                  {ord["dpd_awb_number"]
-                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["dpd_awb_number"] as string}</p>
-                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
-                </div>
-              </button>
-            )}
-            {fanCourierEnabled && (
-              <button type="button" onClick={() => setFanCourierModalOpen(true)}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/fancourier.svg" alt="FAN Courier" className="h-6 w-auto object-contain flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">FAN Courier</p>
-                  {ord["fan_courier_awb_number"]
-                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["fan_courier_awb_number"] as string}</p>
-                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
-                </div>
-              </button>
-            )}
-            {samedayEnabled && (
-              <button type="button" onClick={() => setSamedayModalOpen(true)}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/sameday.webp" alt="Sameday" className="h-6 w-auto object-contain flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">Sameday</p>
-                  {ord["sameday_awb_number"]
-                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["sameday_awb_number"] as string}</p>
-                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
-                </div>
-              </button>
-            )}
-            {coleteEnabled && (
-              <button type="button" onClick={() => setColeteModalOpen(true)}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/coleteonline.svg" alt="Colete Online" className="h-6 w-auto object-contain flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground">Colete Online</p>
-                  {ord["colete_awb_number"]
-                    ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {ord["colete_awb_number"] as string}</p>
-                    : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
-                </div>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Oblio card ── */}
-      {oblioEnabled && (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
-            <img src="/integrations/oblio.svg" alt="Oblio" className="h-6 w-auto object-contain" />
-          </div>
-          <div className="p-5 space-y-3">
-            {order.oblio_storno_number ? (
-              <div className="flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                <p className="text-sm font-mono font-bold text-red-600">
-                  Storno {order.oblio_storno_series}{order.oblio_storno_number}
-                </p>
-              </div>
-            ) : order.oblio_invoice_number ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  <p className="text-sm font-mono font-bold text-foreground">
-                    Factura {order.oblio_invoice_series}{order.oblio_invoice_number}
-                  </p>
-                </div>
-                <button type="button" onClick={() => handleOblioAction("storno")}
-                  disabled={oblioActionPending}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
-                  {oblioActionPending && oblioAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                  Emite storno
-                </button>
-              </div>
-            ) : order.oblio_proforma_number ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                  <p className="text-sm font-mono font-bold text-foreground">
-                    Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}
-                  </p>
-                </div>
-                <button type="button" onClick={() => handleOblioAction("invoice")}
-                  disabled={oblioActionPending}
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                  {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-                  Genereaza factura
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => handleOblioAction("invoice")}
-                  disabled={oblioActionPending}
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                  {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-                  Genereaza factura
-                </button>
-                <button type="button" onClick={() => handleOblioAction("proforma")}
-                  disabled={oblioActionPending}
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                  {oblioActionPending && oblioAction === "proforma" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                  Genereaza proforma
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── fGO card ── */}
-      {fgoEnabled && (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
-            <img src="/integrations/fgo.svg" alt="fGO" className="h-6 w-auto object-contain" />
-          </div>
-          <div className="p-5 space-y-3">
-            {(ord["fgo_storno_number"]) ? (
-              <div className="flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                <p className="text-sm font-mono font-bold text-red-600">
-                  Storno {ord["fgo_storno_series"] as string}{ord["fgo_storno_number"] as string}
-                </p>
-              </div>
-            ) : (ord["fgo_invoice_number"]) ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  <p className="text-sm font-mono font-bold text-foreground">
-                    Factura {ord["fgo_invoice_series"] as string}{ord["fgo_invoice_number"] as string}
-                  </p>
-                </div>
-                {!!(ord["fgo_invoice_link"]) && (
-                  <a href={ord["fgo_invoice_link"] as string} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
-                    <Download className="h-3.5 w-3.5" /> PDF
-                  </a>
-                )}
-                <button type="button" onClick={() => handleFgoAction("storno")}
-                  disabled={fgoActionPending}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
-                  {fgoActionPending && fgoAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                  Emite storno
-                </button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => handleFgoAction("invoice")}
-                disabled={fgoActionPending}
-                className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-                {fgoActionPending && fgoAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-                Genereaza factura
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Edit order ── */}
-      <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
-        <h2 className="text-sm font-semibold text-foreground">Editeaza comanda</h2>
-
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-2">Status comanda</label>
-          <div className="flex flex-wrap gap-2">
-            {STATUS_OPTIONS.map(opt => (
-              <button key={opt.value} type="button" onClick={() => setStatus(opt.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  status === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                }`}>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-2">Status plata</label>
-          <div className="flex gap-2">
-            {PAYMENT_OPTIONS.map(opt => (
-              <button key={opt.value} type="button" onClick={() => setPaymentStatus(opt.value)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  paymentStatus === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                }`}>
-                <CreditCard className="h-3 w-3" />{opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <button type="button" onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges}
-            className="px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            {isPending ? "Se salveaza..." : "Salveaza modificarile"}
-          </button>
+          )}
         </div>
       </div>
 
-      {/* ── Customer notifications ── */}
-      <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Notificari client</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Trimite un email direct clientului. Alege un sablon sau scrie mesajul tau.</p>
+      {/* ── Customer notifications (full width) ── */}
+      <div className={`${CARD} p-5 space-y-4 mt-5`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Notificari client</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Trimite un mesaj direct clientului prin email sau SMS.</p>
+          </div>
+          <div className="flex gap-1 p-1 rounded-lg bg-muted/50 border border-border">
+            <button type="button" onClick={() => setNotifChannel("email")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                notifChannel === "email" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}>
+              <Mail className="h-3.5 w-3.5" />Email
+            </button>
+            <button type="button" onClick={() => setNotifChannel("sms")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                notifChannel === "sms" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}>
+              <MessageSquare className="h-3.5 w-3.5" />SMS
+            </button>
+          </div>
         </div>
-        {customerEmail ? (
+
+        {notifChannel === "email" ? (
+          customerEmail ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(NOTIF_TEMPLATES).map(([key, t]) => (
+                  <button key={key} type="button" onClick={() => applyTemplate(key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      notifTemplate === key ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:bg-muted/40"
+                    }`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Subiect</label>
+                <input type="text" value={notifSubject} onChange={e => setNotifSubject(e.target.value)} placeholder="Subiectul emailului"
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj</label>
+                <textarea value={notifMessage} onChange={e => setNotifMessage(e.target.value)} rows={5} placeholder="Scrie mesajul pentru client..."
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerEmail}</strong></p>
+                <button type="button" onClick={handleSendNotification} disabled={sendingNotif || !notifSubject.trim() || !notifMessage.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
+                  {sendingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  Trimite email
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Clientul nu a lasat o adresa de email, asa ca nu poti trimite notificari pe email pentru aceasta comanda.</p>
+          )
+        ) : !smsoEnabled ? (
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 border border-border">
+            <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-muted-foreground">
+              Conecteaza <Link href="/dashboard/features/smso" className="text-primary font-medium hover:underline">SMSO</Link> ca sa poti trimite SMS-uri clientilor direct din comanda.
+            </p>
+          </div>
+        ) : !customerPhone ? (
+          <p className="text-sm text-muted-foreground">Clientul nu a lasat un numar de telefon, asa ca nu poti trimite SMS pentru aceasta comanda.</p>
+        ) : (
           <>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(NOTIF_TEMPLATES).map(([key, t]) => (
-                <button key={key} type="button" onClick={() => applyTemplate(key)}
+              {Object.entries(SMS_TEMPLATES).map(([key, t]) => (
+                <button key={key} type="button" onClick={() => applySmsTemplate(key)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    notifTemplate === key ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:bg-muted/40"
+                    smsTemplate === key ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:bg-muted/40"
                   }`}>
                   {t.label}
                 </button>
               ))}
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Subiect</label>
-              <input type="text" value={notifSubject} onChange={e => setNotifSubject(e.target.value)}
-                placeholder="Subiectul emailului"
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj</label>
-              <textarea value={notifMessage} onChange={e => setNotifMessage(e.target.value)} rows={5}
-                placeholder="Scrie mesajul pentru client..."
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj SMS</label>
+              <textarea value={smsMessage} onChange={e => setSmsMessage(e.target.value)} rows={3} placeholder="Scrie mesajul SMS..."
                 className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none" />
+              <p className="text-[11px] text-muted-foreground mt-1">{smsLen} caractere · {smsSegments} SMS</p>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerEmail}</strong></p>
-              <button type="button" onClick={handleSendNotification} disabled={sendingNotif || !notifSubject.trim() || !notifMessage.trim()}
+              <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerPhone}</strong></p>
+              <button type="button" onClick={handleSendSms} disabled={sendingSms || !smsMessage.trim()}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
-                {sendingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                Trimite email
+                {sendingSms ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+                Trimite SMS
               </button>
             </div>
           </>
-        ) : (
-          <p className="text-sm text-muted-foreground">Clientul nu a lasat o adresa de email, asa ca nu poti trimite notificari pe email pentru aceasta comanda.</p>
         )}
       </div>
 
       {/* ── Danger zone ── */}
-      <div className="bg-surface border border-red-200 rounded-xl p-5 flex items-center justify-between gap-3">
+      <div className={`${CARD} border-red-200 p-5 flex items-center justify-between gap-3 mt-5`}>
         <div>
           <h2 className="text-sm font-semibold text-foreground">Sterge comanda</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Stergerea este definitiva si nu poate fi anulata.</p>
@@ -962,6 +1071,16 @@ export function OrderDetailClient({
           <Trash2 className="h-4 w-4" /> Sterge definitiv
         </button>
       </div>
+
+      {/* ── Mobile sticky action bar (above bottom nav) ── */}
+      {mobileAction && (
+        <div className="lg:hidden fixed bottom-16 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur px-4 py-3">
+          <button type="button" onClick={mobileAction.onClick} disabled={mobileAction.disabled}
+            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Package className="h-4 w-4" />{mobileAction.label}
+          </button>
+        </div>
+      )}
 
       {/* ── Courier AWB Modals ── */}
       {wootEnabled && (
@@ -991,8 +1110,8 @@ export function OrderDetailClient({
             <div className="text-sm text-muted-foreground mb-4 space-y-1">
               <p>Status comanda: <strong className="text-foreground">{currentStatus.label}</strong></p>
               <p>Status plata: <strong className="text-foreground">{currentPayment.label}</strong></p>
-              {status !== order.status && customerEmail && (
-                <p className="text-xs mt-2">Clientul va fi notificat automat pe email despre schimbarea statusului.</p>
+              {status !== order.status && (customerEmail || customerPhone) && (
+                <p className="text-xs mt-2">Clientul va fi notificat automat despre schimbarea statusului.</p>
               )}
             </div>
             <div className="flex justify-end gap-2">

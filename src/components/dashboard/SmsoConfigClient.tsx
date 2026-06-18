@@ -173,6 +173,24 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
             </div>
           </div>
 
+          {/* SMS automat la schimbarea statusului comenzii */}
+          <div className="flex items-center justify-between pt-4 border-t border-border">
+            <div className="pr-4">
+              <p className="text-sm font-semibold text-foreground">SMS automat la schimbarea statusului</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Trimite automat un SMS clientului cand schimbi statusul comenzii (ex. Expediat). Consuma credite SMSO la fiecare schimbare.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSmso(s => ({ ...s, notify_status_change: !s.notify_status_change }))}
+              disabled={!smso.enabled}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 disabled:opacity-40 ${smso.notify_status_change && smso.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${smso.notify_status_change && smso.enabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+
           <div className="flex justify-end pt-1">
             <button
               type="button"

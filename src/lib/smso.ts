@@ -4,6 +4,8 @@ export interface SmsoConfig {
   enabled: boolean;
   api_key: string;
   sender_id: string;
+  // Auto-send a transactional SMS to the customer when the order status changes.
+  notify_status_change?: boolean;
 }
 
 export interface SmsoSender {

@@ -11,6 +11,8 @@ import { markCartConverted } from "@/lib/abandoned-cart";
 import { expandBundleStock } from "@/lib/bundles";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
+import { sendSms } from "@/lib/smso";
+import type { SmsoConfig } from "@/lib/smso";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -345,6 +347,31 @@ export async function placeOrder(data: {
   return { success: true, orderId: order.id, orderNumber: order.order_number };
 }
 
+const STATUS_SMS_LABELS: Record<string, string> = {
+  pending: "in asteptare",
+  confirmed: "confirmata",
+  processing: "in procesare",
+  shipped: "expediata",
+  delivered: "livrata",
+  cancelled: "anulata",
+  refunded: "rambursata",
+};
+
+// Short transactional SMS for an order status change (auto-notify, opt-in per store).
+function defaultStatusSms(status: string, opts: { orderNumber: string; businessName: string; awb?: string }): string {
+  const biz = opts.businessName;
+  switch (status) {
+    case "confirmed":
+      return `Comanda ${opts.orderNumber} a fost confirmata. Multumim! ${biz}`;
+    case "shipped":
+      return `Comanda ${opts.orderNumber} a fost expediata${opts.awb ? `, AWB ${opts.awb}` : ""}. ${biz}`;
+    case "delivered":
+      return `Comanda ${opts.orderNumber} a fost livrata. Iti multumim! ${biz}`;
+    default:
+      return `Comanda ${opts.orderNumber}: ${STATUS_SMS_LABELS[status] ?? status}. ${biz}`;
+  }
+}
+
 export async function updateOrder(orderId: string, data: { status: string; payment_status: string; awb?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -352,7 +379,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   const { data: order } = await supabase
     .from("orders")
-    .select("business_id, order_number, customer_name, customer_email, total, status, payment_status")
+    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -382,6 +409,28 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       business_name: biz.business_name,
       awb: data.awb,
     }).catch(() => {});
+  }
+
+  // Send status change SMS to customer (opt-in per store via SMSO)
+  if (statusChanged && order.customer_phone) {
+    const { data: st } = await supabase
+      .from("store_settings")
+      .select("smso_config")
+      .eq("business_id", order.business_id)
+      .single();
+    const smso = st?.smso_config as (SmsoConfig & { notify_status_change?: boolean }) | null;
+    if (smso?.enabled && smso.api_key && smso.sender_id && smso.notify_status_change) {
+      void sendSms(smso.api_key, {
+        to: order.customer_phone,
+        sender: smso.sender_id,
+        body: defaultStatusSms(data.status, {
+          orderNumber: order.order_number,
+          businessName: biz.business_name,
+          awb: data.awb,
+        }),
+        type: "transactional",
+      });
+    }
   }
 
   // Auto-generate SmartBill invoice if configured (fire-and-forget)
@@ -443,6 +492,45 @@ export async function sendCustomerNotification(orderId: string, subject: string,
     orderNumber: order.order_number,
   });
   if ("error" in res) return { error: res.error };
+  return { success: true };
+}
+
+export async function sendCustomerSms(orderId: string, message: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  if (!message.trim()) return { error: "Scrie mesajul SMS." };
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("business_id, customer_phone")
+    .eq("id", orderId)
+    .single();
+  if (!order) return { error: "Comanda negasita" };
+
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  if (!order.customer_phone) return { error: "Clientul nu a lasat un numar de telefon." };
+
+  const { data: st } = await supabase
+    .from("store_settings")
+    .select("smso_config")
+    .eq("business_id", order.business_id)
+    .single();
+  const smso = st?.smso_config as SmsoConfig | null;
+  if (!smso?.enabled || !smso.api_key || !smso.sender_id) {
+    return { error: "SMSO nu este activat. Conecteaza-l din Integrari." };
+  }
+
+  const res = await sendSms(smso.api_key, {
+    to: order.customer_phone,
+    sender: smso.sender_id,
+    body: message.trim(),
+    type: "transactional",
+  });
+  if (!res.success) return { error: res.error ?? "Eroare la trimiterea SMS-ului." };
   return { success: true };
 }
 

@@ -11,6 +11,7 @@ import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday";
+import type { SmsoConfig } from "@/lib/smso";
 
 interface Props {
   params: Promise<{ orderId: string }>;
@@ -40,7 +41,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, smso_config")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -67,6 +68,8 @@ export default async function OrderDetailPage({ params }: Props) {
   const fanCourierEnabled = !!(fg?.enabled && fg?.username && fg?.client_id);
   const sg = settings?.sameday_config as SamedayConfig | null;
   const samedayEnabled = !!(sg?.enabled && sg?.username && sg?.pickup_point_id);
+  const sm = settings?.smso_config as SmsoConfig | null;
+  const smsoEnabled = !!(sm?.enabled && sm?.api_key && sm?.sender_id);
 
   return (
     <OrderDetailClient
@@ -82,6 +85,7 @@ export default async function OrderDetailPage({ params }: Props) {
       dpdEnabled={dpdEnabled}
       fanCourierEnabled={fanCourierEnabled}
       samedayEnabled={samedayEnabled}
+      smsoEnabled={smsoEnabled}
     />
   );
 }

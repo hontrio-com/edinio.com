@@ -272,7 +272,7 @@ export async function updateVatSettings(
 
 export async function updateSmsoConfig(
   businessId: string,
-  config: { enabled: boolean; api_key: string; sender_id: string },
+  config: { enabled: boolean; api_key: string; sender_id: string; notify_status_change?: boolean },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

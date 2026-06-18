@@ -69,7 +69,6 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                     {storeName[0]?.toUpperCase()}
                   </div>
                 )}
-                <span className="font-semibold text-sm text-foreground truncate">{storeName}</span>
               </div>
               <button type="button" aria-label="Inchide meniul" onClick={() => setOpen(false)}
                 className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">

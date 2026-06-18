@@ -24,14 +24,23 @@ export interface BundleListItem {
 type StatusFilter = "all" | "active" | "inactive" | "unavailable";
 const PER_PAGE = 12;
 
-export function BundlesClient({ businessId, bundles }: { businessId: string; bundles: BundleListItem[] }) {
+export function BundlesClient({ businessId, bundles, initialPage = 1 }: { businessId: string; bundles: BundleListItem[]; initialPage?: number }) {
   const router = useRouter();
   const [deleting, startDelete] = useTransition();
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
+  // Keep the page in the URL (?page=N) without a server round-trip, so editing a
+  // pachet and returning (save / cancel / back) lands on the same page.
+  function goToPage(p: number) {
+    setPage(p);
+    const params = new URLSearchParams(window.location.search);
+    if (p > 1) params.set("page", String(p)); else params.delete("page");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -47,8 +56,10 @@ export function BundlesClient({ businessId, bundles }: { businessId: string; bun
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const pageItems = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+  // Carry the current page into the edit URL so save/cancel returns to it.
+  const editHref = (id: string) => `/dashboard/products/bundles/${id}/edit${safePage > 1 ? `?page=${safePage}` : ""}`;
 
-  function resetPage() { setPage(1); }
+  function resetPage() { goToPage(1); }
 
   function remove(id: string) {
     startDelete(async () => {
@@ -147,7 +158,7 @@ export function BundlesClient({ businessId, bundles }: { businessId: string; bun
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <Link href={`/dashboard/products/bundles/${b.id}/edit`}
+                      <Link href={editHref(b.id)}
                         className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                         <Pencil className="h-3.5 w-3.5" />
                       </Link>
@@ -171,11 +182,11 @@ export function BundlesClient({ businessId, bundles }: { businessId: string; bun
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground">{filtered.length} pachete · pagina {safePage} din {totalPages}</p>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setPage(safePage - 1)} disabled={safePage <= 1}
+                    <button onClick={() => goToPage(safePage - 1)} disabled={safePage <= 1}
                       className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none">
                       <ChevronLeft className="h-4 w-4" /> Înapoi
                     </button>
-                    <button onClick={() => setPage(safePage + 1)} disabled={safePage >= totalPages}
+                    <button onClick={() => goToPage(safePage + 1)} disabled={safePage >= totalPages}
                       className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none">
                       Înainte <ChevronRight className="h-4 w-4" />
                     </button>

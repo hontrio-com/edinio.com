@@ -43,11 +43,12 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-export function BundleForm({ businessId, eligibleProducts, categories, bundle }: {
+export function BundleForm({ businessId, eligibleProducts, categories, bundle, backHref = "/dashboard/products/bundles" }: {
   businessId: string;
   eligibleProducts: EligibleProduct[];
   categories: { id: string; name: string }[];
   bundle?: ExistingBundle;
+  backHref?: string;
 }) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
@@ -156,7 +157,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle }:
         : await createBundle(businessId, payload);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(bundle ? "Pachet actualizat." : "Pachet creat.");
-      router.push("/dashboard/products/bundles");
+      router.push(backHref);
       router.refresh();
     });
   }
@@ -165,7 +166,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle }:
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push("/dashboard/products/bundles")}
+        <button onClick={() => router.push(backHref)}
           className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -338,7 +339,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle }:
       </div>
 
       <div className="flex justify-end gap-2">
-        <button onClick={() => router.push("/dashboard/products/bundles")} className="px-5 py-2.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors">Anulează</button>
+        <button onClick={() => router.push(backHref)} className="px-5 py-2.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors">Anulează</button>
         <button onClick={save} disabled={saving}
           className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg transition-all hover:opacity-90 disabled:opacity-60">
           {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Se salvează...</> : <><Save className="h-4 w-4" /> {bundle ? "Salvează" : "Creează pachetul"}</>}

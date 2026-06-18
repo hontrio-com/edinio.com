@@ -4,7 +4,8 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { BundlesClient, type BundleListItem } from "@/components/dashboard/BundlesClient";
 import { readBundleConfig, bundleAvailability } from "@/lib/bundles";
 
-export default async function BundlesPage() {
+export default async function BundlesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const { page: pageParam } = await searchParams;
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -53,7 +54,7 @@ export default async function BundlesPage() {
 
   return (
     <div className="p-6">
-      <BundlesClient businessId={biz.id} bundles={bundles} />
+      <BundlesClient businessId={biz.id} bundles={bundles} initialPage={Math.max(1, parseInt(pageParam ?? "1", 10) || 1)} />
     </div>
   );
 }

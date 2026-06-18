@@ -5,8 +5,11 @@ import { getBundleEligibleProducts } from "@/lib/actions/bundle.actions";
 import { BundleForm } from "@/components/dashboard/BundleForm";
 import { readBundleConfig } from "@/lib/bundles";
 
-export default async function EditBundlePage({ params }: { params: Promise<{ bundleId: string }> }) {
+export default async function EditBundlePage({ params, searchParams }: { params: Promise<{ bundleId: string }>; searchParams: Promise<{ page?: string }> }) {
   const { bundleId } = await params;
+  const { page } = await searchParams;
+  // Preserve the bundles-list page the merchant came from, so saving returns there.
+  const backHref = page && Number(page) > 1 ? `/dashboard/products/bundles?page=${encodeURIComponent(page)}` : "/dashboard/products/bundles";
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -42,7 +45,7 @@ export default async function EditBundlePage({ params }: { params: Promise<{ bun
 
   return (
     <div className="p-6">
-      <BundleForm businessId={biz.id} eligibleProducts={eligible} categories={categories} bundle={bundle} />
+      <BundleForm businessId={biz.id} eligibleProducts={eligible} categories={categories} bundle={bundle} backHref={backHref} />
     </div>
   );
 }

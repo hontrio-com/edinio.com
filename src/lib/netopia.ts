@@ -157,13 +157,19 @@ export async function startNetopiaPayment(
       console.error(`[netopia] HTTP ${res.status}:`, JSON.stringify(data).slice(0, 800));
     }
 
+    // In Netopia v2 `error.code` is a STATUS, not necessarily a failure:
+    //   "00"  = completed
+    //   "101" = redirect the customer to the hosted payment page (normal path
+    //           for a fresh card payment — 3DS / card entry)
+    // The real signal is paymentURL: if Netopia hands us a URL, send the customer
+    // there regardless of the (non-fatal) status code. Only a missing URL is an error.
+    if (data.payment?.paymentURL) {
+      return { redirectUrl: data.payment.paymentURL, ntpID: data.payment.ntpID };
+    }
+
     if (data.error?.code && data.error.code !== "00") {
       console.error(`[netopia] error code ${data.error.code}: ${data.error.message ?? ""}`);
       return { error: data.error.message || `Netopia error: ${data.error.code}` };
-    }
-
-    if (data.payment?.paymentURL) {
-      return { redirectUrl: data.payment.paymentURL, ntpID: data.payment.ntpID };
     }
 
     console.error("[netopia] no paymentURL in response:", JSON.stringify(data).slice(0, 800));

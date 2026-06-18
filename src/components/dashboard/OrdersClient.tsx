@@ -635,7 +635,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                                   {generatingOrderId === order.id ? (
                                     <Loader2 className="h-3 w-3 animate-spin" />
                                   ) : (
-                                    <img src="/integrations/smartbill.svg" alt="SmartBill" className="h-3.5 w-auto" style={{ maxWidth: 14, objectFit: "contain" }} />
+                                    <img src="/integrations/smartbill.webp" alt="SmartBill" className="h-3.5 w-auto" style={{ maxWidth: 14, objectFit: "contain" }} />
                                   )}
                                   Factura
                                 </button>

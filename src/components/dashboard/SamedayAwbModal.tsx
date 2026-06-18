@@ -163,7 +163,7 @@ export function SamedayAwbModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center gap-2.5">
-            <img src="/integrations/sameday.svg" alt="Sameday" className="h-5 w-auto" />
+            <img src="/integrations/sameday.webp" alt="Sameday" className="h-5 w-auto" />
             <div>
               <p className="text-sm font-semibold text-foreground">AWB Sameday</p>
               <p className="text-xs text-muted-foreground">Comanda {order.order_number}</p>

@@ -546,7 +546,7 @@ export function OrderDetailClient({
         <div className="bg-surface border border-border rounded-xl overflow-hidden">
           {/* Card header */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/30">
-            <img src="/integrations/smartbill.svg" alt="SmartBill" className="h-6 w-auto object-contain" />
+            <img src="/integrations/smartbill.webp" alt="SmartBill" className="h-6 w-auto object-contain" />
           </div>
 
           <div className="p-5 space-y-5">
@@ -590,7 +590,7 @@ export function OrderDetailClient({
                       className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
                       {generatingEstimate
                         ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <img src="/integrations/smartbill.svg" alt="" className="h-4 w-auto object-contain" />}
+                        : <img src="/integrations/smartbill.webp" alt="" className="h-4 w-auto object-contain" />}
                       {generatingEstimate ? "Se genereaza..." : "Genereaza proforma"}
                     </button>
                   )
@@ -663,7 +663,7 @@ export function OrderDetailClient({
                   className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
                   {generatingInvoice
                     ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <img src="/integrations/smartbill.svg" alt="" className="h-4 w-auto object-contain" />}
+                    : <img src="/integrations/smartbill.webp" alt="" className="h-4 w-auto object-contain" />}
                   {generatingInvoice ? "Se genereaza..." : "Genereaza factura"}
                 </button>
               )}
@@ -683,7 +683,7 @@ export function OrderDetailClient({
             {wootEnabled && (
               <button type="button" onClick={() => setWootModalOpen(true)}
                 className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/woot.svg" alt="Woot" className="h-6 w-auto object-contain flex-shrink-0" />
+                <img src="/integrations/woot.webp" alt="Woot" className="h-6 w-auto object-contain flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-foreground">Woot</p>
                   {order.woot_awb_number
@@ -731,7 +731,7 @@ export function OrderDetailClient({
             {samedayEnabled && (
               <button type="button" onClick={() => setSamedayModalOpen(true)}
                 className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left">
-                <img src="/integrations/sameday.svg" alt="Sameday" className="h-6 w-auto object-contain flex-shrink-0" />
+                <img src="/integrations/sameday.webp" alt="Sameday" className="h-6 w-auto object-contain flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-foreground">Sameday</p>
                   {ord["sameday_awb_number"]

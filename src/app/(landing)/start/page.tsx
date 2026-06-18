@@ -68,15 +68,15 @@ const PLANS = [
 ];
 
 const INTEGRATIONS = [
-  { src: "/integrations/sameday.svg", alt: "Sameday Courier" },
+  { src: "/integrations/sameday.webp", alt: "Sameday Courier" },
   { src: "/integrations/fan-courier.svg", alt: "FAN Courier" },
   { src: "/integrations/cargus.svg", alt: "Cargus" },
   { src: "/integrations/dpd.svg", alt: "DPD" },
-  { src: "/integrations/woot.svg", alt: "Woot" },
+  { src: "/integrations/woot.webp", alt: "Woot" },
   { src: "/integrations/colete-online.svg", alt: "Colete Online" },
   { src: "/integrations/stripe.svg", alt: "Stripe" },
   { src: "/integrations/netopia.svg", alt: "Netopia" },
-  { src: "/integrations/smartbill.svg", alt: "SmartBill" },
+  { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   { src: "/integrations/fgo.svg", alt: "Factura.online" },
   { src: "/integrations/smso.svg", alt: "SMSO" },
   { src: "/integrations/facebook-pixel.svg", alt: "Facebook Pixel" },

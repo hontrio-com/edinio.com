@@ -10,6 +10,7 @@ import {
 import { formatPrice } from "@/lib/utils/format";
 import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
+import { NetopiaBadge } from "./NetopiaBadge";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -981,6 +982,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 </a>
               </div>
             </div>
+
+            {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
+            <NetopiaBadge businessId={business.id} />
           </div>
 
           {/* Divider */}

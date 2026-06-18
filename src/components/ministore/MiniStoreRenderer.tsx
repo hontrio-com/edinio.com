@@ -17,6 +17,7 @@ import { readBundleConfig } from "@/lib/bundles";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
+import { NetopiaBadge } from "./NetopiaBadge";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
 import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
@@ -2206,6 +2207,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 </a>
               </div>
             </div>
+
+            {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
+            <NetopiaBadge businessId={business.id} />
           </div>
 
           {/* Divider */}

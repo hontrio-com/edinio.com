@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Globe } from "lucide-react";
 import { InstagramIcon, FacebookIcon, TikTokIcon, YoutubeIcon } from "./social-icons";
+import { NetopiaBadge } from "./NetopiaBadge";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 
 interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; website?: string }
@@ -14,10 +15,11 @@ const POLICY_LINKS = [
   { slug: "anulare", label: "Anulare comanda" },
 ] as const;
 
-export function StoreFooter({ business, menu, basePath }: {
+export function StoreFooter({ business, menu, basePath, businessId }: {
   business: { business_name: string; store_name: string | null; logo_url: string | null; store_city: string | null; primary_color: string; social: Social };
   menu: MenuItem[];
   basePath: string;
+  businessId: string;
 }) {
   const name = business.store_name ?? business.business_name;
   const color = business.primary_color ?? "#1AB554";
@@ -79,6 +81,8 @@ export function StoreFooter({ business, menu, basePath }: {
               </a>
             </div>
           </div>
+          {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
+          <NetopiaBadge businessId={businessId} />
         </div>
 
         <div className="h-px bg-white/[0.06]" />

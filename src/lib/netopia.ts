@@ -12,6 +12,12 @@ export type NetopiaConfig = {
   pos_signature: string;
   title: string;
   api_key: string;
+  /**
+   * Netopia "Identitate Vizuala" badge — the iframe embed code the merchant
+   * copies from admin.netopia-payments.com. Shown in the storefront footer
+   * (mandatory branding) when Netopia is enabled. Sanitized at save time.
+   */
+  badge_html?: string;
 };
 
 export const NETOPIA_SANDBOX_URL = "https://secure.sandbox.netopia-payments.com";

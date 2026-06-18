@@ -149,6 +149,7 @@ export default async function CustomPage({ params }: Props) {
         business={{ business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, store_city: business.store_city, primary_color: color, social }}
         menu={menu}
         basePath={basePath}
+        businessId={business.id}
       />
     </div>
   );

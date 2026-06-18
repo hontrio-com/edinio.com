@@ -14,6 +14,7 @@ const DEFAULT_CONFIG: NetopiaConfig = {
   pos_signature: "",
   title: "Card online (Netopia)",
   api_key: "",
+  badge_html: "",
 };
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
@@ -203,6 +204,33 @@ export default function NetopiaConfigClient({
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Genereaza un API Key din Netopia → Profil → Securitate (nu din Setari tehnice)
+              </p>
+            </div>
+
+            {/* Logo Netopia pentru footer (Identitate Vizuala) */}
+            <div className="pt-4 border-t border-border">
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                Logo Netopia pentru footer (Identitate Vizuala)
+              </label>
+              <p className="text-xs text-muted-foreground mb-2.5 leading-relaxed">
+                Afisarea logo-ului Netopia este obligatorie cand accepti plata cu cardul. Dupa ce lipesti codul mai jos, logo-ul apare automat in footer-ul magazinului.
+              </p>
+              <div className="p-3 mb-2.5 rounded-lg bg-muted/30 border border-border text-xs text-muted-foreground leading-relaxed space-y-1">
+                <p className="font-medium text-foreground">Cum obtii codul:</p>
+                <p>1. In contul Netopia, mergi la <span className="font-medium text-foreground">Identitate Vizuala</span>.</p>
+                <p>2. La tipul de platforma, alege <span className="font-medium text-foreground">HTML/IFRAME</span> (recomandat).</p>
+                <p>3. Selecteaza <span className="font-medium text-foreground">Punctul de vanzare</span> potrivit.</p>
+                <p>4. Copiaza codul generat si lipeste-l mai jos.</p>
+              </div>
+              <textarea
+                value={cfg.badge_html ?? ""}
+                onChange={e => set("badge_html", e.target.value)}
+                placeholder={'<iframe src="https://netopia-payments.com/..."></iframe>'}
+                rows={4}
+                className={`${inputCls} font-mono text-xs resize-y`}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Accepta doar codul de tip <span className="font-medium">HTML/IFRAME</span> de la Netopia. Alte formate (Script, React, Angular) nu vor fi afisate.
               </p>
             </div>
           </div>

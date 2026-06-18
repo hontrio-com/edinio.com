@@ -26,6 +26,43 @@ const IFRAME_HOST_ALLOWLIST = [
   "w.soundcloud.com",
 ];
 
+// Netopia serves its "Identitate Vizuala" badge from its own domains. We match by
+// domain (subdomains included) so we don't have to guess the exact host the embed
+// generator uses, while still allowing ONLY Netopia.
+const NETOPIA_IFRAME_DOMAINS = ["netopia-payments.com", "netopia.ro", "mobilpay.ro"];
+
+/**
+ * Sanitizer for the Netopia visual-identity badge the merchant pastes in the
+ * Netopia integration page. Allows ONLY an <iframe> (with a small set of layout
+ * wrappers) from a Netopia domain — the official badge is an iframe embed. Scripts,
+ * event handlers and any non-Netopia host are stripped, so a pasted snippet can
+ * never inject arbitrary content into the public storefront footer.
+ *
+ * Server-only (pulls in the Node `sanitize-html` package).
+ */
+export function sanitizeNetopiaBadge(html: string | null | undefined): string {
+  if (!html) return "";
+  return sanitizeHtmlLib(html, {
+    allowedTags: ["iframe", "a", "div", "span", "img", "picture", "source"],
+    allowedAttributes: {
+      "*": ["style", "class", "title", "aria-label"],
+      a: ["href", "target", "rel"],
+      img: ["src", "srcset", "sizes", "alt", "width", "height", "loading", "decoding"],
+      source: ["src", "srcset", "type", "media", "sizes"],
+      iframe: ["src", "width", "height", "style", "frameborder", "scrolling", "allow", "allowfullscreen", "loading", "title", "referrerpolicy"],
+    },
+    allowedSchemes: ["https"],
+    allowedSchemesByTag: { a: ["https"], img: ["https"], iframe: ["https"] },
+    allowedSchemesAppliedToAttributes: ["href", "src"],
+    allowedIframeDomains: NETOPIA_IFRAME_DOMAINS,
+    allowIframeRelativeUrls: false,
+    disallowedTagsMode: "discard",
+    transformTags: {
+      a: sanitizeHtmlLib.simpleTransform("a", { rel: "noopener noreferrer", target: "_blank" }),
+    },
+  });
+}
+
 export function sanitizeEmbedHtml(html: string | null | undefined): string {
   if (!html) return "";
   return sanitizeHtmlLib(html, {

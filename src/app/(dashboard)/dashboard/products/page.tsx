@@ -7,13 +7,13 @@ import { getProductLimit } from "@/lib/plan-limits";
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string }>;
+  searchParams: Promise<{ search?: string; page?: string }>;
 }) {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: bizRow }, { search: searchQuery }, { data: profile }] = await Promise.all([
+  const [{ data: bizRow }, { search: searchQuery, page: pageParam }, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
       .select("id, products(id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id), categories(id, name, parent_id, sort_order)")
@@ -47,6 +47,7 @@ export default async function ProductsPage({
         products={products}
         businessId={bizRow.id}
         initialSearch={searchQuery ?? ""}
+        initialPage={Math.max(1, parseInt(pageParam ?? "1", 10) || 1)}
         categories={categories}
         productLimit={productLimit}
         productCount={products.length}

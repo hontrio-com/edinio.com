@@ -5,10 +5,14 @@ import { ProductForm } from "@/components/dashboard/ProductForm";
 
 interface Props {
   params: Promise<{ productId: string }>;
+  searchParams: Promise<{ page?: string }>;
 }
 
-export default async function EditProductPage({ params }: Props) {
+export default async function EditProductPage({ params, searchParams }: Props) {
   const { productId } = await params;
+  const { page } = await searchParams;
+  // Preserve the products-list page the merchant came from, so saving returns there.
+  const backHref = page && Number(page) > 1 ? `/dashboard/products?page=${encodeURIComponent(page)}` : "/dashboard/products";
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -34,6 +38,7 @@ export default async function EditProductPage({ params }: Props) {
       businessId={business.id}
       product={product}
       categories={categories ?? []}
+      backHref={backHref}
     />
   );
 }

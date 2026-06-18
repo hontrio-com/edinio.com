@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition, useEffect, useRef } from "react";
+import { useState, useMemo, useTransition, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -17,10 +17,11 @@ type Product = Pick<
   "id" | "name" | "slug" | "sku" | "price" | "compare_at_price" | "images" | "category" | "is_active" | "is_featured" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
 >;
 
-export function ProductsClient({ products, businessId, initialSearch = "", categories = [], productLimit, productCount, plan }: {
+export function ProductsClient({ products, businessId, initialSearch = "", initialPage = 1, categories = [], productLimit, productCount, plan }: {
   products: Product[];
   businessId: string;
   initialSearch?: string;
+  initialPage?: number;
   categories: CategoryOption[];
   productLimit: number;
   productCount: number;
@@ -30,7 +31,18 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDupTransition] = useTransition();
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
+  const didMountRef = useRef(false);
+  // Keep the current page in the URL (?page=N) WITHOUT a server round-trip, so
+  // opening a product and returning (save / cancel / browser back) lands on the
+  // same page. The list is paginated client-side, hence history.replaceState.
+  const goToPage = useCallback((p: number) => {
+    setPage(p);
+    const params = new URLSearchParams(window.location.search);
+    if (p > 1) params.set("page", String(p)); else params.delete("page");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+  }, []);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all");
@@ -129,14 +141,18 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Carry the current page into the edit URL so save/cancel returns to it.
+  const editHref = (id: string) => `/dashboard/products/${id}/edit${currentPage > 1 ? `?page=${currentPage}` : ""}`;
 
-  // Reset paging + selection whenever the filtered set changes.
+  // Reset paging + selection whenever the filtered set changes — but NOT on the
+  // initial mount, so a page restored from the URL (?page=N) is preserved.
   useEffect(() => {
-    setPage(1);
+    if (!didMountRef.current) { didMountRef.current = true; return; }
+    goToPage(1);
     setSelected(new Set());
     setBulkPanel(null);
     setConfirmBulkDelete(false);
-  }, [searchQuery, categoryFilter, statusFilter, stockFilter]);
+  }, [searchQuery, categoryFilter, statusFilter, stockFilter, goToPage]);
 
   const allSelected = filtered.length > 0 && filtered.every(p => selected.has(p.id));
   const someSelected = !allSelected && filtered.some(p => selected.has(p.id));
@@ -423,7 +439,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                 const images = Array.isArray(product.images) ? product.images : [];
                 return (
                   <tr key={product.id} className={cn("hover:bg-muted/30 transition-colors cursor-pointer", selected.has(product.id) && "bg-primary/5")}
-                    onClick={() => router.push(`/dashboard/products/${product.id}/edit`)}>
+                    onClick={() => router.push(editHref(product.id))}>
                     <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={selected.has(product.id)} onChange={() => toggleOne(product.id)}
                         aria-label={`Selecteaza ${product.name}`}
@@ -496,7 +512,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                           {duplicatingId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                         </button>
                         <Link
-                          href={`/dashboard/products/${product.id}/edit`}
+                          href={editHref(product.id)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                           aria-label="Editeaza"
                         >
@@ -515,7 +531,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                 {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} produse
               </p>
               <div className="flex items-center gap-1">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                <button onClick={() => goToPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
                   className="px-2.5 py-1.5 text-xs rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors">Inapoi</button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
                   .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
@@ -528,14 +544,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", categ
                     p === "dots" ? (
                       <span key={`d${i}`} className="px-1 text-muted-foreground text-xs">...</span>
                     ) : (
-                      <button key={p} onClick={() => setPage(p)}
+                      <button key={p} onClick={() => goToPage(p)}
                         className={cn("min-w-[28px] h-7 text-xs rounded-lg border transition-colors",
                           currentPage === p ? "bg-foreground text-background border-foreground" : "border-border hover:bg-muted")}>
                         {p}
                       </button>
                     )
                   )}
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                <button onClick={() => goToPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
                   className="px-2.5 py-1.5 text-xs rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors">Inainte</button>
               </div>
             </div>

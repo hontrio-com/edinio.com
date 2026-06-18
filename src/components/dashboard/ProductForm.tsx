@@ -480,9 +480,10 @@ interface Props {
   businessId: string;
   product?: Product;
   categories: CategoryOption[];
+  backHref?: string;
 }
 
-export function ProductForm({ businessId, product, categories }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products" }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [form, setForm] = useState<FormState>(product ? productToForm(product) : EMPTY_FORM);
@@ -658,7 +659,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
         : await createProduct(businessId, payload);
       if (result.error) { toast.error(result.error); return; }
       toast.success(isEditing ? "Produs actualizat!" : "Produs adaugat!");
-      router.push("/dashboard/products");
+      router.push(backHref);
     });
   }
 
@@ -667,7 +668,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
       const result = await deleteProduct(product!.id, businessId);
       if (result.error) { toast.error(result.error); return; }
       toast.success("Produs sters!");
-      router.push("/dashboard/products");
+      router.push(backHref);
     });
   }
 
@@ -677,7 +678,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-28 lg:pb-6">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <button type="button" onClick={() => router.push("/dashboard/products")}
+        <button type="button" onClick={() => router.push(backHref)}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" />
           Produse
@@ -1520,7 +1521,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
                   {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   {isPending ? "Se salveaza..." : isEditing ? "Salveaza modificarile" : "Adauga produs"}
                 </button>
-                <button type="button" onClick={() => router.push("/dashboard/products")}
+                <button type="button" onClick={() => router.push(backHref)}
                   className="w-full py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors text-foreground">
                   Anuleaza
                 </button>
@@ -1565,7 +1566,7 @@ export function ProductForm({ businessId, product, categories }: Props) {
 
       {/* Mobile sticky save bar */}
       <div className="fixed bottom-16 left-0 right-0 z-20 bg-background border-t border-border px-4 py-3 flex gap-3 lg:hidden">
-        <button type="button" onClick={() => router.push("/dashboard/products")}
+        <button type="button" onClick={() => router.push(backHref)}
           className="flex-1 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors text-foreground">
           Anuleaza
         </button>

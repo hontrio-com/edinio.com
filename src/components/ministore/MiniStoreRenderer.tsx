@@ -1512,7 +1512,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
               </div>
             )}
-            <span className="font-semibold text-sm text-foreground truncate hidden sm:block">{business.store_name ?? business.business_name}</span>
           </a>
 
           <StoreNavLinks items={menu} basePath={basePath} color={color} className="flex-1 justify-center" />
@@ -1626,7 +1625,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
       <main className="max-w-6xl mx-auto px-4 py-10">
         {/* Search + Sort + Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-5 max-w-2xl">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
@@ -1713,7 +1712,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             categories doesn't sprawl into many wrapped rows. */}
         {hasCategories && !hasAnyCategoryImage && (
           <CategoryScroller className="mb-6">
-            <div className="flex items-center gap-2 pb-1" style={{ minWidth: "min-content" }}>
+            <div className="flex items-center gap-2 pb-1 w-max mx-auto">
               {drillParentId ? (
                 <button
                   type="button"
@@ -1758,7 +1757,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         {/* Category image carousel — circles, hierarchy-aware (drill into subcategories) */}
         {hasCategories && hasAnyCategoryImage && (
           <CategoryScroller className="mb-6">
-            <div className="flex gap-4 pb-1" style={{ minWidth: "min-content" }}>
+            <div className="flex gap-4 pb-1 w-max mx-auto">
               {/* Leading control: Toate (top level) or Inapoi (drilled into a category) */}
               {drillParentId ? (
                 <button
@@ -2126,10 +2125,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
                 </div>
               )}
-              <div className="min-w-0">
-                <p className="font-semibold text-sm text-white truncate">{business.store_name ?? business.business_name}</p>
-                {business.store_city && <p className="text-[11px] text-white/40">{business.store_city}</p>}
-              </div>
             </div>
             {(social.instagram || social.facebook || social.tiktok || social.website) && (
               <div className="flex items-center gap-1.5 shrink-0">

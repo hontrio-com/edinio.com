@@ -57,7 +57,6 @@ export function StoreHeader({ business, menu, basePath, currentSlug, logoSize = 
                 {name[0]?.toUpperCase()}
               </div>
             )}
-            <span className="font-semibold text-sm text-foreground truncate hidden sm:block">{name}</span>
           </a>
         </div>
 

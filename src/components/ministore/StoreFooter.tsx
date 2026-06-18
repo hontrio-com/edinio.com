@@ -37,10 +37,6 @@ export function StoreFooter({ business, menu, basePath }: {
                 {name[0]?.toUpperCase()}
               </div>
             )}
-            <div className="min-w-0">
-              <p className="font-semibold text-sm text-white truncate">{name}</p>
-              {business.store_city && <p className="text-[11px] text-white/40">{business.store_city}</p>}
-            </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {social.instagram && <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors"><InstagramIcon className="h-3.5 w-3.5" /></a>}

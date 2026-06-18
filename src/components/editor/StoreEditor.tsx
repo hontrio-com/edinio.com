@@ -31,7 +31,7 @@ interface PageContent {
   show_shipping_progress?: boolean;
   store_benefits_section?: { enabled: boolean; title: string; items: Array<{ title: string; desc: string; }>; };
   benefits_section?: { enabled: boolean; title: string; items: Array<{ title: string; desc: string; }>; };
-  reviews_section?: { enabled: boolean; title: string; items: Array<{ name: string; rating: number; text: string; date: string; }>; };
+  reviews_section?: { enabled: boolean; title: string; items: Array<{ name: string; rating: number; text: string; date: string; image?: string; }>; };
   checkout_config?: {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
@@ -248,6 +248,8 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
   })();
   const [bannerItems, setBannerItems] = useState<BannerItem[]>(initialBanners);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  // Tracks which review row is uploading a photo (drives the per-row spinner).
+  const [reviewUploadIdx, setReviewUploadIdx] = useState<number | null>(null);
 
   function addBannerFile(file: File) {
     setBannerItems((prev) =>
@@ -1103,6 +1105,36 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
                         className="p-1 text-muted-foreground hover:text-destructive transition-colors">
                         <X className="h-3.5 w-3.5" />
                       </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {item.image ? (
+                        <div className="relative flex-shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={item.image} alt="" className="w-9 h-9 rounded-full object-cover border border-border" />
+                          <button type="button" aria-label="Sterge poza"
+                            onClick={() => setPageContent(p => ({ ...p, reviews_section: { ...p.reviews_section!, items: p.reviews_section!.items.map((it, j) => j === i ? { ...it, image: undefined } : it) } }))}
+                            className="absolute -top-1 -right-1 bg-destructive text-white rounded-full p-0.5 shadow">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-9 h-9 rounded-full border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors flex-shrink-0">
+                          {reviewUploadIdx === i
+                            ? <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />
+                            : <Upload className="h-3.5 w-3.5 text-muted-foreground" />}
+                          <input type="file" accept="image/*" className="hidden" disabled={reviewUploadIdx !== null}
+                            onChange={async e => {
+                              const f = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!f) return;
+                              setReviewUploadIdx(i);
+                              const url = await uploadFile(f, "avatars");
+                              setReviewUploadIdx(null);
+                              if (url) setPageContent(p => ({ ...p, reviews_section: { ...p.reviews_section!, items: p.reviews_section!.items.map((it, j) => j === i ? { ...it, image: url } : it) } }));
+                            }} />
+                        </label>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">Poza (optional). Fara poza se afiseaza initiala.</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input type="text" value={item.name} placeholder="Numele clientului" className={inputCls + " !py-1.5 !text-xs"}

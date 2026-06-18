@@ -58,7 +58,7 @@ interface PageContent {
   featured_section_title?: string;
   show_shipping_progress?: boolean;
   store_benefits_section?: { enabled: boolean; title: string; items: Array<{ title: string; desc: string }> };
-  reviews_section?: { enabled: boolean; title: string; items: Array<{ name: string; rating: number; text: string; date: string }> };
+  reviews_section?: { enabled: boolean; title: string; items: Array<{ name: string; rating: number; text: string; date: string; image?: string }> };
   checkout_config?: {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
@@ -2029,10 +2029,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                     </p>
                   )}
                   <div className="flex items-center gap-2.5 pt-1 border-t border-border">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                      style={{ backgroundColor: color }}>
-                      {review.name?.[0]?.toUpperCase() ?? "?"}
-                    </div>
+                    {review.image ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={review.image} alt={review.name || "Client"}
+                        className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-border" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                        style={{ backgroundColor: color }}>
+                        {review.name?.[0]?.toUpperCase() ?? "?"}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-foreground truncate">{review.name || "Anonim"}</p>
                       {review.date && (

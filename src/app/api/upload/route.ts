@@ -35,6 +35,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Fisierul este prea mare. Limita este 10MB." }, { status: 400 });
   }
 
+  // Reject empty files: some mobile/cloud pickers hand back a 0-byte stub, which
+  // would otherwise be stored as an empty object and render as a broken image.
+  if (file.size === 0) {
+    return NextResponse.json({ error: "Fisierul pare gol (0 octeti). Reincarca imaginea." }, { status: 400 });
+  }
+
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "webp";
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
   const key = folder
@@ -43,6 +49,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (buffer.length === 0) {
+      return NextResponse.json({ error: "Fisierul pare gol (0 octeti). Reincarca imaginea." }, { status: 400 });
+    }
     const url = await uploadToR2(buffer, key, file.type);
     return NextResponse.json({ url });
   } catch (err) {

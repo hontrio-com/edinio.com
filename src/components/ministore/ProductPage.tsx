@@ -35,6 +35,7 @@ interface PageContent {
   image_zoom?: { enabled: boolean };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
   button_effect?: string;
+  footer_logo_size?: number;
   checkout_config?: {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
@@ -902,10 +903,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           <div className="flex items-center justify-between gap-4 pb-8">
             <div className="flex items-center gap-3 min-w-0">
               {business.logo_url ? (
-                /* Free logo: full image at any ratio, fixed height, no box/crop. */
+                /* Free logo: full image at any ratio, merchant-set height, no box/crop. */
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-                  className="h-9 w-auto max-w-[150px] object-contain shrink-0" />
+                  style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
+                  className="w-auto object-contain shrink-0" />
               ) : (
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
                   style={{ backgroundColor: color }}>

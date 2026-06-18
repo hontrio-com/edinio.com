@@ -15,11 +15,12 @@ const POLICY_LINKS = [
   { slug: "anulare", label: "Anulare comanda" },
 ] as const;
 
-export function StoreFooter({ business, menu, basePath, businessId }: {
+export function StoreFooter({ business, menu, basePath, businessId, footerLogoSize = 36 }: {
   business: { business_name: string; store_name: string | null; logo_url: string | null; store_city: string | null; primary_color: string; social: Social };
   menu: MenuItem[];
   basePath: string;
   businessId: string;
+  footerLogoSize?: number;
 }) {
   const name = business.store_name ?? business.business_name;
   const color = business.primary_color ?? "#1AB554";
@@ -33,7 +34,7 @@ export function StoreFooter({ business, menu, basePath, businessId }: {
           <div className="flex items-center gap-3 min-w-0">
             {business.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={business.logo_url} alt={name} className="h-9 w-auto max-w-[150px] object-contain shrink-0" />
+              <img src={business.logo_url} alt={name} style={{ height: footerLogoSize, maxWidth: footerLogoSize * 4.2 }} className="w-auto object-contain shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0" style={{ backgroundColor: color }}>
                 {name[0]?.toUpperCase()}

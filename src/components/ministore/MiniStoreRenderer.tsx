@@ -71,6 +71,7 @@ interface PageContent {
   new_badge?: { enabled: boolean; days: number };
   store_bg_color?: string;
   logo_size?: number;
+  footer_logo_size?: number;
   hero_show_content?: boolean;
   hero_banners?: string[];
   menu?: MenuItem[];
@@ -2130,8 +2131,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           <div className="flex items-center justify-between gap-4 pb-8">
             <div className="flex items-center gap-3 min-w-0">
               {business.logo_url ? (
-                <Image src={business.logo_url} alt={business.store_name ?? business.business_name}
-                  width={36} height={36} className="rounded-lg object-cover border border-white/10 shrink-0" />
+                /* Free logo at the merchant-set footer size — matches the header (no box/crop). */
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
+                  style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
+                  className="w-auto object-contain shrink-0" />
               ) : (
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
                   style={{ backgroundColor: color }}>

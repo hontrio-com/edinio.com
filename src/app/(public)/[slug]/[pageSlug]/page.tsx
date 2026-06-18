@@ -107,9 +107,10 @@ export default async function CustomPage({ params }: Props) {
     success_message: f.success_message,
   }));
 
-  const pageContent = (storeSettings?.page_content ?? {}) as { menu?: MenuItem[]; logo_size?: number };
+  const pageContent = (storeSettings?.page_content ?? {}) as { menu?: MenuItem[]; logo_size?: number; footer_logo_size?: number };
   const menu = pageContent.menu ?? [];
   const logoSize = pageContent.logo_size ?? 36;
+  const footerLogoSize = pageContent.footer_logo_size ?? 36;
 
   // Custom domain detection (links honour basePath).
   const headersList = await headers();
@@ -150,6 +151,7 @@ export default async function CustomPage({ params }: Props) {
         menu={menu}
         basePath={basePath}
         businessId={business.id}
+        footerLogoSize={footerLogoSize}
       />
     </div>
   );

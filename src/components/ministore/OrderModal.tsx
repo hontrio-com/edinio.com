@@ -14,7 +14,7 @@ import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
-import type { PaymentMethodType } from "@/lib/payment-methods";
+import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 
 const JUDETE = [
   "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
@@ -96,6 +96,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
+  const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? [];
@@ -139,7 +140,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       ? 0
       : baseShippingCost;
 
-  const total = discountedSubtotal + extrasTotal + shipping;
+  // Card-payment discount (mirrors the server): only for online card methods, on
+  // the goods value after promo. Updates live as the customer switches method.
+  const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
+  const total = discountedSubtotal + extrasTotal + shipping - cardDiscountAmount;
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
@@ -212,6 +216,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
+      setCardDiscountConfig(data.card_discount);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
@@ -852,6 +857,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <div className="flex justify-between text-green-600">
                     <span>Discount ({appliedDiscount.code})</span>
                     <span className="font-semibold">-{discountAmount.toFixed(2)} lei</span>
+                  </div>
+                )}
+                {cardDiscountAmount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Reducere plata cu cardul</span>
+                    <span className="font-semibold">-{cardDiscountAmount.toFixed(2)} lei</span>
                   </div>
                 )}
                 {appliedDiscount?.type === "free_shipping" && (

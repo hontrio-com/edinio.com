@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
-import { checkoutPaymentMethods, sanitizePaymentMethods, type PaymentMethodEntry, type PaymentMethodType } from "@/lib/payment-methods";
+import { checkoutPaymentMethods, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 
 /**
  * Public, secret-free view of a store's checkout configuration.
@@ -23,11 +23,12 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   shipping_zones: Json | null;
   min_order_amount: number | null;
   payment_methods: { type: PaymentMethodType; label: string }[];
+  card_discount: CardDiscountConfig;
 } | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, payment_methods")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, payment_methods, card_discount_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -51,7 +52,40 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     shipping_zones: (data.shipping_zones as Json) ?? null,
     min_order_amount: data.min_order_amount != null ? Number(data.min_order_amount) : null,
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
+    card_discount: parseCardDiscountConfig(data.card_discount_config),
   };
+}
+
+/**
+ * Save the merchant's card-payment discount config (Setari > Metode de plata).
+ * Sanitized server-side; a zero/invalid value is coerced to disabled.
+ */
+export async function updateCardDiscount(
+  businessId: string,
+  config: CardDiscountConfig,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const sanitized = sanitizeCardDiscountConfig(config);
+  const { error } = await supabase
+    .from("store_settings")
+    .update({ card_discount_config: sanitized as never })
+    .eq("business_id", businessId);
+
+  if (error) {
+    logError({ action: "updateCardDiscount", message: error.message, details: { code: error.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea discountului la plata cu cardul." };
+  }
+
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  revalidatePath("/dashboard/settings");
+  return { success: true };
 }
 
 /**

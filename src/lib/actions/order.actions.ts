@@ -10,6 +10,7 @@ import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import { expandBundleStock } from "@/lib/bundles";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
+import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -152,7 +153,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount")
+      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -189,12 +190,21 @@ export async function placeOrder(data: {
     }
   }
 
+  // Card-payment discount: applies only to online card methods, on the goods
+  // value (subtotal + extras, after any promo), never on shipping. Computed
+  // server-side and baked into total so the card processor charges the right sum.
+  const cardDiscount = computeCardDiscount(
+    parseCardDiscountConfig(cfgRow?.card_discount_config),
+    data.payment_method,
+    subtotal + extrasTotal - discountAmount,
+  );
+
   // Shipping clamped non-negative; zeroed when free-shipping rules apply.
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   let shipping = Math.max(0, round2(data.shipping_cost));
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount + shipping));
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount + shipping));
 
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -245,6 +255,7 @@ export async function placeOrder(data: {
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
+    card_discount_amount: cardDiscount,
     total,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
     payment_method: data.payment_method ?? "cash_on_delivery",
@@ -307,6 +318,7 @@ export async function placeOrder(data: {
         shipping_cost: data.shipping_cost,
         discount_code: data.discount_code,
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
+        card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         payment_method: data.payment_method ?? "cash_on_delivery",
         business_name: businessName,
         order_id: order.id,
@@ -473,7 +485,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat")
+      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -529,11 +541,19 @@ export async function placeCartOrder(data: {
   // Only VAT-exclusive pricing adds VAT on top of the total (matches the storefront grand total).
   const vatAddOn = vatEnabled && !pricesIncludeVat ? vatAmount : 0;
 
+  // Card-payment discount: only for online card methods, on the goods value
+  // (subtotal + extras, after promo), never on shipping/VAT. Baked into total.
+  const cardDiscount = computeCardDiscount(
+    parseCardDiscountConfig(cfgRow?.card_discount_config),
+    data.payment_method,
+    subtotal + extrasTotal - discountAmount,
+  );
+
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   let shipping = Math.max(0, round2(data.shipping_cost));
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount + shipping + vatAddOn));
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount + shipping + vatAddOn));
 
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -577,6 +597,7 @@ export async function placeCartOrder(data: {
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
+    card_discount_amount: cardDiscount,
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
@@ -641,6 +662,7 @@ export async function placeCartOrder(data: {
         shipping_cost: data.shipping_cost,
         discount_code: data.discount_code,
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
+        card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         payment_method: data.payment_method ?? "cash_on_delivery",
         business_name: businessName,
         order_id: order.id,

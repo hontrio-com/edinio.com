@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
-import { resolvePaymentMethods } from "@/lib/payment-methods";
+import { resolvePaymentMethods, parseCardDiscountConfig } from "@/lib/payment-methods";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
@@ -18,7 +18,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config)")
+      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, card_discount_config)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -92,6 +92,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       activeCourierIds={activeCourierIds}
       paymentMethods={paymentMethods}
       paymentReadiness={paymentReadiness}
+      cardDiscount={parseCardDiscountConfig(storeSettings?.card_discount_config)}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={plan_success === "1"}
       domainSuccess={domain_success === "1"}

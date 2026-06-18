@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods } from "@/lib/actions/store.actions";
-import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType } from "@/lib/payment-methods";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount } from "@/lib/actions/store.actions";
+import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
@@ -216,6 +216,7 @@ interface Props {
   activeCourierIds: string[];
   paymentMethods: PaymentMethodEntry[];
   paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean };
+  cardDiscount: CardDiscountConfig;
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
   domainSuccess?: boolean;
@@ -233,7 +234,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -401,6 +402,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updatePaymentMethods(businessId, methods);
       if ("error" in result) toast.error(result.error);
       else toast.success("Metodele de plata au fost salvate.");
+    });
+  }
+
+  // Discount la plata cu cardul (Netopia / Stripe / BT iPay) — nu se aplica la ramburs.
+  const [cardDisc, setCardDisc] = useState<CardDiscountConfig>(cardDiscount);
+  const [savingCardDisc, startCardDiscTransition] = useTransition();
+  function saveCardDiscount() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    if (cardDisc.enabled && (!Number.isFinite(cardDisc.value) || cardDisc.value <= 0)) {
+      toast.error("Introdu o valoare mai mare ca 0 pentru discount.");
+      return;
+    }
+    if (cardDisc.enabled && cardDisc.type === "percent" && cardDisc.value > 100) {
+      toast.error("Procentul nu poate depasi 100%.");
+      return;
+    }
+    startCardDiscTransition(async () => {
+      const result = await updateCardDiscount(businessId, cardDisc);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Discountul la plata cu cardul a fost salvat.");
     });
   }
 
@@ -1406,6 +1427,64 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   <button type="button" onClick={saveMethods} disabled={savingMethods}
                     className="mt-2 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-60">
                     {savingMethods ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Salveaza
+                  </button>
+                </div>
+              </div>
+
+              {/* Discount la plata cu cardul */}
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Discount la plata cu cardul</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Ofera clientilor o reducere automata cand platesc online cu cardul (Netopia, Stripe sau BT iPay). Nu se aplica la ramburs.
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setCardDisc(c => ({ ...c, enabled: !c.enabled }))}
+                    aria-label={cardDisc.enabled ? "Dezactiveaza" : "Activeaza"}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-1 ${cardDisc.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${cardDisc.enabled ? "translate-x-4" : "translate-x-0"}`} />
+                  </button>
+                </div>
+                {cardDisc.enabled && (
+                  <div className="px-5 py-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tip discount</label>
+                      <div className="grid grid-cols-2 gap-2 max-w-sm">
+                        <button type="button" onClick={() => setCardDisc(c => ({ ...c, type: "percent" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${cardDisc.type === "percent" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Procent (%)
+                        </button>
+                        <button type="button" onClick={() => setCardDisc(c => ({ ...c, type: "fixed" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${cardDisc.type === "fixed" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Suma fixa (lei)
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                        {cardDisc.type === "percent" ? "Valoare discount (%)" : "Valoare discount (lei)"}
+                      </label>
+                      <input
+                        type="number" min={0} max={cardDisc.type === "percent" ? 100 : undefined} step="0.01"
+                        value={cardDisc.value || ""}
+                        onChange={e => setCardDisc(c => ({ ...c, value: Math.max(0, Number(e.target.value) || 0) }))}
+                        className={`${inputCls} max-w-[200px]`}
+                        placeholder={cardDisc.type === "percent" ? "ex: 5" : "ex: 20"}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        {cardDisc.type === "percent"
+                          ? "Se aplica la valoarea produselor (fara transport), dupa eventualul cod de reducere."
+                          : "Se scade din valoarea produselor (fara transport), dupa eventualul cod de reducere."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="px-5 py-4 border-t border-border">
+                  <button type="button" onClick={saveCardDiscount} disabled={savingCardDisc}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-60">
+                    {savingCardDisc ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Salveaza
                   </button>
                 </div>

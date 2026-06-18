@@ -146,3 +146,64 @@ export function sanitizePaymentMethods(input: unknown): PaymentMethodEntry[] {
   }
   return out;
 }
+
+// ── Card-payment discount ────────────────────────────────────────────────────
+// Optional incentive: a discount applied automatically when the customer pays
+// with an online card method (netopia / stripe / ipay). It NEVER applies to
+// ramburs (cash on delivery). The amount is computed server-side at order
+// creation and baked into `orders.total`, so every processor charges (and iPay
+// verifies) the discounted amount with no changes to the payment endpoints.
+
+export type CardDiscountType = "percent" | "fixed";
+
+export type CardDiscountConfig = {
+  enabled: boolean;
+  type: CardDiscountType;
+  value: number; // percent => 0..100 ; fixed => RON off the goods value
+};
+
+export const DEFAULT_CARD_DISCOUNT: CardDiscountConfig = { enabled: false, type: "percent", value: 0 };
+
+/** Online card methods eligible for the card-payment discount (excludes ramburs). */
+const CARD_DISCOUNT_METHODS = new Set<PaymentMethodType>(["netopia", "stripe", "ipay"]);
+
+export function isCardPaymentMethod(method: string | null | undefined): boolean {
+  return !!method && CARD_DISCOUNT_METHODS.has(method as PaymentMethodType);
+}
+
+/** Parse/normalize the stored jsonb config. Unknown/invalid => disabled. */
+export function parseCardDiscountConfig(raw: unknown): CardDiscountConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_CARD_DISCOUNT };
+  const o = raw as Record<string, unknown>;
+  const type: CardDiscountType = o.type === "fixed" ? "fixed" : "percent";
+  let value = Number(o.value);
+  if (!Number.isFinite(value) || value < 0) value = 0;
+  if (type === "percent") value = Math.min(value, 100);
+  return { enabled: o.enabled === true, type, value: Math.round(value * 100) / 100 };
+}
+
+/** Validate before persisting: a zero/invalid value can't be a real discount. */
+export function sanitizeCardDiscountConfig(raw: unknown): CardDiscountConfig {
+  const c = parseCardDiscountConfig(raw);
+  if (c.value <= 0) return { enabled: false, type: c.type, value: 0 };
+  return c;
+}
+
+/**
+ * Card discount amount for a goods base (subtotal + extras, AFTER any promo
+ * discount — never including shipping). Returns 0 when disabled or when the
+ * method isn't an online card method. Capped at the base so total never goes
+ * negative from this alone.
+ */
+export function computeCardDiscount(
+  config: CardDiscountConfig,
+  paymentMethod: string | null | undefined,
+  goodsBase: number,
+): number {
+  if (!config.enabled || config.value <= 0) return 0;
+  if (!isCardPaymentMethod(paymentMethod)) return 0;
+  const base = Math.max(0, goodsBase);
+  if (base <= 0) return 0;
+  const raw = config.type === "percent" ? base * (config.value / 100) : config.value;
+  return Math.round(Math.min(raw, base) * 100) / 100;
+}

@@ -816,6 +816,7 @@ export type Database = {
       orders: {
         Row: {
           business_id: string
+          card_discount_amount: number
           cargus_awb_number: string | null
           cargus_service_name: string | null
           colete_awb_number: string | null
@@ -873,6 +874,7 @@ export type Database = {
         }
         Insert: {
           business_id: string
+          card_discount_amount?: number
           cargus_awb_number?: string | null
           cargus_service_name?: string | null
           colete_awb_number?: string | null
@@ -930,6 +932,7 @@ export type Database = {
         }
         Update: {
           business_id?: string
+          card_discount_amount?: number
           cargus_awb_number?: string | null
           cargus_service_name?: string | null
           colete_awb_number?: string | null
@@ -1440,6 +1443,7 @@ export type Database = {
           abandoned_cart_automation: Json
           abandoned_cart_enabled: boolean
           business_id: string
+          card_discount_config: Json
           cargus_config: Json | null
           colete_config: Json | null
           created_at: string
@@ -1479,6 +1483,7 @@ export type Database = {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           business_id: string
+          card_discount_config?: Json
           cargus_config?: Json | null
           colete_config?: Json | null
           created_at?: string
@@ -1518,6 +1523,7 @@ export type Database = {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           business_id?: string
+          card_discount_config?: Json
           cargus_config?: Json | null
           colete_config?: Json | null
           created_at?: string

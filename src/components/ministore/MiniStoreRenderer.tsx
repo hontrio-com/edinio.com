@@ -19,7 +19,7 @@ import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
-import type { PaymentMethodType } from "@/lib/payment-methods";
+import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Pick<
@@ -218,6 +218,7 @@ function CartCheckoutModal({
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
+  const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   const hiddenFields = checkoutConfig?.hidden_fields ?? [];
@@ -241,7 +242,10 @@ function CartCheckoutModal({
       : Math.round(vatBase * (vatConfig.vat_rate / 100) * 100) / 100
     : 0;
   const vatAddOn = vatConfig.vat_enabled && !vatConfig.prices_include_vat ? vatAmount : 0;
-  const grandTotal = Math.max(0, total + extrasTotal - discountAmount + shipping + vatAddOn);
+  // Card-payment discount (mirrors the server): only for online card methods, on
+  // the goods value after promo. Shown live as the customer switches payment method.
+  const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, total + extrasTotal - discountAmount);
+  const grandTotal = Math.max(0, total + extrasTotal - discountAmount - cardDiscountAmount + shipping + vatAddOn);
 
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -283,6 +287,7 @@ function CartCheckoutModal({
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
+      setCardDiscountConfig(data.card_discount);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
@@ -604,6 +609,12 @@ function CartCheckoutModal({
               <div className="flex justify-between text-green-600">
                 <span>Reducere ({appliedDiscount.code})</span>
                 <span className="font-medium">{isFreeShippingDiscount && discountAmount === 0 ? "Transport gratuit" : `-${discountAmount} lei`}</span>
+              </div>
+            )}
+            {cardDiscountAmount > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Reducere plata cu cardul</span>
+                <span className="font-medium">-{cardDiscountAmount} lei</span>
               </div>
             )}
             {freeShippingThreshold && total < freeShippingThreshold && (

@@ -38,7 +38,7 @@ export default function NetopiaConfigClient({
 
   function save() {
     if (!cfg.pos_signature.trim()) {
-      toast.error("Account Signature este obligatoriu.");
+      toast.error("POS Signature este obligatoriu.");
       return;
     }
     if (!cfg.api_key.trim()) {
@@ -87,17 +87,17 @@ export default function NetopiaConfigClient({
               {
                 step: "1",
                 title: "Logheaza-te in contul Netopia",
-                desc: 'Mergi pe admin.netopia-payments.com si acceseaza "Puncte de vanzare" → "Setari tehnice".',
+                desc: "Mergi pe admin.netopia-payments.com si autentifica-te cu contul tau de comerciant.",
               },
               {
                 step: "2",
                 title: "Copiaza POS Signature",
-                desc: "Gasesti Signature-ul punctului de vanzare. Copiaza-l si lipeste-l mai jos.",
+                desc: 'Mergi la "Puncte de vanzare" → alege punctul de vanzare → "Setari tehnice" si copiaza valoarea din campul "Signature" (format XXXX-XXXX-XXXX-XXXX). Lipeste-o mai jos.',
               },
               {
                 step: "3",
-                title: "Genereaza API Key",
-                desc: 'In sectiunea "Setari tehnice" → "API Key", genereaza un API Key nou. Copiaza-l si lipeste-l mai jos.',
+                title: "Genereaza API Key din Profil → Securitate",
+                desc: 'API Key-ul NU se afla in "Setari tehnice". Apasa pe numele contului (sus) → "Profil" → "Securitate" si genereaza un API Key. Copiaza-l si lipeste-l mai jos.',
               },
               {
                 step: "4",
@@ -116,6 +116,14 @@ export default function NetopiaConfigClient({
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Atentie: chei RSA vechi */}
+        <div className="p-4 bg-amber-500/5 border border-amber-500/30 rounded-xl flex items-start gap-3">
+          <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">Nu confunda API Key-ul cu cheile de criptare.</span> In &quot;Setari tehnice&quot; vei vedea si o &quot;Cheie publica&quot; si o &quot;Cheie privata&quot;: acestea sunt pentru vechea integrare (Netopia API v1) si <span className="font-medium text-foreground">nu sunt necesare aici</span>. Edinio foloseste API v2, care are nevoie doar de <span className="font-medium text-foreground">POS Signature</span> (din Setari tehnice) si de <span className="font-medium text-foreground">API Key</span> (din Profil → Securitate).
+          </p>
         </div>
 
         {/* Main config card */}
@@ -194,7 +202,7 @@ export default function NetopiaConfigClient({
                 className={inputCls}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Genereaza un API Key din Netopia → Setari tehnice → API Key
+                Genereaza un API Key din Netopia → Profil → Securitate (nu din Setari tehnice)
               </p>
             </div>
           </div>

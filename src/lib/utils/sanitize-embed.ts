@@ -26,10 +26,11 @@ const IFRAME_HOST_ALLOWLIST = [
   "w.soundcloud.com",
 ];
 
-// Netopia serves its "Identitate Vizuala" badge from its own domains. We match by
-// domain (subdomains included) so we don't have to guess the exact host the embed
-// generator uses, while still allowing ONLY Netopia.
-const NETOPIA_IFRAME_DOMAINS = ["netopia-payments.com", "netopia.ro", "mobilpay.ro"];
+// Netopia's visual-identity badge iframe is served from mny.ro (npId.html) — its
+// short domain, with a POS-specific `secret` in the query string. The other hosts
+// are kept for robustness. Matched by domain (subdomains included), allowing ONLY
+// Netopia-owned hosts.
+const NETOPIA_IFRAME_DOMAINS = ["mny.ro", "netopia-payments.com", "netopia.ro", "mobilpay.ro"];
 
 /**
  * Sanitizer for the Netopia visual-identity badge the merchant pastes in the

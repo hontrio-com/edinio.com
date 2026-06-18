@@ -131,14 +131,34 @@ export async function startNetopiaPayment(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: apiKey,
+        Authorization: apiKey.trim(),
       },
       body: JSON.stringify(body),
     });
 
-    const data = (await res.json()) as NetopiaStartResponse;
+    // Read as text first: on a wrong endpoint, invalid API key or upstream error
+    // Netopia can return a non-JSON page, and res.json() would throw and hide the
+    // real status/body. Parse manually and always log enough to debug.
+    const rawBody = await res.text();
+    let data: NetopiaStartResponse;
+    try {
+      data = JSON.parse(rawBody) as NetopiaStartResponse;
+    } catch {
+      console.error(
+        `[netopia] non-JSON response (HTTP ${res.status}) from ${baseUrl}/payment/card/start:`,
+        rawBody.slice(0, 800)
+      );
+      return {
+        error: `Netopia a raspuns neasteptat (HTTP ${res.status}). Verifica API Key-ul si modul (Sandbox/Live).`,
+      };
+    }
+
+    if (!res.ok) {
+      console.error(`[netopia] HTTP ${res.status}:`, JSON.stringify(data).slice(0, 800));
+    }
 
     if (data.error?.code && data.error.code !== "00") {
+      console.error(`[netopia] error code ${data.error.code}: ${data.error.message ?? ""}`);
       return { error: data.error.message || `Netopia error: ${data.error.code}` };
     }
 
@@ -146,6 +166,7 @@ export async function startNetopiaPayment(
       return { redirectUrl: data.payment.paymentURL, ntpID: data.payment.ntpID };
     }
 
+    console.error("[netopia] no paymentURL in response:", JSON.stringify(data).slice(0, 800));
     return { error: "Nu s-a primit URL-ul de plata de la Netopia." };
   } catch (err) {
     console.error("[netopia] startPayment failed:", err);

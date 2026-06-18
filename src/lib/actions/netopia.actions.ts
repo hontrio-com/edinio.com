@@ -20,9 +20,18 @@ export async function saveNetopiaConfig(
     .single();
   if (!biz) return { success: false, error: "Acces interzis" };
 
+  // Trim credentials: pasted keys/signatures often carry stray whitespace or a
+  // trailing newline, which silently breaks the Authorization header at checkout.
+  const clean: NetopiaConfig = {
+    ...config,
+    pos_signature: config.pos_signature.trim(),
+    api_key: config.api_key.trim(),
+    title: config.title.trim(),
+  };
+
   const { error } = await supabase
     .from("store_settings")
-    .update({ netopia_config: config, updated_at: new Date().toISOString() })
+    .update({ netopia_config: clean, updated_at: new Date().toISOString() })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

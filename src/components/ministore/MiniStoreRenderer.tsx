@@ -388,7 +388,8 @@ function CartCheckoutModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId, businessId }),
         });
-        const data = await res.json() as { url?: string; redirectUrl?: string; error?: string };
+        let data: { url?: string; redirectUrl?: string; error?: string } = {};
+        try { data = await res.json(); } catch { /* non-JSON response (e.g. error page) — show generic error below */ }
         const redirect = data.url ?? data.redirectUrl;
         if (redirect) { clear(); window.location.href = redirect; return; }
         setErrors({ _: data.error ?? "Eroare la initierea platii cu cardul." });

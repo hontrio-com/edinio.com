@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { uploadToR2, deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
+import { uploadToR2, deleteFromR2, r2KeyFromUrl, createPresignedPutUrl } from "@/lib/r2";
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES, MAX_VIDEO_MB, VIDEO_EXT_BY_TYPE } from "@/lib/pages/video-config";
 
 type UploadBucket = "logos" | "covers" | "gallery" | "products" | "avatars";
 
@@ -35,6 +36,39 @@ export async function uploadImage(
     return { url };
   } catch {
     return { error: "Incarcarea a esuat. Incearca din nou." };
+  }
+}
+
+/**
+ * Issue a presigned URL for a direct-to-R2 video upload (custom-page video block).
+ * The bytes never pass through this function, so it sidesteps the serverless
+ * request-body limit. Type and size are validated here before any URL is minted,
+ * and the key is namespaced under the caller's user id.
+ */
+export async function createVideoUpload(input: { contentType: string; size: number }):
+  Promise<{ uploadUrl: string; publicUrl: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Nu esti autentificat." };
+
+  if (!(ALLOWED_VIDEO_TYPES as readonly string[]).includes(input.contentType)) {
+    return { error: "Format video neacceptat. Foloseste MP4, WebM sau MOV." };
+  }
+  if (!Number.isFinite(input.size) || input.size <= 0) {
+    return { error: "Fisier invalid." };
+  }
+  if (input.size > MAX_VIDEO_BYTES) {
+    return { error: `Videoclipul este prea mare. Limita este ${MAX_VIDEO_MB}MB.` };
+  }
+
+  const ext = VIDEO_EXT_BY_TYPE[input.contentType] ?? "mp4";
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const key = `gallery/${user.id}/pages/videos/${filename}`;
+
+  try {
+    return await createPresignedPutUrl(key, input.contentType);
+  } catch {
+    return { error: "Nu am putut pregati incarcarea. Incearca din nou." };
   }
 }
 

@@ -27,6 +27,12 @@ export function prepareBlocksForPublic(blocks: Block[]): Block[] {
         if ((b.js ?? "").trim()) return b;
         return { ...b, html: sanitizeEmbedHtml(b.html) };
       }
+      case "video": {
+        // Uploaded video/poster URLs come from our own R2 upload flow; still pin
+        // them to http(s) so a hand-crafted block can't smuggle another scheme.
+        const safeUrl = (u?: string | null) => (u && /^https?:\/\//i.test(u) ? u : null);
+        return { ...b, src: safeUrl(b.src), poster: safeUrl(b.poster) };
+      }
       default:
         return b;
     }

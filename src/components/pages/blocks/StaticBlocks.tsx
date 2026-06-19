@@ -218,6 +218,23 @@ export function DividerBlockView({ block }: { block: DividerBlock }) {
 }
 
 export function VideoBlockView({ block }: { block: VideoBlock }) {
+  // Uploaded (self-hosted) video takes priority over an embed URL.
+  if (block.src) {
+    return (
+      <BlockShell style={{ width: "container", ...block.style }}>
+        <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-black" style={{ aspectRatio: "16/9" }}>
+          <video
+            src={block.src}
+            poster={block.poster ?? undefined}
+            controls
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 w-full h-full object-contain"
+          />
+        </div>
+      </BlockShell>
+    );
+  }
   const embed = videoEmbedUrl(block.url);
   if (!embed) return null;
   return (

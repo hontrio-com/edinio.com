@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3 = new S3Client({
   region: "auto",
@@ -28,6 +29,23 @@ export async function uploadToR2(
     })
   );
   return `${PUBLIC_URL}/${key}`;
+}
+
+/**
+ * Create a short-lived presigned PUT URL for a direct browser → R2 upload.
+ * Used for large files (video) that would otherwise exceed the serverless
+ * request-body limit if routed through an API function. Only the ContentType is
+ * signed, so the client must send a matching `Content-Type` header (and nothing
+ * else) — this keeps the browser PUT simple and CORS-friendly.
+ */
+export async function createPresignedPutUrl(
+  key: string,
+  contentType: string,
+  expiresIn = 600
+): Promise<{ uploadUrl: string; publicUrl: string }> {
+  const command = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType });
+  const uploadUrl = await getSignedUrl(s3, command, { expiresIn });
+  return { uploadUrl, publicUrl: `${PUBLIC_URL}/${key}` };
 }
 
 export async function deleteFromR2(key: string): Promise<void> {

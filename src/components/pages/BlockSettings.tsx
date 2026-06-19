@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Upload, X, Loader2, Plus, AlertTriangle, Search } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
-import { uploadImage } from "@/lib/upload";
+import { uploadImage, uploadVideo } from "@/lib/upload";
+import { MAX_VIDEO_MB } from "@/lib/pages/video-config";
 import { PageIcon, PAGE_ICON_NAMES } from "./icon-registry";
 import type {
   Block, BlockStyle, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock,
@@ -137,6 +138,68 @@ function ImageField({ label, value, onChange }: { label: string; value?: string 
       )}
       <input value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} placeholder="sau lipeste un URL" className={`${inputCls} mt-2 text-xs`} />
     </Field>
+  );
+}
+
+function VideoUploadField({ value, onChange }: { value?: string | null; onChange: (v: string | null) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [pct, setPct] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  async function onFile(file: File) {
+    setErr(null);
+    setBusy(true);
+    setPct(0);
+    const res = await uploadVideo(file, setPct);
+    setBusy(false);
+    if ("url" in res) onChange(res.url);
+    else setErr(res.error);
+  }
+  return (
+    <Field label="Videoclip">
+      {value ? (
+        <div className="relative rounded-lg overflow-hidden border border-border bg-black">
+          <video src={value} controls preload="metadata" className="w-full max-h-48" />
+          <button type="button" onClick={() => onChange(null)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-border flex items-center justify-center z-10"><X className="h-3 w-3" /></button>
+        </div>
+      ) : (
+        <label className={`border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1.5 py-6 transition-colors ${busy ? "opacity-70" : "cursor-pointer hover:border-primary hover:bg-primary/5"}`}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <Upload className="h-4 w-4 text-muted-foreground" />}
+          <span className="text-xs text-muted-foreground">{busy ? `Se incarca... ${pct}%` : "Incarca videoclip"}</span>
+          {busy && <div className="w-3/4 h-1 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} /></div>}
+          <input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={busy} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
+        </label>
+      )}
+      <p className="text-[11px] text-muted-foreground mt-1.5">MP4, WebM sau MOV. Maxim {MAX_VIDEO_MB}MB. Pentru clipuri lungi, foloseste un link YouTube/Vimeo.</p>
+      {err && <p className="text-[11px] text-red-500 mt-1">{err}</p>}
+    </Field>
+  );
+}
+
+function VideoSettings({ block, patch, setStyle }: { block: VideoBlock; patch: (p: Record<string, unknown>) => void; setStyle: (s: BlockStyle) => void }) {
+  const [mode, setMode] = useState<"upload" | "url">(block.url && !block.src ? "url" : "upload");
+  const tab = (m: "upload" | "url", label: string) => (
+    <button type="button" onClick={() => {
+      setMode(m);
+      if (m === "upload") patch({ url: "" });
+      else patch({ src: null, poster: null });
+    }} className={`py-1.5 text-xs font-medium rounded-md transition-colors ${mode === m ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground"}`}>{label}</button>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-muted">
+        {tab("upload", "Incarca video")}
+        {tab("url", "Link YouTube / Vimeo")}
+      </div>
+      {mode === "upload" ? (
+        <>
+          <VideoUploadField value={block.src} onChange={(v) => patch({ src: v })} />
+          {block.src && <ImageField label="Imagine de coperta (optional)" value={block.poster} onChange={(v) => patch({ poster: v })} />}
+        </>
+      ) : (
+        <Text label="Link YouTube / Vimeo" value={block.url} onChange={(v) => patch({ url: v })} placeholder="https://youtube.com/watch?v=..." />
+      )}
+      <StyleControls style={block.style} onChange={setStyle} hide={["align"]} />
+    </div>
   );
 }
 
@@ -337,7 +400,7 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
     }
     case "video": {
       const b = block as VideoBlock;
-      return <div className="space-y-4"><Text label="Link YouTube / Vimeo" value={b.url} onChange={(v) => patch({ url: v })} placeholder="https://youtube.com/watch?v=..." /><StyleControls style={b.style} onChange={setStyle} hide={["align"]} /></div>;
+      return <VideoSettings block={b} patch={patch} setStyle={setStyle} />;
     }
     case "map": {
       const b = block as MapBlock;

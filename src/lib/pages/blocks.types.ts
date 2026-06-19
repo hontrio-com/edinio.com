@@ -150,7 +150,12 @@ export interface DividerBlock extends BaseBlock {
 
 export interface VideoBlock extends BaseBlock {
   type: "video";
-  url?: string; // YouTube / Vimeo URL — converted to a safe embed
+  /** Embed mode: a YouTube / Vimeo URL, converted to a safe iframe embed. */
+  url?: string;
+  /** Upload mode: a self-hosted video file (R2/CDN URL) played in a native <video>. */
+  src?: string | null;
+  /** Optional poster image shown before an uploaded video plays. */
+  poster?: string | null;
 }
 
 export interface MapBlock extends BaseBlock {

@@ -194,6 +194,19 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
 
+// Placeholder shown in the "display name" field — mirrors the default label the
+// checkout uses when no custom name is set (see shipping.actions.ts).
+const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
+  "fan-courier": "Livrare prin FAN Courier",
+  sameday: "Livrare prin Sameday",
+  dpd: "DPD",
+  cargus: "Cargus",
+  woot: "Woot",
+  colete: "Colete Online",
+  own: "Curier propriu",
+  pickup: "Ridicare personala",
+};
+
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};
   for (const m of SHIPPING_METHODS) {
@@ -1145,6 +1158,22 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                               />
                               <span className="text-xs text-muted-foreground">lei</span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Custom checkout display name — any enabled courier */}
+                        {zone.enabled && canToggle && (
+                          <div className="px-3.5 pb-3.5">
+                            <label className="block text-[11px] font-medium text-muted-foreground mb-1">Nume afisat la checkout</label>
+                            <input
+                              type="text"
+                              value={zone.label ?? ""}
+                              maxLength={60}
+                              onChange={(e) => setShippingZones(z => ({ ...z, [method.id]: { ...zone, label: e.target.value } }))}
+                              placeholder={DEFAULT_CHECKOUT_LABELS[method.id] ?? "ex: Livrare prin curier"}
+                              className="w-full px-2.5 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+                            />
+                            <p className="text-[10px] text-muted-foreground mt-1">Asa apare metoda in formularul de comanda. Lasa gol pentru numele implicit.</p>
                           </div>
                         )}
                       </div>

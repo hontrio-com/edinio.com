@@ -43,6 +43,16 @@ const COURIER_LABELS: Record<string, string> = {
   pickup: "Ridicare personala",
 };
 
+/** Merchant's custom checkout label (shipping_zones[id].label) or the branded default. */
+function addrLabel(custom: string | undefined, fallback: string): string {
+  return (custom ?? "").trim() || fallback;
+}
+/** Locker variant of the label: custom name + "(locker)" suffix, or the branded default. */
+function lockerLabel(custom: string | undefined, fallback: string): string {
+  const c = (custom ?? "").trim();
+  return c ? `${c} (locker)` : fallback;
+}
+
 // ─── Get shipping options ────────────────────────────────────────────────────
 
 export async function getShippingOptions(
@@ -96,14 +106,14 @@ export async function getShippingOptions(
               const days = r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`;
               options.push({
                 courier: "sameday",
-                courierLabel: "Livrare prin Sameday",
+                courierLabel: addrLabel(zone.label, "Livrare prin Sameday"),
                 deliveryType: "address",
                 price,
                 estimatedDays: days,
               });
               options.push({
                 courier: "sameday",
-                courierLabel: "Sameday EasyBox (locker)",
+                courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
                 deliveryType: "locker",
                 price,
                 estimatedDays: days,
@@ -114,7 +124,7 @@ export async function getShippingOptions(
               // Fallback to flat price
               options.push({
                 courier: "sameday",
-                courierLabel: "Livrare prin Sameday",
+                courierLabel: addrLabel(zone.label, "Livrare prin Sameday"),
                 deliveryType: "address",
                 price: zone.price,
               });
@@ -124,7 +134,7 @@ export async function getShippingOptions(
         // Manual price or no API config
         options.push({
           courier: "sameday",
-          courierLabel: "Livrare prin Sameday",
+          courierLabel: addrLabel(zone.label, "Livrare prin Sameday"),
           deliveryType: "address",
           price: zone.price,
         });
@@ -132,7 +142,7 @@ export async function getShippingOptions(
         if (hasApi) {
           options.push({
             courier: "sameday",
-            courierLabel: "Sameday EasyBox (locker)",
+            courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
             deliveryType: "locker",
             price: zone.price,
           });
@@ -155,13 +165,13 @@ export async function getShippingOptions(
               const price = Math.round(r.total * 100) / 100;
               options.push({
                 courier: "fan-courier",
-                courierLabel: "Livrare prin FAN Courier",
+                courierLabel: addrLabel(zone.label, "Livrare prin FAN Courier"),
                 deliveryType: "address",
                 price,
               });
               options.push({
                 courier: "fan-courier",
-                courierLabel: "FAN Courier FANbox (locker)",
+                courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
                 deliveryType: "locker",
                 price,
               });
@@ -170,7 +180,7 @@ export async function getShippingOptions(
               console.error("[shipping] FanCourier estimate failed:", err.message);
               options.push({
                 courier: "fan-courier",
-                courierLabel: "Livrare prin FAN Courier",
+                courierLabel: addrLabel(zone.label, "Livrare prin FAN Courier"),
                 deliveryType: "address",
                 price: zone.price,
               });
@@ -179,14 +189,14 @@ export async function getShippingOptions(
       } else {
         options.push({
           courier: "fan-courier",
-          courierLabel: "Livrare prin FAN Courier",
+          courierLabel: addrLabel(zone.label, "Livrare prin FAN Courier"),
           deliveryType: "address",
           price: zone.price,
         });
         if (hasApi) {
           options.push({
             courier: "fan-courier",
-            courierLabel: "FAN Courier FANbox (locker)",
+            courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
             deliveryType: "locker",
             price: zone.price,
           });
@@ -212,7 +222,7 @@ export async function getShippingOptions(
       if (hasApi && useAutoPrice) {
         // Woot is a broker: fetch the live courier offers so the customer picks one.
         promises.push(
-          buildWootOptions(wootConfig!, destination, weight)
+          buildWootOptions(wootConfig!, destination, weight, zone.label)
             .then((wootOpts) => {
               if (wootOpts.length > 0) options.push(...wootOpts);
               else options.push(flat()); // locality not matched / no offers
@@ -268,6 +278,7 @@ async function buildWootOptions(
   config: WootConfig,
   destination: { county: string; city: string; cod?: number },
   weightKg: number,
+  customLabel?: string,
 ): Promise<ShippingOption[]> {
   const counties = await fetchWootCounties();
   const county = matchByName(counties, destination.county);
@@ -295,7 +306,7 @@ async function buildWootOptions(
     .filter((p) => p.errors.length === 0)
     .map((p): ShippingOption => ({
       courier: "woot",
-      courierLabel: p.courier_name,
+      courierLabel: addrLabel(customLabel, p.courier_name),
       deliveryType: "address",
       price: Math.round(p.final_total * 100) / 100,
       wootServiceId: p.service_id,

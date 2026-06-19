@@ -4,7 +4,8 @@ import { PageIcon } from "../icon-registry";
 import { BlockShell } from "../BlockShell";
 import { resolveHref, isExternalHref } from "@/lib/pages/href";
 import { videoEmbedUrl, mapEmbedUrl } from "@/lib/pages/embeds";
-import type { CSSProperties } from "react";
+import { NativeVideo } from "./NativeVideo";
+import type { CSSProperties, ReactNode } from "react";
 import type {
   HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock, GalleryItem, ButtonBlock,
   ColumnsBlock, SpacerBlock, DividerBlock, VideoBlock, MapBlock, TrustBlock, SocialBlock,
@@ -218,31 +219,42 @@ export function DividerBlockView({ block }: { block: DividerBlock }) {
 }
 
 export function VideoBlockView({ block }: { block: VideoBlock }) {
-  // Uploaded (self-hosted) video takes priority over an embed URL.
-  if (block.src) {
-    return (
-      <BlockShell style={{ width: "container", ...block.style }}>
-        <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-black" style={{ aspectRatio: "16/9" }}>
-          <video
-            src={block.src}
-            poster={block.poster ?? undefined}
-            controls
-            playsInline
-            preload="metadata"
-            className="absolute inset-0 w-full h-full object-contain"
-          />
-        </div>
-      </BlockShell>
-    );
-  }
-  const embed = videoEmbedUrl(block.url);
-  if (!embed) return null;
-  return (
+  const w = Math.min(100, Math.max(10, block.widthPct ?? 100));
+  const ratio = block.aspect === "9:16" ? "9 / 16" : block.aspect === "1:1" ? "1 / 1" : "16 / 9";
+  const justify = block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center";
+  // Shared frame: alignment + custom width + aspect ratio (like the image block).
+  const frame = (inner: ReactNode) => (
     <BlockShell style={{ width: "container", ...block.style }}>
-      <div className="relative w-full overflow-hidden rounded-2xl border border-border" style={{ aspectRatio: "16/9" }}>
-        <iframe src={embed} title="Video" className="absolute inset-0 w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen loading="lazy" />
+      <div className={`flex w-full ${justify}`}>
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-black" style={{ width: `${w}%`, aspectRatio: ratio }}>
+          {inner}
+        </div>
       </div>
     </BlockShell>
+  );
+
+  // Uploaded (self-hosted) video takes priority over an embed URL.
+  if (block.src) {
+    return frame(
+      <NativeVideo
+        src={block.src}
+        poster={block.poster ?? undefined}
+        controls={block.controls !== false}
+        autoplay={!!block.autoplay}
+        loop={!!block.loop}
+        muted={!!block.muted}
+      />,
+    );
+  }
+  const embed = videoEmbedUrl(block.url, {
+    autoplay: block.autoplay,
+    loop: block.loop,
+    muted: block.muted,
+    controls: block.controls !== false,
+  });
+  if (!embed) return null;
+  return frame(
+    <iframe src={embed} title="Video" className="absolute inset-0 w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen loading="lazy" />,
   );
 }
 

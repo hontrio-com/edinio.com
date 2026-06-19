@@ -156,6 +156,14 @@ export interface VideoBlock extends BaseBlock {
   src?: string | null;
   /** Optional poster image shown before an uploaded video plays. */
   poster?: string | null;
+  /** Playback options (apply to both uploaded video and embeds). */
+  autoplay?: boolean;          // forces muted — browsers block autoplay with sound
+  loop?: boolean;
+  muted?: boolean;
+  controls?: boolean;          // default true (undefined => show controls)
+  aspect?: "16:9" | "9:16" | "1:1"; // frame ratio; default 16:9
+  widthPct?: number;           // 10-100, max width as % of container (like image)
+  align?: "left" | "center" | "right";
 }
 
 export interface MapBlock extends BaseBlock {

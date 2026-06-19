@@ -198,6 +198,18 @@ function VideoSettings({ block, patch, setStyle }: { block: VideoBlock; patch: (
       ) : (
         <Text label="Link YouTube / Vimeo" value={block.url} onChange={(v) => patch({ url: v })} placeholder="https://youtube.com/watch?v=..." />
       )}
+      <div className="space-y-2.5 pt-3 border-t border-border">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Redare</p>
+        <Toggle label="Pornire automata" checked={!!block.autoplay} onChange={(v) => patch({ autoplay: v, muted: v ? true : block.muted })} />
+        {block.autoplay && <p className="text-[11px] text-muted-foreground -mt-1">Pornirea automata merge doar fara sunet (asa cer browserele).</p>}
+        <Toggle label="Redare in bucla" checked={!!block.loop} onChange={(v) => patch({ loop: v })} />
+        {!block.autoplay && <Toggle label="Fara sunet" checked={!!block.muted} onChange={(v) => patch({ muted: v })} />}
+        <Toggle label="Afiseaza controalele de redare" checked={block.controls !== false} onChange={(v) => patch({ controls: v })} />
+      </div>
+      <Select label="Raport de aspect" value={block.aspect ?? "16:9"} onChange={(v) => patch({ aspect: v })} options={[{ value: "16:9", label: "16:9 (orizontal)" }, { value: "9:16", label: "9:16 (vertical / reels)" }, { value: "1:1", label: "1:1 (patrat)" }]} />
+      {block.aspect === "9:16" && <p className="text-[11px] text-muted-foreground -mt-1">Pentru video vertical, micsoreaza latimea (ex: 40-60%) ca sa nu ocupe tot ecranul.</p>}
+      <Range label="Latime video" value={block.widthPct ?? 100} min={10} max={100} step={5} unit="%" onChange={(v) => patch({ widthPct: v })} />
+      <Select label="Aliniere" value={block.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "left", label: "Stanga" }, { value: "center", label: "Centru" }, { value: "right", label: "Dreapta" }]} />
       <StyleControls style={block.style} onChange={setStyle} hide={["align"]} />
     </div>
   );

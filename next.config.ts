@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["@aws-sdk/client-s3", "sanitize-html"],
+  serverExternalPackages: ["@aws-sdk/client-s3", "sanitize-html", "sharp"],
   experimental: {
     serverActions: {
       // Product-import CSV uploads go through a Server Action; the default 1MB

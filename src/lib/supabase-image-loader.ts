@@ -1,13 +1,10 @@
 // Custom Next/Image loader.
 //
-// Default: returns the original URL (no Vercel Image Optimization, no cost).
-//
-// When NEXT_PUBLIC_CF_IMAGE_RESIZE="true", images on the Cloudflare CDN
-// (cdn.edinio.com — an R2 custom domain) are resized + converted to WebP/AVIF at
-// the edge via Cloudflare Image Resizing (/cdn-cgi/image/...). This serves each
-// grid card a thumbnail instead of the full-size original — the big speed win.
-// Enable "Transformations" (Image Resizing) in the Cloudflare dashboard first,
-// otherwise leave the flag off.
+// Our images live on R2 (the default *.r2.dev domain), which can't use Cloudflare
+// or Vercel image optimization for free. So we route them through our own
+// optimizer at /api/img, which resizes to the requested width + converts to WebP
+// once, caches the variant back on R2, and serves it cached. Non-R2 images (rare)
+// pass through untouched.
 export default function imageLoader({
   src,
   width,
@@ -17,18 +14,11 @@ export default function imageLoader({
   width: number;
   quality?: number;
 }): string {
-  if (
-    process.env.NEXT_PUBLIC_CF_IMAGE_RESIZE === "true" &&
-    src.includes("cdn.edinio.com") &&
-    !src.includes("/cdn-cgi/")
-  ) {
-    try {
-      const u = new URL(src);
-      const opts = `width=${width},quality=${quality ?? 75},format=auto,fit=scale-down`;
-      return `${u.origin}/cdn-cgi/image/${opts}${u.pathname}`;
-    } catch {
-      return src;
-    }
+  const marker = ".r2.dev/";
+  const i = src.indexOf(marker);
+  if (i !== -1 && !src.includes("/api/img")) {
+    const key = src.slice(i + marker.length);
+    return `/api/img?p=${encodeURIComponent(key)}&w=${width}&q=${quality ?? 75}`;
   }
   return src;
 }

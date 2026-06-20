@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3 = new S3Client({
@@ -46,6 +46,18 @@ export async function createPresignedPutUrl(
   const command = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType });
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn });
   return { uploadUrl, publicUrl: `${PUBLIC_URL}/${key}` };
+}
+
+/** Read an object from R2 as a Buffer; null if it doesn't exist (used by the image optimizer). */
+export async function getFromR2(key: string): Promise<Buffer | null> {
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+    if (!res.Body) return null;
+    const bytes = await res.Body.transformToByteArray();
+    return Buffer.from(bytes);
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteFromR2(key: string): Promise<void> {

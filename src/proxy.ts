@@ -21,6 +21,15 @@ function isPlatformHost(hostname: string): boolean {
   return false;
 }
 
+// First path segments on the platform host that are app/website routes (not
+// storefront slugs). The custom-domain redirect below skips these.
+const NON_STORE_SEGMENTS = new Set([
+  "dashboard", "login", "register", "forgot-password", "reset-password",
+  "onboarding", "admin",
+  "despre", "preturi", "contact", "termeni", "cookies", "gdpr",
+  "confidentialitate", "start", "demo",
+]);
+
 export async function proxy(request: NextRequest) {
   const hostname = request.headers.get("host") ?? "";
   const bare = hostname.split(":")[0];
@@ -70,6 +79,31 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/404";
     return NextResponse.rewrite(url);
+  }
+
+  // Platform host: if /{slug} is a published store with an active custom domain,
+  // redirect visitors to that domain instead (its canonical home), keeping the path.
+  if (bare !== "localhost" && !bare.endsWith(".vercel.app")) {
+    const { pathname } = request.nextUrl;
+    const firstSeg = pathname.split("/")[1] ?? "";
+    if (firstSeg && !NON_STORE_SEGMENTS.has(firstSeg)) {
+      const supabase = createServerClient<Database>(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { cookies: { getAll() { return []; }, setAll() {} } },
+      );
+      const { data: store } = await supabase
+        .from("businesses")
+        .select("custom_domain")
+        .eq("slug", firstSeg)
+        .eq("is_published", true)
+        .maybeSingle();
+      if (store?.custom_domain) {
+        const target = new URL(`https://${store.custom_domain}${pathname.slice(firstSeg.length + 1) || "/"}`);
+        target.search = request.nextUrl.search;
+        return NextResponse.redirect(target, 307);
+      }
+    }
   }
 
   // Platform host — normal auth middleware

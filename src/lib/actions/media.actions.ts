@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
+import { deleteFromR2 } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
-import { collectR2Urls, inferMediaType, inferFolder } from "@/lib/media/scan";
+import { collectMediaUrls, parseMediaUrl, inferMediaType, inferFolder } from "@/lib/media/scan";
 import type { Database } from "@/types/database.types";
 
 export type MediaRow = Database["public"]["Tables"]["media_library"]["Row"];
@@ -81,8 +81,9 @@ export async function registerMedia(input: RegisterMediaInput): Promise<{ ok: bo
   try {
     const ctx = await resolveBusiness();
     if (!ctx.ok) return { ok: false };
-    const key = r2KeyFromUrl(input.url);
-    if (!key) return { ok: false };
+    const parsed = parseMediaUrl(input.url);
+    if (!parsed) return { ok: false };
+    const key = parsed.key;
     // Keep non-store media (support attachments, announcements) out of the library.
     if (!isStoreMediaKey(key)) return { ok: false };
 
@@ -117,15 +118,12 @@ export async function listMedia(): Promise<{ rows: MediaRow[] } | { error: strin
   const ctx = await resolveBusiness();
   if (!ctx.ok) return { error: ctx.error };
 
-  // Lazy backfill: if the library is empty for this store, import existing media
-  // before the first listing so the user sees their history immediately.
-  const { count } = await ctx.supabase
-    .from("media_library")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", ctx.businessId);
-  if ((count ?? 0) === 0) {
-    await backfillMediaLibrary();
-  }
+  // Reconcile before listing: import any store media not yet catalogued (legacy
+  // Supabase Storage images, category images, freshly imported products, …). The
+  // backfill is idempotent (upsert, ignore duplicates) and a near no-op once the
+  // library is in sync, so it's safe to run on every load — keeps the library
+  // self-healing instead of going stale after the first upload.
+  await backfillMediaLibrary();
 
   const { data, error } = await ctx.supabase
     .from("media_library")
@@ -178,17 +176,33 @@ export async function deleteMedia(ids: string[]): Promise<{ success: true; delet
 
   const { data: rows, error } = await ctx.supabase
     .from("media_library")
-    .select("id, r2_key")
+    .select("id, r2_key, url")
     .in("id", ids)
     .eq("business_id", ctx.businessId);
   if (error) return { error: "Nu am putut sterge fisierele." };
 
-  // Remove the R2 objects first (best-effort), then the rows. Only delete keys that
-  // live in the caller's own R2 namespace — never another tenant's storage object.
+  // Remove the storage objects first (best-effort), then the rows. Provider is
+  // re-derived from the URL so a crafted r2_key can't redirect the deletion.
   await Promise.all(
-    (rows ?? [])
-      .filter((r) => keyOwnedBy(r.r2_key, ctx.userId, ctx.businessId))
-      .map((r) => deleteFromR2(r.r2_key).catch(() => {})),
+    (rows ?? []).map(async (r) => {
+      const parsed = parseMediaUrl(r.url);
+      if (!parsed) return;
+      if (parsed.provider === "r2") {
+        // Only delete keys in the caller's own R2 namespace — never another tenant's.
+        if (keyOwnedBy(parsed.key, ctx.userId, ctx.businessId)) {
+          await deleteFromR2(parsed.key).catch(() => {});
+        }
+      } else {
+        // Legacy Supabase Storage: key is `bucket/path`. Deletion is governed by
+        // storage RLS for the caller's authenticated client.
+        const slash = parsed.key.indexOf("/");
+        if (slash > 0) {
+          const bucket = parsed.key.slice(0, slash);
+          const path = parsed.key.slice(slash + 1);
+          await ctx.supabase.storage.from(bucket).remove([path]).catch(() => {});
+        }
+      }
+    }),
   );
 
   const { error: delErr } = await ctx.supabase
@@ -216,26 +230,30 @@ export async function getMediaUsage(): Promise<{ usage: UsageMap } | { error: st
     for (const u of urls) (usage[u] ??= []).push(ref);
   };
 
-  const [products, pages, biz, settings] = await Promise.all([
+  const [products, pages, biz, settings, categories] = await Promise.all([
     supabase.from("products").select("id, name, images, page_sections").eq("business_id", businessId),
     supabase.from("custom_pages").select("id, title, blocks, seo").eq("business_id", businessId),
     supabase.from("businesses").select("logo_url, cover_url, gallery").eq("id", businessId).maybeSingle(),
     supabase.from("store_settings").select("*").eq("business_id", businessId).maybeSingle(),
+    supabase.from("categories").select("id, name, image_url").eq("business_id", businessId),
   ]);
 
   for (const p of products.data ?? []) {
-    add(collectR2Urls([p.images, p.page_sections]), { kind: "product", id: p.id, label: `Produs: ${p.name}` });
+    add(collectMediaUrls([p.images, p.page_sections]), { kind: "product", id: p.id, label: `Produs: ${p.name}` });
   }
   for (const pg of pages.data ?? []) {
-    add(collectR2Urls([pg.blocks, pg.seo]), { kind: "page", id: pg.id, label: `Pagina: ${pg.title}` });
+    add(collectMediaUrls([pg.blocks, pg.seo]), { kind: "page", id: pg.id, label: `Pagina: ${pg.title}` });
+  }
+  for (const c of categories.data ?? []) {
+    add(collectMediaUrls(c.image_url), { kind: "store", id: c.id, label: `Categorie: ${c.name}` });
   }
   if (biz.data) {
-    add(collectR2Urls([biz.data.logo_url, biz.data.cover_url, biz.data.gallery]), {
+    add(collectMediaUrls([biz.data.logo_url, biz.data.cover_url, biz.data.gallery]), {
       kind: "store", id: null, label: "Magazin (logo / copertă / galerie)",
     });
   }
   if (settings.data) {
-    add(collectR2Urls(settings.data), { kind: "store", id: null, label: "Setări magazin" });
+    add(collectMediaUrls(settings.data), { kind: "store", id: null, label: "Setări magazin" });
   }
 
   return { usage };
@@ -248,32 +266,35 @@ export async function backfillMediaLibrary(): Promise<{ success: true; added: nu
   if (!ctx.ok) return { error: ctx.error };
   const { supabase, businessId, userId } = ctx;
 
-  const [products, pages, biz, settings, existing] = await Promise.all([
+  const [products, pages, biz, settings, categories, existing] = await Promise.all([
     supabase.from("products").select("images, page_sections").eq("business_id", businessId),
     supabase.from("custom_pages").select("blocks, seo").eq("business_id", businessId),
     supabase.from("businesses").select("logo_url, cover_url, gallery").eq("id", businessId).maybeSingle(),
     supabase.from("store_settings").select("*").eq("business_id", businessId).maybeSingle(),
+    supabase.from("categories").select("image_url").eq("business_id", businessId),
     supabase.from("media_library").select("r2_key").eq("business_id", businessId),
   ]);
 
   const all = new Set<string>();
-  for (const p of products.data ?? []) collectR2Urls([p.images, p.page_sections], all);
-  for (const pg of pages.data ?? []) collectR2Urls([pg.blocks, pg.seo], all);
-  if (biz.data) collectR2Urls([biz.data.logo_url, biz.data.cover_url, biz.data.gallery], all);
-  if (settings.data) collectR2Urls(settings.data, all);
+  for (const p of products.data ?? []) collectMediaUrls([p.images, p.page_sections], all);
+  for (const pg of pages.data ?? []) collectMediaUrls([pg.blocks, pg.seo], all);
+  for (const c of categories.data ?? []) collectMediaUrls(c.image_url, all);
+  if (biz.data) collectMediaUrls([biz.data.logo_url, biz.data.cover_url, biz.data.gallery], all);
+  if (settings.data) collectMediaUrls(settings.data, all);
 
   const known = new Set((existing.data ?? []).map((r) => r.r2_key));
   const rows = [...all]
-    .map((url) => ({ url, key: r2KeyFromUrl(url) }))
-    .filter((x): x is { url: string; key: string } => !!x.key && !known.has(x.key))
-    .map(({ url, key }) => ({
+    .map((url) => ({ url, parsed: parseMediaUrl(url) }))
+    .filter((x): x is { url: string; parsed: { provider: "r2" | "supabase"; key: string } } =>
+      !!x.parsed && isStoreMediaKey(x.parsed.key) && !known.has(x.parsed.key))
+    .map(({ url, parsed }) => ({
       business_id: businessId,
       user_id: userId,
       url,
-      r2_key: key,
-      type: inferMediaType(key),
-      folder: inferFolder(key),
-      file_name: key.split("/").pop() ?? null,
+      r2_key: parsed.key,
+      type: inferMediaType(parsed.key),
+      folder: inferFolder(parsed.key),
+      file_name: parsed.key.split("/").pop() ?? null,
     }));
 
   if (rows.length === 0) return { success: true, added: 0 };

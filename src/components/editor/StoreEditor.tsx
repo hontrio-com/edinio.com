@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
+import { MediaPicker } from "@/components/media/MediaPicker";
 import { updateBusiness } from "@/lib/actions/business.actions";
 import { updatePageContent } from "@/lib/actions/store.actions";
 import type { Database } from "@/types/database.types";
@@ -96,10 +97,12 @@ function SaveBtn({ loading, saved, onSave }: { loading: boolean; saved: boolean;
   );
 }
 
-function ImageUploadField({ label, preview, aspectRatio, onFile, onRemove }: {
+function ImageUploadField({ label, preview, aspectRatio, onFile, onRemove, onPick }: {
   label: string; preview: string | null; aspectRatio: string; onFile: (f: File) => void; onRemove: () => void;
+  onPick?: (url: string) => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <div>
       <label className="block text-xs font-medium text-muted-foreground mb-1.5">{label}</label>
@@ -119,6 +122,13 @@ function ImageUploadField({ label, preview, aspectRatio, onFile, onRemove }: {
           <input ref={ref} type="file" accept="image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
         </div>
+      )}
+      {onPick && (
+        <>
+          <button type="button" onClick={() => setPickerOpen(true)} className="mt-1.5 text-[11px] font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
+          <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} accept="image" bucket="logos"
+            onSelect={(urls) => urls[0] && onPick(urls[0])} />
+        </>
       )}
     </div>
   );
@@ -263,9 +273,15 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
   // Tracks which review row is uploading a photo (drives the per-row spinner).
   const [reviewUploadIdx, setReviewUploadIdx] = useState<number | null>(null);
 
+  const [bannerPickerOpen, setBannerPickerOpen] = useState(false);
   function addBannerFile(file: File) {
     setBannerItems((prev) =>
       prev.length >= 5 ? prev : [...prev, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, url: URL.createObjectURL(file), file }],
+    );
+  }
+  function addBannerUrl(url: string) {
+    setBannerItems((prev) =>
+      prev.length >= 5 ? prev : [...prev, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, url, file: null, link: "" }],
     );
   }
   function removeBanner(id: string) {
@@ -288,6 +304,8 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
     setSaving("branding");
     let logo_url = business.logo_url;
     if (logoFile) logo_url = (await uploadFile(logoFile, "logos")) ?? logo_url;
+    // Picked from the library: preview holds the hosted R2 URL (not a blob: object URL).
+    else if (logoPreview && !logoPreview.startsWith("blob:")) logo_url = logoPreview;
     if (logoPreview === null) logo_url = null;
 
     let favicon_url: string | null;
@@ -508,12 +526,14 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
           <div className="max-w-[180px]">
             <ImageUploadField label="Logo" aspectRatio="1/1" preview={logoPreview}
               onFile={(f) => { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); }}
-              onRemove={() => { setLogoFile(null); setLogoPreview(null); }} />
+              onRemove={() => { setLogoFile(null); setLogoPreview(null); }}
+              onPick={(url) => { setLogoFile(null); setLogoPreview(url); }} />
           </div>
           <div className="max-w-[180px]">
             <ImageUploadField label="Favicon (iconita din tab)" aspectRatio="1/1" preview={faviconPreview}
               onFile={(f) => { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); }}
-              onRemove={() => { setFaviconFile(null); setFaviconPreview(null); }} />
+              onRemove={() => { setFaviconFile(null); setFaviconPreview(null); }}
+              onPick={(url) => { setFaviconFile(null); setFaviconPreview(url); }} />
             <p className="text-[10px] text-muted-foreground mt-1.5">Imagine patrata (ideal 512x512px, PNG). Daca lipseste, se foloseste logo-ul.</p>
           </div>
           {logoPreview && (
@@ -601,6 +621,13 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
               )}
               <input ref={bannerInputRef} type="file" accept="image/*" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) addBannerFile(f); e.target.value = ""; }} />
+              {bannerItems.length < 5 && (
+                <button type="button" onClick={() => setBannerPickerOpen(true)}
+                  className="text-[11px] font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
+              )}
+              <MediaPicker open={bannerPickerOpen} onClose={() => setBannerPickerOpen(false)} multiple accept="image" bucket="covers"
+                excludeUrls={bannerItems.map((b) => b.url)}
+                onSelect={(urls) => urls.forEach((u) => addBannerUrl(u))} />
             </div>
             <p className="text-[10px] text-muted-foreground mt-1.5">Recomandat 16:9 (ex. 1920x1080). Cu mai multe bannere, se afiseaza ca un carusel pe magazin.</p>
           </div>

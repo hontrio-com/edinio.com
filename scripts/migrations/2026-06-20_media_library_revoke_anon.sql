@@ -1,0 +1,11 @@
+-- APPLIED 2026-06-20 (via MCP). Defense in depth for the Media Library.
+--
+-- Dropping the public RLS policy stops anon from reading any row, but the anon role
+-- still holds the default table-level SELECT grant (so the table shows up in the
+-- GraphQL schema — lint 0026). anon never needs media_library: public pages read it
+-- via the service role. Revoking the grant adds a second, independent layer so even
+-- a future policy mistake cannot leak media to anonymous visitors.
+--
+-- authenticated keeps SELECT (owners read their own rows via RLS); service_role
+-- bypasses grants entirely.
+revoke select on public.media_library from anon;

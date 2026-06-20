@@ -14,7 +14,13 @@ type Business = Database["public"]["Tables"]["businesses"]["Row"];
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Panou principal" },
-  { href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul" },
+  {
+    href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul",
+    children: [
+      { href: "/dashboard/editor", label: "Design magazin" },
+      { href: "/dashboard/editor/media", label: "Biblioteca Media" },
+    ],
+  },
   {
     href: "/dashboard/pages", icon: FileText, label: "Pagini",
     children: [

@@ -1203,6 +1203,83 @@ export type Database = {
           },
         ]
       }
+      media_library: {
+        Row: {
+          alt_text: string | null
+          business_id: string
+          caption: string | null
+          created_at: string
+          description: string | null
+          duration_seconds: number | null
+          file_name: string | null
+          folder: string | null
+          height: number | null
+          id: string
+          mime_type: string | null
+          r2_key: string
+          size_bytes: number | null
+          tags: string[]
+          title: string | null
+          type: string
+          updated_at: string
+          url: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          alt_text?: string | null
+          business_id: string
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          file_name?: string | null
+          folder?: string | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          r2_key: string
+          size_bytes?: number | null
+          tags?: string[]
+          title?: string | null
+          type?: string
+          updated_at?: string
+          url: string
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          alt_text?: string | null
+          business_id?: string
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          file_name?: string | null
+          folder?: string | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          r2_key?: string
+          size_bytes?: number | null
+          tags?: string[]
+          title?: string | null
+          type?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_library_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           business_id: string

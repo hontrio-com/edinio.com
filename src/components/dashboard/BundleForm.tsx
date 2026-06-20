@@ -8,6 +8,7 @@ import {
   Upload, Loader2, X, Plus, Minus, Search, Package, Trash2, Save, ChevronLeft, Sparkles,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
+import { MediaPicker } from "@/components/media/MediaPicker";
 import { createBundle, updateBundle, type BundleFormData } from "@/lib/actions/bundle.actions";
 import { computeBundlePricing, bundleAvailability, type BundlePricingMode } from "@/lib/bundles";
 
@@ -56,6 +57,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
   const [name, setName] = useState(bundle?.name ?? "");
   const [description, setDescription] = useState(bundle?.description ?? "");
   const [images, setImages] = useState<string[]>(bundle?.images ?? []);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [category, setCategory] = useState(bundle?.category ?? "");
   const [isActive, setIsActive] = useState(bundle?.is_active ?? true);
   const [isFeatured, setIsFeatured] = useState(bundle?.is_featured ?? false);
@@ -200,6 +202,10 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
           </div>
           <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
             onChange={(e) => { if (e.target.files) handleFiles(e.target.files); e.target.value = ""; }} />
+          <button type="button" onClick={() => setPickerOpen(true)}
+            className="mt-2 text-xs font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
+          <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} multiple accept="image" bucket="products"
+            excludeUrls={images} onSelect={(urls) => setImages((prev) => [...prev, ...urls.filter((u) => !prev.includes(u))])} />
         </div>
 
         <div>

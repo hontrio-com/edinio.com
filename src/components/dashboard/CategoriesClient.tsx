@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { createCategory, updateCategory, deleteCategory } from "@/lib/actions/category.actions";
 import { uploadImage } from "@/lib/actions/upload.actions";
+import { MediaPicker } from "@/components/media/MediaPicker";
 
 interface Category {
   id: string;
@@ -153,6 +154,14 @@ export function CategoriesClient({ initialCategories }: Props) {
   }
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [pickerCatId, setPickerCatId] = useState<string | null>(null);
+
+  async function applyCategoryImage(categoryId: string, url: string) {
+    const result = await updateCategory(categoryId, { image_url: url });
+    if ("error" in result) { toast.error(result.error); return; }
+    setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, image_url: url } : c));
+    toast.success("Imagine salvata");
+  }
 
   async function handleImageUpload(categoryId: string, file: File) {
     if (!file.type.startsWith("image/")) { toast.error("Fisierul trebuie sa fie o imagine"); return; }
@@ -163,10 +172,7 @@ export function CategoriesClient({ initialCategories }: Props) {
       // avoids the Supabase Storage RLS limits on re-upload.
       const uploaded = await uploadImage(file, "products", "categories");
       if ("error" in uploaded) throw new Error(uploaded.error);
-      const result = await updateCategory(categoryId, { image_url: uploaded.url });
-      if ("error" in result) throw new Error(result.error);
-      setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, image_url: uploaded.url } : c));
-      toast.success("Imagine salvata");
+      await applyCategoryImage(categoryId, uploaded.url);
     } catch (e) { toast.error((e as Error).message ?? "Eroare la upload"); }
     finally { setUploadingId(null); }
   }
@@ -279,6 +285,10 @@ export function CategoriesClient({ initialCategories }: Props) {
                     <input type="file" accept="image/*" className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(cat.id, f); e.target.value = ""; }} />
                   </label>
+                  <button type="button" title="Alege din Biblioteca Media" onClick={() => setPickerCatId(cat.id)}
+                    className="w-7 h-9 flex items-center justify-center flex-shrink-0 text-muted-foreground hover:text-primary transition-colors">
+                    <FolderOpen className="h-3.5 w-3.5" />
+                  </button>
 
                   {isEditing ? (
                     <EditableLabel
@@ -435,6 +445,14 @@ export function CategoriesClient({ initialCategories }: Props) {
           </p>
         </div>
       )}
+
+      <MediaPicker
+        open={pickerCatId !== null}
+        onClose={() => setPickerCatId(null)}
+        accept="image"
+        bucket="products"
+        onSelect={(urls) => { if (pickerCatId && urls[0]) void applyCategoryImage(pickerCatId, urls[0]); }}
+      />
     </div>
   );
 }

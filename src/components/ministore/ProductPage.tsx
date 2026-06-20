@@ -227,16 +227,19 @@ const POLICY_LINKS = [
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [] }: {
+export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {} }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
   bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
+  altMap?: Record<string, string>;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
+  // SEO alt text from the Media Library, falling back to the product name.
+  const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
 
   const color = business.primary_color ?? "#1AB554";
   const social = (business.social as Social) ?? {};
@@ -428,7 +431,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
             {slides.map((src, i) => (
               <div key={i} className="relative w-full h-full flex-shrink-0">
-                <Image src={src} alt={`${product.name} ${i + 1}`} fill sizes="100vw"
+                <Image src={src} alt={imgAlt(src, i)} fill sizes="100vw"
                   className="object-contain p-2" priority={i === 0} />
               </div>
             ))}
@@ -437,7 +440,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           slides.map((src, i) => (
             <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
               style={{ opacity: i === activeSlide ? 1 : 0 }}>
-              <Image src={src} alt={`${product.name} ${i + 1}`} fill sizes="50vw"
+              <Image src={src} alt={imgAlt(src, i)} fill sizes="50vw"
                 className="object-contain p-2" priority={i === 0} />
             </div>
           ))
@@ -710,7 +713,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                   <button key={i} type="button" aria-label={`Selecteaza imaginea ${i + 1}`} onClick={() => goTo(i)}
                     className="relative flex-1 rounded-lg overflow-hidden transition-all"
                     style={{ aspectRatio: "1/1", border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
-                    <Image src={src} alt={`${product.name} ${i + 1}`} fill sizes="120px" className="object-contain p-1" />
+                    <Image src={src} alt={imgAlt(src, i)} fill sizes="120px" className="object-contain p-1" />
                   </button>
                 ))}
               </div>

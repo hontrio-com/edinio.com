@@ -33,6 +33,12 @@ export async function uploadImage(
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
     const url = await uploadToR2(buffer, key, file.type);
+    // Register in the Media Library (best-effort).
+    const { registerMedia } = await import("@/lib/actions/media.actions");
+    await registerMedia({
+      url, type: "image", mimeType: file.type, fileName: file.name || null,
+      sizeBytes: buffer.length, folder: bucket,
+    }).catch(() => {});
     return { url };
   } catch {
     return { error: "Incarcarea a esuat. Incearca din nou." };

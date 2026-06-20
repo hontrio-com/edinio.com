@@ -145,14 +145,6 @@ export async function updateBusiness(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
 
-  // Fetch old values to clean up replaced images
-  const { data: oldBiz } = await supabase
-    .from("businesses")
-    .select("logo_url, cover_url, gallery")
-    .eq("id", businessId)
-    .eq("user_id", user.id)
-    .single();
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await supabase
     .from("businesses")
@@ -165,23 +157,9 @@ export async function updateBusiness(
     return { error: "Nu am putut salva modificarile." };
   }
 
-  // Clean up replaced/removed images from R2 (fire-and-forget)
-  if (oldBiz) {
-    const { deleteFromR2, r2KeyFromUrl } = await import("@/lib/r2");
-    const tryDelete = (url: string | null | undefined) => {
-      if (!url) return;
-      const key = r2KeyFromUrl(url);
-      if (key) deleteFromR2(key).catch(() => {});
-    };
-    if (data.logo_url !== undefined && data.logo_url !== oldBiz.logo_url) tryDelete(oldBiz.logo_url);
-    if (data.cover_url !== undefined && data.cover_url !== oldBiz.cover_url) tryDelete(oldBiz.cover_url);
-    if (data.gallery !== undefined && Array.isArray(oldBiz.gallery)) {
-      const newSet = new Set(data.gallery);
-      for (const url of oldBiz.gallery as string[]) {
-        if (!newSet.has(url)) tryDelete(url);
-      }
-    }
-  }
+  // Note: replaced/removed logo/cover/gallery images are intentionally NOT deleted
+  // from R2 here — the Media Library is the single deletion authority. They stay in
+  // the library for reuse and are removed only via deleteMedia.
 
   revalidatePath("/dashboard/editor");
   revalidatePath("/dashboard/features");

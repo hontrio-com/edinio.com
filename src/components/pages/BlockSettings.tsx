@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Upload, X, Loader2, Plus, AlertTriangle, Search } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { MediaPicker } from "@/components/media/MediaPicker";
 import { uploadImage, uploadVideo } from "@/lib/upload";
 import { MAX_VIDEO_MB } from "@/lib/pages/video-config";
 import { PageIcon, PAGE_ICON_NAMES } from "./icon-registry";
@@ -115,6 +116,7 @@ function IconPicker({ value, onChange }: { value?: string; onChange: (v: string)
 
 function ImageField({ label, value, onChange }: { label: string; value?: string | null; onChange: (v: string | null) => void }) {
   const [busy, setBusy] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   async function onFile(file: File) {
     setBusy(true);
     const res = await uploadImage(file, "gallery", "pages");
@@ -136,7 +138,10 @@ function ImageField({ label, value, onChange }: { label: string; value?: string 
           <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
         </label>
       )}
+      <button type="button" onClick={() => setPickerOpen(true)} className="mt-2 text-xs font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
       <input value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} placeholder="sau lipeste un URL" className={`${inputCls} mt-2 text-xs`} />
+      <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} accept="image" bucket="gallery"
+        onSelect={(urls) => urls[0] && onChange(urls[0])} />
     </Field>
   );
 }
@@ -145,6 +150,7 @@ function VideoUploadField({ value, onChange }: { value?: string | null; onChange
   const [busy, setBusy] = useState(false);
   const [pct, setPct] = useState(0);
   const [err, setErr] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   async function onFile(file: File) {
     setErr(null);
     setBusy(true);
@@ -169,8 +175,11 @@ function VideoUploadField({ value, onChange }: { value?: string | null; onChange
           <input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={busy} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
         </label>
       )}
+      <button type="button" onClick={() => setPickerOpen(true)} className="mt-2 text-xs font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
       <p className="text-[11px] text-muted-foreground mt-1.5">MP4, WebM sau MOV. Maxim {MAX_VIDEO_MB}MB. Pentru clipuri lungi, foloseste un link YouTube/Vimeo.</p>
       {err && <p className="text-[11px] text-red-500 mt-1">{err}</p>}
+      <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} accept="video" bucket="gallery"
+        onSelect={(urls) => urls[0] && onChange(urls[0])} />
     </Field>
   );
 }

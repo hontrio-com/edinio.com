@@ -171,6 +171,22 @@ export default async function ProductDetailPage({ params }: Props) {
     .eq("business_id", business.id)
     .single();
 
+  // SEO: map product image URLs to their Media Library alt text / title. media_library
+  // is owner-only (no anon access), so we read it via the service role here.
+  const imgUrls = ((product.images as string[] | null) ?? []).filter(Boolean);
+  const altMap: Record<string, string> = {};
+  if (imgUrls.length) {
+    const { data: media } = await createAdminClient()
+      .from("media_library")
+      .select("url, alt_text, title")
+      .eq("business_id", business.id)
+      .in("url", imgUrls);
+    for (const m of media ?? []) {
+      const a = m.alt_text || m.title;
+      if (a) altMap[m.url] = a;
+    }
+  }
+
   // Sanitize rich-text server-side so the client renders trusted HTML only.
   product.description = sanitizeHtml(product.description);
   const psRaw = product.page_sections as Record<string, unknown> | null;
@@ -241,6 +257,7 @@ export default async function ProductDetailPage({ params }: Props) {
         basePath={basePath}
         hasCardPayment={hasCardPayment}
         bundleComponents={bundleComponents}
+        altMap={altMap}
       />
     </>
   );

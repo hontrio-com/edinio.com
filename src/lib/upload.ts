@@ -59,6 +59,16 @@ export async function uploadVideo(
 
   try {
     await putWithProgress(presign.uploadUrl, file, contentType, onProgress);
+    // Register in the Media Library (best-effort).
+    const { registerMedia } = await import("@/lib/actions/media.actions");
+    registerMedia({
+      url: presign.publicUrl,
+      type: "video",
+      mimeType: contentType,
+      fileName: file.name || null,
+      sizeBytes: file.size,
+      folder: "pages",
+    }).catch(() => {});
     return { url: presign.publicUrl };
   } catch {
     return { error: "Incarcarea a esuat. Verifica conexiunea si incearca din nou." };

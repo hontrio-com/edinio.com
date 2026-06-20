@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
+import { registerMedia } from "@/lib/actions/media.actions";
+
+export const runtime = "nodejs";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 const ALL_ALLOWED_TYPES = [...IMAGE_TYPES, "application/pdf", "image/gif"];
@@ -53,6 +57,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Fisierul pare gol (0 octeti). Reincarca imaginea." }, { status: 400 });
     }
     const url = await uploadToR2(buffer, key, file.type);
+
+    // Register in the Media Library (best-effort; never blocks the upload).
+    let width: number | null = null;
+    let height: number | null = null;
+    try {
+      const meta = await sharp(buffer).metadata();
+      width = meta.width ?? null;
+      height = meta.height ?? null;
+    } catch { /* non-image (e.g. pdf) or unreadable — leave dims null */ }
+    await registerMedia({
+      url,
+      type: "image",
+      mimeType: file.type,
+      fileName: file.name || null,
+      sizeBytes: buffer.length,
+      width,
+      height,
+      folder: bucket,
+    }).catch(() => {});
+
     return NextResponse.json({ url });
   } catch (err) {
     console.error("[upload] R2 upload failed:", err);

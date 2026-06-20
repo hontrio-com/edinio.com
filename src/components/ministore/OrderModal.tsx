@@ -119,6 +119,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Customization state
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
   const [custUploading, setCustUploading] = useState<Record<string, boolean>>({});
+  // Editable copy of the carried-over cart (change quantity / remove inside the form).
+  const [cartLines, setCartLines] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[]>(cartItems ?? []);
 
   // Discount state
   const [discountInput, setDiscountInput] = useState("");
@@ -132,9 +134,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
-  const cart = cartItems ?? [];
+  const cart = cartLines;
   const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const subtotal = Math.round((productSubtotal + cartSubtotal) * 100) / 100;
+  const setCartQty = (productId: string, qty: number) =>
+    setCartLines((lines) => qty <= 0 ? lines.filter((l) => l.productId !== productId) : lines.map((l) => l.productId === productId ? { ...l, quantity: qty } : l));
+  const removeCartLine = (productId: string) => setCartLines((lines) => lines.filter((l) => l.productId !== productId));
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
 
   // Apply discount to subtotal
@@ -499,19 +504,33 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <Package size={12} /> Din cosul tau
                   </p>
                   {cart.map((ci) => (
-                    <div key={ci.productId} className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-gray-300 bg-gray-50">
-                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-white flex-shrink-0">
+                    <div key={ci.productId} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-gray-300 bg-gray-50">
+                      <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-white flex-shrink-0">
                         {ci.imageUrl ? (
-                          <Image src={ci.imageUrl} alt={ci.name} fill sizes="56px" className="object-contain p-1" />
+                          <Image src={ci.imageUrl} alt={ci.name} fill sizes="48px" className="object-contain p-1" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center"><Package size={18} className="text-gray-300" /></div>
+                          <div className="w-full h-full flex items-center justify-center"><Package size={16} className="text-gray-300" /></div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-gray-900 truncate">{ci.name}</p>
                         <p className="text-sm font-black mt-0.5" style={{ color }}>{ci.price} lei</p>
                       </div>
-                      <span className="text-sm font-bold text-gray-500 shrink-0">x{ci.quantity}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button type="button" aria-label="Scade cantitatea" onClick={() => setCartQty(ci.productId, ci.quantity - 1)}
+                          className="w-6 h-6 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                          <Minus size={11} />
+                        </button>
+                        <span className="w-5 text-center text-sm font-bold tabular-nums">{ci.quantity}</span>
+                        <button type="button" aria-label="Creste cantitatea" onClick={() => setCartQty(ci.productId, ci.quantity + 1)}
+                          className="w-6 h-6 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                          <Plus size={11} />
+                        </button>
+                      </div>
+                      <button type="button" aria-label="Elimina produsul" onClick={() => removeCartLine(ci.productId)}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors shrink-0">
+                        <X size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>

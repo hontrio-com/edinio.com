@@ -3,10 +3,18 @@ import { FacebookPixel } from "@/components/public/FacebookPixel";
 import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { GoogleTag } from "@/components/public/GoogleTag";
 import type { MarketingConfig } from "@/lib/marketing";
+import type { Metadata } from "next";
 
 interface Props {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
+}
+
+/** Per-store favicon: the merchant's logo overrides the default Edinio favicon. */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const { data } = await createAdminClient().from("businesses").select("logo_url").eq("slug", slug).single();
+  return data?.logo_url ? { icons: { icon: data.logo_url } } : {};
 }
 
 export default async function StoreLayout({ children, params }: Props) {

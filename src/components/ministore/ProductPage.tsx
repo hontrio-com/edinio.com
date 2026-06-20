@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw, Phone,
+  ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
   Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye, Calendar, Globe,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
@@ -98,23 +98,7 @@ interface PageSections {
 
 /* ─── Default content ─────────────────────────────────────────────────────── */
 
-const DEFAULT_TRUST_BADGES: TrustBadge[] = [
-  { icon: "truck", title: "Livrare 24-48h", desc: "Livrare rapida in toata Romania prin curier." },
-  { icon: "shield", title: "Plata la livrare", desc: "Platesti cash curierului. Zero riscuri." },
-  { icon: "rotate-ccw", title: "Retur 14 zile", desc: "Returneaza fara intrebari in 14 zile." },
-  { icon: "phone", title: "Suport", desc: "Disponibil pentru orice intrebare." },
-];
-
 /* ─── Sub-components ──────────────────────────────────────────────────────── */
-
-function TrustIcon({ icon, color }: { icon: string; color: string }) {
-  const props = { size: 22, style: { color } };
-  if (icon === "truck") return <Truck {...props} />;
-  if (icon === "shield") return <ShieldCheck {...props} />;
-  if (icon === "rotate-ccw") return <RotateCcw {...props} />;
-  if (icon === "phone") return <Phone {...props} />;
-  return <ShieldCheck {...props} />;
-}
 
 function SocialProof({ count }: { count: number }) {
   return (
@@ -272,7 +256,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
   const announcementBar = pageContent.announcement_bar;
   const trustBadgesEnabled = pageContent.trust_badges_enabled !== false;
-  const trustBadges = pageContent.trust_badges ?? DEFAULT_TRUST_BADGES;
   const benefitsSection = pageContent.benefits_section;
   const howItWorksSection = pageContent.how_it_works_section;
   const faqSection = pageContent.faq_section;
@@ -729,28 +712,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </motion.div>
         </div>
       </div>
-
-      {/* Trust Badges */}
-      {trustBadgesEnabled && <section className="py-16 md:py-20 px-4 md:px-6 bg-white">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {trustBadges.map((b, i) => (
-              <motion.div key={i}
-                initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.08 }}
-                className="flex flex-col items-center text-center gap-3 p-5 bg-white rounded-xl border border-gray-100 shadow-sm">
-                <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
-                  <TrustIcon icon={b.icon} color={color} />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm mb-1">{b.title}</p>
-                  <p className="text-xs text-gray-500 leading-relaxed">{b.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>}
 
       {/* Benefits */}
       {benefitsSection?.enabled && benefitsSection.items.length > 0 && (

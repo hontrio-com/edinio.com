@@ -54,6 +54,7 @@ interface PageContent {
   store_bg_color?: string;
   logo_size?: number;
   footer_logo_size?: number;
+  favicon_url?: string | null;
   hero_show_content?: boolean;
   hero_banners?: string[];
   hero_banner_links?: string[];
@@ -246,6 +247,8 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
   // ── Branding section state
   const [logoPreview, setLogoPreview] = useState<string | null>(business.logo_url);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [faviconPreview, setFaviconPreview] = useState<string | null>(((storeSettings?.page_content as PageContent | undefined)?.favicon_url) ?? null);
+  const [faviconFile, setFaviconFile] = useState<File | null>(null);
   const initialBanners: BannerItem[] = (() => {
     const pc = storeSettings?.page_content as PageContent | undefined;
     const raw = pc?.hero_banners;
@@ -286,6 +289,10 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
     if (logoFile) logo_url = (await uploadFile(logoFile, "logos")) ?? logo_url;
     if (logoPreview === null) logo_url = null;
 
+    let favicon_url: string | null;
+    if (faviconFile) favicon_url = (await uploadFile(faviconFile, "logos")) ?? null;
+    else favicon_url = faviconPreview;
+
     // Resolve banners in order: upload new files, keep already-hosted URLs.
     const bannerUrls: string[] = [];
     const bannerLinks: string[] = [];
@@ -299,13 +306,15 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
 
     const result = await updateBusiness(business.id, { logo_url, cover_url, primary_color: primaryColor });
     // Banners (+ their click links) + hero overlay toggle live in page_content.
-    const pcResult = await updatePageContent(business.id, { ...pageContent, hero_banners: bannerUrls, hero_banner_links: bannerLinks } as Record<string, unknown>);
+    const pcResult = await updatePageContent(business.id, { ...pageContent, hero_banners: bannerUrls, hero_banner_links: bannerLinks, favicon_url } as Record<string, unknown>);
     setSaving(null);
     if (result.error) { toast.error(result.error); }
     else if ("error" in pcResult) { toast.error(pcResult.error); }
     else {
       setSaved("branding");
       setLogoFile(null);
+      setFaviconFile(null);
+      setFaviconPreview(favicon_url);
       setBannerItems(bannerUrls.map((url, i) => ({ id: `saved-${i}`, url, file: null, link: bannerLinks[i] ?? "" })));
       setPreviewKey(k => k + 1);
       setTimeout(() => setSaved(null), 2000);
@@ -369,6 +378,7 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
     logo_size: rawPageContent.logo_size ?? 36,
     footer_logo_size: rawPageContent.footer_logo_size ?? 36,
+    favicon_url: rawPageContent.favicon_url ?? null,
     hero_show_content: rawPageContent.hero_show_content ?? false,
   });
 
@@ -497,6 +507,12 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
             <ImageUploadField label="Logo" aspectRatio="1/1" preview={logoPreview}
               onFile={(f) => { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); }}
               onRemove={() => { setLogoFile(null); setLogoPreview(null); }} />
+          </div>
+          <div className="max-w-[180px]">
+            <ImageUploadField label="Favicon (iconita din tab)" aspectRatio="1/1" preview={faviconPreview}
+              onFile={(f) => { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); }}
+              onRemove={() => { setFaviconFile(null); setFaviconPreview(null); }} />
+            <p className="text-[10px] text-muted-foreground mt-1.5">Imagine patrata (ideal 512x512px, PNG). Daca lipseste, se foloseste logo-ul.</p>
           </div>
           {logoPreview && (
             <div>

@@ -13,8 +13,16 @@ interface Props {
 /** Per-store favicon: the merchant's logo overrides the default Edinio favicon. */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const { data } = await createAdminClient().from("businesses").select("logo_url").eq("slug", slug).single();
-  return data?.logo_url ? { icons: { icon: data.logo_url } } : {};
+  const { data } = await createAdminClient()
+    .from("businesses")
+    .select("logo_url, store_settings(page_content)")
+    .eq("slug", slug)
+    .single();
+  if (!data) return {};
+  const rawSettings = (data as unknown as { store_settings: { page_content: unknown } | { page_content: unknown }[] | null }).store_settings;
+  const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
+  const favicon = ((settings?.page_content ?? null) as { favicon_url?: string | null } | null)?.favicon_url || data.logo_url;
+  return favicon ? { icons: { icon: favicon } } : {};
 }
 
 export default async function StoreLayout({ children, params }: Props) {

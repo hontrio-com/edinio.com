@@ -16,15 +16,27 @@ export function formatDateTime(date: Date | string): string {
   return dateFnsFormat(d, "d MMMM yyyy, HH:mm", { locale: ro });
 }
 
-export function formatPrice(amount: number): string {
+// Pretul ca numar formatat, fara sufixul " lei" (pentru capetele unui interval).
+export function formatPriceValue(amount: number): string {
   if (amount >= 1000) {
     const parts = amount.toFixed(2).split(".");
     const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     const decPart = parts[1] === "00" ? "" : `,${parts[1]}`;
-    return `${intPart}${decPart} lei`;
+    return `${intPart}${decPart}`;
   }
-  const formatted = amount % 1 === 0 ? String(Math.floor(amount)) : amount.toFixed(2).replace(".", ",");
-  return `${formatted} lei`;
+  return amount % 1 === 0 ? String(Math.floor(amount)) : amount.toFixed(2).replace(".", ",");
+}
+
+export function formatPrice(amount: number): string {
+  return `${formatPriceValue(amount)} lei`;
+}
+
+// Afiseaza pretul unui produs variabil cu mai multe preturi.
+// Implicit: interval "De la X – Y lei". Daca lowestOnly e true (sau exista un
+// singur pret efectiv), afiseaza doar pretul minim "X lei".
+export function formatPriceRange(min: number, max: number, lowestOnly = false): string {
+  if (lowestOnly || max <= min) return formatPrice(min);
+  return `De la ${formatPriceValue(min)} – ${formatPrice(max)}`;
 }
 
 export function formatPhoneDisplay(phone: string): string {

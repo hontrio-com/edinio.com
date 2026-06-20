@@ -45,6 +45,7 @@ interface PageContent {
   sort_options?: { enabled: boolean; default_sort?: string; };
   sticky_cart_bar?: { enabled: boolean; };
   new_badge?: { enabled: boolean; days: number; };
+  price_range_display?: { enabled: boolean; };
   image_zoom?: { enabled: boolean; };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
   show_social_proof?: boolean;
@@ -369,6 +370,7 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
     sort_options: rawPageContent.sort_options ?? { enabled: true, default_sort: "newest" },
     sticky_cart_bar: rawPageContent.sticky_cart_bar ?? { enabled: true },
     new_badge: rawPageContent.new_badge ?? { enabled: true, days: 7 },
+    price_range_display: rawPageContent.price_range_display ?? { enabled: true },
     image_zoom: rawPageContent.image_zoom ?? { enabled: true },
     delivery_estimate: rawPageContent.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
     show_social_proof: rawPageContent.show_social_proof ?? false,
@@ -1339,6 +1341,25 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
                   onChange={e => setPageContent(p => ({ ...p, new_badge: { ...p.new_badge!, days: parseInt(e.target.value) || 7 } }))} />
               </div>
             )}
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Interval de pret pentru produse variabile */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Interval de pret la produse variabile</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {pageContent.price_range_display?.enabled !== false
+                  ? 'Produsele cu mai multe preturi afiseaza "De la X – Y lei"'
+                  : "Se afiseaza doar pretul cel mai mic (fara „De la” / „la”)"}
+              </p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, price_range_display: { enabled: !(p.price_range_display?.enabled !== false) } }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.price_range_display?.enabled !== false ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.price_range_display?.enabled !== false ? "translate-x-4" : "translate-x-0")} />
+            </button>
           </div>
 
           <SaveBtn loading={saving === "page"} saved={saved === "page"} onSave={savePageContent} />

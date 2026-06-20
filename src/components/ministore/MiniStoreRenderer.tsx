@@ -7,7 +7,8 @@ import {
   MapPin, Mail, Globe, ChevronRight, ChevronLeft, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
   Truck, ShieldCheck, RotateCcw, Check, Filter,
 } from "lucide-react";
-import { formatPrice, whatsappLink } from "@/lib/utils/format";
+import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format";
+import { getProductPriceRange } from "@/lib/utils/product-price";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart, getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
@@ -71,6 +72,7 @@ interface PageContent {
   sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };
   sticky_cart_bar?: { enabled: boolean };
   new_badge?: { enabled: boolean; days: number };
+  price_range_display?: { enabled: boolean };
   store_bg_color?: string;
   logo_size?: number;
   footer_logo_size?: number;
@@ -833,13 +835,16 @@ function CartDrawer({
   );
 }
 
-function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock, showCategoryBadge = true, priority = false }: {
-  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean; showCategoryBadge?: boolean; priority?: boolean;
+function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock, showCategoryBadge = true, priority = false, priceLowestOnly = false }: {
+  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean; showCategoryBadge?: boolean; priority?: boolean; priceLowestOnly?: boolean;
 }) {
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
   const isNew = newBadgeDays > 0 && (Date.now() - new Date(product.created_at).getTime()) < newBadgeDays * 86400000;
-  const hasDiscount = product.compare_at_price && Number(product.compare_at_price) > Number(product.price);
+  // Produs variabil cu preturi diferite -> afiseaza interval ("De la X – Y") sau doar minimul.
+  const priceRange = getProductPriceRange(Number(product.price), product.page_sections);
+  const showPriceRange = priceRange.hasRange && !priceLowestOnly;
+  const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > Number(product.price);
   const discountPct = hasDiscount
     ? Math.round((1 - Number(product.price) / Number(product.compare_at_price)) * 100)
     : 0;
@@ -914,7 +919,11 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
             {product.name}
           </h3>
           <div className="flex items-baseline gap-2 mb-3">
-            <span className="font-black text-lg" style={{ color }}>{formatPrice(Number(product.price))}</span>
+            <span className="font-black text-lg" style={{ color }}>
+              {showPriceRange
+                ? formatPriceRange(priceRange.min, priceRange.max)
+                : formatPrice(priceRange.min)}
+            </span>
             {hasDiscount && (
               <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.compare_at_price))}</span>
             )}
@@ -1301,6 +1310,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const showStickyCartBar = pageContent.sticky_cart_bar?.enabled !== false;
 
   const newBadgeDays = pageContent.new_badge?.enabled !== false ? (pageContent.new_badge?.days ?? 7) : 0;
+
+  // Produse variabile: interval de pret implicit; doar pretul minim daca e dezactivat din editor.
+  const priceLowestOnly = pageContent.price_range_display?.enabled === false;
 
   const sortOption = pageContent.sort_options?.enabled
     ? (pageContent.sort_options.default_sort ?? "newest")
@@ -1946,6 +1958,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   newBadgeDays={newBadgeDays}
                   outOfStock={isProductOutOfStock(product)}
                   showCategoryBadge={showCategoryBadges}
+                  priceLowestOnly={priceLowestOnly}
                 />
               ))}
             </div>
@@ -1992,6 +2005,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                     outOfStock={isProductOutOfStock(product)}
                     showCategoryBadge={showCategoryBadges}
                     priority={i < 4}
+                    priceLowestOnly={priceLowestOnly}
                   />
                 ))}
               </div>

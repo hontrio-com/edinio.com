@@ -7,7 +7,8 @@ import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
   Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye, Calendar, Globe,
 } from "lucide-react";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, formatPriceRange } from "@/lib/utils/format";
+import { getProductPriceRange } from "@/lib/utils/product-price";
 import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
 import { NetopiaBadge } from "./NetopiaBadge";
@@ -35,6 +36,7 @@ interface PageContent {
   faq_section?: { enabled: boolean; title: string; items: FaqItem[]; };
   image_zoom?: { enabled: boolean };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
+  price_range_display?: { enabled: boolean };
   button_effect?: string;
   show_social_proof?: boolean;
   show_quality_badge?: boolean;
@@ -319,7 +321,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     ? Number(selectedCombo.compare_at_price)
     : product.compare_at_price ? Number(product.compare_at_price) : null;
 
-  const hasDiscount = displayComparePrice && displayComparePrice > displayPrice;
+  // Inainte de a alege o varianta, afiseaza intervalul de pret (sau doar minimul daca e setat din editor).
+  const priceRange = getProductPriceRange(basePrice, pageSections);
+  const priceLowestOnly = pageContent.price_range_display?.enabled === false;
+  const showPriceRange = !selectedCombo && priceRange.hasRange;
+
+  const hasDiscount = !showPriceRange && displayComparePrice && displayComparePrice > displayPrice;
   const discountPct = hasDiscount
     ? Math.round((1 - displayPrice / displayComparePrice!) * 100)
     : 0;
@@ -497,7 +504,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         {/* Price */}
         <div className="flex items-center gap-3 flex-wrap">
           <span className={`tracking-tight font-black text-gray-900 ${mobile ? "text-3xl" : "text-4xl"}`}>
-            {formatPrice(displayPrice)}
+            {showPriceRange
+              ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
+              : formatPrice(displayPrice)}
           </span>
           {hasDiscount && (
             <>
@@ -997,7 +1006,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 {displayName}
               </p>
               <div className="flex items-baseline gap-2">
-                <span className="text-lg font-bold text-gray-900">{formatPrice(displayPrice)}</span>
+                <span className="text-lg font-bold text-gray-900">
+                  {showPriceRange
+                    ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
+                    : formatPrice(displayPrice)}
+                </span>
                 {hasDiscount && (
                   <span className="text-xs text-gray-400 line-through">{formatPrice(displayComparePrice!)}</span>
                 )}

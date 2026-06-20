@@ -833,8 +833,8 @@ function CartDrawer({
   );
 }
 
-function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock, showCategoryBadge = true }: {
-  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean; showCategoryBadge?: boolean;
+function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock, showCategoryBadge = true, priority = false }: {
+  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean; showCategoryBadge?: boolean; priority?: boolean;
 }) {
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
@@ -854,6 +854,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
               src={imageUrl}
               alt={product.name}
               fill
+              priority={priority}
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
             />
@@ -1979,7 +1980,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                {paginatedProducts.map((product) => (
+                {paginatedProducts.map((product, i) => (
                   <ProductCard
                     key={product.id}
                     product={product}
@@ -1990,6 +1991,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                     newBadgeDays={newBadgeDays}
                     outOfStock={isProductOutOfStock(product)}
                     showCategoryBadge={showCategoryBadges}
+                    priority={i < 4}
                   />
                 ))}
               </div>

@@ -52,6 +52,8 @@ export default async function StoreLayout({ children, params }: Props) {
 
   return (
     <>
+      {/* Warm up the CDN connection early so product images start downloading sooner. */}
+      <link rel="preconnect" href="https://cdn.edinio.com" />
       {fbPixelId && <FacebookPixel pixelId={fbPixelId} />}
       {ttPixelId && <TikTokPixel pixelId={ttPixelId} />}
       {googleTagId && <GoogleTag tagId={googleTagId} />}

@@ -76,6 +76,7 @@ interface PageContent {
   hero_show_content?: boolean;
   hero_banners?: string[];
   hero_banner_links?: string[];
+  show_category_badges?: boolean;
   menu?: MenuItem[];
 }
 
@@ -831,8 +832,8 @@ function CartDrawer({
   );
 }
 
-function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock }: {
-  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean;
+function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock, showCategoryBadge = true }: {
+  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean; showCategoryBadge?: boolean;
 }) {
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
@@ -887,7 +888,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
           </div>
 
           {/* Category chip bottom */}
-          {product.category && (
+          {showCategoryBadge && product.category && (
             <div className="absolute bottom-2 left-2">
               <span className="bg-black/55 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-0.5 rounded-full">
                 {product.category}
@@ -1324,6 +1325,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // By default a banner shows on its own (molded, no overlay); the merchant can
   // opt in to overlaying logo/name/tagline/button.
   const heroImageOnly = heroBanners.length > 0 && pageContent.hero_show_content !== true;
+  const showCategoryBadges = pageContent.show_category_badges !== false; // category chip on product cards
 
   // Category hierarchy — built from the categories table (parent_id) + product
   // assignments. Only categories whose subtree contains products are shown.
@@ -1941,6 +1943,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   isAdded={addedId === product.id}
                   newBadgeDays={newBadgeDays}
                   outOfStock={isProductOutOfStock(product)}
+                  showCategoryBadge={showCategoryBadges}
                 />
               ))}
             </div>
@@ -1985,6 +1988,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                     isAdded={addedId === product.id}
                     newBadgeDays={newBadgeDays}
                     outOfStock={isProductOutOfStock(product)}
+                    showCategoryBadge={showCategoryBadges}
                   />
                 ))}
               </div>

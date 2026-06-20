@@ -459,10 +459,11 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     }
   }
 
-  // Auto-generate SmartBill invoice if configured (fire-and-forget)
+  // Auto-generate an invoice with whichever provider has auto-invoicing enabled
+  // (SmartBill / Oblio / fGO) — at most one per order. Fire-and-forget.
   if (statusChanged || paymentChanged) {
-    import("@/lib/actions/smartbill.actions").then(({ maybeAutoGenerateInvoice }) => {
-      void maybeAutoGenerateInvoice(order.business_id, orderId, data.status, data.payment_status);
+    import("@/lib/actions/invoice-auto.actions").then(({ maybeAutoInvoice }) => {
+      void maybeAutoInvoice(order.business_id, orderId, data.status, data.payment_status);
     }).catch(() => {});
   }
 

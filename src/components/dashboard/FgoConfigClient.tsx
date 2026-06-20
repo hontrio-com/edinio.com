@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CheckCircle, Loader2, Unplug, ExternalLink } from "lucide-react";
 import { saveFgoConfig, disconnectFgo, testFgoConfig } from "@/lib/actions/fgo.actions";
 import type { FgoConfig } from "@/lib/fgo";
+import { AUTO_INVOICE_TRIGGERS, type AutoInvoiceTrigger } from "@/lib/invoicing";
 
 export function FgoConfigClient({
   businessId,
@@ -29,6 +30,8 @@ export function FgoConfigClient({
     platforma_url: initialConfig?.platforma_url ?? "",
     tip_factura: initialConfig?.tip_factura ?? "Factura",
     valuta: initialConfig?.valuta ?? "RON",
+    auto_invoice: initialConfig?.auto_invoice ?? false,
+    auto_invoice_trigger: initialConfig?.auto_invoice_trigger ?? "confirmed",
   });
 
   function set(field: keyof FgoConfig, value: string | boolean) {
@@ -222,6 +225,34 @@ export function FgoConfigClient({
             />
             <p className="text-[11px] text-muted-foreground mt-1">URL-ul root al platformei tale</p>
           </div>
+        </div>
+
+        {/* Auto-invoice */}
+        <div className="space-y-3 border-t border-border pt-4 mt-1">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Generare automata factura</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Factura fGO se genereaza automat cand comanda atinge statusul selectat
+              </p>
+            </div>
+            <button type="button" onClick={() => set("auto_invoice", !form.auto_invoice)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${form.auto_invoice ? "bg-primary" : "bg-muted-foreground/30"}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.auto_invoice ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+          {form.auto_invoice && (
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Declanseaza generarea cand comanda devine</label>
+              <select value={form.auto_invoice_trigger ?? "confirmed"} onChange={e => set("auto_invoice_trigger", e.target.value as AutoInvoiceTrigger)}
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
+                {AUTO_INVOICE_TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Daca ai mai multe softuri de facturare cu generare automata, se emite o singura factura (prioritate: SmartBill, apoi Oblio, apoi fGO).
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

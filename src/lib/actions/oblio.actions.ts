@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
   getOblioToken,
   getCompanies,
@@ -280,6 +281,32 @@ export async function generateOblioInvoice(
     return { number: result.number, series: result.seriesName };
   } catch (e) {
     return { error: (e as Error).message };
+  }
+}
+
+/**
+ * Auto-invoicing entry point (called by the central dispatcher). Returns true only
+ * if it actually issued an invoice this call, so the dispatcher can stop and avoid
+ * a second provider issuing for the same order. Never throws.
+ */
+export async function maybeAutoGenerateInvoice(
+  businessId: string,
+  orderId: string,
+  newStatus: string,
+  newPaymentStatus: string,
+): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { data: settings } = await supabase
+      .from("store_settings").select("oblio_config").eq("business_id", businessId).single();
+    const config = settings?.oblio_config as OblioConfig | null;
+    if (!config?.enabled || !config.auto_invoice) return false;
+    if (!autoInvoiceTriggerMatches(config.auto_invoice_trigger, newStatus, newPaymentStatus)) return false;
+
+    const result = await generateOblioInvoice(businessId, orderId);
+    return !("error" in result);
+  } catch {
+    return false;
   }
 }
 

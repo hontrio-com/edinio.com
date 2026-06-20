@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveOblioConfig, disconnectOblio, loadOblioAccountData, loadOblioSeriesForCif } from "@/lib/actions/oblio.actions";
 import type { OblioConfig } from "@/lib/oblio";
+import { AUTO_INVOICE_TRIGGERS, type AutoInvoiceTrigger } from "@/lib/invoicing";
 
 const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors";
 const selectCls = inputCls + " appearance-none cursor-pointer";
@@ -33,6 +34,8 @@ export default function OblioConfigClient({
   const [seriesProforma, setSeriesProforma] = useState(initialConfig?.series_proforma ?? "");
   const [vatName, setVatName] = useState(initialConfig?.vat_name ?? "Normala");
   const [vatPercentage, setVatPercentage] = useState(initialConfig?.vat_percentage ?? 19);
+  const [autoInvoice, setAutoInvoice] = useState(initialConfig?.auto_invoice ?? false);
+  const [autoInvoiceTrigger, setAutoInvoiceTrigger] = useState<AutoInvoiceTrigger>(initialConfig?.auto_invoice_trigger ?? "confirmed");
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -111,6 +114,8 @@ export default function OblioConfigClient({
       series_proforma: seriesProforma,
       vat_name: vatName,
       vat_percentage: vatPercentage,
+      auto_invoice: autoInvoice,
+      auto_invoice_trigger: autoInvoiceTrigger,
     };
 
     startSaveTransition(async () => {
@@ -312,6 +317,35 @@ export default function OblioConfigClient({
                 Folosita la generarea facturilor daca nu este specificata per produs. Cota va fi aplicata conform setarilor de TVA ale magazinului.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Auto-invoice */}
+        {(accountData || isConnected) && (
+          <div className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Generare automata factura</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Factura Oblio se genereaza automat cand comanda atinge statusul selectat
+                </p>
+              </div>
+              <button type="button" onClick={() => setAutoInvoice(v => !v)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${autoInvoice ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoInvoice ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+            {autoInvoice && (
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">Declanseaza generarea cand comanda devine</label>
+                <select value={autoInvoiceTrigger} onChange={e => setAutoInvoiceTrigger(e.target.value as AutoInvoiceTrigger)} className={inputCls}>
+                  {AUTO_INVOICE_TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Daca ai mai multe softuri de facturare cu generare automata, se emite o singura factura (prioritate: SmartBill, apoi Oblio, apoi fGO).
+                </p>
+              </div>
+            )}
           </div>
         )}
 

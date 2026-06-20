@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
   getMerchantSeries,
   getMerchantTaxes,
@@ -364,25 +365,22 @@ export async function maybeAutoGenerateInvoice(
   orderId: string,
   newStatus: string,
   newPaymentStatus: string
-): Promise<void> {
+): Promise<boolean> {
   try {
     const supabase = await createClient();
     const { data: settings } = await supabase
       .from("store_settings").select("smartbill_config").eq("business_id", businessId).single();
 
     const config = settings?.smartbill_config as SmartbillConfig | null;
-    if (!config?.enabled || !config.auto_invoice) return;
-    if (!config.email || !config.token || !config.company_vat_code || !config.series_name) return;
+    if (!config?.enabled || !config.auto_invoice) return false;
+    if (!config.email || !config.token || !config.company_vat_code || !config.series_name) return false;
 
-    const trigger = config.auto_invoice_trigger;
-    const statusMatches = trigger !== "paid" && newStatus === trigger;
-    const paymentMatches = trigger === "paid" && newPaymentStatus === "paid";
-    if (!statusMatches && !paymentMatches) return;
+    if (!autoInvoiceTriggerMatches(config.auto_invoice_trigger, newStatus, newPaymentStatus)) return false;
 
     // Check order doesn't already have invoice
     const { data: order } = await supabase
       .from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single();
-    if (!order || order.smartbill_invoice_number) return;
+    if (!order || order.smartbill_invoice_number) return false;
 
     const { data: storeSettings } = await supabase
       .from("store_settings").select("prices_include_vat, vat_enabled").eq("business_id", businessId).single();
@@ -392,13 +390,15 @@ export async function maybeAutoGenerateInvoice(
 
     const params = await buildInvoiceParams(config, order, config.series_name, pricesIncludeVat, vatEnabled);
     const result = await createMerchantInvoice(config, params);
-    if ("error" in result) return;
+    if ("error" in result) return false;
 
     await supabase.from("orders").update({
       smartbill_invoice_number: result.number,
       smartbill_invoice_series: result.series,
     }).eq("id", orderId);
+    return true;
   } catch {
     // Fire-and-forget: never throw, never block order update
+    return false;
   }
 }

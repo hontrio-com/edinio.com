@@ -12,6 +12,8 @@ export type OblioConfig = {
   series_proforma: string; // ex: "PR"
   vat_name: string;        // ex: "Normala"
   vat_percentage: number;  // ex: 19
+  auto_invoice?: boolean;  // auto-issue an invoice when the trigger fires
+  auto_invoice_trigger?: "confirmed" | "processing" | "shipped" | "delivered" | "paid";
 };
 
 export type OblioCompany = {

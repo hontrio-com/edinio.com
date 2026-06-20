@@ -9,6 +9,8 @@ export type FgoConfig = {
   platforma_url: string; // URL root platforma
   tip_factura: string;   // default "Factura"
   valuta: string;        // default "RON"
+  auto_invoice?: boolean;  // auto-issue an invoice when the trigger fires
+  auto_invoice_trigger?: "confirmed" | "processing" | "shipped" | "delivered" | "paid";
 };
 
 export type FgoInvoiceResult = {

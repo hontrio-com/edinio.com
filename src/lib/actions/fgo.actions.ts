@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
   createFgoInvoice,
   stornoFgoInvoice,
@@ -168,6 +169,32 @@ export async function testFgoConfig(
 }
 
 // ─── Document actions ─────────────────────────────────────────────────────────
+
+/**
+ * Auto-invoicing entry point (called by the central dispatcher). Returns true only
+ * if it actually issued an invoice this call, so the dispatcher can stop and avoid
+ * a second provider issuing for the same order. Never throws.
+ */
+export async function maybeAutoGenerateInvoice(
+  businessId: string,
+  orderId: string,
+  newStatus: string,
+  newPaymentStatus: string,
+): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { data: settings } = await supabase
+      .from("store_settings").select("fgo_config").eq("business_id", businessId).single();
+    const config = settings?.fgo_config as FgoConfig | null;
+    if (!config?.enabled || !config.auto_invoice) return false;
+    if (!autoInvoiceTriggerMatches(config.auto_invoice_trigger, newStatus, newPaymentStatus)) return false;
+
+    const result = await generateFgoInvoice(businessId, orderId);
+    return !("error" in result);
+  } catch {
+    return false;
+  }
+}
 
 export async function generateFgoInvoice(
   businessId: string,

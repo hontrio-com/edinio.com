@@ -675,6 +675,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       <header className={`fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm transition-all ${announcementBar?.enabled ? "top-9" : "top-0"}`}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
           <a href={basePath || "/"} aria-label="Inapoi la magazin"
+            onClick={(e) => {
+              try {
+                const p = sessionStorage.getItem(`store_page_${business.slug}`);
+                if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${basePath || "/"}?page=${p}`; }
+              } catch {}
+            }}
             className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors shrink-0">
             <ArrowLeft size={16} />
             <span>Magazin</span>

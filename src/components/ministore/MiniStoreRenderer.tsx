@@ -1172,6 +1172,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     const qs = sp.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
   }, []);
+  // Remember the active page for this tab so the "Magazin" link on a product page
+  // can return here (browser back already works via the URL).
+  useEffect(() => {
+    try { sessionStorage.setItem(`store_page_${business.slug}`, String(currentPage)); } catch {}
+  }, [currentPage, business.slug]);
 
   // Bundle availability is derived from components (best-effort on the storefront;
   // the authoritative check happens at order time). Resolve components from the

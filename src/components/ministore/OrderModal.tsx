@@ -862,12 +862,19 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <span>Produs ({effectiveQty} buc)</span>
                   <span className="font-medium text-gray-900">{productSubtotal} lei</span>
                 </div>
-                {cart.map((ci) => (
-                  <div key={ci.productId} className="flex justify-between text-gray-500">
-                    <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
-                    <span className="font-medium text-gray-900 whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
+                {cart.length > 0 && (
+                  <div className="mt-1.5 rounded-lg bg-white border border-dashed border-gray-300 p-2 space-y-1">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                      <Package size={12} /> Din cosul tau
+                    </p>
+                    {cart.map((ci) => (
+                      <div key={ci.productId} className="flex justify-between text-gray-500">
+                        <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
+                        <span className="font-medium text-gray-900 whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
                 {extrasTotal > 0 && (
                   <div className="flex justify-between text-gray-500">
                     <span>Optiuni extra</span>

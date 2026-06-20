@@ -980,36 +980,6 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
 
           <hr className="border-border" />
 
-          {/* Category badges on product cards */}
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-xs font-semibold text-foreground">Eticheta categorie pe produse</label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Afiseaza categoria pe cardurile de produs din magazin.</p>
-            </div>
-            <button type="button"
-              onClick={() => setPageContent(p => ({ ...p, show_category_badges: !(p.show_category_badges !== false) }))}
-              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_category_badges !== false ? "bg-primary" : "bg-muted-foreground/30")}>
-              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_category_badges !== false ? "translate-x-4" : "translate-x-0")} />
-            </button>
-          </div>
-
-          <hr className="border-border" />
-
-          {/* "Creat cu Edinio" footer credit — can be hidden on a paid plan */}
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-xs font-semibold text-foreground">Afiseaza creditul Edinio in footer</label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{isFreePlan ? "Poate fi ascuns doar pe un plan platit." : "Cand e oprit, textul de credit dispare din footer-ul magazinului."}</p>
-            </div>
-            <button type="button" disabled={isFreePlan}
-              onClick={() => { if (!isFreePlan) setPageContent(p => ({ ...p, hide_edinio_badge: !p.hide_edinio_badge })); }}
-              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed", !pageContent.hide_edinio_badge ? "bg-primary" : "bg-muted-foreground/30")}>
-              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", !pageContent.hide_edinio_badge ? "translate-x-4" : "translate-x-0")} />
-            </button>
-          </div>
-
-          <hr className="border-border" />
-
           {/* Efect buton comanda */}
           <div>
             <label className="text-xs font-semibold text-foreground block mb-1">Efect buton "Comanda acum"</label>
@@ -1040,6 +1010,36 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
       title: "Pagina magazin",
       content: (
         <div className="px-5 pb-5 space-y-5">
+          {/* Category badges on product cards */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Eticheta categorie pe produse</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Afiseaza categoria pe cardurile de produs din magazin.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, show_category_badges: !(p.show_category_badges !== false) }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_category_badges !== false ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_category_badges !== false ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* "Creat cu Edinio" footer credit — can be hidden on a paid plan */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Afiseaza creditul Edinio in footer</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{isFreePlan ? "Poate fi ascuns doar pe un plan platit." : "Cand e oprit, textul de credit dispare din footer-ul magazinului."}</p>
+            </div>
+            <button type="button" disabled={isFreePlan}
+              onClick={() => { if (!isFreePlan) setPageContent(p => ({ ...p, hide_edinio_badge: !p.hide_edinio_badge })); }}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed", !pageContent.hide_edinio_badge ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", !pageContent.hide_edinio_badge ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
           {/* Store benefits */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">

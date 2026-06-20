@@ -421,7 +421,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
               <span className="text-xs font-semibold text-foreground">Plan Gratuit</span>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
-              Upgrade la Pro pentru functii avansate, fara comisioane si suport prioritar.
+              Upgrade la Pro pentru functii avansate si suport prioritar.
             </p>
             <Link href="/dashboard/settings#abonament"
               className="block text-center text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg py-1.5 transition-colors">

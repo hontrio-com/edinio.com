@@ -35,6 +35,8 @@ interface PageContent {
   image_zoom?: { enabled: boolean };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
   button_effect?: string;
+  show_social_proof?: boolean;
+  show_quality_badge?: boolean;
   footer_logo_size?: number;
   checkout_config?: {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
@@ -277,6 +279,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
   const deliveryEstimate = pageContent.delivery_estimate;
   const viewerCount = useRef(18 + Math.floor(Math.random() * 10)).current;
+  const showSocialProof = pageContent.show_social_proof === true; // fake live-viewers counter — off unless enabled
+  const showQualityBadge = pageContent.show_quality_badge !== false; // "Calitate verificata" badge — on unless removed
 
   // Variants
   const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
@@ -486,10 +490,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     return (
       <div className={`flex flex-col ${mobile ? "gap-3" : "gap-4"}`}>
         {/* Rating */}
-        <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 w-fit">
-          <div className="flex">{[1,2,3,4,5].map(i => <Star key={i} size={11} className="text-amber-400 fill-amber-400" />)}</div>
-          <span className="text-[11px] font-semibold text-amber-800">Calitate verificata</span>
-        </div>
+        {showQualityBadge && (
+          <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 w-fit">
+            <div className="flex">{[1,2,3,4,5].map(i => <Star key={i} size={11} className="text-amber-400 fill-amber-400" />)}</div>
+            <span className="text-[11px] font-semibold text-amber-800">Calitate verificata</span>
+          </div>
+        )}
 
         {/* Title */}
         <h1 className={`tracking-tight font-black text-gray-900 leading-tight ${mobile ? "text-2xl" : "text-3xl lg:text-4xl"}`}>
@@ -649,7 +655,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </div>
         )}
 
-        {!mobile && <SocialProof count={viewerCount} />}
+        {!mobile && showSocialProof && <SocialProof count={viewerCount} />}
       </div>
     );
   }

@@ -47,6 +47,8 @@ interface PageContent {
   new_badge?: { enabled: boolean; days: number; };
   image_zoom?: { enabled: boolean; };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
+  show_social_proof?: boolean;
+  show_quality_badge?: boolean;
   store_bg_color?: string;
   logo_size?: number;
   footer_logo_size?: number;
@@ -357,6 +359,8 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
     new_badge: rawPageContent.new_badge ?? { enabled: true, days: 7 },
     image_zoom: rawPageContent.image_zoom ?? { enabled: true },
     delivery_estimate: rawPageContent.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
+    show_social_proof: rawPageContent.show_social_proof ?? false,
+    show_quality_badge: rawPageContent.show_quality_badge ?? true,
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
     logo_size: rawPageContent.logo_size ?? 36,
     footer_logo_size: rawPageContent.footer_logo_size ?? 36,
@@ -937,6 +941,36 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
                 </div>
               </div>
             )}
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Social proof counter */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Contor vizitatori live</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Numarul de persoane care se uita acum, pe pagina produsului. Oprit implicit.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, show_social_proof: !p.show_social_proof }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_social_proof ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_social_proof ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Quality badge */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Badge Calitate verificata</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Eticheta cu stele de pe pagina produsului.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, show_quality_badge: !(p.show_quality_badge !== false) }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_quality_badge !== false ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_quality_badge !== false ? "translate-x-4" : "translate-x-0")} />
+            </button>
           </div>
 
           <hr className="border-border" />

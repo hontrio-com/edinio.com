@@ -493,6 +493,30 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               )}
 
+              {cart.length > 0 && (
+                <div className="space-y-2">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    <Package size={12} /> Din cosul tau
+                  </p>
+                  {cart.map((ci) => (
+                    <div key={ci.productId} className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-gray-300 bg-gray-50">
+                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-white flex-shrink-0">
+                        {ci.imageUrl ? (
+                          <Image src={ci.imageUrl} alt={ci.name} fill sizes="56px" className="object-contain p-1" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center"><Package size={18} className="text-gray-300" /></div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm text-gray-900 truncate">{ci.name}</p>
+                        <p className="text-sm font-black mt-0.5" style={{ color }}>{ci.price} lei</p>
+                      </div>
+                      <span className="text-sm font-bold text-gray-500 shrink-0">x{ci.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Customization fields */}
               {hasCustomization && (
                 <div className="space-y-3 border border-gray-200 rounded-xl p-3.5 bg-gray-50/50">
@@ -862,19 +886,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <span>Produs ({effectiveQty} buc)</span>
                   <span className="font-medium text-gray-900">{productSubtotal} lei</span>
                 </div>
-                {cart.length > 0 && (
-                  <div className="mt-1.5 rounded-lg bg-white border border-dashed border-gray-300 p-2 space-y-1">
-                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                      <Package size={12} /> Din cosul tau
-                    </p>
-                    {cart.map((ci) => (
-                      <div key={ci.productId} className="flex justify-between text-gray-500">
-                        <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
-                        <span className="font-medium text-gray-900 whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
-                      </div>
-                    ))}
+                {cart.map((ci) => (
+                  <div key={ci.productId} className="flex justify-between text-gray-500">
+                    <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
+                    <span className="font-medium text-gray-900 whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
                   </div>
-                )}
+                ))}
                 {extrasTotal > 0 && (
                   <div className="flex justify-between text-gray-500">
                     <span>Optiuni extra</span>

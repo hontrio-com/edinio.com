@@ -23,5 +23,7 @@ export default async function EditorPage() {
     ? rawSettings[0] ?? null
     : rawSettings ?? null;
 
-  return <StoreEditor business={business} storeSettings={storeSettings} />;
+  const { data: profile } = await supabase.from("users_profile").select("plan").eq("id", user.id).single();
+
+  return <StoreEditor business={business} storeSettings={storeSettings} plan={profile?.plan ?? "free"} />;
 }

@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
+import { EdinioCredit } from "@/components/ministore/EdinioCredit";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { Metadata } from "next";
@@ -95,9 +96,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
             <ArrowLeft className="h-4 w-4" />
             Inapoi la magazin
           </a>
-          <p className="text-center text-xs text-gray-400 mt-4">
-            Creat cu <span className="font-semibold" style={{ color }}>Edinio</span>
-          </p>
+          <EdinioCredit businessId={business.id} color={color} className="text-center text-xs text-gray-400 mt-4" />
         </div>
       </div>
     );
@@ -232,9 +231,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
           Inapoi la magazin
         </a>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
-          Creat cu <span className="font-semibold" style={{ color }}>Edinio</span>
-        </p>
+        <EdinioCredit businessId={business.id} color={color} className="text-center text-xs text-gray-400 mt-4" />
       </div>
     </div>
   );

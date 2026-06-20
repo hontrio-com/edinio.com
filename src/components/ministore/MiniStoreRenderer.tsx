@@ -18,6 +18,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
 import { NetopiaBadge } from "./NetopiaBadge";
+import { EdinioCredit } from "./EdinioCredit";
 import type { MenuItem } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import type { Database } from "@/types/database.types";
@@ -2295,9 +2296,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             <p className="text-[11px] text-white/25">
               &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
             </p>
-            <p className="text-[11px] text-white/25">
-              Creat cu <span className="font-semibold" style={{ color }}>Edinio</span>
-            </p>
+            <EdinioCredit businessId={business.id} color={color} className="text-[11px] text-white/25" />
           </div>
         </div>
       </footer>

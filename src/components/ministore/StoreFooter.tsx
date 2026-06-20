@@ -2,6 +2,7 @@ import Image from "next/image";
 import { Globe } from "lucide-react";
 import { InstagramIcon, FacebookIcon, TikTokIcon, YoutubeIcon } from "./social-icons";
 import { NetopiaBadge } from "./NetopiaBadge";
+import { EdinioCredit } from "./EdinioCredit";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 
 interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; website?: string }
@@ -90,7 +91,7 @@ export function StoreFooter({ business, menu, basePath, businessId, footerLogoSi
 
         <div className="pt-5 flex items-center justify-between gap-3">
           <p className="text-[11px] text-white/25">&copy; {new Date().getFullYear()} {name}</p>
-          <p className="text-[11px] text-white/25">Creat cu <span className="font-semibold" style={{ color }}>Edinio</span></p>
+          <EdinioCredit businessId={businessId} color={color} className="text-[11px] text-white/25" />
         </div>
       </div>
     </footer>

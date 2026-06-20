@@ -11,6 +11,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
 import { NetopiaBadge } from "./NetopiaBadge";
+import { EdinioCredit } from "./EdinioCredit";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -1020,9 +1021,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             <p className="text-[11px] text-white/25">
               &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
             </p>
-            <p className="text-[11px] text-white/25">
-              Creat cu <span className="font-semibold" style={{ color }}>Edinio</span>
-            </p>
+            <EdinioCredit businessId={business.id} color={color} className="text-[11px] text-white/25" />
           </div>
         </div>
       </footer>

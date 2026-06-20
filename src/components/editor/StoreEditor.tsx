@@ -18,7 +18,7 @@ type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
 
 interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; }
 interface Features { floating_whatsapp?: boolean; floating_call?: boolean; }
-interface BannerItem { id: string; url: string; file: File | null; }
+interface BannerItem { id: string; url: string; file: File | null; link?: string; }
 
 interface PageContent {
   announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number; };
@@ -52,6 +52,7 @@ interface PageContent {
   footer_logo_size?: number;
   hero_show_content?: boolean;
   hero_banners?: string[];
+  hero_banner_links?: string[];
 }
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
@@ -241,10 +242,12 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
   const [logoPreview, setLogoPreview] = useState<string | null>(business.logo_url);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const initialBanners: BannerItem[] = (() => {
-    const raw = (storeSettings?.page_content as PageContent)?.hero_banners;
+    const pc = storeSettings?.page_content as PageContent | undefined;
+    const raw = pc?.hero_banners;
+    const linksRaw = pc?.hero_banner_links;
     const urls = Array.isArray(raw) ? raw.filter((u): u is string => typeof u === "string" && !!u) : [];
     const list = (urls.length ? urls : business.cover_url ? [business.cover_url] : []).slice(0, 5);
-    return list.map((url, i) => ({ id: `init-${i}`, url, file: null }));
+    return list.map((url, i) => ({ id: `init-${i}`, url, file: null, link: Array.isArray(linksRaw) ? (linksRaw[i] ?? "") : "" }));
   })();
   const [bannerItems, setBannerItems] = useState<BannerItem[]>(initialBanners);
   const bannerInputRef = useRef<HTMLInputElement>(null);
@@ -280,22 +283,25 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
 
     // Resolve banners in order: upload new files, keep already-hosted URLs.
     const bannerUrls: string[] = [];
+    const bannerLinks: string[] = [];
     for (const b of bannerItems) {
-      if (b.file) { const u = await uploadFile(b.file, "covers"); if (u) bannerUrls.push(u); }
-      else if (b.url) bannerUrls.push(b.url);
+      let url: string | null = null;
+      if (b.file) { const u = await uploadFile(b.file, "covers"); if (u) url = u; }
+      else if (b.url) url = b.url;
+      if (url) { bannerUrls.push(url); bannerLinks.push((b.link ?? "").trim()); }
     }
     const cover_url = bannerUrls[0] ?? null;
 
     const result = await updateBusiness(business.id, { logo_url, cover_url, primary_color: primaryColor });
-    // Banners + hero overlay toggle live in page_content; persist with the branding save.
-    const pcResult = await updatePageContent(business.id, { ...pageContent, hero_banners: bannerUrls } as Record<string, unknown>);
+    // Banners (+ their click links) + hero overlay toggle live in page_content.
+    const pcResult = await updatePageContent(business.id, { ...pageContent, hero_banners: bannerUrls, hero_banner_links: bannerLinks } as Record<string, unknown>);
     setSaving(null);
     if (result.error) { toast.error(result.error); }
     else if ("error" in pcResult) { toast.error(pcResult.error); }
     else {
       setSaved("branding");
       setLogoFile(null);
-      setBannerItems(bannerUrls.map((url, i) => ({ id: `saved-${i}`, url, file: null })));
+      setBannerItems(bannerUrls.map((url, i) => ({ id: `saved-${i}`, url, file: null, link: bannerLinks[i] ?? "" })));
       setPreviewKey(k => k + 1);
       setTimeout(() => setSaved(null), 2000);
     }
@@ -529,25 +535,34 @@ export function StoreEditor({ business, storeSettings }: { business: Business; s
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">Bannere magazin (max 5)</label>
             <div className="space-y-2">
               {bannerItems.map((b, i) => (
-                <div key={b.id} className="flex items-center gap-2">
-                  <div className="relative flex-1 h-24 rounded-lg overflow-hidden border border-border bg-muted">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={b.url} alt="" className="w-full h-full object-contain" />
+                <div key={b.id} className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 h-24 rounded-lg overflow-hidden border border-border bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={b.url} alt="" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <button type="button" aria-label="Muta sus" disabled={i === 0} onClick={() => moveBanner(b.id, -1)}
+                        className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button type="button" aria-label="Muta jos" disabled={i === bannerItems.length - 1} onClick={() => moveBanner(b.id, 1)}
+                        className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                      <button type="button" aria-label="Sterge banner" onClick={() => removeBanner(b.id)}
+                        className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-red-500 hover:bg-red-50">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <button type="button" aria-label="Muta sus" disabled={i === 0} onClick={() => moveBanner(b.id, -1)}
-                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button type="button" aria-label="Muta jos" disabled={i === bannerItems.length - 1} onClick={() => moveBanner(b.id, 1)}
-                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                    <button type="button" aria-label="Sterge banner" onClick={() => removeBanner(b.id)}
-                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-red-500 hover:bg-red-50">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <input
+                    type="text"
+                    value={b.link ?? ""}
+                    onChange={(e) => setBannerItems((prev) => prev.map((x) => x.id === b.id ? { ...x, link: e.target.value } : x))}
+                    placeholder="Link la apasare (optional): /produse, /contact sau https://..."
+                    className="w-full px-2.5 py-1.5 text-xs border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                  />
                 </div>
               ))}
               {bannerItems.length < 5 && (

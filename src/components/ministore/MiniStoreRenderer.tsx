@@ -19,6 +19,7 @@ import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
 import { NetopiaBadge } from "./NetopiaBadge";
 import type { MenuItem } from "@/lib/pages/menu";
+import { resolveHref } from "@/lib/pages/href";
 import type { Database } from "@/types/database.types";
 import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 
@@ -74,6 +75,7 @@ interface PageContent {
   footer_logo_size?: number;
   hero_show_content?: boolean;
   hero_banners?: string[];
+  hero_banner_links?: string[];
   menu?: MenuItem[];
 }
 
@@ -964,23 +966,27 @@ interface Props {
 
 // Hero banners. One banner keeps the molded look (complete image, any ratio).
 // Two to five render as a swipeable carousel with dots, auto-advance and arrows.
-function HeroBanners({ banners, alt }: { banners: string[]; alt: string }) {
+function HeroBanners({ banners, links, alt, basePath }: { banners: string[]; links?: (string | undefined)[]; alt: string; basePath: string }) {
   if (banners.length === 0) return null;
   if (banners.length === 1) {
+    const href = links?.[0] ? resolveHref(links[0], basePath) : null;
+    const img = (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={banners[0]} alt={alt} fetchPriority="high"
+        className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl" />
+    );
     return (
       <section className="relative overflow-hidden md:pt-6">
         <div className="mx-auto md:max-w-6xl md:px-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={banners[0]} alt={alt} fetchPriority="high"
-            className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl" />
+          {href ? <a href={href} className="block">{img}</a> : img}
         </div>
       </section>
     );
   }
-  return <BannerCarousel banners={banners} alt={alt} />;
+  return <BannerCarousel banners={banners} links={links} alt={alt} basePath={basePath} />;
 }
 
-function BannerCarousel({ banners, alt }: { banners: string[]; alt: string }) {
+function BannerCarousel({ banners, links, alt, basePath }: { banners: string[]; links?: (string | undefined)[]; alt: string; basePath: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
   const paused = useRef(false);
@@ -1043,12 +1049,20 @@ function BannerCarousel({ banners, alt }: { banners: string[]; alt: string }) {
             onPointerUp={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
             onPointerLeave={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
           >
-            {banners.map((src, i) => (
-              <div key={i} className="shrink-0 w-full snap-center aspect-[16/9] bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+            {banners.map((src, i) => {
+              const href = links?.[i] ? resolveHref(links[i], basePath) : null;
+              const img = (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={src} alt={alt} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
-              </div>
-            ))}
+              );
+              return (
+                <div key={i} className="shrink-0 w-full snap-center aspect-[16/9] bg-muted">
+                  {href ? (
+                    <a href={href} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
+                  ) : img}
+                </div>
+              );
+            })}
           </div>
 
           <button type="button" aria-label="Banner anterior" onClick={() => goTo(index - 1)} className={`${arrow} left-2`}>
@@ -1291,12 +1305,20 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [sort, setSort] = useState<string>(sortOption ?? "newest");
   const showSort = pageContent.sort_options?.enabled !== false;
 
-  // Banner source: up to 5 hero_banners (page_content), else the legacy single cover_url.
-  const heroBanners = (() => {
+  // Banner source: up to 5 hero_banners (page_content), else the legacy single
+  // cover_url. Each banner can carry an optional click link (hero_banner_links,
+  // aligned by index); banners + links are filtered together to stay aligned.
+  const { heroBanners, heroBannerLinks } = (() => {
     const raw = pageContent.hero_banners;
-    const list = Array.isArray(raw) ? raw.filter((u): u is string => typeof u === "string" && !!u) : [];
-    const resolved = list.length ? list : business.cover_url ? [business.cover_url] : [];
-    return resolved.slice(0, 5);
+    const linksRaw = pageContent.hero_banner_links;
+    const pairs = (Array.isArray(raw) ? raw : [])
+      .map((url, i) => ({ url, link: Array.isArray(linksRaw) ? linksRaw[i] : undefined }))
+      .filter((p): p is { url: string; link: string | undefined } => typeof p.url === "string" && !!p.url)
+      .slice(0, 5);
+    if (pairs.length === 0 && business.cover_url) {
+      return { heroBanners: [business.cover_url], heroBannerLinks: [undefined as string | undefined] };
+    }
+    return { heroBanners: pairs.map((p) => p.url), heroBannerLinks: pairs.map((p) => p.link) };
   })();
   const hasHero = heroBanners.length > 0 || !!business.tagline;
   // By default a banner shows on its own (molded, no overlay); the merchant can
@@ -1621,7 +1643,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
       {/* Hero */}
       {heroImageOnly ? (
-        <HeroBanners banners={heroBanners} alt={business.store_name ?? business.business_name} />
+        <HeroBanners banners={heroBanners} links={heroBannerLinks} alt={business.store_name ?? business.business_name} basePath={basePath} />
       ) : hasHero ? (
         <section className="relative overflow-hidden">
           <div className="absolute inset-0" style={{ backgroundColor: color }} />

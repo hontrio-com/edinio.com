@@ -151,7 +151,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
     // Mark platform notifications
     const unreadPlatformIds = notifications.filter(n => !n.is_read).map(n => n.id);
     if (unreadPlatformIds.length > 0) {
-      startMarkRead(async () => { await markNotificationsRead(unreadPlatformIds); });
+      startMarkRead(async () => { await markNotificationsRead(unreadPlatformIds); router.refresh(); });
     }
   }
 
@@ -288,7 +288,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                       <div key={notif.id}
                         onClick={() => {
                           if (notif.isUnread && notif.notifData) {
-                            startMarkRead(async () => { await markNotificationsRead([notif.id]); });
+                            startMarkRead(async () => { await markNotificationsRead([notif.id]); router.refresh(); });
                           }
                         }}
                         className="flex items-start gap-3.5 px-5 py-3.5 hover:bg-accent transition-colors border-b border-border/50 last:border-0 cursor-default">

@@ -107,18 +107,18 @@ export default async function PolicyPage({ params }: Props) {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-10">
-        {/* Business branding */}
-        <div className="flex items-center gap-3 mb-8">
+        {/* Business branding — free logo, like the storefront header (no frame, no name) */}
+        <div className="flex items-center mb-8">
           {business.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-              className="w-10 h-10 rounded-xl object-cover border border-border flex-shrink-0" />
+              style={{ height: 40, maxWidth: 40 * 4.2 }} className="w-auto object-contain" />
           ) : (
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
               style={{ backgroundColor: color }}>
               {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
             </div>
           )}
-          <span className="text-sm font-semibold text-foreground">{business.store_name ?? business.business_name}</span>
         </div>
 
         <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">{meta.label}</h1>

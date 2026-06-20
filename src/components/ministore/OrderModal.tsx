@@ -72,6 +72,10 @@ interface Props {
   minOrderAmount?: number | null;
   tiers?: QuantityTier[];
   customizationFields?: CustomizationFieldDef[];
+  /** Items already in the storefront cart, carried into this order. */
+  cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[];
+  /** Called after the order is placed so the caller can clear the cart. */
+  onCartConsumed?: () => void;
 }
 
 const inputCls = "flex-1 px-3 py-2.5 text-sm text-gray-800 bg-white placeholder:text-gray-400 focus:outline-none";
@@ -89,7 +93,7 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, customizationFields }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, customizationFields, cartItems, onCartConsumed }: Props) {
   const color = business.primary_color;
   const hasTiers = tiers && tiers.length > 0;
   const hasCustomization = customizationFields && customizationFields.length > 0;
@@ -124,7 +128,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
   // Derive effective qty and raw subtotal (before discount)
   const effectiveQty = hasTiers ? tiers![selectedTierIdx].qty : quantity;
-  const subtotal = hasTiers ? tiers![selectedTierIdx].price : product.price * quantity;
+  const productSubtotal = hasTiers ? tiers![selectedTierIdx].price : product.price * quantity;
+  // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
+  // (this product + cart) so discount, min-order, free-shipping and total all
+  // account for it; `productSubtotal` stays for this product's own lines.
+  const cart = cartItems ?? [];
+  const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const subtotal = Math.round((productSubtotal + cartSubtotal) * 100) / 100;
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
 
   // Apply discount to subtotal
@@ -159,7 +169,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!open || !sessionId) return;
     const phoneDigits = form.phone.replace(/\D/g, "");
     if (!form.email.includes("@") && phoneDigits.length < 6) return;
-    const unit = effectiveQty > 0 ? Math.round((subtotal / effectiveQty) * 100) / 100 : product.price;
+    const unit = effectiveQty > 0 ? Math.round((productSubtotal / effectiveQty) * 100) / 100 : product.price;
     if (trackTimer.current) clearTimeout(trackTimer.current);
     trackTimer.current = setTimeout(() => {
       void trackAbandonedCart({
@@ -173,7 +183,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
-  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, subtotal, effectiveQty, product.id, product.name, product.price, product.images]);
+  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, effectiveQty, product.id, product.name, product.price, product.images]);
 
   // Reset on open
   useEffect(() => {
@@ -346,8 +356,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         woot_service_id: courierSelection?.wootServiceId,
         woot_courier_name: courierSelection?.wootCourierName,
         woot_service_name: courierSelection?.wootServiceName,
+        additional_items: cart.length > 0 ? cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity })) : undefined,
       });
       if (result.error) { setErrors({ _: result.error }); return; }
+      // Order created with the cart folded in — clear it so it isn't re-ordered.
+      if (cart.length > 0) onCartConsumed?.();
 
       if (paymentMethod !== "cash_on_delivery") {
         const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"
@@ -847,8 +860,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               <div className="rounded-xl p-3 space-y-1.5 text-sm bg-gray-50 border border-gray-200">
                 <div className="flex justify-between text-gray-500">
                   <span>Produs ({effectiveQty} buc)</span>
-                  <span className="font-medium text-gray-900">{subtotal} lei</span>
+                  <span className="font-medium text-gray-900">{productSubtotal} lei</span>
                 </div>
+                {cart.map((ci) => (
+                  <div key={ci.productId} className="flex justify-between text-gray-500">
+                    <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
+                    <span className="font-medium text-gray-900 whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
+                  </div>
+                ))}
                 {extrasTotal > 0 && (
                   <div className="flex justify-between text-gray-500">
                     <span>Optiuni extra</span>

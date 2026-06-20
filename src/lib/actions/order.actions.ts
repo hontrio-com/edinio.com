@@ -134,6 +134,8 @@ export async function placeOrder(data: {
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
+  /** Items carried over from the storefront cart (priced server-side at base price). */
+  additional_items?: { product_id: string; name: string; quantity: number }[];
   payment_method?: string;
   selected_courier?: string;
   courier_label?: string;
@@ -164,11 +166,29 @@ export async function placeOrder(data: {
     return { error: "Produsul nu mai este disponibil. Reincarca pagina." };
   }
 
-  const subtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, data.quantity);
-  if (subtotal === null) {
+  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, data.quantity);
+  if (mainSubtotal === null) {
     logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity }, severity: "warning" });
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
   }
+
+  // Items carried over from the cart (product-page "Comanda" with a non-empty cart).
+  // Priced server-side at the product's current base price — never trusted from the
+  // client (same model as placeCartOrder). The current product is excluded to avoid
+  // double-counting, and unavailable/inactive items are dropped.
+  let cartItems: { product_id: string; name: string; price: number; quantity: number }[] = [];
+  if (data.additional_items?.length) {
+    const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
+    if (ids.length > 0) {
+      const { data: extraProducts } = await admin.from("products").select("id, name, price, is_active").in("id", ids).eq("business_id", data.business_id);
+      const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => [p.id, { name: String(p.name), price: round2(Number(p.price)) }]));
+      cartItems = data.additional_items
+        .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0)
+        .map((i) => ({ product_id: i.product_id, name: extraMap.get(i.product_id)!.name, price: extraMap.get(i.product_id)!.price, quantity: Math.floor(i.quantity) }));
+    }
+  }
+  const cartSubtotal = round2(cartItems.reduce((s, i) => s + i.price * i.quantity, 0));
+  const subtotal = round2(mainSubtotal + cartSubtotal);
 
   // Enforce the merchant's minimum order value (Setari > Livrare) against the authoritative subtotal.
   const minOrder = cfgRow?.min_order_amount != null ? Number(cfgRow.min_order_amount) : null;
@@ -210,12 +230,15 @@ export async function placeOrder(data: {
 
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
-  const stockExp = await expandBundleStock(admin, data.business_id, [{ product_id: data.product_id, quantity: data.quantity }]);
+  const stockExp = await expandBundleStock(admin, data.business_id, [
+    { product_id: data.product_id, quantity: data.quantity },
+    ...cartItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+  ]);
   if ("error" in stockExp) return { error: stockExp.error };
 
   const order_number = await buildOrderNumber(admin, data.business_id);
 
-  const unitPrice = round2(subtotal / data.quantity);
+  const unitPrice = round2(mainSubtotal / data.quantity);
   const allItems = [
     {
       product_id: data.product_id,
@@ -224,6 +247,7 @@ export async function placeOrder(data: {
       quantity: data.quantity,
       ...(data.customization && { customization: data.customization }),
     },
+    ...cartItems,
     ...validatedExtras.map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
@@ -278,7 +302,7 @@ export async function placeOrder(data: {
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
 
   // Reflect stock/availability changes in Google Merchant (if connected).
-  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id]);
+  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.
@@ -293,15 +317,16 @@ export async function placeOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, user_id)")
+      .select("notifications_config, businesses(business_name, store_name, user_id)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; user_id: string } | null;
-      const businessName = biz?.business_name ?? "";
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string } | null;
+      // Customer-facing emails use the public store name, falling back to the legal/account name.
+      const businessName = biz?.store_name || biz?.business_name || "";
 
       let notifyEmail = config.notification_email;
       if (!notifyEmail && biz?.user_id) {
@@ -384,8 +409,9 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     .single();
   if (!order) return { error: "Comanda negasita" };
 
-  const { data: biz } = await supabase.from("businesses").select("id, business_name").eq("id", order.business_id).eq("user_id", user.id).single();
+  const { data: biz } = await supabase.from("businesses").select("id, business_name, store_name").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
+  const storeName = biz.store_name || biz.business_name;
 
   const { error } = await supabase.from("orders")
     .update({ status: data.status as never, payment_status: data.payment_status as never })
@@ -406,7 +432,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       customer_name: order.customer_name,
       total: order.total,
       status: data.status,
-      business_name: biz.business_name,
+      business_name: storeName,
       awb: data.awb,
     }).catch(() => {});
   }
@@ -425,7 +451,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
         sender: smso.sender_id,
         body: defaultStatusSms(data.status, {
           orderNumber: order.order_number,
-          businessName: biz.business_name,
+          businessName: storeName,
           awb: data.awb,
         }),
         type: "transactional",
@@ -480,7 +506,7 @@ export async function sendCustomerNotification(orderId: string, subject: string,
     .single();
   if (!order) return { error: "Comanda negasita" };
 
-  const { data: biz } = await supabase.from("businesses").select("business_name").eq("id", order.business_id).eq("user_id", user.id).single();
+  const { data: biz } = await supabase.from("businesses").select("business_name, store_name").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
   if (!order.customer_email) return { error: "Clientul nu a lasat o adresa de email." };
@@ -488,7 +514,7 @@ export async function sendCustomerNotification(orderId: string, subject: string,
   const res = await sendCustomerMessage(order.customer_email, {
     subject: subject.trim(),
     message: message.trim(),
-    businessName: biz.business_name,
+    businessName: biz.store_name || biz.business_name,
     orderNumber: order.order_number,
   });
   if ("error" in res) return { error: res.error };
@@ -723,15 +749,16 @@ export async function placeCartOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, user_id)")
+      .select("notifications_config, businesses(business_name, store_name, user_id)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; user_id: string } | null;
-      const businessName = biz?.business_name ?? "";
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string } | null;
+      // Customer-facing emails use the public store name, falling back to the legal/account name.
+      const businessName = biz?.store_name || biz?.business_name || "";
 
       let notifyEmail = config.notification_email;
       if (!notifyEmail && biz?.user_id) {

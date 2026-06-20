@@ -93,6 +93,7 @@ interface StorePolicies {
 
 interface CartItem {
   productId: string;
+  slug?: string;
   name: string;
   price: number;
   imageUrl: string | null;
@@ -677,9 +678,9 @@ function CartCheckoutModal({
 }
 
 function CartDrawer({
-  open, onClose, color, onCheckout, shippingCost, freeShippingThreshold, minOrderAmount,
+  open, onClose, color, basePath, onCheckout, shippingCost, freeShippingThreshold, minOrderAmount,
 }: {
-  open: boolean; onClose: () => void; color: string; onCheckout: () => void;
+  open: boolean; onClose: () => void; color: string; basePath: string; onCheckout: () => void;
   shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null;
 }) {
   const { items, removeItem, updateQty, total, count } = useCart();
@@ -743,19 +744,31 @@ function CartDrawer({
             </div>
           ) : (
             <div className="space-y-4">
-              {items.map((item) => (
-                <div key={item.productId} className="flex items-start gap-3">
-                  <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted border border-border">
-                    {item.imageUrl ? (
-                      <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                    )}
+              {items.map((item) => {
+                const href = item.slug ? `${basePath}/product/${item.slug}` : null;
+                const thumbCls = "relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted border border-border";
+                const thumb = item.imageUrl ? (
+                  <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Package className="h-5 w-5 text-muted-foreground" />
                   </div>
+                );
+                return (
+                <div key={item.productId} className="flex items-start gap-3">
+                  {href ? (
+                    <a href={href} onClick={onClose} className={thumbCls}>{thumb}</a>
+                  ) : (
+                    <div className={thumbCls}>{thumb}</div>
+                  )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground leading-snug truncate">{item.name}</p>
+                    {href ? (
+                      <a href={href} onClick={onClose} className="block">
+                        <p className="text-sm font-medium text-foreground leading-snug truncate hover:opacity-70 transition-opacity">{item.name}</p>
+                      </a>
+                    ) : (
+                      <p className="text-sm font-medium text-foreground leading-snug truncate">{item.name}</p>
+                    )}
                     <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(item.price)}</p>
                     <div className="flex items-center gap-2 mt-2">
                       <button type="button" aria-label="Scade cantitatea" onClick={() => updateQty(item.productId, item.quantity - 1)}
@@ -774,7 +787,8 @@ function CartDrawer({
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -945,6 +959,7 @@ interface Props {
   storeSettings: StoreSettings | null;
   basePath?: string;
   categories?: CategoryNode[];
+  initialPage?: number;
 }
 
 // Hero banners. One banner keeps the molded look (complete image, any ratio).
@@ -1136,7 +1151,7 @@ function CategoryScroller({ children, className }: { children: ReactNode; classN
   );
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1 }: Props) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -1145,7 +1160,18 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [categoryFilter, setCategoryFilter] = useState("toate");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  // Page is seeded from the URL (?page=N, read server-side as initialPage) so
+  // returning from a product page (browser back) lands on the same page instead
+  // of resetting to 1. goToPage keeps the URL in sync without a navigation.
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const goToPage = useCallback((n: number) => {
+    setCurrentPage(n);
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (n <= 1) sp.delete("page"); else sp.set("page", String(n));
+    const qs = sp.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
+  }, []);
 
   // Bundle availability is derived from components (best-effort on the storefront;
   // the authoritative check happens at order time). Resolve components from the
@@ -1469,13 +1495,19 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     currentPage * PRODUCTS_PER_PAGE,
   );
 
-  // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, categoryFilter, sort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
+  // Reset to page 1 when filters change — but not on the initial mount, which
+  // would clobber a page restored from the URL.
+  const filtersInitRef = useRef(true);
+  useEffect(() => {
+    if (filtersInitRef.current) { filtersInitRef.current = false; return; }
+    goToPage(1);
+  }, [search, categoryFilter, sort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, goToPage]);
 
   function handleAddToCart(product: Product) {
     const images = Array.isArray(product.images) ? product.images : [];
     addItem({
       productId: product.id,
+      slug: product.slug ?? undefined,
       name: product.name,
       price: Number(product.price),
       imageUrl: images[0] ? String(images[0]) : null,
@@ -1932,7 +1964,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 mt-8">
                   <button
-                    onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    onClick={() => { goToPage(Math.max(1, currentPage - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                     disabled={currentPage === 1}
                     className="px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors"
                   >
@@ -1951,7 +1983,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                       ) : (
                         <button
                           key={p}
-                          onClick={() => { setCurrentPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                          onClick={() => { goToPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                           className="min-w-[36px] h-9 text-sm rounded-lg border transition-colors"
                           style={currentPage === p
                             ? { backgroundColor: color, borderColor: color, color: "#fff" }
@@ -1962,7 +1994,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                       )
                     )}
                   <button
-                    onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    onClick={() => { goToPage(Math.min(totalPages, currentPage + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                     disabled={currentPage === totalPages}
                     className="px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors"
                   >
@@ -2288,6 +2320,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         color={color}
+        basePath={basePath}
         onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count }); ttqTrack("InitiateCheckout", { value: total, currency: "RON" }); gtagEvent("begin_checkout", { currency: "RON", value: total }); }}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}

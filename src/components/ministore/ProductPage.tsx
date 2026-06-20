@@ -380,6 +380,17 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
+  // Cart carried over from the storefront (localStorage) so ordering from a product
+  // page includes what the customer already added. Current product excluded to avoid
+  // duplication; read once on mount (storefront cart is built before reaching here).
+  const [cartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(`cart_${business.slug}`);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((i) => i?.productId && i.productId !== product.id) : [];
+    } catch { return []; }
+  });
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [zoomPos] = useState<{x: number; y: number} | null>(null);
   const touchStartX = useRef<number>(0);
@@ -1047,6 +1058,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         minOrderAmount={minOrderAmount}
         tiers={quantityTiers}
         customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
+        cartItems={cartItems}
+        onCartConsumed={() => { try { localStorage.removeItem(`cart_${business.slug}`); } catch {} }}
       />
     </div>
   );

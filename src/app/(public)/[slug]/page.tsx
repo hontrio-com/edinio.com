@@ -6,7 +6,7 @@ import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { headers } from "next/headers";
 
-interface Props { params: Promise<{ slug: string }>; }
+interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string }>; }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -38,8 +38,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function SlugPage({ params }: Props) {
+export default async function SlugPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const initialPage = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const supabase = await createClient();
 
   const [{ data: business }, { data: { user } }] = await Promise.all([
@@ -171,6 +173,7 @@ export default async function SlugPage({ params }: Props) {
         storeSettings={storeSettings}
         basePath={basePath}
         categories={categoriesData ?? []}
+        initialPage={initialPage}
       />
     </>
   );

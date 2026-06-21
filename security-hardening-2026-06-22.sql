@@ -5,6 +5,11 @@
 -- defense-in-depth / hardening changes. NONE fixes an active data leak — RLS
 -- was verified to gate every table correctly. Apply in tiers; test after each.
 --
+-- STATUS: Tier A + Tier B APPLIED 2026-06-22 via MCP (verified: storefront still
+-- 200 OK with products; anon kept only on storefront tables; functions pinned;
+-- trigger functions no longer anon/auth-executable; is_admin retained for RLS).
+-- Advisor security lints dropped 83 -> 55 after apply. Tier C is NOT applied.
+--
 -- HOW TO APPLY: review each tier, then run via Supabase SQL editor or
 -- `apply_migration`. Tiers A and B are low risk. Tier C needs app testing.
 -- ============================================================================
@@ -29,9 +34,11 @@ alter function public.update_updated_at_column()    set search_path = public, pg
 -- These fire from triggers regardless of EXECUTE grant, so revoking is safe.
 -- NOTE: is_admin() is DELIBERATELY EXCLUDED — it is called inside RLS policies
 -- (e.g. admins_read_all_profiles), so `authenticated` MUST keep EXECUTE on it.
-revoke execute on function public.handle_new_user()                from anon, authenticated;
-revoke execute on function public.handle_support_message_insert()  from anon, authenticated;
-revoke execute on function public.update_support_ticket_updated_at() from anon, authenticated;
+-- NOTE: the EXECUTE grant is to PUBLIC, so it must be revoked FROM PUBLIC
+-- (revoking from anon/authenticated alone has no effect — they inherit via PUBLIC).
+revoke execute on function public.handle_new_user()                  from public;
+revoke execute on function public.handle_support_message_insert()    from public;
+revoke execute on function public.update_support_ticket_updated_at() from public;
 
 
 -- ----------------------------------------------------------------------------

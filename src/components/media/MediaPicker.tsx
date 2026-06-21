@@ -111,14 +111,14 @@ export function MediaPicker({
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <div className="flex items-center gap-1">
             {(["library", "upload"] as const).map((t) => (
-              <button key={t} onClick={() => setTab(t)}
+              <button key={t} type="button" onClick={() => setTab(t)}
                 className={cn("px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
                   tab === t ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground")}>
                 {t === "library" ? "Biblioteca" : "Incarca"}
               </button>
             ))}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
 
         {tab === "library" ? (
@@ -164,7 +164,7 @@ export function MediaPicker({
           </>
         ) : (
           <div className="p-5 overflow-y-auto flex-1">
-            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
               className="w-full aspect-[2/1] max-h-64 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-primary/5 transition-colors disabled:opacity-50">
               {uploading ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <Upload className="h-7 w-7 text-muted-foreground" />}
               <span className="text-sm text-muted-foreground font-medium">
@@ -181,8 +181,8 @@ export function MediaPicker({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border">
           <span className="text-xs text-muted-foreground">{selected.size} selectat(e)</span>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent">Anuleaza</button>
-            <button onClick={confirm} disabled={selected.size === 0}
+            <button type="button" onClick={onClose} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent">Anuleaza</button>
+            <button type="button" onClick={confirm} disabled={selected.size === 0}
               className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40">
               Adauga {selected.size > 0 ? `(${selected.size})` : ""}
             </button>

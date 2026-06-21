@@ -114,16 +114,15 @@ export async function registerMedia(input: RegisterMediaInput): Promise<{ ok: bo
 
 /* ─── List ────────────────────────────────────────────────────────────────────── */
 
+// Plain list — NO reconcile. This is the hot path: it powers the MediaPicker that
+// opens inside every product/bundle/category form, so it must stay cheap (a single
+// indexed select). Reconciliation/backfill of legacy or externally-added media now
+// happens only on the Media Library page (getMediaPageData) and the manual
+// "Re-scaneaza" button — not on every picker open. New uploads register themselves
+// via registerMedia, so the picker still shows them immediately.
 export async function listMedia(): Promise<{ rows: MediaRow[] } | { error: string }> {
   const ctx = await resolveBusiness();
   if (!ctx.ok) return { error: ctx.error };
-
-  // Reconcile before listing: import any store media not yet catalogued (legacy
-  // Supabase Storage images, category images, freshly imported products, …). The
-  // backfill is idempotent (upsert, ignore duplicates) and a near no-op once the
-  // library is in sync, so it's safe to run on every load — keeps the library
-  // self-healing instead of going stale after the first upload.
-  await backfillMediaLibrary();
 
   const { data, error } = await ctx.supabase
     .from("media_library")
@@ -218,18 +217,22 @@ export async function deleteMedia(ids: string[]): Promise<{ success: true; delet
   return { success: true, deleted: rows?.length ?? 0 };
 }
 
-/* ─── Usage (on-demand; powers the delete warning + "used in" badge) ──────────── */
+/* ─── Shared catalog scan (one fetch powers BOTH usage + backfill) ────────────── */
 
-export async function getMediaUsage(): Promise<{ usage: UsageMap } | { error: string }> {
-  const ctx = await resolveBusiness();
-  if (!ctx.ok) return { error: ctx.error };
-  const { supabase, businessId } = ctx;
+interface CatalogData {
+  products: { id: string; name: string; images: unknown; page_sections: unknown }[];
+  pages: { id: string; title: string; blocks: unknown; seo: unknown }[];
+  biz: { logo_url: string | null; cover_url: string | null; gallery: unknown } | null;
+  settings: Record<string, unknown> | null;
+  categories: { id: string; name: string; image_url: string | null }[];
+}
 
-  const usage: UsageMap = {};
-  const add = (urls: Set<string>, ref: UsageRef) => {
-    for (const u of urls) (usage[u] ??= []).push(ref);
-  };
-
+/**
+ * Fetch every store surface that can reference media (products, pages, business,
+ * settings, categories) in one parallel batch. Usage computation and backfill
+ * both derive from this single scan instead of querying the catalog twice.
+ */
+async function fetchCatalog(supabase: SupabaseServerClient, businessId: string): Promise<CatalogData> {
   const [products, pages, biz, settings, categories] = await Promise.all([
     supabase.from("products").select("id, name, images, page_sections").eq("business_id", businessId),
     supabase.from("custom_pages").select("id, title, blocks, seo").eq("business_id", businessId),
@@ -237,56 +240,58 @@ export async function getMediaUsage(): Promise<{ usage: UsageMap } | { error: st
     supabase.from("store_settings").select("*").eq("business_id", businessId).maybeSingle(),
     supabase.from("categories").select("id, name, image_url").eq("business_id", businessId),
   ]);
+  return {
+    products: products.data ?? [],
+    pages: pages.data ?? [],
+    biz: biz.data ?? null,
+    settings: (settings.data as Record<string, unknown> | null) ?? null,
+    categories: categories.data ?? [],
+  };
+}
 
-  for (const p of products.data ?? []) {
+/** Map every referenced media URL → where it is used (delete warning + "used in" badge). */
+function computeUsage(catalog: CatalogData): UsageMap {
+  const usage: UsageMap = {};
+  const add = (urls: Set<string>, ref: UsageRef) => {
+    for (const u of urls) (usage[u] ??= []).push(ref);
+  };
+  for (const p of catalog.products) {
     add(collectMediaUrls([p.images, p.page_sections]), { kind: "product", id: p.id, label: `Produs: ${p.name}` });
   }
-  for (const pg of pages.data ?? []) {
+  for (const pg of catalog.pages) {
     add(collectMediaUrls([pg.blocks, pg.seo]), { kind: "page", id: pg.id, label: `Pagina: ${pg.title}` });
   }
-  for (const c of categories.data ?? []) {
+  for (const c of catalog.categories) {
     add(collectMediaUrls(c.image_url), { kind: "store", id: c.id, label: `Categorie: ${c.name}` });
   }
-  if (biz.data) {
-    add(collectMediaUrls([biz.data.logo_url, biz.data.cover_url, biz.data.gallery]), {
+  if (catalog.biz) {
+    add(collectMediaUrls([catalog.biz.logo_url, catalog.biz.cover_url, catalog.biz.gallery]), {
       kind: "store", id: null, label: "Magazin (logo / copertă / galerie)",
     });
   }
-  if (settings.data) {
-    add(collectMediaUrls(settings.data), { kind: "store", id: null, label: "Setări magazin" });
+  if (catalog.settings) {
+    add(collectMediaUrls(catalog.settings), { kind: "store", id: null, label: "Setări magazin" });
   }
-
-  return { usage };
+  return usage;
 }
 
-/* ─── Backfill (idempotent scan + upsert of existing media) ───────────────────── */
-
-export async function backfillMediaLibrary(): Promise<{ success: true; added: number } | { error: string }> {
-  const ctx = await resolveBusiness();
-  if (!ctx.ok) return { error: ctx.error };
-  const { supabase, businessId, userId } = ctx;
-
-  const [products, pages, biz, settings, categories, existing] = await Promise.all([
-    supabase.from("products").select("images, page_sections").eq("business_id", businessId),
-    supabase.from("custom_pages").select("blocks, seo").eq("business_id", businessId),
-    supabase.from("businesses").select("logo_url, cover_url, gallery").eq("id", businessId).maybeSingle(),
-    supabase.from("store_settings").select("*").eq("business_id", businessId).maybeSingle(),
-    supabase.from("categories").select("image_url").eq("business_id", businessId),
-    supabase.from("media_library").select("r2_key").eq("business_id", businessId),
-  ]);
-
+/** Every distinct media URL referenced anywhere in the store (for backfill). */
+function collectCatalogUrls(catalog: CatalogData): Set<string> {
   const all = new Set<string>();
-  for (const p of products.data ?? []) collectMediaUrls([p.images, p.page_sections], all);
-  for (const pg of pages.data ?? []) collectMediaUrls([pg.blocks, pg.seo], all);
-  for (const c of categories.data ?? []) collectMediaUrls(c.image_url, all);
-  if (biz.data) collectMediaUrls([biz.data.logo_url, biz.data.cover_url, biz.data.gallery], all);
-  if (settings.data) collectMediaUrls(settings.data, all);
+  for (const p of catalog.products) collectMediaUrls([p.images, p.page_sections], all);
+  for (const pg of catalog.pages) collectMediaUrls([pg.blocks, pg.seo], all);
+  for (const c of catalog.categories) collectMediaUrls(c.image_url, all);
+  if (catalog.biz) collectMediaUrls([catalog.biz.logo_url, catalog.biz.cover_url, catalog.biz.gallery], all);
+  if (catalog.settings) collectMediaUrls(catalog.settings, all);
+  return all;
+}
 
-  const known = new Set((existing.data ?? []).map((r) => r.r2_key));
-  const rows = [...all]
+/** Build media_library insert rows for referenced URLs not yet catalogued. */
+function buildBackfillRows(all: Set<string>, knownKeys: Set<string>, businessId: string, userId: string) {
+  return [...all]
     .map((url) => ({ url, parsed: parseMediaUrl(url) }))
     .filter((x): x is { url: string; parsed: { provider: "r2" | "supabase"; key: string } } =>
-      !!x.parsed && isStoreMediaKey(x.parsed.key) && !known.has(x.parsed.key))
+      !!x.parsed && isStoreMediaKey(x.parsed.key) && !knownKeys.has(x.parsed.key))
     .map(({ url, parsed }) => ({
       business_id: businessId,
       user_id: userId,
@@ -296,7 +301,71 @@ export async function backfillMediaLibrary(): Promise<{ success: true; added: nu
       folder: inferFolder(parsed.key),
       file_name: parsed.key.split("/").pop() ?? null,
     }));
+}
 
+/* ─── Usage (on-demand; powers the delete warning + "used in" badge) ──────────── */
+
+export async function getMediaUsage(): Promise<{ usage: UsageMap } | { error: string }> {
+  const ctx = await resolveBusiness();
+  if (!ctx.ok) return { error: ctx.error };
+  const catalog = await fetchCatalog(ctx.supabase, ctx.businessId);
+  return { usage: computeUsage(catalog) };
+}
+
+/* ─── Combined page payload (one auth + one catalog scan for the Media page) ───── */
+
+/**
+ * Powers the Media Library page in a single round of work: resolves the business
+ * once, scans the catalog once, then reconciles (backfill) and computes usage from
+ * that same scan — instead of the page firing listMedia + getMediaUsage separately
+ * (which doubled the auth lookup and scanned the whole catalog twice).
+ */
+export async function getMediaPageData(): Promise<{ rows: MediaRow[]; usage: UsageMap } | { error: string }> {
+  const ctx = await resolveBusiness();
+  if (!ctx.ok) return { error: ctx.error };
+  const { supabase, businessId, userId } = ctx;
+
+  const [catalog, existing] = await Promise.all([
+    fetchCatalog(supabase, businessId),
+    supabase.from("media_library").select("r2_key").eq("business_id", businessId),
+  ]);
+
+  // Self-healing reconcile: catalogue any store media not yet in the library
+  // (legacy Supabase Storage, category images, freshly imported products, …).
+  const known = new Set((existing.data ?? []).map((r) => r.r2_key));
+  const newRows = buildBackfillRows(collectCatalogUrls(catalog), known, businessId, userId);
+  if (newRows.length > 0) {
+    await supabase.from("media_library").upsert(newRows, { onConflict: "business_id,r2_key", ignoreDuplicates: true });
+  }
+
+  const { data, error } = await supabase
+    .from("media_library")
+    .select("*")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false })
+    .limit(5000);
+  if (error) {
+    logError({ action: "getMediaPageData", message: error.message, userId });
+    return { error: "Nu am putut incarca biblioteca." };
+  }
+
+  return { rows: data ?? [], usage: computeUsage(catalog) };
+}
+
+/* ─── Backfill (idempotent scan + upsert of existing media; manual "Re-scaneaza") ─ */
+
+export async function backfillMediaLibrary(): Promise<{ success: true; added: number } | { error: string }> {
+  const ctx = await resolveBusiness();
+  if (!ctx.ok) return { error: ctx.error };
+  const { supabase, businessId, userId } = ctx;
+
+  const [catalog, existing] = await Promise.all([
+    fetchCatalog(supabase, businessId),
+    supabase.from("media_library").select("r2_key").eq("business_id", businessId),
+  ]);
+
+  const known = new Set((existing.data ?? []).map((r) => r.r2_key));
+  const rows = buildBackfillRows(collectCatalogUrls(catalog), known, businessId, userId);
   if (rows.length === 0) return { success: true, added: 0 };
 
   const { error } = await supabase

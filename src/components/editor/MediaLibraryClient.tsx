@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
-  listMedia, getMediaUsage, updateMediaMeta, deleteMedia, backfillMediaLibrary,
+  getMediaPageData, updateMediaMeta, deleteMedia, backfillMediaLibrary,
   type MediaRow, type UsageMap,
 } from "@/lib/actions/media.actions";
 
@@ -49,9 +49,9 @@ export function MediaLibraryClient() {
 
   async function load() {
     setLoading(true);
-    const [m, u] = await Promise.all([listMedia(), getMediaUsage()]);
-    if ("rows" in m) setRows(m.rows); else toast.error(m.error);
-    if ("usage" in u) setUsage(u.usage);
+    const res = await getMediaPageData();
+    if ("rows" in res) { setRows(res.rows); setUsage(res.usage); }
+    else toast.error(res.error);
     setLoading(false);
   }
 

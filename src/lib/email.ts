@@ -358,6 +358,45 @@ export async function sendPageFormEmail(
 
 const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.com";
 
+export async function sendMigrationLeadToAdmin(data: {
+  name: string;
+  phone: string;
+  platform: string;
+  productsCount: string;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const field = (label: string, value: string) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
+        <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">${esc(label)}</span>
+        <p style="margin:3px 0 0 0;font-size:15px;color:#18181b;font-weight:500;">${esc(value) || "-"}</p>
+      </td>
+    </tr>`;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cerere noua de migrare</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Un client doreste sa migreze magazinul la Edinio. Suna-l cat mai repede.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
+      ${field("Nume complet", data.name)}
+      ${field("Numar de telefon", data.phone)}
+      ${field("Platforma actuala", data.platform)}
+      ${field("Numar aproximativ de produse", data.productsCount)}
+    </table>
+    <div style="text-align:center;margin-top:24px;">
+      <a href="tel:${esc(data.phone.replace(/\s/g, ""))}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Suna clientul
+      </a>
+    </div>
+  `;
+  await getResend().emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: `[Migrare] ${data.name} — ${data.phone} (${data.platform})`,
+    html: baseTemplate(content),
+  });
+}
+
 export async function sendNewSupportTicketToAdmin(data: {
   ticketId: string;
   subject: string;

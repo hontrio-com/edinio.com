@@ -27,7 +27,7 @@ const NON_STORE_SEGMENTS = new Set([
   "dashboard", "login", "register", "forgot-password", "reset-password",
   "onboarding", "admin",
   "despre", "preturi", "contact", "termeni", "cookies", "gdpr",
-  "confidentialitate", "start", "demo",
+  "confidentialitate", "start", "migrare", "demo",
 ]);
 
 export async function proxy(request: NextRequest) {

@@ -8,13 +8,13 @@ import {
   Crown,
   ArrowRight,
   PackageCheck,
-  ShieldCheck,
   Headphones,
 } from "lucide-react";
-import { MigrationForm } from "@/components/landing/MigrationForm";
+import { Logo } from "@/components/ui/Logo";
 import { MigrationHero } from "@/components/landing/MigrationHero";
 import { MigrationPains } from "@/components/landing/MigrationPains";
 import { MigrationOffer } from "@/components/landing/MigrationOffer";
+import { MigrationFormSection } from "@/components/landing/MigrationFormSection";
 
 export const metadata: Metadata = {
   title: "Migreaza-ti magazinul la Edinio - migrare gratuita in 24 de ore",
@@ -202,29 +202,22 @@ export default function MigrarePage() {
       </section>
 
       {/* Formular */}
-      <section id="formular" className="px-4 pb-16 max-w-md mx-auto scroll-mt-8">
-        <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Completeaza si te sunam noi</h2>
-          <p className="mt-2 text-gray-500">
-            Lasa-ne numarul tau si un specialist te contacteaza pentru migrarea gratuita.
+      <MigrationFormSection />
+
+      {/* Footer */}
+      <footer className="border-t border-gray-100 px-4 py-8">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <Logo size="sm" />
+          <p className="text-xs text-gray-400">
+            &copy; {new Date().getFullYear()} Edinio.com. Toate drepturile rezervate.
           </p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 shadow-sm">
-          <MigrationForm />
-        </div>
-
-        {/* Garantie */}
-        <div className="mt-6 flex items-start gap-3 rounded-2xl bg-primary/5 border border-primary/15 p-5">
-          <ShieldCheck className="h-6 w-6 text-primary flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-gray-900">Garantie 30 de zile</p>
-            <p className="mt-1 text-sm text-gray-600">
-              Daca in 30 de zile nu esti multumit, iti returnam banii. Fara intrebari.
-            </p>
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <Link href="/termeni" className="hover:text-primary transition-colors">Termeni</Link>
+            <Link href="/confidentialitate" className="hover:text-primary transition-colors">Confidentialitate</Link>
+            <Link href="/contact" className="hover:text-primary transition-colors">Contact</Link>
           </div>
         </div>
-      </section>
+      </footer>
     </div>
   );
 }

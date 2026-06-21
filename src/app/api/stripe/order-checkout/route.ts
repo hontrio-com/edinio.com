@@ -37,7 +37,12 @@ export async function POST(request: NextRequest) {
   }
 
   const slug = business?.slug ?? "";
-  const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
+  // Always build redirect URLs from the fixed platform host (like Netopia/iPay),
+  // never the request origin. If the customer is on a store's custom domain, the
+  // origin would be that domain and the proxy would rewrite `/{slug}/confirm` a
+  // second time into `/{slug}/{slug}/confirm` → 404. The proxy 307-redirects the
+  // platform `/{slug}/...` path to the custom domain when one is configured.
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com";
 
   const session = await stripe.checkout.sessions.create(
     {

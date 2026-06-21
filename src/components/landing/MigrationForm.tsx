@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ChevronDown, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
 import { submitMigrationLead } from "@/lib/actions/migration.actions";
+import { platformFbq } from "@/components/platform/PlatformMetaPixel";
+import { platformTtq } from "@/components/platform/PlatformTikTokPixel";
 
 const PLATFORMS = ["Shopify", "Gomag", "MerchantPro", "WooCommerce", "Sellavi", "Alta"];
 
@@ -22,6 +24,9 @@ export function MigrationForm() {
     const res = await submitMigrationLead({ name, phone, platform, productsCount });
     setLoading(false);
     if (res.ok) {
+      // Conversion tracking for the META migration campaign (+ TikTok)
+      platformFbq("Lead", { content_name: "Migrare", content_category: platform || "necunoscut" });
+      platformTtq("SubmitForm", { content_name: "Migrare" });
       setDone(true);
     } else {
       setError(res.error);

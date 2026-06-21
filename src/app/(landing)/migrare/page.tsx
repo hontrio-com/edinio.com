@@ -11,6 +11,7 @@ import {
   Clock,
   TrendingUp,
   ShieldCheck,
+  Headphones,
 } from "lucide-react";
 import { MigrationForm } from "@/components/landing/MigrationForm";
 import { MigrationHero } from "@/components/landing/MigrationHero";
@@ -103,6 +104,16 @@ const COMPARISON = [
 export default function MigrarePage() {
   return (
     <div className="min-h-screen bg-white">
+      {/* Announcement bar */}
+      <div className="bg-primary text-white">
+        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center justify-center gap-2 text-center">
+          <Headphones className="h-3.5 w-3.5 flex-shrink-0" />
+          <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
+            Suport si mentenanta gratuita 7 zile din 7
+          </p>
+        </div>
+      </div>
+
       {/* Hero */}
       <MigrationHero />
 

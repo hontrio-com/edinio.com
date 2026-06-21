@@ -13,6 +13,7 @@ import {
 import { MigrationForm } from "@/components/landing/MigrationForm";
 import { MigrationHero } from "@/components/landing/MigrationHero";
 import { MigrationPains } from "@/components/landing/MigrationPains";
+import { MigrationOffer } from "@/components/landing/MigrationOffer";
 
 export const metadata: Metadata = {
   title: "Migreaza-ti magazinul la Edinio - migrare gratuita in 24 de ore",
@@ -20,15 +21,6 @@ export const metadata: Metadata = {
     "Iti migram toate produsele gratuit, in 24 de ore. Fara comisioane, fara costuri ascunse, pret fix pe viata. Mentenanta gratuita si suport 7 zile din 7.",
   alternates: { canonical: "https://www.edinio.com/migrare" },
 };
-
-const OFFER = [
-  "Migrare completa a produselor, o facem noi",
-  "Fara contract pe termen lung, platesti lunar si anulezi oricand",
-  "Magazin live in 24 de ore",
-  "Pret fix pe viata, nu creste niciodata",
-  "Mentenanta gratuita pe viata",
-  "Suport 7 zile din 7, raspuns in ore, nu in zile",
-];
 
 const PLANS = [
   {
@@ -101,26 +93,7 @@ export default function MigrarePage() {
       <MigrationPains />
 
       {/* Oferta de migrare */}
-      <section className="px-4 pb-16 max-w-3xl mx-auto">
-        <div className="bg-white border border-gray-200 rounded-3xl p-8 sm:p-10">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 text-center">
-            Ce primesti cand migrezi la Edinio
-          </h2>
-          <ul className="mt-8 space-y-4">
-            {OFFER.map((item) => (
-              <li key={item} className="flex items-start gap-3">
-                <span className="mt-0.5 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Check className="h-3.5 w-3.5 text-primary" />
-                </span>
-                <span className="text-[15px] text-gray-700">{item}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-8 text-center text-lg font-bold text-gray-900">
-            Fara perioada de tranzitie. Fara batai de cap. Fara sa pierzi nimic.
-          </p>
-        </div>
-      </section>
+      <MigrationOffer />
 
       {/* Preturi */}
       <section className="px-4 pb-16 max-w-5xl mx-auto">

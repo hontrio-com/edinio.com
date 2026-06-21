@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyState, exchangeCode } from "@/lib/google-merchant/oauth";
-import { listAccounts, listDataSources, createApiDataSource, createNotificationSubscription } from "@/lib/google-merchant/client";
+import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription } from "@/lib/google-merchant/client";
 import { DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 
@@ -49,6 +49,8 @@ export async function GET(req: NextRequest) {
   // Auto-connect when there's exactly one account.
   if (accounts.length === 1) {
     const acc = accounts[0];
+    // v1 prerequisite: register our GCP project against this account (best-effort).
+    await registerGcp(tok.accessToken, acc.id, config.connected_email);
     let dataSourceName: string | undefined;
     const list = await listDataSources(tok.accessToken, acc.id);
     if (!("error" in list)) {

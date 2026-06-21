@@ -83,7 +83,8 @@ export function toGoogleProductInput(
   if (images.length > 1) attributes.additionalImageLinks = images.slice(1, 10);
   const googleCat = g.google_product_category || (product.category ? config.category_map?.[product.category] : undefined);
   if (googleCat) attributes.googleProductCategory = googleCat;
-  if (g.gtin) attributes.gtin = g.gtin;
+  // v1 renamed the single `gtin` attribute to a `gtins` array.
+  if (g.gtin) attributes.gtins = [g.gtin];
   if (g.mpn) attributes.mpn = g.mpn;
   if (g.gender) attributes.gender = g.gender;
   if (g.age_group) attributes.ageGroup = g.age_group;

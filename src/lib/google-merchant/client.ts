@@ -2,11 +2,13 @@
 // (merchantapi.googleapis.com). Versions are centralized so they're easy to bump.
 
 const BASE = "https://merchantapi.googleapis.com";
+// Merchant API v1 (the v1beta sub-APIs were discontinued 2026-02-28).
+// Migration guide: https://developers.google.com/merchant/api/guides/compatibility/migrate-v1beta-v1
 const V = {
-  accounts: "accounts/v1beta",
-  datasources: "datasources/v1beta",
-  products: "products/v1beta",
-  notifications: "notifications/v1beta",
+  accounts: "accounts/v1",
+  datasources: "datasources/v1",
+  products: "products/v1",
+  notifications: "notifications/v1",
 };
 
 export type ApiResult<T = Record<string, unknown>> = { data: T } | { error: string; status: number };
@@ -44,6 +46,18 @@ async function call<T = Record<string, unknown>>(
 export function listAccounts(accessToken: string) {
   return call<{ accounts?: { name: string; accountId?: string; accountName?: string }[] }>(
     accessToken, "GET", `/${V.accounts}/accounts`,
+  );
+}
+
+// v1 prerequisite: register the calling GCP project against the merchant account
+// before other v1 write operations. Idempotent in practice — re-registering an
+// already-registered project returns an ALREADY_EXISTS-style error the caller
+// should treat as success. `developerEmail` gets the API_DEVELOPER role.
+export function registerGcp(accessToken: string, accountId: string, developerEmail?: string) {
+  return call<{ name?: string }>(
+    accessToken, "POST",
+    `/${V.accounts}/accounts/${accountId}/developerRegistration:registerGcp`,
+    developerEmail ? { developerEmail } : {},
   );
 }
 

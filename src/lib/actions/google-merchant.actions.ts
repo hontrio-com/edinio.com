@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildAuthUrl, signState, googleMerchantConfigured, getAccessToken } from "@/lib/google-merchant/oauth";
-import { listAccounts, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription } from "@/lib/google-merchant/client";
+import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription } from "@/lib/google-merchant/client";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 import {
   DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig,
@@ -175,6 +175,10 @@ export async function selectMerchantAccount(
 
   const feedLabel = config.feed_label || DEFAULT_FEED_LABEL;
   const lang = config.content_language || DEFAULT_CONTENT_LANGUAGE;
+
+  // v1 prerequisite: register our GCP project against this account before any
+  // write op. Best-effort — already-registered returns an error we can ignore.
+  await registerGcp(token, accountId, config.connected_email);
 
   // Ensure an API data source exists (reuse one named "Edinio" if present).
   let dataSourceName = config.data_source_name;

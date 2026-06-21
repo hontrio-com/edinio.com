@@ -287,6 +287,38 @@
   100% { transform: translateX(-50%); }
 }
 
+/* ─── /migrare hero: animated gradient text + button shine ─────────────── */
+@keyframes migrare-text-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes migrare-btn-shine {
+  0% { transform: translateX(-150%) skewX(-20deg); }
+  60%, 100% { transform: translateX(250%) skewX(-20deg); }
+}
+.migrare-gradient-text {
+  background-image: linear-gradient(110deg, #1AB554 20%, #34d399 40%, #6ee7b7 50%, #34d399 60%, #1AB554 80%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: migrare-text-shimmer 4s linear infinite;
+}
+.migrare-btn-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+  animation: migrare-btn-shine 3.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .migrare-gradient-text { animation: none; }
+  .migrare-btn-shine::after { animation: none; opacity: 0; }
+}
+
 /* ─── Custom-page button effects (CSS-only so blocks stay server-rendered) ─── */
 @keyframes edinio-fx-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 @keyframes edinio-fx-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }

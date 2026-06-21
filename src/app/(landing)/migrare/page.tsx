@@ -7,15 +7,13 @@ import {
   Crown,
   ArrowRight,
   PackageCheck,
-  Wrench,
-  Lock,
-  BadgePercent,
   Banknote,
   Clock,
   TrendingUp,
   ShieldCheck,
 } from "lucide-react";
 import { MigrationForm } from "@/components/landing/MigrationForm";
+import { MigrationHero } from "@/components/landing/MigrationHero";
 
 export const metadata: Metadata = {
   title: "Migreaza-ti magazinul la Edinio - migrare gratuita in 24 de ore",
@@ -23,13 +21,6 @@ export const metadata: Metadata = {
     "Iti migram toate produsele gratuit, in 24 de ore. Fara comisioane, fara costuri ascunse, pret fix pe viata. Mentenanta gratuita si suport 7 zile din 7.",
   alternates: { canonical: "https://www.edinio.com/migrare" },
 };
-
-const HERO_BADGES = [
-  { icon: PackageCheck, label: "Migrare gratuita" },
-  { icon: Wrench, label: "Mentenanta gratuita pe viata" },
-  { icon: Lock, label: "Pret fix, nu creste niciodata" },
-  { icon: BadgePercent, label: "0% comision per vanzare" },
-];
 
 const PAINS = [
   {
@@ -113,39 +104,10 @@ export default function MigrarePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
       {/* Hero */}
-      <section className="pt-16 sm:pt-20 pb-12 px-4 text-center max-w-3xl mx-auto">
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 tracking-tight leading-tight">
-          Muta-ti magazinul la Edinio.{" "}
-          <span className="text-primary">Noi ne ocupam de tot.</span>
-        </h1>
-        <p className="mt-4 text-lg text-gray-500 max-w-2xl mx-auto">
-          Iti migram toate produsele gratuit, in 24 de ore. Fara comisioane, fara costuri ascunse, fara batai de cap.
-        </p>
-
-        {/* Quick badges */}
-        <div className="mt-8 grid grid-cols-2 gap-3 max-w-xl mx-auto sm:flex sm:flex-wrap sm:justify-center">
-          {HERO_BADGES.map(({ icon: Icon, label }) => (
-            <div
-              key={label}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white border border-gray-100 shadow-sm text-left"
-            >
-              <Icon className="h-4 w-4 text-primary flex-shrink-0" />
-              <span className="text-xs sm:text-sm font-medium text-gray-700 leading-tight">{label}</span>
-            </div>
-          ))}
-        </div>
-
-        <a
-          href="#formular"
-          className="inline-flex items-center gap-2 mt-9 px-8 py-3.5 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl transition-colors"
-        >
-          Vreau migrare gratuita
-          <ArrowRight className="h-4 w-4" />
-        </a>
-      </section>
+      <MigrationHero />
 
       {/* Durerea */}
-      <section className="px-4 pb-16 max-w-5xl mx-auto">
+      <section className="px-4 pt-16 pb-16 max-w-5xl mx-auto">
         <div className="grid gap-4 md:grid-cols-3">
           {PAINS.map(({ icon: Icon, title, desc }) => (
             <div key={title} className="bg-white border border-gray-100 rounded-2xl p-6">

@@ -4,6 +4,7 @@ import { InstagramIcon, FacebookIcon, TikTokIcon, YoutubeIcon } from "./social-i
 import { NetopiaBadge } from "./NetopiaBadge";
 import { EdinioCredit } from "./EdinioCredit";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
+import { cdnImage } from "@/lib/cdn-image";
 
 interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; website?: string }
 
@@ -35,7 +36,7 @@ export function StoreFooter({ business, menu, basePath, businessId, footerLogoSi
           <div className="flex items-center gap-3 min-w-0">
             {business.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={business.logo_url} alt={name} style={{ height: footerLogoSize, maxWidth: footerLogoSize * 4.2 }} className="w-auto object-contain shrink-0" />
+              <img src={cdnImage(business.logo_url, 320)} alt={name} style={{ height: footerLogoSize, maxWidth: footerLogoSize * 4.2 }} className="w-auto object-contain shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0" style={{ backgroundColor: color }}>
                 {name[0]?.toUpperCase()}

@@ -8,6 +8,7 @@ import {
   Truck, ShieldCheck, RotateCcw, Check, Filter,
 } from "lucide-react";
 import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format";
+import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
@@ -984,7 +985,7 @@ function HeroBanners({ banners, links, alt, basePath }: { banners: string[]; lin
     const href = links?.[0] ? resolveHref(links[0], basePath) : null;
     const img = (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={banners[0]} alt={alt} fetchPriority="high"
+      <img src={cdnImage(banners[0], 1600)} alt={alt} fetchPriority="high"
         className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl" />
     );
     return (
@@ -1065,7 +1066,7 @@ function BannerCarousel({ banners, links, alt, basePath }: { banners: string[]; 
               const href = links?.[i] ? resolveHref(links[i], basePath) : null;
               const img = (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={src} alt={alt} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
+                <img src={cdnImage(src, 1600)} alt={alt} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
               );
               return (
                 <div key={i} className="shrink-0 w-full snap-center aspect-[16/9] bg-muted">
@@ -1594,7 +1595,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             {business.logo_url ? (
               /* Free logo: full image at any ratio, merchant-set height, no box/crop. */
               /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={business.logo_url} alt={business.store_name ?? business.business_name}
+              <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
                 style={{ height: pageContent.logo_size ?? 36, maxWidth: (pageContent.logo_size ?? 36) * 4.2 }}
                 className="w-auto object-contain flex-shrink-0" />
             ) : (
@@ -2221,7 +2222,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               {business.logo_url ? (
                 /* Free logo at the merchant-set footer size — matches the header (no box/crop). */
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
+                <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
                   style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
                   className="w-auto object-contain shrink-0" />
               ) : (

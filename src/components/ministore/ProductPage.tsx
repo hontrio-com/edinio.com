@@ -8,6 +8,7 @@ import {
   Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye, Calendar, Globe,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
+import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
@@ -902,7 +903,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
               {business.logo_url ? (
                 /* Free logo: full image at any ratio, merchant-set height, no box/crop. */
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={business.logo_url} alt={business.store_name ?? business.business_name}
+                <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
                   style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
                   className="w-auto object-contain shrink-0" />
               ) : (

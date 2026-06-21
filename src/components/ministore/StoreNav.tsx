@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { menuItemHref, isExternalLink, type MenuItem } from "@/lib/pages/menu";
+import { cdnImage } from "@/lib/cdn-image";
 
 /** Desktop inline navigation links (hidden on mobile). */
 export function StoreNavLinks({ items, basePath, color, currentSlug, className }: {
@@ -63,7 +64,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
               <div className="flex items-center gap-2 min-w-0">
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={logoUrl} alt={storeName} className="h-8 w-auto max-w-[120px] object-contain" />
+                  <img src={cdnImage(logoUrl, 256)} alt={storeName} className="h-8 w-auto max-w-[120px] object-contain" />
                 ) : (
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: color }}>
                     {storeName[0]?.toUpperCase()}

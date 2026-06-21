@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ShoppingCart, Phone } from "lucide-react";
 import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
 import type { MenuItem } from "@/lib/pages/menu";
+import { cdnImage } from "@/lib/cdn-image";
 
 interface HeaderBusiness {
   slug: string;
@@ -51,7 +52,7 @@ export function StoreHeader({ business, menu, basePath, currentSlug, logoSize = 
           <a href={`${basePath}/`} className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
             {business.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={business.logo_url} alt={name} style={{ height: logoSize, maxWidth: logoSize * 4.2 }} className="w-auto object-contain shrink-0" />
+              <img src={cdnImage(business.logo_url, 320)} alt={name} style={{ height: logoSize, maxWidth: logoSize * 4.2 }} className="w-auto object-contain shrink-0" />
             ) : (
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0" style={{ backgroundColor: color }}>
                 {name[0]?.toUpperCase()}

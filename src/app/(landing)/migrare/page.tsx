@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   Check,
   X,
@@ -146,13 +147,13 @@ export default function MigrarePage() {
                 ))}
               </ul>
 
-              <a
-                href="#formular"
+              <Link
+                href={`/register?plan=${plan.id}`}
                 className="block text-center py-3 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white font-semibold text-sm transition-colors"
               >
                 Vreau acest plan
                 <ArrowRight className="inline-block h-4 w-4 ml-1.5 -mt-0.5" />
-              </a>
+              </Link>
             </div>
           ))}
         </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { getFromR2, uploadToR2 } from "@/lib/r2";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,13 @@ const KEY_RE = /^(products|gallery|logos|covers|avatars)\/[\w./-]+\.(webp|jpe?g|
  * image never breaks.
  */
 export async function GET(req: NextRequest) {
+  // Cost guard: each miss runs sharp + R2 round-trips. With unbounded w/q params
+  // this is a cost-amplification vector, so throttle per IP. Generous because a
+  // page can legitimately request many variants (and in prod the CDN serves these).
+  if (!rateLimit(`img:${clientIp(req)}`, 240, 60_000)) {
+    return new NextResponse("Too many requests", { status: 429 });
+  }
+
   const sp = req.nextUrl.searchParams;
   const key = sp.get("p") ?? "";
   const width = Math.min(2048, Math.max(16, parseInt(sp.get("w") ?? "", 10) || 0));

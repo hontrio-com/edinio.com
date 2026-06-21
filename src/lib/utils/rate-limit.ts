@@ -10,10 +10,15 @@ import { NextRequest } from "next/server";
  */
 const buckets = new Map<string, number[]>();
 
-export function clientIp(req: NextRequest): string {
-  const fwd = req.headers.get("x-forwarded-for");
+/** Best-effort client IP from a Headers object (works in routes and server actions). */
+export function clientIpFromHeaders(h: Headers): string {
+  const fwd = h.get("x-forwarded-for");
   if (fwd) return fwd.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  return h.get("x-real-ip") ?? "unknown";
+}
+
+export function clientIp(req: NextRequest): string {
+  return clientIpFromHeaders(req.headers);
 }
 
 /**

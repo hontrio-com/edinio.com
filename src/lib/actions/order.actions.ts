@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -146,6 +148,13 @@ export async function placeOrder(data: {
   woot_courier_name?: string;
   woot_service_name?: string;
 }) {
+  // Anti-abuse: order creation is anonymous and triggers SMS/email (real cost).
+  // Throttle per IP so a script can't drain SMS credit or spam the merchant.
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`placeOrder:${ip}`, 10, 60_000)) {
+    return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
+  }
+
   // Use admin client for order creation — customers are anonymous, RLS requires service role
   const admin = createAdminClient();
 
@@ -589,6 +598,12 @@ export async function placeCartOrder(data: {
   woot_courier_name?: string;
   woot_service_name?: string;
 }) {
+  // Anti-abuse: anonymous + triggers SMS/email (real cost). Throttle per IP.
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`placeCartOrder:${ip}`, 10, 60_000)) {
+    return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
+  }
+
   // Use admin client — customers are anonymous
   const admin = createAdminClient();
 

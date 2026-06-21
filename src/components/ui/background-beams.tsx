@@ -69,6 +69,7 @@ export const BackgroundBeams = React.memo(({ className }: { className?: string }
         height="100%"
         viewBox="0 0 696 316"
         fill="none"
+        preserveAspectRatio="xMidYMid slice"
         xmlns="http://www.w3.org/2000/svg"
       >
         <path
@@ -83,8 +84,8 @@ export const BackgroundBeams = React.memo(({ className }: { className?: string }
             key={`path-` + index}
             d={path}
             stroke={`url(#linearGradient-${index})`}
-            strokeOpacity="0.4"
-            strokeWidth="0.5"
+            strokeOpacity="1"
+            strokeWidth="0.8"
           ></motion.path>
         ))}
         <defs>
@@ -111,11 +112,11 @@ export const BackgroundBeams = React.memo(({ className }: { className?: string }
                 delay: Math.random() * 10,
               }}
             >
-              {/* Green stripes (light theme) */}
-              <stop stopColor="#1AB554" stopOpacity="0"></stop>
-              <stop stopColor="#1AB554"></stop>
-              <stop offset="32.5%" stopColor="#10b981"></stop>
-              <stop offset="100%" stopColor="#6ee7b7" stopOpacity="0"></stop>
+              {/* Green stripes (light theme) - saturated so they read on white */}
+              <stop stopColor="#15803d" stopOpacity="0"></stop>
+              <stop stopColor="#15803d"></stop>
+              <stop offset="32.5%" stopColor="#1AB554"></stop>
+              <stop offset="100%" stopColor="#16a34a" stopOpacity="0"></stop>
             </motion.linearGradient>
           ))}
 

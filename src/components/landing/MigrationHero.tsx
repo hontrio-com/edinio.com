@@ -74,9 +74,10 @@ export function MigrationHero() {
         <motion.div variants={fadeUp} className="mt-10">
           <motion.a
             href="#formular"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            animate={{ scale: [1, 1.035, 1] }}
+            transition={{ duration: 2.4, ease: "easeInOut", repeat: Infinity }}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.96 }}
             className="migrare-btn-glow group inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-primary text-white font-semibold"
           >
             Vreau migrare gratuita

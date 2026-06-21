@@ -7,14 +7,12 @@ import {
   Crown,
   ArrowRight,
   PackageCheck,
-  Banknote,
-  Clock,
-  TrendingUp,
   ShieldCheck,
   Headphones,
 } from "lucide-react";
 import { MigrationForm } from "@/components/landing/MigrationForm";
 import { MigrationHero } from "@/components/landing/MigrationHero";
+import { MigrationPains } from "@/components/landing/MigrationPains";
 
 export const metadata: Metadata = {
   title: "Migreaza-ti magazinul la Edinio - migrare gratuita in 24 de ore",
@@ -22,24 +20,6 @@ export const metadata: Metadata = {
     "Iti migram toate produsele gratuit, in 24 de ore. Fara comisioane, fara costuri ascunse, pret fix pe viata. Mentenanta gratuita si suport 7 zile din 7.",
   alternates: { canonical: "https://www.edinio.com/migrare" },
 };
-
-const PAINS = [
-  {
-    icon: Banknote,
-    title: "Platesti comisioane la fiecare vanzare?",
-    desc: "Fiecare comanda iti ia un procent din profit, luna de luna.",
-  },
-  {
-    icon: Clock,
-    title: "Suportul raspunde dupa zile?",
-    desc: "Cand ai o problema urgenta, astepti zile pentru un raspuns.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Pretul abonamentului a crescut fara sa fii intrebat?",
-    desc: "Te trezesti ca platesti mai mult, fara nicio explicatie.",
-  },
-];
 
 const OFFER = [
   "Migrare completa a produselor, o facem noi",
@@ -118,19 +98,7 @@ export default function MigrarePage() {
       <MigrationHero />
 
       {/* Durerea */}
-      <section className="px-4 pt-16 pb-16 max-w-5xl mx-auto">
-        <div className="grid gap-4 md:grid-cols-3">
-          {PAINS.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="bg-white border border-gray-100 rounded-2xl p-6">
-              <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center mb-4">
-                <Icon className="h-5 w-5 text-gray-500" />
-              </div>
-              <p className="text-base font-semibold text-gray-900 leading-snug">{title}</p>
-              <p className="mt-2 text-sm text-gray-500">{desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <MigrationPains />
 
       {/* Oferta de migrare */}
       <section className="px-4 pb-16 max-w-3xl mx-auto">

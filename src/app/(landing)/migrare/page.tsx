@@ -102,7 +102,7 @@ const COMPARISON = [
 
 export default function MigrarePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Hero */}
       <MigrationHero />
 

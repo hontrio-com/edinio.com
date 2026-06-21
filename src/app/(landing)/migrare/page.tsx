@@ -166,27 +166,31 @@ export default function MigrarePage() {
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="text-left font-medium text-gray-400 px-4 py-4 sm:px-6"></th>
-                <th className="text-center font-bold text-primary px-3 py-4 sm:px-6">Edinio</th>
-                <th className="text-center font-medium text-gray-500 px-3 py-4 sm:px-6">Alte platforme</th>
+                <th className="w-[34%] text-left font-medium text-gray-400 px-4 py-4 sm:px-6"></th>
+                <th className="w-[33%] text-left font-bold text-primary px-3 py-4 sm:px-6">Edinio</th>
+                <th className="w-[33%] text-left font-medium text-gray-500 px-3 py-4 sm:px-6">Alte platforme</th>
               </tr>
             </thead>
             <tbody>
               {COMPARISON.map((row, i) => (
                 <tr key={row.label} className={i % 2 === 1 ? "bg-gray-50/60" : ""}>
                   <td className="px-4 py-4 sm:px-6 font-medium text-gray-700">{row.label}</td>
-                  <td className="px-3 py-4 sm:px-6 text-center">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-gray-900">
-                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                  <td className="px-3 py-4 sm:px-6">
+                    <span className="flex items-center gap-2 font-semibold text-gray-900">
+                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                        <Check className="h-3.5 w-3.5 text-primary" />
+                      </span>
                       {row.edinio}
                     </span>
                   </td>
-                  <td className="px-3 py-4 sm:px-6 text-center">
-                    <span className="inline-flex items-center gap-1.5 text-gray-500">
-                      <X className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                  <td className="px-3 py-4 sm:px-6">
+                    <span className="flex items-center gap-2 text-gray-500">
+                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-100">
+                        <X className="h-3.5 w-3.5 text-gray-400" />
+                      </span>
                       {row.other}
                     </span>
                   </td>

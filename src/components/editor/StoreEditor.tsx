@@ -554,7 +554,6 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
                 <img src={logoPreview} alt=""
                   style={{ height: pageContent.logo_size ?? 36, maxWidth: (pageContent.logo_size ?? 36) * 4.2 }}
                   className="w-auto object-contain flex-shrink-0" />
-                <span className="text-sm font-semibold text-foreground truncate">{business.store_name ?? business.business_name}</span>
               </div>
               <p className="text-[10px] text-muted-foreground mt-1.5">Cum se vede logo-ul in antetul magazinului. Trage cursorul ca sa-l faci mai mare sau mai mic.</p>
             </div>
@@ -575,7 +574,6 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
                 <img src={logoPreview} alt=""
                   style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
                   className="w-auto object-contain flex-shrink-0" />
-                <span className="text-sm font-semibold text-white truncate">{business.store_name ?? business.business_name}</span>
               </div>
               <p className="text-[10px] text-muted-foreground mt-1.5">Cum se vede logo-ul in footer-ul magazinului.</p>
             </div>

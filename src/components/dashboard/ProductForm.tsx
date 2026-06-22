@@ -8,6 +8,14 @@ import {
   Plus, X, Pencil, Loader2, Upload, Star, ArrowLeft, Trash2,
   Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info,
 } from "lucide-react";
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext, arrayMove, useSortable, rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { createCategory } from "@/lib/actions/category.actions";
@@ -274,33 +282,82 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
+function SortableImage({ url, index, onRemove, onMakeMain }: {
+  url: string; index: number; onRemove: () => void; onMakeMain: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: url });
+  const isMain = index === 0;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "relative aspect-square rounded-xl overflow-hidden border border-border group bg-muted/30 touch-none cursor-grab active:cursor-grabbing",
+        isDragging && "z-10 shadow-lg ring-2 ring-primary/40 opacity-90",
+      )}
+      {...attributes}
+      {...listeners}
+    >
+      <Image src={url} alt={`Imagine ${index + 1}`} fill sizes="(max-width: 640px) 33vw, 120px" className="object-contain p-1 pointer-events-none" />
+      <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={onRemove}
+        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <X className="h-3 w-3" />
+      </button>
+      {isMain ? (
+        <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[9px] font-semibold rounded flex items-center gap-1">
+          <Star className="h-2.5 w-2.5 fill-current" />
+          Principal
+        </div>
+      ) : (
+        <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={onMakeMain}
+          title="Fa principala"
+          className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[9px] font-semibold rounded flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80">
+          <Star className="h-2.5 w-2.5" />
+          Fa principala
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ImageUploader({ images, onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Small drag threshold so a tap on the delete / "make main" buttons still registers as a click.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = images.indexOf(String(active.id));
+    const to = images.indexOf(String(over.id));
+    if (from === -1 || to === -1) return;
+    onChange(arrayMove(images, from, to));
+  }
 
   return (
     <div>
-      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-2">
-        {images.map((url, i) => (
-          <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border group bg-muted/30">
-            <Image src={url} alt={`Imagine ${i + 1}`} fill sizes="(max-width: 640px) 33vw, 120px" className="object-contain p-1" />
-            <button type="button" onClick={() => onChange(images.filter((_, j) => j !== i))}
-              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <X className="h-3 w-3" />
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={images} strategy={rectSortingStrategy}>
+          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-2">
+            {images.map((url, i) => (
+              <SortableImage
+                key={url}
+                url={url}
+                index={i}
+                onRemove={() => onChange(images.filter((u) => u !== url))}
+                onMakeMain={() => onChange([url, ...images.filter((u) => u !== url)])}
+              />
+            ))}
+            <button type="button" onClick={() => setPickerOpen(true)}
+              className="aspect-square rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 hover:border-primary/50 hover:bg-primary/5 transition-colors">
+              <Upload className="h-5 w-5 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground font-medium">Adauga</span>
             </button>
-            {i === 0 && (
-              <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[9px] font-semibold rounded">
-                Principal
-              </div>
-            )}
           </div>
-        ))}
-        <button type="button" onClick={() => setPickerOpen(true)}
-          className="aspect-square rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 hover:border-primary/50 hover:bg-primary/5 transition-colors">
-          <Upload className="h-5 w-5 text-muted-foreground" />
-          <span className="text-[10px] text-muted-foreground font-medium">Adauga</span>
-        </button>
-      </div>
-      <p className="text-xs text-muted-foreground">Prima imagine va fi afisata pe card. Incarci sau alegi din Biblioteca Media.</p>
+        </SortableContext>
+      </DndContext>
+      <p className="text-xs text-muted-foreground">Trage imaginile ca sa schimbi ordinea. Prima (Principal) e cea afisata pe card. Incarci sau alegi din Biblioteca Media.</p>
 
       <MediaPicker
         open={pickerOpen}

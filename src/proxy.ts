@@ -34,8 +34,14 @@ export async function proxy(request: NextRequest) {
   const hostname = request.headers.get("host") ?? "";
   const bare = hostname.split(":")[0];
 
+  // Editor live-preview loads /{slug}?preview=1 inside a same-origin iframe.
+  // Both the www and custom-domain redirects below would send it cross-origin,
+  // which X-Frame-Options: SAMEORIGIN then blocks ("refused to connect"). Keep
+  // the preview on the current origin so it can be framed by the dashboard.
+  const isPreview = request.nextUrl.searchParams.get("preview") === "1";
+
   // SEO: redirect non-www to www (permanent 301)
-  if (bare === "edinio.com") {
+  if (bare === "edinio.com" && !isPreview) {
     const url = request.nextUrl.clone();
     url.host = "www.edinio.com";
     return NextResponse.redirect(url, 301);
@@ -83,7 +89,7 @@ export async function proxy(request: NextRequest) {
 
   // Platform host: if /{slug} is a published store with an active custom domain,
   // redirect visitors to that domain instead (its canonical home), keeping the path.
-  if (bare !== "localhost" && !bare.endsWith(".vercel.app")) {
+  if (bare !== "localhost" && !bare.endsWith(".vercel.app") && !isPreview) {
     const { pathname } = request.nextUrl;
     const firstSeg = pathname.split("/")[1] ?? "";
     if (firstSeg && !NON_STORE_SEGMENTS.has(firstSeg)) {

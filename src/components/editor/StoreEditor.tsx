@@ -212,7 +212,9 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
   const [mobileView, setMobileView] = useState<"editor" | "preview">("editor");
   const [previewKey, setPreviewKey] = useState(0);
 
-  const previewUrl = `/${business.slug}`;
+  // ?preview=1 keeps the storefront on the current origin (proxy.ts skips its
+  // www/custom-domain redirects) so the iframe below isn't blocked by X-Frame-Options.
+  const previewUrl = `/${business.slug}?preview=1`;
   // Show the connected custom domain when present; otherwise the edinio.com URL.
   const publicUrl = business.custom_domain
     ? `https://${business.custom_domain}`

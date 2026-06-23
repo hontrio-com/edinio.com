@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText,
+  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -39,6 +39,7 @@ const NAV_ITEMS = [
     ],
   },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
+  { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
   { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },

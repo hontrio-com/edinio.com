@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Bell, LogOut, ChevronDown, X, Menu,
   LayoutDashboard, Pencil, Package, ShoppingCart, Settings,
-  BarChart2, Zap, Ticket, Megaphone, FileText,
+  BarChart2, Zap, Ticket, Megaphone, FileText, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { logout } from "@/lib/actions/auth.actions";
@@ -42,6 +42,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/features", icon: Zap, label: "Integrari" },
   { href: "/dashboard/products", icon: Package, label: "Produse" },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
+  { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
   { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },
 ];

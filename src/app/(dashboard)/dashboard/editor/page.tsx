@@ -23,7 +23,10 @@ export default async function EditorPage() {
     ? rawSettings[0] ?? null
     : rawSettings ?? null;
 
-  const { data: profile } = await supabase.from("users_profile").select("plan").eq("id", user.id).single();
+  const [{ data: profile }, { data: categories }] = await Promise.all([
+    supabase.from("users_profile").select("plan").eq("id", user.id).single(),
+    supabase.from("categories").select("id, name, parent_id, sort_order").eq("business_id", row.id).order("sort_order"),
+  ]);
 
-  return <StoreEditor business={business} storeSettings={storeSettings} plan={profile?.plan ?? "free"} />;
+  return <StoreEditor business={business} storeSettings={storeSettings} plan={profile?.plan ?? "free"} categories={categories ?? []} />;
 }

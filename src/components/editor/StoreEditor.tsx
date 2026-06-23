@@ -5,13 +5,15 @@ import { motion } from "framer-motion";
 import {
   Info, Palette, MapPin, Share2, Globe,
   ChevronDown, ChevronUp, Save, Loader2, Check, ExternalLink, Upload, X, Plus,
-  Layout, Smartphone, Monitor, Home, ClipboardList,
+  Layout, Smartphone, Monitor, Home, ClipboardList, LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { ProductSectionsEditor } from "@/components/editor/ProductSectionsEditor";
 import { updateBusiness } from "@/lib/actions/business.actions";
 import { updatePageContent } from "@/lib/actions/store.actions";
+import { type ProductSection } from "@/lib/store-sections";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -52,6 +54,7 @@ interface PageContent {
   show_social_proof?: boolean;
   show_quality_badge?: boolean;
   show_category_badges?: boolean;
+  product_sections?: ProductSection[];
   hide_edinio_badge?: boolean;
   store_bg_color?: string;
   logo_size?: number;
@@ -202,7 +205,9 @@ function EffectPreview({ id, label, color, selected, onClick }: {
 
 // ─── Main component ───────────────────────────────────────────
 
-export function StoreEditor({ business, storeSettings, plan = "free" }: { business: Business; storeSettings: StoreSettings | null; plan?: string }) {
+type EditorCategory = { id: string; name: string; parent_id: string | null; sort_order?: number };
+
+export function StoreEditor({ business, storeSettings, plan = "free", categories = [] }: { business: Business; storeSettings: StoreSettings | null; plan?: string; categories?: EditorCategory[] }) {
   const isFreePlan = plan === "free" || plan === "trial";
   const [open, setOpen] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -396,6 +401,7 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
     show_social_proof: rawPageContent.show_social_proof ?? false,
     show_quality_badge: rawPageContent.show_quality_badge ?? true,
     show_category_badges: rawPageContent.show_category_badges ?? true,
+    product_sections: rawPageContent.product_sections ?? [],
     hide_edinio_badge: rawPageContent.hide_edinio_badge ?? false,
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
     logo_size: rawPageContent.logo_size ?? 36,
@@ -1389,6 +1395,25 @@ export function StoreEditor({ business, storeSettings, plan = "free" }: { busine
             </button>
           </div>
 
+          <SaveBtn loading={saving === "page"} saved={saved === "page"} onSave={savePageContent} />
+        </div>
+      ),
+    },
+    {
+      id: "product_sections",
+      icon: LayoutGrid,
+      title: "Sectiuni produse",
+      content: (
+        <div className="px-5 pb-5 space-y-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Adauga randuri de produse pe pagina magazinului (deasupra catalogului complet). Alegi produse manual, o categorie intreaga sau pachetele tale. Trage de sageti ca sa schimbi ordinea.
+          </p>
+          <ProductSectionsEditor
+            businessId={business.id}
+            categories={categories}
+            value={pageContent.product_sections ?? []}
+            onChange={(next) => setPageContent(p => ({ ...p, product_sections: next }))}
+          />
           <SaveBtn loading={saving === "page"} saved={saved === "page"} onSave={savePageContent} />
         </div>
       ),

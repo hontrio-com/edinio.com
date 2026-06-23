@@ -16,6 +16,7 @@ import { trackAbandonedCart, getRecoverableCart } from "@/lib/actions/abandoned-
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { readBundleConfig } from "@/lib/bundles";
+import { parseProductSections, resolveSectionProducts, type ProductSection } from "@/lib/store-sections";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
@@ -81,6 +82,7 @@ interface PageContent {
   hero_banners?: string[];
   hero_banner_links?: string[];
   show_category_badges?: boolean;
+  product_sections?: ProductSection[];
   menu?: MenuItem[];
 }
 
@@ -1416,6 +1418,23 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Featured products
   const featuredProducts = useMemo(() => products.filter(p => p.is_featured), [products]);
 
+  // Custom product sections — curated rows shown above the main catalog. Resolved
+  // from the already-loaded product list (no extra queries); empty ones are dropped.
+  const productSections = useMemo(() => {
+    return parseProductSections(pageContent.product_sections)
+      .filter(s => s.enabled)
+      .map(section => ({ section, items: resolveSectionProducts(section, products, catTree.subtreeByName) }))
+      .filter(x => x.items.length > 0);
+  }, [pageContent.product_sections, products, catTree.subtreeByName]);
+
+  function viewAllCategory(category: string) {
+    setCategoryFilter(category);
+    setDrillParentId(null);
+    if (typeof document !== "undefined") {
+      document.getElementById("produse")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
   // Filter facets: variant options + price bounds across the products.
   const facets = useMemo(() => {
     const opts = new Map<string, Set<string>>();
@@ -1965,6 +1984,60 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             </div>
           </section>
         )}
+
+        {/* Custom product sections (curated rows above the main catalog) */}
+        {productSections.map(({ section, items }) => (
+          <section key={section.id} className="mb-12">
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-lg font-black text-foreground">{section.title || "Produse"}</h2>
+              <div className="h-px flex-1 bg-border" />
+              {section.mode === "category" && section.category && (
+                <button type="button" onClick={() => viewAllCategory(section.category!)}
+                  className="flex items-center gap-1 text-xs font-semibold whitespace-nowrap transition-opacity hover:opacity-70"
+                  style={{ color }}>
+                  Vezi toate
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {section.layout === "carousel" ? (
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-hide">
+                {items.map(product => (
+                  <div key={product.id} className="snap-start shrink-0 w-[44%] sm:w-[30%] lg:w-[23%]">
+                    <ProductCard
+                      product={product}
+                      color={color}
+                      basePath={basePath}
+                      onAddToCart={() => handleAddToCart(product)}
+                      isAdded={addedId === product.id}
+                      newBadgeDays={newBadgeDays}
+                      outOfStock={isProductOutOfStock(product)}
+                      showCategoryBadge={showCategoryBadges}
+                      priceLowestOnly={priceLowestOnly}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {items.map(product => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    color={color}
+                    basePath={basePath}
+                    onAddToCart={() => handleAddToCart(product)}
+                    isAdded={addedId === product.id}
+                    newBadgeDays={newBadgeDays}
+                    outOfStock={isProductOutOfStock(product)}
+                    showCategoryBadge={showCategoryBadges}
+                    priceLowestOnly={priceLowestOnly}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        ))}
 
         {/* Products */}
         <section id="produse" className="mb-16">

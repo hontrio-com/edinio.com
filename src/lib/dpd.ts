@@ -7,6 +7,8 @@ export type DpdConfig = {
   client_id: number;
   /** Opt-in to international (EU) delivery — shows the country field at checkout. */
   international_enabled?: boolean;
+  /** Opt-in: price international orders by the real product weight (else a 1kg estimate). */
+  use_product_weight?: boolean;
 };
 
 export type DpdShipmentInput = {

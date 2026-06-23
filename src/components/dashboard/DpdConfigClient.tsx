@@ -28,6 +28,7 @@ export function DpdConfigClient({
   const [clientId, setClientId] = useState<number | null>(initialConfig?.client_id ?? null);
   const [clientName, setClientName] = useState("");
   const [international, setInternational] = useState(initialConfig?.international_enabled ?? false);
+  const [useWeight, setUseWeight] = useState(initialConfig?.use_product_weight ?? false);
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_id);
 
@@ -58,6 +59,7 @@ export function DpdConfigClient({
       password: password.trim(),
       client_id: clientId,
       international_enabled: international,
+      use_product_weight: useWeight,
     };
 
     setSaving(true);
@@ -172,6 +174,15 @@ export function DpdConfigClient({
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${international ? "translate-x-6" : "translate-x-1"}`} />
             </button>
           </div>
+          {international && (
+            <label className="flex items-start gap-2.5 mt-3 pt-3 border-t border-border cursor-pointer">
+              <input type="checkbox" checked={useWeight} onChange={e => setUseWeight(e.target.checked)}
+                className="mt-0.5 rounded border-border accent-primary" />
+              <span className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Calculeaza dupa greutatea reala a produselor.</span> Pretul livrarii internationale se ia din greutatea setata pe fiecare produs. Daca e oprit, se foloseste o estimare de 1kg.
+              </span>
+            </label>
+          )}
         </div>
       )}
 

@@ -52,7 +52,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
 
   // Fetch shipping options when the destination is sufficiently filled in
   useEffect(() => {
-    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}`;
+    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}`;
     if (!ready) {
       setOptions([]);
       setSelectedKey(null);
@@ -99,7 +99,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         if (thisReq === reqId.current) setLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [county, city, country, postCode]);
+  }, [county, city, country, postCode, weightKg]);
 
   // Fetch lockers when a locker option is selected
   useEffect(() => {

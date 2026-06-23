@@ -61,6 +61,7 @@ interface Props {
     price: number;
     compare_at_price?: number | null;
     images: string[];
+    weight_grams?: number | null;
   };
   business: {
     id: string;
@@ -117,6 +118,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
   const [intlEnabled, setIntlEnabled] = useState(false);
+  const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
 
   // Customization state
@@ -233,6 +235,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         setLiveCheckoutConfig(pc.checkout_config);
       }
       setIntlEnabled(data.international_shipping === true);
+      setDpdUseWeight(data.dpd_use_weight === true);
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
@@ -796,6 +799,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   color={color}
                   country={isIntl ? form.country : undefined}
                   postCode={isIntl ? form.postCode : undefined}
+                  weightKg={isIntl && dpdUseWeight && product.weight_grams ? (product.weight_grams * effectiveQty) / 1000 : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
                   onSelect={setCourierSelection}
                 />

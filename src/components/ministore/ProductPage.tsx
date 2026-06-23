@@ -1040,6 +1040,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           price: displayPrice,
           compare_at_price: displayComparePrice,
           images: slides,
+          weight_grams: product.weight_grams,
         }}
         business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
         shippingCost={shippingCost}

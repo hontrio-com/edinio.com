@@ -31,7 +31,7 @@ import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Pick<
   Database["public"]["Tables"]["products"]["Row"],
-  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "is_bundle" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id" | "page_sections"
+  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "is_bundle" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id" | "page_sections" | "weight_grams"
 >;
 type StoreSettings = Pick<
   Database["public"]["Tables"]["store_settings"]["Row"],
@@ -217,12 +217,13 @@ interface VatConfig {
 }
 
 function CartCheckoutModal({
-  open, onClose, color, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode,
+  open, onClose, color, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode, productWeights,
 }: {
   open: boolean; onClose: () => void; color: string; basePath: string; businessId: string;
   shippingCost: number; freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
   initialDiscountCode?: string | null;
+  productWeights?: Record<string, number>;
 }) {
   const { items, total, clear, sessionId } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(
@@ -266,7 +267,10 @@ function CartCheckoutModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
   const [intlEnabled, setIntlEnabled] = useState(false);
+  const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
+  // Total cart weight (kg) from per-product weights; used for the live intl quote.
+  const totalWeightKg = items.reduce((s, i) => s + ((productWeights?.[i.productId] ?? 0) * i.quantity), 0) / 1000;
 
   // Auto-apply a recovery discount code passed via the restore link (?code=).
   useEffect(() => {
@@ -310,6 +314,7 @@ function CartCheckoutModal({
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
       setHasCouriers(!!anyEnabled);
       setIntlEnabled(data.international_shipping === true);
+      setDpdUseWeight(data.dpd_use_weight === true);
     });
   }, [open, businessId]);
 
@@ -546,6 +551,7 @@ function CartCheckoutModal({
               color={color}
               country={isIntl ? form.country : undefined}
               postCode={isIntl ? form.postCode : undefined}
+              weightKg={isIntl && dpdUseWeight && totalWeightKg > 0 ? totalWeightKg : undefined}
               cod={paymentMethod === "cash_on_delivery" ? total : 0}
               onSelect={setCourierSelection}
             />
@@ -1246,6 +1252,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // the authoritative check happens at order time). Resolve components from the
   // loaded product list; unknown components are treated as available.
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  // Per-product weights (grams) for the international shipping quote (opt-in).
+  const productWeights = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of products) if (p.weight_grams) m[p.id] = p.weight_grams;
+    return m;
+  }, [products]);
   function isProductOutOfStock(p: Product): boolean {
     if (p.is_bundle) {
       const cfg = readBundleConfig(p.page_sections);
@@ -2493,6 +2505,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         freeShippingThreshold={freeShippingThreshold}
         emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
         initialDiscountCode={recoverDiscountCode}
+        productWeights={productWeights}
       />
 
       {/* Gallery lightbox */}

@@ -26,6 +26,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   payment_methods: { type: PaymentMethodType; label: string }[];
   card_discount: CardDiscountConfig;
   international_shipping: boolean;
+  dpd_use_weight: boolean;
 } | null> {
   const admin = createAdminClient();
   const { data } = await admin
@@ -41,9 +42,10 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
 
   // International (EU) checkout is available only when DPD is enabled as a courier,
   // opted into international, and credentialed. Booleans only — no secrets leak.
-  const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number } | null;
+  const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number; use_product_weight?: boolean } | null;
   const zonesCfg = (data.shipping_zones ?? {}) as Record<string, { enabled?: boolean }>;
   const internationalShipping = !!(dc?.enabled && dc?.international_enabled && dc?.username && dc?.client_id && zonesCfg["dpd"]?.enabled);
+  const dpdUseWeight = internationalShipping && dc?.use_product_weight === true;
 
   const ready = {
     netopia: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
@@ -62,6 +64,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
     card_discount: parseCardDiscountConfig(data.card_discount_config),
     international_shipping: internationalShipping,
+    dpd_use_weight: dpdUseWeight,
   };
 }
 

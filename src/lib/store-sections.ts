@@ -106,7 +106,9 @@ export function resolveSectionProducts<T extends SectionProduct>(
       ? (subtreeByName[section.category] ?? [section.category])
       : [section.category];
     const set = new Set(names);
-    list = products.filter((p) => p.category != null && set.has(p.category) && !p.is_bundle);
+    // Matches the main catalog's category filter (which includes bundles), so a
+    // category section and its "Vezi toate" link stay consistent.
+    list = products.filter((p) => p.category != null && set.has(p.category));
   } else {
     // bundles ("Pachete")
     list = products.filter((p) => p.is_bundle);

@@ -287,7 +287,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   function validate() {
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
-    if (!/^(\+?40|0)7\d{8}$/.test(form.phone.replace(/[\s\-().]/g, ""))) e.phone = "Numar de telefon invalid";
+    const phoneDigits = form.phone.replace(/[\s\-().]/g, "");
+    // RO number for domestic; a lenient international format for EU orders.
+    const phoneOk = isIntl ? /^\+?\d{6,15}$/.test(phoneDigits) : /^(\+?40|0)7\d{8}$/.test(phoneDigits);
+    if (!phoneOk) e.phone = "Numar de telefon invalid";
     if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
     if (emailField.enabled && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Format email invalid";
     if (isIntl) {

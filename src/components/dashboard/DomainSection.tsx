@@ -71,6 +71,10 @@ function splitName(fullName: string): [string, string] {
   return [parts[0], parts.slice(1).join(" ")];
 }
 
+// Vercel nameservers — used for the "full delegation" connect method, where the
+// registrar points the whole domain at Vercel instead of adding individual records.
+const VERCEL_NAMESERVERS = ["ns1.vercel-dns.com", "ns2.vercel-dns.com"];
+
 // Hardcoded TLD pricing (lei/an) — updated manually from reseller panel
 const TLD_OPTIONS = [
   { tld: ".ro",  price: 60, label: ".ro" },
@@ -138,6 +142,8 @@ export function DomainSection({
   // Connect external domain
   const [externalInput, setExternalInput] = useState("");
   const [savingExternal, setSavingExternal] = useState(false);
+  // DNS setup method: full nameserver delegation (recommended — simplest) vs. per-record A/CNAME.
+  const [dnsMethod, setDnsMethod] = useState<"records" | "nameservers">("nameservers");
 
   // ── Data loading ─────────────────────────────────────────────────────────────
 
@@ -620,7 +626,8 @@ export function DomainSection({
             <AlertCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
             <p className="text-xs text-muted-foreground leading-relaxed">
               Ai deja un domeniu cumparat de la alt registrar? Introdu-l mai jos,
-              apoi adauga inregistrarile DNS la registrarul tau.
+              apoi conecteaza-l fie prin inregistrari DNS, fie modificand direct
+              nameserverele la registrarul tau.
             </p>
           </div>
 
@@ -649,53 +656,136 @@ export function DomainSection({
             <div className="bg-surface border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
                 <p className="text-sm font-semibold text-foreground">
-                  Inregistrari DNS necesare
+                  Configureaza domeniul
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Adauga aceste inregistrari la registrarul tau pentru{" "}
+                  Alege una dintre metode si aplic-o la registrarul tau pentru{" "}
                   <span className="font-mono font-semibold">{customDomain}</span>
                 </p>
               </div>
 
-              <div className="px-5 py-4 space-y-2">
-                <div className="grid grid-cols-[64px_64px_1fr_32px] gap-2 px-3 mb-1">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Tip</span>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Nume</span>
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Valoare</span>
-                </div>
-                {[
-                  { type: "A",     name: "@",   value: "216.150.1.1" },
-                  { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
-                ].map((rec) => (
-                  <div
-                    key={rec.type + rec.name}
-                    className="grid grid-cols-[64px_64px_1fr_32px] gap-2 items-center p-3 bg-muted/50 rounded-lg"
-                  >
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-primary/10 text-primary rounded font-mono text-center">
-                      {rec.type}
-                    </span>
-                    <span className="text-xs font-mono text-muted-foreground">
-                      {rec.name}
-                    </span>
-                    <span className="text-xs font-mono text-foreground truncate">
-                      {rec.value}
-                    </span>
+              {/* Method switcher */}
+              <div className="px-5 pt-4">
+                <div className="flex bg-muted rounded-xl p-1 gap-1">
+                  {([
+                    { id: "nameservers", label: "Nameservere", badge: "Recomandat" },
+                    { id: "records",     label: "Inregistrari DNS", badge: null },
+                  ] as const).map((m) => (
                     <button
+                      key={m.id}
                       type="button"
-                      onClick={() => copy(rec.value)}
-                      className="flex items-center justify-center hover:text-primary transition-colors"
+                      onClick={() => setDnsMethod(m.id)}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                        dnsMethod === m.id
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
                     >
-                      <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                      {m.label}
+                      {m.badge && (
+                        <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                          {m.badge}
+                        </span>
+                      )}
                     </button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              <div className="px-5 py-3 border-t border-border bg-muted/20">
+              {/* ── Method: Nameservers (recommended) ── */}
+              {dnsMethod === "nameservers" && (
+                <>
+                  <div className="px-5 pt-3 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Cea mai simpla metoda: inlocuieste nameserverele domeniului la
+                      registrar cu cele de mai jos. Noi ne ocupam automat de tot restul
+                      configurarii DNS.
+                    </p>
+                  </div>
+                  <div className="px-5 py-3 space-y-2">
+                    <span className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">
+                      Nameservere
+                    </span>
+                    {VERCEL_NAMESERVERS.map((ns) => (
+                      <div
+                        key={ns}
+                        className="grid grid-cols-[1fr_32px] gap-2 items-center p-3 bg-muted/50 rounded-lg"
+                      >
+                        <span className="text-xs font-mono text-foreground truncate">{ns}</span>
+                        <button
+                          type="button"
+                          onClick={() => copy(ns)}
+                          className="flex items-center justify-center hover:text-primary transition-colors"
+                        >
+                          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-5 pb-1">
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        Atentie: schimbarea nameserverelor muta intregul DNS al domeniului.
+                        Daca folosesti email pe acest domeniu, alege in schimb metoda
+                        „Inregistrari DNS", care pastreaza setarile existente.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Method: DNS records ── */}
+              {dnsMethod === "records" && (
+                <>
+                  <div className="px-5 pt-3 pb-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Pastreaza nameserverele actuale si adauga doar aceste doua
+                      inregistrari in panoul DNS al registrarului.
+                    </p>
+                  </div>
+                  <div className="px-5 py-3 space-y-2">
+                    <div className="grid grid-cols-[64px_64px_1fr_32px] gap-2 px-3 mb-1">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Tip</span>
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Nume</span>
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Valoare</span>
+                    </div>
+                    {[
+                      { type: "A",     name: "@",   value: "216.150.1.1" },
+                      { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
+                    ].map((rec) => (
+                      <div
+                        key={rec.type + rec.name}
+                        className="grid grid-cols-[64px_64px_1fr_32px] gap-2 items-center p-3 bg-muted/50 rounded-lg"
+                      >
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-primary/10 text-primary rounded font-mono text-center">
+                          {rec.type}
+                        </span>
+                        <span className="text-xs font-mono text-muted-foreground">
+                          {rec.name}
+                        </span>
+                        <span className="text-xs font-mono text-foreground truncate">
+                          {rec.value}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copy(rec.value)}
+                          className="flex items-center justify-center hover:text-primary transition-colors"
+                        >
+                          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="px-5 py-3 border-t border-border bg-muted/20 mt-2">
                 <p className="text-xs text-muted-foreground">
-                  Propagarea DNS poate dura pana la 48 de ore. Verifica statusul pe{" "}
+                  Propagarea poate dura pana la 48 de ore. Verifica statusul pe{" "}
                   <a
-                    href={`https://dnschecker.org/#A/${customDomain}`}
+                    href={`https://dnschecker.org/#${dnsMethod === "nameservers" ? "NS" : "A"}/${customDomain}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"

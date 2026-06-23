@@ -1,8 +1,12 @@
+import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { FacebookPixel } from "@/components/public/FacebookPixel";
 import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { GoogleTag } from "@/components/public/GoogleTag";
+import { ConsentGate } from "@/components/public/ConsentGate";
+import { CookieConsent } from "@/components/public/CookieConsent";
 import type { MarketingConfig } from "@/lib/marketing";
+import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
 import type { Metadata } from "next";
 
 interface Props {
@@ -33,29 +37,60 @@ export default async function StoreLayout({ children, params }: Props) {
 
   const { data: business } = await admin
     .from("businesses")
-    .select("id, store_settings(marketing_config)")
+    .select("id, slug, store_name, business_name, primary_color, custom_domain, store_settings(marketing_config, cookie_banner_config)")
     .eq("slug", slug)
     .single();
 
   let fbPixelId: string | null = null;
   let ttPixelId: string | null = null;
   let googleTagId: string | null = null;
+  let mc: MarketingConfig | null = null;
+  let cookieRaw: unknown = null;
 
   if (business) {
-    const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown } | { marketing_config: unknown }[] | null }).store_settings;
+    const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown; cookie_banner_config: unknown } | { marketing_config: unknown; cookie_banner_config: unknown }[] | null }).store_settings;
     const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
-    const mc = (settings?.marketing_config ?? null) as MarketingConfig | null;
+    mc = (settings?.marketing_config ?? null) as MarketingConfig | null;
+    cookieRaw = settings?.cookie_banner_config ?? null;
     fbPixelId = mc?.facebook_pixel_id?.trim() || null;
     ttPixelId = mc?.tiktok_pixel_id?.trim() || null;
     googleTagId = mc?.google_tag_id?.trim() || null;
   }
 
+  const cookieConfig = parseCookieBannerConfig(cookieRaw);
+  const consentCategories = detectConsentCategories(mc);
+  const color = (business?.primary_color as string | null) ?? "#1AB554";
+  const storeName = (business?.store_name as string | null) ?? (business?.business_name as string | null) ?? "magazin";
+
+  // Policy link must honour custom domains (proxy rewrites customdomain.ro/x → /slug/x).
+  const host = (await headers()).get("host")?.split(":")[0] ?? "";
+  const customDomain = (business?.custom_domain as string | null) ?? null;
+  const basePath = customDomain && host === customDomain ? "" : `/${slug}`;
+
+  // Trackers only inject AFTER the visitor consents to the matching category
+  // (GDPR opt-in). marketing = FB/TikTok pixels, analytics = Google Tag.
   return (
     <>
-      {fbPixelId && <FacebookPixel pixelId={fbPixelId} />}
-      {ttPixelId && <TikTokPixel pixelId={ttPixelId} />}
-      {googleTagId && <GoogleTag tagId={googleTagId} />}
+      {fbPixelId && (
+        <ConsentGate slug={slug} category="marketing"><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
+      )}
+      {ttPixelId && (
+        <ConsentGate slug={slug} category="marketing"><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
+      )}
+      {googleTagId && (
+        <ConsentGate slug={slug} category="analytics"><GoogleTag tagId={googleTagId} /></ConsentGate>
+      )}
       {children}
+      {cookieConfig.enabled && (
+        <CookieConsent
+          slug={slug}
+          color={color}
+          categories={consentCategories}
+          position={cookieConfig.position}
+          policyHref={`${basePath}/politici/confidentialitate`}
+          storeName={storeName}
+        />
+      )}
     </>
   );
 }

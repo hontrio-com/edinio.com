@@ -6,11 +6,12 @@ import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
-  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown,
+  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCookieBannerConfig } from "@/lib/actions/store.actions";
+import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
@@ -23,7 +24,7 @@ type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
 type SectionId =
   | "general" | "plan" | "facturare" | "livrare"
-  | "taxe" | "plati" | "domeniu" | "notificari" | "politici" | "securitate";
+  | "taxe" | "plati" | "domeniu" | "notificari" | "politici" | "cookies" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
@@ -35,7 +36,15 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
   { id: "notificari", label: "Notificari",  icon: Bell      },
   { id: "politici",   label: "Politici",    icon: FileText  },
+  { id: "cookies",    label: "Banner Cookies", icon: Cookie },
   { id: "securitate", label: "Securitate",  icon: Lock      },
+];
+
+const COOKIE_POSITIONS: { id: CookieBannerPosition; label: string; desc: string }[] = [
+  { id: "bottom-bar",   label: "Bara jos (subtil)", desc: "Bara discreta pe toata latimea, jos. Ocupa minim de spatiu." },
+  { id: "bottom-left",  label: "Card stanga-jos",   desc: "Card compact in coltul din stanga-jos." },
+  { id: "bottom-right", label: "Card dreapta-jos",  desc: "Card compact in coltul din dreapta-jos." },
+  { id: "center",       label: "Modal centrat",     desc: "Fereastra centrata cu fundal intunecat. Maxim de vizibilitate." },
 ];
 
 const PAYMENT_TYPE_NAMES: Record<PaymentMethodType, string> = {
@@ -230,6 +239,8 @@ interface Props {
   paymentMethods: PaymentMethodEntry[];
   paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean };
   cardDiscount: CardDiscountConfig;
+  cookieBanner: CookieBannerConfig;
+  cookieCategories: ConsentCategory[];
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
   domainSuccess?: boolean;
@@ -247,7 +258,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -435,6 +446,19 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateCardDiscount(businessId, cardDisc);
       if ("error" in result) toast.error(result.error);
       else toast.success("Discountul la plata cu cardul a fost salvat.");
+    });
+  }
+
+  // Banner de cookie-uri (GDPR) — apare automat pe magazin; categoriile se
+  // adapteaza la integrarile active. Aici se configureaza doar aparenta.
+  const [cookieCfg, setCookieCfg] = useState<CookieBannerConfig>(cookieBanner);
+  const [savingCookie, startCookieTransition] = useTransition();
+  function saveCookieBanner() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    startCookieTransition(async () => {
+      const result = await updateCookieBannerConfig(businessId, cookieCfg);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Bannerul de cookie-uri a fost salvat.");
     });
   }
 
@@ -1404,6 +1428,106 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 >
                   {savingVat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {savingVat ? "Se salveaza..." : "Salveaza setarile TVA"}
+                </button>
+              </div>
+            </div>
+          )}
+          {activeSection === "cookies" && (
+            <div className="space-y-6">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                <Cookie className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-800 leading-relaxed">
+                  Bannerul de cookie-uri este obligatoriu prin lege (GDPR). Apare automat pe magazinul tau, in culoarea magazinului, si cere acordul vizitatorilor inainte de a incarca instrumentele de analiza si marketing. Continutul se actualizeaza singur dupa integrarile pe care le ai active.
+                </p>
+              </div>
+
+              {!businessId && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
+                </div>
+              )}
+
+              {/* Activare banner */}
+              <div className="bg-surface border border-border rounded-xl p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Afiseaza bannerul de cookie-uri</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Recomandat sa ramana activ pentru conformitate legala.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCookieCfg(c => ({ ...c, enabled: !c.enabled }))}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${cookieCfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cookieCfg.enabled ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Pozitionare */}
+              <div className={`bg-surface border border-border rounded-xl p-5 space-y-4 ${cookieCfg.enabled ? "" : "opacity-50 pointer-events-none"}`}>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Pozitionare</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Unde apare bannerul pe magazin.</p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2.5">
+                  {COOKIE_POSITIONS.map(pos => {
+                    const active = cookieCfg.position === pos.id;
+                    return (
+                      <button
+                        key={pos.id}
+                        type="button"
+                        onClick={() => setCookieCfg(c => ({ ...c, position: pos.id }))}
+                        className={`text-left p-3.5 rounded-xl border transition-all ${active ? "border-primary ring-2 ring-primary/20 bg-primary/5" : "border-border hover:border-primary/40 bg-background"}`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-sm font-semibold text-foreground">{pos.label}</span>
+                          {active && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-snug">{pos.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Categorii detectate automat */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Categorii afisate in banner</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Se adapteaza automat la integrarile active. Nu trebuie sa configurezi nimic aici.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-foreground">
+                    <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Esentiale (mereu active)
+                  </span>
+                  {cookieCategories.includes("analytics") && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-foreground">
+                      <BarChart2 className="h-3.5 w-3.5 text-blue-500" /> Analiza (Google)
+                    </span>
+                  )}
+                  {cookieCategories.includes("marketing") && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-foreground">
+                      <Zap className="h-3.5 w-3.5 text-purple-500" /> Marketing (Facebook, TikTok)
+                    </span>
+                  )}
+                </div>
+                {cookieCategories.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Momentan nu ai integrari de analiza sau marketing active, asa ca bannerul informeaza doar despre cookie-urile esentiale. Cand activezi Facebook Pixel, TikTok Pixel sau Google Analytics din <span className="font-medium text-foreground">Functii</span>, categoriile apar automat aici si in banner.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={saveCookieBanner}
+                  disabled={savingCookie || !businessId}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {savingCookie ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savingCookie ? "Se salveaza..." : "Salveaza bannerul"}
                 </button>
               </div>
             </div>

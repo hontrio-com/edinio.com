@@ -1523,6 +1523,7 @@ export type Database = {
           card_discount_config: Json
           cargus_config: Json | null
           colete_config: Json | null
+          cookie_banner_config: Json | null
           created_at: string
           currency: string
           default_shipping_cost: number
@@ -1563,6 +1564,7 @@ export type Database = {
           card_discount_config?: Json
           cargus_config?: Json | null
           colete_config?: Json | null
+          cookie_banner_config?: Json | null
           created_at?: string
           currency?: string
           default_shipping_cost?: number
@@ -1603,6 +1605,7 @@ export type Database = {
           card_discount_config?: Json
           cargus_config?: Json | null
           colete_config?: Json | null
+          cookie_banner_config?: Json | null
           created_at?: string
           currency?: string
           default_shipping_cost?: number

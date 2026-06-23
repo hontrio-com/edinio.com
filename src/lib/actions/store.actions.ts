@@ -7,6 +7,7 @@ import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
 import { checkoutPaymentMethods, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
 
 /**
  * Public, secret-free view of a store's checkout configuration.
@@ -81,6 +82,38 @@ export async function updateCardDiscount(
   if (error) {
     logError({ action: "updateCardDiscount", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea discountului la plata cu cardul." };
+  }
+
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+/**
+ * Save the merchant's cookie banner appearance (enabled + position). The consent
+ * categories themselves are derived from active integrations, not stored here.
+ */
+export async function updateCookieBannerConfig(
+  businessId: string,
+  config: CookieBannerConfig,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const sanitized = parseCookieBannerConfig(config);
+  const { error } = await supabase
+    .from("store_settings")
+    .update({ cookie_banner_config: sanitized as never })
+    .eq("business_id", businessId);
+
+  if (error) {
+    logError({ action: "updateCookieBannerConfig", message: error.message, details: { code: error.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea bannerului de cookie-uri." };
   }
 
   if (biz.slug) revalidatePath(`/${biz.slug}`);

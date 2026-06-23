@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
-  RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck, ChevronDown,
+  RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
@@ -285,7 +285,6 @@ export function OrderDetailClient({
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
   const [coleteModalOpen, setColeteModalOpen] = useState(false);
-  const [showAltCouriers, setShowAltCouriers] = useState(false);
 
   // Oblio state
   const [oblioActionPending, startOblioTransition] = useTransition();
@@ -940,19 +939,11 @@ export function OrderDetailClient({
                       </button>
                     </div>
                     {otherCouriers.length > 0 && (
-                      <div>
-                        <button type="button" onClick={() => setShowAltCouriers(o => !o)}
-                          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
-                          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAltCouriers ? "rotate-180" : ""}`} />
-                          Expediaza cu alt curier
-                        </button>
-                        {showAltCouriers && (
-                          <div className="mt-2 space-y-2">
-                            {otherCouriers.map(c => (
-                              <CourierButton key={c.id} logo={c.logo} name={c.name} awb={c.awb} onClick={c.open} />
-                            ))}
-                          </div>
-                        )}
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Sau expediaza cu alt curier</p>
+                        {otherCouriers.map(c => (
+                          <CourierButton key={c.id} logo={c.logo} name={c.name} awb={c.awb} onClick={c.open} />
+                        ))}
                       </div>
                     )}
                   </>

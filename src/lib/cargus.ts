@@ -71,7 +71,21 @@ async function getCargusToken(
     body: JSON.stringify({ UserName: username, Password: password }),
   });
 
-  if (!res.ok) throw new Error(`Cargus login error: ${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).trim();
+    // The Azure gateway rejects a bad/inactive subscription key with 401 before
+    // the request reaches Cargus. A 500 here comes from Cargus's own backend and
+    // almost always means the WebExpress username/password are wrong (or that
+    // account has no API access enabled) — Cargus returns 500 instead of 401.
+    if (res.status === 500) {
+      throw new Error(
+        "Autentificare Cargus esuata: utilizatorul sau parola contului WebExpress sunt incorecte, " +
+        "sau contul nu are acces API activat. Subscription Key-ul este corect (a trecut de gateway)." +
+        (detail ? ` Raspuns Cargus: ${detail.slice(0, 200)}` : ""),
+      );
+    }
+    throw new Error(`Cargus login error: ${res.status} ${res.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
+  }
   const token = (await res.json()) as string;
   if (!token || typeof token !== "string") throw new Error("Token Cargus invalid");
 

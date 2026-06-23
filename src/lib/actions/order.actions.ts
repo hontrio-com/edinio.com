@@ -130,6 +130,8 @@ export async function placeOrder(data: {
   customer_county: string;
   customer_city: string;
   customer_address: string;
+  customer_country?: string;
+  customer_postal_code?: string;
   discount_id?: string;
   discount_code?: string;
   discount_amount?: number;
@@ -270,6 +272,10 @@ export async function placeOrder(data: {
       county: data.customer_county,
       city: data.customer_city.trim(),
       address: data.customer_address.trim(),
+      ...(data.customer_country && data.customer_country !== "RO" && {
+        country: data.customer_country,
+        postal_code: data.customer_postal_code?.trim() || "",
+      }),
       ...(data.selected_courier && {
         courier: data.selected_courier,
         courier_label: data.courier_label,
@@ -581,6 +587,8 @@ export async function placeCartOrder(data: {
   customer_county: string;
   customer_city: string;
   customer_address: string;
+  customer_country?: string;
+  customer_postal_code?: string;
   discount_id?: string;
   discount_code?: string;
   discount_amount?: number;
@@ -707,6 +715,10 @@ export async function placeCartOrder(data: {
       county: data.customer_county,
       city: data.customer_city.trim(),
       address: data.customer_address.trim(),
+      ...(data.customer_country && data.customer_country !== "RO" && {
+        country: data.customer_country,
+        postal_code: data.customer_postal_code?.trim() || "",
+      }),
       ...(data.selected_courier && {
         courier: data.selected_courier,
         courier_label: data.courier_label,

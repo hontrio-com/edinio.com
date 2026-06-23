@@ -24,10 +24,14 @@ interface Props {
   weightKg?: number;
   cod?: number;
   color: string;
+  /** EU ISO alpha-2 for international; absent or "RO" = domestic. */
+  country?: string;
+  /** Required for international (used by DPD to price + create the AWB). */
+  postCode?: string;
   onSelect: (selection: CourierSelection | null) => void;
 }
 
-export function CourierSelector({ businessId, county, city, weightKg, cod, color, onSelect }: Props) {
+export function CourierSelector({ businessId, county, city, weightKg, cod, color, country, postCode, onSelect }: Props) {
   const [options, setOptions] = useState<ShippingOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -40,13 +44,20 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
   const prevKey = useRef("");
   const reqId = useRef(0);
 
-  // Fetch shipping options when county+city are both set
+  const isIntl = !!country && country.toUpperCase() !== "RO";
+  // Domestic needs county+city; international needs country+postCode+city.
+  const ready = isIntl
+    ? (!!postCode && postCode.trim().length >= 3 && city.trim().length >= 2)
+    : (!!county && city.trim().length >= 2);
+
+  // Fetch shipping options when the destination is sufficiently filled in
   useEffect(() => {
-    const key = `${county}::${city}`;
-    if (!county || !city || city.length < 2) {
+    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}`;
+    if (!ready) {
       setOptions([]);
       setSelectedKey(null);
       onSelect(null);
+      prevKey.current = "";
       return;
     }
     if (key === prevKey.current) return;
@@ -59,7 +70,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     setSelectedLocker(null);
     onSelect(null);
 
-    getShippingOptions(businessId, { county, city, weightKg, cod })
+    getShippingOptions(businessId, { county, city, weightKg, cod, country, postCode })
       .then((opts) => {
         if (thisReq !== reqId.current) return; // stale response
         setOptions(opts);
@@ -88,7 +99,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         if (thisReq === reqId.current) setLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [county, city]);
+  }, [county, city, country, postCode]);
 
   // Fetch lockers when a locker option is selected
   useEffect(() => {
@@ -151,7 +162,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     }
   }
 
-  if (!county || !city || city.length < 2) return null;
+  if (!ready) return null;
 
   if (loading) {
     return (

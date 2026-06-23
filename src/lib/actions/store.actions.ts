@@ -25,11 +25,12 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   min_order_amount: number | null;
   payment_methods: { type: PaymentMethodType; label: string }[];
   card_discount: CardDiscountConfig;
+  international_shipping: boolean;
 } | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, payment_methods, card_discount_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, dpd_config, payment_methods, card_discount_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -37,6 +38,12 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const sc = data.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
   const nc = data.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
   const ic = data.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
+
+  // International (EU) checkout is available only when DPD is enabled as a courier,
+  // opted into international, and credentialed. Booleans only — no secrets leak.
+  const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number } | null;
+  const zonesCfg = (data.shipping_zones ?? {}) as Record<string, { enabled?: boolean }>;
+  const internationalShipping = !!(dc?.enabled && dc?.international_enabled && dc?.username && dc?.client_id && zonesCfg["dpd"]?.enabled);
 
   const ready = {
     netopia: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
@@ -54,6 +61,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     min_order_amount: data.min_order_amount != null ? Number(data.min_order_amount) : null,
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
     card_discount: parseCardDiscountConfig(data.card_discount_config),
+    international_shipping: internationalShipping,
   };
 }
 

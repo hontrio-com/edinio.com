@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday";
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
+import { calculateDpdIntlPrice, type DpdConfig } from "@/lib/dpd";
+import { euCountryByIso2 } from "@/lib/eu-countries";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +64,8 @@ export async function getShippingOptions(
     city: string;
     weightKg?: number;
     cod?: number;
+    country?: string;  // EU ISO alpha-2 for international; absent or "RO" = domestic
+    postCode?: string;
   },
 ): Promise<ShippingOption[]> {
   // Service role: anonymous customers trigger this; courier secrets are read
@@ -69,7 +73,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, default_shipping_cost, shipping_zones")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, default_shipping_cost, shipping_zones")
     .eq("business_id", businessId)
     .single();
 
@@ -83,6 +87,37 @@ export async function getShippingOptions(
 
   const weight = destination.weightKg && destination.weightKg > 0 ? destination.weightKg : 1;
   const options: ShippingOption[] = [];
+
+  // International (EU): only DPD international applies. Short-circuit here so the
+  // domestic courier loop below stays completely unchanged for RO orders.
+  const iso2 = destination.country?.toUpperCase();
+  if (iso2 && iso2 !== "RO") {
+    const eu = euCountryByIso2(iso2);
+    const dpdCfg = settings.dpd_config as DpdConfig | null;
+    const ready = !!(
+      eu && destination.postCode && zones["dpd"]?.enabled &&
+      dpdCfg?.enabled && dpdCfg.international_enabled && dpdCfg.username && dpdCfg.password && dpdCfg.client_id
+    );
+    if (!ready) return [];
+    try {
+      const quote = await calculateDpdIntlPrice(dpdCfg!, {
+        countryId: eu!.dpdCountryId,
+        postCode: destination.postCode!,
+        weightKg: weight,
+      });
+      if (!quote) return [];
+      return [{
+        courier: "dpd",
+        courierLabel: `DPD International (${eu!.name})`,
+        deliveryType: "address",
+        price: quote.price,
+        estimatedDays: "3-6 zile",
+      }];
+    } catch {
+      return [];
+    }
+  }
+
   const promises: Promise<void>[] = [];
 
   for (const [courierId, zone] of enabledZones) {

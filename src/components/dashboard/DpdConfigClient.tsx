@@ -27,6 +27,7 @@ export function DpdConfigClient({
   const [password, setPassword] = useState(initialConfig?.password ?? "");
   const [clientId, setClientId] = useState<number | null>(initialConfig?.client_id ?? null);
   const [clientName, setClientName] = useState("");
+  const [international, setInternational] = useState(initialConfig?.international_enabled ?? false);
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_id);
 
@@ -56,6 +57,7 @@ export function DpdConfigClient({
       username: username.trim(),
       password: password.trim(),
       client_id: clientId,
+      international_enabled: international,
     };
 
     setSaving(true);
@@ -156,6 +158,22 @@ export function DpdConfigClient({
           </div>
         )}
       </div>
+
+      {/* International (EU) */}
+      {clientId && (
+        <div className="p-4 rounded-xl border border-border bg-surface">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">Livrare internationala (UE)</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Permite comenzi catre tarile UE. Clientul alege tara la checkout, iar pretul livrarii se calculeaza live prin DPD.</p>
+            </div>
+            <button type="button" onClick={() => setInternational(v => !v)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${international ? "bg-primary" : "bg-muted-foreground/30"}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${international ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Save */}
       {clientId && (

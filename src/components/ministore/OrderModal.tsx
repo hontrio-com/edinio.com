@@ -11,6 +11,7 @@ import {
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
+import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
@@ -108,13 +109,15 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
   const [selectedTierIdx, setSelectedTierIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
+  const [intlEnabled, setIntlEnabled] = useState(false);
+  const isIntl = intlEnabled && form.country !== "RO";
 
   // Customization state
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
@@ -229,6 +232,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         const pc = data.page_content as { checkout_config?: CheckoutConfig };
         setLiveCheckoutConfig(pc.checkout_config);
       }
+      setIntlEnabled(data.international_shipping === true);
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
@@ -286,7 +290,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!/^(\+?40|0)7\d{8}$/.test(form.phone.replace(/[\s\-().]/g, ""))) e.phone = "Numar de telefon invalid";
     if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
     if (emailField.enabled && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Format email invalid";
-    if (!form.county) e.county = "Selectati judetul";
+    if (isIntl) {
+      if (form.postCode.trim().length < 3) e.postCode = "Introduceti codul postal";
+    } else {
+      if (!form.county) e.county = "Selectati judetul";
+    }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
@@ -343,6 +351,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         customer_email: form.email.trim() || undefined,
         customer_county: form.county,
         customer_city: form.city,
+        customer_country: isIntl ? form.country : undefined,
+        customer_postal_code: isIntl ? form.postCode.trim() : undefined,
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
@@ -710,19 +720,47 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Judet <span className="text-red-500">*</span>
-                </label>
-                <IconInput icon={MapPin} error={!!errors.county}>
-                  <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))}
-                    className={`${inputCls} bg-white`}>
-                    <option value="">Selecteaza judetul</option>
-                    {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
-                  </select>
-                </IconInput>
-                {errors.county && <p className="text-xs text-red-500 mt-0.5">{errors.county}</p>}
-              </div>
+              {intlEnabled && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Tara <span className="text-red-500">*</span>
+                  </label>
+                  <IconInput icon={MapPin}>
+                    <select value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+                      className={`${inputCls} bg-white`}>
+                      <option value="RO">Romania</option>
+                      {EU_COUNTRIES.map(c => <option key={c.iso2} value={c.iso2}>{c.name}</option>)}
+                    </select>
+                  </IconInput>
+                </div>
+              )}
+
+              {isIntl ? (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Cod postal <span className="text-red-500">*</span>
+                  </label>
+                  <IconInput icon={MapPin} error={!!errors.postCode}>
+                    <input value={form.postCode} onChange={e => setForm(f => ({ ...f, postCode: e.target.value }))}
+                      placeholder="Cod postal" className={inputCls} />
+                  </IconInput>
+                  {errors.postCode && <p className="text-xs text-red-500 mt-0.5">{errors.postCode}</p>}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Judet <span className="text-red-500">*</span>
+                  </label>
+                  <IconInput icon={MapPin} error={!!errors.county}>
+                    <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))}
+                      className={`${inputCls} bg-white`}>
+                      <option value="">Selecteaza judetul</option>
+                      {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
+                    </select>
+                  </IconInput>
+                  {errors.county && <p className="text-xs text-red-500 mt-0.5">{errors.county}</p>}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -753,6 +791,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   county={form.county}
                   city={form.city}
                   color={color}
+                  country={isIntl ? form.country : undefined}
+                  postCode={isIntl ? form.postCode : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
                   onSelect={setCourierSelection}
                 />

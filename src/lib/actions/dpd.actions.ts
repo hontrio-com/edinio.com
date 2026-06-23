@@ -3,11 +3,13 @@
 import { createClient } from "@/lib/supabase/server";
 import {
   createDpdShipment,
+  createDpdIntlShipment,
   cancelDpdShipment,
   loadDpdAccount,
   type DpdConfig,
   type DpdShipmentInput,
 } from "@/lib/dpd";
+import { euCountryByIso2 } from "@/lib/eu-countries";
 
 // ─── Config actions ───────────────────────────────────────────────────────────
 
@@ -102,7 +104,25 @@ export async function createDpdShipmentAction(
   };
   if (orderData.dpd_shipment_id) return { error: "AWB DPD a fost deja creat" };
 
+  // International order? The destination country + postcode are stored on the
+  // order at checkout. Route to the DPD international flow when present.
+  const shipping = (order.shipping_address ?? {}) as { country?: string; postal_code?: string };
+  const eu = euCountryByIso2(shipping.country);
+
   try {
+    if (eu) {
+      if (!config.international_enabled) return { error: "Livrarea internationala DPD nu este activata." };
+      const postCode = (shipping.postal_code ?? "").trim();
+      if (!postCode) return { error: "Comanda nu are cod postal pentru expedierea internationala." };
+      const result = await createDpdIntlShipment(config, { ...input, countryId: eu.dpdCountryId, postCode });
+      await supabase.from("orders").update({
+        dpd_shipment_id: result.shipmentId,
+        dpd_awb_number: result.barcode,
+        updated_at: new Date().toISOString(),
+      }).eq("id", orderId);
+      return result;
+    }
+
     const result = await createDpdShipment(config, input);
 
     await supabase.from("orders").update({

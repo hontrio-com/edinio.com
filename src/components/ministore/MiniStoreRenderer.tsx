@@ -12,6 +12,7 @@ import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
+import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart, getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getCartSessionId } from "@/lib/cart-session";
@@ -261,9 +262,11 @@ function CartCheckoutModal({
   // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
   const grandTotal = Math.max(0, Math.round((total + extrasTotal - discountAmount - cardDiscountAmount + shipping + vatAddOn) * 100) / 100);
 
-  const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+  const [intlEnabled, setIntlEnabled] = useState(false);
+  const isIntl = intlEnabled && form.country !== "RO";
 
   // Auto-apply a recovery discount code passed via the restore link (?code=).
   useEffect(() => {
@@ -306,6 +309,7 @@ function CartCheckoutModal({
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
       setHasCouriers(!!anyEnabled);
+      setIntlEnabled(data.international_shipping === true);
     });
   }, [open, businessId]);
 
@@ -335,10 +339,16 @@ function CartCheckoutModal({
   function validate() {
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
-    if (!/^(\+?40|0)7\d{8}$/.test(form.phone.replace(/[\s\-().]/g, ""))) e.phone = "Numar de telefon invalid";
+    const phoneDigits = form.phone.replace(/[\s\-().]/g, "");
+    const phoneOk = isIntl ? /^\+?\d{6,15}$/.test(phoneDigits) : /^(\+?40|0)7\d{8}$/.test(phoneDigits);
+    if (!phoneOk) e.phone = "Numar de telefon invalid";
     if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
     else if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalid";
-    if (!form.county) e.county = "Selectati judetul";
+    if (isIntl) {
+      if (form.postCode.trim().length < 3) e.postCode = "Introduceti codul postal";
+    } else {
+      if (!form.county) e.county = "Selectati judetul";
+    }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
@@ -372,6 +382,8 @@ function CartCheckoutModal({
         customer_email: form.email.trim() || undefined,
         customer_county: form.county,
         customer_city: form.city,
+        customer_country: isIntl ? form.country : undefined,
+        customer_postal_code: isIntl ? form.postCode.trim() : undefined,
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
@@ -480,16 +492,37 @@ function CartCheckoutModal({
               {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
             </div>
           )}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Judet <span className="text-red-500">*</span></label>
-            <FieldWrap icon={MapPin} error={!!errors.county}>
-              <select aria-label="Judet" value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-white`}>
-                <option value="">Selecteaza judetul</option>
-                {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
-              </select>
-            </FieldWrap>
-            {errors.county && <p className="text-xs text-red-500 mt-0.5">{errors.county}</p>}
-          </div>
+          {intlEnabled && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Tara <span className="text-red-500">*</span></label>
+              <FieldWrap icon={MapPin}>
+                <select aria-label="Tara" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className={`${fieldCls} bg-white`}>
+                  <option value="RO">Romania</option>
+                  {EU_COUNTRIES.map(c => <option key={c.iso2} value={c.iso2}>{c.name}</option>)}
+                </select>
+              </FieldWrap>
+            </div>
+          )}
+          {isIntl ? (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Cod postal <span className="text-red-500">*</span></label>
+              <FieldWrap icon={MapPin} error={!!errors.postCode}>
+                <input value={form.postCode} onChange={e => setForm(f => ({ ...f, postCode: e.target.value }))} placeholder="Cod postal" className={fieldCls} />
+              </FieldWrap>
+              {errors.postCode && <p className="text-xs text-red-500 mt-0.5">{errors.postCode}</p>}
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Judet <span className="text-red-500">*</span></label>
+              <FieldWrap icon={MapPin} error={!!errors.county}>
+                <select aria-label="Judet" value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-white`}>
+                  <option value="">Selecteaza judetul</option>
+                  {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
+                </select>
+              </FieldWrap>
+              {errors.county && <p className="text-xs text-red-500 mt-0.5">{errors.county}</p>}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Oras <span className="text-red-500">*</span></label>
             <FieldWrap icon={MapPin} error={!!errors.city}>
@@ -511,6 +544,8 @@ function CartCheckoutModal({
               county={form.county}
               city={form.city}
               color={color}
+              country={isIntl ? form.country : undefined}
+              postCode={isIntl ? form.postCode : undefined}
               cod={paymentMethod === "cash_on_delivery" ? total : 0}
               onSelect={setCourierSelection}
             />

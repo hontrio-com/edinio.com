@@ -25,6 +25,7 @@ import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
 import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
+import { euCountryByIso2 } from "@/lib/eu-countries";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import type { Database } from "@/types/database.types";
@@ -43,6 +44,8 @@ interface ShippingAddress {
   county: string;
   city: string;
   address: string;
+  country?: string;
+  postal_code?: string;
   courier?: string;
   courier_label?: string;
   delivery_type?: string;
@@ -728,12 +731,19 @@ export function OrderDetailClient({
                   <a href={`mailto:${customerEmail}`} className="text-primary hover:underline truncate">{customerEmail}</a>
                 </div>
               )}
-              {address.county && (
+              {(address.county || address.country) && (
                 <div className="flex items-start gap-2.5 text-sm">
                   <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                   <div className="text-muted-foreground leading-relaxed">
                     <div>{address.address}</div>
-                    <div>{address.city}, {address.county}</div>
+                    <div>
+                      {[address.city, address.county, address.postal_code].filter(Boolean).join(", ")}
+                    </div>
+                    {address.country && address.country !== "RO" && (
+                      <div className="font-semibold text-foreground">
+                        {euCountryByIso2(address.country)?.name ?? address.country}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -62,7 +62,7 @@ export default async function OrdersPage() {
   const samedayEnabled = !!(sg?.enabled && sg?.username && sg?.pickup_point_id);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6">
       <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} samedayEnabled={samedayEnabled} businessId={business.id} />
     </div>
   );

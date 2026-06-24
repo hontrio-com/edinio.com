@@ -228,7 +228,7 @@ const POLICY_LINKS = [
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {} }: {
+export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, preview = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -236,6 +236,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   hasCardPayment?: boolean;
   bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
   altMap?: Record<string, string>;
+  // Preview mode (dashboard): render exactly like the storefront but neutralize
+  // the purchase flow so no real order can be placed from the merchant preview.
+  preview?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -634,7 +637,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
 
         {/* CTA */}
-        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => setModalOpen(true)} />
+        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { if (!preview) setModalOpen(true); }} />
 
         {/* Trust mini */}
         {trustBadgesEnabled && (
@@ -1020,7 +1023,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 )}
               </div>
             </div>
-            <button type="button" onClick={() => setModalOpen(true)} disabled={isOutOfStock || needsVariant}
+            <button type="button" onClick={() => { if (!preview) setModalOpen(true); }} disabled={isOutOfStock || needsVariant}
               className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl flex-shrink-0 disabled:opacity-40 uppercase tracking-wide hover:opacity-90 active:scale-[0.98]"
               style={{ backgroundColor: color }}>
               <ShoppingBag size={16} />
@@ -1032,7 +1035,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Order Modal */}
       <OrderModal
-        open={modalOpen}
+        open={modalOpen && !preview}
         onClose={() => setModalOpen(false)}
         product={{
           id: product.id,

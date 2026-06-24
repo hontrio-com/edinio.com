@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus, X, Pencil, Loader2, Upload, Star, ArrowLeft, Trash2,
-  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info,
+  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info, Eye,
 } from "lucide-react";
+import { ProductPage } from "@/components/ministore/ProductPage";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -25,6 +27,8 @@ import { cn } from "@/lib/utils/cn";
 import type { Database } from "@/types/database.types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
+type Business = Database["public"]["Tables"]["businesses"]["Row"];
+type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
 
 export interface CategoryOption {
   id: string;
@@ -442,9 +446,13 @@ interface Props {
   product?: Product;
   categories: CategoryOption[];
   backHref?: string;
+  // Passed on new + edit pages so the live storefront preview can render exactly
+  // like the customer-facing product page. Optional: preview button hides without them.
+  business?: Business;
+  storeSettings?: StoreSettings | null;
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products" }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, storeSettings }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [form, setForm] = useState<FormState>(product ? productToForm(product) : EMPTY_FORM);
@@ -453,6 +461,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   const [isPending, startTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(isEditing && !!product.slug);
 
   // Inline category creation
@@ -540,6 +549,16 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
     });
   }
 
+  // Lock background scroll + close the preview overlay on Escape.
+  useEffect(() => {
+    if (!previewOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPreviewOpen(false); };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prevOverflow; };
+  }, [previewOpen]);
+
   const seoScore = computeSeoScore(form);
   const seoColor = seoScore >= 81 ? "text-green-600" : seoScore >= 61 ? "text-blue-600" : seoScore >= 31 ? "text-amber-600" : "text-red-600";
   const seoBg = seoScore >= 81 ? "bg-green-50 border-green-200" : seoScore >= 61 ? "bg-blue-50 border-blue-200" : seoScore >= 31 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200";
@@ -559,15 +578,12 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
     desc: (form.seo_description.trim() || form.short_description.replace(/<[^>]+>/g, "").trim() || form.description.replace(/<[^>]+>/g, "").slice(0, 160) || "Fara descriere.").slice(0, 160),
   };
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const price = parseFloat(form.price.replace(",", "."));
-    if (!form.name.trim()) { toast.error("Numele produsului este obligatoriu."); return; }
-    if (isNaN(price) || price <= 0) { toast.error("Pretul trebuie sa fie un numar pozitiv."); return; }
-
+  // Build the create/update payload from the current form state (lenient parsing).
+  // Shared by Save and the live Preview so the two can never drift apart.
+  function buildPayload() {
+    const price = parseFloat(form.price.replace(",", ".")) || 0;
     const slug = form.slug.trim() || toSlug(form.name);
-
-    const payload = {
+    return {
       name: form.name.trim(),
       slug,
       description: form.description,
@@ -613,6 +629,31 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
         },
       },
     };
+  }
+
+  // A full Product-shaped object from the live (unsaved) form, for the storefront preview.
+  function buildPreviewProduct(): Product {
+    const p = buildPayload();
+    return {
+      ...(product ?? {}),
+      id: product?.id ?? "preview",
+      business_id: businessId,
+      ...p,
+      name: p.name || "Produs nou",
+      slug: p.slug || "produs",
+      is_bundle: (product as Product | undefined)?.is_bundle ?? false,
+      created_at: product?.created_at ?? new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as unknown as Product;
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const price = parseFloat(form.price.replace(",", "."));
+    if (!form.name.trim()) { toast.error("Numele produsului este obligatoriu."); return; }
+    if (isNaN(price) || price <= 0) { toast.error("Pretul trebuie sa fie un numar pozitiv."); return; }
+
+    const payload = buildPayload();
 
     startTransition(async () => {
       const result = isEditing
@@ -1477,6 +1518,13 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
             {/* Actions */}
             <div className={sectionCls}>
               <div className="px-5 py-4 space-y-2.5">
+                {business && (
+                  <button type="button" onClick={() => setPreviewOpen(true)}
+                    className="w-full py-2.5 text-sm font-semibold rounded-xl border border-border hover:bg-muted transition-colors text-foreground flex items-center justify-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Previzualizare
+                  </button>
+                )}
                 <button type="submit" disabled={isPending}
                   className="w-full py-2.5 text-sm font-semibold text-white rounded-xl bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                   {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -1527,6 +1575,12 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
 
       {/* Mobile sticky save bar */}
       <div className="fixed bottom-16 left-0 right-0 z-20 bg-background border-t border-border px-4 py-3 flex gap-3 lg:hidden">
+        {business && (
+          <button type="button" onClick={() => setPreviewOpen(true)} aria-label="Previzualizare"
+            className="px-3.5 py-2.5 rounded-xl border border-border hover:bg-muted transition-colors text-foreground flex items-center justify-center flex-shrink-0">
+            <Eye className="h-4 w-4" />
+          </button>
+        )}
         <button type="button" onClick={() => router.push(backHref)}
           className="flex-1 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors text-foreground">
           Anuleaza
@@ -1537,6 +1591,38 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
           {isPending ? "Se salveaza..." : isEditing ? "Salveaza" : "Adauga produs"}
         </button>
       </div>
+
+      {/* ── Live storefront preview overlay (portaled to body to escape the dashboard's stacking contexts) ── */}
+      {previewOpen && business && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[200] flex flex-col bg-black/30">
+          <div className="flex items-center justify-between gap-3 px-4 h-14 flex-shrink-0 bg-background border-b border-border">
+            <div className="flex items-center gap-2 min-w-0">
+              <Eye className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-sm font-semibold text-foreground">Previzualizare</span>
+              <span className="hidden sm:block text-xs text-muted-foreground truncate">
+                Asa vede clientul produsul. Cumpararea este dezactivata in preview.
+              </span>
+            </div>
+            <button type="button" onClick={() => setPreviewOpen(false)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border bg-surface hover:bg-muted transition-colors flex-shrink-0">
+              Inchide
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {/* Scrollable storefront; intercept anchor clicks so preview navigation never leaves the dashboard. */}
+          <div className="flex-1 overflow-y-auto bg-white"
+            onClickCapture={(e) => { const a = (e.target as HTMLElement).closest("a"); if (a) e.preventDefault(); }}>
+            <ProductPage
+              business={business}
+              product={buildPreviewProduct()}
+              storeSettings={storeSettings ?? null}
+              basePath={`/${business.slug}`}
+              preview
+            />
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

@@ -19,16 +19,23 @@ export default async function EditProductPage({ params, searchParams }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id")
+    .select("*")
     .eq("user_id", user.id)
     .order("created_at")
     .limit(1)
     .single();
   if (!business) redirect("/dashboard");
 
-  const [{ data: product }, { data: categories }] = await Promise.all([
+  // store_settings: only the public-safe columns the storefront preview needs
+  // (it holds courier/payment secrets, so never select * into a client prop).
+  const [{ data: product }, { data: categories }, { data: storeSettings }] = await Promise.all([
     supabase.from("products").select("*").eq("id", productId).eq("business_id", business.id).single(),
     supabase.from("categories").select("id, name, parent_id").eq("business_id", business.id).order("sort_order").order("name"),
+    supabase
+      .from("store_settings")
+      .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
+      .eq("business_id", business.id)
+      .single(),
   ]);
 
   if (!product) notFound();
@@ -39,6 +46,8 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       product={product}
       categories={categories ?? []}
       backHref={backHref}
+      business={business}
+      storeSettings={storeSettings as never}
     />
   );
 }

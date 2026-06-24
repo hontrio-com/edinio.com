@@ -79,11 +79,16 @@ export async function loadDpdAccount(
 
 // ─── Create shipment ──────────────────────────────────────────────────────────
 
-// Builds the api.dpd.ro/v1 (Speedy) shipment body. The spec requires the top
-// level objects: sender, recipient, service, content, payment. (The earlier
-// receiver/primaryShipment shape was the Interconnector API and is rejected with
-// a "Cannot deserialize" error.) `siteName`+`postCode`+`countryId` resolve the
-// destination for any address type (local RO or foreign EU).
+// RO and BG are "local" (address type 1) in the Speedy engine; everything else
+// is "foreign" (address type 2), which requires addressLine1 instead of
+// streetName/streetNo.
+const LOCAL_COUNTRY_IDS = new Set([642, 100]); // Romania, Bulgaria
+
+// Builds the api.dpd.ro/v1 (Speedy) shipment body. Required top-level objects:
+// sender, recipient, service, content, payment. The recipient address differs by
+// type: type 1 (local) uses street fields / addressNote; type 2 (foreign) uses
+// addressLine1 (+ addressLine2). Both use countryId + siteName + postCode to
+// resolve the destination site.
 function buildDpdShipmentBody(
   config: DpdConfig,
   input: DpdShipmentInput,
@@ -98,6 +103,30 @@ function buildDpdShipmentBody(
       cod: { amount: input.cashOnDelivery, processingType: "CASH" },
     };
   }
+
+  // We capture the street as a single free-text field, so join street + no.
+  const fullStreet = [input.recipientStreet, input.recipientStreetNo]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .trim() || input.recipientCity;
+
+  const address: Record<string, unknown> = {
+    countryId: opts.countryId,
+    siteName: input.recipientCity,
+    ...(opts.postCode ? { postCode: opts.postCode } : {}),
+  };
+  if (LOCAL_COUNTRY_IDS.has(opts.countryId)) {
+    // Type 1 (local): our single address line goes in addressNote — the spec's
+    // "all components of the address stored in addressNote" path, which avoids
+    // street-registry validation against a non-split address.
+    address.addressNote = fullStreet.slice(0, 200);
+  } else {
+    // Type 2 (foreign): addressLine1 is REQUIRED, max 35; overflow to line 2.
+    address.addressLine1 = fullStreet.slice(0, 35) || ".";
+    if (fullStreet.length > 35) address.addressLine2 = fullStreet.slice(35, 70);
+  }
+
   return {
     userName: config.username,
     password: config.password,
@@ -108,13 +137,7 @@ function buildDpdShipmentBody(
       privatePerson: true,
       clientName: input.recipientName,
       email: input.recipientEmail || undefined,
-      address: {
-        countryId: opts.countryId,
-        siteName: input.recipientCity,
-        ...(opts.postCode ? { postCode: opts.postCode } : {}),
-        streetName: input.recipientStreet || "Strada",
-        streetNo: input.recipientStreetNo || "1",
-      },
+      address,
     },
     service,
     content: { parcelsCount: 1, totalWeight: input.weightKg },

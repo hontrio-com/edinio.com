@@ -5,8 +5,10 @@ import Image from "next/image";
 import { toast } from "sonner";
 import {
   Upload, Search, Trash2, X, Loader2, RefreshCw, CheckSquare, Square,
-  Image as ImageIcon, Film, Copy, Check, AlertTriangle,
+  Image as ImageIcon, Film, Copy, Check, AlertTriangle, ChevronLeft, ChevronRight,
 } from "lucide-react";
+
+const PAGE_SIZE_OPTIONS = [24, 48, 96];
 import { cn } from "@/lib/utils/cn";
 import {
   getMediaPageData, updateMediaMeta, deleteMedia, backfillMediaLibrary,
@@ -40,6 +42,9 @@ export function MediaLibraryClient() {
   const [folderFilter, setFolderFilter] = useState<string>("all");
   const [usageFilter, setUsageFilter] = useState<UsageFilter>("all");
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1]);
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [active, setActive] = useState<MediaRow | null>(null);
@@ -49,13 +54,25 @@ export function MediaLibraryClient() {
 
   async function load() {
     setLoading(true);
+    setPage(1);
     const res = await getMediaPageData();
     if ("rows" in res) { setRows(res.rows); setUsage(res.usage); }
     else toast.error(res.error);
     setLoading(false);
   }
 
-  useEffect(() => { void load(); }, []);
+  // Initial fetch. setState runs in the promise callback (after the await), not
+  // synchronously in the effect body, per react-hooks/set-state-in-effect.
+  useEffect(() => {
+    let cancelled = false;
+    getMediaPageData().then((res) => {
+      if (cancelled) return;
+      if ("rows" in res) { setRows(res.rows); setUsage(res.usage); }
+      else toast.error(res.error);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const folders = useMemo(() => {
     const s = new Set<string>();
@@ -79,6 +96,25 @@ export function MediaLibraryClient() {
       return true;
     });
   }, [rows, search, typeFilter, folderFilter, usageFilter, usage]);
+
+  const counts = useMemo(() => {
+    let img = 0, vid = 0;
+    for (const r of rows) { if (r.type === "video") vid++; else img++; }
+    return { total: rows.length, img, vid };
+  }, [rows]);
+
+  const hasActiveFilters =
+    search.trim() !== "" || typeFilter !== "all" || folderFilter !== "all" || usageFilter !== "all";
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  // Clamp on read so filtering/deletions can't strand us on an empty page. The
+  // filter controls reset page to 1 directly, so no setState-in-effect is needed.
+  const currentPage = Math.min(page, totalPages);
+
+  const paged = useMemo(
+    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filtered, currentPage, pageSize],
+  );
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -165,22 +201,22 @@ export function MediaLibraryClient() {
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Cauta dupa nume, titlu, text alternativ..."
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
         </div>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+        <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value as TypeFilter); setPage(1); }}
           className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
           <option value="all">Toate tipurile</option>
           <option value="image">Imagini</option>
           <option value="video">Videoclipuri</option>
         </select>
-        <select value={folderFilter} onChange={(e) => setFolderFilter(e.target.value)}
+        <select value={folderFilter} onChange={(e) => { setFolderFilter(e.target.value); setPage(1); }}
           className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
           <option value="all">Toate sursele</option>
           {folders.map((f) => <option key={f} value={f}>{FOLDER_LABELS[f] ?? f}</option>)}
         </select>
-        <select value={usageFilter} onChange={(e) => setUsageFilter(e.target.value as UsageFilter)}
+        <select value={usageFilter} onChange={(e) => { setUsageFilter(e.target.value as UsageFilter); setPage(1); }}
           className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
           <option value="all">Folosite si nefolosite</option>
           <option value="used">Doar folosite</option>
@@ -209,6 +245,26 @@ export function MediaLibraryClient() {
         </div>
       )}
 
+      {/* Count + page size */}
+      {!loading && rows.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-semibold text-foreground">{counts.total}</span> fisiere in total
+            {" · "}{counts.img} imagini · {counts.vid} videoclipuri
+            {hasActiveFilters && (
+              <> · <span className="font-medium text-foreground">{filtered.length}</span> rezultate filtrate</>
+            )}
+          </p>
+          <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            Pe pagina:
+            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+              className="px-2 py-1 rounded-lg border border-border bg-background text-sm">
+              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+
       {/* Grid */}
       {loading ? (
         <div className="flex items-center justify-center py-24"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
@@ -220,8 +276,9 @@ export function MediaLibraryClient() {
           </p>
         </div>
       ) : (
+        <>
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-          {filtered.map((r) => {
+          {paged.map((r) => {
             const isSel = selected.has(r.id);
             const used = usage[r.url]?.length ?? 0;
             return (
@@ -254,6 +311,22 @@ export function MediaLibraryClient() {
             );
           })}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-5">
+            <button disabled={currentPage <= 1} onClick={() => setPage(Math.max(1, currentPage - 1))}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              <ChevronLeft className="h-4 w-4" /> Inapoi
+            </button>
+            <span className="text-sm text-muted-foreground px-2">Pagina {currentPage} din {totalPages}</span>
+            <button disabled={currentPage >= totalPages} onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              Inainte <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        </>
       )}
 
       {/* Detail drawer */}

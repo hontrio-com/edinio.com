@@ -229,8 +229,8 @@ export async function calculateDpdIntlPrice(
   if (!serviceId) return null;
 
   const data = await dpdPost<{
-    calculations?: { price?: { total?: number; amount?: number; currency?: string } }[];
-    price?: { total?: number; amount?: number; currency?: string };
+    calculations?: { price?: { amount?: number; vat?: number; total?: number; currency?: string } }[];
+    price?: { amount?: number; vat?: number; total?: number; currency?: string };
   }>("calculate", {
     userName: config.username,
     password: config.password,
@@ -243,9 +243,11 @@ export async function calculateDpdIntlPrice(
   });
 
   const price = data.calculations?.[0]?.price ?? data.price;
-  const total = price?.total ?? price?.amount;
-  if (typeof total !== "number") return null;
-  return { serviceId, price: Math.round(total * 100) / 100, currency: price?.currency ?? "RON" };
+  // ShipmentPrice.amount = price BEFORE VAT (the contracted net rate); .total adds
+  // VAT. We charge the net rate so it matches the merchant's DPD contract price.
+  const net = price?.amount ?? price?.total;
+  if (typeof net !== "number") return null;
+  return { serviceId, price: Math.round(net * 100) / 100, currency: price?.currency ?? "RON" };
 }
 
 export type DpdIntlShipmentInput = DpdShipmentInput & {

@@ -691,7 +691,7 @@ export function OrderDetailClient({
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto pb-24 lg:pb-6">
+    <div className="p-4 sm:p-6 pb-24 lg:pb-6">
       {/* ── Header ── */}
       <div className="flex items-start gap-4 mb-5">
         <button type="button" onClick={() => router.push("/dashboard/orders")}

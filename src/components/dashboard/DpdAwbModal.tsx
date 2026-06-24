@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { X, Package, Loader2, Download, Trash2 } from "lucide-react";
 import { createDpdShipmentAction, cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
+import { euCountryByIso2 } from "@/lib/eu-countries";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -35,7 +36,9 @@ export function DpdAwbModal({
   };
 
   const hasAwb = !!orderData.dpd_awb_number;
-  const addr = order.shipping_address as ShippingAddress | null;
+  const addr = order.shipping_address as (ShippingAddress & { country?: string; postal_code?: string }) | null;
+  // International order? The destination service is auto-discovered server-side.
+  const intlCountry = euCountryByIso2(addr?.country);
 
   const [weight, setWeight] = useState("1");
   const [length, setLength] = useState("");
@@ -328,7 +331,7 @@ export function DpdAwbModal({
 
                   <div className="px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 bg-primary/5 border border-primary/20 text-primary">
                     <Package className="h-3.5 w-3.5 flex-shrink-0" />
-                    Serviciu: <span className="font-bold">DPD Classic Romania</span>
+                    Serviciu: <span className="font-bold">{intlCountry ? `DPD International (${intlCountry.name})` : "DPD Classic Romania"}</span>
                   </div>
                 </div>
               </div>

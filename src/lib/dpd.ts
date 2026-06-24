@@ -41,7 +41,16 @@ async function dpdPost<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await res.json() as Record<string, unknown>;
+  // DPD returns a non-JSON body (e.g. "Cannot deserialize ...") when the request
+  // is malformed; read as text first so we surface the real message instead of a
+  // bare "Unexpected token ... is not valid JSON".
+  const text = await res.text();
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`DPD ${path}: ${(text || res.statusText).slice(0, 250)}`);
+  }
   if (!res.ok || data["error"]) {
     const errInfo = data["error"] as Record<string, unknown> | null | undefined;
     const msg = errInfo?.["message"] ?? data["message"] ?? res.statusText;
@@ -70,72 +79,65 @@ export async function loadDpdAccount(
 
 // ─── Create shipment ──────────────────────────────────────────────────────────
 
+// Builds the api.dpd.ro/v1 (Speedy) shipment body. The spec requires the top
+// level objects: sender, recipient, service, content, payment. (The earlier
+// receiver/primaryShipment shape was the Interconnector API and is rejected with
+// a "Cannot deserialize" error.) `siteName`+`postCode`+`countryId` resolve the
+// destination for any address type (local RO or foreign EU).
+function buildDpdShipmentBody(
+  config: DpdConfig,
+  input: DpdShipmentInput,
+  opts: { countryId: number; postCode?: string; serviceId: number },
+) {
+  const service: Record<string, unknown> = {
+    autoAdjustPickupDate: true,
+    serviceId: opts.serviceId,
+  };
+  if (input.cashOnDelivery > 0) {
+    service.additionalServices = {
+      cod: { amount: input.cashOnDelivery, processingType: "CASH" },
+    };
+  }
+  return {
+    userName: config.username,
+    password: config.password,
+    language: "RO",
+    sender: { clientId: config.client_id },
+    recipient: {
+      phone1: { number: input.recipientPhone },
+      privatePerson: true,
+      clientName: input.recipientName,
+      email: input.recipientEmail || undefined,
+      address: {
+        countryId: opts.countryId,
+        siteName: input.recipientCity,
+        ...(opts.postCode ? { postCode: opts.postCode } : {}),
+        streetName: input.recipientStreet || "Strada",
+        streetNo: input.recipientStreetNo || "1",
+      },
+    },
+    service,
+    content: { parcelsCount: 1, totalWeight: input.weightKg },
+    payment: { courierServicePayer: "SENDER" }, // merchant pays the courier
+    ref1: input.ref1,
+    shipmentNote: input.shipmentNote || undefined,
+  };
+}
+
+// CreateShipmentResponse: { id, parcels: [{ id }], ... } — the parcel id IS the AWB barcode.
+async function sendDpdShipment(body: unknown): Promise<DpdShipmentResult> {
+  const res = await dpdPost<{ id?: string | number; parcels?: { id?: string | number }[] }>("shipment", body);
+  const barcode = res.parcels?.[0]?.id != null ? String(res.parcels[0].id) : "";
+  if (!barcode) throw new Error("AWB DPD nu a fost returnat");
+  return { shipmentId: Number(res.id) || 0, barcode };
+}
+
 export async function createDpdShipment(
   config: DpdConfig,
   input: DpdShipmentInput,
 ): Promise<DpdShipmentResult> {
-  const today = new Date().toISOString().slice(0, 10);
-
-  const hasCod = input.cashOnDelivery > 0;
-  const serviceBlock: Record<string, unknown> = {
-    pickupDate: today,
-    serviceId: 1, // DPD Classic Romania
-    autoAdjustPickupDate: true,
-  };
-  if (hasCod) {
-    serviceBlock["additionalServices"] = {
-      cod: {
-        amount: input.cashOnDelivery,
-        currencyCode: "RON",
-        processingType: "CASH",
-      },
-    };
-  }
-
-  const body = {
-    userName: config.username,
-    password: config.password,
-    language: "RO",
-    clientSystemId: "edinio",
-    sendingDate: today,
-    shipmentType: 2,
-    sender: { clientId: config.client_id },
-    receiver: {
-      privatePerson: true,
-      name: input.recipientName,
-      phone: input.recipientPhone,
-      email: input.recipientEmail || undefined,
-      address: {
-        countryId: 642, // Romania
-        siteName: input.recipientCity,
-        streetName: input.recipientStreet || "Strada",
-        streetNo: input.recipientStreetNo || "1",
-        addressNote: input.recipientAddressNote || undefined,
-      },
-    },
-    service: serviceBlock,
-    primaryShipment: {
-      weight: input.weightKg,
-      size: {
-        depth: input.length ?? 0,
-        width: input.width ?? 0,
-        height: input.height ?? 0,
-      },
-    },
-    ref1: input.ref1,
-    shipmentNote: input.shipmentNote || undefined,
-  };
-
-  const res = await dpdPost<{
-    shipmentId: number;
-    parcels: { seqNo: number; id: number; barcode: string }[];
-  }>("shipment", body);
-
-  if (!res.shipmentId) throw new Error("shipmentId lipsa din raspuns DPD");
-  const barcode = res.parcels?.[0]?.barcode ?? String(res.parcels?.[0]?.id ?? "");
-  if (!barcode) throw new Error("Barcod AWB DPD lipsa din raspuns");
-
-  return { shipmentId: res.shipmentId, barcode };
+  // Domestic RO (countryId 642), DPD Classic (serviceId 1).
+  return sendDpdShipment(buildDpdShipmentBody(config, input, { countryId: 642, serviceId: 1 }));
 }
 
 // ─── International (EU) ───────────────────────────────────────────────────────
@@ -214,51 +216,9 @@ export async function createDpdIntlShipment(
   }
   if (!serviceId) throw new Error("DPD nu are serviciu international disponibil pentru aceasta destinatie.");
 
-  const today = new Date().toISOString().slice(0, 10);
-  const hasCod = input.cashOnDelivery > 0;
-  const serviceBlock: Record<string, unknown> = { pickupDate: today, serviceId, autoAdjustPickupDate: true };
-  if (hasCod) {
-    serviceBlock["additionalServices"] = {
-      cod: { amount: input.cashOnDelivery, currencyCode: "RON", processingType: "CASH" },
-    };
-  }
-
-  const body = {
-    userName: config.username,
-    password: config.password,
-    language: "RO",
-    clientSystemId: "edinio",
-    sendingDate: today,
-    shipmentType: 2,
-    sender: { clientId: config.client_id },
-    receiver: {
-      privatePerson: true,
-      name: input.recipientName,
-      phone: input.recipientPhone,
-      email: input.recipientEmail || undefined,
-      address: {
-        countryId: input.countryId,
-        postCode: input.postCode,
-        siteName: input.recipientCity,
-        streetName: input.recipientStreet || "Strada",
-        streetNo: input.recipientStreetNo || "1",
-        addressNote: input.recipientAddressNote || undefined,
-      },
-    },
-    service: serviceBlock,
-    primaryShipment: {
-      weight: input.weightKg,
-      size: { depth: input.length ?? 0, width: input.width ?? 0, height: input.height ?? 0 },
-    },
-    ref1: input.ref1,
-    shipmentNote: input.shipmentNote || undefined,
-  };
-
-  const res = await dpdPost<{ shipmentId: number; parcels: { id: number; barcode: string }[] }>("shipment", body);
-  if (!res.shipmentId) throw new Error("shipmentId lipsa din raspuns DPD");
-  const barcode = res.parcels?.[0]?.barcode ?? String(res.parcels?.[0]?.id ?? "");
-  if (!barcode) throw new Error("Barcod AWB DPD lipsa din raspuns");
-  return { shipmentId: res.shipmentId, barcode };
+  return sendDpdShipment(
+    buildDpdShipmentBody(config, input, { countryId: input.countryId, postCode: input.postCode, serviceId }),
+  );
 }
 
 // ─── Cancel shipment ──────────────────────────────────────────────────────────

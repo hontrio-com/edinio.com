@@ -347,7 +347,8 @@ function CartCheckoutModal({
     const phoneDigits = form.phone.replace(/[\s\-().]/g, "");
     const phoneOk = isIntl ? /^\+?\d{6,15}$/.test(phoneDigits) : /^(\+?40|0)7\d{8}$/.test(phoneDigits);
     if (!phoneOk) e.phone = "Numar de telefon invalid";
-    if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
+    // DPD requires the recipient email for international shipments.
+    if ((emailField.enabled || isIntl) && (emailField.required || isIntl) && !form.email.trim()) e.email = "Email obligatoriu";
     else if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Email invalid";
     if (isIntl) {
       if (form.postCode.trim().length < 3) e.postCode = "Introduceti codul postal";
@@ -482,11 +483,11 @@ function CartCheckoutModal({
             </FieldWrap>
             {errors.phone && <p className="text-xs text-red-500 mt-0.5">{errors.phone}</p>}
           </div>
-          {emailField.enabled && (
+          {(emailField.enabled || isIntl) && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
                 Email{" "}
-                {emailField.required
+                {(emailField.required || isIntl)
                   ? <span className="text-red-500">*</span>
                   : <span className="text-xs font-normal text-gray-400">(optional — pentru confirmare comanda)</span>
                 }

@@ -9,6 +9,10 @@ export type DpdConfig = {
   international_enabled?: boolean;
   /** Opt-in: price international orders by the real product weight (else a 1kg estimate). */
   use_product_weight?: boolean;
+  /** Sender IBAN — required by DPD to pay back COD (ramburs) collected from recipients. */
+  iban?: string;
+  /** Bank account holder (the merchant). Sent alongside the IBAN. */
+  account_holder?: string;
 };
 
 export type DpdShipmentInput = {
@@ -98,9 +102,24 @@ function buildDpdShipmentBody(
     autoAdjustPickupDate: true,
     serviceId: opts.serviceId,
   };
-  if (input.cashOnDelivery > 0) {
+  const hasCod = input.cashOnDelivery > 0;
+  if (hasCod) {
     service.additionalServices = {
       cod: { amount: input.cashOnDelivery, processingType: "CASH" },
+    };
+  }
+
+  // COD (ramburs): DPD pays the collected amount back to the sender, so a valid
+  // sender IBAN is required.
+  const payment: Record<string, unknown> = { courierServicePayer: "SENDER" };
+  if (hasCod) {
+    const iban = (config.iban ?? "").replace(/\s/g, "");
+    if (!iban) {
+      throw new Error("Pentru comenzi cu ramburs, adauga IBAN-ul in setarile DPD (necesar pentru returnarea banilor incasati).");
+    }
+    payment.senderBankAccount = {
+      iban,
+      accountHolder: (config.account_holder ?? "").trim() || "Expeditor",
     };
   }
 
@@ -141,7 +160,7 @@ function buildDpdShipmentBody(
     },
     service,
     content: { parcelsCount: 1, totalWeight: input.weightKg },
-    payment: { courierServicePayer: "SENDER" }, // merchant pays the courier
+    payment,
     ref1: input.ref1,
     shipmentNote: input.shipmentNote || undefined,
   };

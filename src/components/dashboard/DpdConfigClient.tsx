@@ -29,6 +29,8 @@ export function DpdConfigClient({
   const [clientName, setClientName] = useState("");
   const [international, setInternational] = useState(initialConfig?.international_enabled ?? false);
   const [useWeight, setUseWeight] = useState(initialConfig?.use_product_weight ?? false);
+  const [iban, setIban] = useState(initialConfig?.iban ?? "");
+  const [accountHolder, setAccountHolder] = useState(initialConfig?.account_holder ?? "");
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_id);
 
@@ -60,6 +62,8 @@ export function DpdConfigClient({
       client_id: clientId,
       international_enabled: international,
       use_product_weight: useWeight,
+      iban: iban.trim() || undefined,
+      account_holder: accountHolder.trim() || undefined,
     };
 
     setSaving(true);
@@ -160,6 +164,30 @@ export function DpdConfigClient({
           </div>
         )}
       </div>
+
+      {/* Cont bancar pentru ramburs */}
+      {clientId && (
+        <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Cont bancar (ramburs)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Necesar pentru comenzile cu plata la livrare — DPD returneaza aici banii incasati de la clienti.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">IBAN</label>
+              <input type="text" value={iban} onChange={e => setIban(e.target.value)}
+                placeholder="RO00 BANK 0000 0000 0000 0000"
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Titular cont</label>
+              <input type="text" value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
+                placeholder="Numele firmei"
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* International (EU) */}
       {clientId && (

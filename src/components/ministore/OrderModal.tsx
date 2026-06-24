@@ -294,8 +294,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     // RO number for domestic; a lenient international format for EU orders.
     const phoneOk = isIntl ? /^\+?\d{6,15}$/.test(phoneDigits) : /^(\+?40|0)7\d{8}$/.test(phoneDigits);
     if (!phoneOk) e.phone = "Numar de telefon invalid";
-    if (emailField.enabled && emailField.required && !form.email.trim()) e.email = "Email obligatoriu";
-    if (emailField.enabled && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Format email invalid";
+    // DPD requires the recipient email for international shipments.
+    if ((emailField.enabled || isIntl) && (emailField.required || isIntl) && !form.email.trim()) e.email = "Email obligatoriu";
+    if ((emailField.enabled || isIntl) && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = "Format email invalid";
     if (isIntl) {
       if (form.postCode.trim().length < 3) e.postCode = "Introduceti codul postal";
     } else {
@@ -713,10 +714,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 {errors.phone && <p className="text-xs text-red-500 mt-0.5">{errors.phone}</p>}
               </div>
 
-              {emailField.enabled && (
+              {(emailField.enabled || isIntl) && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Email {emailField.required ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal">(optional)</span>}
+                    Email {(emailField.required || isIntl) ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal">(optional)</span>}
                   </label>
                   <IconInput icon={Mail} error={!!errors.email}>
                     <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}

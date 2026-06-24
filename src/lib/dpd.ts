@@ -232,7 +232,7 @@ export async function cancelDpdShipment(
     userName: config.username,
     password: config.password,
     language: "RO",
-    shipmentId,
+    shipmentId: String(shipmentId), // spec: shipmentId is a String
     comment,
   });
 }
@@ -245,14 +245,15 @@ export async function getDpdAwbPdf(
   barcode: string,
   format: "A4" | "A6" = "A6",
 ): Promise<Buffer> {
-  const data = await dpdPost<{ pdfAsBase64: string }>("print/extended", {
+  // Extended Print: PrintRequest = { paperSize, parcels:[{ parcel:{ id } }] };
+  // ExtendedPrintResponse returns { data: <base64 pdf> }.
+  const res = await dpdPost<{ data?: string }>("print/extended", {
     userName: config.username,
     password: config.password,
     language: "RO",
-    parcels: [{ id: barcode }],
-    paperFormat: format,
-    printer: "pdf",
+    paperSize: format, // A4 | A6 | A4_4xA6
+    parcels: [{ parcel: { id: barcode } }],
   });
-  if (!data.pdfAsBase64) throw new Error("PDF lipsa din raspuns DPD");
-  return Buffer.from(data.pdfAsBase64, "base64");
+  if (!res.data) throw new Error("PDF lipsa din raspuns DPD");
+  return Buffer.from(res.data, "base64");
 }

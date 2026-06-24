@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus, X, Pencil, Loader2, Upload, Star, ArrowLeft, Trash2,
-  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info,
+  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info, ExternalLink,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -442,9 +442,12 @@ interface Props {
   product?: Product;
   categories: CategoryOption[];
   backHref?: string;
+  // Store slug + publish status, so we can show "Vezi produsul" only when the
+  // public product page is actually live (active product + published store).
+  business?: { slug: string; is_published: boolean };
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products" }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [form, setForm] = useState<FormState>(product ? productToForm(product) : EMPTY_FORM);
@@ -638,7 +641,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-28 lg:pb-6">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4 mb-6 flex-wrap">
         <button type="button" onClick={() => router.push(backHref)}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" />
@@ -653,6 +656,14 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
             </span>
           ) : "Produs nou"}
         </h1>
+        {/* Live only when the product is active AND the store is published — otherwise the page 404s. */}
+        {isEditing && product?.is_active && product?.slug && business?.is_published && (
+          <a href={`/${business.slug}/product/${product.slug}`} target="_blank" rel="noopener noreferrer"
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground">
+            <ExternalLink className="h-4 w-4" />
+            Vezi produsul
+          </a>
+        )}
       </div>
 
       <form id="product-form" onSubmit={handleSubmit}>

@@ -19,7 +19,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, slug, is_published")
     .eq("user_id", user.id)
     .order("created_at")
     .limit(1)
@@ -39,6 +39,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       product={product}
       categories={categories ?? []}
       backHref={backHref}
+      business={business.slug ? { slug: business.slug, is_published: !!business.is_published } : undefined}
     />
   );
 }

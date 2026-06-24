@@ -30,6 +30,8 @@ export type DpdShipmentInput = {
   cashOnDelivery: number;
   ref1: string;
   shipmentNote: string;
+  /** Parcel content description (required by DPD, esp. for customs on international). */
+  content?: string;
 };
 
 export type DpdShipmentResult = {
@@ -159,7 +161,13 @@ function buildDpdShipmentBody(
       address,
     },
     service,
-    content: { parcelsCount: 1, totalWeight: input.weightKg },
+    // `contents` is required by DPD (customs description on international).
+    content: {
+      parcelsCount: 1,
+      totalWeight: input.weightKg,
+      contents: (input.content ?? "").trim().slice(0, 50) || "Produse",
+      package: "BOX",
+    },
     payment,
     ref1: input.ref1,
     shipmentNote: input.shipmentNote || undefined,

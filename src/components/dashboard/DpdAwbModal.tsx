@@ -46,6 +46,11 @@ export function DpdAwbModal({
   const [height, setHeight] = useState("");
   const [cashOnDelivery, setCashOnDelivery] = useState("0");
   const [shipmentNote, setShipmentNote] = useState("");
+  const [content, setContent] = useState(() => {
+    const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
+    const names = items.map((i) => i?.name).filter(Boolean).join(", ");
+    return (names || "Produse").slice(0, 50);
+  });
 
   const [recipientName, setRecipientName] = useState(order.customer_name);
   const [recipientPhone, setRecipientPhone] = useState(order.customer_phone);
@@ -79,6 +84,7 @@ export function DpdAwbModal({
       if (!recipientStreet.trim()) return toast.error("Adresa destinatarului este obligatorie pentru livrarea internationala");
       if (!recipientEmail.trim()) return toast.error("Email-ul destinatarului este obligatoriu pentru livrarea internationala");
     }
+    if (!content.trim()) return toast.error("Continutul coletului este obligatoriu");
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 
@@ -98,6 +104,7 @@ export function DpdAwbModal({
       cashOnDelivery: parseFloat(cashOnDelivery) || 0,
       ref1: order.order_number,
       shipmentNote: shipmentNote.trim(),
+      content: content.trim(),
     });
     setCreating(false);
 
@@ -356,6 +363,18 @@ export function DpdAwbModal({
                       onChange={e => setCashOnDelivery(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Continut colet *</label>
+                    <input
+                      type="text"
+                      value={content}
+                      onChange={e => setContent(e.target.value)}
+                      maxLength={50}
+                      placeholder="ex: Imbracaminte, Accesorii..."
+                      className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">Descrierea continutului (obligatorie de DPD, mai ales pentru vama internationala).</p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Observatii</label>

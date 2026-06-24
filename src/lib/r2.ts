@@ -1,6 +1,11 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+// Key extraction recognizes every equivalent origin (raw *.r2.dev + CDN domain),
+// not just the configured PUBLIC_URL — see r2-url.ts. Re-exported so existing
+// `@/lib/r2` imports keep working.
+export { r2KeyFromUrl, isOurR2Url } from "./r2-url";
+
 const s3 = new S3Client({
   region: "auto",
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -12,7 +17,7 @@ const s3 = new S3Client({
 });
 
 const BUCKET = process.env.R2_BUCKET_NAME!;
-const PUBLIC_URL = process.env.R2_PUBLIC_URL!; // e.g. https://cdn.edinio.com
+const PUBLIC_URL = process.env.R2_PUBLIC_URL!; // raw bucket (*.r2.dev) or the CDN domain (https://edinio-cdn.com)
 
 export async function uploadToR2(
   buffer: Buffer,
@@ -64,13 +69,4 @@ export async function deleteFromR2(key: string): Promise<void> {
   await s3.send(
     new DeleteObjectCommand({ Bucket: BUCKET, Key: key })
   );
-}
-
-/**
- * Extract R2 key from a full public URL.
- * e.g. "https://cdn.edinio.com/products/abc.webp" → "products/abc.webp"
- */
-export function r2KeyFromUrl(url: string): string | null {
-  if (!url.startsWith(PUBLIC_URL)) return null;
-  return url.slice(PUBLIC_URL.length + 1);
 }

@@ -1,11 +1,10 @@
-// Download remote product images and re-host them on R2 (cdn.edinio.com), so a
+// Download remote product images and re-host them on R2 (edinio-cdn.com), so a
 // store stays intact if the source CDN later blocks hotlinking or disappears.
 // Server-only. DB iteration lives in the committer; this module is fetch + upload.
 
 import { uploadToR2 } from "@/lib/r2";
+import { isOurR2Url } from "@/lib/r2-url";
 import { safeFetchImage } from "./ssrf";
-
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL ?? "";
 
 const EXT_BY_TYPE: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -18,7 +17,7 @@ const EXT_BY_TYPE: Record<string, string> = {
 
 /** True if a URL already points at our own R2 bucket (already rehosted). */
 export function isR2Url(url: string): boolean {
-  return !!R2_PUBLIC_URL && url.startsWith(R2_PUBLIC_URL);
+  return isOurR2Url(url);
 }
 
 /** Does this product still have any externally-hosted image? */

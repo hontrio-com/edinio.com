@@ -21,6 +21,61 @@ function num(v: number | string | null | undefined): string {
   return Number.isFinite(n) ? String(n) : "";
 }
 
+// ── Variants (page_sections.variants) → 2 CSV columns ───────────────────────
+// Combination price/stock can be either string (saved from the product form) or
+// number (saved from an import), so everything goes through num()/String().
+//  • "Optiuni variante": axis defs  → "Marime: S, M, L | Culoare: Rosu, Negru"
+//  • "Variante": one combination per line →
+//      "S / Rosu | pret=79.99 | pret_vechi=99 | sku=ABC | stoc=10 | activ=da | imagine=URL"
+type VOpt = { name?: string; values?: unknown };
+type VCombo = {
+  title?: string;
+  price?: number | string | null;
+  compare_at_price?: number | string | null;
+  sku?: string;
+  stock_quantity?: number | string | null;
+  image?: string;
+  enabled?: boolean;
+};
+type VS = { enabled?: boolean; options?: VOpt[]; combinations?: VCombo[] };
+
+function variantOptionsCell(v: VS | null | undefined): string {
+  if (!v?.enabled || !Array.isArray(v.options)) return "";
+  return v.options
+    .map((o) => {
+      const name = (o?.name ?? "").trim();
+      const vals = Array.isArray(o?.values)
+        ? (o!.values as unknown[]).map((x) => String(x).trim()).filter(Boolean)
+        : [];
+      return name && vals.length ? `${name}: ${vals.join(", ")}` : "";
+    })
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function variantCombosCell(v: VS | null | undefined): string {
+  if (!v?.enabled || !Array.isArray(v.combinations)) return "";
+  const lines: string[] = [];
+  for (const c of v.combinations) {
+    const title = (c?.title ?? "").trim();
+    if (!title) continue;
+    const parts = [title];
+    const price = num(c.price);
+    if (price !== "") parts.push(`pret=${price}`);
+    const cmp = num(c.compare_at_price);
+    if (cmp !== "") parts.push(`pret_vechi=${cmp}`);
+    const sku = (c.sku ?? "").trim();
+    if (sku) parts.push(`sku=${sku}`);
+    const stoc = num(c.stock_quantity);
+    if (stoc !== "") parts.push(`stoc=${stoc}`);
+    parts.push(`activ=${c.enabled === false ? "nu" : "da"}`);
+    const img = (c.image ?? "").trim();
+    if (img) parts.push(`imagine=${img}`);
+    lines.push(parts.join(" | "));
+  }
+  return lines.join("\n");
+}
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -93,7 +148,7 @@ export async function GET() {
     "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Publicat", "Recomandat",
     "Specificatii", "Upsell - mod", "Upsell 2 buc - valoare", "Upsell 2 buc - eticheta",
     "Upsell 3 buc - valoare", "Upsell 3 buc - eticheta", "Slug", "ID extern",
-    "Titlu SEO", "Descriere SEO",
+    "Titlu SEO", "Descriere SEO", "Optiuni variante", "Variante",
   ];
 
   const lines = [header.map(csvCell).join(",")];
@@ -106,6 +161,7 @@ export async function GET() {
     const specs = Array.isArray(ps.specifications)
       ? ps.specifications.filter((s) => s?.label && s?.value).map((s) => `${s.label}: ${s.value}`).join(" | ")
       : "";
+    const variants = ((p.page_sections ?? {}) as { variants?: VS }).variants;
     const qt = ps.quantity_tiers;
     const upsellOn = !!(qt && qt.enabled);
     const isPct = qt?.mode === "percent";
@@ -143,6 +199,8 @@ export async function GET() {
       csvCell(p.external_id as string | null),
       csvCell(ps.seo?.title ?? ""),
       csvCell(ps.seo?.description ?? ""),
+      csvCell(variantOptionsCell(variants)),
+      csvCell(variantCombosCell(variants)),
     ].join(","));
   }
 

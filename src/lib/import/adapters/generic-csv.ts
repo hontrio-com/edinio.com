@@ -12,6 +12,7 @@ import {
   parseWeightToGrams,
   parseCategoryPath,
   parseSpecifications,
+  parseVariants,
   splitTags,
   splitImages,
   parseBool,
@@ -101,7 +102,9 @@ function buildProduct(
     weight_grams: parseWeightToGrams(cell(row, m.weight), options.weight_unit),
     is_active: m.is_active ? parseBool(cell(row, m.is_active), options.default_active) : options.default_active,
     is_featured: m.is_featured ? parseBool(cell(row, m.is_featured)) : false,
-    variants: null,
+    variants: options.collapse_variants
+      ? parseVariants(cell(row, m.variant_options), cell(row, m.variants))
+      : null,
     seo:
       seoTitle || seoDesc
         ? {

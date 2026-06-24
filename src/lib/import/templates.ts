@@ -26,7 +26,7 @@ const GENERIC_HEADERS = [
   "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Publicat", "Recomandat",
   "Specificatii", "Upsell - mod", "Upsell 2 buc - valoare", "Upsell 2 buc - eticheta",
   "Upsell 3 buc - valoare", "Upsell 3 buc - eticheta", "Slug", "ID extern",
-  "Titlu SEO", "Descriere SEO",
+  "Titlu SEO", "Descriere SEO", "Optiuni variante", "Variante",
 ];
 
 export const IMPORT_TEMPLATES: Record<"generic" | "shopify" | "woo", ImportTemplate> = {
@@ -41,12 +41,14 @@ export const IMPORT_TEMPLATES: Record<"generic" | "shopify" | "woo", ImportTempl
         "50", "5", "in stoc", "200 g", "70", "50", "1", "Da", "Da",
         "Material: 100% bumbac | Model: Unisex", "procent", "10", "Popular", "15", "Cea mai buna oferta",
         "tricou-bumbac", "TRICOU-001", "Tricou bumbac comod", "Tricou din bumbac 100%, comod.",
+        "Marime: S, M, L",
+        "S | pret=79.99 | sku=TRICOU-S | stoc=20 | activ=da\nM | pret=79.99 | sku=TRICOU-M | stoc=15 | activ=da\nL | pret=84.99 | sku=TRICOU-L | stoc=10 | activ=da",
       ],
       [
         "Cana ceramica", "29.99", "", "", "Cana de 350 ml.", "CANA-002", "Accesorii",
         "cadou", "https://exemplu.ro/cana.jpg", "100", "", "in stoc", "300 g", "", "", "",
         "Da", "Nu", "Capacitate: 350 ml | Material: Ceramica", "suma", "27", "2+ bucati", "", "",
-        "cana-ceramica", "CANA-002", "", "",
+        "cana-ceramica", "CANA-002", "", "", "", "",
       ],
     ]),
   },

@@ -58,6 +58,8 @@ const FIELD_SYNONYMS: Record<OurField, string[]> = {
   upsell_qty2_badge: ["upsell 2 buc - eticheta", "upsell 2 buc eticheta", "upsell 2 badge", "upsell2 eticheta"],
   upsell_qty3: ["upsell 3 buc - valoare", "upsell 3 buc", "upsell 3", "upsell3"],
   upsell_qty3_badge: ["upsell 3 buc - eticheta", "upsell 3 buc eticheta", "upsell 3 badge", "upsell3 eticheta"],
+  variant_options: ["optiuni variante", "optiuni", "variant options", "axe variante"],
+  variants: ["variante", "variatii", "variants", "combinatii", "variant combinations"],
 };
 
 /** Best-guess mapping of source headers onto our fields (generic CSV). */

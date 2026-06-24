@@ -3,6 +3,7 @@
 
 import { slugify } from "@/lib/utils/slugify";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
+import type { StagedVariantOption, StagedVariantCombination, StagedVariants } from "./types";
 
 /**
  * Parse a price string into a number, tolerating thousands/decimal separators
@@ -139,6 +140,77 @@ export function parseCategoryPath(raw: unknown): string[] {
     .map((p) => cleanText(p))
     .filter(Boolean)
     .slice(0, 4);
+}
+
+/**
+ * Parse the "Optiuni variante" cell into variant axes (mirrors the export route).
+ * Format: "Marime: S, M, L | Culoare: Rosu, Negru" — groups split on | or newline,
+ * name/values split on the first ":", values split on ",". Max 3 axes (form limit).
+ */
+export function parseVariantOptions(raw: unknown): StagedVariantOption[] {
+  if (raw == null) return [];
+  const s = String(raw).trim();
+  if (!s) return [];
+  const out: StagedVariantOption[] = [];
+  for (const group of s.split(/[|\r\n]+/)) {
+    const g = group.trim();
+    const idx = g.indexOf(":");
+    if (idx === -1) continue;
+    const name = cleanText(g.slice(0, idx));
+    const values = dedupe(
+      g.slice(idx + 1).split(",").map((v) => cleanText(v)).filter(Boolean),
+    );
+    if (name && values.length) out.push({ id: slugify(name) || name, name, values });
+  }
+  return out.slice(0, 3);
+}
+
+/**
+ * Parse the "Variante" cell into combinations (mirrors the export route).
+ * One combination per line; first field is the title, the rest are key=value:
+ *   "S / Rosu | pret=79.99 | pret_vechi=99 | sku=ABC | stoc=10 | activ=da | imagine=URL"
+ */
+export function parseVariantCombos(raw: unknown): StagedVariantCombination[] {
+  if (raw == null) return [];
+  const s = String(raw).trim();
+  if (!s) return [];
+  const out: StagedVariantCombination[] = [];
+  for (const line of s.split(/[\r\n]+/)) {
+    const fields = line.split("|").map((f) => f.trim()).filter(Boolean);
+    const title = fields[0] ?? "";
+    // First field must be a plain title, not a key=value pair.
+    if (!title || title.includes("=")) continue;
+    const combo: StagedVariantCombination = {
+      id: slugify(title) || `v${out.length + 1}`,
+      title,
+      price: 0,
+      sku: "",
+      enabled: true,
+      stock_quantity: 0,
+    };
+    for (let i = 1; i < fields.length; i++) {
+      const eq = fields[i].indexOf("=");
+      if (eq === -1) continue;
+      const key = fields[i].slice(0, eq).trim().toLowerCase();
+      const val = fields[i].slice(eq + 1).trim();
+      if (key === "pret") combo.price = parsePrice(val) ?? 0;
+      else if (key === "pret_vechi") combo.compare_at_price = parsePrice(val);
+      else if (key === "sku") combo.sku = val;
+      else if (key === "stoc") combo.stock_quantity = parseIntOrNull(val) ?? 0;
+      else if (key === "activ") combo.enabled = parseBool(val, true);
+      else if (key === "imagine") combo.image = val;
+    }
+    out.push(combo);
+  }
+  return out.slice(0, 100);
+}
+
+/** Reconstruct page_sections.variants from the export's two columns. */
+export function parseVariants(optionsRaw: unknown, combosRaw: unknown): StagedVariants | null {
+  const options = parseVariantOptions(optionsRaw);
+  const combinations = parseVariantCombos(combosRaw);
+  if (options.length === 0 || combinations.length === 0) return null;
+  return { enabled: true, options, combinations };
 }
 
 export function cleanText(raw: unknown): string {

@@ -186,8 +186,12 @@ export async function createDpdShipment(
   config: DpdConfig,
   input: DpdShipmentInput,
 ): Promise<DpdShipmentResult> {
-  // Domestic RO (countryId 642), DPD Classic (serviceId 1).
-  return sendDpdShipment(buildDpdShipmentBody(config, input, { countryId: 642, serviceId: 1 }));
+  // Domestic RO: discover the permitted service for the destination (by city) —
+  // a hardcoded serviceId is rejected with "Serviciul nu este permis".
+  const ids = await getDpdDestinationServiceIds(config, { countryId: 642, siteName: input.recipientCity });
+  const serviceId = ids[0];
+  if (!serviceId) throw new Error("DPD nu a returnat niciun serviciu pentru aceasta destinatie. Verifica orasul/adresa destinatarului.");
+  return sendDpdShipment(buildDpdShipmentBody(config, input, { countryId: 642, serviceId }));
 }
 
 // ─── International (EU) ───────────────────────────────────────────────────────
@@ -197,19 +201,27 @@ export async function createDpdShipment(
 
 export type DpdIntlQuote = { serviceId: number; price: number; currency: string };
 
-/** Valid DPD serviceId(s) for the sender -> destination route. */
+/**
+ * Valid DPD serviceId(s) for the sender -> destination route. The docs say the
+ * serviceId MUST come from a Destination Services Request — hardcoding one is
+ * rejected with "Serviciul nu este permis". Resolve the site by postCode and/or
+ * siteName (city) alongside the countryId.
+ */
 export async function getDpdDestinationServiceIds(
   config: DpdConfig,
-  countryId: number,
-  postCode: string,
+  location: { countryId: number; postCode?: string; siteName?: string },
 ): Promise<number[]> {
+  const addressLocation: Record<string, unknown> = { countryId: location.countryId };
+  if (location.postCode) addressLocation.postCode = location.postCode;
+  if (location.siteName) addressLocation.siteName = location.siteName;
+
   const data = await dpdPost<{ services?: { serviceId?: number; id?: number }[] }>("services/destination", {
     userName: config.username,
     password: config.password,
     language: "RO",
     date: new Date().toISOString().slice(0, 10),
     sender: { clientId: config.client_id },
-    recipient: { privatePerson: true, addressLocation: { countryId, postCode } },
+    recipient: { privatePerson: true, addressLocation },
   });
   return (data.services ?? [])
     .map((s) => s.serviceId ?? s.id)
@@ -223,7 +235,7 @@ export async function calculateDpdIntlPrice(
 ): Promise<DpdIntlQuote | null> {
   let serviceId = input.serviceId;
   if (!serviceId) {
-    const ids = await getDpdDestinationServiceIds(config, input.countryId, input.postCode);
+    const ids = await getDpdDestinationServiceIds(config, { countryId: input.countryId, postCode: input.postCode });
     serviceId = ids[0];
   }
   if (!serviceId) return null;
@@ -263,7 +275,7 @@ export async function createDpdIntlShipment(
 ): Promise<DpdShipmentResult> {
   let serviceId = input.serviceId;
   if (!serviceId) {
-    const ids = await getDpdDestinationServiceIds(config, input.countryId, input.postCode);
+    const ids = await getDpdDestinationServiceIds(config, { countryId: input.countryId, postCode: input.postCode });
     serviceId = ids[0];
   }
   if (!serviceId) throw new Error("DPD nu are serviciu international disponibil pentru aceasta destinatie.");

@@ -73,6 +73,12 @@ export function DpdAwbModal({
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!recipientPhone.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
     if (!recipientCity.trim()) return toast.error("Orasul destinatarului este obligatoriu");
+    if (intlCountry) {
+      // DPD: email is mandatory for international shipments, and the address goes
+      // into addressLine1 (required for foreign addresses).
+      if (!recipientStreet.trim()) return toast.error("Adresa destinatarului este obligatorie pentru livrarea internationala");
+      if (!recipientEmail.trim()) return toast.error("Email-ul destinatarului este obligatoriu pentru livrarea internationala");
+    }
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 

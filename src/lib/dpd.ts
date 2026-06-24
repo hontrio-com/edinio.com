@@ -258,8 +258,10 @@ export async function createDpdIntlShipment(
   }
   if (!serviceId) throw new Error("DPD nu are serviciu international disponibil pentru aceasta destinatie.");
 
+  // DPD international services do not support cash-on-delivery (ramburs), so it is
+  // never sent for foreign shipments — international orders are paid online.
   return sendDpdShipment(
-    buildDpdShipmentBody(config, input, { countryId: input.countryId, postCode: input.postCode, serviceId }),
+    buildDpdShipmentBody(config, { ...input, cashOnDelivery: 0 }, { countryId: input.countryId, postCode: input.postCode, serviceId }),
   );
 }
 

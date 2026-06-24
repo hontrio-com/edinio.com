@@ -120,6 +120,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [intlEnabled, setIntlEnabled] = useState(false);
   const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
+  // DPD international services don't support cash-on-delivery — EU orders pay online.
+  const availablePaymentMethods = isIntl
+    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery")
+    : paymentMethods;
+  useEffect(() => {
+    if (isIntl && paymentMethod === "cash_on_delivery") {
+      setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIntl]);
 
   // Customization state
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
@@ -996,11 +1006,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               </div>
 
               {/* Payment method */}
-              {paymentMethods.length > 1 && (
+              {availablePaymentMethods.length > 1 && (
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-gray-700">Metoda de plata</p>
-                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(paymentMethods.length, 3)}, minmax(0, 1fr))` }}>
-                    {paymentMethods.map((m) => (
+                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(availablePaymentMethods.length, 3)}, minmax(0, 1fr))` }}>
+                    {availablePaymentMethods.map((m) => (
                       <button key={m.type} type="button" onClick={() => setPaymentMethod(m.type)}
                         className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
                         style={paymentMethod === m.type

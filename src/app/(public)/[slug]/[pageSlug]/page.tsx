@@ -41,7 +41,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const url = `${storeBaseUrl(business)}/${page.slug}`;
   const ogImage = seo.ogImage?.trim() || business.cover_url || undefined;
   return {
-    title,
+    // `absolute` strips the root layout's "%s | Edinio" template.
+    title: { absolute: title },
     description: seo.description ?? undefined,
     keywords: seo.keywords?.trim() || undefined,
     alternates: { canonical: url },

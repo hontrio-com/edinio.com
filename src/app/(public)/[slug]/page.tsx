@@ -25,7 +25,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const url = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
   const images = business.cover_url ? [business.cover_url] : [];
   return {
-    title,
+    // `absolute` strips the root layout's "%s | Edinio" template — storefronts
+    // must show only the merchant's own name in Google / browser tabs.
+    title: { absolute: title },
     description,
     openGraph: { title, description, url, images },
     twitter: {

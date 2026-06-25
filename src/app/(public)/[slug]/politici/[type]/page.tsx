@@ -29,7 +29,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .from("businesses").select("business_name, store_name").eq("slug", slug).single();
   if (!business) return {};
   return {
-    title: `${meta.label} | ${business.store_name ?? business.business_name}`,
+    // `absolute` strips the root layout's "%s | Edinio" template.
+    title: { absolute: `${meta.label} | ${business.store_name ?? business.business_name}` },
     robots: { index: false },
   };
 }

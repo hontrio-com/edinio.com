@@ -52,7 +52,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const customDomain = await getBusinessDomainCached(slug);
   const url = `${storeBaseUrl({ slug, custom_domain: customDomain })}/product/${canonicalSlug}`;
   return {
-    title,
+    // `absolute` strips the root layout's "%s | Edinio" template.
+    title: { absolute: title },
     description,
     alternates: { canonical: url },
     openGraph: {

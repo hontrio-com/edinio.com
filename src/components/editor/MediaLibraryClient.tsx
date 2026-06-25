@@ -14,6 +14,8 @@ import {
   getMediaPageData, updateMediaMeta, deleteMedia, backfillMediaLibrary,
   type MediaRow, type UsageMap,
 } from "@/lib/actions/media.actions";
+import { useBulkUpload } from "@/lib/hooks/use-bulk-upload";
+import { UploadProgressPanel } from "@/components/media/UploadProgressPanel";
 
 const FOLDER_LABELS: Record<string, string> = {
   products: "Produse", logos: "Logo", covers: "Coperta",
@@ -35,7 +37,6 @@ export function MediaLibraryClient() {
   const [usage, setUsage] = useState<UsageMap>({});
   const [loading, setLoading] = useState(true);
   const [rescanning, setRescanning] = useState(false);
-  const [uploading, setUploading] = useState(false);
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -60,6 +61,18 @@ export function MediaLibraryClient() {
     else toast.error(res.error);
     setLoading(false);
   }
+
+  // Bulk upload engine: progress, per-file status, batch cap, page-leave guard.
+  // One library reload at the very end (getMediaPageData is a full catalog scan,
+  // so reloading per file would be wasteful).
+  const upload = useBulkUpload({
+    maxBatch: 100,
+    imageBucket: "gallery",
+    onComplete: ({ done, failed }) => {
+      if (done > 0) { toast.success(`${done} fisier(e) incarcate.`); load(); }
+      if (failed > 0) toast.error(`${failed} fisier(e) nu au putut fi incarcate.`);
+    },
+  });
 
   // Initial fetch. setState runs in the promise callback (after the await), not
   // synchronously in the effect body, per react-hooks/set-state-in-effect.
@@ -128,20 +141,6 @@ export function MediaLibraryClient() {
     setSelected(new Set(filtered.map((r) => r.id)));
   }
 
-  async function handleFiles(files: FileList) {
-    if (!files.length) return;
-    setUploading(true);
-    const { uploadImage, uploadVideo } = await import("@/lib/upload");
-    let ok = 0;
-    for (const file of Array.from(files)) {
-      const isVideo = file.type.startsWith("video/");
-      const res = isVideo ? await uploadVideo(file) : await uploadImage(file, "gallery");
-      if ("url" in res) ok += 1; else toast.error(res.error);
-    }
-    setUploading(false);
-    if (ok > 0) { toast.success(`${ok} fisier(e) incarcate.`); await load(); }
-  }
-
   async function rescan() {
     setRescanning(true);
     const res = await backfillMediaLibrary();
@@ -187,13 +186,13 @@ export function MediaLibraryClient() {
             <RefreshCw className={cn("h-4 w-4", rescanning && "animate-spin")} />
             Re-scaneaza
           </button>
-          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+          <button onClick={() => fileRef.current?.click()} disabled={upload.active}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Incarca
+            {upload.active ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {upload.active ? `Se incarca… ${upload.summary.done}/${upload.summary.total}` : "Incarca"}
           </button>
           <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden"
-            onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+            onChange={(e) => { if (e.target.files) upload.start(e.target.files); if (fileRef.current) fileRef.current.value = ""; }} />
         </div>
       </div>
 
@@ -242,6 +241,18 @@ export function MediaLibraryClient() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-40">
             <Trash2 className="h-4 w-4" /> Sterge
           </button>
+        </div>
+      )}
+
+      {/* Upload progress */}
+      {upload.items.length > 0 && (
+        <div className="mb-4">
+          <UploadProgressPanel
+            items={upload.items}
+            summary={upload.summary}
+            onCancel={upload.cancel}
+            onClose={upload.reset}
+          />
         </div>
       )}
 

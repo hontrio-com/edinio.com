@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Upload, Search, X, Loader2, Film, Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { listMedia, type MediaRow } from "@/lib/actions/media.actions";
+import { useBulkUpload } from "@/lib/hooks/use-bulk-upload";
+import { UploadProgressPanel } from "@/components/media/UploadProgressPanel";
 
 export interface MediaPickerProps {
   open: boolean;
@@ -35,7 +37,6 @@ export function MediaPicker({
   const [tab, setTab] = useState<"library" | "upload">("library");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const excluded = useMemo(() => new Set(excludeUrls), [excludeUrls]);
 
@@ -71,29 +72,24 @@ export function MediaPicker({
     });
   }
 
-  async function handleFiles(files: FileList) {
-    if (!files.length) return;
-    setUploading(true);
-    const { uploadImage, uploadVideo } = await import("@/lib/upload");
-    const newUrls: string[] = [];
-    for (const file of Array.from(files)) {
-      const isVideo = file.type.startsWith("video/");
-      if (accept === "image" && isVideo) { toast.error("Acceptam doar imagini aici."); continue; }
-      if (accept === "video" && !isVideo) { toast.error("Acceptam doar videoclipuri aici."); continue; }
-      const res = isVideo ? await uploadVideo(file) : await uploadImage(file, bucket);
-      if ("url" in res) newUrls.push(res.url); else toast.error(res.error);
-    }
-    setUploading(false);
-    if (newUrls.length) {
-      await load();
+  // Same bulk-upload engine as the Media Library: progress, per-file status,
+  // batch cap (100), concurrency, and a page-leave guard. On success we reload
+  // the library, switch to it, and pre-select the freshly uploaded files.
+  const upload = useBulkUpload({
+    accept,
+    imageBucket: bucket,
+    onComplete: ({ failed, urls }) => {
+      if (failed > 0) toast.error(`${failed} fisier(e) nu au putut fi incarcate.`);
+      if (urls.length === 0) return;
+      void load();
       setTab("library");
       setSelected((prev) => {
         const next = new Set(multiple ? prev : []);
-        for (const u of newUrls) next.add(u);
+        for (const u of urls) next.add(u);
         return next;
       });
-    }
-  }
+    },
+  });
 
   function confirm() {
     const urls = [...selected].filter((u) => !excluded.has(u));
@@ -135,7 +131,7 @@ export function MediaPicker({
                 <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
               ) : filtered.length === 0 ? (
                 <div className="text-center py-16 text-sm text-muted-foreground">
-                  Niciun fisier. Treci la tab-ul „Incarca" pentru a adauga.
+                  Niciun fisier. Treci la tab-ul „Incarca” pentru a adauga.
                 </div>
               ) : (
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
@@ -163,17 +159,26 @@ export function MediaPicker({
             </div>
           </>
         ) : (
-          <div className="p-5 overflow-y-auto flex-1">
-            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+          <div className="p-5 overflow-y-auto flex-1 space-y-4">
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={upload.active}
               className="w-full aspect-[2/1] max-h-64 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-primary/5 transition-colors disabled:opacity-50">
-              {uploading ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <Upload className="h-7 w-7 text-muted-foreground" />}
+              {upload.active ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <Upload className="h-7 w-7 text-muted-foreground" />}
               <span className="text-sm text-muted-foreground font-medium">
-                {uploading ? "Se incarca..." : "Apasa pentru a incarca fisiere"}
+                {upload.active ? `Se incarca… ${upload.summary.done}/${upload.summary.total}` : "Apasa pentru a incarca fisiere"}
               </span>
             </button>
             <input ref={fileRef} type="file" multiple
               accept={accept === "video" ? "video/*" : accept === "all" ? "image/*,video/*" : "image/*"}
-              className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+              className="hidden"
+              onChange={(e) => { if (e.target.files) upload.start(e.target.files); if (fileRef.current) fileRef.current.value = ""; }} />
+            {upload.items.length > 0 && (
+              <UploadProgressPanel
+                items={upload.items}
+                summary={upload.summary}
+                onCancel={upload.cancel}
+                onClose={upload.reset}
+              />
+            )}
           </div>
         )}
 

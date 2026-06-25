@@ -572,10 +572,10 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                         disabled={!available}
                         className="px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all"
                         style={isSelected
-                          ? { borderColor: color, backgroundColor: `${color}18`, color: "var(--foreground)" }
+                          ? { borderColor: color, backgroundColor: `${color}18`, color: "var(--color-foreground)" }
                           : available
-                          ? { borderColor: "var(--border)", color: "var(--foreground)" }
-                          : { borderColor: "var(--border)", color: "var(--muted-foreground)", textDecoration: "line-through", cursor: "not-allowed" }
+                          ? { borderColor: "var(--color-border)", color: "var(--color-foreground)" }
+                          : { borderColor: "var(--color-border)", color: "var(--color-muted-foreground)", textDecoration: "line-through", cursor: "not-allowed" }
                         }>
                         {val}
                       </button>

@@ -212,7 +212,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             onClick={() => handleSelect(opt)}
             className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{
-              borderColor: selected ? color : "var(--border)",
+              borderColor: selected ? color : "var(--color-border)",
               background: selected ? `${color}12` : "var(--color-surface)",
             }}
           >
@@ -226,7 +226,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               )}
             </div>
             <div className="text-right shrink-0">
-              <p className="text-sm font-bold" style={{ color: selected ? color : "var(--foreground)" }}>
+              <p className="text-sm font-bold" style={{ color: selected ? color : "var(--color-foreground)" }}>
                 {opt.price > 0 ? `${opt.price.toFixed(2)} lei` : "Gratuit"}
               </p>
             </div>
@@ -235,7 +235,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               style={
                 selected
                   ? { borderColor: color, backgroundColor: color }
-                  : { borderColor: "var(--border)", backgroundColor: "var(--color-surface)" }
+                  : { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }
               }
             >
               {selected && (
@@ -259,7 +259,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             onClick={() => handleSelect(opt)}
             className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{
-              borderColor: selected ? color : "var(--border)",
+              borderColor: selected ? color : "var(--color-border)",
               background: selected ? `${color}12` : "var(--color-surface)",
             }}
           >
@@ -271,7 +271,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               <p className="text-xs text-muted-foreground">Ridicare din locker</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-sm font-bold" style={{ color: selected ? color : "var(--foreground)" }}>
+              <p className="text-sm font-bold" style={{ color: selected ? color : "var(--color-foreground)" }}>
                 {opt.price > 0 ? `${opt.price.toFixed(2)} lei` : "Gratuit"}
               </p>
             </div>
@@ -280,7 +280,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               style={
                 selected
                   ? { borderColor: color, backgroundColor: color }
-                  : { borderColor: "var(--border)", backgroundColor: "var(--color-surface)" }
+                  : { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }
               }
             >
               {selected && (
@@ -313,12 +313,12 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
                 onClick={() => setLockerDropdownOpen(!lockerDropdownOpen)}
                 className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-colors"
                 style={{
-                  borderColor: selectedLocker ? color : "var(--border)",
+                  borderColor: selectedLocker ? color : "var(--color-border)",
                   background: selectedLocker ? `${color}08` : "var(--color-surface)",
                 }}
               >
                 <MapPin size={14} className="text-muted-foreground shrink-0" />
-                <span className="flex-1 text-sm truncate" style={{ color: selectedLocker ? "var(--foreground)" : "var(--muted-foreground)" }}>
+                <span className="flex-1 text-sm truncate" style={{ color: selectedLocker ? "var(--color-foreground)" : "var(--color-muted-foreground)" }}>
                   {selectedLocker ? selectedLocker.name : "Selecteaza un locker..."}
                 </span>
                 <ChevronDown size={14} className="text-muted-foreground shrink-0" />

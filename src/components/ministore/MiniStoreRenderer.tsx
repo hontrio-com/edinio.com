@@ -623,11 +623,11 @@ function CartCheckoutModal({
                     className="w-full text-left rounded-xl border-2 border-dashed p-3.5 transition-all"
                     style={checked
                       ? { borderColor: color, backgroundColor: `${color}08` }
-                      : { borderColor: "var(--border)", backgroundColor: "transparent" }}>
+                      : { borderColor: "var(--color-border)", backgroundColor: "transparent" }}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="w-5 h-5 rounded flex items-center justify-center border-2 flex-shrink-0 transition-colors"
-                          style={checked ? { borderColor: color, backgroundColor: color } : { borderColor: "var(--border)" }}>
+                          style={checked ? { borderColor: color, backgroundColor: color } : { borderColor: "var(--color-border)" }}>
                           {checked && (
                             <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none">
                               <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -703,8 +703,8 @@ function CartCheckoutModal({
                   <button key={m.type} type="button" onClick={() => setPaymentMethod(m.type)}
                     className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                     style={paymentMethod === m.type
-                      ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--foreground)" }
-                      : { borderColor: "var(--border)", backgroundColor: "var(--color-surface)", color: "var(--muted-foreground)" }}>
+                      ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--color-foreground)" }
+                      : { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-muted-foreground)" }}>
                     {m.type === "cash_on_delivery" ? <Banknote className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
                     {m.label}
                   </button>

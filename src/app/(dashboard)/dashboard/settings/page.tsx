@@ -5,6 +5,7 @@ import { SettingsClient } from "@/components/dashboard/SettingsClient";
 import { resolvePaymentMethods, parseCardDiscountConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
 import type { MarketingConfig } from "@/lib/marketing";
+import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
@@ -20,7 +21,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, card_discount_config, cookie_banner_config, marketing_config)")
+      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, card_discount_config, cookie_banner_config, marketing_config, page_content)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -32,6 +33,19 @@ export default async function SettingsPage({ searchParams }: Props) {
   const business = bizRow ? { id: bizRow.id, business_name: bizRow.business_name, address: bizRow.address, city: bizRow.city, county: bizRow.county, phone: bizRow.phone, email: bizRow.email, cui: bizRow.cui, custom_domain: bizRow.custom_domain } : null;
   const rawSettings = bizRow?.store_settings;
   const storeSettings = Array.isArray(rawSettings) ? rawSettings[0] ?? null : rawSettings ?? null;
+
+  // Store-level SEO: current overrides + the auto-derived defaults shown as
+  // placeholders / in the live Google preview (single source of truth: @/lib/seo).
+  const displayName = bizRow?.store_name ?? bizRow?.business_name ?? "magazin";
+  const storeSeo = parseStoreSeo(storeSettings?.page_content ?? null);
+  const seoDefaults = {
+    title: deriveStoreTitle(displayName, bizRow?.store_city ?? null),
+    description: deriveStoreDescription({ tagline: bizRow?.tagline ?? null, description: bizRow?.description ?? null, displayName }),
+    ogImage: bizRow?.cover_url ?? null,
+  };
+  const seoPreviewUrl = bizRow?.slug
+    ? storeBaseUrl({ slug: bizRow.slug, custom_domain: bizRow.custom_domain })
+    : "https://www.edinio.com";
 
   type CourierCfg = Record<string, unknown>;
   const fc = storeSettings?.fan_courier_config as CourierCfg | null;
@@ -97,6 +111,9 @@ export default async function SettingsPage({ searchParams }: Props) {
       cardDiscount={parseCardDiscountConfig(storeSettings?.card_discount_config)}
       cookieBanner={parseCookieBannerConfig(storeSettings?.cookie_banner_config)}
       cookieCategories={detectConsentCategories(storeSettings?.marketing_config as MarketingConfig | null)}
+      storeSeo={storeSeo}
+      seoDefaults={seoDefaults}
+      seoPreviewUrl={seoPreviewUrl}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={plan_success === "1"}
       domainSuccess={domain_success === "1"}

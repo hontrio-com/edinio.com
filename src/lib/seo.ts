@@ -23,3 +23,58 @@ export function storeBaseUrl(business: { slug: string; custom_domain?: string | 
     ? `https://${business.custom_domain}`
     : `${PLATFORM_ORIGIN}/${business.slug}`;
 }
+
+/* ─── Store-level SEO overrides ──────────────────────────────────────────────
+ *
+ * Live in `store_settings.page_content.seo`. The merchant sets these in
+ * Settings > SEO; when a field is empty we fall back to the auto-derived
+ * defaults below. Both the Settings placeholders and the public page metadata
+ * use the same derive helpers, so the live preview matches what actually ships.
+ */
+
+export interface StoreSeo {
+  title?: string;
+  description?: string;
+  ogImage?: string | null;
+  /** Advanced opt-in: hide the store homepage from search engines. */
+  noindex?: boolean;
+}
+
+/** Recommended max lengths (soft) — Google truncates titles/descriptions past these. */
+export const SEO_TITLE_MAX = 60;
+export const SEO_DESCRIPTION_MAX = 160;
+
+/** Read & normalize the SEO overrides out of a `page_content` JSON blob. */
+export function parseStoreSeo(pageContent: unknown): StoreSeo {
+  const seo = (pageContent as { seo?: unknown } | null)?.seo;
+  if (!seo || typeof seo !== "object") return {};
+  const s = seo as Record<string, unknown>;
+  const out: StoreSeo = {};
+  if (typeof s.title === "string" && s.title.trim()) out.title = s.title.trim();
+  if (typeof s.description === "string" && s.description.trim()) out.description = s.description.trim();
+  if (typeof s.ogImage === "string" && s.ogImage.trim()) out.ogImage = s.ogImage.trim();
+  if (s.noindex === true) out.noindex = true;
+  return out;
+}
+
+/**
+ * Default meta title for a store homepage when the merchant hasn't set one.
+ * e.g. "Floraria Mea - Cluj-Napoca" or just "Floraria Mea".
+ */
+export function deriveStoreTitle(displayName: string, city?: string | null): string {
+  const c = city?.trim();
+  return c ? `${displayName} - ${c}` : displayName;
+}
+
+/** Default meta description for a store homepage when the merchant hasn't set one. */
+export function deriveStoreDescription(opts: {
+  tagline?: string | null;
+  description?: string | null;
+  displayName: string;
+}): string {
+  return (
+    opts.tagline?.trim() ||
+    opts.description?.trim().slice(0, 155) ||
+    `Cumpara din ${opts.displayName} online.`
+  );
+}

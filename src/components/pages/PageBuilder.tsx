@@ -7,7 +7,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   ArrowLeft, Monitor, Smartphone, Save, Loader2, Plus, X, Settings2,
-  ArrowUp, ArrowDown, Copy, Trash2, Eye, Upload,
+  ArrowUp, ArrowDown, Copy, Trash2, Eye,
   Sparkles, Heading, Type, Image as ImageIcon, Images, MousePointerClick,
   Columns3, MoveVertical, Minus, Video, MapPin, MessageCircleQuestion,
   ShieldCheck, Package, Share2, Mail, Code, Square,
@@ -15,6 +15,7 @@ import {
 import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
 import { BlockSettings } from "./BlockSettings";
 import { updatePage } from "@/lib/actions/page.actions";
+import { SeoImageField } from "@/components/dashboard/SeoImageField";
 import {
   createBlock, BLOCK_META, BLOCK_PALETTE_ORDER,
   type Block, type BlockType, type PageSeo,
@@ -306,35 +307,6 @@ function InsertButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
   );
 }
 
-function SeoImageField({ value, onChange }: { value?: string | null; onChange: (v: string | null) => void }) {
-  const [busy, setBusy] = useState(false);
-  async function onFile(file: File) {
-    setBusy(true);
-    const { uploadImage } = await import("@/lib/upload");
-    const res = await uploadImage(file, "covers", "pages-og");
-    setBusy(false);
-    if ("url" in res) onChange(res.url);
-  }
-  return (
-    <div>
-      {value ? (
-        <div className="relative rounded-lg overflow-hidden border border-border">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="" className="w-full max-h-32 object-cover" />
-          <button type="button" onClick={() => onChange(null)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-border flex items-center justify-center"><X className="h-3 w-3" /></button>
-        </div>
-      ) : (
-        <label className="border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1 py-4 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <Upload className="h-4 w-4 text-muted-foreground" />}
-          <span className="text-[11px] text-muted-foreground">{busy ? "Se incarca..." : "Incarca imagine (rec. 1200×630px)"}</span>
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
-        </label>
-      )}
-      <input value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} placeholder="sau lipeste un URL" className={`${inputCls} mt-2 text-xs`} />
-    </div>
-  );
-}
-
 function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSeo, onCss }: {
   title: string; slug: string; seo: PageSeo; css: string; publicBase: string;
   onTitle: (v: string) => void; onSlug: (v: string) => void; onSeo: (v: PageSeo) => void; onCss: (v: string) => void;
@@ -358,7 +330,7 @@ function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSe
         <p className="text-[11px] text-muted-foreground mt-1">Cuvintele cheie sunt aproape ignorate de Google azi — conteaza mai mult titlul, descrierea si imaginea de mai jos.</p>
         <div className="mt-3">
           <label className="block text-[11px] font-medium text-muted-foreground mb-1">Imagine la distribuire (Facebook/WhatsApp)</label>
-          <SeoImageField value={seo.ogImage} onChange={(v) => onSeo({ ...seo, ogImage: v })} />
+          <SeoImageField value={seo.ogImage} onChange={(v) => onSeo({ ...seo, ogImage: v })} folder="pages-og" />
         </div>
         <label className="flex items-center gap-2 mt-3 text-xs text-foreground cursor-pointer select-none">
           <input type="checkbox" checked={!!seo.noindex} onChange={(e) => onSeo({ ...seo, noindex: e.target.checked })} className="w-4 h-4 rounded accent-green-600" />

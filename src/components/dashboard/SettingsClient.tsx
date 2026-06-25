@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCookieBannerConfig } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
@@ -22,12 +22,14 @@ import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
+import { SeoImageField } from "@/components/dashboard/SeoImageField";
+import { type StoreSeo, SEO_TITLE_MAX, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
 type SectionId =
   | "general" | "plan" | "facturare" | "livrare"
-  | "taxe" | "plati" | "domeniu" | "notificari" | "politici" | "cookies" | "securitate";
+  | "taxe" | "plati" | "domeniu" | "seo" | "notificari" | "politici" | "cookies" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
@@ -37,6 +39,7 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "taxe",       label: "Taxe",        icon: Percent   },
   { id: "plati",      label: "Metode de plata", icon: Wallet },
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
+  { id: "seo",        label: "SEO",         icon: Search    },
   { id: "notificari", label: "Notificari",  icon: Bell      },
   { id: "politici",   label: "Politici",    icon: FileText  },
   { id: "cookies",    label: "Banner Cookies", icon: Cookie },
@@ -244,6 +247,9 @@ interface Props {
   cardDiscount: CardDiscountConfig;
   cookieBanner: CookieBannerConfig;
   cookieCategories: ConsentCategory[];
+  storeSeo: StoreSeo;
+  seoDefaults: { title: string; description: string; ogImage: string | null };
+  seoPreviewUrl: string;
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
   domainSuccess?: boolean;
@@ -261,7 +267,36 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+const SEO_BLUE = "#1a0dab";
+
+function seoCounterCls(len: number, max: number): string {
+  if (len === 0) return "text-muted-foreground";
+  return len > max ? "text-destructive" : "text-success";
+}
+
+/** Live, Google-style SERP snippet so merchants see their title/description as
+ *  they type. Uses Google's own colors on purpose (it mimics Google, not the app UI). */
+function GooglePreview({ title, description, url }: { title: string; description: string; url: string }) {
+  const display = url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  const host = display.split("/")[0];
+  return (
+    <div className="rounded-xl border border-border bg-white p-4">
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+          <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+        <div className="min-w-0 leading-tight">
+          <div className="text-[12px] text-[#202124] truncate">{host}</div>
+          <div className="text-[12px] text-[#5f6368] truncate">{display}</div>
+        </div>
+      </div>
+      <div className="text-[18px] leading-snug truncate" style={{ color: SEO_BLUE }}>{title}</div>
+      <p className="text-[13px] text-[#4d5156] leading-snug mt-0.5 line-clamp-2">{description}</p>
+    </div>
+  );
+}
+
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -364,6 +399,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
   // Notifications
   const [notif, setNotif] = useState<NotificationsConfig>(notificationsConfig);
+
+  // SEO (Settings > SEO)
+  const [seo, setSeo] = useState<StoreSeo>(storeSeo);
+  const [savingSeo, startSeoTransition] = useTransition();
 
   // SMSO
   const [smso, setSmso] = useState<SmsoConfig>(smsoConfig);
@@ -596,6 +635,25 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateNotificationsSettings(businessId, notif);
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile de notificari au fost salvate.");
+    });
+  }
+
+  function saveSeo() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    // Store only meaningful values; empty fields fall back to the auto-derived
+    // defaults at render time (see @/lib/seo).
+    const cleaned: StoreSeo = {};
+    const t = seo.title?.trim();
+    const d = seo.description?.trim();
+    const og = seo.ogImage?.trim();
+    if (t) cleaned.title = t;
+    if (d) cleaned.description = d;
+    if (og) cleaned.ogImage = og;
+    if (seo.noindex) cleaned.noindex = true;
+    startSeoTransition(async () => {
+      const result = await updatePageContent(businessId, { seo: cleaned });
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Setarile SEO au fost salvate.");
     });
   }
 
@@ -1575,6 +1633,97 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           )}
 
           {/* ── Notificari ── */}
+          {activeSection === "seo" && (
+            <div className="space-y-6">
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
+                <Search className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Controleaza cum apare pagina principala a magazinului in Google si la distribuirea pe retele sociale. Daca lasi campurile goale, folosim automat numele si descrierea magazinului.
+                </p>
+              </div>
+
+              {!businessId && (
+                <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
+              )}
+
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+                {/* Titlu meta */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-semibold text-foreground">Titlu meta</label>
+                    <span className={`text-[11px] tabular-nums ${seoCounterCls((seo.title ?? "").length, SEO_TITLE_MAX)}`}>
+                      {(seo.title ?? "").length}/{SEO_TITLE_MAX}
+                    </span>
+                  </div>
+                  <input
+                    value={seo.title ?? ""}
+                    onChange={(e) => setSeo(s => ({ ...s, title: e.target.value }))}
+                    placeholder={seoDefaults.title}
+                    className={inputCls}
+                    disabled={!businessId}
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">Recomandat pana in {SEO_TITLE_MAX} de caractere. Apare ca titlu albastru in Google si in tab-ul browserului.</p>
+                </div>
+
+                {/* Descriere meta */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-semibold text-foreground">Descriere meta</label>
+                    <span className={`text-[11px] tabular-nums ${seoCounterCls((seo.description ?? "").length, SEO_DESCRIPTION_MAX)}`}>
+                      {(seo.description ?? "").length}/{SEO_DESCRIPTION_MAX}
+                    </span>
+                  </div>
+                  <textarea
+                    value={seo.description ?? ""}
+                    onChange={(e) => setSeo(s => ({ ...s, description: e.target.value }))}
+                    placeholder={seoDefaults.description}
+                    rows={3}
+                    className={`${inputCls} resize-none`}
+                    disabled={!businessId}
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">Recomandat 150-160 de caractere. Nu schimba direct pozitia, dar creste rata de click.</p>
+                </div>
+
+                {/* Previzualizare Google */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Previzualizare in Google</p>
+                  <GooglePreview
+                    title={seo.title?.trim() || seoDefaults.title}
+                    description={seo.description?.trim() || seoDefaults.description}
+                    url={seoPreviewUrl}
+                  />
+                </div>
+              </div>
+
+              {/* Imagine la distribuire */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-2">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Imagine la distribuire</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Apare cand cineva distribuie magazinul pe Facebook, WhatsApp etc. Daca lipseste, folosim coperta magazinului. Ideal 1200×630px.</p>
+                </div>
+                <SeoImageField value={seo.ogImage ?? null} onChange={(v) => setSeo(s => ({ ...s, ogImage: v }))} folder="store-og" />
+              </div>
+
+              {/* Avansat: noindex */}
+              <div className="bg-surface border border-border rounded-xl p-5">
+                <label className="flex items-start gap-3 cursor-pointer select-none">
+                  <input type="checkbox" checked={!!seo.noindex} disabled={!businessId} onChange={(e) => setSeo(s => ({ ...s, noindex: e.target.checked }))} className="w-4 h-4 mt-0.5 rounded accent-green-600" />
+                  <span>
+                    <span className="block text-sm font-medium text-foreground">Ascunde magazinul din Google (noindex)</span>
+                    <span className="block text-xs text-muted-foreground mt-0.5">Optiune avansata. Activeaza doar daca NU vrei ca pagina principala sa apara in motoarele de cautare. Lasa dezactivat pentru SEO normal.</span>
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex justify-end">
+                <Button size="lg" onClick={saveSeo} disabled={savingSeo || !businessId}>
+                  {savingSeo ? <Loader2 className="animate-spin" /> : <Save />}
+                  {savingSeo ? "Se salveaza..." : "Salveaza SEO"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {activeSection === "notificari" && (
             <div className="space-y-6">
               <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">

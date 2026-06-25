@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { headers } from "next/headers";
@@ -10,25 +11,37 @@ interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ pag
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data: business } = await supabase
+  // Read via the service role: the SEO overrides live in store_settings, which
+  // is no longer anon-readable, so a nested anon select would return null there.
+  const { data: business } = await createAdminClient()
     .from("businesses")
-    .select("business_name, store_name, tagline, description, store_city, cover_url, custom_domain")
+    .select("business_name, store_name, tagline, description, store_city, cover_url, custom_domain, store_settings(page_content)")
     .eq("slug", slug)
     .single();
   if (!business) return {};
+
+  // Merchant overrides (Settings > SEO) win; otherwise fall back to the
+  // auto-derived defaults (single source of truth in @/lib/seo).
+  const rawSettings = (business as unknown as { store_settings: { page_content: unknown } | { page_content: unknown }[] | null }).store_settings;
+  const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
+  const seo = parseStoreSeo(settings?.page_content ?? null);
+
   const displayName = business.store_name ?? business.business_name;
-  const title = business.store_city ? `${displayName} - ${business.store_city}` : displayName;
-  const description = business.tagline ?? business.description?.slice(0, 155) ?? `Cumpara din ${displayName} online.`;
+  const title = seo.title || deriveStoreTitle(displayName, business.store_city);
+  const description = seo.description || deriveStoreDescription({ tagline: business.tagline, description: business.description, displayName });
   // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
   // also points its canonical at the store's own domain).
   const url = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
-  const images = business.cover_url ? [business.cover_url] : [];
+  const ogImage = seo.ogImage || business.cover_url;
+  const images = ogImage ? [ogImage] : [];
   return {
     // `absolute` strips the root layout's "%s | Edinio" template — storefronts
     // must show only the merchant's own name in Google / browser tabs.
     title: { absolute: title },
     description,
+    // Advanced opt-in: hide the homepage from search. "follow" stays on so
+    // crawlers still reach the (indexable) product pages it links to.
+    ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
     openGraph: { title, description, url, images },
     twitter: {
       card: images.length ? "summary_large_image" : "summary",

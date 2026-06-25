@@ -213,7 +213,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{
               borderColor: selected ? color : "var(--border)",
-              background: selected ? `${color}12` : "var(--surface)",
+              background: selected ? `${color}12` : "var(--color-surface)",
             }}
           >
             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-muted shrink-0">
@@ -235,7 +235,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               style={
                 selected
                   ? { borderColor: color, backgroundColor: color }
-                  : { borderColor: "var(--border)", backgroundColor: "var(--surface)" }
+                  : { borderColor: "var(--border)", backgroundColor: "var(--color-surface)" }
               }
             >
               {selected && (
@@ -260,7 +260,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{
               borderColor: selected ? color : "var(--border)",
-              background: selected ? `${color}12` : "var(--surface)",
+              background: selected ? `${color}12` : "var(--color-surface)",
             }}
           >
             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-muted shrink-0">
@@ -280,7 +280,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               style={
                 selected
                   ? { borderColor: color, backgroundColor: color }
-                  : { borderColor: "var(--border)", backgroundColor: "var(--surface)" }
+                  : { borderColor: "var(--border)", backgroundColor: "var(--color-surface)" }
               }
             >
               {selected && (
@@ -314,7 +314,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
                 className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-colors"
                 style={{
                   borderColor: selectedLocker ? color : "var(--border)",
-                  background: selectedLocker ? `${color}08` : "var(--surface)",
+                  background: selectedLocker ? `${color}08` : "var(--color-surface)",
                 }}
               >
                 <MapPin size={14} className="text-muted-foreground shrink-0" />

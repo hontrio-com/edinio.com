@@ -465,7 +465,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     return (
                       <button key={i} type="button" onClick={() => setSelectedTierIdx(i)}
                         className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left"
-                        style={{ borderColor: selected ? color : "var(--border)", background: selected ? `${color}12` : "var(--surface)" }}
+                        style={{ borderColor: selected ? color : "var(--border)", background: selected ? `${color}12` : "var(--color-surface)" }}
                       >
                         {product.images[0] && (
                           <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border flex-shrink-0 bg-muted/40">
@@ -497,7 +497,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                         <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
                           style={selected
                             ? { borderColor: color, backgroundColor: color }
-                            : { borderColor: "var(--border)", backgroundColor: "var(--surface)" }}>
+                            : { borderColor: "var(--border)", backgroundColor: "var(--color-surface)" }}>
                           {selected && <Check size={10} className="text-white" strokeWidth={3} />}
                         </div>
                       </button>
@@ -1024,7 +1024,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                         className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                         style={paymentMethod === m.type
                           ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--foreground)" }
-                          : { borderColor: "var(--border)", backgroundColor: "var(--surface)", color: "var(--muted-foreground)" }}>
+                          : { borderColor: "var(--border)", backgroundColor: "var(--color-surface)", color: "var(--muted-foreground)" }}>
                         {m.type === "cash_on_delivery" ? <Banknote size={16} /> : <CreditCard size={16} />}
                         {m.label}
                       </button>

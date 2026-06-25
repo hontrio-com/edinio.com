@@ -1,3 +1,5 @@
+import { normalizePhone } from "@/lib/utils/phone";
+
 export type CargusConfig = {
   enabled: boolean;
   username: string;
@@ -237,7 +239,7 @@ export async function createCargusAwb(
       BuildingNumber: "",
       AddressText: input.recipientAddress,
       ContactPerson: input.recipientName,
-      PhoneNumber: input.recipientPhone,
+      PhoneNumber: normalizePhone(input.recipientPhone),
       Email: input.recipientEmail,
       CodPostal: input.recipientPostalCode,
       CountryId: 0,

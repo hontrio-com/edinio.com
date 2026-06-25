@@ -1,3 +1,5 @@
+import { normalizePhone } from "@/lib/utils/phone";
+
 const PROD_URL = "https://api.sameday.ro";
 const SANDBOX_URL = "https://sameday-api.demo.zitec.com";
 
@@ -231,7 +233,7 @@ export async function createSamedayAwb(
     `insuredValue=${input.insuredValue}`,
     `thirdPartyPickup=0`,
     `awbRecipient[name]=${enc(input.recipientName)}`,
-    `awbRecipient[phoneNumber]=${enc(input.recipientPhone)}`,
+    `awbRecipient[phoneNumber]=${enc(normalizePhone(input.recipientPhone))}`,
     `awbRecipient[personType]=0`,
     `awbRecipient[countyString]=${enc(input.recipientCounty)}`,
     `awbRecipient[cityString]=${enc(input.recipientCity)}`,

@@ -1,3 +1,5 @@
+import { normalizePhone } from "@/lib/utils/phone";
+
 const BASE_URL = "https://api.dpd.ro/v1";
 
 export type DpdConfig = {
@@ -154,7 +156,7 @@ function buildDpdShipmentBody(
     language: "RO",
     sender: { clientId: config.client_id },
     recipient: {
-      phone1: { number: input.recipientPhone },
+      phone1: { number: normalizePhone(input.recipientPhone) },
       privatePerson: true,
       clientName: input.recipientName,
       email: input.recipientEmail || undefined,

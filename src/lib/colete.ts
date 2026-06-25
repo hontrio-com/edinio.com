@@ -1,3 +1,5 @@
+import { normalizePhone } from "@/lib/utils/phone";
+
 const CO_AUTH = "https://auth.colete-online.ro/token";
 const CO_BASE_PROD = "https://api.colete-online.ro/v1";
 const CO_BASE_STAGING = "https://api.colete-online.ro/v1/staging";
@@ -152,7 +154,7 @@ function buildOrderBody(
     sender: {
       contact: {
         name: sender.name,
-        phone: sender.phone,
+        phone: normalizePhone(sender.phone),
         ...(sender.email ? { email: sender.email } : {}),
         ...(sender.company ? { company: sender.company } : {}),
       },
@@ -169,7 +171,7 @@ function buildOrderBody(
     recipient: {
       contact: {
         name: receiver.name,
-        phone: receiver.phone,
+        phone: normalizePhone(receiver.phone),
         ...(receiver.email ? { email: receiver.email } : {}),
         ...(receiver.company ? { company: receiver.company } : {}),
       },

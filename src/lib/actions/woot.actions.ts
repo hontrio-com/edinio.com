@@ -8,6 +8,7 @@ import {
   getAccountInfo, getCredit,
   type WootConfig, type WootParcel, type WootPriceResult,
 } from "@/lib/woot";
+import { normalizePhone } from "@/lib/utils/phone";
 
 function adminClient() {
   return createAdminClient(
@@ -127,7 +128,7 @@ export async function getWootPrices(
     const sender = buildSender(config);
     const prices = await getPrices(token, {
       sender,
-      receiver: { company: 0, ...receiver },
+      receiver: { company: 0, ...receiver, phone: normalizePhone(receiver.phone) },
       parcels,
       repayment: repayment && repayment > 0 ? repayment : undefined,
     });
@@ -167,7 +168,7 @@ export async function createWootAwb(
     const result = await createOrder(token, {
       service_id: serviceId,
       sender: buildSender(config),
-      receiver: { company: 0, ...receiver },
+      receiver: { company: 0, ...receiver, phone: normalizePhone(receiver.phone) },
       parcels,
       repayment: repayment && repayment > 0 ? repayment : undefined,
       options,
@@ -239,7 +240,7 @@ function buildSender(config: WootConfig): object {
       ? { company_name: config.sender.company_name }
       : {}),
     contact: config.sender.contact,
-    phone: config.sender.phone,
+    phone: normalizePhone(config.sender.phone),
     email: config.sender.email,
     country_id: 189,
     city_id: config.sender.city_id,

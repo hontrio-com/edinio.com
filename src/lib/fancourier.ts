@@ -1,3 +1,5 @@
+import { normalizePhone } from "@/lib/utils/phone";
+
 const BASE_URL = "https://api.fancourier.ro";
 
 export type FanCourierConfig = {
@@ -181,7 +183,7 @@ export async function createFanCourierAwb(
         },
         recipient: {
           name: input.recipientName,
-          phone: input.recipientPhone,
+          phone: normalizePhone(input.recipientPhone),
           email: input.recipientEmail || undefined,
           address: {
             county: input.recipientCounty,

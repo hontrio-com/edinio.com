@@ -4,8 +4,8 @@ import { useState, createContext, useContext, useEffect, useTransition, useMemo,
 import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
-  MapPin, Mail, Globe, ChevronRight, ChevronLeft, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
-  Truck, ShieldCheck, RotateCcw, Check, Filter,
+  MapPin, Mail, Globe, ChevronRight, ChevronLeft, ChevronDown, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
+  Truck, ShieldCheck, RotateCcw, Check, Filter, ArrowUpDown,
 } from "lucide-react";
 import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format";
 import { cdnImage } from "@/lib/cdn-image";
@@ -1806,14 +1806,19 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             />
           </div>
           {showSort && (
-            <select aria-label="Sorteaza produsele" value={sort} onChange={e => setSort(e.target.value)}
-              className="h-[46px] px-3 text-sm border border-border rounded-2xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
-              <option value="newest">Cele mai noi</option>
-              <option value="price_asc">Pret crescator</option>
-              <option value="price_desc">Pret descrescator</option>
-              <option value="popular">Populare</option>
-              <option value="name_asc">Alfabetic A-Z</option>
-            </select>
+            <div className="relative w-full md:w-auto shrink-0">
+              <ArrowUpDown className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <select aria-label="Sorteaza produsele" value={sort} onChange={e => setSort(e.target.value)}
+                style={{ WebkitAppearance: "none", MozAppearance: "none" }}
+                className="h-[46px] w-full md:w-auto appearance-none cursor-pointer pl-10 pr-9 text-sm border border-border rounded-2xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+                <option value="newest">Cele mai noi</option>
+                <option value="price_asc">Pret crescator</option>
+                <option value="price_desc">Pret descrescator</option>
+                <option value="popular">Populare</option>
+                <option value="name_asc">Alfabetic A-Z</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
           )}
           <button
             type="button"

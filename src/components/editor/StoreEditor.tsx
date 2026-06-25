@@ -233,6 +233,18 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     return result.url;
   }
 
+  // Favicons are squared + converted to PNG in the browser so they stay crisp in
+  // tabs, then uploaded raw (skip the WebP compressor that would re-scale them).
+  async function uploadFavicon(file: File): Promise<string | null> {
+    const [{ processFavicon }, { uploadImage }] = await Promise.all([
+      import("@/lib/utils/favicon"),
+      import("@/lib/upload"),
+    ]);
+    const png = await processFavicon(file);
+    const result = await uploadImage(png, "logos", undefined, { skipCompress: true });
+    return "error" in result ? null : result.url;
+  }
+
   async function save(section: string, data: Parameters<typeof updateBusiness>[1]) {
     setSaving(section);
     const result = await updateBusiness(business.id, data);
@@ -316,7 +328,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     if (logoPreview === null) logo_url = null;
 
     let favicon_url: string | null;
-    if (faviconFile) favicon_url = (await uploadFile(faviconFile, "logos")) ?? null;
+    if (faviconFile) favicon_url = (await uploadFavicon(faviconFile)) ?? null;
     else favicon_url = faviconPreview;
 
     // Resolve banners in order: upload new files, keep already-hosted URLs.
@@ -542,7 +554,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               onFile={(f) => { setFaviconFile(f); setFaviconPreview(URL.createObjectURL(f)); }}
               onRemove={() => { setFaviconFile(null); setFaviconPreview(null); }}
               onPick={(url) => { setFaviconFile(null); setFaviconPreview(url); }} />
-            <p className="text-[10px] text-muted-foreground mt-1.5">Imagine patrata (ideal 512x512px, PNG). Daca lipseste, se foloseste logo-ul.</p>
+            <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">Imagine patrata (ideal 512x512px): un logo simplu sau simbol, nu un logo lat cu text (devine ilizibil in tab). O facem automat patrata si optimizata (PNG). Daca lipseste, se foloseste logo-ul.</p>
           </div>
           {logoPreview && (
             <div>

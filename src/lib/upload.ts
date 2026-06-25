@@ -8,7 +8,8 @@ import { inferVideoType, validateVideoFile } from "@/lib/pages/video-config";
 export async function uploadImage(
   file: File,
   bucket: string,
-  folder?: string
+  folder?: string,
+  opts?: { skipCompress?: boolean }
 ): Promise<{ url: string } | { error: string }> {
   try {
     // Guard against empty source files (e.g. a 0-byte stub from a cloud picker):
@@ -17,7 +18,9 @@ export async function uploadImage(
       return { error: "Fisierul pare gol. Alege poza din galeria dispozitivului (nu dintr-un link/cloud)." };
     }
 
-    const compressed = await compressImage(file);
+    // skipCompress: the caller already produced the exact bytes to store (e.g. a
+    // squared PNG favicon) — re-running the WebP compressor would undo that.
+    const compressed = opts?.skipCompress ? file : await compressImage(file);
     if (compressed.size === 0) {
       return { error: "Imaginea nu a putut fi citita. Incearca alta poza sau alt dispozitiv." };
     }

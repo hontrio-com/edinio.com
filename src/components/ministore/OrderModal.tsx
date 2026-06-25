@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User, Phone, MapPin, Home, Loader2, Banknote, CreditCard,
   Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package, Mail,
-  Upload, Palette,
+  Upload, Palette, Lock,
 } from "lucide-react";
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
@@ -80,15 +80,15 @@ interface Props {
   onCartConsumed?: () => void;
 }
 
-const inputCls = "flex-1 px-3 py-2.5 text-sm text-gray-800 bg-white placeholder:text-gray-400 focus:outline-none";
+const inputCls = "flex-1 px-3 py-2.5 text-sm text-foreground bg-surface placeholder:text-muted-foreground focus:outline-none";
 
 function IconInput({ icon: Icon, error, children }: {
   icon: React.ElementType; error?: boolean; children: React.ReactNode;
 }) {
   return (
-    <div className={`flex overflow-hidden rounded-lg border ${error ? "border-red-400" : "border-gray-200"} focus-within:border-gray-400 transition-colors`}>
-      <span className="flex items-center justify-center w-10 shrink-0 bg-gray-50">
-        <Icon size={15} className="text-gray-500" />
+    <div className={`flex overflow-hidden rounded-lg border ${error ? "border-red-400" : "border-border"} focus-within:border-foreground/40 transition-colors`}>
+      <span className="flex items-center justify-center w-10 shrink-0 bg-muted/40">
+        <Icon size={15} className="text-muted-foreground" />
       </span>
       {children}
     </div>
@@ -142,6 +142,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [appliedDiscount, setAppliedDiscount] = useState<ValidatedDiscount | null>(null);
   const [discountError, setDiscountError] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  // Collapsed by default — a visible coupon field depresses conversion (shoppers
+  // leave to hunt for codes). Revealed on demand via "Ai un cod?".
+  const [showDiscountField, setShowDiscountField] = useState(false);
 
   // Derive effective qty and raw subtotal (before discount)
   const effectiveQty = hasTiers ? tiers![selectedTierIdx].qty : quantity;
@@ -214,6 +217,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setDiscountInput("");
     setAppliedDiscount(null);
     setDiscountError("");
+    setShowDiscountField(false);
     setCourierSelection(null);
     setHasCouriers(false);
     setCustValues(() => {
@@ -429,21 +433,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           <motion.div
             initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 60 }}
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
-            className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-white"
+            className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-surface"
             style={{ borderRadius: "21px 21px 0 0", boxShadow: "rgba(0,0,0,0.5) 0px 4px 24px", border: `3px solid ${color}` }}
           >
             {/* Mobile handle */}
             <div className="md:hidden flex justify-center pt-3">
-              <div className="w-10 h-1 rounded-full bg-gray-200" />
+              <div className="w-10 h-1 rounded-full bg-border" />
             </div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border">
               <div className="flex-1 text-center">
-                <h2 className="text-lg font-black text-gray-900 tracking-tight">Finalizeaza comanda</h2>
+                <h2 className="text-lg font-bold text-foreground tracking-tight">Finalizeaza comanda</h2>
               </div>
-              <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 transition-colors shrink-0">
-                <X size={17} className="text-gray-500" />
+              <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-muted transition-colors shrink-0">
+                <X size={17} className="text-muted-foreground" />
               </button>
             </div>
 
@@ -452,7 +456,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {/* Quantity tiers OR simple product summary */}
               {hasTiers ? (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Alege cantitatea</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Alege cantitatea</p>
                   {tiers!.map((tier, i) => {
                     const selected = selectedTierIdx === i;
                     const unitPrice = tier.price / tier.qty;
@@ -461,39 +465,39 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     return (
                       <button key={i} type="button" onClick={() => setSelectedTierIdx(i)}
                         className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left"
-                        style={{ borderColor: selected ? color : "#E5E7EB", background: selected ? `${color}12` : "#fff" }}
+                        style={{ borderColor: selected ? color : "var(--border)", background: selected ? `${color}12` : "var(--surface)" }}
                       >
                         {product.images[0] && (
-                          <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 bg-gray-50">
+                          <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border flex-shrink-0 bg-muted/40">
                             <Image src={product.images[0]} alt="" fill sizes="48px" className="object-contain p-1" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold text-sm text-gray-900">
+                          <p className="font-bold text-sm text-foreground">
                             {tier.qty} {tier.qty === 1 ? "bucata" : "bucati"}
                           </p>
                           {tier.badge ? (
-                            <span className="inline-block mt-0.5 text-white text-[10px] font-black px-2 py-0.5 rounded"
+                            <span className="inline-block mt-0.5 text-white text-[10px] font-bold px-2 py-0.5 rounded"
                               style={{ backgroundColor: color }}>
                               {tier.badge}
                             </span>
                           ) : (
-                            <span className="text-xs text-gray-400">{unitPrice.toFixed(0)} lei / buc</span>
+                            <span className="text-xs text-muted-foreground">{unitPrice.toFixed(0)} lei / buc</span>
                           )}
                           {savings > 0 && (
-                            <p className="text-[10px] text-green-600 font-semibold mt-0.5">Economisesti {savings.toFixed(0)} lei</p>
+                            <p className="text-[10px] font-semibold mt-0.5" style={{ color }}>Economisesti {savings.toFixed(0)} lei</p>
                           )}
                         </div>
                         <div className="text-right flex-shrink-0 mr-1">
-                          <p className="font-black text-base text-gray-900">{tier.price} lei</p>
+                          <p className="font-bold text-base text-foreground">{tier.price} lei</p>
                           {savings > 0 && (
-                            <p className="text-xs text-gray-400 line-through">{baseTotal} lei</p>
+                            <p className="text-xs text-muted-foreground line-through">{baseTotal} lei</p>
                           )}
                         </div>
                         <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
                           style={selected
                             ? { borderColor: color, backgroundColor: color }
-                            : { borderColor: "#D1D5DB", backgroundColor: "#fff" }}>
+                            : { borderColor: "var(--border)", backgroundColor: "var(--surface)" }}>
                           {selected && <Check size={10} className="text-white" strokeWidth={3} />}
                         </div>
                       </button>
@@ -501,24 +505,24 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   })}
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/40">
                   {product.images[0] && (
-                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-gray-50 flex-shrink-0">
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-border shrink-0 bg-muted/40 flex-shrink-0">
                       <Image src={product.images[0]} alt={product.name} fill sizes="56px" className="object-contain p-1" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-gray-900 truncate">{product.name}</p>
-                    <p className="text-sm font-black mt-0.5" style={{ color }}>{product.price} lei</p>
+                    <p className="font-bold text-sm text-foreground truncate">{product.name}</p>
+                    <p className="text-sm font-bold mt-0.5" style={{ color }}>{product.price} lei</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                      className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                       <Minus size={12} />
                     </button>
                     <span className="w-5 text-center text-sm font-bold tabular-nums">{quantity}</span>
                     <button type="button" onClick={() => setQuantity(q => q + 1)}
-                      className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                       <Plus size={12} />
                     </button>
                   </div>
@@ -527,35 +531,35 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {cart.length > 0 && (
                 <div className="space-y-2">
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     <Package size={12} /> Din cosul tau
                   </p>
                   {cart.map((ci) => (
-                    <div key={ci.productId} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-gray-300 bg-gray-50">
-                      <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-white flex-shrink-0">
+                    <div key={ci.productId} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-border bg-muted/40">
+                      <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border shrink-0 bg-surface flex-shrink-0">
                         {ci.imageUrl ? (
                           <Image src={ci.imageUrl} alt={ci.name} fill sizes="48px" className="object-contain p-1" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center"><Package size={16} className="text-gray-300" /></div>
+                          <div className="w-full h-full flex items-center justify-center"><Package size={16} className="text-muted-foreground/40" /></div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm text-gray-900 truncate">{ci.name}</p>
-                        <p className="text-sm font-black mt-0.5" style={{ color }}>{ci.price} lei</p>
+                        <p className="font-bold text-sm text-foreground truncate">{ci.name}</p>
+                        <p className="text-sm font-bold mt-0.5" style={{ color }}>{ci.price} lei</p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button type="button" aria-label="Scade cantitatea" onClick={() => setCartQty(ci.productId, ci.quantity - 1)}
-                          className="w-6 h-6 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                          className="w-6 h-6 rounded-md border border-border flex items-center justify-center hover:bg-muted transition-colors">
                           <Minus size={11} />
                         </button>
                         <span className="w-5 text-center text-sm font-bold tabular-nums">{ci.quantity}</span>
                         <button type="button" aria-label="Creste cantitatea" onClick={() => setCartQty(ci.productId, ci.quantity + 1)}
-                          className="w-6 h-6 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                          className="w-6 h-6 rounded-md border border-border flex items-center justify-center hover:bg-muted transition-colors">
                           <Plus size={11} />
                         </button>
                       </div>
                       <button type="button" aria-label="Elimina produsul" onClick={() => removeCartLine(ci.productId)}
-                        className="w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors shrink-0">
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors shrink-0">
                         <X size={14} />
                       </button>
                     </div>
@@ -565,14 +569,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {/* Customization fields */}
               {hasCustomization && (
-                <div className="space-y-3 border border-gray-200 rounded-xl p-3.5 bg-gray-50/50">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                <div className="space-y-3 border border-border rounded-xl p-3.5 bg-muted/30">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                     <Palette size={13} />
                     Personalizeaza produsul
                   </p>
                   {customizationFields!.map(field => (
                     <div key={field.id}>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">
+                      <label className="block text-sm font-semibold text-foreground mb-1">
                         {field.label || "Camp"} {field.required && <span className="text-red-500">*</span>}
                       </label>
 
@@ -582,7 +586,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                           onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
                           placeholder={field.placeholder ?? ""}
                           maxLength={field.max_length}
-                          className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400"
+                          className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40"
                         />
                       )}
 
@@ -594,10 +598,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                             placeholder={field.placeholder ?? ""}
                             maxLength={field.max_length}
                             rows={3}
-                            className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 resize-none"
+                            className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40 resize-none"
                           />
                           {field.max_length && (
-                            <p className="text-[11px] text-gray-400 mt-0.5 text-right">
+                            <p className="text-[11px] text-muted-foreground mt-0.5 text-right">
                               {((custValues[field.id] as string) ?? "").length}/{field.max_length}
                             </p>
                           )}
@@ -610,7 +614,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                           {Array.isArray(custValues[field.id]) && (custValues[field.id] as string[]).length > 0 && (
                             <div className="flex flex-wrap gap-2">
                               {(custValues[field.id] as string[]).map((url, imgIdx) => (
-                                <div key={imgIdx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-white group">
+                                <div key={imgIdx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface group">
                                   <img src={url} alt={`Upload ${imgIdx + 1}`} className="w-full h-full object-cover" />
                                   <button type="button" onClick={() => {
                                     const current = (custValues[field.id] as string[]).filter((_, i) => i !== imgIdx);
@@ -624,11 +628,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                           )}
                           {/* Upload button */}
                           {(!Array.isArray(custValues[field.id]) || (custValues[field.id] as string[]).length < (field.max_files ?? 5)) && (
-                            <label className="flex items-center gap-2 px-3 py-2.5 bg-white border border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 transition-colors">
+                            <label className="flex items-center gap-2 px-3 py-2.5 bg-surface border border-dashed border-border rounded-lg cursor-pointer hover:border-foreground/40 transition-colors">
                               {custUploading[field.id]
-                                ? <Loader2 size={16} className="text-gray-500 animate-spin" />
-                                : <Upload size={16} className="text-gray-500" />}
-                              <span className="text-sm text-gray-600">
+                                ? <Loader2 size={16} className="text-muted-foreground animate-spin" />
+                                : <Upload size={16} className="text-muted-foreground" />}
+                              <span className="text-sm text-muted-foreground">
                                 {custUploading[field.id] ? "Se incarca..." : "Incarca imagine"}
                               </span>
                               <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
@@ -656,7 +660,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                               }} />
                             </label>
                           )}
-                          <p className="text-[11px] text-gray-400">
+                          <p className="text-[11px] text-muted-foreground">
                             Max {field.max_files ?? 5} imagini, {field.max_file_size_mb ?? 10}MB/fisier
                           </p>
                         </div>
@@ -667,7 +671,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                           aria-label={field.label}
                           value={(custValues[field.id] as string) ?? ""}
                           onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
-                          className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400"
+                          className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40"
                         >
                           <option value="">Selecteaza...</option>
                           {(field.options ?? []).map(opt => (
@@ -682,16 +686,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                             type="color"
                             value={(custValues[field.id] as string) ?? field.default_color ?? "#000000"}
                             onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
-                            className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                            className="w-10 h-10 rounded-lg border border-border cursor-pointer"
                           />
-                          <span className="text-sm text-gray-600 font-mono">
+                          <span className="text-sm text-muted-foreground font-mono">
                             {(custValues[field.id] as string) ?? field.default_color ?? "#000000"}
                           </span>
                         </div>
                       )}
 
                       {field.helper_text && (
-                        <p className="text-[11px] text-gray-400 mt-0.5">{field.helper_text}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{field.helper_text}</p>
                       )}
                       {errors[`cust_${field.id}`] && (
                         <p className="text-xs text-red-500 mt-0.5">{errors[`cust_${field.id}`]}</p>
@@ -703,7 +707,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {/* Customer fields */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-foreground mb-1">
                   Nume complet <span className="text-red-500">*</span>
                 </label>
                 <IconInput icon={User} error={!!errors.name}>
@@ -714,7 +718,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-foreground mb-1">
                   Numar de telefon <span className="text-red-500">*</span>
                 </label>
                 <IconInput icon={Phone} error={!!errors.phone}>
@@ -726,8 +730,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {(emailField.enabled || isIntl) && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Email {(emailField.required || isIntl) ? <span className="text-red-500">*</span> : <span className="text-gray-400 font-normal">(optional)</span>}
+                  <label className="block text-sm font-semibold text-foreground mb-1">
+                    Email {(emailField.required || isIntl) ? <span className="text-red-500">*</span> : <span className="text-muted-foreground font-normal">(optional)</span>}
                   </label>
                   <IconInput icon={Mail} error={!!errors.email}>
                     <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
@@ -739,12 +743,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {intlEnabled && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-foreground mb-1">
                     Tara <span className="text-red-500">*</span>
                   </label>
                   <IconInput icon={MapPin}>
                     <select value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
-                      className={`${inputCls} bg-white`}>
+                      className={`${inputCls} bg-surface`}>
                       <option value="RO">Romania</option>
                       {EU_COUNTRIES.map(c => <option key={c.iso2} value={c.iso2}>{c.name}</option>)}
                     </select>
@@ -754,7 +758,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {isIntl ? (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-foreground mb-1">
                     Cod postal <span className="text-red-500">*</span>
                   </label>
                   <IconInput icon={MapPin} error={!!errors.postCode}>
@@ -765,12 +769,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               ) : (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-foreground mb-1">
                     Judet <span className="text-red-500">*</span>
                   </label>
                   <IconInput icon={MapPin} error={!!errors.county}>
                     <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))}
-                      className={`${inputCls} bg-white`}>
+                      className={`${inputCls} bg-surface`}>
                       <option value="">Selecteaza judetul</option>
                       {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
                     </select>
@@ -780,7 +784,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               )}
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-foreground mb-1">
                   Oras <span className="text-red-500">*</span>
                 </label>
                 <IconInput icon={MapPin} error={!!errors.city}>
@@ -791,7 +795,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-foreground mb-1">
                   Adresa <span className="text-red-500">*</span>
                 </label>
                 <IconInput icon={Home} error={!!errors.address}>
@@ -820,7 +824,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {/* Custom fields */}
               {customFields.map(field => (
                 <div key={field.id}>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-foreground mb-1">
                     {field.label || "Camp"} {field.required && <span className="text-red-500">*</span>}
                   </label>
                   {field.type === "text" && (
@@ -834,13 +838,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <textarea value={customValues[field.id] ?? ""} rows={3}
                       placeholder={field.placeholder ?? ""}
                       onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
-                      className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 resize-none" />
+                      className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40 resize-none" />
                   )}
                   {field.type === "select" && (
                     <IconInput icon={Package} error={!!errors[field.id]}>
                       <select aria-label={field.label} value={customValues[field.id] ?? ""}
                         onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
-                        className={`${inputCls} bg-white`}>
+                        className={`${inputCls} bg-surface`}>
                         <option value="">Selecteaza...</option>
                         {(field.options ?? "").split(",").map(opt => opt.trim()).filter(Boolean).map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
@@ -852,8 +856,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <label className="flex items-center gap-2.5 cursor-pointer">
                       <input type="checkbox" checked={customValues[field.id] === "da"}
                         onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.checked ? "da" : "nu" }))}
-                        className="w-4 h-4 rounded accent-green-600" />
-                      <span className="text-sm text-gray-700">{field.placeholder || field.label}</span>
+                        className="w-4 h-4 rounded" style={{ accentColor: color }} />
+                      <span className="text-sm text-foreground">{field.placeholder || field.label}</span>
                     </label>
                   )}
                   {errors[field.id] && <p className="text-xs text-red-500 mt-0.5">{errors[field.id]}</p>}
@@ -863,7 +867,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {/* Extras */}
               {extras.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-700">Optiuni suplimentare</p>
+                  <p className="text-sm font-semibold text-foreground">Optiuni suplimentare</p>
                   {extras.map(extra => {
                     const checked = !!selectedExtras[extra.id];
                     return (
@@ -872,11 +876,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                         className="w-full text-left rounded-xl border-2 border-dashed p-3.5 transition-all"
                         style={checked
                           ? { borderColor: color, backgroundColor: `${color}08` }
-                          : { borderColor: "#D1D5DB", backgroundColor: "transparent" }}>
+                          : { borderColor: "var(--border)", backgroundColor: "transparent" }}>
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-5 h-5 rounded flex items-center justify-center border-2 flex-shrink-0 transition-colors"
-                              style={checked ? { borderColor: color, backgroundColor: color } : { borderColor: "#D1D5DB" }}>
+                              style={checked ? { borderColor: color, backgroundColor: color } : { borderColor: "var(--border)" }}>
                               {checked && (
                                 <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none">
                                   <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -884,13 +888,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 leading-tight">{extra.label}</p>
+                              <p className="text-sm font-semibold text-foreground leading-tight">{extra.label}</p>
                               {extra.description && (
-                                <p className="text-xs text-gray-500 mt-0.5">{extra.description}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">{extra.description}</p>
                               )}
                             </div>
                           </div>
-                          <span className="text-sm font-black flex-shrink-0" style={{ color }}>+{extra.price} lei</span>
+                          <span className="text-sm font-bold flex-shrink-0" style={{ color }}>+{extra.price} lei</span>
                         </div>
                       </button>
                     );
@@ -898,20 +902,20 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               )}
 
-              {/* Discount code */}
-              {!hiddenFields.includes("discount") && <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Cod discount (optional)
+              {/* Discount code — collapsed behind a link until needed */}
+              {!hiddenFields.includes("discount") && (appliedDiscount || showDiscountField ? <div>
+                <label className="block text-sm font-semibold text-foreground mb-1">
+                  Cod discount
                 </label>
                 {appliedDiscount ? (
                   /* Applied discount banner */
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 border-green-300 bg-green-50">
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2" style={{ borderColor: `${color}55`, backgroundColor: `${color}12` }}>
                     {appliedDiscount.type === "free_shipping"
-                      ? <Truck size={15} className="text-green-600 flex-shrink-0" />
-                      : <BadgePercent size={15} className="text-green-600 flex-shrink-0" />}
+                      ? <Truck size={15} className="flex-shrink-0" style={{ color }} />
+                      : <BadgePercent size={15} className="flex-shrink-0" style={{ color }} />}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-green-700 font-mono">{appliedDiscount.code}</p>
-                      <p className="text-xs text-green-600">
+                      <p className="text-sm font-bold font-mono" style={{ color }}>{appliedDiscount.code}</p>
+                      <p className="text-xs text-muted-foreground">
                         {appliedDiscount.type === "percent" && `${appliedDiscount.value}% reducere`}
                         {appliedDiscount.type === "fixed" && `${appliedDiscount.value} lei reducere`}
                         {appliedDiscount.type === "free_shipping" && "Transport gratuit aplicat"}
@@ -920,31 +924,31 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <button
                       type="button"
                       onClick={handleRemoveDiscount}
-                      className="p-1 rounded-full hover:bg-green-100 transition-colors flex-shrink-0"
+                      className="p-1 rounded-full hover:bg-muted transition-colors flex-shrink-0"
                     >
-                      <X size={14} className="text-green-600" />
+                      <X size={14} style={{ color }} />
                     </button>
                   </div>
                 ) : (
                   /* Input + Apply button */
                   <div className="flex gap-2">
-                    <div className="flex flex-1 overflow-hidden rounded-lg border border-gray-200 focus-within:border-gray-400 transition-colors">
-                      <span className="flex items-center justify-center w-10 shrink-0 bg-gray-50">
-                        <Tag size={15} className="text-gray-500" />
+                    <div className="flex flex-1 overflow-hidden rounded-lg border border-border focus-within:border-foreground/40 transition-colors">
+                      <span className="flex items-center justify-center w-10 shrink-0 bg-muted/40">
+                        <Tag size={15} className="text-muted-foreground" />
                       </span>
                       <input
                         value={discountInput}
                         onChange={e => { setDiscountInput(e.target.value.toUpperCase()); setDiscountError(""); }}
                         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleApplyDiscount(); } }}
                         placeholder="COD DISCOUNT"
-                        className="flex-1 px-3 py-2.5 text-sm text-gray-800 bg-white placeholder:text-gray-400 focus:outline-none font-mono tracking-widest"
+                        className="flex-1 px-3 py-2.5 text-sm text-foreground bg-surface placeholder:text-muted-foreground focus:outline-none font-mono tracking-widest"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={handleApplyDiscount}
                       disabled={isValidating || !discountInput.trim()}
-                      className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+                      className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                       style={{ backgroundColor: color }}
                     >
                       {isValidating
@@ -955,51 +959,56 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   </div>
                 )}
                 {discountError && <p className="text-xs text-red-500 mt-1">{discountError}</p>}
-              </div>}
+              </div> : (
+                <button type="button" onClick={() => setShowDiscountField(true)}
+                  className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  <Tag size={14} /> Ai un cod de reducere?
+                </button>
+              ))}
 
               {/* Order summary */}
-              <div className="rounded-xl p-3 space-y-1.5 text-sm bg-gray-50 border border-gray-200">
-                <div className="flex justify-between text-gray-500">
+              <div className="rounded-xl p-3 space-y-1.5 text-sm bg-muted/40 border border-border">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Produs ({effectiveQty} buc)</span>
-                  <span className="font-medium text-gray-900">{productSubtotal} lei</span>
+                  <span className="font-medium text-foreground">{productSubtotal} lei</span>
                 </div>
                 {cart.map((ci) => (
-                  <div key={ci.productId} className="flex justify-between text-gray-500">
+                  <div key={ci.productId} className="flex justify-between text-muted-foreground">
                     <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
-                    <span className="font-medium text-gray-900 whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
+                    <span className="font-medium text-foreground whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
                   </div>
                 ))}
                 {extrasTotal > 0 && (
-                  <div className="flex justify-between text-gray-500">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>Optiuni extra</span>
-                    <span className="font-medium text-gray-900">+{extrasTotal} lei</span>
+                    <span className="font-medium text-foreground">+{extrasTotal} lei</span>
                   </div>
                 )}
                 {appliedDiscount && discountAmount > 0 && (
-                  <div className="flex justify-between text-green-600">
+                  <div className="flex justify-between" style={{ color }}>
                     <span>Discount ({appliedDiscount.code})</span>
                     <span className="font-semibold">-{discountAmount.toFixed(2)} lei</span>
                   </div>
                 )}
                 {cardDiscountAmount > 0 && (
-                  <div className="flex justify-between text-green-600">
+                  <div className="flex justify-between" style={{ color }}>
                     <span>Reducere plata cu cardul</span>
                     <span className="font-semibold">-{cardDiscountAmount.toFixed(2)} lei</span>
                   </div>
                 )}
                 {appliedDiscount?.type === "free_shipping" && (
-                  <div className="flex justify-between text-green-600">
+                  <div className="flex justify-between" style={{ color }}>
                     <span>Transport gratuit ({appliedDiscount.code})</span>
                     <span className="font-semibold">-{shippingCost} lei</span>
                   </div>
                 )}
-                <div className="flex justify-between text-gray-500">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Transport</span>
-                  <span className={shipping === 0 ? "font-medium text-green-600" : "font-medium text-gray-900"}>
+                  <span className={shipping === 0 ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 ? { color } : undefined}>
                     {shipping === 0 ? "Gratuit" : `${shipping} lei`}
                   </span>
                 </div>
-                <div className="flex justify-between font-black text-base border-t border-gray-200 pt-2">
+                <div className="flex justify-between font-bold text-base border-t border-border pt-2">
                   <span>Total</span>
                   <span style={{ color }}>{total.toFixed(2).replace(".00", "")} lei</span>
                 </div>
@@ -1008,14 +1017,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {/* Payment method */}
               {availablePaymentMethods.length > 1 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold text-gray-700">Metoda de plata</p>
+                  <p className="text-sm font-semibold text-foreground">Metoda de plata</p>
                   <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(availablePaymentMethods.length, 3)}, minmax(0, 1fr))` }}>
                     {availablePaymentMethods.map((m) => (
                       <button key={m.type} type="button" onClick={() => setPaymentMethod(m.type)}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                         style={paymentMethod === m.type
-                          ? { borderColor: color, backgroundColor: `${color}12`, color: "#111" }
-                          : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                          ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--foreground)" }
+                          : { borderColor: "var(--border)", backgroundColor: "var(--surface)", color: "var(--muted-foreground)" }}>
                         {m.type === "cash_on_delivery" ? <Banknote size={16} /> : <CreditCard size={16} />}
                         {m.label}
                       </button>
@@ -1027,14 +1036,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {errors._ && <p className="text-sm text-red-500 text-center">{errors._}</p>}
 
               {belowMinOrder && (
-                <p className="text-sm text-center text-gray-500">
-                  Comanda minima este <strong className="text-gray-800">{minOrderAmount} lei</strong>. Mai adauga <strong className="text-gray-800">{(minOrderAmount! - subtotal).toFixed(2).replace(".00", "")} lei</strong> pentru a comanda.
+                <p className="text-sm text-center text-muted-foreground">
+                  Comanda minima este <strong className="text-foreground">{minOrderAmount} lei</strong>. Mai adauga <strong className="text-foreground">{(minOrderAmount! - subtotal).toFixed(2).replace(".00", "")} lei</strong> pentru a comanda.
                 </p>
               )}
 
               {/* Submit */}
               <button type="submit" disabled={isPending || belowMinOrder}
-                className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                 style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
                 {isPending
                   ? <><Loader2 size={18} className="animate-spin" />Se proceseaza...</>
@@ -1046,10 +1055,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 }
               </button>
 
-              <p className="text-center text-xs text-gray-400">
+              <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+                <Lock size={12} className="shrink-0" />
                 {paymentMethod === "cash_on_delivery"
-                  ? "Platesti cash curierului - Fara card necesar"
-                  : "Vei fi redirectionat pentru plata securizata"}
+                  ? "Platesti cash curierului la primire - fara card necesar"
+                  : "Plata securizata - vei fi redirectionat catre procesatorul de plati"}
               </p>
             </form>
           </motion.div>

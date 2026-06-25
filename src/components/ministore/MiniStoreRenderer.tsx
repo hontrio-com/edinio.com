@@ -130,13 +130,13 @@ const JUDETE = [
   "Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea",
 ];
 
-const fieldCls = "flex-1 px-3 py-2.5 text-sm text-gray-800 bg-white placeholder:text-gray-400 focus:outline-none";
+const fieldCls = "flex-1 px-3 py-2.5 text-sm text-foreground bg-surface placeholder:text-muted-foreground focus:outline-none";
 
 function FieldWrap({ icon: Icon, error, children }: { icon: React.ElementType; error?: boolean; children: React.ReactNode }) {
   return (
-    <div className={`flex overflow-hidden rounded-lg border ${error ? "border-red-400" : "border-gray-200"} focus-within:border-gray-400 transition-colors`}>
-      <span className="flex items-center justify-center w-10 shrink-0 bg-gray-50">
-        <Icon size={15} className="text-gray-500" />
+    <div className={`flex overflow-hidden rounded-lg border ${error ? "border-red-400" : "border-border"} focus-within:border-foreground/40 transition-colors`}>
+      <span className="flex items-center justify-center w-10 shrink-0 bg-muted/40">
+        <Icon size={15} className="text-muted-foreground" />
       </span>
       {children}
     </div>
@@ -450,44 +450,44 @@ function CartCheckoutModal({
     <>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" onClick={onClose} />
       <div
-        className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-[60] w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-white"
+        className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-[60] w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-surface"
         style={{ borderRadius: "21px 21px 0 0", boxShadow: "rgba(0,0,0,0.5) 0px 4px 24px", border: `3px solid ${color}` }}
       >
         <div className="md:hidden flex justify-center pt-3">
-          <div className="w-10 h-1 rounded-full bg-gray-200" />
+          <div className="w-10 h-1 rounded-full bg-border" />
         </div>
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border">
           <div className="flex-1 text-center">
-            <h2 className="text-lg font-black text-gray-900 tracking-tight">Finalizeaza comanda</h2>
+            <h2 className="text-lg font-bold text-foreground tracking-tight">Finalizeaza comanda</h2>
           </div>
-          <button type="button" aria-label="Inchide formularul" onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 transition-colors shrink-0">
-            <X className="h-[17px] w-[17px] text-gray-500" />
+          <button type="button" aria-label="Inchide formularul" onClick={onClose} className="p-1.5 rounded-full hover:bg-muted transition-colors shrink-0">
+            <X className="h-[17px] w-[17px] text-muted-foreground" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="px-5 pt-4 pb-6 space-y-4">
           <div className="space-y-2">
             {items.map((item) => (
-              <div key={item.productId} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
+              <div key={item.productId} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/40">
                 {item.imageUrl && (
-                  <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="rounded-lg object-cover border border-gray-200 shrink-0" />
+                  <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="rounded-lg object-cover border border-border shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm text-gray-900 truncate">{item.name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{item.quantity} buc &times; {item.price} lei</p>
+                  <p className="font-bold text-sm text-foreground truncate">{item.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.quantity} buc &times; {item.price} lei</p>
                 </div>
-                <p className="text-sm font-black shrink-0" style={{ color }}>{item.price * item.quantity} lei</p>
+                <p className="text-sm font-bold shrink-0" style={{ color }}>{item.price * item.quantity} lei</p>
               </div>
             ))}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Nume complet <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-semibold text-foreground mb-1">Nume complet <span className="text-red-500">*</span></label>
             <FieldWrap icon={User} error={!!errors.name}>
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Prenume Nume" className={fieldCls} />
             </FieldWrap>
             {errors.name && <p className="text-xs text-red-500 mt-0.5">{errors.name}</p>}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Numar de telefon <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-semibold text-foreground mb-1">Numar de telefon <span className="text-red-500">*</span></label>
             <FieldWrap icon={Phone} error={!!errors.phone}>
               <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07XXXXXXXX" type="tel" className={fieldCls} />
             </FieldWrap>
@@ -495,11 +495,11 @@ function CartCheckoutModal({
           </div>
           {(emailField.enabled || isIntl) && (
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-foreground mb-1">
                 Email{" "}
                 {(emailField.required || isIntl)
                   ? <span className="text-red-500">*</span>
-                  : <span className="text-xs font-normal text-gray-400">(optional — pentru confirmare comanda)</span>
+                  : <span className="text-xs font-normal text-muted-foreground">(optional — pentru confirmare comanda)</span>
                 }
               </label>
               <FieldWrap icon={Mail} error={!!errors.email}>
@@ -510,9 +510,9 @@ function CartCheckoutModal({
           )}
           {intlEnabled && (
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Tara <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-semibold text-foreground mb-1">Tara <span className="text-red-500">*</span></label>
               <FieldWrap icon={MapPin}>
-                <select aria-label="Tara" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className={`${fieldCls} bg-white`}>
+                <select aria-label="Tara" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className={`${fieldCls} bg-surface`}>
                   <option value="RO">Romania</option>
                   {EU_COUNTRIES.map(c => <option key={c.iso2} value={c.iso2}>{c.name}</option>)}
                 </select>
@@ -521,7 +521,7 @@ function CartCheckoutModal({
           )}
           {isIntl ? (
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Cod postal <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-semibold text-foreground mb-1">Cod postal <span className="text-red-500">*</span></label>
               <FieldWrap icon={MapPin} error={!!errors.postCode}>
                 <input value={form.postCode} onChange={e => setForm(f => ({ ...f, postCode: e.target.value }))} placeholder="Cod postal" className={fieldCls} />
               </FieldWrap>
@@ -529,9 +529,9 @@ function CartCheckoutModal({
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Judet <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-semibold text-foreground mb-1">Judet <span className="text-red-500">*</span></label>
               <FieldWrap icon={MapPin} error={!!errors.county}>
-                <select aria-label="Judet" value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-white`}>
+                <select aria-label="Judet" value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-surface`}>
                   <option value="">Selecteaza judetul</option>
                   {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
                 </select>
@@ -540,14 +540,14 @@ function CartCheckoutModal({
             </div>
           )}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Oras <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-semibold text-foreground mb-1">Oras <span className="text-red-500">*</span></label>
             <FieldWrap icon={MapPin} error={!!errors.city}>
               <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Oras / Localitate" className={fieldCls} />
             </FieldWrap>
             {errors.city && <p className="text-xs text-red-500 mt-0.5">{errors.city}</p>}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Adresa <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-semibold text-foreground mb-1">Adresa <span className="text-red-500">*</span></label>
             <FieldWrap icon={Home} error={!!errors.address}>
               <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Strada, nr., bloc, ap." className={fieldCls} />
             </FieldWrap>
@@ -571,7 +571,7 @@ function CartCheckoutModal({
           {/* Custom fields */}
           {customFields.map(field => (
             <div key={field.id}>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-foreground mb-1">
                 {field.label || "Camp"} {field.required && <span className="text-red-500">*</span>}
               </label>
               {field.type === "text" && (
@@ -585,13 +585,13 @@ function CartCheckoutModal({
                 <textarea value={customValues[field.id] ?? ""} rows={3}
                   placeholder={field.placeholder ?? ""}
                   onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
-                  className="w-full px-3 py-2.5 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 resize-none" />
+                  className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40 resize-none" />
               )}
               {field.type === "select" && (
                 <FieldWrap icon={Package} error={!!errors[field.id]}>
                   <select aria-label={field.label} value={customValues[field.id] ?? ""}
                     onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
-                    className={`${fieldCls} bg-white`}>
+                    className={`${fieldCls} bg-surface`}>
                     <option value="">Selecteaza...</option>
                     {(field.options ?? "").split(",").map(opt => opt.trim()).filter(Boolean).map(opt => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -603,8 +603,8 @@ function CartCheckoutModal({
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <input type="checkbox" checked={customValues[field.id] === "da"}
                     onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.checked ? "da" : "nu" }))}
-                    className="w-4 h-4 rounded accent-green-600" />
-                  <span className="text-sm text-gray-700">{field.placeholder || field.label}</span>
+                    className="w-4 h-4 rounded" style={{ accentColor: color }} />
+                  <span className="text-sm text-foreground">{field.placeholder || field.label}</span>
                 </label>
               )}
               {errors[field.id] && <p className="text-xs text-red-500 mt-0.5">{errors[field.id]}</p>}
@@ -614,7 +614,7 @@ function CartCheckoutModal({
           {/* Extras */}
           {extras.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-700">Optiuni suplimentare</p>
+              <p className="text-sm font-semibold text-foreground">Optiuni suplimentare</p>
               {extras.map(extra => {
                 const checked = !!selectedExtras[extra.id];
                 return (
@@ -623,11 +623,11 @@ function CartCheckoutModal({
                     className="w-full text-left rounded-xl border-2 border-dashed p-3.5 transition-all"
                     style={checked
                       ? { borderColor: color, backgroundColor: `${color}08` }
-                      : { borderColor: "#D1D5DB", backgroundColor: "transparent" }}>
+                      : { borderColor: "var(--border)", backgroundColor: "transparent" }}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="w-5 h-5 rounded flex items-center justify-center border-2 flex-shrink-0 transition-colors"
-                          style={checked ? { borderColor: color, backgroundColor: color } : { borderColor: "#D1D5DB" }}>
+                          style={checked ? { borderColor: color, backgroundColor: color } : { borderColor: "var(--border)" }}>
                           {checked && (
                             <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none">
                               <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -635,13 +635,13 @@ function CartCheckoutModal({
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 leading-tight">{extra.label}</p>
+                          <p className="text-sm font-semibold text-foreground leading-tight">{extra.label}</p>
                           {extra.description && (
-                            <p className="text-xs text-gray-500 mt-0.5">{extra.description}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{extra.description}</p>
                           )}
                         </div>
                       </div>
-                      <span className="text-sm font-black flex-shrink-0" style={{ color }}>+{extra.price} lei</span>
+                      <span className="text-sm font-bold flex-shrink-0" style={{ color }}>+{extra.price} lei</span>
                     </div>
                   </button>
                 );
@@ -649,47 +649,47 @@ function CartCheckoutModal({
             </div>
           )}
 
-          <div className="rounded-xl p-3 space-y-1.5 text-sm bg-gray-50 border border-gray-200">
-            <div className="flex justify-between text-gray-500">
+          <div className="rounded-xl p-3 space-y-1.5 text-sm bg-muted/40 border border-border">
+            <div className="flex justify-between text-muted-foreground">
               <span>Produse</span>
-              <span className="font-medium text-gray-900">{total} lei</span>
+              <span className="font-medium text-foreground">{total} lei</span>
             </div>
             {extrasTotal > 0 && (
-              <div className="flex justify-between text-gray-500">
+              <div className="flex justify-between text-muted-foreground">
                 <span>Optiuni extra</span>
-                <span className="font-medium text-gray-900">+{extrasTotal} lei</span>
+                <span className="font-medium text-foreground">+{extrasTotal} lei</span>
               </div>
             )}
-            <div className="flex justify-between text-gray-500">
+            <div className="flex justify-between text-muted-foreground">
               <span>Transport</span>
-              <span className={shipping === 0 ? "font-medium text-green-600" : "font-medium text-gray-900"}>
+              <span className={shipping === 0 ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 ? { color } : undefined}>
                 {shipping === 0 ? "Gratuit" : `${shipping} lei`}
               </span>
             </div>
             {vatConfig.vat_enabled && vatConfig.show_vat_breakdown && vatAmount > 0 && (
-              <div className="flex justify-between text-gray-500">
+              <div className="flex justify-between text-muted-foreground">
                 <span>TVA ({vatConfig.vat_rate}%){vatConfig.prices_include_vat ? " inclus" : ""}</span>
-                <span className="font-medium text-gray-900">{vatAmount.toFixed(2)} lei</span>
+                <span className="font-medium text-foreground">{vatAmount.toFixed(2)} lei</span>
               </div>
             )}
             {appliedDiscount && (discountAmount > 0 || isFreeShippingDiscount) && (
-              <div className="flex justify-between text-green-600">
+              <div className="flex justify-between" style={{ color }}>
                 <span>Reducere ({appliedDiscount.code})</span>
                 <span className="font-medium">{isFreeShippingDiscount && discountAmount === 0 ? "Transport gratuit" : `-${discountAmount} lei`}</span>
               </div>
             )}
             {cardDiscountAmount > 0 && (
-              <div className="flex justify-between text-green-600">
+              <div className="flex justify-between" style={{ color }}>
                 <span>Reducere plata cu cardul</span>
                 <span className="font-medium">-{cardDiscountAmount} lei</span>
               </div>
             )}
             {freeShippingThreshold && total < freeShippingThreshold && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 Mai adauga <strong>{freeShippingThreshold - total} lei</strong> pentru livrare gratuita
               </p>
             )}
-            <div className="flex justify-between font-black text-base border-t border-gray-200 pt-2">
+            <div className="flex justify-between font-bold text-base border-t border-border pt-2">
               <span>Total</span>
               <span style={{ color }}>{grandTotal} lei</span>
             </div>
@@ -697,14 +697,14 @@ function CartCheckoutModal({
           {/* Payment method toggle */}
           {availablePaymentMethods.length > 1 && (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-700">Metoda de plata</p>
+              <p className="text-sm font-semibold text-foreground">Metoda de plata</p>
               <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(availablePaymentMethods.length, 3)}, minmax(0, 1fr))` }}>
                 {availablePaymentMethods.map((m) => (
                   <button key={m.type} type="button" onClick={() => setPaymentMethod(m.type)}
-                    className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                    className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                     style={paymentMethod === m.type
-                      ? { borderColor: color, backgroundColor: `${color}12`, color: "#111" }
-                      : { borderColor: "#E5E7EB", backgroundColor: "#fff", color: "#6B7280" }}>
+                      ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--foreground)" }
+                      : { borderColor: "var(--border)", backgroundColor: "var(--surface)", color: "var(--muted-foreground)" }}>
                     {m.type === "cash_on_delivery" ? <Banknote className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
                     {m.label}
                   </button>
@@ -717,7 +717,7 @@ function CartCheckoutModal({
           <button
             type="submit"
             disabled={isPending}
-            className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >
             {isPending
@@ -727,7 +727,7 @@ function CartCheckoutModal({
                 : <><CreditCard className="h-5 w-5" />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {grandTotal} lei</>
             }
           </button>
-          <p className="text-center text-xs text-gray-400">
+          <p className="text-center text-xs text-muted-foreground">
             {paymentMethod === "cash_on_delivery"
               ? "Platesti cash curierului - Fara card necesar"
               : "Vei fi redirectionat pentru plata securizata"}
@@ -775,7 +775,7 @@ function CartDrawer({
         {freeShippingThreshold && (
           <div className="px-5 py-3 bg-muted/40 border-b border-border">
             {total >= freeShippingThreshold ? (
-              <p className="text-xs font-semibold text-green-600 flex items-center gap-1.5">
+              <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color }}>
                 <Check className="h-3.5 w-3.5" /> Ai obtinut livrare gratuita!
               </p>
             ) : (
@@ -863,7 +863,7 @@ function CartDrawer({
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Livrare</span>
-                <span className={shipping === 0 ? "text-green-600 font-medium" : "font-medium text-foreground"}>
+                <span className={shipping === 0 ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 ? { color } : undefined}>
                   {shipping === 0 ? "Gratuita" : formatPrice(shipping)}
                 </span>
               </div>
@@ -878,7 +878,7 @@ function CartDrawer({
               </p>
             )}
             <button type="button" onClick={onCheckout} disabled={belowMinOrder}
-              className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+              className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
               style={{ backgroundColor: color }}>
               Finalizeaza comanda
               <ChevronRight className="h-4 w-4" />
@@ -906,9 +906,9 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
   const isOutOfStock = outOfStock ?? (product.track_inventory && product.stock_quantity === 0);
 
   return (
-    <div className="group bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
+    <div className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
       <a href={`${basePath}/product/${product.slug}`} className="block">
-        <div className="relative aspect-square bg-gray-50 overflow-hidden">
+        <div className="relative aspect-square bg-muted/40 overflow-hidden">
           {imageUrl ? (
             <Image
               src={imageUrl}
@@ -920,19 +920,19 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <Package className="h-10 w-10 text-gray-200" />
+              <Package className="h-10 w-10 text-muted-foreground/40" />
             </div>
           )}
 
           {/* Top badges */}
           <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
             {product.is_bundle && (
-              <span className="bg-gray-900 text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm inline-flex items-center gap-1">
+              <span className="bg-foreground text-background text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm inline-flex items-center gap-1">
                 <Layers className="h-3 w-3" /> Pachet
               </span>
             )}
             {hasDiscount && (
-              <span className="bg-red-500 text-white text-[11px] font-black px-2 py-0.5 rounded-lg shadow-sm">
+              <span className="bg-red-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
                 -{discountPct}%
               </span>
             )}
@@ -943,7 +943,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
               </span>
             )}
             {isNew && !hasDiscount && !product.is_featured && (
-              <span className="bg-blue-500 text-white text-[11px] font-black px-2 py-0.5 rounded-lg shadow-sm">
+              <span className="text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm" style={{ backgroundColor: color }}>
                 Nou
               </span>
             )}
@@ -959,8 +959,8 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
           )}
 
           {isOutOfStock && (
-            <div className="absolute inset-0 bg-white/75 backdrop-blur-[2px] flex items-center justify-center">
-              <span className="text-xs font-semibold text-gray-500 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-sm">
+            <div className="absolute inset-0 bg-surface/75 backdrop-blur-[2px] flex items-center justify-center">
+              <span className="text-xs font-semibold text-muted-foreground bg-surface border border-border px-3 py-1.5 rounded-full shadow-sm">
                 Stoc epuizat
               </span>
             </div>
@@ -970,17 +970,17 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
 
       <div className="p-3 sm:p-4 flex flex-col flex-1">
         <a href={`${basePath}/product/${product.slug}`} className="flex-1">
-          <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
+          <h3 className="font-semibold text-foreground text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
             {product.name}
           </h3>
           <div className="flex items-baseline gap-2 mb-3">
-            <span className="font-black text-lg" style={{ color }}>
+            <span className="font-bold text-lg" style={{ color }}>
               {showPriceRange
                 ? formatPriceRange(priceRange.min, priceRange.max)
                 : formatPrice(priceRange.min)}
             </span>
             {hasDiscount && (
-              <span className="text-sm text-gray-400 line-through">{formatPrice(Number(product.compare_at_price))}</span>
+              <span className="text-sm text-muted-foreground line-through">{formatPrice(Number(product.compare_at_price))}</span>
             )}
           </div>
         </a>
@@ -988,10 +988,10 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
           type="button"
           onClick={onAddToCart}
           disabled={isOutOfStock}
-          className="w-full py-2.5 text-sm font-bold text-white rounded-xl transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full py-2.5 text-sm font-bold text-white rounded-xl transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
           style={{
-            backgroundColor: isAdded ? "#16a34a" : color,
-            boxShadow: isAdded ? "0 0 0 3px rgba(22,163,74,0.2)" : `0 2px 8px ${color}40`,
+            backgroundColor: color,
+            boxShadow: isAdded ? `0 0 0 3px ${color}33` : `0 2px 8px ${color}40`,
           }}
         >
           {isAdded ? (
@@ -1142,7 +1142,7 @@ function BannerCarousel({ banners, links, alt, basePath }: { banners: string[]; 
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex gap-1.5">
             {banners.map((_, i) => (
               <button key={i} type="button" aria-label={`Mergi la banner ${i + 1}`} onClick={() => goTo(i)}
-                className={`h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-white" : "w-1.5 bg-white/60 hover:bg-white/80"}`} />
+                className={`h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-surface" : "w-1.5 bg-surface/60 hover:bg-surface/80"}`} />
             ))}
           </div>
         </div>
@@ -1566,11 +1566,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <div className="flex items-center gap-2">
           <input type="number" inputMode="numeric" min={0} placeholder={`De la ${facets.priceMin}`}
             value={priceMin} onChange={(e) => setPriceMin(e.target.value)}
-            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-white text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
           <span className="text-muted-foreground">-</span>
           <input type="number" inputMode="numeric" min={0} placeholder={`Pana la ${facets.priceMax}`}
             value={priceMax} onChange={(e) => setPriceMax(e.target.value)}
-            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-white text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
+            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
         </div>
       </div>
 
@@ -1751,7 +1751,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 width={72} height={72}
                 className="rounded-2xl object-cover mx-auto mb-5 border-2 border-white/20 shadow-2xl" />
             )}
-            <h1 className="text-3xl sm:text-4xl font-black mb-3 drop-shadow-sm tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-bold mb-3 drop-shadow-sm tracking-tight">
               {business.store_name ?? business.business_name}
             </h1>
             {business.tagline && (
@@ -1833,7 +1833,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
         {/* Filters — desktop: inline panel */}
         {filtersOpen && (
-          <div className="hidden md:block mb-6 rounded-2xl border border-border bg-white p-4 space-y-4">
+          <div className="hidden md:block mb-6 rounded-2xl border border-border bg-surface p-4 space-y-4">
             {filterFields}
             {activeFilterCount > 0 && (
               <button type="button" onClick={resetFilters}
@@ -1848,7 +1848,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         {filtersOpen && (
           <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
             <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
-            <div className="relative bg-white rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="relative bg-surface rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <p className="text-base font-semibold text-foreground">
                   Filtre{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
@@ -1996,7 +1996,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                         </div>
                       )}
                       {item.hasChildren && (
-                        <span className="absolute bottom-0.5 right-0.5 rounded-full bg-white/95 p-0.5 shadow-sm flex items-center justify-center" style={{ color }}>
+                        <span className="absolute bottom-0.5 right-0.5 rounded-full bg-surface/95 p-0.5 shadow-sm flex items-center justify-center" style={{ color }}>
                           <Layers className="w-3 h-3" />
                         </span>
                       )}
@@ -2021,7 +2021,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         {showFeaturedSection && featuredProducts.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-lg font-black text-foreground">{featuredTitle}</h2>
+              <h2 className="text-lg font-bold text-foreground">{featuredTitle}</h2>
               <div className="h-px flex-1 bg-border" />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -2047,7 +2047,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         {productSections.map(({ section, items }) => (
           <section key={section.id} className="mb-12">
             <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-lg font-black text-foreground">{section.title || "Produse"}</h2>
+              <h2 className="text-lg font-bold text-foreground">{section.title || "Produse"}</h2>
               <div className="h-px flex-1 bg-border" />
               {section.mode === "category" && section.category && (
                 <button type="button" onClick={() => viewAllCategory(section.category!)}
@@ -2193,7 +2193,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {storeBenefits.items.map((item, i) => (
                 <div key={i} className="flex gap-4 p-5 bg-surface border border-border rounded-2xl">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-black text-sm text-white"
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm text-white"
                     style={{ backgroundColor: color }}>
                     {i + 1}
                   </div>
@@ -2367,7 +2367,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               <div className="flex items-center gap-1.5 shrink-0">
                 {social.instagram && (
                   <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
                     </svg>
@@ -2375,7 +2375,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 )}
                 {social.facebook && (
                   <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
                     </svg>
@@ -2383,7 +2383,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 )}
                 {social.tiktok && (
                   <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
                     </svg>
@@ -2391,7 +2391,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                 )}
                 {social.website && (
                   <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <Globe className="h-3.5 w-3.5" />
                   </a>
                 )}
@@ -2400,7 +2400,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           </div>
 
           {/* Divider */}
-          <div className="h-px bg-white/[0.06]" />
+          <div className="h-px bg-surface/[0.06]" />
 
           {/* Middle: policies + consumer protection side by side on desktop, stacked on mobile */}
           <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
@@ -2437,7 +2437,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           </div>
 
           {/* Divider */}
-          <div className="h-px bg-white/[0.06]" />
+          <div className="h-px bg-surface/[0.06]" />
 
           {/* Bottom: copyright */}
           <div className="pt-5 flex items-center justify-between gap-3">
@@ -2479,7 +2479,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
       {/* Sticky cart bar (mobile) */}
       {showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-white border-t border-gray-200 shadow-2xl px-4 py-3"
+        <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-surface border-t border-border shadow-2xl px-4 py-3"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <button type="button" onClick={() => setCartOpen(true)}
             className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl text-white font-bold text-sm active:scale-[0.98] transition-transform"
@@ -2524,7 +2524,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setLightboxUrl(null)}>
           <button type="button" aria-label="Inchide galeria" onClick={() => setLightboxUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-colors">
+            className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-surface/10 flex items-center justify-center text-white hover:bg-surface/20 transition-colors">
             <X className="h-5 w-5" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2545,7 +2545,7 @@ function ShippingProgressBanner({ color, threshold }: { color: string; threshold
   return (
     <div className="mb-6 p-3.5 rounded-2xl border border-border bg-surface">
       {isFree ? (
-        <div className="flex items-center gap-2 text-green-600">
+        <div className="flex items-center gap-2" style={{ color }}>
           <Check className="h-4 w-4 flex-shrink-0" strokeWidth={3} />
           <span className="text-sm font-semibold">Felicitari! Ai obtinut livrare gratuita.</span>
         </div>

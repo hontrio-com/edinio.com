@@ -166,17 +166,17 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 bg-gray-50">
-        <Loader2 size={16} className="animate-spin text-gray-400" />
-        <span className="text-sm text-gray-500">Se calculeaza optiunile de livrare...</span>
+      <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-muted/40">
+        <Loader2 size={16} className="animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Se calculeaza optiunile de livrare...</span>
       </div>
     );
   }
 
   if (loadError && options.length === 0) {
     return (
-      <div className="p-3 rounded-xl border border-amber-200 bg-amber-50">
-        <p className="text-xs text-amber-700">Nu s-au putut calcula optiunile de livrare. Se va folosi tariful standard.</p>
+      <div className="p-3 rounded-xl border border-warning/20 bg-warning/10">
+        <p className="text-xs text-warning">Nu s-au putut calcula optiunile de livrare. Se va folosi tariful standard.</p>
       </div>
     );
   }
@@ -199,7 +199,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-semibold text-gray-700">Metoda de livrare</p>
+      <p className="text-sm font-semibold text-foreground">Metoda de livrare</p>
 
       {/* Address delivery options */}
       {addressOpts.map((opt) => {
@@ -210,23 +210,23 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             key={k}
             type="button"
             onClick={() => handleSelect(opt)}
-            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left"
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{
-              borderColor: selected ? color : "#E5E7EB",
-              background: selected ? `${color}12` : "#fff",
+              borderColor: selected ? color : "var(--border)",
+              background: selected ? `${color}12` : "var(--surface)",
             }}
           >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-100 shrink-0">
-              <Truck size={16} className="text-gray-600" />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-muted shrink-0">
+              <Truck size={16} className="text-muted-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900">{opt.courierLabel}</p>
+              <p className="text-sm font-semibold text-foreground">{opt.courierLabel}</p>
               {opt.estimatedDays && (
-                <p className="text-xs text-gray-500">{opt.estimatedDays}</p>
+                <p className="text-xs text-muted-foreground">{opt.estimatedDays}</p>
               )}
             </div>
             <div className="text-right shrink-0">
-              <p className="text-sm font-black" style={{ color: selected ? color : "#111" }}>
+              <p className="text-sm font-bold" style={{ color: selected ? color : "var(--foreground)" }}>
                 {opt.price > 0 ? `${opt.price.toFixed(2)} lei` : "Gratuit"}
               </p>
             </div>
@@ -235,7 +235,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               style={
                 selected
                   ? { borderColor: color, backgroundColor: color }
-                  : { borderColor: "#D1D5DB", backgroundColor: "#fff" }
+                  : { borderColor: "var(--border)", backgroundColor: "var(--surface)" }
               }
             >
               {selected && (
@@ -257,21 +257,21 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             key={k}
             type="button"
             onClick={() => handleSelect(opt)}
-            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left"
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{
-              borderColor: selected ? color : "#E5E7EB",
-              background: selected ? `${color}12` : "#fff",
+              borderColor: selected ? color : "var(--border)",
+              background: selected ? `${color}12` : "var(--surface)",
             }}
           >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-100 shrink-0">
-              <Package size={16} className="text-gray-600" />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-muted shrink-0">
+              <Package size={16} className="text-muted-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900">{opt.courierLabel}</p>
-              <p className="text-xs text-gray-500">Ridicare din locker</p>
+              <p className="text-sm font-semibold text-foreground">{opt.courierLabel}</p>
+              <p className="text-xs text-muted-foreground">Ridicare din locker</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-sm font-black" style={{ color: selected ? color : "#111" }}>
+              <p className="text-sm font-bold" style={{ color: selected ? color : "var(--foreground)" }}>
                 {opt.price > 0 ? `${opt.price.toFixed(2)} lei` : "Gratuit"}
               </p>
             </div>
@@ -280,7 +280,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               style={
                 selected
                   ? { borderColor: color, backgroundColor: color }
-                  : { borderColor: "#D1D5DB", backgroundColor: "#fff" }
+                  : { borderColor: "var(--border)", backgroundColor: "var(--surface)" }
               }
             >
               {selected && (
@@ -297,13 +297,13 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
       {isLockerSelected && (
         <div className="ml-1 space-y-2">
           {lockersLoading ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 bg-gray-50">
-              <Loader2 size={14} className="animate-spin text-gray-400" />
-              <span className="text-xs text-gray-500">Se incarca lockerele...</span>
+            <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/40">
+              <Loader2 size={14} className="animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Se incarca lockerele...</span>
             </div>
           ) : lockers.length === 0 ? (
-            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50">
-              <p className="text-xs text-amber-700">Nu au fost gasite lockere in aceasta localitate.</p>
+            <div className="p-3 rounded-lg border border-warning/20 bg-warning/10">
+              <p className="text-xs text-warning">Nu au fost gasite lockere in aceasta localitate.</p>
             </div>
           ) : (
             <div className="relative">
@@ -313,54 +313,54 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
                 onClick={() => setLockerDropdownOpen(!lockerDropdownOpen)}
                 className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-colors"
                 style={{
-                  borderColor: selectedLocker ? color : "#D1D5DB",
-                  background: selectedLocker ? `${color}08` : "#fff",
+                  borderColor: selectedLocker ? color : "var(--border)",
+                  background: selectedLocker ? `${color}08` : "var(--surface)",
                 }}
               >
-                <MapPin size={14} className="text-gray-500 shrink-0" />
-                <span className="flex-1 text-sm truncate" style={{ color: selectedLocker ? "#111" : "#9CA3AF" }}>
+                <MapPin size={14} className="text-muted-foreground shrink-0" />
+                <span className="flex-1 text-sm truncate" style={{ color: selectedLocker ? "var(--foreground)" : "var(--muted-foreground)" }}>
                   {selectedLocker ? selectedLocker.name : "Selecteaza un locker..."}
                 </span>
-                <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                <ChevronDown size={14} className="text-muted-foreground shrink-0" />
               </button>
 
               {selectedLocker && (
-                <p className="text-xs text-gray-500 mt-1 ml-0.5">{selectedLocker.address}</p>
+                <p className="text-xs text-muted-foreground mt-1 ml-0.5">{selectedLocker.address}</p>
               )}
 
               {/* Dropdown */}
               {lockerDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-64 overflow-hidden flex flex-col">
+                <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg z-10 max-h-64 overflow-hidden flex flex-col">
                   {/* Search */}
-                  <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
-                    <Search size={14} className="text-gray-400 shrink-0" />
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+                    <Search size={14} className="text-muted-foreground shrink-0" />
                     <input
                       type="text"
                       value={lockerSearch}
                       onChange={(e) => setLockerSearch(e.target.value)}
                       placeholder="Cauta locker..."
-                      className="flex-1 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none bg-transparent"
+                      className="flex-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none bg-transparent"
                     />
                     {lockerSearch && (
                       <button type="button" onClick={() => setLockerSearch("")} className="p-0.5">
-                        <X size={12} className="text-gray-400" />
+                        <X size={12} className="text-muted-foreground" />
                       </button>
                     )}
                   </div>
                   {/* List */}
                   <div className="overflow-y-auto max-h-52">
                     {filteredLockers.length === 0 ? (
-                      <p className="text-xs text-gray-500 p-3 text-center">Niciun locker gasit</p>
+                      <p className="text-xs text-muted-foreground p-3 text-center">Niciun locker gasit</p>
                     ) : (
                       filteredLockers.slice(0, 50).map((locker) => (
                         <button
                           key={locker.id}
                           type="button"
                           onClick={() => handleLockerPick(locker)}
-                          className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                          className="w-full text-left px-3 py-2.5 hover:bg-muted/40 transition-colors border-b border-border last:border-0"
                         >
-                          <p className="text-sm font-medium text-gray-900 leading-tight">{locker.name}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{locker.address}</p>
+                          <p className="text-sm font-medium text-foreground leading-tight">{locker.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{locker.address}</p>
                         </button>
                       ))
                     )}

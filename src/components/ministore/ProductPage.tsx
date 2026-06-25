@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
-  Star, ShoppingBag, ArrowLeft, Package, Plus, Minus, Eye, Calendar, Globe,
+  ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Globe,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { cdnImage } from "@/lib/cdn-image";
@@ -103,37 +103,22 @@ interface PageSections {
 
 /* ─── Sub-components ──────────────────────────────────────────────────────── */
 
-function SocialProof({ count }: { count: number }) {
-  return (
-    <div className="inline-flex items-center gap-2 bg-white border border-gray-100 shadow-sm rounded-full px-4 py-2 text-sm">
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-      </span>
-      <Eye size={14} className="text-gray-500" />
-      <span className="font-medium text-gray-700">
-        <span className="text-gray-900 font-bold">{count}</span> persoane se uita acum
-      </span>
-    </div>
-  );
-}
-
 function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boolean; onToggle: () => void }) {
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-border last:border-0">
       <button type="button" onClick={onToggle} aria-expanded={isOpen}
-        className="w-full flex items-start gap-4 py-5 text-left hover:text-gray-700 transition-colors">
-        <span className="mt-0.5 shrink-0 w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center">
-          {isOpen ? <Minus size={12} className="text-gray-900" /> : <Plus size={12} className="text-gray-500" />}
+        className="w-full flex items-start gap-4 py-5 text-left hover:text-foreground transition-colors">
+        <span className="mt-0.5 shrink-0 w-6 h-6 rounded-full border border-border flex items-center justify-center">
+          {isOpen ? <Minus size={12} className="text-foreground" /> : <Plus size={12} className="text-muted-foreground" />}
         </span>
-        <span className="font-semibold text-gray-900 text-base pr-4">{faq.q}</span>
+        <span className="font-semibold text-foreground text-base pr-4">{faq.q}</span>
       </button>
       <AnimatePresence initial={false}>
         {isOpen && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }}
             className="overflow-hidden">
-            <p className="text-gray-500 text-sm leading-relaxed pb-5 pl-10 pr-4">{faq.a}</p>
+            <p className="text-muted-foreground text-sm leading-relaxed pb-5 pl-10 pr-4">{faq.a}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -143,7 +128,7 @@ function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boolean; onT
 
 /* ─── CTA Button with effects ─────────────────────────────────────────────── */
 
-const BTN_CLS = "w-full py-4 text-base font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide";
+const BTN_CLS = "w-full py-4 text-base font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
 
 function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayment, effect, onClick }: {
   color: string; isOutOfStock: boolean; isPreorder: boolean; needsVariant: boolean; hasCardPayment: boolean; effect: string; onClick: () => void;
@@ -268,9 +253,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const buttonEffect = pageContent.button_effect ?? "none";
   const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
   const deliveryEstimate = pageContent.delivery_estimate;
-  const viewerCount = useRef(18 + Math.floor(Math.random() * 10)).current;
-  const showSocialProof = pageContent.show_social_proof === true; // fake live-viewers counter — off unless enabled
-  const showQualityBadge = pageContent.show_quality_badge !== false; // "Calitate verificata" badge — on unless removed
 
   // Variants
   const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
@@ -420,12 +402,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
   function Gallery({ mobile }: { mobile: boolean }) {
     return (
-      <div className="relative w-full overflow-hidden rounded-2xl bg-gray-50 shadow-lg"
+      <div className="relative w-full overflow-hidden rounded-2xl bg-muted/40 shadow-lg"
         style={{ aspectRatio: "1/1" }}
         onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         {slides.length === 0 ? (
           <div className="w-full h-full flex items-center justify-center">
-            <Package className="h-20 w-20 text-gray-200" />
+            <Package className="h-20 w-20 text-muted-foreground/40" />
           </div>
         ) : mobile ? (
           <div className="flex h-full transition-transform duration-500 ease-in-out"
@@ -450,12 +432,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         {slides.length > 1 && (
           <>
             <button type="button" aria-label="Imaginea anterioara" onClick={e => { e.stopPropagation(); goTo(activeSlide - 1); }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-white transition-colors">
-              <ChevronLeft size={16} className="text-gray-700" />
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
+              <ChevronLeft size={16} className="text-foreground" />
             </button>
             <button type="button" aria-label="Imaginea urmatoare" onClick={e => { e.stopPropagation(); goTo(activeSlide + 1); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-white transition-colors">
-              <ChevronRight size={16} className="text-gray-700" />
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
+              <ChevronRight size={16} className="text-foreground" />
             </button>
             <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
               {slides.map((_, i) => (
@@ -473,7 +455,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
 
         {hasDiscount && (
-          <div className="absolute top-3 right-3 bg-amber-400 text-black text-xs font-black px-3 py-1.5 rounded-full shadow-md z-10">
+          <div className="absolute top-3 right-3 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10" style={{ backgroundColor: color }}>
             -{discountPct}%
           </div>
         )}
@@ -484,22 +466,14 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   function Content({ mobile }: { mobile: boolean }) {
     return (
       <div className={`flex flex-col ${mobile ? "gap-3" : "gap-4"}`}>
-        {/* Rating */}
-        {showQualityBadge && (
-          <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 w-fit">
-            <div className="flex">{[1,2,3,4,5].map(i => <Star key={i} size={11} className="text-amber-400 fill-amber-400" />)}</div>
-            <span className="text-[11px] font-semibold text-amber-800">Calitate verificata</span>
-          </div>
-        )}
-
         {/* Title */}
-        <h1 className={`tracking-tight font-black text-gray-900 leading-tight ${mobile ? "text-2xl" : "text-3xl lg:text-4xl"}`}>
+        <h1 className={`tracking-tight font-bold text-foreground leading-tight ${mobile ? "text-2xl" : "text-3xl lg:text-4xl"}`}>
           {displayName}
         </h1>
 
         {topBlurb && (
           <div
-            className={`policy-content text-gray-500 leading-relaxed ${mobile ? "text-sm" : "text-base"}`}
+            className={`policy-content text-muted-foreground leading-relaxed ${mobile ? "text-sm" : "text-base"}`}
             // Sanitized server-side (see product route) before reaching the client.
             dangerouslySetInnerHTML={{ __html: topBlurb }}
           />
@@ -507,37 +481,37 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
         {/* Price */}
         <div className="flex items-center gap-3 flex-wrap">
-          <span className={`tracking-tight font-black text-gray-900 ${mobile ? "text-3xl" : "text-4xl"}`}>
+          <span className={`tracking-tight font-bold text-foreground ${mobile ? "text-3xl" : "text-4xl"}`}>
             {showPriceRange
               ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
               : formatPrice(displayPrice)}
           </span>
           {hasDiscount && (
             <>
-              <span className="text-lg text-gray-400 line-through">{formatPrice(displayComparePrice!)}</span>
-              <span className="bg-amber-400 text-black text-xs font-black px-2.5 py-1 rounded-full">-{discountPct}%</span>
+              <span className="text-lg text-muted-foreground line-through">{formatPrice(displayComparePrice!)}</span>
+              <span className="text-white text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: color }}>-{discountPct}%</span>
             </>
           )}
           {pageSections.customization?.enabled && pageSections.customization.fields.length > 0 && (
-            <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2.5 py-1 rounded-full">Personalizabil</span>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: `${color}1a`, color }}>Personalizabil</span>
           )}
         </div>
 
         {/* Bundle contents — shown prominently in the buy box */}
         {product.is_bundle && bundleComponents.length > 0 && (
-          <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3">
-            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Pachetul conține</p>
+          <div className="rounded-xl border border-border bg-muted/30 p-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Pachetul conține</p>
 
             {/* Mobile: clean stacked list (full names, no truncation) */}
             <div className="space-y-1.5 sm:hidden">
               {bundleComponents.map((c) => (
-                <div key={c.id} className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-lg p-1.5">
-                  <div className="relative w-9 h-9 rounded-md overflow-hidden bg-gray-50 shrink-0">
+                <div key={c.id} className="flex items-center gap-2.5 bg-surface border border-border rounded-lg p-1.5">
+                  <div className="relative w-9 h-9 rounded-md overflow-hidden bg-muted/40 shrink-0">
                     {c.image_url
                       ? <Image src={c.image_url} alt={c.name} fill sizes="36px" className="object-contain p-0.5" />
-                      : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-gray-300" /></div>}
+                      : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-muted-foreground/50" /></div>}
                   </div>
-                  <span className="text-sm text-gray-800 leading-snug flex-1 min-w-0">
+                  <span className="text-sm text-foreground leading-snug flex-1 min-w-0">
                     {c.quantity > 1 && <span className="font-bold">{c.quantity}× </span>}{c.name}
                   </span>
                 </div>
@@ -548,14 +522,14 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
               {bundleComponents.map((c, i) => (
                 <div key={c.id} className="flex items-center gap-1.5">
-                  {i > 0 && <Plus size={14} className="text-gray-400 shrink-0" />}
-                  <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg pl-1 pr-2 py-1">
-                    <div className="relative w-7 h-7 rounded-md overflow-hidden bg-gray-50 shrink-0">
+                  {i > 0 && <Plus size={14} className="text-muted-foreground shrink-0" />}
+                  <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg pl-1 pr-2 py-1">
+                    <div className="relative w-7 h-7 rounded-md overflow-hidden bg-muted/40 shrink-0">
                       {c.image_url
                         ? <Image src={c.image_url} alt={c.name} fill sizes="28px" className="object-contain" />
-                        : <div className="w-full h-full flex items-center justify-center"><Package size={12} className="text-gray-300" /></div>}
+                        : <div className="w-full h-full flex items-center justify-center"><Package size={12} className="text-muted-foreground/50" /></div>}
                     </div>
-                    <span className="text-xs font-medium text-gray-800 max-w-[160px] truncate">{c.quantity > 1 ? `${c.quantity}× ` : ""}{c.name}</span>
+                    <span className="text-xs font-medium text-foreground max-w-[160px] truncate">{c.quantity > 1 ? `${c.quantity}× ` : ""}{c.name}</span>
                   </div>
                 </div>
               ))}
@@ -564,13 +538,13 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
 
         {deliveryDates && (
-          <div className="flex items-center gap-2.5 bg-green-50 border border-green-200 rounded-xl px-3.5 py-2.5">
-            <Calendar size={16} className="text-green-600 flex-shrink-0" />
+          <div className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
+            <Calendar size={16} className="flex-shrink-0" style={{ color }} />
             <div>
-              <p className="text-sm font-semibold text-green-800">
+              <p className="text-sm font-semibold text-foreground">
                 {deliveryEstimate?.text || "Estimare livrare"}
               </p>
-              <p className="text-xs text-green-600">{deliveryDates.min} - {deliveryDates.max}</p>
+              <p className="text-xs text-muted-foreground">{deliveryDates.min} - {deliveryDates.max}</p>
             </div>
           </div>
         )}
@@ -579,10 +553,10 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           <div className="space-y-4">
             {variantsData.options.map(option => (
               <div key={option.id}>
-                <p className="text-sm font-semibold text-gray-900 mb-2">
+                <p className="text-sm font-semibold text-foreground mb-2">
                   {option.name}
                   {selectedOptions[option.name] && (
-                    <span className="font-normal text-gray-500 ml-2">- {selectedOptions[option.name]}</span>
+                    <span className="font-normal text-muted-foreground ml-2">- {selectedOptions[option.name]}</span>
                   )}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -598,10 +572,10 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                         disabled={!available}
                         className="px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all"
                         style={isSelected
-                          ? { borderColor: color, backgroundColor: `${color}18`, color: "#111" }
+                          ? { borderColor: color, backgroundColor: `${color}18`, color: "var(--foreground)" }
                           : available
-                          ? { borderColor: "#e5e7eb", color: "#374151" }
-                          : { borderColor: "#f3f4f6", color: "#d1d5db", textDecoration: "line-through", cursor: "not-allowed" }
+                          ? { borderColor: "var(--border)", color: "var(--foreground)" }
+                          : { borderColor: "var(--border)", color: "var(--muted-foreground)", textDecoration: "line-through", cursor: "not-allowed" }
                         }>
                         {val}
                       </button>
@@ -618,9 +592,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
         {/* Stock indicators */}
         {isPreorder && (
-          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
-            <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
-            <span className="text-sm font-semibold text-blue-700">Produs in precomanda</span>
+          <div className="flex items-center gap-2 rounded-xl px-3 py-2 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <span className="text-sm font-semibold text-foreground">Produs in precomanda</span>
           </div>
         )}
         {!isOutOfStock && !isPreorder && product.track_inventory && product.stock_quantity !== null && product.stock_quantity > 0 && product.stock_quantity <= 10 && (
@@ -646,19 +620,18 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex flex-col items-center gap-1.5 text-center">
                 <Icon size={20} style={{ color }} />
-                <span className="text-[11px] text-gray-500 font-medium leading-tight">{text}</span>
+                <span className="text-[11px] text-muted-foreground font-medium leading-tight">{text}</span>
               </div>
             ))}
           </div>
         )}
 
-        {!mobile && showSocialProof && <SocialProof count={viewerCount} />}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-background">
       {/* Announcement bar */}
       {announcementBar?.enabled && (
         <div className="h-9 overflow-hidden flex items-center fixed top-0 left-0 right-0 z-50"
@@ -675,7 +648,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       )}
 
       {/* Header */}
-      <header className={`fixed left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100 shadow-sm transition-all ${announcementBar?.enabled ? "top-9" : "top-0"}`}>
+      <header className={`fixed left-0 right-0 z-40 bg-surface/95 backdrop-blur-sm border-b border-border shadow-sm transition-all ${announcementBar?.enabled ? "top-9" : "top-0"}`}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
           <a href={basePath || "/"} aria-label="Inapoi la magazin"
             onClick={(e) => {
@@ -684,12 +657,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${basePath || "/"}?page=${p}`; }
               } catch {}
             }}
-            className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors shrink-0">
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0">
             <ArrowLeft size={16} />
             <span>Magazin</span>
           </a>
-          <span className="text-gray-300">/</span>
-          <span className="font-bold text-sm text-gray-900 truncate">{business.store_name ?? business.business_name}</span>
+          <span className="text-muted-foreground/50">/</span>
+          <span className="font-bold text-sm text-foreground truncate">{business.store_name ?? business.business_name}</span>
         </div>
       </header>
 
@@ -728,25 +701,25 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Benefits */}
       {benefitsSection?.enabled && benefitsSection.items.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-[#FAFAFA]">
+        <section className="py-20 md:py-28 px-4 md:px-6 bg-background">
           <div className="max-w-6xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
-              <p className="text-xs uppercase tracking-widest text-gray-400 font-mono mb-3">De ce sa alegi</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">{benefitsSection.title}</h2>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">De ce sa alegi</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{benefitsSection.title}</h2>
             </motion.div>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
               {benefitsSection.items.map((b, i) => (
                 <motion.div key={i}
                   initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.08 }}
-                  className="bg-white border border-gray-100 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                  className="bg-surface border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
                     style={{ backgroundColor: `${color}20` }}>
-                    <span className="text-lg font-black" style={{ color }}>{i + 1}</span>
+                    <span className="text-lg font-bold" style={{ color }}>{i + 1}</span>
                   </div>
-                  <h3 className="font-semibold text-gray-900 text-base mb-2">{b.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">{b.desc}</p>
+                  <h3 className="font-semibold text-foreground text-base mb-2">{b.title}</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{b.desc}</p>
                 </motion.div>
               ))}
             </div>
@@ -756,12 +729,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* How it works */}
       {howItWorksSection?.enabled && howItWorksSection.steps.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-white">
+        <section className="py-20 md:py-28 px-4 md:px-6 bg-surface">
           <div className="max-w-6xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-16">
-              <p className="text-xs uppercase tracking-widest text-gray-400 font-mono mb-3">Simplu de folosit</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">{howItWorksSection.title}</h2>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Simplu de folosit</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{howItWorksSection.title}</h2>
             </motion.div>
             {/* Mobile */}
             <div className="md:hidden flex flex-col gap-3">
@@ -769,31 +742,31 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 <motion.div key={i}
                   initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="flex items-center gap-4 bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-black text-lg text-white"
+                  className="flex items-center gap-4 bg-surface border border-border rounded-xl p-4 shadow-sm">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold text-lg text-white"
                     style={{ backgroundColor: color }}>
                     {String(i + 1).padStart(2, "0")}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 text-sm mb-0.5">{step.title}</h3>
-                    <p className="text-gray-500 text-xs leading-relaxed">{step.desc}</p>
+                    <h3 className="font-semibold text-foreground text-sm mb-0.5">{step.title}</h3>
+                    <p className="text-muted-foreground text-xs leading-relaxed">{step.desc}</p>
                   </div>
                 </motion.div>
               ))}
             </div>
             {/* Desktop */}
             <div className="hidden md:grid md:grid-cols-3 gap-8 relative">
-              <div className="absolute top-12 left-[calc(16.66%+2rem)] right-[calc(16.66%+2rem)] h-px bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200" />
+              <div className="absolute top-12 left-[calc(16.66%+2rem)] right-[calc(16.66%+2rem)] h-px bg-gradient-to-r from-border via-border to-border" />
               {howItWorksSection.steps.map((step, i) => (
                 <motion.div key={i}
                   initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.15 }}
                   className="flex flex-col items-center text-center relative">
-                  <div className="w-24 h-24 rounded-full bg-white border-2 border-gray-100 shadow-sm flex flex-col items-center justify-center mb-6 z-10">
-                    <span className="font-black text-xl" style={{ color }}>{String(i + 1).padStart(2, "0")}</span>
+                  <div className="w-24 h-24 rounded-full bg-surface border-2 border-border shadow-sm flex flex-col items-center justify-center mb-6 z-10">
+                    <span className="font-bold text-xl" style={{ color }}>{String(i + 1).padStart(2, "0")}</span>
                   </div>
-                  <h3 className="font-semibold text-gray-900 text-xl mb-3">{step.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed max-w-xs">{step.desc}</p>
+                  <h3 className="font-semibold text-foreground text-xl mb-3">{step.title}</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">{step.desc}</p>
                 </motion.div>
               ))}
             </div>
@@ -803,13 +776,13 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Long description */}
       {hasShortDesc && hasLongDesc && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-white">
+        <section className="py-20 md:py-28 px-4 md:px-6 bg-surface">
           <div className="max-w-3xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">Descriere</h2>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Descriere</h2>
             </motion.div>
-            <div className="policy-content text-gray-600 leading-relaxed text-base"
+            <div className="policy-content text-muted-foreground leading-relaxed text-base"
               dangerouslySetInnerHTML={{ __html: product.description ?? "" }} />
           </div>
         </section>
@@ -817,30 +790,30 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Bundle contents */}
       {product.is_bundle && bundleComponents.length > 0 && (
-        <section className="py-16 md:py-24 px-4 md:px-6 bg-white">
+        <section className="py-16 md:py-24 px-4 md:px-6 bg-surface">
           <div className="max-w-4xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-12">
-              <p className="text-xs uppercase tracking-widest text-gray-400 font-mono mb-3">Pachet</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">Ce conține pachetul</h2>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Pachet</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Ce conține pachetul</h2>
             </motion.div>
             <div className="grid sm:grid-cols-2 gap-3">
               {bundleComponents.map((c) => (
-                <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-white shadow-sm">
-                  <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 shrink-0">
+                <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-surface shadow-sm">
+                  <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted/40 border border-border shrink-0">
                     {c.image_url
                       ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
-                      : <div className="w-full h-full flex items-center justify-center"><Package className="h-5 w-5 text-gray-300" /></div>}
+                      : <div className="w-full h-full flex items-center justify-center"><Package className="h-5 w-5 text-muted-foreground/50" /></div>}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900 leading-snug">{c.quantity > 1 ? `${c.quantity}x ` : ""}{c.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{formatPrice(c.price)}{c.out_of_stock ? " · indisponibil" : ""}</p>
+                    <p className="text-sm font-semibold text-foreground leading-snug">{c.quantity > 1 ? `${c.quantity}x ` : ""}{c.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(c.price)}{c.out_of_stock ? " · indisponibil" : ""}</p>
                   </div>
                 </div>
               ))}
             </div>
             {Number(product.compare_at_price) > Number(product.price) && (
-              <p className="text-center text-sm text-gray-600 mt-6">
+              <p className="text-center text-sm text-muted-foreground mt-6">
                 Cumpărate separat: <span className="line-through">{formatPrice(Number(product.compare_at_price))}</span>
                 {" · "}în pachet plătești <span className="font-bold" style={{ color }}>{formatPrice(Number(product.price))}</span>
               </p>
@@ -851,21 +824,21 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Specifications */}
       {specifications.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-[#FAFAFA]">
+        <section className="py-20 md:py-28 px-4 md:px-6 bg-background">
           <div className="max-w-4xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
-              <p className="text-xs uppercase tracking-widest text-gray-400 font-mono mb-3">Detalii tehnice</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">Specificatii</h2>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Detalii tehnice</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Specificatii</h2>
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
-              className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+              className="border border-border rounded-xl overflow-hidden shadow-sm">
               {specifications.map((spec, i) => (
                 <div key={i}
-                  className={`flex items-start sm:items-center gap-4 px-6 py-4 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${i !== specifications.length - 1 ? "border-b border-gray-100" : ""}`}>
-                  <span className="text-sm text-gray-500 w-44 shrink-0 font-medium">{spec.label}</span>
-                  <span className="text-sm font-semibold text-gray-900">{spec.value}</span>
+                  className={`flex items-start sm:items-center gap-4 px-6 py-4 ${i % 2 === 0 ? "bg-surface" : "bg-muted/30"} ${i !== specifications.length - 1 ? "border-b border-border" : ""}`}>
+                  <span className="text-sm text-muted-foreground w-44 shrink-0 font-medium">{spec.label}</span>
+                  <span className="text-sm font-semibold text-foreground">{spec.value}</span>
                 </div>
               ))}
             </motion.div>
@@ -875,16 +848,16 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* FAQ */}
       {faqSection?.enabled && faqSection.items.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-white">
+        <section className="py-20 md:py-28 px-4 md:px-6 bg-surface">
           <div className="max-w-3xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
-              <p className="text-xs uppercase tracking-widest text-gray-400 font-mono mb-3">Intrebari frecvente</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">{faqSection.title}</h2>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Intrebari frecvente</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{faqSection.title}</h2>
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
-              className="bg-white border border-gray-100 rounded-xl shadow-sm px-4 md:px-8">
+              className="bg-surface border border-border rounded-xl shadow-sm px-4 md:px-8">
               {faqSection.items.map((faq, i) => (
                 <FAQItem key={i} faq={faq} isOpen={openFaq === i}
                   onToggle={() => setOpenFaq(openFaq === i ? null : i)} />
@@ -921,7 +894,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
               <div className="flex items-center gap-1.5 shrink-0">
                 {social.instagram && (
                   <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
                     </svg>
@@ -929,7 +902,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 )}
                 {social.facebook && (
                   <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
                     </svg>
@@ -937,7 +910,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 )}
                 {social.tiktok && (
                   <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
                     </svg>
@@ -945,7 +918,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 )}
                 {social.website && (
                   <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website"
-                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center transition-colors">
+                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
                     <Globe className="h-3.5 w-3.5" />
                   </a>
                 )}
@@ -954,7 +927,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </div>
 
           {/* Divider */}
-          <div className="h-px bg-white/[0.06]" />
+          <div className="h-px bg-surface/[0.06]" />
 
           {/* Middle: policies + consumer protection */}
           <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
@@ -988,7 +961,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </div>
 
           {/* Divider */}
-          <div className="h-px bg-white/[0.06]" />
+          <div className="h-px bg-surface/[0.06]" />
 
           {/* Bottom: copyright */}
           <div className="pt-5 flex items-center justify-between gap-3">
@@ -1002,26 +975,26 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Sticky bottom bar (mobile) */}
       {!modalOpen && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white border-t border-gray-100 shadow-2xl px-4 py-3"
+        <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-surface border-t border-border shadow-2xl px-4 py-3"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-500 truncate">
+              <p className="text-xs font-medium text-muted-foreground truncate">
                 {displayName}
               </p>
               <div className="flex items-baseline gap-2">
-                <span className="text-lg font-bold text-gray-900">
+                <span className="text-lg font-bold text-foreground">
                   {showPriceRange
                     ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
                     : formatPrice(displayPrice)}
                 </span>
                 {hasDiscount && (
-                  <span className="text-xs text-gray-400 line-through">{formatPrice(displayComparePrice!)}</span>
+                  <span className="text-xs text-muted-foreground line-through">{formatPrice(displayComparePrice!)}</span>
                 )}
               </div>
             </div>
             <button type="button" onClick={() => setModalOpen(true)} disabled={isOutOfStock || needsVariant}
-              className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl flex-shrink-0 disabled:opacity-40 uppercase tracking-wide hover:opacity-90 active:scale-[0.98]"
+              className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl flex-shrink-0 disabled:opacity-40 hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
               style={{ backgroundColor: color }}>
               <ShoppingBag size={16} />
               {isOutOfStock ? "Epuizat" : isPreorder ? "Precomanda" : "Comanda"}

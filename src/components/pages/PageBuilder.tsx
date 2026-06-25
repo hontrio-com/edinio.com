@@ -16,6 +16,8 @@ import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
 import { BlockSettings } from "./BlockSettings";
 import { updatePage } from "@/lib/actions/page.actions";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
+import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
+import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import {
   createBlock, BLOCK_META, BLOCK_PALETTE_ORDER,
   type Block, type BlockType, type PageSeo,
@@ -324,8 +326,30 @@ function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSe
       </div>
       <div className="pt-2 border-t border-border">
         <p className="text-xs font-semibold text-foreground mb-2">SEO</p>
-        <input value={seo.title ?? ""} onChange={(e) => onSeo({ ...seo, title: e.target.value })} placeholder="Titlu SEO (optional)" className={`${inputCls} mb-2`} />
-        <textarea value={seo.description ?? ""} onChange={(e) => onSeo({ ...seo, description: e.target.value })} placeholder="Descriere SEO (optional)" rows={2} className={`${inputCls} resize-none`} />
+
+        <div className="mb-3">
+          <GooglePreview
+            title={seo.title?.trim() || title || "Titlu pagina"}
+            description={seo.description?.trim() || ""}
+            url={`${publicBase}/${slug}`}
+          />
+        </div>
+
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[11px] font-medium text-muted-foreground">Titlu SEO (optional)</label>
+            <CharCounter len={(seo.title ?? "").length} idealMin={SEO_TITLE_IDEAL_MIN} max={SEO_TITLE_MAX} />
+          </div>
+          <input value={seo.title ?? ""} onChange={(e) => onSeo({ ...seo, title: e.target.value })} placeholder={title || "Titlu pentru Google"} className={inputCls} />
+        </div>
+
+        <div className="mb-2">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[11px] font-medium text-muted-foreground">Descriere SEO (optional)</label>
+            <CharCounter len={(seo.description ?? "").length} idealMin={SEO_DESCRIPTION_IDEAL_MIN} max={SEO_DESCRIPTION_MAX} />
+          </div>
+          <textarea value={seo.description ?? ""} onChange={(e) => onSeo({ ...seo, description: e.target.value })} placeholder="Descriere scurta pentru rezultatele Google..." rows={2} className={`${inputCls} resize-none`} />
+        </div>
         <input value={seo.keywords ?? ""} onChange={(e) => onSeo({ ...seo, keywords: e.target.value })} placeholder="Cuvinte cheie (optional, separate prin virgula)" className={`${inputCls} mt-2`} />
         <p className="text-[11px] text-muted-foreground mt-1">Cuvintele cheie sunt aproape ignorate de Google azi — conteaza mai mult titlul, descrierea si imaginea de mai jos.</p>
         <div className="mt-3">

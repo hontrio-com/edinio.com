@@ -1,7 +1,17 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { PLATFORM_ORIGIN, isPlatformHost } from "@/lib/seo";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { PLATFORM_ORIGIN, isPlatformHost, parseStoreSeo } from "@/lib/seo";
+
+/** Whether a store's homepage opted out of indexing (Settings > SEO > noindex).
+ *  Reads the nested store_settings(page_content) selected on a businesses row. */
+function homepageNoindex(row: { store_settings?: unknown }): boolean {
+  const ss = row.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null | undefined;
+  if (!ss) return false;
+  const pc = (Array.isArray(ss) ? ss[0] : ss)?.page_content ?? null;
+  return parseStoreSeo(pc).noindex === true;
+}
 
 // Host-aware. Using headers() makes this dynamic (per request), so:
 //  - a merchant custom domain gets a sitemap of ONLY that store's pages, on its
@@ -15,18 +25,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // ── Custom domain: only this store's pages, on its own domain ──────────────
   if (!isPlatformHost(host)) {
-    const { data: biz } = await supabase
+    const { data: biz } = await createAdminClient()
       .from("businesses")
-      .select("id, updated_at")
+      .select("id, updated_at, store_settings(page_content)")
       .eq("custom_domain", host)
       .eq("is_published", true)
       .single();
     if (!biz) return [];
 
     const base = `https://${host}`;
-    const entries: MetadataRoute.Sitemap = [
-      { url: base, lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(), changeFrequency: "weekly", priority: 1 },
-    ];
+    // Skip the homepage entry when the merchant set it to noindex (Settings > SEO);
+    // its products/pages can still be indexable, so they stay below.
+    const entries: MetadataRoute.Sitemap = homepageNoindex(biz)
+      ? []
+      : [{ url: base, lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(), changeFrequency: "weekly", priority: 1 }];
 
     const { data: products } = await supabase
       .from("products")
@@ -74,13 +86,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${PLATFORM_ORIGIN}/gdpr`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
   ];
 
-  const { data: businesses } = await supabase
+  const { data: businesses } = await createAdminClient()
     .from("businesses")
-    .select("slug, updated_at, custom_domain")
+    .select("slug, updated_at, custom_domain, store_settings(page_content)")
     .eq("is_published", true);
 
   const businessPages: MetadataRoute.Sitemap = (businesses ?? [])
-    .filter((b) => !b.custom_domain)
+    .filter((b) => !b.custom_domain && !homepageNoindex(b))
     .map((b) => ({
       url: `${PLATFORM_ORIGIN}/${b.slug}`,
       lastModified: b.updated_at ? new Date(b.updated_at) : new Date(),

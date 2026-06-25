@@ -40,8 +40,10 @@ export interface StoreSeo {
   noindex?: boolean;
 }
 
-/** Recommended max lengths (soft) — Google truncates titles/descriptions past these. */
+/** Recommended lengths — counters turn green inside [ideal_min, max], red past max. */
+export const SEO_TITLE_IDEAL_MIN = 50;
 export const SEO_TITLE_MAX = 60;
+export const SEO_DESCRIPTION_IDEAL_MIN = 140;
 export const SEO_DESCRIPTION_MAX = 160;
 
 /** Read & normalize the SEO overrides out of a `page_content` JSON blob. */

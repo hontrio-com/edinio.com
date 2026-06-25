@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
-import { type StoreSeo, SEO_TITLE_MAX, SEO_DESCRIPTION_MAX } from "@/lib/seo";
+import { type StoreSeo, SEO_TITLE_MAX, SEO_DESCRIPTION_MAX, SEO_TITLE_IDEAL_MIN, SEO_DESCRIPTION_IDEAL_MIN } from "@/lib/seo";
+import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
@@ -263,35 +264,6 @@ function ComingSoon({ title }: { title: string }) {
       </div>
       <p className="text-base font-semibold text-foreground mb-1">{title}</p>
       <p className="text-sm text-muted-foreground">Aceasta sectiune va fi disponibila in curand.</p>
-    </div>
-  );
-}
-
-const SEO_BLUE = "#1a0dab";
-
-function seoCounterCls(len: number, max: number): string {
-  if (len === 0) return "text-muted-foreground";
-  return len > max ? "text-destructive" : "text-success";
-}
-
-/** Live, Google-style SERP snippet so merchants see their title/description as
- *  they type. Uses Google's own colors on purpose (it mimics Google, not the app UI). */
-function GooglePreview({ title, description, url }: { title: string; description: string; url: string }) {
-  const display = url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  const host = display.split("/")[0];
-  return (
-    <div className="rounded-xl border border-border bg-white p-4">
-      <div className="flex items-center gap-2 mb-1.5">
-        <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-          <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-        <div className="min-w-0 leading-tight">
-          <div className="text-[12px] text-[#202124] truncate">{host}</div>
-          <div className="text-[12px] text-[#5f6368] truncate">{display}</div>
-        </div>
-      </div>
-      <div className="text-[18px] leading-snug truncate" style={{ color: SEO_BLUE }}>{title}</div>
-      <p className="text-[13px] text-[#4d5156] leading-snug mt-0.5 line-clamp-2">{description}</p>
     </div>
   );
 }
@@ -1651,9 +1623,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-sm font-semibold text-foreground">Titlu meta</label>
-                    <span className={`text-[11px] tabular-nums ${seoCounterCls((seo.title ?? "").length, SEO_TITLE_MAX)}`}>
-                      {(seo.title ?? "").length}/{SEO_TITLE_MAX}
-                    </span>
+                    <CharCounter len={(seo.title ?? "").length} idealMin={SEO_TITLE_IDEAL_MIN} max={SEO_TITLE_MAX} />
                   </div>
                   <input
                     value={seo.title ?? ""}
@@ -1669,9 +1639,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-sm font-semibold text-foreground">Descriere meta</label>
-                    <span className={`text-[11px] tabular-nums ${seoCounterCls((seo.description ?? "").length, SEO_DESCRIPTION_MAX)}`}>
-                      {(seo.description ?? "").length}/{SEO_DESCRIPTION_MAX}
-                    </span>
+                    <CharCounter len={(seo.description ?? "").length} idealMin={SEO_DESCRIPTION_IDEAL_MIN} max={SEO_DESCRIPTION_MAX} />
                   </div>
                   <textarea
                     value={seo.description ?? ""}

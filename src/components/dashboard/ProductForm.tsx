@@ -24,6 +24,8 @@ import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
+import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import type { Database } from "@/types/database.types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -1367,11 +1369,9 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 </div>
 
                 {/* SERP preview */}
-                <div className="border border-border rounded-xl p-4 bg-white dark:bg-surface">
+                <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Preview Google</p>
-                  <div className="text-xs text-green-700 mb-0.5 truncate">{serp.url}</div>
-                  <div className="text-[15px] font-normal text-blue-700 hover:underline cursor-pointer truncate leading-snug">{serp.title}</div>
-                  <div className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{serp.desc}</div>
+                  <GooglePreview title={serp.title} description={serp.desc} url={serp.url} />
                 </div>
 
                 <button type="button" onClick={autofillSeo}
@@ -1383,10 +1383,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-sm font-medium text-foreground">Titlu SEO</label>
-                    <span className={cn("text-xs font-medium tabular-nums",
-                      form.seo_title.length > 60 ? "text-destructive" : form.seo_title.length >= 50 ? "text-success" : "text-muted-foreground")}>
-                      {form.seo_title.length}/60
-                    </span>
+                    <CharCounter len={form.seo_title.length} idealMin={SEO_TITLE_IDEAL_MIN} max={SEO_TITLE_MAX} />
                   </div>
                   <input type="text" value={form.seo_title} onChange={e => set("seo_title", e.target.value)}
                     placeholder={form.name || "Titlu pentru Google"} maxLength={70} className={inputCls} />
@@ -1396,10 +1393,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-sm font-medium text-foreground">Descriere SEO</label>
-                    <span className={cn("text-xs font-medium tabular-nums",
-                      form.seo_description.length > 160 ? "text-destructive" : form.seo_description.length >= 140 ? "text-success" : "text-muted-foreground")}>
-                      {form.seo_description.length}/160
-                    </span>
+                    <CharCounter len={form.seo_description.length} idealMin={SEO_DESCRIPTION_IDEAL_MIN} max={SEO_DESCRIPTION_MAX} />
                   </div>
                   <textarea value={form.seo_description} onChange={e => set("seo_description", e.target.value)}
                     placeholder="Descriere scurta pentru rezultatele Google..."

@@ -5,6 +5,7 @@ import { Image, MapPin, MessageCircle, Mail, Smartphone, Star, Globe, Zap, Lock,
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { updateBusiness } from "@/lib/actions/business.actions";
+import { Switch } from "@/components/ui/switch";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -92,12 +93,12 @@ export function FeaturesClient({ business }: { business: Business }) {
                         {disabled ? "Necesita numar de WhatsApp in editor." : feature.description}
                       </p>
                     </div>
-                    <button type="button" onClick={() => toggle(feature.key)} disabled={isPending || disabled}
-                      className={cn("relative w-11 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 flex-shrink-0 disabled:cursor-not-allowed",
-                        enabled && !disabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                      <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-                        enabled && !disabled ? "translate-x-5" : "translate-x-0")} />
-                    </button>
+                    <Switch
+                      checked={enabled && !disabled}
+                      disabled={isPending || disabled}
+                      onCheckedChange={() => toggle(feature.key)}
+                      className="shrink-0"
+                    />
                   </div>
                 </div>
               </div>

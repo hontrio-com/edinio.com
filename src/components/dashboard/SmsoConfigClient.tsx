@@ -5,13 +5,16 @@ import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Save, Loader2, MessageSquare, Phone,
+  Save, Loader2, MessageSquare, Phone,
   ExternalLink, CheckCircle, XCircle,
 } from "lucide-react";
 import { updateSmsoConfig } from "@/lib/actions/store.actions";
 import type { SmsoConfig } from "@/lib/smso";
-
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+import { cn } from "@/lib/utils/cn";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 
 export function SmsoConfigClient({ businessId, initialConfig }: { businessId: string; initialConfig: SmsoConfig }) {
   const router = useRouter();
@@ -64,20 +67,20 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
 
       <div className="space-y-6">
         {/* Info */}
-        <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
-          <MessageSquare className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <MessageSquare className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Integreaza contul tau SMSO pentru a trimite campanii SMS catre clientii magazinului.
             Dupa activare, sectiunea <strong>SMS Marketing</strong> va aparea in meniu.
           </p>
         </div>
 
         {/* Ghid pas cu pas */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border">
-            <p className="text-sm font-semibold text-foreground">Cum obtii Cheia API si Sender ID?</p>
-          </div>
-          <div className="px-5 py-4 space-y-4">
+        <Panel className="overflow-hidden">
+          <PanelHeader>
+            <PanelTitle>Cum obtii Cheia API si Sender ID?</PanelTitle>
+          </PanelHeader>
+          <div className="space-y-4 px-5 py-4">
             {[
               {
                 step: "1",
@@ -105,18 +108,18 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
               },
             ].map(({ step, title, desc, link }) => (
               <div key={step} className="flex gap-3">
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <span className="text-xs font-bold text-primary">{step}</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
                   {link && (
                     <a
                       href={link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
                     >
                       Deschide in SMSO <ExternalLink className="h-3 w-3" />
                     </a>
@@ -125,110 +128,99 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
 
         {/* Configurare */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+        <Panel className="space-y-5 p-5">
           {/* Toggle activare */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Activeaza SMSO</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Activeaza pentru a putea trimite campanii SMS Marketing din dashboard
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setSmso(s => ({ ...s, enabled: !s.enabled }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${smso.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${smso.enabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch checked={smso.enabled} onCheckedChange={v => setSmso(s => ({ ...s, enabled: v }))} />
           </div>
 
           {/* Campuri */}
-          <div className="space-y-4 pt-4 border-t border-border">
+          <div className="space-y-4 border-t border-border pt-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Cheie API SMSO</label>
-              <input
+              <label className="mb-1.5 block text-sm font-medium text-foreground">Cheie API SMSO</label>
+              <Input
                 type="password"
                 value={smso.api_key}
                 onChange={e => setSmso(s => ({ ...s, api_key: e.target.value }))}
                 placeholder="Cheia ta API de la app.smso.ro"
-                className={inputCls}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Sender ID</label>
-              <input
+              <label className="mb-1.5 block text-sm font-medium text-foreground">Sender ID</label>
+              <Input
                 type="text"
                 value={smso.sender_id}
                 onChange={e => setSmso(s => ({ ...s, sender_id: e.target.value }))}
                 placeholder="ID-ul numeric al senderului (ex: 4)"
-                className={inputCls}
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 ID-ul numeric afisat in sectiunea Sendere a contului tau SMSO.
               </p>
             </div>
           </div>
 
           {/* SMS automat la schimbarea statusului comenzii */}
-          <div className="flex items-center justify-between pt-4 border-t border-border">
+          <div className="flex items-center justify-between border-t border-border pt-4">
             <div className="pr-4">
               <p className="text-sm font-semibold text-foreground">SMS automat la schimbarea statusului</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Trimite automat un SMS clientului cand schimbi statusul comenzii (ex. Expediat). Consuma credite SMSO la fiecare schimbare.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setSmso(s => ({ ...s, notify_status_change: !s.notify_status_change }))}
+            <Switch
+              checked={smso.notify_status_change && smso.enabled}
+              onCheckedChange={v => setSmso(s => ({ ...s, notify_status_change: v }))}
               disabled={!smso.enabled}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 disabled:opacity-40 ${smso.notify_status_change && smso.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${smso.notify_status_change && smso.enabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            />
           </div>
 
           <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <Button size="lg" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
               {saving ? "Se salveaza..." : "Salveaza integrarea"}
-            </button>
+            </Button>
           </div>
-        </div>
+        </Panel>
 
         {/* Test SMS */}
         {smso.api_key && smso.sender_id && (
-          <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+          <Panel className="space-y-4 p-5">
             <div>
               <p className="text-sm font-semibold text-foreground">Testeaza integrarea</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Trimite un SMS de test ca sa verifici ca Cheia API si Sender ID sunt corecte
               </p>
             </div>
 
             {testResult && (
-              <div className={`rounded-lg p-3 text-sm space-y-1 ${testResult.ok ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+              <div className={cn(
+                "space-y-1 rounded-lg border p-3 text-sm",
+                testResult.ok
+                  ? "border-success/20 bg-success/5 text-success"
+                  : "border-destructive/20 bg-destructive/5 text-destructive"
+              )}>
                 <div className="flex items-center gap-2">
                   {testResult.ok
                     ? <CheckCircle className="h-4 w-4 flex-shrink-0" />
                     : <XCircle className="h-4 w-4 flex-shrink-0" />}
                   <p className="font-semibold">{testResult.message}</p>
                 </div>
-                {testResult.details && <p className="text-xs opacity-80 font-mono pl-6">{testResult.details}</p>}
+                {testResult.details && <p className="pl-6 font-mono text-xs opacity-80">{testResult.details}</p>}
               </div>
             )}
 
             <div className="flex gap-2">
-              <div className="flex flex-1 overflow-hidden rounded-lg border border-border focus-within:border-primary transition-colors">
-                <span className="flex items-center justify-center w-10 shrink-0 bg-muted/40">
+              <div className="flex flex-1 overflow-hidden rounded-lg border border-input transition-colors focus-within:border-ring">
+                <span className="flex w-10 shrink-0 items-center justify-center bg-muted/40">
                   <Phone className="h-3.5 w-3.5 text-muted-foreground" />
                 </span>
                 <input
@@ -236,20 +228,15 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
                   value={testPhone}
                   onChange={e => setTestPhone(e.target.value)}
                   placeholder="07XXXXXXXX sau +407XXXXXXXX"
-                  className="flex-1 px-3 py-2.5 text-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
               </div>
-              <button
-                type="button"
-                onClick={sendTest}
-                disabled={testLoading}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50 whitespace-nowrap"
-              >
-                {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+              <Button variant="outline" onClick={sendTest} disabled={testLoading} className="whitespace-nowrap">
+                {testLoading ? <Loader2 className="animate-spin" /> : <MessageSquare />}
                 {testLoading ? "Se trimite..." : "Trimite test"}
-              </button>
+              </Button>
             </div>
-          </div>
+          </Panel>
         )}
       </div>
     </div>

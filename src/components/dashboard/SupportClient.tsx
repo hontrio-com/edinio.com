@@ -28,17 +28,17 @@ interface Business {
 }
 
 const STATUS_CONFIG = {
-  open: { label: "Deschis", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  in_progress: { label: "In lucru", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  resolved: { label: "Rezolvat", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  open: { label: "Deschis", color: "bg-info/10 text-info" },
+  in_progress: { label: "In lucru", color: "bg-warning/10 text-warning" },
+  resolved: { label: "Rezolvat", color: "bg-success/10 text-success" },
   closed: { label: "Inchis", color: "bg-muted text-muted-foreground" },
 } as const;
 
 const PRIORITY_CONFIG = {
-  low: { label: "Scazuta", dot: "bg-zinc-400" },
-  normal: { label: "Normala", dot: "bg-blue-500" },
-  high: { label: "Mare", dot: "bg-orange-500" },
-  urgent: { label: "Urgenta", dot: "bg-red-500" },
+  low: { label: "Scazuta", dot: "bg-muted-foreground/40" },
+  normal: { label: "Normala", dot: "bg-info" },
+  high: { label: "Mare", dot: "bg-warning" },
+  urgent: { label: "Urgenta", dot: "bg-destructive" },
 } as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -183,19 +183,19 @@ export function SupportClient({ tickets, businesses, userEmail }: {
       </div>
 
       {/* Urgent contact */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 px-5 py-4 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 px-5 py-4 bg-info/5 border border-info/20 rounded-xl mb-6">
         <div className="flex-1">
-          <p className="text-sm font-semibold text-blue-800 mb-0.5">Ai nevoie de ajutor urgent?</p>
-          <p className="text-xs text-blue-600">Pentru probleme urgente, contacteaza-ne direct prin telefon sau WhatsApp.</p>
+          <p className="text-sm font-semibold text-info mb-0.5">Ai nevoie de ajutor urgent?</p>
+          <p className="text-xs text-muted-foreground">Pentru probleme urgente, contacteaza-ne direct prin telefon sau WhatsApp.</p>
         </div>
         <div className="flex items-center gap-2">
           <a href="tel:0750456809"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-info bg-surface border border-info/20 rounded-lg hover:bg-info/10 transition-colors">
             <Phone className="h-3.5 w-3.5" />
             0750 456 809
           </a>
           <a href="https://wa.me/40750456809" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-success hover:bg-success/90 rounded-lg transition-colors">
             <MessageCircle className="h-3.5 w-3.5" />
             WhatsApp
           </a>
@@ -205,9 +205,9 @@ export function SupportClient({ tickets, businesses, userEmail }: {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
-          { label: "Deschise", value: open, icon: AlertCircle, color: "text-blue-500" },
-          { label: "In lucru", value: inProgress, icon: Loader2, color: "text-amber-500" },
-          { label: "Rezolvate", value: resolved, icon: CheckCircle2, color: "text-green-500" },
+          { label: "Deschise", value: open, icon: AlertCircle, color: "text-info" },
+          { label: "In lucru", value: inProgress, icon: Loader2, color: "text-warning" },
+          { label: "Rezolvate", value: resolved, icon: CheckCircle2, color: "text-success" },
           { label: "Raspunsuri noi", value: unread, icon: LifeBuoy, color: "text-primary" },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-card border border-border rounded-xl p-4">
@@ -338,7 +338,7 @@ export function SupportClient({ tickets, businesses, userEmail }: {
                 {/* Subject */}
                 <div>
                   <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Subiect <span className="text-red-500">*</span>
+                    Subiect <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
@@ -384,7 +384,7 @@ export function SupportClient({ tickets, businesses, userEmail }: {
                 {/* Description */}
                 <div>
                   <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Descriere <span className="text-red-500">*</span>
+                    Descriere <span className="text-destructive">*</span>
                   </label>
                   <textarea
                     value={content}
@@ -438,9 +438,9 @@ export function SupportClient({ tickets, businesses, userEmail }: {
                 </div>
 
                 {/* Info box */}
-                <div className="flex items-start gap-2.5 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl">
-                  <LifeBuoy className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                <div className="flex items-start gap-2.5 p-3 bg-info/5 border border-info/20 rounded-xl">
+                  <LifeBuoy className="h-4 w-4 text-info flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-info leading-relaxed">
                     Echipa noastra de suport raspunde in maxim <strong>24h</strong>. Vei primi un email la <strong>{userEmail}</strong> cand avem un raspuns.
                   </p>
                 </div>

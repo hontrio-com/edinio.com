@@ -10,6 +10,12 @@ import {
   loadSamedayAccountAction,
 } from "@/lib/actions/sameday.actions";
 import type { SamedayConfig, SamedayPickupPoint, SamedayService } from "@/lib/sameday";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
+import { Callout } from "@/components/ui/callout";
+import { Panel } from "@/components/ui/panel";
+import { selectCls } from "@/lib/ui";
 
 export function SamedayConfigClient({
   businessId,
@@ -146,94 +152,88 @@ export function SamedayConfigClient({
     <div className="space-y-6">
       {/* Status */}
       {isActive && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-200">
-          <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-green-800">Sameday activ</p>
-            <p className="text-xs text-green-700 truncate">
-              {initialConfig?.service_name} · Pickup ID {initialConfig?.pickup_point_id}
-              {initialConfig?.sandbox && " · Sandbox"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
-          >
-            {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
-            Deconecteaza
-          </button>
-        </div>
+        <Callout
+          variant="success"
+          icon={CheckCircle}
+          title="Sameday activ"
+          action={
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+            >
+              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
+              Deconecteaza
+            </Button>
+          }
+        >
+          {initialConfig?.service_name} · Pickup ID {initialConfig?.pickup_point_id}
+          {initialConfig?.sandbox && " · Sandbox"}
+        </Callout>
       )}
 
       {/* Step 1: Credentials */}
-      <div className="p-4 rounded-xl border border-border bg-surface space-y-4">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">1</span>
+      <Panel className="space-y-4 p-4">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
           <h3 className="text-sm font-semibold text-foreground">Credentiale cont Sameday</h3>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Username *</label>
-            <input
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Username" required>
+            <Input
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
               placeholder="Username Sameday"
-              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Parola *</label>
-            <input
+          </Field>
+          <Field label="Parola" required>
+            <Input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Parola cont Sameday"
-              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
             />
-          </div>
+          </Field>
         </div>
 
-        <label className="flex items-center gap-2 cursor-pointer w-fit">
+        <label className="flex w-fit cursor-pointer items-center gap-2">
           <input
             type="checkbox"
             checked={sandbox}
             onChange={e => setSandbox(e.target.checked)}
-            className="w-4 h-4 rounded border-border text-primary focus:ring-primary/30"
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
           />
           <span className="text-xs font-medium text-muted-foreground">Mod sandbox (testare)</span>
         </label>
 
-        <button
-          type="button"
+        <Button
           onClick={handleConnect}
           disabled={loading || !username.trim() || !password.trim()}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+          {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
           {loading ? "Se conecteaza..." : "Conecteaza si incarca datele"}
-        </button>
-      </div>
+        </Button>
+      </Panel>
 
       {/* Step 2: Settings */}
       {(step === "settings" || pickupPoints.length > 0) && (
-        <div className="p-4 rounded-xl border border-border bg-surface space-y-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">2</span>
+        <Panel className="space-y-4 p-4">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
             <h3 className="text-sm font-semibold text-foreground">Configurare punct ridicare si serviciu</h3>
           </div>
 
           {/* Pickup point */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Punct de ridicare *</label>
+          <Field label="Punct de ridicare" required>
             {pickupPoints.length > 0 ? (
               <select
+                aria-label="Punct de ridicare"
                 value={selectedPickupPointId}
                 onChange={e => handlePickupPointChange(Number(e.target.value))}
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                className={selectCls}
               >
                 {pickupPoints.map(pp => (
                   <option key={pp.id} value={pp.id}>
@@ -241,26 +241,28 @@ export function SamedayConfigClient({
                   </option>
                 ))}
               </select>
+            ) : step === "settings" ? (
+              <Callout variant="warning">
+                Nu exista puncte de ridicare in contul Sameday. Adauga unul din panoul Sameday si apasa din nou &quot;Conecteaza&quot;.
+              </Callout>
             ) : (
-              <div className={`w-full px-3 py-2 text-sm border rounded-lg ${step === "settings" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-border bg-muted/30 text-muted-foreground"}`}>
+              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                 {initialConfig?.pickup_point_id
                   ? `Pickup ID: ${initialConfig.pickup_point_id}`
-                  : step === "settings"
-                    ? "Nu exista puncte de ridicare in contul Sameday. Adauga unul din panoul Sameday si apasa din nou 'Conecteaza'."
-                    : "Conecteaza contul pentru a incarca punctele de ridicare"}
+                  : "Conecteaza contul pentru a incarca punctele de ridicare"}
               </div>
             )}
-          </div>
+          </Field>
 
           {/* Contact person */}
           {(contactPersons.length > 0 || initialConfig?.contact_person_id) && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Persoana de contact *</label>
+            <Field label="Persoana de contact" required>
               {contactPersons.length > 0 ? (
                 <select
+                  aria-label="Persoana de contact"
                   value={selectedContactPersonId}
                   onChange={e => setSelectedContactPersonId(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                  className={selectCls}
                 >
                   {contactPersons.map(cp => (
                     <option key={cp.id} value={cp.id}>
@@ -269,18 +271,18 @@ export function SamedayConfigClient({
                   ))}
                 </select>
               ) : (
-                <div className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-muted/30 text-muted-foreground">
+                <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                   Contact ID: {initialConfig?.contact_person_id}
                 </div>
               )}
-            </div>
+            </Field>
           )}
 
           {/* Service */}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Serviciu *</label>
+          <Field label="Serviciu" required>
             {services.length > 0 ? (
               <select
+                aria-label="Serviciu"
                 value={selectedServiceId}
                 onChange={e => {
                   const id = Number(e.target.value);
@@ -288,7 +290,7 @@ export function SamedayConfigClient({
                   setSelectedServiceId(id);
                   setSelectedServiceName(svc?.name ?? "");
                 }}
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                className={selectCls}
               >
                 {services.map(s => (
                   <option key={s.id} value={s.id}>
@@ -297,32 +299,31 @@ export function SamedayConfigClient({
                 ))}
               </select>
             ) : (
-              <div className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-muted/30 text-muted-foreground">
+              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                 {initialConfig?.service_name
                   ? `${initialConfig.service_name} (ID: ${initialConfig.service_id})`
                   : "Conecteaza contul pentru a incarca serviciile"}
               </div>
             )}
-          </div>
+          </Field>
 
           <div className="flex justify-end">
-            <button
-              type="button"
+            <Button
+              size="lg"
               onClick={handleSave}
               disabled={saving || !selectedPickupPointId || !selectedServiceId}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {saving && <Loader2 className="animate-spin" />}
               {saving ? "Se salveaza..." : "Salveaza configuratia"}
-            </button>
+            </Button>
           </div>
-        </div>
+        </Panel>
       )}
 
       {/* Help */}
-      <div className="p-4 rounded-xl bg-primary/5 border border-primary/15">
-        <p className="text-sm font-semibold text-foreground mb-2">Cum obtii accesul API Sameday?</p>
-        <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
+      <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
+        <p className="mb-2 text-sm font-semibold text-foreground">Cum obtii accesul API Sameday?</p>
+        <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
           <li>Trebuie sa ai un contract semnat cu Sameday Courier</li>
           <li>Contacteaza Sameday pentru a activa accesul API</li>
           <li>Introdu username + parola si apasa &quot;Conecteaza&quot;</li>
@@ -332,7 +333,7 @@ export function SamedayConfigClient({
           href="https://www.sameday.ro"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-primary hover:underline"
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
           <ExternalLink className="h-3 w-3" />
           Deschide site Sameday

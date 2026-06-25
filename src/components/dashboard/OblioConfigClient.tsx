@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
-import { ArrowLeft, CheckCircle, Loader2, Plug, PlugZap, RefreshCw, Info, ChevronDown } from "lucide-react";
+import { Loader2, Plug, PlugZap, RefreshCw, Info } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveOblioConfig, disconnectOblio, loadOblioAccountData, loadOblioSeriesForCif } from "@/lib/actions/oblio.actions";
 import type { OblioConfig } from "@/lib/oblio";
 import { AUTO_INVOICE_TRIGGERS, type AutoInvoiceTrigger } from "@/lib/invoicing";
-
-const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors";
-const selectCls = inputCls + " appearance-none cursor-pointer";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Panel } from "@/components/ui/panel";
+import { selectCls } from "@/lib/ui";
 
 type AccountData = {
   companies: { cif: string; name: string }[];
@@ -144,108 +145,98 @@ export default function OblioConfigClient({
 
       <div className="space-y-4">
         {/* Info */}
-        <div className="p-4 rounded-xl border border-border bg-surface">
+        <Panel className="p-4">
           <div className="flex items-start gap-3">
-            <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">Despre Oblio</p>
               <p className="text-xs text-muted-foreground">
                 Oblio este o platforma romaneasca de facturare online. Integrarea permite generarea automata de facturi si proforme
                 direct din comenzile magazinului tau.
               </p>
-              <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5 mt-1">
+              <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
                 <li><strong>client_id</strong> = email-ul cu care te autentifici in Oblio</li>
                 <li><strong>client_secret</strong> = token-ul din <strong>Setari &gt; Date Cont</strong></li>
               </ul>
             </div>
           </div>
-        </div>
+        </Panel>
 
         {/* Enable toggle */}
-        <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-surface">
+        <Panel className="flex items-center justify-between p-4">
           <div>
             <p className="text-sm font-medium text-foreground">Activat</p>
             <p className="text-xs text-muted-foreground">Permite generarea documentelor Oblio din comenzi</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setEnabled(v => !v)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-          >
-            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-4" : "translate-x-0.5"}`} />
-          </button>
-        </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </Panel>
 
         {/* Credentials */}
-        <div className="p-5 rounded-xl border border-border bg-surface space-y-4">
+        <Panel className="space-y-4 p-5">
           <p className="text-sm font-semibold text-foreground">Credentiale API</p>
 
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Email cont Oblio (client_id) *</label>
-              <input
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Email cont Oblio (client_id) *</label>
+              <Input
                 type="email"
                 value={clientId}
                 onChange={e => setClientId(e.target.value)}
                 placeholder="email@exemplu.ro"
-                className={inputCls}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Token secret (client_secret) *</label>
-              <input
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Token secret (client_secret) *</label>
+              <Input
                 type="password"
                 value={clientSecret}
                 onChange={e => setClientSecret(e.target.value)}
                 placeholder="Token din Setari > Date Cont"
-                className={inputCls}
               />
             </div>
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleLoad}
             disabled={loading || !clientId || !clientSecret}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
           >
-            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
             Testeaza si incarca date
-          </button>
+          </Button>
 
           {loadError && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{loadError}</p>
+            <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">{loadError}</p>
           )}
-        </div>
+        </Panel>
 
         {/* Company + Series + VAT — shown after data loaded or if already configured */}
         {(accountData || isConnected) && (
-          <div className="p-5 rounded-xl border border-border bg-surface space-y-4">
+          <Panel className="space-y-4 p-5">
             <p className="text-sm font-semibold text-foreground">Configurare firma si documente</p>
 
             {/* Company selector */}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Firma *</label>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Firma *</label>
               {accountData && accountData.companies.length > 1 ? (
-                <div className="relative">
-                  <select
-                    value={cif}
-                    onChange={e => handleCifChange(e.target.value)}
-                    className={selectCls}
-                    disabled={loadingCif}
-                  >
-                    {accountData.companies.map(c => (
-                      <option key={c.cif} value={c.cif}>{c.name} ({c.cif})</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                </div>
+                <select
+                  aria-label="Firma"
+                  value={cif}
+                  onChange={e => handleCifChange(e.target.value)}
+                  className={selectCls}
+                  disabled={loadingCif}
+                >
+                  {accountData.companies.map(c => (
+                    <option key={c.cif} value={c.cif}>{c.name} ({c.cif})</option>
+                  ))}
+                </select>
               ) : (
-                <input
+                <Input
                   type="text"
                   value={cif ? `${companyName} (${cif})` : cif}
                   readOnly
-                  className={inputCls + " bg-muted/40"}
+                  className="bg-muted/40"
                   placeholder="CIF firma"
                 />
               )}
@@ -253,71 +244,63 @@ export default function OblioConfigClient({
 
             {/* Invoice series */}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Serie factura *</label>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Serie factura *</label>
               {accountData && invoiceSeries.length > 0 ? (
-                <div className="relative">
-                  <select value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} className={selectCls}>
-                    <option value="">-- Selecteaza --</option>
-                    {invoiceSeries.map(s => (
-                      <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicita)" : ""}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                </div>
+                <select aria-label="Serie factura" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} className={selectCls}>
+                  <option value="">-- Selecteaza --</option>
+                  {invoiceSeries.map(s => (
+                    <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicita)" : ""}</option>
+                  ))}
+                </select>
               ) : (
-                <input type="text" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} placeholder="ex: FCT" className={inputCls} />
+                <Input type="text" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} placeholder="ex: FCT" />
               )}
             </div>
 
             {/* Proforma series */}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Serie proforma</label>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Serie proforma</label>
               {accountData && proformaSeries.length > 0 ? (
-                <div className="relative">
-                  <select value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} className={selectCls}>
-                    <option value="">-- Fara proforma --</option>
-                    {proformaSeries.map(s => (
-                      <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicita)" : ""}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                </div>
+                <select aria-label="Serie proforma" value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} className={selectCls}>
+                  <option value="">-- Fara proforma --</option>
+                  {proformaSeries.map(s => (
+                    <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicita)" : ""}</option>
+                  ))}
+                </select>
               ) : (
-                <input type="text" value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} placeholder="ex: PR (optional)" className={inputCls} />
+                <Input type="text" value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} placeholder="ex: PR (optional)" />
               )}
             </div>
 
             {/* VAT rate */}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Cota TVA implicita</label>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Cota TVA implicita</label>
               {accountData && accountData.vatRates.length > 0 ? (
-                <div className="relative">
-                  <select
-                    value={vatName}
-                    onChange={e => {
-                      const selected = accountData.vatRates.find(v => v.name === e.target.value);
-                      setVatName(e.target.value);
-                      if (selected) setVatPercentage(selected.percent);
-                    }}
-                    className={selectCls}
-                  >
-                    {accountData.vatRates.map(v => (
-                      <option key={v.name} value={v.name}>{v.name} ({v.percent}%){v.default ? " — implicita" : ""}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                </div>
+                <select
+                  aria-label="Cota TVA implicita"
+                  value={vatName}
+                  onChange={e => {
+                    const selected = accountData.vatRates.find(v => v.name === e.target.value);
+                    setVatName(e.target.value);
+                    if (selected) setVatPercentage(selected.percent);
+                  }}
+                  className={selectCls}
+                >
+                  {accountData.vatRates.map(v => (
+                    <option key={v.name} value={v.name}>{v.name} ({v.percent}%){v.default ? " — implicita" : ""}</option>
+                  ))}
+                </select>
               ) : (
                 <div className="flex gap-2">
-                  <input type="text" value={vatName} onChange={e => setVatName(e.target.value)} placeholder="Normala" className={inputCls} />
-                  <input type="number" value={vatPercentage} onChange={e => setVatPercentage(Number(e.target.value))} placeholder="19" className={inputCls} style={{ maxWidth: 80 }} />
+                  <Input type="text" value={vatName} onChange={e => setVatName(e.target.value)} placeholder="Normala" />
+                  <Input type="number" value={vatPercentage} onChange={e => setVatPercentage(Number(e.target.value))} placeholder="19" className="max-w-20" />
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Folosita la generarea facturilor daca nu este specificata per produs. Cota va fi aplicata conform setarilor de TVA ale magazinului.
               </p>
             </div>
-          </div>
+          </Panel>
         )}
 
         {/* Auto-invoice */}
@@ -326,22 +309,19 @@ export default function OblioConfigClient({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-foreground">Generare automata factura</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Factura Oblio se genereaza automat cand comanda atinge statusul selectat
                 </p>
               </div>
-              <button type="button" onClick={() => setAutoInvoice(v => !v)}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${autoInvoice ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoInvoice ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
+              <Switch checked={autoInvoice} onCheckedChange={setAutoInvoice} />
             </div>
             {autoInvoice && (
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Declanseaza generarea cand comanda devine</label>
-                <select value={autoInvoiceTrigger} onChange={e => setAutoInvoiceTrigger(e.target.value as AutoInvoiceTrigger)} className={inputCls}>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Declanseaza generarea cand comanda devine</label>
+                <select aria-label="Declanseaza generarea cand comanda devine" value={autoInvoiceTrigger} onChange={e => setAutoInvoiceTrigger(e.target.value as AutoInvoiceTrigger)} className={selectCls}>
                   {AUTO_INVOICE_TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Daca ai mai multe softuri de facturare cu generare automata, se emite o singura factura (prioritate: SmartBill, apoi Oblio, apoi fGO).
                 </p>
               </div>
@@ -351,26 +331,16 @@ export default function OblioConfigClient({
 
         {/* Actions */}
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="animate-spin" /> : <PlugZap />}
             Salveaza
-          </button>
+          </Button>
 
           {isConnected && (
-            <button
-              type="button"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-red-200 text-red-600 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
-            >
-              {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
+            <Button variant="destructive" onClick={handleDisconnect} disabled={disconnecting}>
+              {disconnecting ? <Loader2 className="animate-spin" /> : <Plug />}
               Deconecteaza
-            </button>
+            </Button>
           )}
         </div>
       </div>

@@ -143,6 +143,20 @@
      background at all — every surface rendered transparent. */
   --color-surface: #FFFFFF;
   --color-surface-raised: #F3F4F6;
+
+  /* Semantic state colors — registered so Tailwind generates the utilities
+     (bg-success, text-warning, border-info, …). Tones are chosen to read
+     >=4.5:1 on light surfaces, so the same token works for text, icon and
+     border. Soft fills use the /10 opacity idiom, e.g. `bg-success/10
+     text-success` — the same pattern shadcn already uses for `destructive`.
+     This replaces the hardcoded green/amber/blue palette spread across the
+     dashboard (bg-green-50, text-amber-700, bg-blue-100, …). */
+  --color-success: #0F8A43;
+  --color-success-foreground: #FFFFFF;
+  --color-warning: #B45309;
+  --color-warning-foreground: #FFFFFF;
+  --color-info: #1D4ED8;
+  --color-info-foreground: #FFFFFF;
 }
 
 @theme inline {

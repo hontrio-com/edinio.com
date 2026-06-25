@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { X, Package, Loader2, Download, Trash2 } from "lucide-react";
 import { createSamedayAwbAction, deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
+import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -178,9 +179,9 @@ export function SamedayAwbModal({
           {hasAwb ? (
             /* ── AWB existent ── */
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
-                <p className="text-xs font-semibold text-blue-700 mb-1">AWB generat</p>
-                <p className="text-lg font-mono font-bold text-blue-900">{orderData.sameday_awb_number}</p>
+              <div className="p-4 rounded-xl bg-info/5 border border-info/20">
+                <p className="text-xs font-semibold text-info mb-1">AWB generat</p>
+                <p className="text-lg font-mono font-bold text-foreground">{orderData.sameday_awb_number}</p>
               </div>
 
               <div>
@@ -203,26 +204,16 @@ export function SamedayAwbModal({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={downloading}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-sm font-semibold text-foreground transition-colors disabled:opacity-50"
-              >
-                {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              <Button variant="outline" size="lg" onClick={handleDownload} disabled={downloading} className="w-full">
+                {downloading ? <Loader2 className="animate-spin" /> : <Download />}
                 {downloading ? "Se descarca..." : `Descarca eticheta ${labelFormat} PDF`}
-              </button>
+              </Button>
 
               <div className="pt-2 border-t border-border">
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors disabled:opacity-50"
-                >
-                  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <Button variant="destructive" size="lg" onClick={handleDelete} disabled={deleting} className="w-full">
+                  {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
                   {deleting ? "Se sterge..." : "Sterge AWB"}
-                </button>
+                </Button>
                 <p className="text-[11px] text-muted-foreground text-center mt-2">
                   AWB-ul poate fi sters doar daca nu a fost preluat de curier
                 </p>
@@ -393,15 +384,10 @@ export function SamedayAwbModal({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={creating}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+              <Button onClick={handleCreate} disabled={creating} size="lg" className="w-full">
+                {creating ? <Loader2 className="animate-spin" /> : <Package />}
                 {creating ? "Se genereaza AWB..." : "Genereaza AWB Sameday"}
-              </button>
+              </Button>
             </div>
           )}
         </div>

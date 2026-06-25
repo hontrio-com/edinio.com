@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { CheckCircle, AlertCircle, Loader2, Link2, Link2Off, ExternalLink, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import { Button } from "@/components/ui/button";
+import { Panel } from "@/components/ui/panel";
 
 export interface StripeConfig {
   account_id?: string;
@@ -10,6 +13,8 @@ export interface StripeConfig {
   payouts_enabled?: boolean;
   enabled?: boolean;
 }
+
+const STRIPE_PURPLE = "bg-[#635bff] text-white hover:bg-[#635bff]/90";
 
 export function StripeConnectClient({ config, businessId }: { config: StripeConfig | null; businessId: string }) {
   const [loading, setLoading] = useState(false);
@@ -65,57 +70,60 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
   return (
     <div className="space-y-6">
       {/* Status card */}
-      <div className={`flex items-start gap-4 p-5 rounded-2xl border ${
+      <div className={cn(
+        "flex items-start gap-4 rounded-2xl border p-5",
         isConnected
-          ? "bg-green-50 border-green-200"
+          ? "border-success/20 bg-success/5"
           : isPending || isAwaiting
-            ? "bg-yellow-50 border-yellow-200"
-            : "bg-muted/40 border-border"
-      }`}>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-          isConnected ? "bg-green-100" : isPending || isAwaiting ? "bg-yellow-100" : "bg-muted"
-        }`}>
+            ? "border-warning/20 bg-warning/5"
+            : "border-border bg-muted/40"
+      )}>
+        <div className={cn(
+          "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl",
+          isConnected ? "bg-success/10" : isPending || isAwaiting ? "bg-warning/10" : "bg-muted"
+        )}>
           {isConnected
-            ? <CheckCircle className="h-5 w-5 text-green-600" />
+            ? <CheckCircle className="h-5 w-5 text-success" />
             : isPending || isAwaiting
-              ? <AlertCircle className="h-5 w-5 text-yellow-600" />
+              ? <AlertCircle className="h-5 w-5 text-warning" />
+              // eslint-disable-next-line @next/next/no-img-element
               : <img src="/integrations/stripe.svg" alt="Stripe" className="h-5 w-auto" />
           }
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           {isConnected ? (
             <>
-              <p className="text-sm font-semibold text-green-800">Stripe conectat</p>
-              <p className="text-xs text-green-700 mt-0.5">
+              <p className="text-sm font-semibold text-foreground">Stripe conectat</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Contul tau Stripe este activ. Clientii pot plati cu cardul.
               </p>
               {config?.account_id && (
-                <p className="text-[11px] text-green-600 mt-1 font-mono">{config.account_id}</p>
+                <p className="mt-1 font-mono text-[11px] text-success">{config.account_id}</p>
               )}
             </>
           ) : isAwaiting ? (
             <>
-              <p className="text-sm font-semibold text-yellow-800">Cont conectat — in curs de verificare</p>
-              <p className="text-xs text-yellow-700 mt-0.5">
+              <p className="text-sm font-semibold text-foreground">Cont conectat — in curs de verificare</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Ai finalizat conectarea. Stripe iti verifica contul inainte de a activa platile cu cardul.
                 Poate dura de la cateva minute pana la 1-2 zile lucratoare. Apasa &laquo;Verifica din nou&raquo; sau
                 completeaza informatiile cerute pe Stripe.
               </p>
               {config?.account_id && (
-                <p className="text-[11px] text-yellow-600 mt-1 font-mono">{config.account_id}</p>
+                <p className="mt-1 font-mono text-[11px] text-warning">{config.account_id}</p>
               )}
             </>
           ) : isPending ? (
             <>
-              <p className="text-sm font-semibold text-yellow-800">Onboarding incomplet</p>
-              <p className="text-xs text-yellow-700 mt-0.5">
+              <p className="text-sm font-semibold text-foreground">Onboarding incomplet</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Continua configurarea contului Stripe pentru a activa platile cu cardul.
               </p>
             </>
           ) : (
             <>
               <p className="text-sm font-semibold text-foreground">Stripe neconectat</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Conecteaza-ti contul Stripe pentru a accepta plati cu cardul direct in magazinul tau.
               </p>
             </>
@@ -125,93 +133,62 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
 
       {/* Info boxes */}
       {!isConnected && (
-        <div className="grid sm:grid-cols-3 gap-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           {[
             { title: "Plati cu cardul", desc: "Accepta Visa, Mastercard si toate cardurile majore." },
             { title: "Bani direct la tine", desc: "Fondurile ajung direct in contul tau Stripe, fara intermediari." },
             { title: "Securitate maxima", desc: "Stripe este certificat PCI DSS Level 1 — cel mai inalt standard." },
           ].map(({ title, desc }) => (
-            <div key={title} className="p-4 rounded-xl border border-border bg-surface">
-              <p className="text-xs font-semibold text-foreground mb-1">{title}</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
-            </div>
+            <Panel key={title} className="p-4">
+              <p className="mb-1 text-xs font-semibold text-foreground">{title}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{desc}</p>
+            </Panel>
           ))}
         </div>
       )}
 
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-destructive">{error}</p>
       )}
 
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-3">
         {isConnected ? (
           <>
-            <button
-              onClick={handleConnect}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+            <Button variant="outline" onClick={handleConnect} disabled={loading}>
+              {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
               Acceseaza dashboard Stripe
-            </button>
-            <button
-              onClick={handleDisconnect}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
-            >
-              <Link2Off className="h-4 w-4" />
+            </Button>
+            <Button variant="destructive" onClick={handleDisconnect} disabled={loading}>
+              <Link2Off />
               Deconecteaza
-            </button>
+            </Button>
           </>
         ) : isAwaiting ? (
           <>
-            <button
-              onClick={handleResync}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <Button variant="outline" onClick={handleResync} disabled={loading}>
+              {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               Verifica din nou
-            </button>
-            <button
-              onClick={handleConnect}
-              disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 disabled:opacity-50"
-              style={{ backgroundColor: "#635bff" }}
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+            </Button>
+            <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
+              {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
               Continua pe Stripe
-            </button>
-            <button
-              onClick={handleDisconnect}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
-            >
-              <Link2Off className="h-4 w-4" />
+            </Button>
+            <Button variant="destructive" onClick={handleDisconnect} disabled={loading}>
+              <Link2Off />
               Deconecteaza
-            </button>
+            </Button>
           </>
         ) : isPending ? (
-          <button
-            onClick={handleConnect}
-            disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 disabled:opacity-50"
-            style={{ backgroundColor: "#635bff" }}
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+          <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
+            {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
             Continua onboarding
-          </button>
+          </Button>
         ) : (
-          <button
-            onClick={handleConnect}
-            disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 disabled:opacity-50"
-            style={{ backgroundColor: "#635bff" }}
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+          <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
+            {loading ? <Loader2 className="animate-spin" /> : <Link2 />}
             Conecteaza cu Stripe
-          </button>
+          </Button>
         )}
       </div>
 

@@ -104,14 +104,14 @@ export function RomaniaMap({ svgContent, countyData, primaryColor }: {
       />
       {tooltip && (
         <div
-          className="pointer-events-none absolute z-20 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-lg text-sm"
+          className="pointer-events-none absolute z-20 bg-surface border border-border rounded-xl px-3 py-2 shadow-lg text-sm"
           style={{
             left: Math.min(tooltip.x + 14, 600),
             top: tooltip.y - 48,
           }}
         >
-          <p className="font-semibold text-gray-900">{tooltip.county}</p>
-          <p className="text-gray-500">{tooltip.orders} {tooltip.orders === 1 ? "comanda" : "comenzi"}</p>
+          <p className="font-semibold text-foreground">{tooltip.county}</p>
+          <p className="text-muted-foreground">{tooltip.orders} {tooltip.orders === 1 ? "comanda" : "comenzi"}</p>
         </div>
       )}
     </div>

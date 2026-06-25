@@ -18,7 +18,7 @@ export function GracePeriodBanner({ suspendedUntil }: Props) {
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-white ${
-        isSuspended ? "bg-red-600" : daysLeft <= 3 ? "bg-red-500" : "bg-amber-500"
+        isSuspended ? "bg-destructive" : daysLeft <= 3 ? "bg-destructive" : "bg-warning"
       }`}
     >
       {isSuspended ? (

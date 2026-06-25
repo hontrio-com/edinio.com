@@ -155,7 +155,7 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
                 </div>
 
                 {s.channel === "sms" && !data.smsoEnabled && (
-                  <p className="text-[11px] text-amber-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> SMSO nu e activat — acest pas nu se va trimite până nu activezi integrarea SMSO.</p>
+                  <p className="text-[11px] text-warning flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> SMSO nu e activat — acest pas nu se va trimite până nu activezi integrarea SMSO.</p>
                 )}
 
                 <div className="grid sm:grid-cols-2 gap-2">

@@ -74,9 +74,9 @@ function Toggle({ label, desc, checked, onChange }: { label: string; desc?: stri
 }
 
 function StatusBadge({ status }: { status: Campaign["status"] }) {
-  if (status === "sent")    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700"><CheckCircle className="h-3 w-3" />Trimis</span>;
-  if (status === "partial") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700"><AlertCircle className="h-3 w-3" />Partial</span>;
-  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700"><XCircle className="h-3 w-3" />Esuat</span>;
+  if (status === "sent")    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/10 text-success"><CheckCircle className="h-3 w-3" />Trimis</span>;
+  if (status === "partial") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/10 text-warning"><AlertCircle className="h-3 w-3" />Partial</span>;
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-destructive/10 text-destructive"><XCircle className="h-3 w-3" />Esuat</span>;
 }
 
 export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, initialTemplates }: Props) {
@@ -443,7 +443,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
                             type="button"
                             onClick={() => handleDeleteTemplate(t.id)}
                             disabled={templateSaving}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-destructive text-white hover:bg-destructive/90 transition-colors disabled:opacity-50"
                           >
                             Da, sterge
                           </button>
@@ -467,7 +467,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
                           <button
                             type="button"
                             onClick={() => setConfirmDeleteId(t.id)}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -537,7 +537,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-foreground">Compune mesajul</p>
           <div className="text-right">
-            <span className={`text-xs font-mono font-semibold ${charCount > SMS_MAX_CHARS ? "text-amber-600" : "text-muted-foreground"}`}>
+            <span className={`text-xs font-mono font-semibold ${charCount > SMS_MAX_CHARS ? "text-warning" : "text-muted-foreground"}`}>
               {charCount}/{SMS_MAX_CHARS}
             </span>
             <span className="text-xs text-muted-foreground ml-2">
@@ -553,7 +553,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
           className="w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none transition-colors"
         />
         {charCount > SMS_MAX_CHARS && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-warning">
             Mesajul depaseste 160 de caractere. Va fi trimis ca {smsCount} SMS-uri per destinatar, ceea ce va creste costul campaniei.
           </p>
         )}
@@ -644,8 +644,8 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
                 </div>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1"><Users className="h-3 w-3" />{c.recipient_count} destinatari</span>
-                  <span className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-green-500" />{c.sent_count} trimise</span>
-                  {c.failed_count > 0 && <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-red-500" />{c.failed_count} esuate</span>}
+                  <span className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-success" />{c.sent_count} trimise</span>
+                  {c.failed_count > 0 && <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" />{c.failed_count} esuate</span>}
                   <span>{formatDate(c.created_at)}</span>
                 </div>
               </div>

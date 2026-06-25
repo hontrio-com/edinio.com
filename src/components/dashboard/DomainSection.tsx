@@ -82,11 +82,11 @@ const TLD_OPTIONS = [
 ];
 
 const ORDER_STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; color: string }> = {
-  pending:    { label: "In asteptare",  icon: Clock,        color: "bg-amber-50 text-amber-700 border-amber-200" },
-  processing: { label: "Se proceseaza", icon: Loader2,      color: "bg-blue-50 text-blue-700 border-blue-200" },
-  completed:  { label: "Finalizata",    icon: CheckCircle2, color: "bg-green-50 text-green-700 border-green-200" },
-  cancelled:  { label: "Anulata",       icon: XCircle,      color: "bg-red-50 text-red-700 border-red-200" },
-  refunded:   { label: "Rambursata",    icon: XCircle,      color: "bg-zinc-50 text-zinc-500 border-zinc-200" },
+  pending:    { label: "In asteptare",  icon: Clock,        color: "bg-warning/10 text-warning border-warning/20" },
+  processing: { label: "Se proceseaza", icon: Loader2,      color: "bg-info/10 text-info border-info/20" },
+  completed:  { label: "Finalizata",    icon: CheckCircle2, color: "bg-success/10 text-success border-success/20" },
+  cancelled:  { label: "Anulata",       icon: XCircle,      color: "bg-destructive/10 text-destructive border-destructive/20" },
+  refunded:   { label: "Rambursata",    icon: XCircle,      color: "bg-muted text-muted-foreground border-border" },
 };
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -340,8 +340,8 @@ export function DomainSection({
     <div className="space-y-6">
       {/* No business warning */}
       {!businessId && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-sm text-amber-800">
+        <div className="p-4 bg-warning/5 border border-warning/20 rounded-xl">
+          <p className="text-sm text-warning">
             Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.
           </p>
         </div>
@@ -562,7 +562,7 @@ export function DomainSection({
                       className={cn(
                         "px-2 py-0.5 rounded-full text-[10px] font-semibold border",
                         d.status === "active"
-                          ? "bg-green-50 text-green-700 border-green-200"
+                          ? "bg-success/10 text-success border-success/20"
                           : "bg-muted text-muted-foreground border-border"
                       )}
                     >
@@ -724,9 +724,9 @@ export function DomainSection({
                     ))}
                   </div>
                   <div className="px-5 pb-1">
-                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                    <div className="flex items-start gap-2 p-3 bg-warning/5 border border-warning/20 rounded-lg">
+                      <AlertCircle className="h-3.5 w-3.5 text-warning mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] text-warning leading-relaxed">
                         Atentie: schimbarea nameserverelor muta intregul DNS al domeniului.
                         Daca folosesti email pe acest domeniu, alege in schimb metoda
                         „Inregistrari DNS", care pastreaza setarile existente.
@@ -817,9 +817,9 @@ export function DomainSection({
             {/* Scrollable body */}
             <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
               {/* Info banner */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5">
-                <Clock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-blue-700 leading-relaxed">
+              <div className="p-3 bg-info/5 border border-info/20 rounded-xl flex items-start gap-2.5">
+                <Clock className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-info leading-relaxed">
                   Dupa finalizarea platii, domeniul va fi inregistrat si conectat automat
                   la magazinul tau in maximum 24 de ore. Plata se proceseaza securizat prin Stripe.
                 </p>

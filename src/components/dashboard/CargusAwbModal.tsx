@@ -6,6 +6,8 @@ import { X, Package, Loader2, Download, Trash2, ExternalLink } from "lucide-reac
 import { cn } from "@/lib/utils/cn";
 import { createCargusAwbAction, deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { getCargusServiceId } from "@/lib/cargus";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -178,45 +180,30 @@ export function CargusAwbModal({
           {hasAwb ? (
             /* ── AWB existent ── */
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
-                <p className="text-xs font-semibold text-blue-700 mb-1">AWB generat</p>
-                <p className="text-lg font-mono font-bold text-blue-900">{orderData.cargus_awb_number}</p>
+              <div className="p-4 rounded-xl bg-info/5 border border-info/20">
+                <p className="text-xs font-semibold text-info mb-1">AWB generat</p>
+                <p className="text-lg font-mono font-bold text-foreground">{orderData.cargus_awb_number}</p>
                 {orderData.cargus_service_name && (
-                  <p className="text-xs text-blue-600 mt-1">{orderData.cargus_service_name}</p>
+                  <p className="text-xs text-info mt-1">{orderData.cargus_service_name}</p>
                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleDownload(0)}
-                  disabled={downloadingFormat !== null}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-sm font-semibold text-foreground transition-colors disabled:opacity-50"
-                >
-                  {downloadingFormat === 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                <Button variant="outline" size="lg" onClick={() => handleDownload(0)} disabled={downloadingFormat !== null} className="w-full">
+                  {downloadingFormat === 0 ? <Loader2 className="animate-spin" /> : <Download />}
                   Descarca A4
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload(1)}
-                  disabled={downloadingFormat !== null}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-sm font-semibold text-foreground transition-colors disabled:opacity-50"
-                >
-                  {downloadingFormat === 1 ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                </Button>
+                <Button variant="outline" size="lg" onClick={() => handleDownload(1)} disabled={downloadingFormat !== null} className="w-full">
+                  {downloadingFormat === 1 ? <Loader2 className="animate-spin" /> : <ExternalLink />}
                   Eticheta 10x14
-                </button>
+                </Button>
               </div>
 
               <div className="pt-2 border-t border-border">
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors disabled:opacity-50"
-                >
-                  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <Button variant="destructive" size="lg" onClick={handleDelete} disabled={deleting} className="w-full">
+                  {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
                   {deleting ? "Se sterge..." : "Sterge AWB"}
-                </button>
+                </Button>
                 <p className="text-[11px] text-muted-foreground text-center mt-2">
                   AWB-ul poate fi sters doar daca nu are niciun checkpoint Cargus
                 </p>
@@ -391,19 +378,7 @@ export function CargusAwbModal({
                       <p className="text-xs font-semibold text-foreground">Deschidere la livrare</p>
                       <p className="text-[11px] text-muted-foreground">Destinatarul poate verifica coletul inainte de acceptare</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setOpenPackage(p => !p)}
-                      className={cn(
-                        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0",
-                        openPackage ? "bg-primary" : "bg-muted"
-                      )}
-                    >
-                      <span className={cn(
-                        "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform",
-                        openPackage ? "translate-x-4" : "translate-x-0.5"
-                      )} />
-                    </button>
+                    <Switch checked={openPackage} onCheckedChange={setOpenPackage} className="shrink-0" />
                   </div>
 
                   <div>
@@ -430,15 +405,10 @@ export function CargusAwbModal({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={creating}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+              <Button onClick={handleCreate} disabled={creating} size="lg" className="w-full">
+                {creating ? <Loader2 className="animate-spin" /> : <Package />}
                 {creating ? "Se genereaza AWB..." : "Genereaza AWB Cargus"}
-              </button>
+              </Button>
             </div>
           )}
         </div>

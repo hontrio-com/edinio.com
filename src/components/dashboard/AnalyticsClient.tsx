@@ -73,7 +73,7 @@ function StatCard({
         {trend !== null && trend !== undefined && (
           <div className={cn(
             "flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full",
-            trend >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"
+            trend >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
           )}>
             {trend >= 0
               ? <ArrowUpRight className="h-3 w-3" />
@@ -94,11 +94,11 @@ function ChartTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-lg text-sm">
-      <p className="font-semibold text-gray-900 mb-1">{label}</p>
-      <p className="text-gray-500">Vanzari: <span className="font-bold text-gray-900">{formatPrice(payload[0]?.value ?? 0)}</span></p>
+    <div className="bg-surface border border-border rounded-xl px-3 py-2 shadow-lg text-sm">
+      <p className="font-semibold text-foreground mb-1">{label}</p>
+      <p className="text-muted-foreground">Vanzari: <span className="font-bold text-foreground">{formatPrice(payload[0]?.value ?? 0)}</span></p>
       {payload[1] && (
-        <p className="text-gray-500">Comenzi: <span className="font-bold text-gray-900">{payload[1].value}</span></p>
+        <p className="text-muted-foreground">Comenzi: <span className="font-bold text-foreground">{payload[1].value}</span></p>
       )}
     </div>
   );
@@ -170,15 +170,15 @@ function LiveTab({ businessId, ordersByCounty, svgContent, primaryColor }: {
   return (
     <div className="space-y-6">
       {/* Live counter */}
-      <div className="bg-white border border-border rounded-xl p-6 flex items-center gap-5">
+      <div className="bg-surface border border-border rounded-xl p-6 flex items-center gap-5">
         <div className="relative">
-          <div className="w-16 h-16 rounded-2xl bg-green-50 flex items-center justify-center">
-            <Radio className="h-7 w-7 text-green-600" />
+          <div className="w-16 h-16 rounded-2xl bg-success/10 flex items-center justify-center">
+            <Radio className="h-7 w-7 text-success" />
           </div>
           {liveCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-success" />
             </span>
           )}
         </div>
@@ -194,7 +194,7 @@ function LiveTab({ businessId, ordersByCounty, svgContent, primaryColor }: {
           </p>
         </div>
         {liveCount > 0 && (
-          <div className="px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700">
+          <div className="px-3 py-1.5 rounded-full text-xs font-bold bg-success/10 text-success">
             LIVE
           </div>
         )}
@@ -245,7 +245,7 @@ function LiveTab({ businessId, ordersByCounty, svgContent, primaryColor }: {
         {/* Legend */}
         <div className="px-5 py-3 border-t border-border flex items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-gray-200 inline-block" /> Fara comenzi
+            <span className="w-3 h-3 rounded-sm bg-border inline-block" /> Fara comenzi
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: `rgba(26,181,84,0.3)` }} /> Putine
@@ -453,7 +453,7 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
                 value={formatPrice(data.metrics.totalRevenue)}
                 trend={revenueTrend}
                 icon={BadgeDollarSign}
-                color="bg-green-50 text-green-600"
+                color="bg-success/10 text-success"
               />
               <StatCard
                 label="Comenzi"
@@ -461,20 +461,20 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
                 sub={`vs ${data.metrics.prevOrdersCount} perioada anterioara`}
                 trend={ordersTrend}
                 icon={ShoppingCart}
-                color="bg-blue-50 text-blue-600"
+                color="bg-info/10 text-info"
               />
               <StatCard
                 label="Valoare medie comanda"
                 value={hasOrders ? formatPrice(data.metrics.aov) : "-"}
                 icon={TrendingUp}
-                color="bg-purple-50 text-purple-600"
+                color="bg-purple-500/10 text-purple-600"
               />
               <StatCard
                 label="Rata de conversie"
                 value={data.metrics.visitsCount > 0 ? `${data.metrics.conversionRate.toFixed(1)}%` : "-"}
                 sub={`${data.metrics.visitsCount} vizite`}
                 icon={Eye}
-                color="bg-amber-50 text-amber-600"
+                color="bg-warning/10 text-warning"
               />
             </div>
           )}

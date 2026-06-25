@@ -11,6 +11,8 @@ import { formatPrice } from "@/lib/utils/format";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { createBundle, updateBundle, type BundleFormData } from "@/lib/actions/bundle.actions";
 import { computeBundlePricing, bundleAvailability, type BundlePricingMode } from "@/lib/bundles";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 export interface EligibleProduct {
   id: string;
@@ -36,7 +38,7 @@ interface ExistingBundle {
   discount_amount?: number;
 }
 
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 function slugify(s: string): string {
   return s.toLowerCase().trim()
@@ -321,35 +323,34 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
             {pricing.compareAt > pricing.price && <span className="text-xs text-muted-foreground line-through">{formatPrice(pricing.compareAt)}</span>}
           </div>
           {pricing.savings > 0 && (
-            <span className="text-xs font-semibold text-green-600 bg-green-50 dark:bg-green-950/40 px-2 py-1 rounded-full">
+            <span className="text-xs font-semibold text-success bg-success/10 px-2 py-1 rounded-full">
               Economie {formatPrice(pricing.savings)}
             </span>
           )}
         </div>
 
         {components.length >= 2 && !availability.inStock && (
-          <p className="text-xs text-amber-600">Atenție: pachetul e momentan indisponibil (un produs e epuizat).</p>
+          <p className="text-xs text-warning">Atenție: pachetul e momentan indisponibil (un produs e epuizat).</p>
         )}
       </div>
 
       {/* Toggles + save */}
       <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
-        <label className="flex items-center justify-between cursor-pointer">
+        <div className="flex items-center justify-between">
           <span className="text-sm text-foreground">Activ (vizibil în magazin)</span>
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="w-4 h-4 accent-[var(--primary)]" />
-        </label>
-        <label className="flex items-center justify-between cursor-pointer">
+          <Switch checked={isActive} onCheckedChange={setIsActive} />
+        </div>
+        <div className="flex items-center justify-between">
           <span className="text-sm text-foreground">Recomandat</span>
-          <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="w-4 h-4 accent-[var(--primary)]" />
-        </label>
+          <Switch checked={isFeatured} onCheckedChange={setIsFeatured} />
+        </div>
       </div>
 
       <div className="flex justify-end gap-2">
-        <button onClick={() => router.push(backHref)} className="px-5 py-2.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors">Anulează</button>
-        <button onClick={save} disabled={saving}
-          className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg transition-all hover:opacity-90 disabled:opacity-60">
-          {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Se salvează...</> : <><Save className="h-4 w-4" /> {bundle ? "Salvează" : "Creează pachetul"}</>}
-        </button>
+        <Button variant="outline" size="lg" onClick={() => router.push(backHref)}>Anulează</Button>
+        <Button onClick={save} disabled={saving} size="lg">
+          {saving ? <><Loader2 className="animate-spin" /> Se salvează...</> : <><Save /> {bundle ? "Salvează" : "Creează pachetul"}</>}
+        </Button>
       </div>
     </div>
   );

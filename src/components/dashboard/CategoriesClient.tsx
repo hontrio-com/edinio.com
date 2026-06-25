@@ -9,6 +9,7 @@ import {
 import { createCategory, updateCategory, deleteCategory } from "@/lib/actions/category.actions";
 import { uploadImage } from "@/lib/actions/upload.actions";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { Button } from "@/components/ui/button";
 
 interface Category {
   id: string;
@@ -198,15 +199,10 @@ export function CategoriesClient({ initialCategories }: Props) {
             {totalCount === 0 ? "Nicio categorie" : `${roots.length} ${roots.length === 1 ? "categorie" : "categorii"}, ${totalCount - roots.length} subcategorii`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing("new-root")}
-          disabled={editing === "new-root"}
-          className="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" />
+        <Button onClick={() => setEditing("new-root")} disabled={editing === "new-root"}>
+          <Plus />
           Categorie noua
-        </button>
+        </Button>
       </div>
 
       {/* Empty state */}
@@ -217,14 +213,10 @@ export function CategoriesClient({ initialCategories }: Props) {
           </div>
           <p className="font-medium text-foreground mb-1">Nicio categorie creata</p>
           <p className="text-sm text-muted-foreground mb-4">Organizeaza-ti produsele in categorii si subcategorii.</p>
-          <button
-            type="button"
-            onClick={() => setEditing("new-root")}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors"
-          >
-            <Plus className="h-4 w-4" />
+          <Button onClick={() => setEditing("new-root")}>
+            <Plus />
             Adauga prima categorie
-          </button>
+          </Button>
         </div>
       )}
 

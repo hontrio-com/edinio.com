@@ -5,15 +5,19 @@ import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Save, Loader2, FileText, ExternalLink,
+  Save, Loader2, FileText, ExternalLink,
   CheckCircle, RefreshCw, Mail, Building2, Key, Layers,
   ReceiptText, Zap, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { updateSmartbillConfig } from "@/lib/actions/store.actions";
 import { testSmartbillConnection } from "@/lib/actions/smartbill.actions";
 import type { SmartbillConfig } from "@/lib/smartbill";
-
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Callout } from "@/components/ui/callout";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { selectCls } from "@/lib/ui";
 
 const AUTO_TRIGGERS = [
   { value: "confirmed",  label: "Comanda Confirmata" },
@@ -110,20 +114,20 @@ export function SmartbillConfigClient({
 
       <div className="space-y-5">
         {/* Info */}
-        <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
-          <FileText className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Integreaza contul tau SmartBill pentru a genera facturi si proforma direct din comenzile magazinului.
             Documentele sunt emise in contul tau SmartBill si pot fi trimise automat pe email clientilor.
           </p>
         </div>
 
         {/* Ghid */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border">
-            <p className="text-sm font-semibold text-foreground">Cum configurezi integrarea?</p>
-          </div>
-          <div className="px-5 py-4 space-y-4">
+        <Panel className="overflow-hidden">
+          <PanelHeader>
+            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
+          </PanelHeader>
+          <div className="space-y-4 px-5 py-4">
             {[
               {
                 step: "1",
@@ -151,15 +155,15 @@ export function SmartbillConfigClient({
               },
             ].map(({ step, title, desc, link }) => (
               <div key={step} className="flex gap-3">
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <span className="text-xs font-bold text-primary">{step}</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
                   {link && (
                     <a href={link} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
                       Deschide SmartBill <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
@@ -167,78 +171,75 @@ export function SmartbillConfigClient({
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
 
         {/* Main config card */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+        <Panel className="space-y-5 p-5">
           {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Activeaza SmartBill</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Activeaza pentru a genera facturi din pagina comenzilor
               </p>
             </div>
-            <button type="button" onClick={() => set("enabled", !cfg.enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${cfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.enabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
           </div>
 
-          <div className="space-y-4 pt-4 border-t border-border">
+          <div className="space-y-4 border-t border-border pt-4">
             {/* Email */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Mail className="h-3.5 w-3.5 text-muted-foreground" />Email cont SmartBill
               </label>
-              <input type="email" value={cfg.email}
+              <Input type="email" value={cfg.email}
                 onChange={e => set("email", e.target.value)}
-                placeholder="email@firma.ro" className={inputCls} />
+                placeholder="email@firma.ro" />
             </div>
 
             {/* Token */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Key className="h-3.5 w-3.5 text-muted-foreground" />Token API SmartBill
               </label>
-              <input type="password" value={cfg.token}
+              <Input type="password" value={cfg.token}
                 onChange={e => set("token", e.target.value)}
-                placeholder="Tokenul din Contul meu > Integrari > API" className={inputCls} />
+                placeholder="Tokenul din Contul meu > Integrari > API" />
             </div>
 
             {/* CUI */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Building2 className="h-3.5 w-3.5 text-muted-foreground" />CUI firma
               </label>
-              <input type="text" value={cfg.company_vat_code}
+              <Input type="text" value={cfg.company_vat_code}
                 onChange={e => set("company_vat_code", e.target.value)}
-                placeholder="ex: RO12345678 sau 12345678" className={inputCls} />
-              <p className="text-xs text-muted-foreground mt-1">Cu sau fara prefix RO.</p>
+                placeholder="ex: RO12345678 sau 12345678" />
+              <p className="mt-1 text-xs text-muted-foreground">Cu sau fara prefix RO.</p>
             </div>
 
             {/* Invoice series */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Layers className="h-3.5 w-3.5 text-muted-foreground" />Seria facturilor
               </label>
-              <input type="text" value={cfg.series_name}
+              <Input type="text" value={cfg.series_name}
                 onChange={e => set("series_name", e.target.value)}
-                placeholder="ex: FACT" className={inputCls} />
-              <p className="text-xs text-muted-foreground mt-1">
+                placeholder="ex: FACT" />
+              <p className="mt-1 text-xs text-muted-foreground">
                 Testeaza conexiunea pentru a vedea seriile disponibile.
               </p>
             </div>
 
             {/* Tax name */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <ReceiptText className="h-3.5 w-3.5 text-muted-foreground" />Cota TVA
               </label>
-              <input type="text" value={cfg.tax_name}
+              <Input type="text" value={cfg.tax_name}
                 onChange={e => set("tax_name", e.target.value)}
-                placeholder="ex: Cota 19% — lasa gol daca nu esti platitor TVA" className={inputCls} />
-              <p className="text-xs text-muted-foreground mt-1">
+                placeholder="ex: Cota 19% — lasa gol daca nu esti platitor TVA" />
+              <p className="mt-1 text-xs text-muted-foreground">
                 Numele exact al cotei din SmartBill. Testeaza conexiunea pentru a-l vedea.
               </p>
             </div>
@@ -247,37 +248,34 @@ export function SmartbillConfigClient({
             <div className="flex items-center justify-between pt-1">
               <div>
                 <p className="text-sm font-medium text-foreground">Trimite documentul pe email clientului</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   SmartBill va trimite factura/proforma automat daca clientul are email
                 </p>
               </div>
-              <button type="button" onClick={() => set("send_email", !cfg.send_email)}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${cfg.send_email ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.send_email ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
+              <Switch checked={cfg.send_email} onCheckedChange={v => set("send_email", v)} />
             </div>
           </div>
 
           {/* Advanced section: auto-invoice + proforma series */}
           <div className="border-t border-border pt-4">
             <button type="button" onClick={() => setAdvancedOpen(o => !o)}
-              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors w-full text-left">
+              className="flex w-full items-center gap-2 text-left text-sm font-medium text-foreground transition-colors hover:text-primary">
               <Zap className="h-4 w-4 text-primary" />
               Setari avansate
-              {advancedOpen ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+              {advancedOpen ? <ChevronUp className="ml-auto h-4 w-4" /> : <ChevronDown className="ml-auto h-4 w-4" />}
             </button>
 
             {advancedOpen && (
               <div className="mt-4 space-y-5">
                 {/* Proforma series */}
                 <div>
-                  <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+                  <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                     <Layers className="h-3.5 w-3.5 text-muted-foreground" />Seria proformelor (optional)
                   </label>
-                  <input type="text" value={cfg.estimate_series_name}
+                  <Input type="text" value={cfg.estimate_series_name}
                     onChange={e => set("estimate_series_name", e.target.value)}
-                    placeholder="ex: PFACT — lasa gol daca nu emiti proforma" className={inputCls} />
-                  <p className="text-xs text-muted-foreground mt-1">
+                    placeholder="ex: PFACT — lasa gol daca nu emiti proforma" />
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Daca este completata, vei putea genera proforma din detaliul comenzii.
                   </p>
                 </div>
@@ -286,25 +284,23 @@ export function SmartbillConfigClient({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">Generare automata factura</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       Factura se genereaza automat cand comanda atinge statusul selectat
                     </p>
                   </div>
-                  <button type="button" onClick={() => set("auto_invoice", !cfg.auto_invoice)}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${cfg.auto_invoice ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.auto_invoice ? "translate-x-6" : "translate-x-1"}`} />
-                  </button>
+                  <Switch checked={cfg.auto_invoice} onCheckedChange={v => set("auto_invoice", v)} />
                 </div>
 
                 {cfg.auto_invoice && (
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                    <label className="mb-1.5 block text-sm font-medium text-foreground">
                       Declanseaza generarea cand comanda devine
                     </label>
                     <select
+                      aria-label="Declanseaza generarea cand comanda devine"
                       value={cfg.auto_invoice_trigger}
                       onChange={e => set("auto_invoice_trigger", e.target.value as SmartbillConfig["auto_invoice_trigger"])}
-                      className={inputCls}
+                      className={selectCls}
                     >
                       {AUTO_TRIGGERS.map(t => (
                         <option key={t.value} value={t.value}>{t.label}</option>
@@ -317,60 +313,56 @@ export function SmartbillConfigClient({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-between pt-2 border-t border-border">
-            <button type="button" onClick={testConnection} disabled={testing || !canTest}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-50 transition-colors">
-              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          <div className="flex items-center justify-between border-t border-border pt-2">
+            <Button variant="outline" onClick={testConnection} disabled={testing || !canTest}>
+              {testing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               {testing ? "Se testeaza..." : "Testeaza conexiunea"}
-            </button>
-            <button type="button" onClick={save} disabled={saving}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            </Button>
+            <Button onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
               {saving ? "Se salveaza..." : "Salveaza"}
-            </button>
+            </Button>
           </div>
 
           {/* Test result */}
           {testResult && (
-            <div className={`rounded-xl p-4 border space-y-3 ${testResult.ok ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
-              <div className={`flex items-center gap-2 text-sm font-semibold ${testResult.ok ? "text-green-800" : "text-red-800"}`}>
-                <CheckCircle className="h-4 w-4" />
-                {testResult.message}
-              </div>
+            <Callout
+              variant={testResult.ok ? "success" : "danger"}
+              icon={testResult.ok ? CheckCircle : undefined}
+              title={testResult.message}
+            >
               {testResult.ok && testResult.series && testResult.series.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-green-700 mb-1.5">Serii disponibile (click pentru selectare):</p>
+                <div className="mt-2">
+                  <p className="mb-1.5 text-xs font-semibold text-foreground">Serii disponibile (click pentru selectare):</p>
                   <div className="flex flex-wrap gap-1.5">
                     {testResult.series.map(s => (
-                      <button key={s} type="button"
-                        onClick={() => { set("series_name", s); toast.success(`Seria "${s}" selectata ca serie facturi.`); }}
-                        className="px-2.5 py-1 text-xs font-mono font-semibold bg-white border border-green-300 text-green-800 rounded-lg hover:bg-green-100 transition-colors">
+                      <Button key={s} type="button" variant="outline" size="xs" className="font-mono"
+                        onClick={() => { set("series_name", s); toast.success(`Seria "${s}" selectata ca serie facturi.`); }}>
                         {s}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
               )}
               {testResult.ok && testResult.taxes && testResult.taxes.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-green-700 mb-1.5">Cote TVA disponibile (click pentru selectare):</p>
+                <div className="mt-3">
+                  <p className="mb-1.5 text-xs font-semibold text-foreground">Cote TVA disponibile (click pentru selectare):</p>
                   <div className="flex flex-wrap gap-1.5">
                     {testResult.taxes.map(t => {
                       const name = t.split(" (")[0];
                       return (
-                        <button key={t} type="button"
-                          onClick={() => { set("tax_name", name); toast.success(`Cota "${name}" selectata.`); }}
-                          className="px-2.5 py-1 text-xs font-mono font-semibold bg-white border border-green-300 text-green-800 rounded-lg hover:bg-green-100 transition-colors">
+                        <Button key={t} type="button" variant="outline" size="xs" className="font-mono"
+                          onClick={() => { set("tax_name", name); toast.success(`Cota "${name}" selectata.`); }}>
                           {t}
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
                 </div>
               )}
-            </div>
+            </Callout>
           )}
-        </div>
+        </Panel>
       </div>
     </div>
   );

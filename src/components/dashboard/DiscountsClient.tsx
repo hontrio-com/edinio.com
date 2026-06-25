@@ -12,6 +12,7 @@ import {
   createDiscount, updateDiscount, deleteDiscount, toggleDiscount,
   type DiscountData,
 } from "@/lib/actions/discount.actions";
+import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
 type Discount = Database["public"]["Tables"]["discounts"]["Row"];
@@ -22,9 +23,9 @@ function generateCode() {
 }
 
 const TYPE_CONFIG = {
-  percent:      { label: "Procent",           icon: Percent,  color: "text-blue-600 bg-blue-50 border-blue-200" },
-  fixed:        { label: "Suma fixa",          icon: Banknote, color: "text-green-600 bg-green-50 border-green-200" },
-  free_shipping:{ label: "Transport gratuit", icon: Truck,    color: "text-purple-600 bg-purple-50 border-purple-200" },
+  percent:      { label: "Procent",           icon: Percent,  color: "text-info bg-info/10 border-info/20" },
+  fixed:        { label: "Suma fixa",          icon: Banknote, color: "text-success bg-success/10 border-success/20" },
+  free_shipping:{ label: "Transport gratuit", icon: Truck,    color: "text-purple-600 bg-purple-500/10 border-purple-500/20" },
 };
 
 const EMPTY_FORM: DiscountData = {
@@ -37,7 +38,7 @@ const EMPTY_FORM: DiscountData = {
   expires_at: null,
 };
 
-const fieldCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
+const fieldCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /* ── Overlay wrapper shared by modals ─────────────────────────────────────── */
 function Overlay({ children }: { children: React.ReactNode }) {
@@ -109,21 +110,21 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
 
   return (
     <Overlay>
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto border border-gray-200">
+      <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto border border-border">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-base font-semibold text-foreground">
             {editing ? "Editeaza discount" : "Discount nou"}
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <X className="h-4 w-4 text-gray-500" />
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* Code */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Cod discount
             </label>
             <div className="flex gap-2">
@@ -131,23 +132,23 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
                 value={form.code}
                 onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
                 placeholder="ex: VARA20"
-                className={cn(fieldCls, "flex-1 font-mono tracking-widest", errors.code && "border-red-400")}
+                className={cn(fieldCls, "flex-1 font-mono tracking-widest", errors.code && "border-destructive")}
               />
               <button
                 type="button"
                 onClick={() => setForm(f => ({ ...f, code: generateCode() }))}
-                className="px-2.5 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-gray-500"
+                className="px-2.5 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-muted-foreground"
                 title="Genereaza cod aleatoriu"
               >
                 <RefreshCw className="h-4 w-4" />
               </button>
             </div>
-            {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code}</p>}
+            {errors.code && <p className="text-xs text-destructive mt-1">{errors.code}</p>}
           </div>
 
           {/* Type */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Tip discount
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -162,7 +163,7 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
                     onClick={() => setForm(f => ({ ...f, type: t }))}
                     className={cn(
                       "flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 text-xs font-medium transition-all",
-                      active ? "border-primary bg-primary/5 text-primary" : "border-gray-200 text-gray-500 hover:border-primary/40"
+                      active ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -176,7 +177,7 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
           {/* Value */}
           {form.type !== "free_shipping" && (
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
                 {form.type === "percent" ? "Procent reducere" : "Suma reducere (lei)"}
               </label>
               <div className="relative">
@@ -187,19 +188,19 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
                   step="0.01"
                   value={form.value}
                   onChange={e => setForm(f => ({ ...f, value: Number(e.target.value) }))}
-                  className={cn(fieldCls, "pr-12", errors.value && "border-red-400")}
+                  className={cn(fieldCls, "pr-12", errors.value && "border-destructive")}
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-400">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
                   {form.type === "percent" ? "%" : "lei"}
                 </span>
               </div>
-              {errors.value && <p className="text-xs text-red-500 mt-1">{errors.value}</p>}
+              {errors.value && <p className="text-xs text-destructive mt-1">{errors.value}</p>}
             </div>
           )}
 
           {/* Min order amount */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Valoare minima comanda (optional)
             </label>
             <div className="relative">
@@ -212,13 +213,13 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
                 placeholder="Fara minim"
                 className={cn(fieldCls, "pr-12")}
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-400">lei</span>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">lei</span>
             </div>
           </div>
 
           {/* Max uses */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Numar maxim de utilizari (optional)
             </label>
             <input
@@ -234,7 +235,7 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
 
           {/* Expiry date */}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
               Data expirare (optional)
             </label>
             <input
@@ -248,10 +249,10 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
           </div>
 
           {/* Active toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/50">
             <div>
-              <p className="text-sm font-medium text-gray-900">Discount activ</p>
-              <p className="text-xs text-gray-500 mt-0.5">Clientii pot folosi acest cod</p>
+              <p className="text-sm font-medium text-foreground">Discount activ</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Clientii pot folosi acest cod</p>
             </div>
             <button
               type="button"
@@ -260,26 +261,18 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
             >
               {form.is_active
                 ? <ToggleRight className="h-7 w-7 text-primary" />
-                : <ToggleLeft className="h-7 w-7 text-gray-400" />}
+                : <ToggleLeft className="h-7 w-7 text-muted-foreground" />}
             </button>
           </div>
 
           {/* Actions */}
           <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-            >
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Anuleaza
-            </button>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="flex-1 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl disabled:opacity-60 transition-colors"
-            >
+            </Button>
+            <Button type="submit" disabled={isPending} className="flex-1">
               {isPending ? "Se salveaza..." : editing ? "Salveaza" : "Creeaza"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -308,29 +301,20 @@ function DeleteDialog({ discount, businessId, onClose }: DeleteDialogProps) {
 
   return (
     <Overlay>
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 p-5">
-        <h2 className="text-base font-semibold text-gray-900 mb-1">Sterge discount</h2>
-        <p className="text-sm text-gray-500 mb-4">
+      <div className="bg-surface rounded-2xl w-full max-w-sm shadow-2xl border border-border p-5">
+        <h2 className="text-base font-semibold text-foreground mb-1">Sterge discount</h2>
+        <p className="text-sm text-muted-foreground mb-4">
           Esti sigur ca vrei sa stergi codul{" "}
-          <span className="font-mono font-bold text-gray-900">{discount.code}</span>?
+          <span className="font-mono font-bold text-foreground">{discount.code}</span>?
           Actiunea nu poate fi anulata.
         </p>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-          >
+          <Button type="button" variant="outline" onClick={onClose} className="flex-1">
             Anuleaza
-          </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isPending}
-            className="flex-1 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl disabled:opacity-60 transition-colors"
-          >
+          </Button>
+          <Button type="button" onClick={handleDelete} disabled={isPending} className="flex-1 bg-destructive text-white hover:bg-destructive/90">
             {isPending ? "Se sterge..." : "Sterge"}
-          </button>
+          </Button>
         </div>
       </div>
     </Overlay>
@@ -382,15 +366,11 @@ export function DiscountsClient({ discounts, businessId }: {
           <h1 className="text-xl font-semibold text-foreground">Discounturi</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Creeaza si gestioneaza coduri promotionale</p>
         </div>
-        <button
-          type="button"
-          onClick={handleNew}
-          className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors"
-        >
-          <Plus className="h-4 w-4" />
+        <Button onClick={handleNew}>
+          <Plus />
           <span className="hidden xs:inline sm:inline">Cod nou</span>
           <span className="xs:hidden sm:hidden">Nou</span>
-        </button>
+        </Button>
       </div>
 
       {/* Empty state */}
@@ -403,19 +383,15 @@ export function DiscountsClient({ discounts, businessId }: {
           <p className="text-sm text-muted-foreground max-w-xs mb-4">
             Creeaza primul tau cod promotional pentru a oferi reduceri clientilor.
           </p>
-          <button
-            type="button"
-            onClick={handleNew}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors"
-          >
-            <Plus className="h-4 w-4" />
+          <Button onClick={handleNew}>
+            <Plus />
             Creeaza primul discount
-          </button>
+          </Button>
         </div>
       ) : (
         <>
           {/* Table */}
-          <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="bg-surface border border-border rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -445,7 +421,7 @@ export function DiscountsClient({ discounts, businessId }: {
                             <button
                               type="button"
                               onClick={() => copyCode(d.code)}
-                              className={cn("transition-colors", copiedCode === d.code ? "text-green-500" : "text-muted-foreground hover:text-foreground")}
+                              className={cn("transition-colors", copiedCode === d.code ? "text-success" : "text-muted-foreground hover:text-foreground")}
                             >
                               {copiedCode === d.code ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                             </button>
@@ -468,13 +444,13 @@ export function DiscountsClient({ discounts, businessId }: {
                           </span>
                         </td>
                         <td className="px-5 py-3.5 hidden md:table-cell">
-                          <span className={cn("text-sm", usedUp && "text-red-500 font-semibold")}>
+                          <span className={cn("text-sm", usedUp && "text-destructive font-semibold")}>
                             {d.uses_count}{d.max_uses !== null ? ` / ${d.max_uses}` : ""}
                           </span>
                         </td>
                         <td className="px-5 py-3.5 hidden lg:table-cell">
                           {d.expires_at ? (
-                            <span className={cn("text-sm", expired && "text-red-500")}>
+                            <span className={cn("text-sm", expired && "text-destructive")}>
                               {expired ? "Expirat" : formatDate(new Date(d.expires_at))}
                             </span>
                           ) : (
@@ -514,7 +490,7 @@ export function DiscountsClient({ discounts, businessId }: {
                             <button
                               type="button"
                               onClick={() => setDeleting(d)}
-                              className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-500"
+                              className="p-1.5 rounded-lg hover:bg-destructive/5 transition-colors text-muted-foreground hover:text-destructive"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -536,7 +512,7 @@ export function DiscountsClient({ discounts, businessId }: {
               { label: "Total utilizari", value: discounts.reduce((s, d) => s + d.uses_count, 0) },
               { label: "Expirate / Epuizate", value: discounts.filter(d => isExpired(d) || (d.max_uses !== null && d.uses_count >= d.max_uses)).length },
             ].map(stat => (
-              <div key={stat.label} className="bg-white border border-border rounded-xl p-4">
+              <div key={stat.label} className="bg-surface border border-border rounded-xl p-4">
                 <p className="text-xs text-muted-foreground">{stat.label}</p>
                 <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
               </div>

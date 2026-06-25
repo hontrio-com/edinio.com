@@ -10,6 +10,12 @@ import {
   loadDpdAccountAction,
 } from "@/lib/actions/dpd.actions";
 import type { DpdConfig } from "@/lib/dpd";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
+import { Switch } from "@/components/ui/switch";
+import { Callout } from "@/components/ui/callout";
+import { Panel } from "@/components/ui/panel";
 
 export function DpdConfigClient({
   businessId,
@@ -96,114 +102,94 @@ export function DpdConfigClient({
     <div className="space-y-6">
       {/* Status */}
       {isActive && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-200">
-          <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-green-800">DPD activ</p>
-            <p className="text-xs text-green-700 truncate">
-              {initialConfig?.username} · Client ID {initialConfig?.client_id}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
-          >
-            {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
-            Deconecteaza
-          </button>
-        </div>
+        <Callout
+          variant="success"
+          icon={CheckCircle}
+          title="DPD activ"
+          action={
+            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
+              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
+              Deconecteaza
+            </Button>
+          }
+        >
+          {initialConfig?.username} · Client ID {initialConfig?.client_id}
+        </Callout>
       )}
 
       {/* Credentials */}
-      <div className="p-4 rounded-xl border border-border bg-surface space-y-4">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">1</span>
+      <Panel className="space-y-4 p-4">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
           <h3 className="text-sm font-semibold text-foreground">Credentiale cont DPD</h3>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Username *</label>
-            <input
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Username" required>
+            <Input
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
               placeholder="user@firma.ro"
-              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Parola *</label>
-            <input
+          </Field>
+          <Field label="Parola" required>
+            <Input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Parola contului DPD"
-              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
             />
-          </div>
+          </Field>
         </div>
 
-        <button
-          type="button"
+        <Button
           onClick={handleConnect}
           disabled={loading || !username.trim() || !password.trim()}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+          {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
           {loading ? "Se conecteaza..." : "Testeaza si conecteaza"}
-        </button>
+        </Button>
 
         {clientId && (
-          <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-            <p className="text-xs font-semibold text-green-800">
-              Conectat ca: {clientName || "DPD Client"} (ID: {clientId})
-            </p>
-          </div>
+          <p className="rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-xs font-semibold text-success">
+            Conectat ca: {clientName || "DPD Client"} (ID: {clientId})
+          </p>
         )}
-      </div>
+      </Panel>
 
       {/* Cont bancar pentru ramburs */}
       {clientId && (
-        <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+        <Panel className="space-y-3 p-4">
           <div>
             <p className="text-sm font-semibold text-foreground">Cont bancar (ramburs)</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Necesar pentru comenzile cu plata la livrare — DPD returneaza aici banii incasati de la clienti.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Necesar pentru comenzile cu plata la livrare — DPD returneaza aici banii incasati de la clienti.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">IBAN</label>
-              <input type="text" value={iban} onChange={e => setIban(e.target.value)}
-                placeholder="RO00 BANK 0000 0000 0000 0000"
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Titular cont</label>
-              <input type="text" value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
-                placeholder="Numele firmei"
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors" />
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="IBAN">
+              <Input type="text" value={iban} onChange={e => setIban(e.target.value)}
+                placeholder="RO00 BANK 0000 0000 0000 0000" />
+            </Field>
+            <Field label="Titular cont">
+              <Input type="text" value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
+                placeholder="Numele firmei" />
+            </Field>
           </div>
-        </div>
+        </Panel>
       )}
 
       {/* International (EU) */}
       {clientId && (
-        <div className="p-4 rounded-xl border border-border bg-surface">
+        <Panel className="p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">Livrare internationala (UE)</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Permite comenzi catre tarile UE. Clientul alege tara la checkout, iar pretul livrarii se calculeaza live prin DPD.</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Permite comenzi catre tarile UE. Clientul alege tara la checkout, iar pretul livrarii se calculeaza live prin DPD.</p>
             </div>
-            <button type="button" onClick={() => setInternational(v => !v)}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${international ? "bg-primary" : "bg-muted-foreground/30"}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${international ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch checked={international} onCheckedChange={setInternational} />
           </div>
           {international && (
-            <label className="flex items-start gap-2.5 mt-3 pt-3 border-t border-border cursor-pointer">
+            <label className="mt-3 flex cursor-pointer items-start gap-2.5 border-t border-border pt-3">
               <input type="checkbox" checked={useWeight} onChange={e => setUseWeight(e.target.checked)}
                 className="mt-0.5 rounded border-border accent-primary" />
               <span className="text-xs text-muted-foreground">
@@ -211,28 +197,27 @@ export function DpdConfigClient({
               </span>
             </label>
           )}
-        </div>
+        </Panel>
       )}
 
       {/* Save */}
       {clientId && (
         <div className="flex justify-end">
-          <button
-            type="button"
+          <Button
+            size="lg"
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {saving && <Loader2 className="animate-spin" />}
             {saving ? "Se salveaza..." : "Salveaza configuratia"}
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Help */}
-      <div className="p-4 rounded-xl bg-primary/5 border border-primary/15">
-        <p className="text-sm font-semibold text-foreground mb-2">Cum obtii credentialele DPD?</p>
-        <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
+      <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
+        <p className="mb-2 text-sm font-semibold text-foreground">Cum obtii credentialele DPD?</p>
+        <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
           <li>Contacteaza DPD Romania pentru activarea accesului API (myDPD Business)</li>
           <li>Vei primi un username si parola pentru API</li>
           <li>Introdu credentialele si apasa &quot;Testeaza si conecteaza&quot;</li>
@@ -241,7 +226,7 @@ export function DpdConfigClient({
           href="https://api.dpd.ro/api/docs/"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 mt-3 text-xs font-semibold text-primary hover:underline"
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
           <ExternalLink className="h-3 w-3" />
           Documentatie API DPD

@@ -9,16 +9,7 @@ import {
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { normalizePhone, type Customer, type CustomersSummary } from "@/lib/customers";
-
-const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  pending:    { label: "In asteptare", className: "bg-amber-50 text-amber-700 border border-amber-200" },
-  confirmed:  { label: "Confirmat",    className: "bg-blue-50 text-blue-700 border border-blue-200" },
-  processing: { label: "In procesare", className: "bg-purple-50 text-purple-700 border border-purple-200" },
-  shipped:    { label: "Expediat",     className: "bg-indigo-50 text-indigo-700 border border-indigo-200" },
-  delivered:  { label: "Livrat",       className: "bg-green-50 text-green-700 border border-green-200" },
-  cancelled:  { label: "Anulat",       className: "bg-red-50 text-red-700 border border-red-200" },
-  refunded:   { label: "Rambursat",    className: "bg-gray-100 text-gray-500 border border-gray-200" },
-};
+import { orderStatus } from "@/lib/orders/status";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
 
@@ -84,9 +75,9 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <StatCard icon={Users} label="Clienti" value={String(summary.totalCustomers)} tint="bg-primary/10 text-primary" />
-        <StatCard icon={Repeat} label="Clienti fideli" value={String(summary.returningCustomers)} tint="bg-blue-50 text-blue-600" />
-        <StatCard icon={ShoppingBag} label="Venit total" value={formatPrice(summary.totalRevenue)} tint="bg-green-50 text-green-600" />
-        <StatCard icon={TrendingUp} label="Valoare medie comanda" value={formatPrice(summary.averageOrderValue)} tint="bg-amber-50 text-amber-600" />
+        <StatCard icon={Repeat} label="Clienti fideli" value={String(summary.returningCustomers)} tint="bg-info/10 text-info" />
+        <StatCard icon={ShoppingBag} label="Venit total" value={formatPrice(summary.totalRevenue)} tint="bg-success/10 text-success" />
+        <StatCard icon={TrendingUp} label="Valoare medie comanda" value={formatPrice(summary.averageOrderValue)} tint="bg-warning/10 text-warning" />
       </div>
 
       {/* Toolbar */}
@@ -142,7 +133,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
                   {c.paidOrderCount > 1 && (
-                    <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5">
+                    <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-info bg-info/10 border border-info/20 rounded-full px-1.5 py-0.5">
                       <Repeat className="h-2.5 w-2.5" /> Fidel
                     </span>
                   )}
@@ -187,7 +178,7 @@ function CustomerDetail({ customer, onClose }: { customer: Customer; onClose: ()
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-foreground truncate">{customer.name}</h2>
               {customer.paidOrderCount > 1 && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-info bg-info/10 border border-info/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
                   <Repeat className="h-2.5 w-2.5" /> Fidel
                 </span>
               )}
@@ -245,7 +236,7 @@ function CustomerDetail({ customer, onClose }: { customer: Customer; onClose: ()
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Istoric comenzi</p>
             <div className="space-y-1.5">
               {customer.orders.map((o) => {
-                const st = STATUS_MAP[o.status] ?? STATUS_MAP.pending;
+                const st = orderStatus(o.status);
                 return (
                   <Link
                     key={o.id}

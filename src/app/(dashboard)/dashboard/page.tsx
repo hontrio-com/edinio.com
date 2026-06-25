@@ -9,6 +9,8 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { getLatestAnnouncement } from "@/lib/actions/announcement.actions";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { Callout } from "@/components/ui/callout";
+import { orderStatus } from "@/lib/orders/status";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { AnnouncementArticle } from "@/components/dashboard/AnnouncementArticle";
 import type { Announcement } from "@/lib/announcements";
@@ -57,7 +59,7 @@ function StatCard({
     <Link
       href={href}
       className={[
-        "group relative flex flex-col overflow-hidden rounded-[18px] bg-surface",
+        "group relative flex flex-col overflow-hidden rounded-xl bg-surface",
         "shadow-[0_1px_2px_rgba(15,23,20,0.04)]",
         "border border-border transition-all duration-200",
         "hover:-translate-y-0.5",
@@ -117,16 +119,6 @@ function StatCard({
     </Link>
   );
 }
-
-const ORDER_STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  pending:    { label: "In asteptare", className: "bg-amber-50 text-amber-700 border border-amber-200" },
-  confirmed:  { label: "Confirmat",    className: "bg-blue-50 text-blue-700 border border-blue-200" },
-  processing: { label: "In procesare", className: "bg-purple-50 text-purple-700 border border-purple-200" },
-  shipped:    { label: "Expediat",     className: "bg-indigo-50 text-indigo-700 border border-indigo-200" },
-  delivered:  { label: "Livrat",       className: "bg-green-50 text-green-700 border border-green-200" },
-  cancelled:  { label: "Anulat",       className: "bg-red-50 text-red-700 border border-red-200" },
-  refunded:   { label: "Rambursat",    className: "bg-gray-100 text-gray-500 border border-gray-200" },
-};
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -229,22 +221,25 @@ export default async function DashboardPage() {
 
       {/* Low stock alert */}
       {(lowStockProducts ?? []).length > 0 && (
-        <div className="mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-red-700 mb-1">Stoc scazut</p>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-              {(lowStockProducts ?? []).map(p => (
-                <span key={p.id} className="text-xs text-red-600">
-                  {p.name} - <strong>{p.stock_quantity ?? 0} buc</strong>
-                </span>
-              ))}
-            </div>
+        <Callout
+          variant="danger"
+          icon={AlertCircle}
+          title="Stoc scazut"
+          className="mt-4"
+          action={
+            <Link href="/dashboard/products" className="text-xs font-semibold text-destructive hover:underline">
+              Gestioneaza
+            </Link>
+          }
+        >
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+            {(lowStockProducts ?? []).map(p => (
+              <span key={p.id} className="text-xs">
+                {p.name} - <strong>{p.stock_quantity ?? 0} buc</strong>
+              </span>
+            ))}
           </div>
-          <Link href="/dashboard/products" className="text-xs font-semibold text-red-600 hover:text-red-700 flex-shrink-0 transition-colors">
-            Gestioneaza
-          </Link>
-        </div>
+        </Callout>
       )}
 
       {/* Stat cards */}
@@ -315,7 +310,7 @@ export default async function DashboardPage() {
           {(recentOrders ?? []).length > 0 ? (
             <div className="divide-y divide-border">
               {(recentOrders ?? []).map(order => {
-                const status = ORDER_STATUS_LABELS[order.status] ?? ORDER_STATUS_LABELS.pending;
+                const status = orderStatus(order.status);
                 return (
                   <Link
                     key={order.id}

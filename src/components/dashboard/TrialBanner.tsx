@@ -22,10 +22,10 @@ export function TrialBanner({ planExpiresAt }: Props) {
       className={cn(
         "relative overflow-hidden",
         isExpired
-          ? "bg-red-600"
+          ? "bg-destructive"
           : isUrgent
-            ? "bg-gradient-to-r from-red-500 to-orange-500"
-            : "bg-gradient-to-r from-primary to-emerald-500"
+            ? "bg-gradient-to-r from-destructive to-warning"
+            : "bg-primary"
       )}
     >
       <div className="px-4 py-3 sm:py-4 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-white text-center">
@@ -39,7 +39,7 @@ export function TrialBanner({ planExpiresAt }: Props) {
             </div>
             <Link
               href="/dashboard/settings#abonament"
-              className="inline-flex items-center gap-2 px-5 py-2 bg-white text-red-600 rounded-lg text-sm font-bold hover:bg-red-50 transition-colors flex-shrink-0"
+              className="inline-flex items-center gap-2 px-5 py-2 bg-white text-destructive rounded-lg text-sm font-bold hover:bg-destructive/5 transition-colors flex-shrink-0"
             >
               <Zap className="h-4 w-4" />
               Alege un plan acum
@@ -61,7 +61,7 @@ export function TrialBanner({ planExpiresAt }: Props) {
               className={cn(
                 "inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors flex-shrink-0",
                 isUrgent
-                  ? "bg-white text-red-600 hover:bg-red-50"
+                  ? "bg-white text-destructive hover:bg-destructive/5"
                   : "bg-white/20 hover:bg-white/30 text-white"
               )}
             >

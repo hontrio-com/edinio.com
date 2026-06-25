@@ -295,8 +295,8 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-foreground truncate">{c.customer_name || "Client anonim"}</p>
                     {c.source === "buy_now" && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Cumpără acum</span>}
-                    {c.recovery_email_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium dark:bg-blue-950/40">Mail trimis</span>}
-                    {c.recovery_sms_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium dark:bg-green-950/40">SMS trimis</span>}
+                    {c.recovery_email_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-info/10 text-info font-medium">Mail trimis</span>}
+                    {c.recovery_sms_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/10 text-success font-medium">SMS trimis</span>}
                   </div>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {[c.phone, c.email].filter(Boolean).join(" · ") || "Fără contact"}

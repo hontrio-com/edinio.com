@@ -140,7 +140,7 @@ export function BundlesClient({ businessId, bundles, initialPage = 1 }: { busine
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-foreground truncate">{b.name}</p>
                         {!b.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Inactiv</span>}
-                        {!b.in_stock && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-950/40 font-medium">Indisponibil</span>}
+                        {!b.in_stock && <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/10 text-warning font-medium">Indisponibil</span>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{b.component_count} produse</p>
                     </div>
@@ -153,7 +153,7 @@ export function BundlesClient({ businessId, bundles, initialPage = 1 }: { busine
                         )}
                       </div>
                       {b.savings > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600"><Sparkles className="h-3 w-3" /> -{formatPrice(b.savings)}</span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success"><Sparkles className="h-3 w-3" /> -{formatPrice(b.savings)}</span>
                       )}
                     </div>
 

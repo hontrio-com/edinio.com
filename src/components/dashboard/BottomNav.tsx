@@ -31,7 +31,7 @@ export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
         })}
         {isAdmin && (
           <Link href="/admin"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-xs font-medium text-amber-600">
+            className="flex-1 flex flex-col items-center justify-center gap-1 text-xs font-medium text-warning">
             <ShieldCheck className="h-5 w-5" />
             Admin
           </Link>

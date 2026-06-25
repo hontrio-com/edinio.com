@@ -5,13 +5,17 @@ import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Save, Loader2, CheckCircle, Wifi, WifiOff,
+  Save, Loader2, Wifi, WifiOff,
   Building2, User, Phone, Mail, MapPin, Home, CreditCard, Info,
 } from "lucide-react";
 import { saveWootConfig, disconnectWoot, testWootConnection } from "@/lib/actions/woot.actions";
 import type { WootConfig, WootCounty, WootCity } from "@/lib/woot";
-
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+import { cn } from "@/lib/utils/cn";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { selectCls } from "@/lib/ui";
 
 const DEFAULT_CONFIG: WootConfig = {
   enabled: false,
@@ -151,19 +155,19 @@ export default function WootConfigClient({
 
       <div className="space-y-5">
         {/* Info */}
-        <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
-          <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Woot.ro iti permite sa compari preturi intre toti curierii (Fan Courier, DPD, Cargus, Sameday, GLS si altii) si sa creezi AWB-uri direct din comenzile tale. Ai nevoie de un cont pe woot.ro.
           </p>
         </div>
 
         {/* Ghid */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border">
-            <p className="text-sm font-semibold text-foreground">Cum te conectezi?</p>
-          </div>
-          <div className="px-5 py-4 space-y-4">
+        <Panel className="overflow-hidden">
+          <PanelHeader>
+            <PanelTitle>Cum te conectezi?</PanelTitle>
+          </PanelHeader>
+          <div className="space-y-4 px-5 py-4">
             {[
               { step: "1", title: "Creeaza un cont Woot.ro", desc: "Mergi pe woot.ro si inregistreaza-te sau logheaza-te." },
               { step: "2", title: "Obtine cheile API", desc: "In contul Woot, mergi la Setari → API → genereaza Public Key si Secret Key." },
@@ -171,60 +175,61 @@ export default function WootConfigClient({
               { step: "4", title: "Configureaza adresa expeditor", desc: "Completeaza datele firmei tale (adresa de unde se ridica coletele)." },
             ].map(({ step, title, desc }) => (
               <div key={step} className="flex gap-3">
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <span className="text-xs font-bold text-primary">{step}</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
 
         {/* API Keys card */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+        <Panel className="space-y-5 p-5">
           {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Activeaza Woot</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Afiseaza butonul "Creeaza AWB" in pagina comenzilor</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Afiseaza butonul &quot;Creeaza AWB&quot; in pagina comenzilor</p>
             </div>
-            <button type="button" onClick={() => set("enabled", !cfg.enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${cfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.enabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
           </div>
 
-          <div className="space-y-4 pt-4 border-t border-border">
+          <div className="space-y-4 border-t border-border pt-4">
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Public Key
               </label>
-              <input type="text" value={cfg.public_key} onChange={e => set("public_key", e.target.value)}
-                placeholder="32 caractere" className={inputCls} />
+              <Input type="text" value={cfg.public_key} onChange={e => set("public_key", e.target.value)}
+                placeholder="32 caractere" />
             </div>
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Secret Key
               </label>
-              <input type="password" value={cfg.secret_key} onChange={e => set("secret_key", e.target.value)}
-                placeholder="32 caractere" className={inputCls} />
+              <Input type="password" value={cfg.secret_key} onChange={e => set("secret_key", e.target.value)}
+                placeholder="32 caractere" />
             </div>
 
             {/* Test connection */}
             <div>
-              <button type="button" onClick={handleTest} disabled={testing || saving}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50">
+              <Button variant="outline" onClick={handleTest} disabled={testing || saving}>
                 {testing || saving
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : testResult?.ok ? <Wifi className="h-4 w-4 text-green-600" /> : <WifiOff className="h-4 w-4 text-muted-foreground" />}
+                  ? <Loader2 className="animate-spin" />
+                  : testResult?.ok ? <Wifi className="text-success" /> : <WifiOff className="text-muted-foreground" />}
                 Testeaza conexiunea
-              </button>
+              </Button>
 
               {testResult && (
-                <div className={`mt-3 p-3 rounded-lg border text-xs ${testResult.ok ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-700"}`}>
+                <div className={cn(
+                  "mt-3 rounded-lg border p-3 text-xs",
+                  testResult.ok
+                    ? "border-success/20 bg-success/5 text-success"
+                    : "border-destructive/20 bg-destructive/5 text-destructive"
+                )}>
                   {testResult.ok ? (
                     <div className="space-y-0.5">
                       <p className="font-semibold">Conexiune reusita!</p>
@@ -238,74 +243,77 @@ export default function WootConfigClient({
               )}
             </div>
           </div>
-        </div>
+        </Panel>
 
         {/* Sender address card */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+        <Panel className="space-y-4 p-5">
           <div>
             <p className="text-sm font-semibold text-foreground">Adresa expeditor implicit</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Adresa de unde se ridica coletele (firma ta)</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Adresa de unde se ridica coletele (firma ta)</p>
           </div>
 
           {/* Company type */}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setSender("company", 1)}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${cfg.sender.company === 1 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}>
+              className={cn("flex items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
+                cfg.sender.company === 1 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground")}>
               <Building2 className="h-4 w-4" />Firma
             </button>
             <button type="button" onClick={() => setSender("company", 0)}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${cfg.sender.company === 0 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}>
+              className={cn("flex items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
+                cfg.sender.company === 0 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground")}>
               <User className="h-4 w-4" />Persoana fizica
             </button>
           </div>
 
           {cfg.sender.company === 1 && (
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Building2 className="h-3.5 w-3.5 text-muted-foreground" />Nume firma
               </label>
-              <input type="text" value={cfg.sender.company_name ?? ""} onChange={e => setSender("company_name", e.target.value)}
-                placeholder="S.C. Firma S.R.L." className={inputCls} />
+              <Input type="text" value={cfg.sender.company_name ?? ""} onChange={e => setSender("company_name", e.target.value)}
+                placeholder="S.C. Firma S.R.L." />
             </div>
           )}
 
           <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
               <User className="h-3.5 w-3.5 text-muted-foreground" />Persoana de contact
             </label>
-            <input type="text" value={cfg.sender.contact} onChange={e => setSender("contact", e.target.value)}
-              placeholder="Prenume Nume" className={inputCls} />
+            <Input type="text" value={cfg.sender.contact} onChange={e => setSender("contact", e.target.value)}
+              placeholder="Prenume Nume" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Phone className="h-3.5 w-3.5 text-muted-foreground" />Telefon
               </label>
-              <input type="tel" value={cfg.sender.phone} onChange={e => setSender("phone", e.target.value)}
-                placeholder="+40721000000" className={inputCls} />
+              <Input type="tel" value={cfg.sender.phone} onChange={e => setSender("phone", e.target.value)}
+                placeholder="+40721000000" />
             </div>
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Mail className="h-3.5 w-3.5 text-muted-foreground" />Email
               </label>
-              <input type="email" value={cfg.sender.email} onChange={e => setSender("email", e.target.value)}
-                placeholder="firma@email.ro" className={inputCls} />
+              <Input type="email" value={cfg.sender.email} onChange={e => setSender("email", e.target.value)}
+                placeholder="firma@email.ro" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground" />Judet
               </label>
               <select
+                aria-label="Judet"
                 value={cfg.sender.county_id || ""}
                 onChange={e => {
                   setSender("county_id", Number(e.target.value));
                   setSender("city_id", 0);
                 }}
-                className={inputCls}
+                className={selectCls}
               >
                 <option value="">Selecteaza judetul</option>
                 {counties.map(c => (
@@ -314,14 +322,15 @@ export default function WootConfigClient({
               </select>
             </div>
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground" />Oras
               </label>
               <select
+                aria-label="Oras"
                 value={cfg.sender.city_id || ""}
                 onChange={e => setSender("city_id", Number(e.target.value))}
                 disabled={!cfg.sender.county_id || loadingCities}
-                className={inputCls}
+                className={selectCls}
               >
                 <option value="">
                   {loadingCities ? "Se incarca..." : "Selecteaza orasul"}
@@ -334,35 +343,33 @@ export default function WootConfigClient({
           </div>
 
           <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
               <Home className="h-3.5 w-3.5 text-muted-foreground" />Adresa
             </label>
-            <input type="text" value={cfg.sender.address} onChange={e => setSender("address", e.target.value)}
-              placeholder="Strada, nr., etc." className={inputCls} />
+            <Input type="text" value={cfg.sender.address} onChange={e => setSender("address", e.target.value)}
+              placeholder="Strada, nr., etc." />
           </div>
 
           <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
               Cod postal (optional)
             </label>
-            <input type="text" value={cfg.sender.zipcode ?? ""} onChange={e => setSender("zipcode", e.target.value)}
-              placeholder="000000" className={inputCls} style={{ maxWidth: 160 }} />
+            <Input type="text" value={cfg.sender.zipcode ?? ""} onChange={e => setSender("zipcode", e.target.value)}
+              placeholder="000000" className="max-w-40" />
           </div>
-        </div>
+        </Panel>
 
         {/* Actions */}
         <div className="flex items-center gap-3">
-          <button type="button" onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="animate-spin" /> : <Save />}
             Salveaza
-          </button>
+          </Button>
           {isConnected && (
-            <button type="button" onClick={handleDisconnect} disabled={disconnecting}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-60">
-              {disconnecting && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button variant="outline" onClick={handleDisconnect} disabled={disconnecting}>
+              {disconnecting && <Loader2 className="animate-spin" />}
               Deconecteaza
-            </button>
+            </Button>
           )}
         </div>
       </div>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { updateBusiness } from "@/lib/actions/business.actions";
+import { Button } from "@/components/ui/button";
 
 export function SiteStatusBar({
   isPublished,
@@ -45,20 +46,16 @@ export function SiteStatusBar({
   if (!isPublished) {
     return (
       <>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-4 bg-amber-50 border border-amber-200 rounded-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-4 bg-warning/5 border border-warning/20 rounded-xl">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <span className="text-sm text-amber-800 font-medium">
+            <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
+            <span className="text-sm text-warning font-medium">
               Site-ul tau nu este publicat. Clientii nu il pot vedea.
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowConfirm(true)}
-            className="flex-shrink-0 px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
-          >
+          <Button size="sm" onClick={() => setShowConfirm(true)} className="shrink-0 bg-warning text-white hover:bg-warning/90">
             Publica acum
-          </button>
+          </Button>
         </div>
 
         {showConfirm && (
@@ -78,23 +75,13 @@ export function SiteStatusBar({
                 <span className="font-medium text-foreground">{displayUrl}</span> va deveni vizibil public si clientii vor putea plasa comenzi. Poti opri publicarea oricand din editor.
               </p>
               <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  disabled={publishing}
-                  onClick={() => setShowConfirm(false)}
-                  className="px-4 py-2 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
-                >
+                <Button type="button" variant="outline" disabled={publishing} onClick={() => setShowConfirm(false)}>
                   Anuleaza
-                </button>
-                <button
-                  type="button"
-                  disabled={publishing}
-                  onClick={handlePublish}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                </Button>
+                <Button type="button" disabled={publishing} onClick={handlePublish}>
+                  {publishing ? <Loader2 className="animate-spin" /> : <Globe />}
                   Publica magazinul
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -106,8 +93,8 @@ export function SiteStatusBar({
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-4 bg-surface border border-border rounded-xl">
       <div className="flex items-center gap-3">
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/10 text-success border border-success/20">
+          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
           Publicat
         </span>
         <a
@@ -125,7 +112,7 @@ export function SiteStatusBar({
           onClick={handleCopy}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors text-foreground"
         >
-          {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
           {copied ? "Copiat!" : "Copiaza link"}
         </button>
         <a

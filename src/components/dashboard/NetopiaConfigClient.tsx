@@ -4,9 +4,15 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Loader2, CheckCircle, CreditCard, Info, Key } from "lucide-react";
+import { Save, Loader2, CreditCard, Info, Key } from "lucide-react";
 import { saveNetopiaConfig, disconnectNetopia } from "@/lib/actions/netopia.actions";
 import type { NetopiaConfig } from "@/lib/netopia";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Callout } from "@/components/ui/callout";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 
 const DEFAULT_CONFIG: NetopiaConfig = {
   enabled: false,
@@ -16,8 +22,6 @@ const DEFAULT_CONFIG: NetopiaConfig = {
   api_key: "",
   badge_html: "",
 };
-
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
 export default function NetopiaConfigClient({
   businessId,
@@ -70,20 +74,20 @@ export default function NetopiaConfigClient({
 
       <div className="space-y-5">
         {/* Info */}
-        <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
-          <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Integreaza Netopia Payments pentru a accepta plati cu cardul. Clientii sunt redirectionati catre pagina securizata Netopia, fara a introduce datele cardului pe site-ul tau.
             Ai nevoie de un cont de comerciant Netopia si de API Key-ul generat din panoul Netopia.
           </p>
         </div>
 
         {/* Ghid */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border">
-            <p className="text-sm font-semibold text-foreground">Cum configurezi integrarea?</p>
-          </div>
-          <div className="px-5 py-4 space-y-4">
+        <Panel className="overflow-hidden">
+          <PanelHeader>
+            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
+          </PanelHeader>
+          <div className="space-y-4 px-5 py-4">
             {[
               {
                 step: "1",
@@ -107,158 +111,136 @@ export default function NetopiaConfigClient({
               },
             ].map(({ step, title, desc }) => (
               <div key={step} className="flex gap-3">
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <span className="text-xs font-bold text-primary">{step}</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
 
         {/* Atentie: chei RSA vechi */}
-        <div className="p-4 bg-amber-500/5 border border-amber-500/30 rounded-xl flex items-start gap-3">
-          <Info className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground">Nu confunda API Key-ul cu cheile de criptare.</span> In &quot;Setari tehnice&quot; vei vedea si o &quot;Cheie publica&quot; si o &quot;Cheie privata&quot;: acestea sunt pentru vechea integrare (Netopia API v1) si <span className="font-medium text-foreground">nu sunt necesare aici</span>. Edinio foloseste API v2, care are nevoie doar de <span className="font-medium text-foreground">POS Signature</span> (din Setari tehnice) si de <span className="font-medium text-foreground">API Key</span> (din Profil → Securitate).
-          </p>
-        </div>
+        <Callout variant="warning" icon={Info}>
+          <span className="font-medium text-foreground">Nu confunda API Key-ul cu cheile de criptare.</span> In &quot;Setari tehnice&quot; vei vedea si o &quot;Cheie publica&quot; si o &quot;Cheie privata&quot;: acestea sunt pentru vechea integrare (Netopia API v1) si <span className="font-medium text-foreground">nu sunt necesare aici</span>. Edinio foloseste API v2, care are nevoie doar de <span className="font-medium text-foreground">POS Signature</span> (din Setari tehnice) si de <span className="font-medium text-foreground">API Key</span> (din Profil → Securitate).
+        </Callout>
 
         {/* Main config card */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+        <Panel className="space-y-5 p-5">
           {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Activeaza Netopia Payments</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Afiseaza optiunea de plata cu cardul la checkout
               </p>
             </div>
-            <button type="button" onClick={() => set("enabled", !cfg.enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${cfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.enabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
           </div>
 
-          <div className="space-y-4 pt-4 border-t border-border">
+          <div className="space-y-4 border-t border-border pt-4">
             {/* Sandbox toggle */}
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
               <div>
                 <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {cfg.sandbox ? "Platile nu sunt reale — foloseste pentru testare" : "Mod Live — platile sunt reale"}
                 </p>
               </div>
-              <button type="button" onClick={() => set("sandbox", !cfg.sandbox)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${cfg.sandbox ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.sandbox ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
+              <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />
             </div>
 
             {/* Title */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                 Titlu afisaj checkout
               </label>
-              <input
+              <Input
                 type="text"
                 value={cfg.title}
                 onChange={e => set("title", e.target.value)}
                 placeholder="Card online (Netopia)"
-                className={inputCls}
               />
-              <p className="text-xs text-muted-foreground mt-1">Cum apare optiunea de plata in formularul de comanda</p>
+              <p className="mt-1 text-xs text-muted-foreground">Cum apare optiunea de plata in formularul de comanda</p>
             </div>
 
             {/* POS Signature */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">POS Signature</label>
-              <input
+              <label className="mb-1.5 block text-sm font-medium text-foreground">POS Signature</label>
+              <Input
                 type="text"
                 value={cfg.pos_signature}
                 onChange={e => set("pos_signature", e.target.value)}
                 placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
-                className={inputCls}
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Gasesti Signature-ul in Netopia → Puncte de vanzare → Setari tehnice
               </p>
             </div>
 
             {/* API Key */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Key className="h-3.5 w-3.5 text-muted-foreground" />
                 API Key
               </label>
-              <input
+              <Input
                 type="password"
                 value={cfg.api_key}
                 onChange={e => set("api_key", e.target.value)}
                 placeholder="Introdu API Key-ul Netopia"
-                className={inputCls}
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Genereaza un API Key din Netopia → Profil → Securitate (nu din Setari tehnice)
               </p>
             </div>
 
             {/* Logo Netopia pentru footer (Identitate Vizuala) */}
-            <div className="pt-4 border-t border-border">
-              <label className="block text-sm font-medium text-foreground mb-1.5">
+            <div className="border-t border-border pt-4">
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
                 Logo Netopia pentru footer (Identitate Vizuala)
               </label>
-              <p className="text-xs text-muted-foreground mb-2.5 leading-relaxed">
+              <p className="mb-2.5 text-xs leading-relaxed text-muted-foreground">
                 Afisarea logo-ului Netopia este obligatorie cand accepti plata cu cardul. Dupa ce lipesti codul mai jos, logo-ul apare automat in footer-ul magazinului.
               </p>
-              <div className="p-3 mb-2.5 rounded-lg bg-muted/30 border border-border text-xs text-muted-foreground leading-relaxed space-y-1">
+              <div className="mb-2.5 space-y-1 rounded-lg border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
                 <p className="font-medium text-foreground">Cum obtii codul:</p>
                 <p>1. In contul Netopia, mergi la <span className="font-medium text-foreground">Identitate Vizuala</span>.</p>
                 <p>2. La tipul de platforma, alege <span className="font-medium text-foreground">HTML/IFRAME</span> (recomandat).</p>
                 <p>3. Selecteaza <span className="font-medium text-foreground">Punctul de vanzare</span> potrivit.</p>
                 <p>4. Copiaza codul generat si lipeste-l mai jos.</p>
               </div>
-              <textarea
+              <Textarea
                 value={cfg.badge_html ?? ""}
                 onChange={e => set("badge_html", e.target.value)}
                 placeholder={'<iframe src="https://netopia-payments.com/..."></iframe>'}
                 rows={4}
-                className={`${inputCls} font-mono text-xs resize-y`}
+                className="resize-y font-mono text-xs"
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Accepta doar codul de tip <span className="font-medium">HTML/IFRAME</span> de la Netopia. Alte formate (Script, React, Angular) nu vor fi afisate.
               </p>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="pt-4 border-t border-border flex items-center gap-3">
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          <div className="flex items-center gap-3 border-t border-border pt-4">
+            <Button onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
               Salveaza
-            </button>
+            </Button>
             {isConfigured && (
-              <button
-                type="button"
-                onClick={disconnect}
-                disabled={disconnecting}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-60"
-              >
-                {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <Button variant="outline" onClick={disconnect} disabled={disconnecting}>
+                {disconnecting ? <Loader2 className="animate-spin" /> : null}
                 Deconecteaza
-              </button>
+              </Button>
             )}
           </div>
-        </div>
+        </Panel>
       </div>
     </div>
   );

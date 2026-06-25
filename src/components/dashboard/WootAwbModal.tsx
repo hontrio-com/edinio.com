@@ -5,6 +5,7 @@ import { X, Loader2, Package, Truck, ChevronRight, Download, AlertCircle, CheckC
 import { toast } from "sonner";
 import { getWootPrices, createWootAwb, cancelWootAwb } from "@/lib/actions/woot.actions";
 import type { WootPriceResult, WootParcel, WootCounty, WootCity } from "@/lib/woot";
+import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -26,7 +27,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors";
+const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
@@ -260,42 +261,39 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
             {/* If AWB already exists */}
             {hasAwb ? (
               <div className="space-y-4">
-                <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                <div className="p-4 bg-success/5 border border-success/20 rounded-xl">
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-                    <p className="text-sm font-semibold text-green-800">AWB generat</p>
+                    <CheckCircle className="h-4 w-4 text-success flex-shrink-0" />
+                    <p className="text-sm font-semibold text-success">AWB generat</p>
                   </div>
-                  <p className="text-xs text-green-700">Nr. AWB: <strong className="font-mono">{order.woot_awb_number}</strong></p>
+                  <p className="text-xs text-success">Nr. AWB: <strong className="font-mono">{order.woot_awb_number}</strong></p>
                   {order.woot_service_name && (
-                    <p className="text-xs text-green-700 mt-0.5">Curier: {order.woot_service_name}</p>
+                    <p className="text-xs text-success mt-0.5">Curier: {order.woot_service_name}</p>
                   )}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => handleDownload("A4")}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-opacity">
-                    <Download className="h-4 w-4" />
+                  <Button onClick={() => handleDownload("A4")}>
+                    <Download />
                     Descarca A4
-                  </button>
-                  <button onClick={() => handleDownload("A6")}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors">
-                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" onClick={() => handleDownload("A6")}>
+                    <Download />
                     Descarca A6
-                  </button>
-                  <button onClick={handleCancel} disabled={cancelling}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-60 ml-auto">
-                    {cancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="destructive" onClick={handleCancel} disabled={cancelling} className="ml-auto">
+                    {cancelling ? <Loader2 className="animate-spin" /> : <Trash2 />}
                     Anuleaza AWB
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
               <>
                 {/* Courier chosen by the customer at checkout */}
                 {addr.woot_courier_name && (
-                  <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <Truck className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-blue-700">
+                  <div className="flex items-start gap-2 p-3 bg-info/5 border border-info/20 rounded-lg">
+                    <Truck className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-info">
                       Clientul a ales la comanda: <strong>{addr.woot_courier_name}</strong>
                       {addr.woot_service_name ? ` — ${addr.woot_service_name}` : ""}. Apasa
                       &nbsp;„Calculeaza preturi" ca sa se preselecteze automat.
@@ -403,9 +401,9 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
 
                 {/* Error */}
                 {pricesError && (
-                  <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-red-700">{pricesError}</p>
+                  <div className="flex items-start gap-2 p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-destructive">{pricesError}</p>
                   </div>
                 )}
 
@@ -439,13 +437,12 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                     </div>
 
                     {selectedService && (
-                      <button type="button" onClick={handleCreate} disabled={creating}
-                        className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-bold text-white bg-primary rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60 mt-3">
-                        {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+                      <Button onClick={handleCreate} disabled={creating} size="lg" className="w-full mt-3">
+                        {creating ? <Loader2 className="animate-spin" /> : <ChevronRight />}
                         {creating
                           ? "Se creeaza AWB..."
                           : `Creeaza AWB — ${selectedService.courier_name} — ${selectedService.final_total.toFixed(2)} RON`}
-                      </button>
+                      </Button>
                     )}
                   </section>
                 )}

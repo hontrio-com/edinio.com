@@ -9,6 +9,7 @@ import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/acti
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 import type { CategoryOption } from "@/components/dashboard/ProductForm";
 
@@ -217,44 +218,30 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/products/import")}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-muted rounded-xl transition-colors whitespace-nowrap"
-          >
-            <Upload className="h-4 w-4" />
+          <Button variant="outline" onClick={() => router.push("/dashboard/products/import")} className="whitespace-nowrap">
+            <Upload />
             Importa
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleExport}
             disabled={exporting || products.length === 0}
             title={products.length === 0 ? "Nu ai produse de exportat" : "Exporta toate produsele in CSV"}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-muted rounded-xl transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            className="whitespace-nowrap"
           >
-            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {exporting ? <Loader2 className="animate-spin" /> : <Download />}
             Exporta
-          </button>
+          </Button>
           {isAtLimit ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary/40 rounded-xl whitespace-nowrap opacity-60 cursor-not-allowed"
-              >
-                <Plus className="h-4 w-4" />
-                Adauga produs
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/products/new")}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors whitespace-nowrap"
-            >
-              <Plus className="h-4 w-4" />
+            <Button disabled className="whitespace-nowrap">
+              <Plus />
               Adauga produs
-            </button>
+            </Button>
+          ) : (
+            <Button onClick={() => router.push("/dashboard/products/new")} className="whitespace-nowrap">
+              <Plus />
+              Adauga produs
+            </Button>
           )}
         </div>
       </div>
@@ -305,9 +292,9 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
         <div className={cn(
           "mb-4 px-4 py-3 rounded-xl border text-sm flex flex-col gap-2",
           isAtLimit
-            ? "bg-red-50 border-red-200 text-red-700"
+            ? "border-destructive/20 bg-destructive/5 text-destructive"
             : isNearLimit
-              ? "bg-amber-50 border-amber-200 text-amber-700"
+              ? "border-warning/20 bg-warning/5 text-warning"
               : "bg-muted/50 border-border text-muted-foreground"
         )}>
           <div className="flex items-center justify-between gap-3">
@@ -325,7 +312,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                 onClick={() => router.push("/dashboard/settings")}
                 className={cn(
                   "text-xs font-semibold underline underline-offset-2 whitespace-nowrap flex-shrink-0",
-                  isAtLimit ? "text-red-700" : "text-amber-700"
+                  isAtLimit ? "text-destructive" : "text-warning"
                 )}
               >
                 Upgradeaza planul
@@ -336,7 +323,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
             <div
               className={cn(
                 "h-full rounded-full transition-all",
-                isAtLimit ? "bg-red-500" : isNearLimit ? "bg-amber-500" : "bg-primary"
+                isAtLimit ? "bg-destructive" : isNearLimit ? "bg-warning" : "bg-primary"
               )}
               style={{ width: `${limitPercent}%` }}
             />
@@ -363,7 +350,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
             <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "featured", value: false }, "Recomandat eliminat de la {n} produse")} className={bulkBtn}>Scoate recomandat</button>
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "price" ? null : "price"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "price" && "border-primary ring-1 ring-primary/30")}><Percent className="h-3.5 w-3.5" /> Pret</button>
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "category" ? null : "category"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "category" && "border-primary ring-1 ring-primary/30")}><Tag className="h-3.5 w-3.5" /> Categorie</button>
-            <button type="button" disabled={bulkBusy} onClick={() => { setConfirmBulkDelete(true); setBulkPanel(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 bg-surface hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Sterge</button>
+            <button type="button" disabled={bulkBusy} onClick={() => { setConfirmBulkDelete(true); setBulkPanel(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/20 bg-surface hover:bg-destructive/5 rounded-lg transition-colors disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Sterge</button>
             <div className="flex-1" />
             {bulkBusy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             <button type="button" disabled={bulkBusy} onClick={clearSelection} className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"><X className="h-3.5 w-3.5" /> Deselecteaza</button>
@@ -406,9 +393,9 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
           )}
 
           {confirmBulkDelete && (
-            <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-red-200">
-              <span className="text-sm font-medium text-red-700">Stergi definitiv {selected.size} produse? Actiunea nu poate fi anulata.</span>
-              <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "delete" }, "{n} produse sterse")} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">{bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Da, sterge</button>
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-destructive/20">
+              <span className="text-sm font-medium text-destructive">Stergi definitiv {selected.size} produse? Actiunea nu poate fi anulata.</span>
+              <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "delete" }, "{n} produse sterse")} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors disabled:opacity-50">{bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Da, sterge</button>
               <button type="button" disabled={bulkBusy} onClick={() => setConfirmBulkDelete(false)} className={bulkBtn}>Anuleaza</button>
             </div>
           )}
@@ -486,8 +473,8 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                       <span className={cn(
                         "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap",
                         product.is_active
-                          ? "bg-green-50 text-green-700 border border-green-200"
-                          : "bg-gray-100 text-gray-500 border border-gray-200"
+                          ? "bg-success/10 text-success"
+                          : "bg-muted text-muted-foreground"
                       )}>
                         {product.is_active ? "Activ" : "Inactiv"}
                       </span>
@@ -566,11 +553,10 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
               <>
                 <p className="text-sm font-medium text-foreground mb-1">Niciun produs gasit</p>
                 <p className="text-xs text-muted-foreground mb-5">Incearca un alt termen de cautare</p>
-                <button type="button" onClick={() => setSearchQuery("")}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors">
-                  <X className="h-4 w-4" />
+                <Button variant="outline" onClick={() => setSearchQuery("")}>
+                  <X />
                   Sterge cautarea
-                </button>
+                </Button>
               </>
             ) : (
               <>
@@ -578,17 +564,15 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                 <p className="text-xs text-muted-foreground mb-5">Adauga primul produs sau importa-le din Shopify / WooCommerce</p>
                 <div className="flex items-center justify-center gap-2">
                   {!isAtLimit && (
-                    <button type="button" onClick={() => router.push("/dashboard/products/new")}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors">
-                      <Plus className="h-4 w-4" />
+                    <Button onClick={() => router.push("/dashboard/products/new")}>
+                      <Plus />
                       Adauga produs
-                    </button>
+                    </Button>
                   )}
-                  <button type="button" onClick={() => router.push("/dashboard/products/import")}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground border border-border hover:bg-muted rounded-xl transition-colors">
-                    <Upload className="h-4 w-4" />
+                  <Button variant="outline" onClick={() => router.push("/dashboard/products/import")}>
+                    <Upload />
                     Importa produse
-                  </button>
+                  </Button>
                 </div>
               </>
             )}

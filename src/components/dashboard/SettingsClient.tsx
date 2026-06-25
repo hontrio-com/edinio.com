@@ -19,6 +19,9 @@ import { DomainSection } from "@/components/dashboard/DomainSection";
 import type { Database } from "@/types/database.types";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Callout } from "@/components/ui/callout";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
@@ -57,11 +60,11 @@ const PAYMENT_TYPE_NAMES: Record<PaymentMethodType, string> = {
 // PLAN_LABELS, PLAN_PRICES imported from @/lib/plans
 
 const PLAN_BADGE_COLORS: Record<string, string> = {
-  free: "bg-gray-100 text-gray-600 border-gray-200",
-  trial: "bg-green-50 text-green-700 border-green-200",
-  basic: "bg-blue-50 text-blue-700 border-blue-200",
-  premium: "bg-purple-50 text-purple-700 border-purple-200",
-  ultra: "bg-amber-50 text-amber-700 border-amber-200",
+  free: "bg-muted text-muted-foreground border-border",
+  trial: "bg-success/10 text-success border-success/20",
+  basic: "bg-info/10 text-info border-info/20",
+  premium: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  ultra: "bg-warning/10 text-warning border-warning/20",
 };
 
 const PLAN_CARDS = [
@@ -392,7 +395,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   );
   const [savingShipping, startShippingTransition] = useTransition();
 
-  const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+  // Mirrors the <Input> primitive so every native input in Settings matches the
+  // rest of the dashboard (border-input, transparent bg, focus-visible ring).
+  const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
   // Payment methods ("Metode de plata")
   const [methods, setMethods] = useState<PaymentMethodEntry[]>(paymentMethods);
@@ -772,15 +777,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     />
                     <p className="mt-1 text-xs text-muted-foreground">Contactati suportul pentru schimbarea adresei de email.</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={saveProfile}
-                    disabled={savingName}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-all disabled:opacity-60"
-                  >
-                    {savingName ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <Button onClick={saveProfile} disabled={savingName}>
+                    {savingName ? <Loader2 className="animate-spin" /> : <Save />}
                     {savingName ? "Se salveaza..." : "Salveaza contul"}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -816,15 +816,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         className={inputCls}
                         placeholder="ex: RO12345678"
                       />
-                      <button
-                        type="button"
-                        onClick={lookupCui}
-                        disabled={anafLoading || !biz.cui.trim()}
-                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50 whitespace-nowrap"
-                      >
-                        {anafLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                      <Button type="button" variant="outline" onClick={lookupCui} disabled={anafLoading || !biz.cui.trim()} className="shrink-0 whitespace-nowrap">
+                        {anafLoading ? <Loader2 className="animate-spin" /> : <Search />}
                         {anafLoading ? "Se cauta..." : "Completeaza automat"}
-                      </button>
+                      </Button>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">Apare pe facturile emise catre tine. Butonul completeaza automat datele din ANAF.</p>
                   </div>
@@ -944,15 +939,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={saveGeneral}
-                disabled={savingGeneral || !businessId}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-all disabled:opacity-60"
-              >
-                {savingGeneral ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <Button onClick={saveGeneral} disabled={savingGeneral || !businessId}>
+                {savingGeneral ? <Loader2 className="animate-spin" /> : <Save />}
                 {savingGeneral ? "Se salveaza..." : "Salveaza setarile generale"}
-              </button>
+              </Button>
             </div>
           )}
 
@@ -1026,15 +1016,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           Plan activ
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          disabled={checkoutLoading === plan.id}
-                          onClick={() => startCheckout(plan.id)}
-                          className="py-2 text-xs font-semibold text-foreground border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
-                        >
-                          {checkoutLoading === plan.id && <Loader2 className="h-3 w-3 animate-spin" />}
+                        <Button type="button" variant="outline" className="w-full" disabled={checkoutLoading === plan.id} onClick={() => startCheckout(plan.id)}>
+                          {checkoutLoading === plan.id && <Loader2 className="animate-spin" />}
                           {checkoutLoading === plan.id ? "Se redirectioneaza..." : `Alege ${plan.label}`}
-                        </button>
+                        </Button>
                       )}
                     </div>
                   );
@@ -1057,9 +1042,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {activeSection === "livrare" && (
             <div className="space-y-6">
               {!businessId && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
-                </div>
+                <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
               )}
 
               {/* Global toggle */}
@@ -1068,13 +1051,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   <p className="text-sm font-semibold text-foreground">Livrare activata</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Permite clientilor sa aleaga o metoda de livrare la comanda</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShippingEnabled(v => !v)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${shippingEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${shippingEnabled ? "translate-x-6" : "translate-x-1"}`} />
-                </button>
+                <Switch checked={shippingEnabled} onCheckedChange={setShippingEnabled} />
               </div>
 
               {/* Methods list */}
@@ -1110,14 +1087,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           </div>
 
                           {/* Toggle */}
-                          <button
-                            type="button"
+                          <Switch
+                            checked={!!(zone.enabled && canToggle)}
                             disabled={!canToggle}
-                            onClick={() => setShippingZones(z => ({ ...z, [method.id]: { ...zone, enabled: !zone.enabled } }))}
-                            className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:cursor-not-allowed ${zone.enabled && canToggle ? "bg-primary" : "bg-muted-foreground/30"}`}
-                          >
-                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${zone.enabled && canToggle ? "translate-x-4" : "translate-x-0.5"}`} />
-                          </button>
+                            onCheckedChange={(v) => setShippingZones(z => ({ ...z, [method.id]: { ...zone, enabled: v } }))}
+                          />
                         </div>
 
                         {/* Price mode selector — only for enabled couriers with API integration */}
@@ -1248,14 +1222,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
               {/* Save button */}
               <div className="flex justify-end">
-                <button
-                  onClick={saveShipping}
-                  disabled={savingShipping || !businessId}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {savingShipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <Button size="lg" onClick={saveShipping} disabled={savingShipping || !businessId}>
+                  {savingShipping ? <Loader2 className="animate-spin" /> : <Save />}
                   Salveaza
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1263,17 +1233,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {/* ── Taxe / TVA ── */}
           {activeSection === "taxe" && (
             <div className="space-y-6">
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-                <Percent className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-amber-800 leading-relaxed">
-                  Daca esti platitor de TVA, activeaza aceasta sectiune. TVA-ul va fi aplicat la totalul comenzii si afisat clientilor. Daca nu esti platitor de TVA, lasa aceasta sectiune dezactivata.
-                </p>
-              </div>
+              <Callout variant="warning" icon={Percent}>
+                Daca esti platitor de TVA, activeaza aceasta sectiune. TVA-ul va fi aplicat la totalul comenzii si afisat clientilor. Daca nu esti platitor de TVA, lasa aceasta sectiune dezactivata.
+              </Callout>
 
               {!businessId && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
-                </div>
+                <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
               )}
 
               {/* Toggle platitor TVA */}
@@ -1283,17 +1248,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <p className="text-sm font-semibold text-foreground">Platitor de TVA</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Activeaza daca firma ta este inregistrata ca platitor de TVA</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setVat(v => ({ ...v, vat_enabled: !v.vat_enabled }))}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${
-                      vat.vat_enabled ? "bg-primary" : "bg-muted-foreground/30"
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      vat.vat_enabled ? "translate-x-6" : "translate-x-1"
-                    }`} />
-                  </button>
+                  <Switch checked={vat.vat_enabled} onCheckedChange={(v) => setVat(prev => ({ ...prev, vat_enabled: v }))} />
                 </div>
 
                 {vat.vat_enabled && (
@@ -1370,17 +1325,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         <p className="text-sm font-medium text-foreground">Afiseaza defalcarea TVA in cos</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Clientii vor vedea valoarea TVA separat in sumar</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setVat(v => ({ ...v, show_vat_breakdown: !v.show_vat_breakdown }))}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${
-                          vat.show_vat_breakdown ? "bg-primary" : "bg-muted-foreground/30"
-                        }`}
-                      >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                          vat.show_vat_breakdown ? "translate-x-6" : "translate-x-1"
-                        }`} />
-                      </button>
+                      <Switch checked={vat.show_vat_breakdown} onCheckedChange={(v) => setVat(prev => ({ ...prev, show_vat_breakdown: v }))} />
                     </div>
                   </>
                 )}
@@ -1420,31 +1365,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               )}
 
               <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={saveVat}
-                  disabled={savingVat || !businessId}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {savingVat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <Button size="lg" onClick={saveVat} disabled={savingVat || !businessId}>
+                  {savingVat ? <Loader2 className="animate-spin" /> : <Save />}
                   {savingVat ? "Se salveaza..." : "Salveaza setarile TVA"}
-                </button>
+                </Button>
               </div>
             </div>
           )}
           {activeSection === "cookies" && (
             <div className="space-y-6">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
-                <Cookie className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-blue-800 leading-relaxed">
-                  Bannerul de cookie-uri este obligatoriu prin lege (GDPR). Apare automat pe magazinul tau, in culoarea magazinului, si cere acordul vizitatorilor inainte de a incarca instrumentele de analiza si marketing. Continutul se actualizeaza singur dupa integrarile pe care le ai active.
-                </p>
-              </div>
+              <Callout variant="info" icon={Cookie}>
+                Bannerul de cookie-uri este obligatoriu prin lege (GDPR). Apare automat pe magazinul tau, in culoarea magazinului, si cere acordul vizitatorilor inainte de a incarca instrumentele de analiza si marketing. Continutul se actualizeaza singur dupa integrarile pe care le ai active.
+              </Callout>
 
               {!businessId && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
-                </div>
+                <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
               )}
 
               {/* Activare banner */}
@@ -1454,13 +1389,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <p className="text-sm font-semibold text-foreground">Afiseaza bannerul de cookie-uri</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Recomandat sa ramana activ pentru conformitate legala.</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setCookieCfg(c => ({ ...c, enabled: !c.enabled }))}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${cookieCfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cookieCfg.enabled ? "translate-x-6" : "translate-x-1"}`} />
-                  </button>
+                  <Switch checked={cookieCfg.enabled} onCheckedChange={(v) => setCookieCfg(c => ({ ...c, enabled: v }))} />
                 </div>
               </div>
 
@@ -1503,7 +1432,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </span>
                   {cookieCategories.includes("analytics") && (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-foreground">
-                      <BarChart2 className="h-3.5 w-3.5 text-blue-500" /> Analiza (Google)
+                      <BarChart2 className="h-3.5 w-3.5 text-info" /> Analiza (Google)
                     </span>
                   )}
                   {cookieCategories.includes("marketing") && (
@@ -1520,15 +1449,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={saveCookieBanner}
-                  disabled={savingCookie || !businessId}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {savingCookie ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <Button size="lg" onClick={saveCookieBanner} disabled={savingCookie || !businessId}>
+                  {savingCookie ? <Loader2 className="animate-spin" /> : <Save />}
                   {savingCookie ? "Se salveaza..." : "Salveaza bannerul"}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1567,21 +1491,17 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                             onChange={(e) => renameMethod(i, e.target.value)}
                             placeholder={PAYMENT_METHOD_DEFAULT_LABELS[m.type]} className={inputCls} />
                           {!ready && !isCod && (
-                            <p className="text-[11px] text-amber-600 mt-1">Neconfigurat. Nu apare la checkout pana nu il configurezi in Integrari.</p>
+                            <p className="text-[11px] text-warning mt-1">Neconfigurat. Nu apare la checkout pana nu il configurezi in Integrari.</p>
                           )}
                         </div>
-                        <button type="button" onClick={() => toggleMethod(i)} aria-label={m.enabled ? "Dezactiveaza" : "Activeaza"}
-                          className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-1 ${m.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                          <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${m.enabled ? "translate-x-4" : "translate-x-0"}`} />
-                        </button>
+                        <Switch checked={m.enabled} onCheckedChange={() => toggleMethod(i)} className="mt-1 shrink-0" aria-label={m.enabled ? "Dezactiveaza" : "Activeaza"} />
                       </div>
                     );
                   })}
-                  <button type="button" onClick={saveMethods} disabled={savingMethods}
-                    className="mt-2 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-60">
-                    {savingMethods ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <Button onClick={saveMethods} disabled={savingMethods} className="mt-2">
+                    {savingMethods ? <Loader2 className="animate-spin" /> : <Save />}
                     Salveaza
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1594,11 +1514,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       Ofera clientilor o reducere automata cand platesc online cu cardul (Netopia, Stripe sau BT iPay). Nu se aplica la ramburs.
                     </p>
                   </div>
-                  <button type="button" onClick={() => setCardDisc(c => ({ ...c, enabled: !c.enabled }))}
-                    aria-label={cardDisc.enabled ? "Dezactiveaza" : "Activeaza"}
-                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-1 ${cardDisc.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${cardDisc.enabled ? "translate-x-4" : "translate-x-0"}`} />
-                  </button>
+                  <Switch checked={cardDisc.enabled} onCheckedChange={(v) => setCardDisc(c => ({ ...c, enabled: v }))} className="mt-1 shrink-0" aria-label={cardDisc.enabled ? "Dezactiveaza" : "Activeaza"} />
                 </div>
                 {cardDisc.enabled && (
                   <div className="px-5 py-5 space-y-4">
@@ -1635,11 +1551,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </div>
                 )}
                 <div className="px-5 py-4 border-t border-border">
-                  <button type="button" onClick={saveCardDiscount} disabled={savingCardDisc}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-60">
-                    {savingCardDisc ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <Button onClick={saveCardDiscount} disabled={savingCardDisc}>
+                    {savingCardDisc ? <Loader2 className="animate-spin" /> : <Save />}
                     Salveaza
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1670,9 +1585,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {!businessId && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
-                </div>
+                <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
               )}
 
               {/* Email destinatie */}
@@ -1701,18 +1614,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <p className="text-sm font-medium text-foreground">Comanda noua</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Primesti un email imediat cand un client plaseaza o comanda</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setNotif(n => ({ ...n, new_order: !n.new_order }))}
-                    disabled={!businessId}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:opacity-40 ${
-                      notif.new_order ? "bg-primary" : "bg-muted-foreground/30"
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      notif.new_order ? "translate-x-6" : "translate-x-1"
-                    }`} />
-                  </button>
+                  <Switch checked={notif.new_order} disabled={!businessId} onCheckedChange={(v) => setNotif(n => ({ ...n, new_order: v }))} />
                 </div>
 
               </div>
@@ -1727,10 +1629,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
 
                 {testEmailResult && (
-                  <div className={`rounded-lg p-3 text-sm space-y-1 ${
+                  <div className={`space-y-1 rounded-lg border p-3 text-sm ${
                     testEmailResult.ok
-                      ? "bg-green-50 border border-green-200 text-green-800"
-                      : "bg-red-50 border border-red-200 text-red-800"
+                      ? "border-success/20 bg-success/5 text-success"
+                      : "border-destructive/20 bg-destructive/5 text-destructive"
                   }`}>
                     <p className="font-semibold">{testEmailResult.ok ? "Succes" : "Eroare"}: {testEmailResult.message}</p>
                     {testEmailResult.details && (
@@ -1739,27 +1641,17 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={sendTestEmail}
-                  disabled={testEmailLoading || !businessId}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {testEmailLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                <Button variant="outline" onClick={sendTestEmail} disabled={testEmailLoading || !businessId}>
+                  {testEmailLoading ? <Loader2 className="animate-spin" /> : <Bell />}
                   {testEmailLoading ? "Se trimite..." : "Trimite email de test"}
-                </button>
+                </Button>
               </div>
 
               <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={saveNotifications}
-                  disabled={savingNotif || !businessId}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {savingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <Button size="lg" onClick={saveNotifications} disabled={savingNotif || !businessId}>
+                  {savingNotif ? <Loader2 className="animate-spin" /> : <Save />}
                   {savingNotif ? "Se salveaza..." : "Salveaza notificarile"}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1775,9 +1667,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {!businessId && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm text-amber-800">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</p>
-                </div>
+                <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
               )}
 
               <div className="space-y-3">
@@ -1801,23 +1691,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           )}
                         </div>
                         {/* Toggle */}
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={isEnabled}
+                        <Switch
+                          checked={isEnabled}
                           disabled={!businessId}
-                          onClick={() => setPolicies(p => ({
+                          onCheckedChange={(v) => setPolicies(p => ({
                             ...p,
-                            [key]: { ...entry, enabled: !isEnabled },
+                            [key]: { ...entry, enabled: v },
                           }))}
-                          className={`relative w-10 h-6 rounded-full transition-colors focus:outline-none flex-shrink-0 disabled:opacity-40 ${
-                            isEnabled ? "bg-primary" : "bg-muted-foreground/30"
-                          }`}
-                        >
-                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                            isEnabled ? "translate-x-4" : "translate-x-0"
-                          }`} />
-                        </button>
+                          className="shrink-0"
+                        />
                       </div>
 
                       {/* Editor - hidden when disabled */}
@@ -1839,15 +1721,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 })}
               </div>
 
-              <button
-                type="button"
-                onClick={savePolicies}
-                disabled={savingPolicies || !businessId}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-all disabled:opacity-60"
-              >
-                {savingPolicies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <Button onClick={savePolicies} disabled={savingPolicies || !businessId}>
+                {savingPolicies ? <Loader2 className="animate-spin" /> : <Save />}
                 {savingPolicies ? "Se salveaza..." : "Salveaza politicile"}
-              </button>
+              </Button>
             </div>
           )}
 
@@ -1879,15 +1756,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       className={inputCls}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={changePassword}
-                    disabled={savingPassword || !newPassword || !confirmPassword}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-all disabled:opacity-60"
-                  >
-                    {savingPassword && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <Button onClick={changePassword} disabled={savingPassword || !newPassword || !confirmPassword}>
+                    {savingPassword && <Loader2 className="animate-spin" />}
                     {savingPassword ? "Se schimba..." : "Schimba parola"}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1899,7 +1771,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <p className="text-xs text-muted-foreground mt-0.5">La autentificare vei primi un cod de verificare pe email.</p>
                   </div>
                   {mfaEnabled && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-green-700 bg-green-100 rounded-full border border-green-200 flex-shrink-0">
+                    <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[10px] font-bold text-success">
                       <ShieldCheck className="h-3 w-3" />Activ
                     </span>
                   )}
@@ -1915,15 +1787,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           La fiecare autentificare vei primi un cod de 6 cifre pe adresa <strong className="text-foreground">{email}</strong>. Introduce-l pentru a confirma ca esti tu.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void startEnableMfa()}
-                        disabled={mfaSending}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
-                      >
-                        {mfaSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                      <Button onClick={() => void startEnableMfa()} disabled={mfaSending}>
+                        {mfaSending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}
                         {mfaSending ? "Se trimite codul..." : "Activeaza 2FA"}
-                      </button>
+                      </Button>
                     </div>
                   )}
 
@@ -1948,22 +1815,13 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void confirmEnableMfa()}
-                          disabled={mfaVerifying || mfaCode.length < 6}
-                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-60"
-                        >
-                          {mfaVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                        <Button onClick={() => void confirmEnableMfa()} disabled={mfaVerifying || mfaCode.length < 6}>
+                          {mfaVerifying ? <Loader2 className="animate-spin" /> : <Check />}
                           Verifica si activeaza
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setMfaStep("idle"); setMfaCode(""); }}
-                          className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
-                        >
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => { setMfaStep("idle"); setMfaCode(""); }}>
                           Anuleaza
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -1971,30 +1829,22 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   {/* Enabled — idle */}
                   {mfaEnabled && mfaStep === "idle" && (
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
-                        <ShieldCheck className="h-5 w-5 text-green-600 flex-shrink-0" />
-                        <p className="text-sm text-green-800 leading-relaxed">
-                          Contul tau este protejat. La autentificare vei primi un cod pe adresa <strong>{email}</strong>.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void startDisableMfa()}
-                        disabled={mfaSending}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-destructive border border-destructive/30 rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-60"
-                      >
-                        {mfaSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                      <Callout variant="success" icon={ShieldCheck}>
+                        Contul tau este protejat. La autentificare vei primi un cod pe adresa <strong>{email}</strong>.
+                      </Callout>
+                      <Button variant="destructive" onClick={() => void startDisableMfa()} disabled={mfaSending}>
+                        {mfaSending ? <Loader2 className="animate-spin" /> : <ShieldOff />}
                         {mfaSending ? "Se trimite codul..." : "Dezactiveaza 2FA"}
-                      </button>
+                      </Button>
                     </div>
                   )}
 
                   {/* Disabling — enter code sent to email */}
                   {mfaEnabled && mfaStep === "disabling" && (
                     <div className="space-y-4">
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 leading-relaxed">
+                      <Callout variant="danger">
                         Am trimis un cod de verificare la <strong>{email}</strong>. Introdu-l mai jos pentru a dezactiva 2FA.
-                      </div>
+                      </Callout>
                       <div>
                         <label className="block text-xs font-medium text-foreground mb-1.5">Cod de verificare</label>
                         <input
@@ -2010,22 +1860,13 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void confirmDisableMfa()}
-                          disabled={mfaVerifying || mfaCode.length < 6}
-                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors disabled:opacity-60"
-                        >
-                          {mfaVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                        <Button onClick={() => void confirmDisableMfa()} disabled={mfaVerifying || mfaCode.length < 6} className="bg-destructive text-white hover:bg-destructive/90">
+                          {mfaVerifying ? <Loader2 className="animate-spin" /> : <ShieldOff />}
                           Confirma dezactivarea
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setMfaStep("idle"); setMfaCode(""); }}
-                          className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
-                        >
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => { setMfaStep("idle"); setMfaCode(""); }}>
                           Anuleaza
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -2046,13 +1887,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           Aceasta actiune este ireversibila. Toate datele tale, inclusiv magazinele si comenzile, vor fi sterse definitiv.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowDeleteConfirm(true)}
-                        className="flex-shrink-0 px-3 py-1.5 text-sm font-medium text-destructive border border-destructive/30 rounded-lg hover:bg-destructive/10 transition-colors"
-                      >
+                      <Button variant="destructive" size="sm" onClick={() => setShowDeleteConfirm(true)} className="shrink-0">
                         Sterge contul
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -2075,15 +1912,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmEmail(""); }}
-                          className="px-3 py-1.5 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors"
-                        >
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmEmail(""); }}>
                           Anuleaza
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
+                          size="sm"
                           disabled={deletingAccount || deleteConfirmEmail !== email}
                           onClick={() => {
                             startDeleteTransition(async () => {
@@ -2091,11 +1924,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                               if (result && "error" in result) toast.error(result.error);
                             });
                           }}
-                          className="px-3 py-1.5 text-sm font-semibold text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                          className="bg-destructive text-white hover:bg-destructive/90"
                         >
-                          {deletingAccount && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                          {deletingAccount && <Loader2 className="animate-spin" />}
                           {deletingAccount ? "Se sterge..." : "Confirma stergerea"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}

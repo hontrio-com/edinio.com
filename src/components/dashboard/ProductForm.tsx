@@ -22,6 +22,8 @@ import { createCategory } from "@/lib/actions/category.actions";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import type { Database } from "@/types/database.types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -263,21 +265,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   return (
     <label className="flex items-center justify-between gap-3 cursor-pointer">
       <span className="text-sm text-foreground">{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          "relative w-10 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 flex-shrink-0",
-          checked ? "bg-primary" : "bg-muted-foreground/30"
-        )}
-      >
-        <span className={cn(
-          "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-          checked ? "translate-x-4" : "translate-x-0"
-        )} />
-      </button>
+      <Switch checked={checked} onCheckedChange={onChange} className="shrink-0" />
     </label>
   );
 }
@@ -408,8 +396,10 @@ function VariantImagePicker({ images, selected, onSelect }: { images: string[]; 
   );
 }
 
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
-const smallInputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20";
+// Mirror the <Input> primitive (border-input, transparent bg, focus-visible ring)
+// so every native field in the form matches the rest of the dashboard.
+const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+const smallInputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 const sectionCls = "bg-surface border border-border rounded-xl overflow-hidden";
 
 // Small "( i )" toggle next to a section title; opens an inline explanatory card.
@@ -544,10 +534,10 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   }
 
   const seoScore = computeSeoScore(form);
-  const seoColor = seoScore >= 81 ? "text-green-600" : seoScore >= 61 ? "text-blue-600" : seoScore >= 31 ? "text-amber-600" : "text-red-600";
-  const seoBg = seoScore >= 81 ? "bg-green-50 border-green-200" : seoScore >= 61 ? "bg-blue-50 border-blue-200" : seoScore >= 31 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200";
+  const seoColor = seoScore >= 81 ? "text-success" : seoScore >= 61 ? "text-info" : seoScore >= 31 ? "text-warning" : "text-destructive";
+  const seoBg = seoScore >= 81 ? "border-success/20 bg-success/5" : seoScore >= 61 ? "border-info/20 bg-info/5" : seoScore >= 31 ? "border-warning/20 bg-warning/5" : "border-destructive/20 bg-destructive/5";
   const seoLabel = seoScore >= 81 ? "Excelent" : seoScore >= 61 ? "Bun" : seoScore >= 31 ? "Mediu" : "Slab";
-  const seoBarColor = seoScore >= 81 ? "bg-green-500" : seoScore >= 61 ? "bg-blue-500" : seoScore >= 31 ? "bg-amber-500" : "bg-red-500";
+  const seoBarColor = seoScore >= 81 ? "bg-success" : seoScore >= 61 ? "bg-info" : seoScore >= 31 ? "bg-warning" : "bg-destructive";
 
   // Auto-fill SEO from the product title + (short, then long) description.
   function autofillSeo() {
@@ -803,14 +793,12 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                           ))}
                         </select>
                         <div className="flex gap-2">
-                          <button type="button" onClick={handleCreateCategory} disabled={isCreatingCat || !newCatName.trim()}
-                            className="flex-1 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center">
-                            {isCreatingCat ? <Loader2 className="h-3 w-3 animate-spin" /> : "Creeaza"}
-                          </button>
-                          <button type="button" onClick={() => { setShowAddCategory(false); setNewCatName(""); setNewCatParentId(null); }}
-                            className="flex-1 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">
+                          <Button type="button" size="sm" onClick={handleCreateCategory} disabled={isCreatingCat || !newCatName.trim()} className="flex-1">
+                            {isCreatingCat ? <Loader2 className="animate-spin" /> : "Creeaza"}
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setShowAddCategory(false); setNewCatName(""); setNewCatParentId(null); }} className="flex-1">
                             Anuleaza
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -847,13 +835,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">Culori, marimi, materiale etc.</p>
                 </div>
-                <button type="button"
-                  onClick={() => set("variants", { ...form.variants, enabled: !form.variants.enabled })}
-                  className={cn("relative w-10 h-6 rounded-full transition-colors focus:outline-none flex-shrink-0",
-                    form.variants.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                  <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-                    form.variants.enabled ? "translate-x-4" : "translate-x-0")} />
-                </button>
+                <Switch checked={form.variants.enabled} onCheckedChange={(v) => set("variants", { ...form.variants, enabled: v })} className="shrink-0" />
               </div>
               {helpOpen === "variants" && (
                 <HelpCard>
@@ -1015,13 +997,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">Clientii pot incarca imagini, text etc.</p>
                 </div>
-                <button type="button"
-                  onClick={() => set("customization", { ...form.customization, enabled: !form.customization.enabled })}
-                  className={cn("relative w-10 h-6 rounded-full transition-colors focus:outline-none flex-shrink-0",
-                    form.customization.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                  <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-                    form.customization.enabled ? "translate-x-4" : "translate-x-0")} />
-                </button>
+                <Switch checked={form.customization.enabled} onCheckedChange={(v) => set("customization", { ...form.customization, enabled: v })} className="shrink-0" />
               </div>
               {helpOpen === "customization" && (
                 <HelpCard>
@@ -1278,13 +1254,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">Ofera pret mai bun la 2 sau 3 bucati</p>
                 </div>
-                <button type="button"
-                  onClick={() => set("quantity_tiers", { ...form.quantity_tiers, enabled: !form.quantity_tiers.enabled })}
-                  className={cn("relative w-10 h-6 rounded-full transition-colors focus:outline-none flex-shrink-0",
-                    form.quantity_tiers.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                  <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-                    form.quantity_tiers.enabled ? "translate-x-4" : "translate-x-0")} />
-                </button>
+                <Switch checked={form.quantity_tiers.enabled} onCheckedChange={(v) => set("quantity_tiers", { ...form.quantity_tiers, enabled: v })} className="shrink-0" />
               </div>
               {helpOpen === "tiers" && (
                 <HelpCard>
@@ -1414,7 +1384,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-sm font-medium text-foreground">Titlu SEO</label>
                     <span className={cn("text-xs font-medium tabular-nums",
-                      form.seo_title.length > 60 ? "text-destructive" : form.seo_title.length >= 50 ? "text-green-600" : "text-muted-foreground")}>
+                      form.seo_title.length > 60 ? "text-destructive" : form.seo_title.length >= 50 ? "text-success" : "text-muted-foreground")}>
                       {form.seo_title.length}/60
                     </span>
                   </div>
@@ -1427,7 +1397,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-sm font-medium text-foreground">Descriere SEO</label>
                     <span className={cn("text-xs font-medium tabular-nums",
-                      form.seo_description.length > 160 ? "text-destructive" : form.seo_description.length >= 140 ? "text-green-600" : "text-muted-foreground")}>
+                      form.seo_description.length > 160 ? "text-destructive" : form.seo_description.length >= 140 ? "text-success" : "text-muted-foreground")}>
                       {form.seo_description.length}/160
                     </span>
                   </div>
@@ -1488,15 +1458,13 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
             {/* Actions */}
             <div className={sectionCls}>
               <div className="px-5 py-4 space-y-2.5">
-                <button type="submit" disabled={isPending}
-                  className="w-full py-2.5 text-sm font-semibold text-white rounded-xl bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                  {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                <Button type="submit" size="lg" disabled={isPending} className="w-full">
+                  {isPending && <Loader2 className="animate-spin" />}
                   {isPending ? "Se salveaza..." : isEditing ? "Salveaza modificarile" : "Adauga produs"}
-                </button>
-                <button type="button" onClick={() => router.push(backHref)}
-                  className="w-full py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors text-foreground">
+                </Button>
+                <Button type="button" variant="outline" size="lg" onClick={() => router.push(backHref)} className="w-full">
                   Anuleaza
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -1511,23 +1479,20 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">Esti sigur? Actiunea este ireversibila.</p>
                       <div className="flex gap-2">
-                        <button type="button" onClick={handleDelete} disabled={isDeleting}
-                          className="flex-1 py-2 text-xs font-semibold text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
-                          {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        <Button type="button" size="sm" onClick={handleDelete} disabled={isDeleting} className="flex-1 bg-destructive text-white hover:bg-destructive/90">
+                          {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
                           Sterge
-                        </button>
-                        <button type="button" onClick={() => setConfirmDelete(false)}
-                          className="flex-1 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setConfirmDelete(false)} className="flex-1">
                           Anuleaza
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => setConfirmDelete(true)}
-                      className="w-full py-2 text-sm font-medium text-destructive border border-destructive/30 rounded-lg hover:bg-destructive/10 transition-colors flex items-center justify-center gap-2">
-                      <Trash2 className="h-4 w-4" />
+                    <Button type="button" variant="destructive" onClick={() => setConfirmDelete(true)} className="w-full">
+                      <Trash2 />
                       Sterge produsul
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -1538,15 +1503,13 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
 
       {/* Mobile sticky save bar */}
       <div className="fixed bottom-16 left-0 right-0 z-20 bg-background border-t border-border px-4 py-3 flex gap-3 lg:hidden">
-        <button type="button" onClick={() => router.push(backHref)}
-          className="flex-1 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors text-foreground">
+        <Button type="button" variant="outline" size="lg" onClick={() => router.push(backHref)} className="flex-1">
           Anuleaza
-        </button>
-        <button type="submit" form="product-form" disabled={isPending}
-          className="flex-1 py-2.5 text-sm font-semibold text-white rounded-xl bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-          {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        </Button>
+        <Button type="submit" form="product-form" size="lg" disabled={isPending} className="flex-1">
+          {isPending && <Loader2 className="animate-spin" />}
           {isPending ? "Se salveaza..." : isEditing ? "Salveaza" : "Adauga produs"}
-        </button>
+        </Button>
       </div>
     </div>
   );

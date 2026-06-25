@@ -15,19 +15,11 @@ import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
+import { Button } from "@/components/ui/button";
+import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
-
-const STATUS_MAP: Record<string, { label: string; className: string }> = {
-  pending:    { label: "In asteptare", className: "bg-amber-50 text-amber-700 border border-amber-200" },
-  confirmed:  { label: "Confirmat",    className: "bg-blue-50 text-blue-700 border border-blue-200" },
-  processing: { label: "In procesare", className: "bg-purple-50 text-purple-700 border border-purple-200" },
-  shipped:    { label: "Expediat",     className: "bg-indigo-50 text-indigo-700 border border-indigo-200" },
-  delivered:  { label: "Livrat",       className: "bg-green-50 text-green-700 border border-green-200" },
-  cancelled:  { label: "Anulat",       className: "bg-red-50 text-red-700 border border-red-200" },
-  refunded:   { label: "Rambursat",    className: "bg-gray-100 text-gray-500 border border-gray-200" },
-};
 
 const STATUS_TABS = [
   { key: "all",        label: "Toate" },
@@ -224,7 +216,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
             <p className="text-sm text-muted-foreground mt-0.5">Toate comenzile primite</p>
           </div>
           {pendingCount > 0 && (
-            <span className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full border border-amber-200 flex-shrink-0">
+            <span className="px-3 py-1.5 bg-warning/10 text-warning text-xs font-semibold rounded-full border border-warning/20 flex-shrink-0">
               {pendingCount} in asteptare
             </span>
           )}
@@ -333,7 +325,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                 </thead>
                 <tbody className="divide-y divide-border">
                   {paginated.map((order) => {
-                    const status = STATUS_MAP[order.status] ?? STATUS_MAP.pending;
+                    const status = orderStatus(order.status);
                     return (
                       <tr
                         key={order.id}
@@ -360,7 +352,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setWootModalOrder(order); }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
                               >
                                 <Package className="h-3 w-3" />
                                 {order.woot_awb_number}
@@ -383,7 +375,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setCargusModalOrder(order); }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
                               >
                                 <Package className="h-3 w-3" />
                                 {order.cargus_awb_number}
@@ -406,7 +398,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setDpdModalOrder(order); }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
                               >
                                 <Package className="h-3 w-3" />
                                 {(order as unknown as Record<string, unknown>)["dpd_awb_number"] as string}
@@ -429,7 +421,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setFanCourierModalOrder(order); }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
                               >
                                 <Package className="h-3 w-3" />
                                 {(order as unknown as Record<string, unknown>)["fan_courier_awb_number"] as string}
@@ -452,7 +444,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setSamedayModalOrder(order); }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100 transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
                               >
                                 <Package className="h-3 w-3" />
                                 {(order as unknown as Record<string, unknown>)["sameday_awb_number"] as string}
@@ -475,7 +467,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setColeteModalOrder(order); }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
                               >
                                 <Package className="h-3 w-3" />
                                 {(order as unknown as Record<string, unknown>)["colete_awb_number"] as string}
@@ -496,13 +488,13 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                           <td className="px-5 py-3.5 hidden lg:table-cell">
                             <div className="flex flex-wrap items-center gap-1.5">
                               {order.oblio_storno_number ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive">
                                   <XCircle className="h-3 w-3" />
                                   Storno {order.oblio_storno_series}{order.oblio_storno_number}
                                 </span>
                               ) : order.oblio_invoice_number ? (
                                 <>
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success">
                                     <FileCheck className="h-3 w-3" />
                                     Factura {order.oblio_invoice_series}{order.oblio_invoice_number}
                                   </span>
@@ -510,7 +502,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                                     type="button"
                                     onClick={e => handleOblioAction(e, order.id, "storno")}
                                     disabled={oblioActionOrderId === order.id}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
                                   >
                                     {oblioActionOrderId === order.id && oblioAction === "storno" ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
                                     Storno
@@ -518,7 +510,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                                 </>
                               ) : order.oblio_proforma_number ? (
                                 <>
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info">
                                     <FileText className="h-3 w-3" />
                                     Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}
                                   </span>
@@ -526,7 +518,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                                     type="button"
                                     onClick={e => handleOblioAction(e, order.id, "invoice")}
                                     disabled={oblioActionOrderId === order.id}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-success/20 bg-success/5 text-success hover:bg-success/10 transition-colors disabled:opacity-50"
                                   >
                                     {oblioActionOrderId === order.id && oblioAction === "invoice" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck className="h-3 w-3" />}
                                     Factura
@@ -561,13 +553,13 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                           <td className="px-5 py-3.5 hidden lg:table-cell">
                             <div className="flex flex-wrap items-center gap-1.5">
                               {(order as unknown as Record<string, unknown>)["fgo_storno_number"] ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive">
                                   <XCircle className="h-3 w-3" />
                                   Storno {(order as unknown as Record<string, unknown>)["fgo_storno_series"] as string}{(order as unknown as Record<string, unknown>)["fgo_storno_number"] as string}
                                 </span>
                               ) : (order as unknown as Record<string, unknown>)["fgo_invoice_number"] ? (
                                 <>
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success">
                                     <FileCheck className="h-3 w-3" />
                                     {(order as unknown as Record<string, unknown>)["fgo_invoice_series"] as string}{(order as unknown as Record<string, unknown>)["fgo_invoice_number"] as string}
                                   </span>
@@ -587,7 +579,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                                     type="button"
                                     onClick={e => handleFgoAction(e, order.id, "storno")}
                                     disabled={fgoActionOrderId === order.id}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
                                   >
                                     {fgoActionOrderId === order.id && fgoAction === "storno" ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
                                     Storno
@@ -611,17 +603,17 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                           <td className="px-5 py-3.5 hidden lg:table-cell">
                             <div className="flex items-center gap-1.5">
                               {order.smartbill_storno_number ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive">
                                   <XCircle className="h-3 w-3" />
                                   Storno
                                 </span>
                               ) : order.smartbill_invoice_number ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700 border border-green-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success">
                                   <FileCheck className="h-3 w-3" />
                                   Factura
                                 </span>
                               ) : order.smartbill_estimate_number ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info">
                                   <FileText className="h-3 w-3" />
                                   Proforma
                                 </span>
@@ -713,20 +705,16 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                 <Search className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm font-medium text-foreground mb-1">Niciun rezultat</p>
                 <p className="text-xs text-muted-foreground mb-4">Incearca un alt termen de cautare</p>
-                <button
-                  type="button"
-                  onClick={() => handleSearch("")}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors"
-                >
-                  <X className="h-4 w-4" />
+                <Button variant="outline" onClick={() => handleSearch("")}>
+                  <X />
                   Sterge cautarea
-                </button>
+                </Button>
               </>
             ) : (
               <>
                 <ShoppingCart className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                 <p className="text-sm font-medium text-foreground mb-1">
-                  {statusFilter === "all" ? "Nicio comanda inca" : `Nicio comanda cu statusul "${STATUS_MAP[statusFilter]?.label}"`}
+                  {statusFilter === "all" ? "Nicio comanda inca" : `Nicio comanda cu statusul "${ORDER_STATUS[statusFilter as OrderStatus]?.label}"`}
                 </p>
                 <p className="text-xs text-muted-foreground">Comenzile clientilor vor aparea aici</p>
               </>

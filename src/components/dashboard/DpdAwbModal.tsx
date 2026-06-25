@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { X, Package, Loader2, Download, Trash2 } from "lucide-react";
 import { createDpdShipmentAction, cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { euCountryByIso2 } from "@/lib/eu-countries";
+import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -178,45 +179,30 @@ export function DpdAwbModal({
           {hasAwb ? (
             /* ── AWB existent ── */
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-red-50 border border-red-200">
-                <p className="text-xs font-semibold text-red-700 mb-1">AWB generat</p>
-                <p className="text-lg font-mono font-bold text-red-900">{orderData.dpd_awb_number}</p>
+              <div className="p-4 rounded-xl bg-info/5 border border-info/20">
+                <p className="text-xs font-semibold text-info mb-1">AWB generat</p>
+                <p className="text-lg font-mono font-bold text-foreground">{orderData.dpd_awb_number}</p>
                 {orderData.dpd_shipment_id && (
-                  <p className="text-xs text-red-600 mt-1">Shipment ID: {orderData.dpd_shipment_id}</p>
+                  <p className="text-xs text-info mt-1">Shipment ID: {orderData.dpd_shipment_id}</p>
                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleDownload("A4")}
-                  disabled={downloadingFormat !== null}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-sm font-semibold text-foreground transition-colors disabled:opacity-50"
-                >
-                  {downloadingFormat === "A4" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                <Button variant="outline" size="lg" onClick={() => handleDownload("A4")} disabled={downloadingFormat !== null} className="w-full">
+                  {downloadingFormat === "A4" ? <Loader2 className="animate-spin" /> : <Download />}
                   Descarca A4
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownload("A6")}
-                  disabled={downloadingFormat !== null}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-sm font-semibold text-foreground transition-colors disabled:opacity-50"
-                >
-                  {downloadingFormat === "A6" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                </Button>
+                <Button variant="outline" size="lg" onClick={() => handleDownload("A6")} disabled={downloadingFormat !== null} className="w-full">
+                  {downloadingFormat === "A6" ? <Loader2 className="animate-spin" /> : <Download />}
                   Eticheta A6
-                </button>
+                </Button>
               </div>
 
               <div className="pt-2 border-t border-border">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={cancelling}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors disabled:opacity-50"
-                >
-                  {cancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <Button variant="destructive" size="lg" onClick={handleCancel} disabled={cancelling} className="w-full">
+                  {cancelling ? <Loader2 className="animate-spin" /> : <Trash2 />}
                   {cancelling ? "Se anuleaza..." : "Anuleaza expeditia"}
-                </button>
+                </Button>
                 <p className="text-[11px] text-muted-foreground text-center mt-2">
                   Expeditia poate fi anulata doar inainte ca pachetul sa fie preluat de curier
                 </p>
@@ -389,15 +375,10 @@ export function DpdAwbModal({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={creating}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+              <Button onClick={handleCreate} disabled={creating} size="lg" className="w-full">
+                {creating ? <Loader2 className="animate-spin" /> : <Package />}
                 {creating ? "Se genereaza AWB..." : "Genereaza AWB DPD"}
-              </button>
+              </Button>
             </div>
           )}
         </div>

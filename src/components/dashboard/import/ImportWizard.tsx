@@ -408,7 +408,7 @@ function MappingStep({ headers, mapping, onChange, onBack, onNext }: {
             <div key={f.key} className="flex items-center gap-3 px-4 py-2.5">
               <div className="flex-1 min-w-0">
                 <span className="text-sm text-foreground">{f.label}</span>
-                {f.required && <span className="text-red-500 ml-1">*</span>}
+                {f.required && <span className="text-destructive ml-1">*</span>}
                 {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
               </div>
               <select
@@ -416,7 +416,7 @@ function MappingStep({ headers, mapping, onChange, onBack, onNext }: {
                 onChange={(e) => onChange(f.key, e.target.value)}
                 className={cn(
                   "w-56 px-3 py-2 text-sm border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors",
-                  f.required && !mapping[f.key] ? "border-red-300" : "border-border",
+                  f.required && !mapping[f.key] ? "border-destructive/40" : "border-border",
                 )}
               >
                 <option value="">— ignora —</option>
@@ -443,7 +443,7 @@ function MappingStep({ headers, mapping, onChange, onBack, onNext }: {
         </button>
       </div>
       {missingRequired.length > 0 && (
-        <p className="text-xs text-amber-600 text-right">Potriveste campurile obligatorii: {missingRequired.map((f) => f.label).join(", ")}</p>
+        <p className="text-xs text-warning text-right">Potriveste campurile obligatorii: {missingRequired.map((f) => f.label).join(", ")}</p>
       )}
     </div>
   );
@@ -493,7 +493,7 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
 
       {/* Warnings */}
       {summary && summary.warnings.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-700 space-y-1">
+        <div className="bg-warning/5 border border-warning/20 rounded-xl p-3 text-sm text-warning space-y-1">
           {summary.warnings.slice(0, 4).map((w, i) => (
             <div key={i} className="flex items-start gap-2">
               <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
@@ -519,7 +519,7 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
                 {p.images[0] ? <img src={p.images[0].src} alt="" className="w-full h-full object-cover" /> : <Package className="h-4 w-4 text-muted-foreground" />}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground truncate">{p.name || <span className="text-red-500">(fara nume)</span>}</p>
+                <p className="text-sm font-medium text-foreground truncate">{p.name || <span className="text-destructive">(fara nume)</span>}</p>
                 <p className="text-xs text-muted-foreground truncate">
                   {p.category_path.join(" › ") || "Fara categorie"}
                   {p.variants && p.variants.combinations.length > 0 ? ` · ${p.variants.combinations.length} variante` : ""}
@@ -533,7 +533,7 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
       </div>
 
       {productLimit !== Infinity && (summary?.valid ?? 0) + productCount > productLimit && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs text-warning">
           Planul {plan} permite {productLimit} produse. Vor fi importate primele {importable}; restul vor fi sarite.
         </p>
       )}
@@ -559,7 +559,7 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
 function Stat({ label, value, tone }: { label: string; value: number | string; tone?: "green" | "red" }) {
   return (
     <div className="bg-surface border border-border rounded-xl p-3 text-center">
-      <p className={cn("text-2xl font-semibold", tone === "green" ? "text-green-600" : tone === "red" ? "text-red-600" : "text-foreground")}>{value}</p>
+      <p className={cn("text-2xl font-semibold", tone === "green" ? "text-success" : tone === "red" ? "text-destructive" : "text-foreground")}>{value}</p>
       <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
     </div>
   );
@@ -625,8 +625,8 @@ function DoneStep({ totals, status, importId, onViewProducts }: { totals: Import
   const imported = totals.created + totals.updated;
   return (
     <div className="bg-surface border border-border rounded-2xl p-8 text-center">
-      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4", hasIssues ? "bg-amber-100" : "bg-green-100")}>
-        {hasIssues ? <AlertTriangle className="h-7 w-7 text-amber-600" /> : <CheckCircle2 className="h-7 w-7 text-green-600" />}
+      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4", hasIssues ? "bg-warning/10" : "bg-success/10")}>
+        {hasIssues ? <AlertTriangle className="h-7 w-7 text-warning" /> : <CheckCircle2 className="h-7 w-7 text-success" />}
       </div>
       <p className="text-base font-semibold text-foreground mb-1">
         {status === "failed" ? "Importul a esuat" : `${imported} produse importate`}

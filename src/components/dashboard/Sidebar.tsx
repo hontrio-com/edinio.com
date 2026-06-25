@@ -75,7 +75,7 @@ export function BusinessCard({ business }: { business: Business | null }) {
           <div className="text-[13px] font-semibold text-foreground truncate">{name}</div>
           {domain && (
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" />
               <span className="text-[11px] text-muted-foreground truncate">{domain}</span>
             </div>
           )}
@@ -208,7 +208,7 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
         <div className="px-3 pb-1">
           <Link
             href="/admin"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-400 dark:bg-amber-950/30 dark:hover:bg-amber-950/50"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-all text-warning bg-warning/10 hover:bg-warning/15"
           >
             <ShieldCheck className="h-4 w-4 flex-shrink-0" />
             Panou Admin

@@ -75,7 +75,7 @@ export function AnnouncementArticle({ data, dateLabel }: { data: ArticleData; da
       <div className="p-5 sm:p-6 space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
           {data.is_pinned && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full">
               <Pin className="h-3 w-3" /> Important
             </span>
           )}

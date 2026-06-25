@@ -5,6 +5,7 @@ import { X, Loader2, Package, Truck, ChevronRight, Download, CheckCircle, AlertC
 import { toast } from "sonner";
 import { getCOPrices, createCOAwb } from "@/lib/actions/colete.actions";
 import type { COReceiver, COParcel } from "@/lib/colete";
+import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -24,7 +25,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors";
+const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 interface PriceItem {
   serviceId: number;
@@ -165,39 +166,31 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
           {hasAwb ? (
             /* ── AWB exists ── */
             <div className="space-y-4">
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-200">
-                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-success/5 border border-success/20">
+                <CheckCircle className="h-5 w-5 text-success flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-green-800">AWB generat</p>
-                  <p className="text-xs text-green-700 font-mono mt-0.5">{awbNumber}</p>
-                  {serviceName && <p className="text-xs text-green-600 mt-0.5">{serviceName}</p>}
+                  <p className="text-sm font-semibold text-success">AWB generat</p>
+                  <p className="text-xs text-success font-mono mt-0.5">{awbNumber}</p>
+                  {serviceName && <p className="text-xs text-success mt-0.5">{serviceName}</p>}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Descarca AWB</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDownload("A4")}
-                    className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-sm font-medium transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
+                  <Button variant="outline" size="lg" onClick={() => handleDownload("A4")} className="w-full">
+                    <Download />
                     Format A4
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownload("A6")}
-                    className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-sm font-medium transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="lg" onClick={() => handleDownload("A6")} className="w-full">
+                    <Download />
                     Format A6
-                  </button>
+                  </Button>
                 </div>
               </div>
 
-              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                <p className="text-xs text-amber-700">
+              <div className="p-3 rounded-lg bg-warning/5 border border-warning/20">
+                <p className="text-xs text-warning">
                   Anularea AWB-urilor nu este disponibila prin API. Contacteaza Colete Online direct pentru anulare.
                 </p>
               </div>
@@ -312,7 +305,7 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
 
               {/* Price error */}
               {priceError && (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/20 text-xs text-destructive">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
                   {priceError}
                 </div>
@@ -344,15 +337,10 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
 
               {/* Create button */}
               {selectedServiceId !== null && (
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={creating}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                >
-                  {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+                <Button onClick={handleCreate} disabled={creating} size="lg" className="w-full">
+                  {creating ? <Loader2 className="animate-spin" /> : <Package />}
                   Creeaza AWB
-                </button>
+                </Button>
               )}
             </>
           )}

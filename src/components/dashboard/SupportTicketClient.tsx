@@ -33,17 +33,17 @@ interface Message {
 }
 
 const STATUS_CONFIG = {
-  open: { label: "Deschis", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  in_progress: { label: "In lucru", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  resolved: { label: "Rezolvat", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  open: { label: "Deschis", color: "bg-info/10 text-info" },
+  in_progress: { label: "In lucru", color: "bg-warning/10 text-warning" },
+  resolved: { label: "Rezolvat", color: "bg-success/10 text-success" },
   closed: { label: "Inchis", color: "bg-muted text-muted-foreground" },
 };
 
 const PRIORITY_CONFIG = {
-  low: { label: "Scazuta", dot: "bg-zinc-400" },
-  normal: { label: "Normala", dot: "bg-blue-500" },
-  high: { label: "Mare", dot: "bg-orange-500" },
-  urgent: { label: "Urgenta", dot: "bg-red-500" },
+  low: { label: "Scazuta", dot: "bg-muted-foreground/40" },
+  normal: { label: "Normala", dot: "bg-info" },
+  high: { label: "Mare", dot: "bg-warning" },
+  urgent: { label: "Urgenta", dot: "bg-destructive" },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -287,7 +287,7 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
               <button
                 onClick={() => updateStatus("resolved")}
                 disabled={updatingStatus}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 rounded-lg transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-success bg-success/10 hover:bg-success/20 rounded-lg transition-colors disabled:opacity-50"
               >
                 {updatingStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                 Marcare rezolvat
@@ -369,7 +369,7 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
             <div className="h-px flex-1 bg-border" />
             <span className="text-xs text-muted-foreground px-3 flex items-center gap-1.5">
               {isResolved
-                ? <><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Tichet marcat ca rezolvat</>
+                ? <><CheckCircle2 className="h-3.5 w-3.5 text-success" /> Tichet marcat ca rezolvat</>
                 : <><XCircle className="h-3.5 w-3.5" /> Tichet inchis</>
               }
             </span>

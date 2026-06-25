@@ -7,6 +7,10 @@ import { useRouter } from "next/navigation";
 import { Save, Loader2, CreditCard, Info, Key, User } from "lucide-react";
 import { saveIpayConfig, disconnectIpay } from "@/lib/actions/ipay.actions";
 import type { IPayConfig } from "@/lib/ipay";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 
 const DEFAULT_CONFIG: IPayConfig = {
   enabled: false,
@@ -15,8 +19,6 @@ const DEFAULT_CONFIG: IPayConfig = {
   password: "",
   title: "Card bancar (BT iPay)",
 };
-
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
 export default function IPayConfigClient({
   businessId,
@@ -63,9 +65,9 @@ export default function IPayConfigClient({
 
       <div className="space-y-5">
         {/* Info */}
-        <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3">
-          <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-muted-foreground leading-relaxed">
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Integreaza BT iPay pentru a accepta plati cu cardul. Clientii sunt redirectionati catre pagina securizata
             a Bancii Transilvania (cu 3D Secure), fara a introduce datele cardului pe site-ul tau. Ai nevoie de
             credentialele API (utilizator si parola) primite de la Banca Transilvania la crearea comerciantului iPay.
@@ -73,11 +75,11 @@ export default function IPayConfigClient({
         </div>
 
         {/* Ghid */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border">
-            <p className="text-sm font-semibold text-foreground">Cum configurezi integrarea?</p>
-          </div>
-          <div className="px-5 py-4 space-y-4">
+        <Panel className="overflow-hidden">
+          <PanelHeader>
+            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
+          </PanelHeader>
+          <div className="space-y-4 px-5 py-4">
             {[
               { step: "1", title: "Obtine credentialele API", desc: "Banca Transilvania iti furnizeaza o pereche utilizator - parola API la crearea comerciantului pe platforma iPay. Sunt diferite de credentialele consolei." },
               { step: "2", title: "Testeaza pe Sandbox", desc: "Foloseste intai credentialele de test pe mediul Sandbox. Platile nu sunt reale si poti folosi cardurile de test furnizate de banca." },
@@ -85,95 +87,87 @@ export default function IPayConfigClient({
               { step: "4", title: "Apare in Metode de plata", desc: 'Dupa activare, BT iPay apare automat in Setari -> Metode de plata, unde poti schimba denumirea si ordinea afisarii la checkout.' },
             ].map(({ step, title, desc }) => (
               <div key={step} className="flex gap-3">
-                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                   <span className="text-xs font-bold text-primary">{step}</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{desc}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
 
         {/* Main config card */}
-        <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+        <Panel className="space-y-5 p-5">
           {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Activeaza BT iPay</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Afiseaza optiunea de plata cu cardul la checkout</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Afiseaza optiunea de plata cu cardul la checkout</p>
             </div>
-            <button type="button" onClick={() => set("enabled", !cfg.enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${cfg.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.enabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
           </div>
 
-          <div className="space-y-4 pt-4 border-t border-border">
+          <div className="space-y-4 border-t border-border pt-4">
             {/* Sandbox toggle */}
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
               <div>
                 <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {cfg.sandbox ? "Platile nu sunt reale — foloseste pentru testare" : "Mod Live — platile sunt reale"}
                 </p>
               </div>
-              <button type="button" onClick={() => set("sandbox", !cfg.sandbox)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${cfg.sandbox ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cfg.sandbox ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
+              <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />
             </div>
 
             {/* Title */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                 Titlu afisaj checkout
               </label>
-              <input type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)}
-                placeholder="Card bancar (BT iPay)" className={inputCls} />
-              <p className="text-xs text-muted-foreground mt-1">Cum apare optiunea de plata in formularul de comanda (o poti schimba si din Metode de plata)</p>
+              <Input type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)}
+                placeholder="Card bancar (BT iPay)" />
+              <p className="mt-1 text-xs text-muted-foreground">Cum apare optiunea de plata in formularul de comanda (o poti schimba si din Metode de plata)</p>
             </div>
 
             {/* Username */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <User className="h-3.5 w-3.5 text-muted-foreground" />
                 Utilizator API
               </label>
-              <input type="text" value={cfg.username} onChange={(e) => set("username", e.target.value)}
-                placeholder="Utilizatorul API iPay" autoComplete="off" className={inputCls} />
+              <Input type="text" value={cfg.username} onChange={(e) => set("username", e.target.value)}
+                placeholder="Utilizatorul API iPay" autoComplete="off" />
             </div>
 
             {/* Password */}
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
+              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Key className="h-3.5 w-3.5 text-muted-foreground" />
                 Parola API
               </label>
-              <input type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
-                placeholder="Parola API iPay" autoComplete="new-password" className={inputCls} />
+              <Input type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
+                placeholder="Parola API iPay" autoComplete="new-password" />
             </div>
           </div>
 
           {/* Actions */}
-          <div className="pt-4 border-t border-border flex items-center gap-3">
-            <button type="button" onClick={save} disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          <div className="flex items-center gap-3 border-t border-border pt-4">
+            <Button onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
               Salveaza
-            </button>
+            </Button>
             {isConfigured && (
-              <button type="button" onClick={disconnect} disabled={disconnecting}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-60">
-                {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <Button variant="outline" onClick={disconnect} disabled={disconnecting}>
+                {disconnecting ? <Loader2 className="animate-spin" /> : null}
                 Deconecteaza
-              </button>
+              </Button>
             )}
           </div>
-        </div>
+        </Panel>
       </div>
     </div>
   );

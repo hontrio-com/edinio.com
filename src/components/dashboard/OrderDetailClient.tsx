@@ -28,6 +28,9 @@ import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -54,19 +57,19 @@ interface ShippingAddress {
 }
 
 const STATUS_OPTIONS = [
-  { value: "pending",    label: "In asteptare",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  { value: "confirmed",  label: "Confirmat",     cls: "bg-blue-50 text-blue-700 border-blue-200" },
-  { value: "processing", label: "In procesare",  cls: "bg-purple-50 text-purple-700 border-purple-200" },
-  { value: "shipped",    label: "Expediat",      cls: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  { value: "delivered",  label: "Livrat",        cls: "bg-green-50 text-green-700 border-green-200" },
-  { value: "cancelled",  label: "Anulat",        cls: "bg-red-50 text-red-700 border-red-200" },
-  { value: "refunded",   label: "Rambursat",     cls: "bg-gray-100 text-gray-500 border-gray-200" },
+  { value: "pending",    label: "In asteptare",  cls: "bg-warning/10 text-warning border-warning/20" },
+  { value: "confirmed",  label: "Confirmat",     cls: "bg-info/10 text-info border-info/20" },
+  { value: "processing", label: "In procesare",  cls: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
+  { value: "shipped",    label: "Expediat",      cls: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20" },
+  { value: "delivered",  label: "Livrat",        cls: "bg-success/10 text-success border-success/20" },
+  { value: "cancelled",  label: "Anulat",        cls: "bg-destructive/10 text-destructive border-destructive/20" },
+  { value: "refunded",   label: "Rambursat",     cls: "bg-muted text-muted-foreground border-border" },
 ];
 
 const PAYMENT_OPTIONS = [
-  { value: "unpaid",   label: "Neplatit",  cls: "bg-red-50 text-red-700 border-red-200" },
-  { value: "paid",     label: "Platit",    cls: "bg-green-50 text-green-700 border-green-200" },
-  { value: "refunded", label: "Rambursat", cls: "bg-gray-100 text-gray-500 border-gray-200" },
+  { value: "unpaid",   label: "Neplatit",  cls: "bg-destructive/10 text-destructive border-destructive/20" },
+  { value: "paid",     label: "Platit",    cls: "bg-success/10 text-success border-success/20" },
+  { value: "refunded", label: "Rambursat", cls: "bg-muted text-muted-foreground border-border" },
 ];
 
 // Visible milestones for the fulfillment stepper. "processing" folds into "Confirmata".
@@ -89,8 +92,8 @@ function StatusStepper({ status }: { status: string }) {
   if (status === "cancelled" || status === "refunded") {
     return (
       <div className="flex items-center gap-2 text-sm">
-        <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-        <span className="font-medium text-red-600">
+        <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+        <span className="font-medium text-destructive">
           {status === "cancelled" ? "Comanda anulata" : "Comanda rambursata"}
         </span>
       </div>
@@ -130,7 +133,7 @@ function DocRow({
 }) {
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+      <CheckCircle className="h-4 w-4 text-success flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="text-sm font-mono font-bold text-foreground">{docNumber}</p>
@@ -161,22 +164,23 @@ function ResendEmailForm({
   const [email, setEmail] = useState(defaultEmail);
   return (
     <div className="flex gap-2 items-center mt-2">
-      <input
+      <Input
         type="email"
         value={email}
         onChange={e => setEmail(e.target.value)}
         placeholder="email@client.ro"
-        className="flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        className="flex-1"
       />
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={() => onSend(email)}
         disabled={sending || !email.trim()}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
       >
-        {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+        {sending ? <Loader2 className="animate-spin" /> : <Mail />}
         Trimite
-      </button>
+      </Button>
     </div>
   );
 }
@@ -190,7 +194,7 @@ function CourierButton({ logo, name, awb, onClick }: { logo: string; name: strin
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold text-foreground">{name}</p>
         {awb
-          ? <p className="text-[11px] font-mono text-green-600 truncate">AWB: {awb}</p>
+          ? <p className="text-[11px] font-mono text-success truncate">AWB: {awb}</p>
           : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
       </div>
     </button>
@@ -578,22 +582,21 @@ export function OrderDetailClient({
                   onDownload={() => handleDownloadPdf("storno")} downloading={downloadingPdf === "storno"} />
               ) : canStorno ? (
                 showStornoConfirm ? (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50 border border-red-200">
-                    <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
-                    <p className="text-xs text-red-700 flex-1">Aceasta actiune storneaza factura in SmartBill. Nu poate fi anulata.</p>
-                    <button type="button" onClick={handleStorno} disabled={stornoing}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
-                      {stornoing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
+                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <p className="text-xs text-destructive flex-1">Aceasta actiune storneaza factura in SmartBill. Nu poate fi anulata.</p>
+                    <Button type="button" size="sm" onClick={handleStorno} disabled={stornoing} className="bg-destructive text-white hover:bg-destructive/90">
+                      {stornoing ? <Loader2 className="animate-spin" /> : <RotateCcw />}
                       Confirma storno
-                    </button>
+                    </Button>
                     <button type="button" onClick={() => setShowStornoConfirm(false)}
-                      className="p-1.5 text-red-400 hover:text-red-600 transition-colors">
+                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
                       <XCircle className="h-4 w-4" />
                     </button>
                   </div>
                 ) : (
                   <button type="button" onClick={() => setShowStornoConfirm(true)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors">
                     <RotateCcw className="h-4 w-4" />Emite storno
                   </button>
                 )
@@ -614,17 +617,17 @@ export function OrderDetailClient({
   function renderOblio() {
     return order.oblio_storno_number ? (
       <div className="flex items-center gap-2">
-        <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-        <p className="text-sm font-mono font-bold text-red-600">Storno {order.oblio_storno_series}{order.oblio_storno_number}</p>
+        <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+        <p className="text-sm font-mono font-bold text-destructive">Storno {order.oblio_storno_series}{order.oblio_storno_number}</p>
       </div>
     ) : order.oblio_invoice_number ? (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+          <FileCheck className="h-4 w-4 text-success flex-shrink-0" />
           <p className="text-sm font-mono font-bold text-foreground">Factura {order.oblio_invoice_series}{order.oblio_invoice_number}</p>
         </div>
         <button type="button" onClick={() => handleOblioAction("storno")} disabled={oblioActionPending}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
           {oblioActionPending && oblioAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
           Emite storno
         </button>
@@ -632,7 +635,7 @@ export function OrderDetailClient({
     ) : order.oblio_proforma_number ? (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-blue-500 flex-shrink-0" />
+          <FileText className="h-4 w-4 text-info flex-shrink-0" />
           <p className="text-sm font-mono font-bold text-foreground">Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}</p>
         </div>
         <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending}
@@ -660,13 +663,13 @@ export function OrderDetailClient({
   function renderFgo() {
     return (ord["fgo_storno_number"]) ? (
       <div className="flex items-center gap-2">
-        <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-        <p className="text-sm font-mono font-bold text-red-600">Storno {ord["fgo_storno_series"] as string}{ord["fgo_storno_number"] as string}</p>
+        <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+        <p className="text-sm font-mono font-bold text-destructive">Storno {ord["fgo_storno_series"] as string}{ord["fgo_storno_number"] as string}</p>
       </div>
     ) : (ord["fgo_invoice_number"]) ? (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <FileCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+          <FileCheck className="h-4 w-4 text-success flex-shrink-0" />
           <p className="text-sm font-mono font-bold text-foreground">Factura {ord["fgo_invoice_series"] as string}{ord["fgo_invoice_number"] as string}</p>
         </div>
         {!!(ord["fgo_invoice_link"]) && (
@@ -676,7 +679,7 @@ export function OrderDetailClient({
           </a>
         )}
         <button type="button" onClick={() => handleFgoAction("storno")} disabled={fgoActionPending}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
           {fgoActionPending && fgoAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
           Emite storno
         </button>
@@ -805,7 +808,7 @@ export function OrderDetailClient({
                 <span>Subtotal</span><span>{formatPrice(Number(order.subtotal))}</span>
               </div>
               {Number(order.discount_amount) > 0 && (
-                <div className="flex justify-between text-green-600">
+                <div className="flex justify-between text-success">
                   <span>Discount {order.discount_code ? `(${order.discount_code})` : ""}</span>
                   <span className="font-medium">-{formatPrice(Number(order.discount_amount))}</span>
                 </div>
@@ -872,10 +875,9 @@ export function OrderDetailClient({
                 ))}
               </div>
             </div>
-            <button type="button" onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges}
-              className="w-full px-5 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <Button onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges} className="w-full">
               {isPending ? "Se salveaza..." : "Salveaza modificarile"}
-            </button>
+            </Button>
           </div>
 
           {/* Facturare (unified) */}
@@ -918,11 +920,12 @@ export function OrderDetailClient({
               <div className="p-4 space-y-3">
                 {shippedCourier ? (
                   <>
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-green-50 border border-green-200">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-success/5 border border-success/20">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={shippedCourier.logo} alt={shippedCourier.name} className="h-7 w-7 object-contain flex-shrink-0" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-green-700">Expediat cu {shippedCourier.name}</p>
-                        <p className="text-sm font-mono font-bold text-green-800 truncate">AWB: {shippedCourier.awb}</p>
+                        <p className="text-xs text-success">Expediat cu {shippedCourier.name}</p>
+                        <p className="text-sm font-mono font-bold text-success truncate">AWB: {shippedCourier.awb}</p>
                       </div>
                     </div>
                     <button type="button" onClick={shippedCourier.open}
@@ -1002,21 +1005,18 @@ export function OrderDetailClient({
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Subiect</label>
-                <input type="text" value={notifSubject} onChange={e => setNotifSubject(e.target.value)} placeholder="Subiectul emailului"
-                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                <Input type="text" value={notifSubject} onChange={e => setNotifSubject(e.target.value)} placeholder="Subiectul emailului" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj</label>
-                <textarea value={notifMessage} onChange={e => setNotifMessage(e.target.value)} rows={5} placeholder="Scrie mesajul pentru client..."
-                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none" />
+                <Textarea value={notifMessage} onChange={e => setNotifMessage(e.target.value)} rows={5} placeholder="Scrie mesajul pentru client..." className="resize-none" />
               </div>
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerEmail}</strong></p>
-                <button type="button" onClick={handleSendNotification} disabled={sendingNotif || !notifSubject.trim() || !notifMessage.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
-                  {sendingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                <Button onClick={handleSendNotification} disabled={sendingNotif || !notifSubject.trim() || !notifMessage.trim()} className="shrink-0">
+                  {sendingNotif ? <Loader2 className="animate-spin" /> : <Mail />}
                   Trimite email
-                </button>
+                </Button>
               </div>
             </>
           ) : (
@@ -1045,41 +1045,37 @@ export function OrderDetailClient({
             </div>
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj SMS</label>
-              <textarea value={smsMessage} onChange={e => setSmsMessage(e.target.value)} rows={3} placeholder="Scrie mesajul SMS..."
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none" />
+              <Textarea value={smsMessage} onChange={e => setSmsMessage(e.target.value)} rows={3} placeholder="Scrie mesajul SMS..." className="resize-none" />
               <p className="text-[11px] text-muted-foreground mt-1">{smsLen} caractere · {smsSegments} SMS</p>
             </div>
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerPhone}</strong></p>
-              <button type="button" onClick={handleSendSms} disabled={sendingSms || !smsMessage.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
-                {sendingSms ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+              <Button onClick={handleSendSms} disabled={sendingSms || !smsMessage.trim()} className="shrink-0">
+                {sendingSms ? <Loader2 className="animate-spin" /> : <MessageSquare />}
                 Trimite SMS
-              </button>
+              </Button>
             </div>
           </>
         )}
       </div>
 
       {/* ── Danger zone ── */}
-      <div className={`${CARD} border-red-200 p-5 flex items-center justify-between gap-3 mt-5`}>
+      <div className={`${CARD} border-destructive/30 p-5 flex items-center justify-between gap-3 mt-5`}>
         <div>
           <h2 className="text-sm font-semibold text-foreground">Sterge comanda</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Stergerea este definitiva si nu poate fi anulata.</p>
         </div>
-        <button type="button" onClick={() => setShowDeleteConfirm(true)} disabled={deleting}
-          className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex-shrink-0 disabled:opacity-50">
-          <Trash2 className="h-4 w-4" /> Sterge definitiv
-        </button>
+        <Button variant="destructive" onClick={() => setShowDeleteConfirm(true)} disabled={deleting} className="shrink-0">
+          <Trash2 /> Sterge definitiv
+        </Button>
       </div>
 
       {/* ── Mobile sticky action bar (above bottom nav) ── */}
       {mobileAction && (
         <div className="lg:hidden fixed bottom-16 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur px-4 py-3">
-          <button type="button" onClick={mobileAction.onClick} disabled={mobileAction.disabled}
-            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">
-            <Package className="h-4 w-4" />{mobileAction.label}
-          </button>
+          <Button size="lg" onClick={mobileAction.onClick} disabled={mobileAction.disabled} className="w-full">
+            <Package />{mobileAction.label}
+          </Button>
         </div>
       )}
 
@@ -1116,10 +1112,8 @@ export function OrderDetailClient({
               )}
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowSaveConfirm(false)}
-                className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors">Anuleaza</button>
-              <button type="button" onClick={confirmSave} disabled={isPending}
-                className="px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 transition-colors">Confirma</button>
+              <Button type="button" variant="outline" onClick={() => setShowSaveConfirm(false)}>Anuleaza</Button>
+              <Button type="button" onClick={confirmSave} disabled={isPending}>Confirma</Button>
             </div>
           </div>
         </div>
@@ -1132,12 +1126,10 @@ export function OrderDetailClient({
             <h3 className="text-base font-semibold text-foreground mb-2">Stergi comanda {orderNumber}?</h3>
             <p className="text-sm text-muted-foreground mb-4">Aceasta actiune este definitiva si nu poate fi anulata.</p>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors">Anuleaza</button>
-              <button type="button" onClick={handleDelete} disabled={deleting}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors">
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Sterge definitiv
-              </button>
+              <Button type="button" variant="outline" onClick={() => setShowDeleteConfirm(false)}>Anuleaza</Button>
+              <Button type="button" onClick={handleDelete} disabled={deleting} className="bg-destructive text-white hover:bg-destructive/90">
+                {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />} Sterge definitiv
+              </Button>
             </div>
           </div>
         </div>

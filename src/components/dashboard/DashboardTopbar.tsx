@@ -49,9 +49,9 @@ const NAV_ITEMS = [
 
 const PLAN_BADGE_STYLES: Record<string, string> = {
   free:    "bg-muted text-muted-foreground",
-  basic:   "bg-blue-100 text-blue-700",
+  basic:   "bg-info/10 text-info",
   premium: "bg-primary/10 text-primary",
-  ultra:   "bg-amber-100 text-amber-700",
+  ultra:   "bg-warning/10 text-warning",
 };
 
 interface Props {
@@ -273,8 +273,8 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                         <div className="flex-shrink-0 mt-1.5">
                           {notif.isUnread ? <span className="block w-2 h-2 rounded-full bg-primary" /> : <span className="block w-2 h-2 rounded-full bg-transparent" />}
                         </div>
-                        <div className={cn("w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0", notif.isUnread ? "bg-amber-100" : "bg-muted")}>
-                          <ShoppingCart className={cn("h-4 w-4", notif.isUnread ? "text-amber-600" : "text-muted-foreground")} />
+                        <div className={cn("w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0", notif.isUnread ? "bg-warning/10" : "bg-muted")}>
+                          <ShoppingCart className={cn("h-4 w-4", notif.isUnread ? "text-warning" : "text-muted-foreground")} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className={cn("text-sm leading-snug", notif.isUnread ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>{notif.title}</p>
@@ -296,8 +296,8 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                         <div className="flex-shrink-0 mt-1.5">
                           {notif.isUnread ? <span className="block w-2 h-2 rounded-full bg-primary" /> : <span className="block w-2 h-2 rounded-full bg-transparent" />}
                         </div>
-                        <div className={cn("w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0", notif.isUnread ? "bg-blue-100" : "bg-muted")}>
-                          <Megaphone className={cn("h-4 w-4", notif.isUnread ? "text-blue-600" : "text-muted-foreground")} />
+                        <div className={cn("w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0", notif.isUnread ? "bg-info/10" : "bg-muted")}>
+                          <Megaphone className={cn("h-4 w-4", notif.isUnread ? "text-info" : "text-muted-foreground")} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className={cn("text-sm leading-snug", notif.isUnread ? "font-semibold text-foreground" : "font-medium text-muted-foreground")}>{notif.title}</p>

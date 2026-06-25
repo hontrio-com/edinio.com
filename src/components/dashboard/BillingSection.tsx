@@ -62,7 +62,7 @@ export function BillingSection({ plan, planExpiresAt }: Props) {
                 <span className="text-base font-bold text-foreground">
                   Plan {PLAN_LABELS[plan]} — {PLAN_PRICES[plan] ?? "—"} lei/luna
                 </span>
-                <span className="px-2 py-0.5 text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200 rounded-full">
+                <span className="px-2 py-0.5 text-[10px] font-semibold bg-success/10 text-success border border-success/20 rounded-full">
                   Activ
                 </span>
               </div>
@@ -100,7 +100,7 @@ export function BillingSection({ plan, planExpiresAt }: Props) {
         </div>
       ) : plan === "trial" ? (
         <div className="bg-surface border border-border rounded-xl px-5 py-5 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-foreground mb-0.5">Testare gratuita</p>
             <p className="text-xs text-muted-foreground leading-relaxed">

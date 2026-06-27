@@ -5,7 +5,7 @@ import { Check, Zap, Rocket, Crown, ArrowRight, ShieldCheck, Star, Clock, Credit
 import { HeroMockups } from "@/components/website/HeroMockups";
 
 export const metadata: Metadata = {
-  title: "Creeaza magazin online - de la 99 lei/luna | Edinio",
+  title: "Creeaza magazin online - de la 99 lei/luna",
   description:
     "Lanseaza-ti magazinul online in cateva minute. Integrari curierat, plati online, facturare automata. Suport 7/7, mentenanta gratuita pe viata.",
   alternates: { canonical: "https://www.edinio.com/start" },

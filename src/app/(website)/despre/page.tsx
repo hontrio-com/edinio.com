@@ -3,9 +3,9 @@ import Link from "next/link";
 import { ArrowRight, Target, Heart, Zap, Shield } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Despre Edinio - Platforma de creare magazin online din Romania",
+  title: "Despre noi - platforma de creare magazin online",
   description:
-    "Edinio face comertul online accesibil pentru orice afacere locala din Romania. Creeaza-ti magazinul online in cateva minute, fara cunostinte tehnice, cu integrari complete.",
+    "Edinio face comertul online accesibil oricarei afaceri din Romania. Creeaza-ti magazinul in cateva minute, fara cunostinte tehnice, cu integrari complete.",
   alternates: {
     canonical: "https://www.edinio.com/despre",
   },

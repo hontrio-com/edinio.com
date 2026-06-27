@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Termeni și condiții | Edinio",
+  title: "Termeni și condiții",
   description:
     "Termenii și condițiile de utilizare a platformei Edinio pentru crearea magazinelor online.",
   alternates: { canonical: "https://www.edinio.com/termeni" },

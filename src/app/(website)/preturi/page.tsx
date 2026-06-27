@@ -6,10 +6,9 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
-  title:
-    "Preturi creare magazin online - de la 99 lei/luna | Edinio",
+  title: "Preturi creare magazin online - de la 99 lei/luna",
   description:
-    "Pret creare magazin online de la 99 lei/luna. Plan gratuit 15 zile, fara card de credit. Include mentenanta gratuita pe viata, integrari curierat, plati online si facturare.",
+    "Pret creare magazin online de la 99 lei/luna. Plan gratuit 15 zile, fara card. Mentenanta gratuita pe viata, integrari curierat, plati online si facturare.",
   alternates: {
     canonical: "https://www.edinio.com/preturi",
   },

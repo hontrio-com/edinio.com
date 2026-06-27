@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Politica de confidențialitate | Edinio",
+  title: "Politica de confidențialitate",
   description:
     "Informații despre cum colectăm, utilizăm și protejăm datele dumneavoastră personale pe platforma Edinio.",
   alternates: { canonical: "https://www.edinio.com/confidentialitate" },

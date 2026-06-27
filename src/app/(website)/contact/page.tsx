@@ -3,7 +3,7 @@ import { Mail, MapPin, Clock } from "lucide-react";
 import { ContactForm } from "@/components/website/ContactForm";
 
 export const metadata: Metadata = {
-  title: "Contact Edinio - Suport creare magazin online",
+  title: "Contact - suport creare magazin online",
   description:
     "Contacteaza echipa Edinio pentru orice intrebare despre creare magazin online. Suport 7 zile din 7, raspuns rapid.",
   alternates: {

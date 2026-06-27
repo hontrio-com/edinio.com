@@ -11,7 +11,7 @@ import { FAQSection } from "@/components/website/FAQSection";
 import { PlatformEvent } from "@/components/platform/PlatformEvent";
 
 export const metadata: Metadata = {
-  title: "Creare magazin online rapid | Edinio",
+  title: "Creare magazin online rapid",
   description:
     "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
   alternates: {

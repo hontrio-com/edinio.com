@@ -17,7 +17,7 @@ import { MigrationOffer } from "@/components/landing/MigrationOffer";
 import { MigrationFormSection } from "@/components/landing/MigrationFormSection";
 
 export const metadata: Metadata = {
-  title: "Migreaza-ti magazinul la Edinio - migrare gratuita in 24 de ore",
+  title: "Migrare gratuita magazin online in 24 de ore",
   description:
     "Iti migram toate produsele gratuit, in 24 de ore. Fara comisioane, fara costuri ascunse, pret fix pe viata. Mentenanta gratuita si suport 7 zile din 7.",
   alternates: { canonical: "https://www.edinio.com/migrare" },

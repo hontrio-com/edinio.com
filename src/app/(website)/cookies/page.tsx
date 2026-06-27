@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Politica cookies | Edinio",
+  title: "Politica de cookies",
   description:
     "Informații despre cookie-urile și tehnologiile similare utilizate pe platforma Edinio.",
   alternates: { canonical: "https://www.edinio.com/cookies" },

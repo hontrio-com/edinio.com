@@ -84,6 +84,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           recentOrders={recentOrders}
           notifications={notifications}
           currentBusiness={currentBusiness}
+          smsoEnabled={smsoEnabled}
+          unreadSupportCount={unreadSupportCount}
+          isAdmin={profile.role === "admin"}
         />
         <main className="min-h-screen pb-20 lg:pb-0">{children}</main>
       </div>

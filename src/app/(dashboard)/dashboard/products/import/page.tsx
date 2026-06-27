@@ -26,7 +26,7 @@ export default async function ImportProductsPage() {
   const plan = profile?.plan ?? "free";
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <ImportWizard plan={plan} productLimit={getProductLimit(plan)} productCount={count ?? 0} />
     </div>
   );

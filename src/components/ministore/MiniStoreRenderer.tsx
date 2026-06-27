@@ -1375,11 +1375,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Produse variabile: interval de pret implicit; doar pretul minim daca e dezactivat din editor.
   const priceLowestOnly = pageContent.price_range_display?.enabled === false;
 
-  const sortOption = pageContent.sort_options?.enabled
-    ? (pageContent.sort_options.default_sort ?? "newest")
-    : null;
-  const [sort, setSort] = useState<string>(sortOption ?? "newest");
-  const showSort = pageContent.sort_options?.enabled !== false;
+  // Sorting is a standard storefront feature — always shown. Honour the saved
+  // default sort if present, otherwise newest-first.
+  const [sort, setSort] = useState<string>(pageContent.sort_options?.default_sort ?? "newest");
+  const showSort = true;
 
   // Banner source: up to 5 hero_banners (page_content), else the legacy single
   // cover_url. Each banner can carry an optional click link (hero_banner_links,

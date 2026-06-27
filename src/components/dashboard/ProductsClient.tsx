@@ -201,15 +201,15 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
             {products.length}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <input
               type="search"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Cauta produs..."
-              className="pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors w-48"
+              className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
             />
             {searchQuery && (
               <button type="button" onClick={() => setSearchQuery("")}
@@ -218,31 +218,30 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
               </button>
             )}
           </div>
-          <Button variant="outline" onClick={() => router.push("/dashboard/products/import")} className="whitespace-nowrap">
-            <Upload />
-            Importa
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleExport}
-            disabled={exporting || products.length === 0}
-            title={products.length === 0 ? "Nu ai produse de exportat" : "Exporta toate produsele in CSV"}
-            className="whitespace-nowrap"
-          >
-            {exporting ? <Loader2 className="animate-spin" /> : <Download />}
-            Exporta
-          </Button>
-          {isAtLimit ? (
-            <Button disabled className="whitespace-nowrap">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+            <Button variant="outline" onClick={() => router.push("/dashboard/products/import")} className="w-full sm:w-auto whitespace-nowrap">
+              <Upload />
+              Importa
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleExport}
+              disabled={exporting || products.length === 0}
+              title={products.length === 0 ? "Nu ai produse de exportat" : "Exporta toate produsele in CSV"}
+              className="w-full sm:w-auto whitespace-nowrap"
+            >
+              {exporting ? <Loader2 className="animate-spin" /> : <Download />}
+              Exporta
+            </Button>
+            <Button
+              onClick={() => router.push("/dashboard/products/new")}
+              disabled={isAtLimit}
+              className="col-span-2 w-full sm:w-auto whitespace-nowrap"
+            >
               <Plus />
               Adauga produs
             </Button>
-          ) : (
-            <Button onClick={() => router.push("/dashboard/products/new")} className="whitespace-nowrap">
-              <Plus />
-              Adauga produs
-            </Button>
-          )}
+          </div>
         </div>
       </div>
 
@@ -402,9 +401,93 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
         </div>
       )}
 
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        {filtered.length > 0 ? (
-          <>
+      {filtered.length > 0 ? (
+        <>
+          {/* Mobile: card list (the table is too cramped on small screens) */}
+          <div className="sm:hidden space-y-2">
+            <label className="flex w-fit items-center gap-2 px-1 pb-0.5 cursor-pointer">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                aria-label="Selecteaza toate produsele filtrate"
+                className="h-4 w-4 rounded border-border accent-primary cursor-pointer" />
+              <span className="text-xs font-medium text-muted-foreground">{allSelected ? "Deselecteaza tot" : "Selecteaza tot"}</span>
+            </label>
+            {paginated.map((product) => {
+              const images = Array.isArray(product.images) ? product.images : [];
+              const isSel = selected.has(product.id);
+              return (
+                <div key={product.id}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-xl border transition-colors",
+                    isSel ? "border-primary/40 bg-primary/5" : "border-border bg-surface"
+                  )}>
+                  <input type="checkbox" checked={isSel} onChange={() => toggleOne(product.id)}
+                    aria-label={`Selecteaza ${product.name}`}
+                    className="mt-1 h-4 w-4 rounded border-border accent-primary cursor-pointer flex-shrink-0" />
+                  <Link href={editHref(product.id)} className="flex items-start gap-3 flex-1 min-w-0">
+                    {images[0] ? (
+                      <Image src={String(images[0])} alt={product.name} width={56} height={56}
+                        className="w-14 h-14 rounded-lg object-cover border border-border flex-shrink-0" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                        <Package className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-foreground flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{product.name}</span>
+                        {product.is_featured && <Star className="h-3 w-3 text-amber-400 fill-amber-400 flex-shrink-0" />}
+                      </div>
+                      {product.sku && <div className="text-xs text-muted-foreground font-mono truncate">SKU: {product.sku}</div>}
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-foreground text-sm whitespace-nowrap">{formatPrice(Number(product.price))}</span>
+                        {product.compare_at_price && (
+                          <span className="text-xs text-muted-foreground line-through whitespace-nowrap">{formatPrice(Number(product.compare_at_price))}</span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                        <span className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium",
+                          product.is_active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+                        )}>
+                          {product.is_active ? "Activ" : "Inactiv"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {product.track_inventory ? `${product.stock_quantity ?? 0} buc` : "Stoc nelimitat"}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      disabled={duplicatingId === product.id}
+                      onClick={() => {
+                        setDuplicatingId(product.id);
+                        startDupTransition(async () => {
+                          const res = await duplicateProduct(product.id, businessId);
+                          setDuplicatingId(null);
+                          if ("error" in res) { toast.error(res.error); }
+                          else { toast.success("Produs duplicat"); router.refresh(); }
+                        });
+                      }}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                      aria-label="Duplica"
+                    >
+                      {duplicatingId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                    <Link href={editHref(product.id)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      aria-label="Editeaza">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden sm:block bg-surface border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm table-fixed">
             <thead>
               <tr className="border-b border-border bg-muted/50">
@@ -512,12 +595,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
               })}
             </tbody>
           </table>
+          </div>
+
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-border">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2 px-3 sm:px-5 py-3 mt-3 bg-surface border border-border rounded-xl">
               <p className="text-xs text-muted-foreground">
                 {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} produse
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 self-end sm:self-auto">
                 <button onClick={() => goToPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
                   className="px-2.5 py-1.5 text-xs rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors">Inapoi</button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -543,9 +628,10 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
               </div>
             </div>
           )}
-          </>
-        ) : (
-          <div className="py-16 text-center">
+        </>
+      ) : (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="py-16 text-center px-4">
             <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
               {searchQuery.trim() ? <Search className="h-6 w-6 text-muted-foreground" /> : <Package className="h-6 w-6 text-muted-foreground" />}
             </div>
@@ -562,14 +648,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
               <>
                 <p className="text-sm font-medium text-foreground mb-1">Niciun produs inca</p>
                 <p className="text-xs text-muted-foreground mb-5">Adauga primul produs sau importa-le din Shopify / WooCommerce</p>
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 max-w-xs mx-auto sm:max-w-none">
                   {!isAtLimit && (
-                    <Button onClick={() => router.push("/dashboard/products/new")}>
+                    <Button onClick={() => router.push("/dashboard/products/new")} className="w-full sm:w-auto">
                       <Plus />
                       Adauga produs
                     </Button>
                   )}
-                  <Button variant="outline" onClick={() => router.push("/dashboard/products/import")}>
+                  <Button variant="outline" onClick={() => router.push("/dashboard/products/import")} className="w-full sm:w-auto">
                     <Upload />
                     Importa produse
                   </Button>
@@ -577,8 +663,8 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
               </>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 }

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   Info, Palette, MapPin, Share2, Globe,
   ChevronDown, ChevronUp, Save, Loader2, Check, ExternalLink, Upload, X, Plus,
-  Layout, Smartphone, Monitor, Home, ClipboardList, LayoutGrid,
+  Layout, Smartphone, Paintbrush2, Home, ClipboardList, LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
@@ -404,7 +404,8 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     reviews_section: rawPageContent.reviews_section ?? { enabled: false, title: "Ce spun clientii nostri", items: [] },
     checkout_config: rawPageContent.checkout_config ?? { custom_fields: [], extras: [] },
     show_announcement_on_store: rawPageContent.show_announcement_on_store ?? true,
-    sort_options: rawPageContent.sort_options ?? { enabled: true, default_sort: "newest" },
+    // Sorting is always available on the storefront (no per-store toggle); keep any saved default sort.
+    sort_options: { enabled: true, default_sort: rawPageContent.sort_options?.default_sort ?? "newest" },
     sticky_cart_bar: rawPageContent.sticky_cart_bar ?? { enabled: true },
     new_badge: rawPageContent.new_badge ?? { enabled: true, days: 7 },
     price_range_display: rawPageContent.price_range_display ?? { enabled: true },
@@ -499,6 +500,35 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             <input type="email" value={general.email} className={inputCls}
               onChange={(e) => setGeneral((p) => ({ ...p, email: e.target.value }))} />
           </div>
+
+          {/* Locatie magazin (publica) */}
+          <div className="border border-border rounded-xl p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+              <p className="text-xs font-semibold text-foreground">Locatie</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Adresa</label>
+              <input type="text" value={location.address} className={inputCls}
+                onChange={(e) => setLocation((p) => ({ ...p, address: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Oras</label>
+                <input type="text" value={location.city} className={inputCls}
+                  onChange={(e) => setLocation((p) => ({ ...p, city: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Judet</label>
+                <input type="text" value={location.county} className={inputCls}
+                  onChange={(e) => setLocation((p) => ({ ...p, county: e.target.value }))} />
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Adresa apare public pe pagina magazinului (in footer si la datele de contact). Lasa campurile goale daca nu vrei sa o afisezi.
+            </p>
+          </div>
+
           <div className="border border-border rounded-xl p-3 space-y-3">
             <p className="text-xs font-semibold text-foreground">Butoane flotante</p>
             <div className="flex items-center justify-between">
@@ -532,6 +562,9 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               phone: general.phone || null,
               whatsapp: (whatsappSameAsPhone ? general.phone : general.whatsapp) || null,
               email: general.email || null,
+              store_address: location.address || null,
+              store_city: location.city || null,
+              store_county: location.county || null,
               features: { ...rawFeatures, ...features } as Record<string, boolean>,
             })} />
         </div>
@@ -688,38 +721,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             </div>
           </div>
           <SaveBtn loading={saving === "branding"} saved={saved === "branding"} onSave={saveBranding} />
-        </div>
-      ),
-    },
-    {
-      id: "location",
-      icon: MapPin,
-      title: "Locatie",
-      content: (
-        <div className="px-5 pb-5 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Adresa</label>
-            <input type="text" value={location.address} className={inputCls}
-              onChange={(e) => setLocation((p) => ({ ...p, address: e.target.value }))} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Oras</label>
-              <input type="text" value={location.city} className={inputCls}
-                onChange={(e) => setLocation((p) => ({ ...p, city: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Judet</label>
-              <input type="text" value={location.county} className={inputCls}
-                onChange={(e) => setLocation((p) => ({ ...p, county: e.target.value }))} />
-            </div>
-          </div>
-          <SaveBtn loading={saving === "location"} saved={saved === "location"}
-            onSave={() => save("location", {
-              store_address: location.address || null,
-              store_city: location.city || null,
-              store_county: location.county || null,
-            })} />
         </div>
       ),
     },
@@ -1321,36 +1322,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
 
           <hr className="border-border" />
 
-          {/* Sort options */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-xs font-semibold text-foreground">Sortare produse</label>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Permite clientilor sa sorteze produsele</p>
-              </div>
-              <button type="button"
-                onClick={() => setPageContent(p => ({ ...p, sort_options: { ...p.sort_options!, enabled: !p.sort_options?.enabled } }))}
-                className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.sort_options?.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.sort_options?.enabled ? "translate-x-4" : "translate-x-0")} />
-              </button>
-            </div>
-            {pageContent.sort_options?.enabled && (
-              <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">Sortare implicita</label>
-                <select value={pageContent.sort_options.default_sort ?? "newest"} className={inputCls + " !py-1.5 !text-xs"}
-                  onChange={e => setPageContent(p => ({ ...p, sort_options: { ...p.sort_options!, default_sort: e.target.value } }))}>
-                  <option value="newest">Cele mai noi</option>
-                  <option value="price_asc">Pret crescator</option>
-                  <option value="price_desc">Pret descrescator</option>
-                  <option value="popular">Populare</option>
-                  <option value="name_asc">Alfabetic A-Z</option>
-                </select>
-              </div>
-            )}
-          </div>
-
-          <hr className="border-border" />
-
           {/* Sticky cart bar */}
           <div className="flex items-center justify-between">
             <div>
@@ -1450,7 +1421,8 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             {[
               { id: "discount", label: "Cod discount", desc: "Permite clientilor sa aplice un cod de reducere" },
             ].map(field => {
-              const hidden = (pageContent.checkout_config?.hidden_fields ?? []).includes(field.id);
+              // Discount code is OFF by default — the field is hidden unless the merchant explicitly enables it.
+              const hidden = (pageContent.checkout_config?.hidden_fields ?? ["discount"]).includes(field.id);
               return (
                 <div key={field.id} className="flex items-center justify-between p-3 border border-border rounded-xl">
                   <div>
@@ -1646,9 +1618,9 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             </div>
             {/* Mobile view switcher */}
             <div className="flex lg:hidden bg-muted rounded-xl p-1 gap-0.5">
-              <button type="button" onClick={() => setMobileView("editor")}
+              <button type="button" onClick={() => setMobileView("editor")} aria-label="Editare"
                 className={cn("p-1.5 rounded-lg transition-colors", mobileView === "editor" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground")}>
-                <Monitor className="h-4 w-4" />
+                <Paintbrush2 className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => setMobileView("preview")}
                 className={cn("p-1.5 rounded-lg transition-colors", mobileView === "preview" ? "bg-white shadow-sm text-foreground" : "text-muted-foreground")}>
@@ -1674,7 +1646,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             {/* Mobile back to editor */}
             <button type="button" onClick={() => setMobileView("editor")}
               className="lg:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-              <Monitor className="h-3.5 w-3.5" />
+              <Paintbrush2 className="h-3.5 w-3.5" />
               Editor
             </button>
             <span className="text-sm font-medium text-foreground">Previzualizare</span>

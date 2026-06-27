@@ -7,6 +7,7 @@ import {
   Search, Bell, LogOut, ChevronDown, X, Menu,
   LayoutDashboard, Pencil, Package, ShoppingCart, Settings,
   BarChart2, Zap, Ticket, Megaphone, FileText, Users,
+  ShoppingBag, LifeBuoy, ShieldCheck, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { logout } from "@/lib/actions/auth.actions";
@@ -35,14 +36,43 @@ type PlatformNotif = {
   created_at: string;
 };
 
-const NAV_ITEMS = [
+type MobileNavItem = {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  children?: { href: string; label: string }[];
+};
+
+// Mirrors the desktop Sidebar (same sections + submenus).
+const NAV_ITEMS: MobileNavItem[] = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Panou principal" },
-  { href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul" },
-  { href: "/dashboard/pages", icon: FileText, label: "Pagini" },
+  {
+    href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul",
+    children: [
+      { href: "/dashboard/editor", label: "Design magazin" },
+      { href: "/dashboard/editor/media", label: "Biblioteca Media" },
+    ],
+  },
+  {
+    href: "/dashboard/pages", icon: FileText, label: "Pagini",
+    children: [
+      { href: "/dashboard/pages", label: "Toate paginile" },
+      { href: "/dashboard/pages/forms", label: "Formulare" },
+      { href: "/dashboard/pages/messages", label: "Mesaje" },
+    ],
+  },
   { href: "/dashboard/features", icon: Zap, label: "Integrari" },
-  { href: "/dashboard/products", icon: Package, label: "Produse" },
+  {
+    href: "/dashboard/products", icon: Package, label: "Produse",
+    children: [
+      { href: "/dashboard/products", label: "Toate produsele" },
+      { href: "/dashboard/products/categories", label: "Categorii" },
+      { href: "/dashboard/products/bundles", label: "Pachete" },
+    ],
+  },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
   { href: "/dashboard/customers", icon: Users, label: "Clienti" },
+  { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
   { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },
 ];
@@ -60,13 +90,17 @@ interface Props {
   recentOrders: OrderNotif[];
   notifications: PlatformNotif[];
   currentBusiness: Business | null;
+  smsoEnabled?: boolean;
+  unreadSupportCount?: number;
+  isAdmin?: boolean;
 }
 
-export function DashboardTopbar({ userFullName, plan, recentOrders, notifications, currentBusiness }: Props) {
+export function DashboardTopbar({ userFullName, plan, recentOrders, notifications, currentBusiness, smsoEnabled = false, unreadSupportCount = 0, isAdmin = false }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [navOverride, setNavOverride] = useState<string | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
@@ -108,6 +142,12 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
   }, []);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // Submenu expansion: defaults to the section the user is currently in; once they
+  // tap a section header, their choice takes over. Derived (no effect) so it can't
+  // trigger cascading renders. "__none__" = user collapsed everything.
+  const activeParentHref = NAV_ITEMS.find((it) => it.children && pathname.startsWith(it.href))?.href ?? null;
+  const expandedHref = navOverride ?? activeParentHref;
 
   // Sync search input with URL param
   useEffect(() => {
@@ -398,20 +438,97 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
-            const active = href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
+        <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+
+            if (item.children) {
+              const expanded = expandedHref === item.href;
+              return (
+                <div key={item.href}>
+                  <button
+                    type="button"
+                    onClick={() => setNavOverride(expanded ? "__none__" : item.href)}
+                    aria-expanded={expanded}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                      active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    <ChevronDown className={cn("h-4 w-4 flex-shrink-0 transition-transform", expanded && "rotate-180")} />
+                  </button>
+                  {expanded && (
+                    <div className="ml-7 mt-0.5 mb-1 space-y-0.5 border-l border-sidebar-border pl-3">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setMobileOpen(false)}
+                          className={cn(
+                            "block px-2 py-2 rounded-md text-xs font-medium transition-all",
+                            pathname === child.href ? "text-primary bg-primary/5" : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
-              <Link key={href} href={href}
+              <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
                   active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}>
                 <Icon className="h-4 w-4 flex-shrink-0" />
-                {label}
+                {item.label}
               </Link>
             );
           })}
+
+          {smsoEnabled && (
+            <Link href="/dashboard/sms" onClick={() => setMobileOpen(false)}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                pathname.startsWith("/dashboard/sms") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}>
+              <MessageSquare className="h-4 w-4 flex-shrink-0" />
+              SMS Marketing
+            </Link>
+          )}
+
+          <div className="my-2 border-t border-sidebar-border" />
+
+          {/* Support */}
+          <Link href="/dashboard/suport" onClick={() => setMobileOpen(false)}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+              pathname.startsWith("/dashboard/suport") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}>
+            <LifeBuoy className="h-4 w-4 flex-shrink-0" />
+            <span className="flex-1">Suport</span>
+            {unreadSupportCount > 0 && (
+              <span className="min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-white text-[10px] font-bold rounded-full px-1">
+                {unreadSupportCount}
+              </span>
+            )}
+          </Link>
+
+          {/* Admin */}
+          {isAdmin && (
+            <Link href="/admin" onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-warning bg-warning/10 hover:bg-warning/15 transition-all">
+              <ShieldCheck className="h-4 w-4 flex-shrink-0" />
+              Panou Admin
+            </Link>
+          )}
         </nav>
 
         {/* Upgrade banner (free plan) */}

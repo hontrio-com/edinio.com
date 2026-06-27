@@ -273,7 +273,7 @@ function PlanPageContent() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
-      <OnboardingProgress currentStep={3} />
+      <OnboardingProgress currentStep={2} />
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
         <div className="mb-6 sm:mb-8">

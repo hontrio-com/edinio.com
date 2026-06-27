@@ -105,7 +105,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
-  const hiddenFields = liveCheckoutConfig?.hidden_fields ?? [];
+  // Discount code is OFF by default (hidden unless the merchant enabled it in the editor).
+  const hiddenFields = liveCheckoutConfig?.hidden_fields ?? ["discount"];
   const emailField = liveCheckoutConfig?.email_field ?? { enabled: true, required: false };
 
   const [selectedTierIdx, setSelectedTierIdx] = useState(0);

@@ -15,6 +15,14 @@ const ITEMS = [
 export function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
 
+  // The product add/edit form has its own sticky save bar on mobile — hide the
+  // global bottom nav there so the two bars don't stack. (Bundles use BundleForm,
+  // which has no fixed bar, so they keep the nav; hence the single-segment match.)
+  const isProductForm =
+    pathname === "/dashboard/products/new" ||
+    /^\/dashboard\/products\/[^/]+\/edit$/.test(pathname);
+  if (isProductForm) return null;
+
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border z-20">
       <div className="flex items-stretch h-16">

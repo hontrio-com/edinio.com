@@ -1495,8 +1495,8 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
         </div>
       </form>
 
-      {/* Mobile sticky save bar */}
-      <div className="fixed bottom-16 left-0 right-0 z-20 bg-background border-t border-border px-4 py-3 flex gap-3 lg:hidden">
+      {/* Mobile sticky save bar — sits at the very bottom (the global bottom nav is hidden on this screen) */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-background border-t border-border px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex gap-3 lg:hidden">
         <Button type="button" variant="outline" size="lg" onClick={() => router.push(backHref)} className="flex-1">
           Anuleaza
         </Button>

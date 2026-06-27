@@ -262,17 +262,18 @@ function Stepper({ step }: { step: Step }) {
   const labels: Record<string, string> = { upload: "Incarca", mapping: "Potriveste", review: "Verifica", progress: "Importa" };
   const activeIdx = order.indexOf(step === "done" ? "progress" : step);
   return (
-    <div className="flex items-center gap-2 mb-6">
+    <div className="flex items-center gap-1.5 sm:gap-2 mb-6">
       {order.map((s, i) => (
-        <div key={s} className="flex items-center gap-2">
+        <div key={s} className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
+            "flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full text-xs font-medium",
             i <= activeIdx ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
           )}>
-            <span className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[10px]", i <= activeIdx ? "bg-primary text-white" : "bg-border text-muted-foreground")}>{i + 1}</span>
-            {labels[s]}
+            <span className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[10px] flex-shrink-0", i <= activeIdx ? "bg-primary text-white" : "bg-border text-muted-foreground")}>{i + 1}</span>
+            {/* On mobile only the current step shows its label, so the row never overflows. */}
+            <span className={cn("truncate", i === activeIdx ? "inline" : "hidden sm:inline")}>{labels[s]}</span>
           </div>
-          {i < order.length - 1 && <div className="w-4 h-px bg-border" />}
+          {i < order.length - 1 && <div className="w-2 sm:w-4 h-px bg-border flex-shrink-0" />}
         </div>
       ))}
     </div>
@@ -415,7 +416,7 @@ function MappingStep({ headers, mapping, onChange, onBack, onNext }: {
                 value={mapping[f.key] ?? ""}
                 onChange={(e) => onChange(f.key, e.target.value)}
                 className={cn(
-                  "w-56 px-3 py-2 text-sm border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors",
+                  "w-40 sm:w-56 flex-shrink-0 px-3 py-2 text-sm border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors",
                   f.required && !mapping[f.key] ? "border-destructive/40" : "border-border",
                 )}
               >
@@ -469,10 +470,10 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <FileSpreadsheet className="h-4 w-4" />
-        <span className="font-medium text-foreground">{fileName}</span>
-        <span className="px-2 py-0.5 bg-muted rounded-full text-xs">{SOURCE_LABELS[source]}</span>
+      <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+        <FileSpreadsheet className="h-4 w-4 flex-shrink-0" />
+        <span className="font-medium text-foreground truncate">{fileName}</span>
+        <span className="px-2 py-0.5 bg-muted rounded-full text-xs flex-shrink-0">{SOURCE_LABELS[source]}</span>
       </div>
 
       {/* Summary */}

@@ -42,7 +42,7 @@ export default async function ProductsPage({
   const productLimit = getProductLimit(plan);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <ProductsClient
         products={products}
         businessId={bizRow.id}

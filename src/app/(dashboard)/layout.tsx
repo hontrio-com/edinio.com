@@ -16,7 +16,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
-    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at").eq("id", user.id).single(),
+    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at").eq("id", user.id).single(),
     supabase.from("businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
   ]);
 
@@ -83,6 +83,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           plan={profile.plan}
           recentOrders={recentOrders}
           notifications={notifications}
+          ordersSeenAt={profile.orders_seen_at}
           currentBusiness={currentBusiness}
           smsoEnabled={smsoEnabled}
           unreadSupportCount={unreadSupportCount}

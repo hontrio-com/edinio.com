@@ -1864,6 +1864,7 @@ export type Database = {
           mfa_otp_expires_at: string | null
           onboarding_completed: boolean
           onboarding_step: string
+          orders_seen_at: string | null
           plan: string
           plan_expires_at: string | null
           role: string
@@ -1883,6 +1884,7 @@ export type Database = {
           mfa_otp_expires_at?: string | null
           onboarding_completed?: boolean
           onboarding_step?: string
+          orders_seen_at?: string | null
           plan?: string
           plan_expires_at?: string | null
           role?: string
@@ -1902,6 +1904,7 @@ export type Database = {
           mfa_otp_expires_at?: string | null
           onboarding_completed?: boolean
           onboarding_step?: string
+          orders_seen_at?: string | null
           plan?: string
           plan_expires_at?: string | null
           role?: string

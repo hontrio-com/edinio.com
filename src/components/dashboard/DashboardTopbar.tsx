@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { logout } from "@/lib/actions/auth.actions";
-import { markNotificationsRead } from "@/lib/actions/notification.actions";
+import { markNotificationsRead, markOrderNotificationsSeen } from "@/lib/actions/notification.actions";
 import { Logo } from "@/components/ui/Logo";
 import { BusinessCard } from "@/components/dashboard/Sidebar";
 import { formatPrice } from "@/lib/utils/format";
@@ -89,13 +89,14 @@ interface Props {
   plan: string;
   recentOrders: OrderNotif[];
   notifications: PlatformNotif[];
+  ordersSeenAt?: string | null;
   currentBusiness: Business | null;
   smsoEnabled?: boolean;
   unreadSupportCount?: number;
   isAdmin?: boolean;
 }
 
-export function DashboardTopbar({ userFullName, plan, recentOrders, notifications, currentBusiness, smsoEnabled = false, unreadSupportCount = 0, isAdmin = false }: Props) {
+export function DashboardTopbar({ userFullName, plan, recentOrders, notifications, ordersSeenAt = null, currentBusiness, smsoEnabled = false, unreadSupportCount = 0, isAdmin = false }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -155,7 +156,13 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
     setSearch(urlSearch);
   }, [searchParams]);
 
-  const unreadOrderCount = recentOrders.filter(o => !readOrderIds.has(o.id)).length;
+  // An order notification is read when the server watermark covers it (durable,
+  // syncs across devices) OR it was just dismissed locally (instant per-item feedback).
+  const ordersSeenTime = ordersSeenAt ? new Date(ordersSeenAt).getTime() : 0;
+  const isOrderUnread = (o: OrderNotif) =>
+    new Date(o.created_at).getTime() > ordersSeenTime && !readOrderIds.has(o.id);
+
+  const unreadOrderCount = recentOrders.filter(isOrderUnread).length;
   const unreadPlatformCount = notifications.filter(n => !n.is_read).length;
   const totalUnread = unreadOrderCount + unreadPlatformCount;
 
@@ -168,7 +175,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
       title: `Comanda noua de la ${o.customer_name}`,
       subtitle: formatPrice(o.total),
       created_at: o.created_at,
-      isUnread: !readOrderIds.has(o.id),
+      isUnread: isOrderUnread(o),
       href: `/dashboard/orders/${o.id}`,
     })),
     ...notifications.map(n => ({
@@ -185,15 +192,24 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
   const filteredNotifs = notifTab === "all" ? allNotifs : notifTab === "orders" ? allNotifs.filter(n => n.kind === "order") : allNotifs.filter(n => n.kind === "platform");
 
   function markAllRead() {
-    // Mark orders
+    // Optimistic: hide order dots immediately (local overlay).
     const newIds = new Set([...readOrderIds, ...recentOrders.map(o => o.id)]);
     setReadOrderIds(newIds);
     try { localStorage.setItem("edinio_read_notifs", JSON.stringify([...newIds])); } catch {}
-    // Mark platform notifications
+    // Durable: persist a server-side watermark so the read state survives reloads,
+    // cache clears and other devices (the localStorage flag alone did not). The
+    // optimistic update above already clears the badge and the action calls
+    // revalidatePath, so we skip an immediate router.refresh() (and its refetch)
+    // in the common orders-only case. Refresh only when platform notifications
+    // exist, whose is_read must be reflected back from the DB.
     const unreadPlatformIds = notifications.filter(n => !n.is_read).map(n => n.id);
-    if (unreadPlatformIds.length > 0) {
-      startMarkRead(async () => { await markNotificationsRead(unreadPlatformIds); router.refresh(); });
-    }
+    startMarkRead(async () => {
+      await markOrderNotificationsSeen();
+      if (unreadPlatformIds.length > 0) {
+        await markNotificationsRead(unreadPlatformIds);
+        router.refresh();
+      }
+    });
   }
 
   function formatTimeAgo(dateStr: string) {

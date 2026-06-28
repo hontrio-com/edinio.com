@@ -15,6 +15,8 @@ import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
+import { maybeSendNoticeSms, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
+import { formatPrice } from "@/lib/utils/format";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -380,6 +382,15 @@ export async function placeOrder(data: {
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)
           : null,
       ].filter(Boolean));
+
+      // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
+      void maybeSendNoticeSms({
+        businessId: data.business_id,
+        orderId: order.id,
+        triggerKey: "pending",
+        phone: data.customer_phone,
+        vars: { order: order.order_number, name: data.customer_name, total: formatPrice(total), awb: "", store: businessName },
+      });
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 
@@ -480,6 +491,26 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     import("@/lib/actions/invoice-auto.actions").then(({ maybeAutoInvoice }) => {
       void maybeAutoInvoice(order.business_id, orderId, data.status, data.payment_status);
     }).catch(() => {});
+  }
+
+  // notice.ro SMS — transactional notification on a status / payment change, using
+  // the merchant's chosen template per trigger (opt-in). Fire-and-forget.
+  if (order.customer_phone && (statusChanged || paymentChanged)) {
+    const noticeVars = {
+      order: order.order_number,
+      name: order.customer_name,
+      total: formatPrice(Number(order.total)),
+      awb: data.awb ?? "",
+      store: storeName,
+    };
+    if (statusChanged) {
+      const tk = noticeTriggerForStatus(data.status);
+      if (tk) void maybeSendNoticeSms({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+    }
+    if (paymentChanged) {
+      const tk = noticeTriggerForPayment(data.payment_status);
+      if (tk) void maybeSendNoticeSms({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+    }
   }
 
   revalidatePath("/dashboard/orders");
@@ -825,6 +856,15 @@ export async function placeCartOrder(data: {
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)
           : null,
       ].filter(Boolean));
+
+      // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
+      void maybeSendNoticeSms({
+        businessId: data.business_id,
+        orderId: order.id,
+        triggerKey: "pending",
+        phone: data.customer_phone,
+        vars: { order: order.order_number, name: data.customer_name, total: formatPrice(total), awb: "", store: businessName },
+      });
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 

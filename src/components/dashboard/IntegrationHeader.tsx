@@ -14,6 +14,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },
   smso: { src: "/integrations/smso.svg", alt: "Smso.ro" },
+  notice: { src: "/integrations/notice.ro.png", alt: "Notice.ro" },
   stripe: { src: "/integrations/stripe.svg", alt: "Stripe" },
   netopia: { src: "/integrations/netopia.svg", alt: "Netopia Payments", filter: "invert(1)" },
   ipay: { src: "/integrations/ipay.webp", alt: "BT iPay" },

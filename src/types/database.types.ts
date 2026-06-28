@@ -1439,6 +1439,60 @@ export type Database = {
           },
         ]
       }
+      notice_sms_log: {
+        Row: {
+          business_id: string
+          created_at: string
+          error: string | null
+          id: string
+          message: string | null
+          order_id: string | null
+          phone: string | null
+          success: boolean
+          template_id: string | null
+          trigger_key: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          message?: string | null
+          order_id?: string | null
+          phone?: string | null
+          success?: boolean
+          template_id?: string | null
+          trigger_key: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          message?: string | null
+          order_id?: string | null
+          phone?: string | null
+          success?: boolean
+          template_id?: string | null
+          trigger_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notice_sms_log_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_sms_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_campaigns: {
         Row: {
           business_id: string
@@ -1537,6 +1591,7 @@ export type Database = {
           marketing_config: Json | null
           min_order_amount: number | null
           netopia_config: Json | null
+          notice_config: Json | null
           notifications_config: Json
           oblio_config: Json | null
           order_counter: number
@@ -1578,6 +1633,7 @@ export type Database = {
           marketing_config?: Json | null
           min_order_amount?: number | null
           netopia_config?: Json | null
+          notice_config?: Json | null
           notifications_config?: Json
           oblio_config?: Json | null
           order_counter?: number
@@ -1619,6 +1675,7 @@ export type Database = {
           marketing_config?: Json | null
           min_order_amount?: number | null
           netopia_config?: Json | null
+          notice_config?: Json | null
           notifications_config?: Json
           oblio_config?: Json | null
           order_counter?: number

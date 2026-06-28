@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
   Save, Loader2, FileText, ExternalLink,
   CheckCircle, RefreshCw, Mail, Building2, Key, Layers,
-  ReceiptText, Zap, ChevronDown, ChevronUp,
+  ReceiptText, Zap, ChevronDown, ChevronUp, AlertTriangle,
 } from "lucide-react";
 import { updateSmartbillConfig } from "@/lib/actions/store.actions";
-import { testSmartbillConnection } from "@/lib/actions/smartbill.actions";
+import { testSmartbillConnection, getSmartbillTaxes } from "@/lib/actions/smartbill.actions";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +61,30 @@ export function SmartbillConfigClient({
     message: string;
   } | null>(null);
 
+  // VAT rates pulled from the merchant's SmartBill account — the Cota TVA value we
+  // send must be one of THESE names (not a percentage typed by hand).
+  const [taxes, setTaxes] = useState<{ name: string; percentage: number }[]>([]);
+  const [taxesLoading, setTaxesLoading] = useState(false);
+
+  const loadTaxes = useCallback(async () => {
+    setTaxesLoading(true);
+    const res = await getSmartbillTaxes(businessId);
+    setTaxesLoading(false);
+    if (!("error" in res)) setTaxes(res.taxes);
+  }, [businessId]);
+
+  // Auto-load the VAT rates on open if creds are already saved (state set only
+  // after the await, never synchronously inside the effect).
+  useEffect(() => {
+    if (!(initialConfig.email && initialConfig.token && initialConfig.company_vat_code)) return;
+    let active = true;
+    void (async () => {
+      const res = await getSmartbillTaxes(businessId);
+      if (active && !("error" in res)) setTaxes(res.taxes);
+    })();
+    return () => { active = false; };
+  }, [initialConfig.email, initialConfig.token, initialConfig.company_vat_code, businessId]);
+
   function set<K extends keyof SmartbillConfig>(key: K, value: SmartbillConfig[K]) {
     setCfg(c => ({ ...c, [key]: value }));
   }
@@ -97,6 +121,7 @@ export function SmartbillConfigClient({
         setTestResult({ ok: false, message: result.error });
       } else {
         setTestResult({ ok: true, message: "Conexiune reusita!", series: result.series, taxes: result.taxes });
+        void loadTaxes();
       }
     } catch {
       setTestResult({ ok: false, message: "Eroare de retea." });
@@ -231,17 +256,53 @@ export function SmartbillConfigClient({
               </p>
             </div>
 
-            {/* Tax name */}
+            {/* Cota TVA — must be a tax NAME from SmartBill (not a percentage), so it's a dropdown */}
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <ReceiptText className="h-3.5 w-3.5 text-muted-foreground" />Cota TVA
               </label>
-              <Input type="text" value={cfg.tax_name}
-                onChange={e => set("tax_name", e.target.value)}
-                placeholder="ex: Cota 19% — lasa gol daca nu esti platitor TVA" />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Numele exact al cotei din SmartBill. Testeaza conexiunea pentru a-l vedea.
-              </p>
+              {(() => {
+                const known = taxes.some(t => t.name === cfg.tax_name);
+                const showCustom = !!cfg.tax_name && !known;
+                const isUnknownAfterLoad = showCustom && taxes.length > 0;
+                return (
+                  <>
+                    <div className="flex gap-2">
+                      <select
+                        aria-label="Cota TVA"
+                        value={cfg.tax_name}
+                        onChange={e => set("tax_name", e.target.value)}
+                        className={selectCls}
+                      >
+                        <option value="">— Nu sunt platitor de TVA (fara TVA) —</option>
+                        {taxes.map(t => (
+                          <option key={t.name} value={t.name}>{t.name} ({t.percentage}%)</option>
+                        ))}
+                        {showCustom && (
+                          <option value={cfg.tax_name}>
+                            {cfg.tax_name}{isUnknownAfterLoad ? " — necunoscut in SmartBill" : ""}
+                          </option>
+                        )}
+                      </select>
+                      <Button type="button" variant="outline" size="icon" aria-label="Reincarca cotele din SmartBill"
+                        onClick={() => void loadTaxes()} disabled={taxesLoading || !canTest}>
+                        {taxesLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                      </Button>
+                    </div>
+                    {isUnknownAfterLoad && (
+                      <div className="mt-1.5 flex items-start gap-1.5 text-xs text-warning">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                        <span>Cota „{cfg.tax_name}” nu exista in contul tau SmartBill. Alege una din lista — SmartBill cere <strong>numele</strong> cotei (ex. „Normala”), nu procentul.</span>
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {taxes.length > 0
+                        ? "Alege cota care corespunde TVA-ului din Setari. SmartBill foloseste numele cotei, nu procentul."
+                        : "Testeaza conexiunea (sau apasa reincarca) ca sa aduci cotele din SmartBill. Lasa gol daca nu esti platitor de TVA."}
+                    </p>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Send email toggle */}
@@ -341,22 +402,6 @@ export function SmartbillConfigClient({
                         {s}
                       </Button>
                     ))}
-                  </div>
-                </div>
-              )}
-              {testResult.ok && testResult.taxes && testResult.taxes.length > 0 && (
-                <div className="mt-3">
-                  <p className="mb-1.5 text-xs font-semibold text-foreground">Cote TVA disponibile (click pentru selectare):</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {testResult.taxes.map(t => {
-                      const name = t.split(" (")[0];
-                      return (
-                        <Button key={t} type="button" variant="outline" size="xs" className="font-mono"
-                          onClick={() => { set("tax_name", name); toast.success(`Cota "${name}" selectata.`); }}>
-                          {t}
-                        </Button>
-                      );
-                    })}
                   </div>
                 </div>
               )}

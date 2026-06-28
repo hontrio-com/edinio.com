@@ -48,13 +48,40 @@ async function buildInvoiceProducts(
     vat_rate: unknown;
   },
   pricesIncludeVat: boolean,
-  vatEnabled: boolean
+  vatEnabled: boolean,
+  storeVatRate: number
 ): Promise<MerchantInvoiceProduct[]> {
   const items = (order.items as unknown as OrderItem[]) ?? [];
-  const hasTax = vatEnabled && !!config.tax_name && Number(order.vat_rate) > 0;
+
+  // A non-empty tax_name means "I'm a VAT payer". (Empty = facturi fara TVA.)
+  const isVatPayer = vatEnabled && !!config.tax_name;
+  const orderVat = Number(order.vat_rate) || 0;
+  // Old orders placed before VAT was enabled carry vat_rate=0 — fall back to the
+  // store's CURRENT VAT rate so a VAT-paying merchant can still invoice them.
+  const effectiveVat = isVatPayer ? (orderVat > 0 ? orderVat : storeVatRate) : 0;
+  const usingFallback = effectiveVat > 0 && orderVat <= 0;
+
+  // SmartBill needs the exact tax NAME (not a percentage). Keep the configured name
+  // if it's valid in the account; otherwise resolve by matching percentage — so the
+  // invoice works even if the merchant typed e.g. "21". Best-effort (network).
+  let taxName = config.tax_name;
+  if (effectiveVat > 0) {
+    const taxList = await getMerchantTaxes(config);
+    if (!("error" in taxList) && taxList.length > 0) {
+      const byName = taxList.find(t => t.name === config.tax_name);
+      const byPct = taxList.find(t => Math.abs(t.percentage - effectiveVat) < 0.01);
+      taxName = byName?.name ?? byPct?.name ?? config.tax_name;
+    }
+  }
+
+  const hasTax = effectiveVat > 0 && !!taxName;
+  // For a fallback (historical) order the stored prices are the final amounts the
+  // customer paid, so VAT is extracted FROM them (tax included) — invoice total
+  // stays equal to the order total instead of adding tax on top.
+  const taxIncluded = usingFallback ? true : pricesIncludeVat;
 
   const taxFields = hasTax
-    ? { taxName: config.tax_name, taxPercentage: Number(order.vat_rate) }
+    ? { taxName, taxPercentage: effectiveVat }
     : {};
 
   const products: MerchantInvoiceProduct[] = items.map(item => ({
@@ -63,7 +90,7 @@ async function buildInvoiceProducts(
     currency: "RON",
     quantity: item.quantity,
     price: item.price,
-    isTaxIncluded: pricesIncludeVat,
+    isTaxIncluded: taxIncluded,
     ...taxFields,
   }));
 
@@ -74,7 +101,7 @@ async function buildInvoiceProducts(
       currency: "RON",
       quantity: 1,
       price: Number(order.shipping_cost),
-      isTaxIncluded: pricesIncludeVat,
+      isTaxIncluded: taxIncluded,
       ...taxFields,
     });
   }
@@ -111,10 +138,11 @@ async function buildInvoiceParams(
   seriesName: string,
   pricesIncludeVat: boolean,
   vatEnabled: boolean,
+  storeVatRate: number,
   extraParams?: Partial<MerchantInvoiceParams>
 ): Promise<MerchantInvoiceParams> {
   const address = order.shipping_address as ShippingAddress | null;
-  const products = await buildInvoiceProducts(config, order, pricesIncludeVat, vatEnabled);
+  const products = await buildInvoiceProducts(config, order, pricesIncludeVat, vatEnabled, storeVatRate);
   const today = new Date().toISOString().split("T")[0];
   const shouldSendEmail = config.send_email && !!order.customer_email;
 
@@ -147,12 +175,13 @@ async function getStoreVatSettings(businessId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("store_settings")
-    .select("prices_include_vat, vat_enabled")
+    .select("prices_include_vat, vat_enabled, vat_rate")
     .eq("business_id", businessId)
     .single();
   return {
     pricesIncludeVat: data?.prices_include_vat ?? false,
     vatEnabled: data?.vat_enabled ?? false,
+    vatRate: Number(data?.vat_rate ?? 0),
   };
 }
 
@@ -177,6 +206,32 @@ export async function testSmartbillConnection(
   };
 }
 
+// Fetch the VAT rates defined in the merchant's SmartBill account, so the config
+// UI can offer them as a dropdown (the taxName sent to SmartBill must match one of
+// these names exactly). Works while still configuring (no `enabled` gate).
+export async function getSmartbillTaxes(
+  businessId: string
+): Promise<{ taxes: { name: string; percentage: number }[] } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  const { data: settings } = await supabase
+    .from("store_settings").select("smartbill_config").eq("business_id", businessId).single();
+  const config = settings?.smartbill_config as SmartbillConfig | null;
+  if (!config?.email || !config.token || !config.company_vat_code) {
+    return { error: "Completeaza email, token si CUI, apoi salveaza." };
+  }
+
+  const res = await getMerchantTaxes(config);
+  if ("error" in res) return res;
+  return { taxes: res };
+}
+
 export async function generateOrderInvoice(
   businessId: string,
   orderId: string
@@ -193,8 +248,8 @@ export async function generateOrderInvoice(
   if (!order) return { error: "Comanda nu a fost gasita." };
   if (order.smartbill_invoice_number) return { error: "Factura a fost deja generata pentru aceasta comanda." };
 
-  const { pricesIncludeVat, vatEnabled } = await getStoreVatSettings(businessId);
-  const params = await buildInvoiceParams(config, order, config.series_name, pricesIncludeVat, vatEnabled);
+  const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
+  const params = await buildInvoiceParams(config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate);
   const result = await createMerchantInvoice(config, params);
   if ("error" in result) return result;
 
@@ -225,8 +280,8 @@ export async function generateOrderEstimate(
   if (!order) return { error: "Comanda nu a fost gasita." };
   if (order.smartbill_estimate_number) return { error: "Proforma a fost deja generata pentru aceasta comanda." };
 
-  const { pricesIncludeVat, vatEnabled } = await getStoreVatSettings(businessId);
-  const params = await buildInvoiceParams(config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled);
+  const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
+  const params = await buildInvoiceParams(config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate);
   const result = await createMerchantEstimate(config, params);
   if ("error" in result) return result;
 
@@ -257,8 +312,8 @@ export async function convertEstimateToInvoice(
   }
   if (order.smartbill_invoice_number) return { error: "Factura a fost deja generata." };
 
-  const { pricesIncludeVat, vatEnabled } = await getStoreVatSettings(businessId);
-  const params = await buildInvoiceParams(config, order, config.series_name, pricesIncludeVat, vatEnabled, {
+  const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
+  const params = await buildInvoiceParams(config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate, {
     useEstimateDetails: true,
     estimate: {
       seriesName: order.smartbill_estimate_series as string,
@@ -383,12 +438,13 @@ export async function maybeAutoGenerateInvoice(
     if (!order || order.smartbill_invoice_number) return false;
 
     const { data: storeSettings } = await supabase
-      .from("store_settings").select("prices_include_vat, vat_enabled").eq("business_id", businessId).single();
+      .from("store_settings").select("prices_include_vat, vat_enabled, vat_rate").eq("business_id", businessId).single();
 
     const pricesIncludeVat = storeSettings?.prices_include_vat ?? false;
     const vatEnabled = storeSettings?.vat_enabled ?? false;
+    const vatRate = Number(storeSettings?.vat_rate ?? 0);
 
-    const params = await buildInvoiceParams(config, order, config.series_name, pricesIncludeVat, vatEnabled);
+    const params = await buildInvoiceParams(config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate);
     const result = await createMerchantInvoice(config, params);
     if ("error" in result) return false;
 

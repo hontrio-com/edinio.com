@@ -246,5 +246,8 @@ function buildSender(config: WootConfig): object {
     city_id: config.sender.city_id,
     address: config.sender.address,
     ...(config.sender.zipcode ? { zipcode: config.sender.zipcode } : {}),
+    // Drop-off services ("predare la Locker / Locatie") require the sender's
+    // handover-point ID; harmless for home-pickup services.
+    ...(config.sender.location_id ? { location_id: config.sender.location_id } : {}),
   };
 }

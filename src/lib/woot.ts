@@ -13,6 +13,9 @@ export type WootSender = {
   city_id: number;
   address: string;
   zipcode?: string;
+  // Required by Woot for drop-off services ("predare la Locker / Locatie") — the
+  // sender's handover point ID. Ignored for normal home-pickup services.
+  location_id?: number;
 };
 
 export type WootConfig = {

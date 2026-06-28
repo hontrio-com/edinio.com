@@ -357,6 +357,18 @@ export default function WootConfigClient({
             <Input type="text" value={cfg.sender.zipcode ?? ""} onChange={e => setSender("zipcode", e.target.value)}
               placeholder="000000" className="max-w-40" />
           </div>
+
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
+              ID locatie predare (optional)
+            </label>
+            <Input type="number" min="0" value={cfg.sender.location_id ? String(cfg.sender.location_id) : ""}
+              onChange={e => setSender("location_id", e.target.value ? Number(e.target.value) : undefined)}
+              placeholder="ex: 1234" className="max-w-40" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Necesar doar pentru serviciile cu <strong>predare la locker / locatie</strong> (predai coletul la un punct Woot, nu ridicare de la adresa). Gasesti ID-ul locatiei in contul tau Woot. Lasa gol daca folosesti ridicare de la adresa.
+            </p>
+          </div>
         </Panel>
 
         {/* Actions */}

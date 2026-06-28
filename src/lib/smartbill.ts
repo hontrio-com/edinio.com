@@ -270,10 +270,16 @@ export async function createMerchantInvoice(
       number?: string;
       series?: string;
     };
+    // If SmartBill returned a number, the document WAS created — record it even if a
+    // non-fatal warning (e.g. email server not configured) is present, so we never
+    // discard a real document, which would cause a duplicate on retry.
+    if (data.number) {
+      return { number: data.number, series: data.series ?? "" };
+    }
     if (!res.ok || data.errorText) {
       return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
     }
-    return { number: data.number ?? "", series: data.series ?? "" };
+    return { number: "", series: data.series ?? "" };
   } catch {
     return { error: "Eroare de retea la crearea facturii." };
   }
@@ -312,10 +318,16 @@ export async function createMerchantEstimate(
       number?: string;
       series?: string;
     };
+    // If SmartBill returned a number, the document WAS created — record it even if a
+    // non-fatal warning (e.g. email server not configured) is present, so we never
+    // discard a real document, which would cause a duplicate on retry.
+    if (data.number) {
+      return { number: data.number, series: data.series ?? "" };
+    }
     if (!res.ok || data.errorText) {
       return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
     }
-    return { number: data.number ?? "", series: data.series ?? "" };
+    return { number: "", series: data.series ?? "" };
   } catch {
     return { error: "Eroare de retea la crearea proformei." };
   }

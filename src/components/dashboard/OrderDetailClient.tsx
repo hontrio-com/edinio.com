@@ -402,6 +402,7 @@ export function OrderDetailClient({
       setInvoiceNumber(result.number);
       setInvoiceSeries(result.series);
       toast.success(`Factura ${result.series}${result.number} generata.`);
+      if (result.emailWarning) toast.warning(result.emailWarning);
     });
   }
 
@@ -412,6 +413,7 @@ export function OrderDetailClient({
       setEstimateNumber(result.number);
       setEstimateSeries(result.series);
       toast.success(`Proforma ${result.series}${result.number} generata.`);
+      if (result.emailWarning) toast.warning(result.emailWarning);
     });
   }
 
@@ -422,6 +424,7 @@ export function OrderDetailClient({
       setInvoiceNumber(result.number);
       setInvoiceSeries(result.series);
       toast.success(`Factura ${result.series}${result.number} emisa din proforma.`);
+      if (result.emailWarning) toast.warning(result.emailWarning);
     });
   }
 

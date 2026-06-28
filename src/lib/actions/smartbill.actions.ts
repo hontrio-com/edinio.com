@@ -144,7 +144,6 @@ async function buildInvoiceParams(
   const address = order.shipping_address as ShippingAddress | null;
   const products = await buildInvoiceProducts(config, order, pricesIncludeVat, vatEnabled, storeVatRate);
   const today = new Date().toISOString().split("T")[0];
-  const shouldSendEmail = config.send_email && !!order.customer_email;
 
   return {
     companyVatCode: config.company_vat_code,
@@ -163,10 +162,9 @@ async function buildInvoiceParams(
     issueDate: today,
     products,
     isDraft: false,
-    sendEmail: shouldSendEmail,
-    ...(shouldSendEmail && order.customer_email
-      ? { email: { to: order.customer_email } }
-      : {}),
+    // Email is sent as a separate, non-blocking step after creation (see
+    // trySendDocEmail), so a missing SmartBill email server can't fail invoicing.
+    sendEmail: false,
     ...extraParams,
   };
 }
@@ -183,6 +181,32 @@ async function getStoreVatSettings(businessId: string) {
     vatEnabled: data?.vat_enabled ?? false,
     vatRate: Number(data?.vat_rate ?? 0),
   };
+}
+
+// Best-effort document email. SmartBill sends the PDF using the merchant's OWN
+// email server; if that's not configured it fails — but the document is already
+// created, so we never block on it. Returns a warning string the UI can surface.
+async function trySendDocEmail(
+  config: SmartbillConfig,
+  customerEmail: string | null,
+  type: "invoice" | "estimate",
+  seriesName: string,
+  number: string,
+): Promise<string | null> {
+  if (!config.send_email || !customerEmail) return null;
+  const label = type === "invoice" ? "Factura" : "Proforma";
+  try {
+    const res = await sendMerchantDocumentEmail(config, {
+      companyVatCode: config.company_vat_code,
+      type, seriesName, number, to: customerEmail,
+    });
+    if ("error" in res) {
+      return `${label} a fost generata, dar emailul catre client nu a putut fi trimis: ${res.error}. Configureaza serverul de email in SmartBill sau opreste trimiterea pe email din integrare.`;
+    }
+    return null;
+  } catch {
+    return `${label} a fost generata, dar emailul catre client nu a putut fi trimis.`;
+  }
 }
 
 // ─── Public actions ────────────────────────────────────────────────────────
@@ -235,7 +259,7 @@ export async function getSmartbillTaxes(
 export async function generateOrderInvoice(
   businessId: string,
   orderId: string
-): Promise<{ number: string; series: string } | { error: string }> {
+): Promise<{ number: string; series: string; emailWarning?: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
@@ -258,13 +282,14 @@ export async function generateOrderInvoice(
     smartbill_invoice_series: result.series,
   }).eq("id", orderId);
 
-  return { number: result.number, series: result.series };
+  const emailWarning = await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
+  return { number: result.number, series: result.series, ...(emailWarning ? { emailWarning } : {}) };
 }
 
 export async function generateOrderEstimate(
   businessId: string,
   orderId: string
-): Promise<{ number: string; series: string } | { error: string }> {
+): Promise<{ number: string; series: string; emailWarning?: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
@@ -290,13 +315,14 @@ export async function generateOrderEstimate(
     smartbill_estimate_series: result.series,
   }).eq("id", orderId);
 
-  return { number: result.number, series: result.series };
+  const emailWarning = await trySendDocEmail(config, order.customer_email, "estimate", result.series, result.number);
+  return { number: result.number, series: result.series, ...(emailWarning ? { emailWarning } : {}) };
 }
 
 export async function convertEstimateToInvoice(
   businessId: string,
   orderId: string
-): Promise<{ number: string; series: string } | { error: string }> {
+): Promise<{ number: string; series: string; emailWarning?: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
@@ -329,7 +355,8 @@ export async function convertEstimateToInvoice(
     smartbill_invoice_series: result.series,
   }).eq("id", orderId);
 
-  return { number: result.number, series: result.series };
+  const emailWarning = await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
+  return { number: result.number, series: result.series, ...(emailWarning ? { emailWarning } : {}) };
 }
 
 export async function stornoOrderInvoice(
@@ -452,6 +479,8 @@ export async function maybeAutoGenerateInvoice(
       smartbill_invoice_number: result.number,
       smartbill_invoice_series: result.series,
     }).eq("id", orderId);
+    // Best-effort email — never affects the already-created invoice.
+    await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
     return true;
   } catch {
     // Fire-and-forget: never throw, never block order update

@@ -3,8 +3,8 @@
 import { useState, useEffect, useTransition } from "react";
 import { X, Loader2, Package, Truck, ChevronRight, Download, AlertCircle, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { getWootPrices, createWootAwb, cancelWootAwb } from "@/lib/actions/woot.actions";
-import type { WootPriceResult, WootParcel, WootCounty, WootCity } from "@/lib/woot";
+import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations } from "@/lib/actions/woot.actions";
+import type { WootPriceResult, WootParcel, WootCounty, WootCity, WootLocation } from "@/lib/woot";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -61,11 +61,19 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [pricesError, setPricesError] = useState("");
   const [pricesFetched, setPricesFetched] = useState(false);
 
+  // Sender drop-off location (for "predare la locker" services)
+  const [senderLocations, setSenderLocations] = useState<WootLocation[]>([]);
+  const [loadingSenderLocations, setLoadingSenderLocations] = useState(false);
+  const [senderLocationId, setSenderLocationId] = useState<number | null>(null);
+
   // Create state
   const [creating, startCreate] = useTransition();
   const [cancelling, startCancel] = useTransition();
 
   const hasAwb = !!order.woot_awb_number;
+  // A service whose pickup isn't "door" needs the sender to hand the parcel over
+  // at a Woot location, so it requires a sender location_id.
+  const needsSenderLocation = !!selectedService?.service_pickup && selectedService.service_pickup !== "door";
 
   // Load counties on open
   useEffect(() => {
@@ -191,10 +199,23 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   function handleSelectService(p: WootPriceResult) {
     setSelectedServiceId(p.service_id);
     setSelectedService(p);
+    setSenderLocationId(null);
+    setSenderLocations([]);
+    // Drop-off service ("predare la locker") → load this courier's sender locations.
+    if (p.service_pickup && p.service_pickup !== "door") {
+      setLoadingSenderLocations(true);
+      void (async () => {
+        const res = await getWootSenderLocations(businessId, p.courier_id);
+        setLoadingSenderLocations(false);
+        if (res.success && res.locations) setSenderLocations(res.locations);
+        else if (res.error) toast.error(res.error);
+      })();
+    }
   }
 
   function handleCreate() {
     if (!selectedService) { toast.error("Selecteaza un curier."); return; }
+    if (needsSenderLocation && !senderLocationId) { toast.error("Selecteaza locatia de predare."); return; }
     startCreate(async () => {
       const rep = Number(repayment);
       const result = await createWootAwb(
@@ -205,7 +226,8 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
         buildReceiver(),
         buildParcels(),
         rep > 0 ? rep : undefined,
-        { opd: opdEnabled || undefined }
+        { opd: opdEnabled || undefined },
+        needsSenderLocation ? senderLocationId ?? undefined : undefined
       );
       if (!result.success) {
         toast.error(result.error ?? "Eroare la crearea AWB.");
@@ -436,8 +458,33 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                       })}
                     </div>
 
+                    {needsSenderLocation && (
+                      <div className="pt-2">
+                        <label className="text-sm font-semibold text-foreground">Locatie de predare</label>
+                        <p className="text-xs text-muted-foreground mb-1.5">
+                          Serviciul {selectedService?.courier_name} cere predarea coletului la un punct. Alege locatia de unde predai.
+                        </p>
+                        {loadingSenderLocations ? (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Se incarca locatiile...
+                          </div>
+                        ) : senderLocations.length > 0 ? (
+                          <select value={senderLocationId ?? ""} onChange={e => setSenderLocationId(e.target.value ? Number(e.target.value) : null)} className={inputCls}>
+                            <option value="">Alege locatia de predare...</option>
+                            {senderLocations.map(loc => (
+                              <option key={loc.id} value={loc.id}>{loc.name} — {loc.address}, {loc.city_name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-xs text-destructive">
+                            Nicio locatie de predare disponibila pentru {selectedService?.courier_name} in judetul expeditorului. Alege un serviciu cu ridicare de la adresa, sau verifica judetul expeditorului in setarile Woot.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {selectedService && (
-                      <Button onClick={handleCreate} disabled={creating} size="lg" className="w-full mt-3">
+                      <Button onClick={handleCreate} disabled={creating || (needsSenderLocation && !senderLocationId)} size="lg" className="w-full mt-3">
                         {creating ? <Loader2 className="animate-spin" /> : <ChevronRight />}
                         {creating
                           ? "Se creeaza AWB..."

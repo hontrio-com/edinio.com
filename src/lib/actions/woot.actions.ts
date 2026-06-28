@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   getWootToken, getPrices, createOrder, cancelWootOrder,
-  getAccountInfo, getCredit,
-  type WootConfig, type WootParcel, type WootPriceResult,
+  getAccountInfo, getCredit, getLocations,
+  type WootConfig, type WootParcel, type WootPriceResult, type WootLocation,
 } from "@/lib/woot";
 import { normalizePhone } from "@/lib/utils/phone";
 
@@ -139,6 +139,30 @@ export async function getWootPrices(
   }
 }
 
+// Sender drop-off lockers/points for a given service's courier, near the sender's
+// county. Used by the AWB modal when a "predare la locker" service is selected.
+export async function getWootSenderLocations(
+  businessId: string,
+  courierId: number
+): Promise<{ success: boolean; error?: string; locations?: WootLocation[] }> {
+  if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
+
+  const config = await loadConfig(businessId);
+  if (!config?.public_key || !config?.secret_key) return { success: false, error: "Woot nu este configurat" };
+
+  try {
+    const token = await getWootToken(config.public_key, config.secret_key);
+    const locations = await getLocations(token, {
+      sender: true,
+      courier_id: courierId,
+      county_id: config.sender.county_id || undefined,
+    });
+    return { success: true, locations };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
 export async function createWootAwb(
   businessId: string,
   orderId: string,
@@ -154,7 +178,8 @@ export async function createWootAwb(
   },
   parcels: WootParcel[],
   repayment?: number,
-  options?: { opd?: boolean; sat?: boolean }
+  options?: { opd?: boolean; sat?: boolean },
+  senderLocationId?: number
 ): Promise<{ success: boolean; error?: string; awbNumber?: string; wootOrderId?: number }> {
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
 
@@ -167,7 +192,7 @@ export async function createWootAwb(
     const token = await getWootToken(config.public_key, config.secret_key);
     const result = await createOrder(token, {
       service_id: serviceId,
-      sender: buildSender(config),
+      sender: buildSender(config, senderLocationId),
       receiver: { company: 0, ...receiver, phone: normalizePhone(receiver.phone) },
       parcels,
       repayment: repayment && repayment > 0 ? repayment : undefined,
@@ -233,7 +258,7 @@ export async function cancelWootAwb(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildSender(config: WootConfig): object {
+function buildSender(config: WootConfig, locationId?: number): object {
   return {
     company: config.sender.company,
     ...(config.sender.company === 1 && config.sender.company_name
@@ -246,5 +271,8 @@ function buildSender(config: WootConfig): object {
     city_id: config.sender.city_id,
     address: config.sender.address,
     ...(config.sender.zipcode ? { zipcode: config.sender.zipcode } : {}),
+    // Drop-off ("predare la locker") services: id of a Woot location from
+    // GET /general/locations (only sent at AWB creation, never at pricing).
+    ...(locationId ? { location_id: locationId } : {}),
   };
 }

@@ -36,6 +36,11 @@ export type WootPriceResult = {
   service_name: string;
   courier_id: number;
   courier_name: string;
+  // "door" = home pickup; anything else (locker/point) = sender hands over at a
+  // location, which requires sender.location_id at AWB creation.
+  service_pickup?: string;
+  service_delivery?: string;
+  pickup_locations_count?: number | null;
   price: number;
   tax: number;
   total: number;
@@ -44,6 +49,24 @@ export type WootPriceResult = {
   final_total: number;
   return_price: number | null;
   errors: string[];
+};
+
+// A Woot locker/point (from GET /general/locations). The `id` is what
+// sender.location_id / receiver.location_id expect for locker/point services.
+export type WootLocation = {
+  id: number;
+  name: string;
+  type: string;
+  courier_id: number;
+  courier_name: string;
+  county_id: number;
+  county_name: string;
+  city_id: number;
+  city_name: string;
+  address: string;
+  zipcode: string;
+  sender: number;   // 1 = supports pickup (sender drop-off)
+  receiver: number; // 1 = supports delivery
 };
 
 export type WootCounty = {
@@ -154,6 +177,25 @@ export async function getAccountInfo(token: string) {
 
 export async function getCredit(token: string) {
   return wootReq<{ gross: number; tax: number; total: number }>(token, "GET", "/account/credit");
+}
+
+// Lockers/points from GET /general/locations. For sender drop-off ("predare la
+// locker"), filter to sender-capable locations of the chosen service's courier.
+export async function getLocations(
+  token: string,
+  params: { sender?: boolean; receiver?: boolean; courier_id?: number; county_id?: number; city_id?: number }
+): Promise<WootLocation[]> {
+  const qs = new URLSearchParams({ country_id: "189" });
+  if (params.sender) qs.set("sender", "true");
+  if (params.receiver) qs.set("receiver", "true");
+  if (params.courier_id) qs.set("courier_id", String(params.courier_id));
+  if (params.county_id) qs.set("county_id", String(params.county_id));
+  if (params.city_id) qs.set("city_id", String(params.city_id));
+  const data = await wootReq<WootLocation[]>(token, "GET", `/general/locations?${qs.toString()}`);
+  const list = Array.isArray(data) ? data : [];
+  // Filter client-side too, so we only ever offer sender-capable locations
+  // regardless of how the API treats the boolean query param.
+  return params.sender ? list.filter((l) => Number(l.sender) === 1) : list;
 }
 
 export async function getPrices(

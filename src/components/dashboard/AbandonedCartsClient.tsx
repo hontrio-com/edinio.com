@@ -315,7 +315,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                   >
                     <Mail className="h-3.5 w-3.5" /> Mail
                   </button>
-                  {data.smsoEnabled && (
+                  {data.smsEnabled && (
                     <button
                       onClick={() => openRecover(c, "sms")}
                       disabled={!c.phone}
@@ -339,10 +339,10 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         )}
       </div>
 
-      {!data.smsoEnabled && data.carts.length > 0 && (
+      {!data.smsEnabled && data.carts.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-muted-foreground rounded-xl border border-border bg-muted/40 p-3">
           <Bell className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>Activează integrarea SMSO din Integrări ca să poți recupera coșurile și prin SMS, nu doar prin email.</span>
+          <span>Activează SMSO sau notice.ro (coș abandonat) din Integrări ca să poți recupera coșurile și prin SMS, nu doar prin email.</span>
         </div>
       )}
 

@@ -40,6 +40,8 @@ export interface AbandonedCartRow {
 export interface AbandonedCartsData {
   enabled: boolean;
   smsoEnabled: boolean;
+  // SMS recovery is available if EITHER SMSO or notice.ro (abandoned-cart) is configured.
+  smsEnabled: boolean;
   storeUrl: string;
   storeName: string;
   primaryColor: string;

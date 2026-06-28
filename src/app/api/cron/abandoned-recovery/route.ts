@@ -3,6 +3,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { sendSms, type SmsoConfig } from "@/lib/smso";
+import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
+import type { NoticeConfig } from "@/lib/notice";
 import { storeBaseUrl, PLATFORM_ORIGIN } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
 import {
@@ -55,7 +57,7 @@ export async function GET(req: NextRequest) {
   // Stores opted in + with automation enabled.
   const { data: settingsRows } = await admin
     .from("store_settings")
-    .select("business_id, abandoned_cart_automation, smso_config")
+    .select("business_id, abandoned_cart_automation, smso_config, notice_config")
     .eq("abandoned_cart_enabled", true);
 
   const active = (settingsRows ?? [])
@@ -63,6 +65,7 @@ export async function GET(req: NextRequest) {
       businessId: s.business_id,
       automation: readAutomationConfig(s.abandoned_cart_automation),
       smso: s.smso_config as SmsoConfig | null,
+      notice: s.notice_config as NoticeConfig | null,
     }))
     .filter((s) => s.automation.enabled && s.automation.steps.length > 0);
 
@@ -91,6 +94,7 @@ export async function GET(req: NextRequest) {
     const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
     const storeName = biz.store_name ?? biz.business_name;
     const smsoReady = !!(store.smso?.enabled && store.smso.api_key && store.smso.sender_id);
+    const noticeReady = !!(store.notice?.enabled && store.notice.api_token && store.notice.abandoned?.enabled);
 
     const { data: carts } = await admin
       .from("abandoned_carts")
@@ -132,15 +136,23 @@ export async function GET(req: NextRequest) {
           sent++;
         } catch { /* leave for next run */ }
       } else {
-        if (!cart.phone || !smsoReady) { await advance(admin, cart.id, cart, now); continue; }
+        if (!cart.phone || (!smsoReady && !noticeReady)) { await advance(admin, cart.id, cart, now); continue; }
         if (isQuietHour(store.automation.quiet_hours, nowHour)) continue; // defer SMS
         const body = step.message
           ? `${interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName })} ${recoverUrl}`
           : defaultRecoverySms({ name: cart.customer_name, storeName, url: recoverUrl, code: step.discount_code ?? null });
-        const res = await sendSms(store.smso!.api_key, {
-          to: cart.phone, sender: store.smso!.sender_id, body, type: "marketing", remove_special_chars: true,
-        });
-        if (res.success) { await advance(admin, cart.id, cart, now, "sms"); sent++; }
+        // Prefer notice.ro when enabled for abandoned carts, else SMSO.
+        let smsOk = false;
+        if (noticeReady) {
+          const r = await sendNoticeAbandonedSms(admin, store.notice, { businessId: store.businessId, phone: cart.phone, body });
+          smsOk = r.success;
+        } else {
+          const res = await sendSms(store.smso!.api_key, {
+            to: cart.phone, sender: store.smso!.sender_id, body, type: "marketing", remove_special_chars: true,
+          });
+          smsOk = res.success;
+        }
+        if (smsOk) { await advance(admin, cart.id, cart, now, "sms"); sent++; }
       }
     }
   }

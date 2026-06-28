@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
+import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
+import type { NoticeConfig } from "@/lib/notice";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { storeBaseUrl } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
@@ -162,7 +164,7 @@ export async function getAbandonedCartsData(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: settings } = await supabase
-    .from("store_settings").select("abandoned_cart_enabled, smso_config, abandoned_cart_automation").eq("business_id", businessId).single();
+    .from("store_settings").select("abandoned_cart_enabled, smso_config, abandoned_cart_automation, notice_config").eq("business_id", businessId).single();
 
   const [{ data: profile }, { data: discountRows }] = await Promise.all([
     supabase.from("users_profile").select("plan").eq("id", user.id).single(),
@@ -177,6 +179,8 @@ export async function getAbandonedCartsData(
   const enabled = settings?.abandoned_cart_enabled ?? false;
   const smso = settings?.smso_config as SmsoConfig | null;
   const smsoEnabled = !!(smso?.enabled && smso?.api_key && smso?.sender_id);
+  const notice = settings?.notice_config as NoticeConfig | null;
+  const smsEnabled = smsoEnabled || !!(notice?.enabled && notice.api_token && notice.abandoned?.enabled);
 
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
   const primaryColor = biz.primary_color ?? "#1AB554";
@@ -229,6 +233,7 @@ export async function getAbandonedCartsData(
   return {
     enabled,
     smsoEnabled,
+    smsEnabled,
     storeUrl,
     storeName: biz.store_name ?? biz.business_name,
     primaryColor,
@@ -368,9 +373,12 @@ export async function sendAbandonedCartSms(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: settings } = await supabase
-    .from("store_settings").select("smso_config").eq("business_id", businessId).single();
+    .from("store_settings").select("smso_config, notice_config").eq("business_id", businessId).single();
   const smso = settings?.smso_config as SmsoConfig | null;
-  if (!smso?.enabled || !smso.api_key || !smso.sender_id) return { error: "SMSO nu este activat." };
+  const notice = settings?.notice_config as NoticeConfig | null;
+  const smsoReady = !!(smso?.enabled && smso.api_key && smso.sender_id);
+  const noticeReady = !!(notice?.enabled && notice.api_token && notice.abandoned?.enabled);
+  if (!smsoReady && !noticeReady) return { error: "Activeaza SMSO sau notice.ro (cos abandonat) ca sa trimiti SMS." };
 
   const { data: cart } = await supabase
     .from("abandoned_carts").select("id, customer_name, phone, recovery_count")
@@ -389,10 +397,16 @@ export async function sendAbandonedCartSms(
         code: discountCode?.trim() || null,
       });
 
-  const res = await sendSms(smso.api_key, {
-    to: cart.phone, sender: smso.sender_id, body, type: "marketing", remove_special_chars: true,
-  });
-  if (!res.success) return { error: res.error ?? "SMS-ul nu a putut fi trimis." };
+  // Prefer notice.ro when the merchant enabled it for abandoned carts, else SMSO.
+  if (noticeReady) {
+    const r = await sendNoticeAbandonedSms(supabase, notice, { businessId, phone: cart.phone, body });
+    if (!r.success) return { error: r.error ?? "SMS-ul nu a putut fi trimis." };
+  } else {
+    const res = await sendSms(smso!.api_key, {
+      to: cart.phone, sender: smso!.sender_id, body, type: "marketing", remove_special_chars: true,
+    });
+    if (!res.success) return { error: res.error ?? "SMS-ul nu a putut fi trimis." };
+  }
 
   await supabase.from("abandoned_carts")
     .update({

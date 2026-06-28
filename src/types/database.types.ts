@@ -1439,6 +1439,57 @@ export type Database = {
           },
         ]
       }
+      notice_inbox: {
+        Row: {
+          body: string | null
+          business_id: string
+          channel: string
+          created_at: string
+          from_number: string | null
+          id: string
+          order_id: string | null
+          raw: Json | null
+          received_at: string
+        }
+        Insert: {
+          body?: string | null
+          business_id: string
+          channel?: string
+          created_at?: string
+          from_number?: string | null
+          id?: string
+          order_id?: string | null
+          raw?: Json | null
+          received_at?: string
+        }
+        Update: {
+          body?: string | null
+          business_id?: string
+          channel?: string
+          created_at?: string
+          from_number?: string | null
+          id?: string
+          order_id?: string | null
+          raw?: Json | null
+          received_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notice_inbox_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_inbox_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notice_sms_log: {
         Row: {
           business_id: string
@@ -1451,6 +1502,10 @@ export type Database = {
           success: boolean
           template_id: string | null
           trigger_key: string
+          channel: string
+          provider_id: string | null
+          delivery_status: string | null
+          delivered_at: string | null
         }
         Insert: {
           business_id: string
@@ -1463,6 +1518,10 @@ export type Database = {
           success?: boolean
           template_id?: string | null
           trigger_key: string
+          channel?: string
+          provider_id?: string | null
+          delivery_status?: string | null
+          delivered_at?: string | null
         }
         Update: {
           business_id?: string
@@ -1475,6 +1534,10 @@ export type Database = {
           success?: boolean
           template_id?: string | null
           trigger_key?: string
+          channel?: string
+          provider_id?: string | null
+          delivery_status?: string | null
+          delivered_at?: string | null
         }
         Relationships: [
           {

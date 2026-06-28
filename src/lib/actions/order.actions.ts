@@ -15,8 +15,11 @@ import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
-import { maybeSendNoticeSms, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
-import { formatPrice } from "@/lib/utils/format";
+import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
+import { formatPrice, formatDate } from "@/lib/utils/format";
+
+// Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
+const STORE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -334,14 +337,14 @@ export async function placeOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id)")
+      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -384,12 +387,21 @@ export async function placeOrder(data: {
       ].filter(Boolean));
 
       // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
-      void maybeSendNoticeSms({
+      void maybeSendNoticeNotification({
         businessId: data.business_id,
         orderId: order.id,
         triggerKey: "pending",
         phone: data.customer_phone,
-        vars: { order: order.order_number, name: data.customer_name, total: formatPrice(total), awb: "", store: businessName },
+        vars: {
+          order: order.order_number, name: data.customer_name, total: formatPrice(total),
+          awb: "", store: businessName,
+          phone: data.customer_phone, email: data.customer_email ?? "",
+          address: data.customer_address, city: data.customer_city, region: data.customer_county,
+          payment_method: data.payment_method ?? "cash_on_delivery",
+          shipping_method: data.courier_label ?? "",
+          store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
+          date_added: formatDate(new Date()),
+        },
       });
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
@@ -430,12 +442,12 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   const { data: order } = await supabase
     .from("orders")
-    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status")
+    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status, shipping_address, payment_method, created_at")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
 
-  const { data: biz } = await supabase.from("businesses").select("id, business_name, store_name").eq("id", order.business_id).eq("user_id", user.id).single();
+  const { data: biz } = await supabase.from("businesses").select("id, business_name, store_name, slug").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
   const storeName = biz.store_name || biz.business_name;
 
@@ -496,20 +508,34 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   // notice.ro SMS — transactional notification on a status / payment change, using
   // the merchant's chosen template per trigger (opt-in). Fire-and-forget.
   if (order.customer_phone && (statusChanged || paymentChanged)) {
+    const ship = (order.shipping_address ?? {}) as {
+      address?: string; city?: string; county?: string; postcode?: string; country?: string; courier_label?: string;
+    };
     const noticeVars = {
       order: order.order_number,
       name: order.customer_name,
       total: formatPrice(Number(order.total)),
       awb: data.awb ?? "",
       store: storeName,
+      phone: order.customer_phone ?? "",
+      email: order.customer_email ?? "",
+      address: ship.address ?? "",
+      city: ship.city ?? "",
+      region: ship.county ?? "",
+      postcode: ship.postcode ?? "",
+      country: ship.country ?? "",
+      payment_method: (order.payment_method as string | null) ?? "",
+      shipping_method: ship.courier_label ?? "",
+      store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
+      date_added: order.created_at ? formatDate(order.created_at as string) : "",
     };
     if (statusChanged) {
       const tk = noticeTriggerForStatus(data.status);
-      if (tk) void maybeSendNoticeSms({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+      if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
     }
     if (paymentChanged) {
       const tk = noticeTriggerForPayment(data.payment_status);
-      if (tk) void maybeSendNoticeSms({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+      if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
     }
   }
 
@@ -808,14 +834,14 @@ export async function placeCartOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id)")
+      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -858,12 +884,21 @@ export async function placeCartOrder(data: {
       ].filter(Boolean));
 
       // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
-      void maybeSendNoticeSms({
+      void maybeSendNoticeNotification({
         businessId: data.business_id,
         orderId: order.id,
         triggerKey: "pending",
         phone: data.customer_phone,
-        vars: { order: order.order_number, name: data.customer_name, total: formatPrice(total), awb: "", store: businessName },
+        vars: {
+          order: order.order_number, name: data.customer_name, total: formatPrice(total),
+          awb: "", store: businessName,
+          phone: data.customer_phone, email: data.customer_email ?? "",
+          address: data.customer_address, city: data.customer_city, region: data.customer_county,
+          payment_method: data.payment_method ?? "cash_on_delivery",
+          shipping_method: data.courier_label ?? "",
+          store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
+          date_added: formatDate(new Date()),
+        },
       });
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }

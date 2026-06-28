@@ -96,8 +96,31 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(err.message ?? `Woot API error ${res.status}`);
+    // Surface Woot's actual reason (it returns various shapes: { message }, { error },
+    // or Laravel-style { errors: { field: [..] } }) instead of a bare status code.
+    const raw = await res.text().catch(() => "");
+    let detail = "";
+    try {
+      const parsed = JSON.parse(raw) as { message?: string; error?: string; errors?: unknown };
+      if (typeof parsed.message === "string") detail = parsed.message;
+      else if (typeof parsed.error === "string") detail = parsed.error;
+      if (parsed.errors) {
+        const msgs: string[] = [];
+        if (Array.isArray(parsed.errors)) {
+          for (const e of parsed.errors) msgs.push(typeof e === "string" ? e : JSON.stringify(e));
+        } else if (typeof parsed.errors === "object") {
+          for (const v of Object.values(parsed.errors as Record<string, unknown>)) {
+            if (Array.isArray(v)) msgs.push(...v.map(String));
+            else if (v != null) msgs.push(String(v));
+          }
+        }
+        if (msgs.length) detail = detail ? `${detail}: ${msgs.join("; ")}` : msgs.join("; ");
+      }
+    } catch {
+      // Non-JSON body (e.g. HTML error page) — keep a short snippet, skip markup.
+      if (raw && !raw.trimStart().startsWith("<")) detail = raw.slice(0, 300);
+    }
+    throw new Error(detail ? `Woot: ${detail}` : `Woot API error ${res.status}`);
   }
 
   return res.json() as Promise<T>;

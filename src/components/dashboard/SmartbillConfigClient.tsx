@@ -306,14 +306,24 @@ export function SmartbillConfigClient({
             </div>
 
             {/* Send email toggle */}
-            <div className="flex items-center justify-between pt-1">
-              <div>
-                <p className="text-sm font-medium text-foreground">Trimite documentul pe email clientului</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  SmartBill va trimite factura/proforma automat daca clientul are email
-                </p>
+            <div className="pt-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Trimite documentul pe email clientului</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    SmartBill va trimite factura/proforma automat daca clientul are email
+                  </p>
+                </div>
+                <Switch checked={cfg.send_email} onCheckedChange={v => set("send_email", v)} />
               </div>
-              <Switch checked={cfg.send_email} onCheckedChange={v => set("send_email", v)} />
+              {cfg.send_email && (
+                <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-warning/20 bg-warning/5 p-2.5 text-xs text-warning">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span>
+                    Ca emailul sa fie trimis, contul tau SmartBill trebuie sa aiba un server de email configurat (in SmartBill: Setari &rarr; Configurare email). Daca nu e configurat, factura se genereaza oricum, dar emailul catre client nu pleaca.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

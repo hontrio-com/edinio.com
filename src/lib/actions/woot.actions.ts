@@ -184,7 +184,7 @@ export async function createWootAwb(
     const token = await getWootToken(config.public_key, config.secret_key);
     const result = await createOrder(token, {
       service_id: serviceId,
-      sender: buildSender(config),
+      sender: buildSender(config, true),
       receiver: { company: 0, ...receiver, phone: normalizePhone(receiver.phone) },
       parcels,
       repayment: repayment && repayment > 0 ? repayment : undefined,
@@ -250,7 +250,7 @@ export async function cancelWootAwb(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildSender(config: WootConfig): object {
+function buildSender(config: WootConfig, includeLocation = false): object {
   return {
     company: config.sender.company,
     ...(config.sender.company === 1 && config.sender.company_name
@@ -263,8 +263,8 @@ function buildSender(config: WootConfig): object {
     city_id: config.sender.city_id,
     address: config.sender.address,
     ...(config.sender.zipcode ? { zipcode: config.sender.zipcode } : {}),
-    // Drop-off services ("predare la Locker / Locatie") require the sender's
-    // handover-point ID; harmless for home-pickup services.
-    ...(config.sender.location_id ? { location_id: config.sender.location_id } : {}),
+    // location_id is only valid at AWB creation (the pricing endpoint rejects it).
+    // Sent only for drop-off services where the merchant configured a location.
+    ...(includeLocation && config.sender.location_id ? { location_id: config.sender.location_id } : {}),
   };
 }

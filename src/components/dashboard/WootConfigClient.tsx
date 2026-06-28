@@ -8,7 +8,7 @@ import {
   Save, Loader2, Wifi, WifiOff,
   Building2, User, Phone, Mail, MapPin, Home, CreditCard, Info,
 } from "lucide-react";
-import { saveWootConfig, disconnectWoot, testWootConnection, getWootSenderLocations } from "@/lib/actions/woot.actions";
+import { saveWootConfig, disconnectWoot, testWootConnection } from "@/lib/actions/woot.actions";
 import type { WootConfig, WootCounty, WootCity } from "@/lib/woot";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,6 @@ export default function WootConfigClient({
   const [counties, setCounties] = useState<WootCounty[]>([]);
   const [cities, setCities] = useState<WootCity[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
-  const [senderLocations, setSenderLocations] = useState<{ id: number; label: string }[]>([]);
 
   const isConnected = !!initialConfig?.enabled && !!initialConfig?.public_key;
 
@@ -74,18 +73,6 @@ export default function WootConfigClient({
       .then((data: WootCounty[]) => setCounties(data))
       .catch(() => {});
   }, []);
-
-  // Load the merchant's registered Woot sender locations (for the drop-off picker).
-  // State is set only after the await (never synchronously inside the effect).
-  useEffect(() => {
-    if (!(initialConfig?.public_key && initialConfig?.secret_key)) return;
-    let active = true;
-    void (async () => {
-      const res = await getWootSenderLocations(businessId);
-      if (active && res.success && res.locations) setSenderLocations(res.locations);
-    })();
-    return () => { active = false; };
-  }, [initialConfig?.public_key, initialConfig?.secret_key, businessId]);
 
   // Load cities when county changes
   useEffect(() => {
@@ -371,34 +358,6 @@ export default function WootConfigClient({
               placeholder="000000" className="max-w-40" />
           </div>
 
-          <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-              Locatie predare (optional)
-            </label>
-            {senderLocations.length > 0 ? (
-              <select
-                aria-label="Locatie predare"
-                value={cfg.sender.location_id ? String(cfg.sender.location_id) : ""}
-                onChange={e => setSender("location_id", e.target.value ? Number(e.target.value) : undefined)}
-                className={selectCls}
-              >
-                <option value="">— Ridicare de la adresa (fara predare la locker) —</option>
-                {senderLocations.map(loc => (
-                  <option key={loc.id} value={loc.id}>{loc.label}</option>
-                ))}
-                {cfg.sender.location_id && !senderLocations.some(l => l.id === cfg.sender.location_id) && (
-                  <option value={cfg.sender.location_id}>Locatie #{cfg.sender.location_id}</option>
-                )}
-              </select>
-            ) : (
-              <Input type="number" min="0" value={cfg.sender.location_id ? String(cfg.sender.location_id) : ""}
-                onChange={e => setSender("location_id", e.target.value ? Number(e.target.value) : undefined)}
-                placeholder="ex: 1234" className="max-w-40" />
-            )}
-            <p className="mt-1 text-xs text-muted-foreground">
-              Doar pentru serviciile cu <strong>predare la locker / locatie</strong>. Alege locatia ta inregistrata in Woot de unde predai coletele. Lasa gol pentru ridicare de la adresa.
-            </p>
-          </div>
         </Panel>
 
         {/* Actions */}

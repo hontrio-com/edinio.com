@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   getWootToken, getPrices, createOrder, cancelWootOrder,
-  getAccountInfo, getCredit, getSenderAddresses,
-  type WootConfig, type WootParcel, type WootPriceResult, type WootSenderLocation,
+  getAccountInfo, getCredit,
+  type WootConfig, type WootParcel, type WootPriceResult,
 } from "@/lib/woot";
 import { normalizePhone } from "@/lib/utils/phone";
 
@@ -101,23 +101,6 @@ export async function testWootConnection(businessId: string): Promise<{
   }
 }
 
-export async function getWootSenderLocations(
-  businessId: string
-): Promise<{ success: boolean; error?: string; locations?: WootSenderLocation[] }> {
-  if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
-
-  const config = await loadConfig(businessId);
-  if (!config?.public_key || !config?.secret_key) return { success: false, error: "Woot nu este configurat" };
-
-  try {
-    const token = await getWootToken(config.public_key, config.secret_key);
-    const locations = await getSenderAddresses(token);
-    return { success: true, locations };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
-  }
-}
-
 // ─── AWB ──────────────────────────────────────────────────────────────────────
 
 export async function getWootPrices(
@@ -184,7 +167,7 @@ export async function createWootAwb(
     const token = await getWootToken(config.public_key, config.secret_key);
     const result = await createOrder(token, {
       service_id: serviceId,
-      sender: buildSender(config, true),
+      sender: buildSender(config),
       receiver: { company: 0, ...receiver, phone: normalizePhone(receiver.phone) },
       parcels,
       repayment: repayment && repayment > 0 ? repayment : undefined,
@@ -250,7 +233,7 @@ export async function cancelWootAwb(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildSender(config: WootConfig, includeLocation = false): object {
+function buildSender(config: WootConfig): object {
   return {
     company: config.sender.company,
     ...(config.sender.company === 1 && config.sender.company_name
@@ -263,8 +246,5 @@ function buildSender(config: WootConfig, includeLocation = false): object {
     city_id: config.sender.city_id,
     address: config.sender.address,
     ...(config.sender.zipcode ? { zipcode: config.sender.zipcode } : {}),
-    // location_id is only valid at AWB creation (the pricing endpoint rejects it).
-    // Sent only for drop-off services where the merchant configured a location.
-    ...(includeLocation && config.sender.location_id ? { location_id: config.sender.location_id } : {}),
   };
 }

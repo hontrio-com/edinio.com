@@ -13,9 +13,6 @@ export type WootSender = {
   city_id: number;
   address: string;
   zipcode?: string;
-  // Required by Woot for drop-off services ("predare la Locker / Locatie") — the
-  // sender's handover point ID. Ignored for normal home-pickup services.
-  location_id?: number;
 };
 
 export type WootConfig = {
@@ -157,33 +154,6 @@ export async function getAccountInfo(token: string) {
 
 export async function getCredit(token: string) {
   return wootReq<{ gross: number; tax: number; total: number }>(token, "GET", "/account/credit");
-}
-
-export type WootSenderLocation = { id: number; label: string };
-
-// The merchant's registered sender addresses/locations in Woot. The `id` of one of
-// these is what `sender.location_id` references for drop-off ("predare") services.
-// Response shape isn't documented — accept an array at root or under data/list.
-export async function getSenderAddresses(token: string): Promise<WootSenderLocation[]> {
-  const data = await wootReq<unknown>(token, "GET", "/addresses/sender?page=1&limit=100");
-  const list: unknown[] = Array.isArray(data)
-    ? data
-    : Array.isArray((data as { data?: unknown })?.data)
-      ? (data as { data: unknown[] }).data
-      : Array.isArray((data as { list?: unknown })?.list)
-        ? (data as { list: unknown[] }).list
-        : [];
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : "");
-  return list
-    .map((raw): WootSenderLocation => {
-      const a = (raw ?? {}) as Record<string, unknown>;
-      const id = Number(a.id ?? a.location_id ?? 0);
-      const name = str(a.name) || str(a.contact) || str(a.company_name);
-      const place = [str(a.address), str(a.city_name) || str(a.city)].filter(Boolean).join(", ");
-      const label = [name, place].filter(Boolean).join(" — ") || `Locatie #${id}`;
-      return { id, label };
-    })
-    .filter((x) => x.id > 0);
 }
 
 export async function getPrices(

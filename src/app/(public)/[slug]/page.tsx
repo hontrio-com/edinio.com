@@ -4,7 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
+import { ProductPage } from "@/components/ministore/ProductPage";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
+import { parseStoreMode } from "@/lib/storefront/store-mode";
+import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
+import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
+import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
 
 interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string }>; }
@@ -15,7 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // is no longer anon-readable, so a nested anon select would return null there.
   const { data: business } = await createAdminClient()
     .from("businesses")
-    .select("business_name, store_name, tagline, description, store_city, cover_url, custom_domain, store_settings(page_content)")
+    .select("id, business_name, store_name, tagline, description, store_city, cover_url, custom_domain, store_settings(page_content)")
     .eq("slug", slug)
     .single();
   if (!business) return {};
@@ -32,6 +37,40 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
   // also points its canonical at the store's own domain).
   const url = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
+
+  // One Product Store: the homepage *is* the chosen product's landing page, so its
+  // metadata comes from that product (canonical stays on the homepage URL). Store
+  // SEO overrides (Settings > SEO) still win when set.
+  const storeMode = parseStoreMode(settings?.page_content ?? null);
+  if (storeMode.mode === "one_product" && storeMode.productId) {
+    const product = await getStoreProduct(business.id, storeMode.productId);
+    if (product) {
+      const ps = product.page_sections as { seo?: { title?: string; description?: string }; short_description?: string } | null;
+      const opsTitle = seo.title || ps?.seo?.title || product.name;
+      const opsDescription = seo.description
+        || ps?.seo?.description
+        || (ps?.short_description ? ps.short_description.replace(/<[^>]+>/g, "").slice(0, 155) : "")
+        || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
+      const pImgs = product.images as string[] | null;
+      const opsImage = seo.ogImage || pImgs?.[0] || business.cover_url;
+      const opsImages = opsImage ? [opsImage] : [];
+      return {
+        title: { absolute: opsTitle },
+        description: opsDescription,
+        ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
+        openGraph: { title: opsTitle, description: opsDescription, url, images: opsImages },
+        twitter: {
+          card: opsImages.length ? "summary_large_image" : "summary",
+          title: opsTitle,
+          description: opsDescription,
+          ...(opsImages.length ? { images: opsImages } : {}),
+        },
+        alternates: { canonical: url },
+      };
+    }
+    // Chosen product missing/inactive — fall through to the store metadata below.
+  }
+
   const ogImage = seo.ogImage || business.cover_url;
   const images = ogImage ? [ogImage] : [];
   return {
@@ -154,6 +193,44 @@ export default async function SlugPage({ params, searchParams }: Props) {
     const ua = headersList.get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     supabase.from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
+  }
+
+  // One Product Store: render the chosen product's landing page as the homepage,
+  // reusing the same ProductPage component as /product/[slug]. Falls back to the
+  // catalog below if the product is missing/inactive (defence in depth — the
+  // Settings toggle already requires a product before enabling this mode).
+  const storeMode = parseStoreMode((storeSettings?.page_content as Json) ?? null);
+  if (storeMode.mode === "one_product" && storeMode.productId) {
+    const product = await getStoreProduct(business.id, storeMode.productId);
+    if (product) {
+      const { altMap, hasCardPayment, bundleComponents } = await enrichStoreProduct(business, product);
+      // Product structured data for the landing page. The product's canonical URL
+      // is this homepage (the /product/<main> URL 301s here), so the JSON-LD points
+      // at the homepage too — mirrors the shipping/delivery used on the product route.
+      const opsCanonical = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
+      const opsShippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
+      const opsDe = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
+      const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 1, max: opsDe.max_days ?? 3 } : { min: 1, max: 3 };
+      const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max });
+      return (
+        <>
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(opsJsonLd) }}
+          />
+          <ProductPage
+            business={business}
+            product={product}
+            storeSettings={storeSettings as never}
+            basePath={basePath}
+            hasCardPayment={hasCardPayment}
+            bundleComponents={bundleComponents}
+            altMap={altMap}
+            isHome
+          />
+        </>
+      );
+    }
   }
 
   const displayName = business.store_name ?? business.business_name;

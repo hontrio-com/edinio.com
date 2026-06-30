@@ -213,7 +213,7 @@ const POLICY_LINKS = [
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {} }: {
+export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -221,6 +221,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   hasCardPayment?: boolean;
   bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
   altMap?: Record<string, string>;
+  /** When this product page IS the store homepage (One Product Store mode):
+   *  hides the "back to store" breadcrumb since there is no catalog behind it. */
+  isHome?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -650,19 +653,33 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       {/* Header */}
       <header className={`fixed left-0 right-0 z-40 bg-surface/95 backdrop-blur-sm border-b border-border shadow-sm transition-all ${announcementBar?.enabled ? "top-9" : "top-0"}`}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
-          <a href={basePath || "/"} aria-label="Inapoi la magazin"
-            onClick={(e) => {
-              try {
-                const p = sessionStorage.getItem(`store_page_${business.slug}`);
-                if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${basePath || "/"}?page=${p}`; }
-              } catch {}
-            }}
-            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0">
-            <ArrowLeft size={16} />
-            <span>Magazin</span>
-          </a>
-          <span className="text-muted-foreground/50">/</span>
-          <span className="font-bold text-sm text-foreground truncate">{business.store_name ?? business.business_name}</span>
+          {isHome ? (
+            /* One Product Store: no catalog behind this page — show the store
+               identity (logo, else name) instead of a "back to store" link. */
+            business.logo_url ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
+                style={{ height: 32 }} className="w-auto object-contain" />
+            ) : (
+              <span className="font-bold text-base text-foreground truncate">{business.store_name ?? business.business_name}</span>
+            )
+          ) : (
+            <>
+              <a href={basePath || "/"} aria-label="Inapoi la magazin"
+                onClick={(e) => {
+                  try {
+                    const p = sessionStorage.getItem(`store_page_${business.slug}`);
+                    if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${basePath || "/"}?page=${p}`; }
+                  } catch {}
+                }}
+                className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0">
+                <ArrowLeft size={16} />
+                <span>Magazin</span>
+              </a>
+              <span className="text-muted-foreground/50">/</span>
+              <span className="font-bold text-sm text-foreground truncate">{business.store_name ?? business.business_name}</span>
+            </>
+          )}
         </div>
       </header>
 

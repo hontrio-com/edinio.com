@@ -6,6 +6,7 @@ import { resolvePaymentMethods, parseCardDiscountConfig } from "@/lib/payment-me
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
 import type { MarketingConfig } from "@/lib/marketing";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
+import { parseStoreMode } from "@/lib/storefront/store-mode";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
@@ -33,6 +34,20 @@ export default async function SettingsPage({ searchParams }: Props) {
   const business = bizRow ? { id: bizRow.id, business_name: bizRow.business_name, address: bizRow.address, city: bizRow.city, county: bizRow.county, phone: bizRow.phone, email: bizRow.email, cui: bizRow.cui, custom_domain: bizRow.custom_domain } : null;
   const rawSettings = bizRow?.store_settings;
   const storeSettings = Array.isArray(rawSettings) ? rawSettings[0] ?? null : rawSettings ?? null;
+
+  // One Product Store (Settings > Tip magazin): current mode + active products picker.
+  const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
+  let opsProducts: { id: string; name: string }[] = [];
+  if (bizRow?.id) {
+    const { data } = await supabase
+      .from("products")
+      .select("id, name")
+      .eq("business_id", bizRow.id)
+      .eq("is_active", true)
+      .order("is_featured", { ascending: false })
+      .order("sort_order");
+    opsProducts = data ?? [];
+  }
 
   // Store-level SEO: current overrides + the auto-derived defaults shown as
   // placeholders / in the live Google preview (single source of truth: @/lib/seo).
@@ -114,6 +129,9 @@ export default async function SettingsPage({ searchParams }: Props) {
       storeSeo={storeSeo}
       seoDefaults={seoDefaults}
       seoPreviewUrl={seoPreviewUrl}
+      storeMode={storeMode.mode}
+      oneProductId={storeMode.productId}
+      products={opsProducts}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={plan_success === "1"}
       domainSuccess={domain_success === "1"}

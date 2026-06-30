@@ -6,7 +6,7 @@ import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
-  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2,
+  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
@@ -25,15 +25,17 @@ import { Callout } from "@/components/ui/callout";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
 import { type StoreSeo, SEO_TITLE_MAX, SEO_DESCRIPTION_MAX, SEO_TITLE_IDEAL_MIN, SEO_DESCRIPTION_IDEAL_MIN } from "@/lib/seo";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
+import { type StoreMode } from "@/lib/storefront/store-mode";
 
 type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
 type SectionId =
-  | "general" | "plan" | "facturare" | "livrare"
+  | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"
   | "taxe" | "plati" | "domeniu" | "seo" | "notificari" | "politici" | "cookies" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
+  { id: "tip-magazin", label: "Tip magazin", icon: Package  },
   { id: "plan",       label: "Plan",        icon: Zap       },
   { id: "facturare",  label: "Facturare",   icon: Receipt   },
   { id: "livrare",    label: "Livrare",     icon: Truck     },
@@ -251,6 +253,9 @@ interface Props {
   storeSeo: StoreSeo;
   seoDefaults: { title: string; description: string; ogImage: string | null };
   seoPreviewUrl: string;
+  storeMode: StoreMode;
+  oneProductId: string | null;
+  products: { id: string; name: string }[];
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
   domainSuccess?: boolean;
@@ -268,7 +273,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, storeMode, oneProductId, products, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -375,6 +380,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   // SEO (Settings > SEO)
   const [seo, setSeo] = useState<StoreSeo>(storeSeo);
   const [savingSeo, startSeoTransition] = useTransition();
+
+  // Store mode (Settings > Tip magazin) — One Product Store toggle + main product
+  const [opsEnabled, setOpsEnabled] = useState(storeMode === "one_product");
+  const [opsProductId, setOpsProductId] = useState(oneProductId ?? "");
+  const [savingOps, startOpsTransition] = useTransition();
 
   // SMSO
   const [smso, setSmso] = useState<SmsoConfig>(smsoConfig);
@@ -626,6 +636,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updatePageContent(businessId, { seo: cleaned });
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile SEO au fost salvate.");
+    });
+  }
+
+  function saveStoreMode() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    if (opsEnabled && !opsProductId) {
+      toast.error("Alege produsul principal inainte de a activa modul One Product Store.");
+      return;
+    }
+    startOpsTransition(async () => {
+      // updatePageContent merges, so we keep one_product_id even in catalog mode
+      // (remembers the choice); parseStoreMode ignores it unless store_mode says so.
+      const result = await updatePageContent(businessId, {
+        store_mode: opsEnabled ? "one_product" : "catalog",
+        one_product_id: opsProductId || null,
+      });
+      if ("error" in result) toast.error(result.error);
+      else toast.success(opsEnabled
+        ? "Magazinul afiseaza acum un singur produs."
+        : "Magazinul afiseaza catalogul cu toate produsele.");
     });
   }
 
@@ -973,6 +1003,75 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 {savingGeneral ? <Loader2 className="animate-spin" /> : <Save />}
                 {savingGeneral ? "Se salveaza..." : "Salveaza setarile generale"}
               </Button>
+            </div>
+          )}
+
+          {/* ── Tip magazin (One Product Store) ── */}
+          {activeSection === "tip-magazin" && (
+            <div className="space-y-4">
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border">
+                  <p className="text-sm font-semibold text-foreground">One Product Store</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Transforma magazinul intr-o pagina dedicata unui singur produs. Pagina principala devine landing page-ul produsului ales, iar catalogul, categoriile si cautarea sunt ascunse.
+                  </p>
+                </div>
+                <div className="px-5 py-5 space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Afiseaza un singur produs</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Cand e activ, vizitatorii ajung direct pe produsul principal.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={opsEnabled}
+                      disabled={!businessId}
+                      onCheckedChange={setOpsEnabled}
+                      aria-label="Activeaza One Product Store"
+                      className="mt-1 shrink-0"
+                    />
+                  </div>
+
+                  {products.length === 0 ? (
+                    <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
+                      <p className="text-xs text-muted-foreground">
+                        Nu ai inca niciun produs activ. Adauga un produs din <strong>Produse</strong> ca sa poti activa acest mod.
+                      </p>
+                    </div>
+                  ) : opsEnabled ? (
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">
+                        Produsul principal <span className="text-destructive">*</span>
+                      </label>
+                      <select
+                        value={opsProductId}
+                        onChange={(e) => setOpsProductId(e.target.value)}
+                        className={inputCls}
+                        aria-label="Produsul principal"
+                      >
+                        <option value="">Alege un produs...</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      {opsProductId && !products.some((p) => p.id === opsProductId) && (
+                        <p className="text-xs text-amber-600 mt-1.5">
+                          Produsul selectat anterior nu mai este activ. Alege altul din lista.
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                        Continutul paginii (descriere, beneficii, FAQ, variante) se editeaza din <strong>Produse</strong>, la produsul ales. Comanda se face direct, fara cos.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <Button onClick={saveStoreMode} disabled={savingOps || !businessId}>
+                    {savingOps ? <Loader2 className="animate-spin" /> : <Save />}
+                    {savingOps ? "Se salveaza..." : "Salveaza"}
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 

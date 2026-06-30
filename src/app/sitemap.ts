@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN, isPlatformHost, parseStoreSeo } from "@/lib/seo";
+import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 
 /** Whether a store's homepage opted out of indexing (Settings > SEO > noindex).
  *  Reads the nested store_settings(page_content) selected on a businesses row. */
@@ -40,21 +41,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ? []
       : [{ url: base, lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(), changeFrequency: "weekly", priority: 1 }];
 
-    const { data: products } = await supabase
-      .from("products")
-      .select("slug, updated_at")
-      .eq("business_id", biz.id)
-      .eq("is_active", true)
-      .not("slug", "is", null);
+    // One Product Store: the homepage already represents the single product, so
+    // skip the individual /product/* URLs (the main one 301s to the homepage; the
+    // rest are noindex). Custom pages below still get listed.
+    if (parseStoreModeFromSettings(biz.store_settings).mode !== "one_product") {
+      const { data: products } = await supabase
+        .from("products")
+        .select("slug, updated_at")
+        .eq("business_id", biz.id)
+        .eq("is_active", true)
+        .not("slug", "is", null);
 
-    for (const p of products ?? []) {
-      if (!p.slug) continue;
-      entries.push({
-        url: `${base}/product/${p.slug}`,
-        lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
-        changeFrequency: "weekly",
-        priority: 0.7,
-      });
+      for (const p of products ?? []) {
+        if (!p.slug) continue;
+        entries.push({
+          url: `${base}/product/${p.slug}`,
+          lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
+          changeFrequency: "weekly",
+          priority: 0.7,
+        });
+      }
     }
 
     const { data: pages } = await supabase
@@ -100,6 +106,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     }));
 
+  // One Product Store homepages represent their single product, so their
+  // /product/* URLs are excluded below (the main one 301s to the homepage; the
+  // rest are noindex).
+  const opsSlugs = new Set(
+    (businesses ?? [])
+      .filter((b) => parseStoreModeFromSettings(b.store_settings).mode === "one_product")
+      .map((b) => b.slug),
+  );
+
   const { data: products } = await supabase
     .from("products")
     .select("slug, updated_at, businesses!inner(slug, is_published, custom_domain)")
@@ -107,7 +122,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .eq("businesses.is_published", true);
 
   const productPages: MetadataRoute.Sitemap = (products ?? [])
-    .filter((p) => p.slug && !(p.businesses as unknown as { custom_domain: string | null }).custom_domain)
+    .filter((p) => {
+      const biz = p.businesses as unknown as { slug: string; custom_domain: string | null };
+      return p.slug && !biz.custom_domain && !opsSlugs.has(biz.slug);
+    })
     .map((p) => {
       const biz = p.businesses as unknown as { slug: string };
       return {

@@ -715,7 +715,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         <div className="px-4 pb-2">
           <Gallery mobile />
         </div>
-        <div className="px-4 pt-4 pb-36">
+        <div className="px-4 pt-4 pb-8">
           <Content mobile />
         </div>
       </div>
@@ -745,7 +745,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Benefits */}
       {benefitsSection?.enabled && benefitsSection.items.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-background">
+        <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
           <div className="max-w-6xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
@@ -773,7 +773,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* How it works */}
       {howItWorksSection?.enabled && howItWorksSection.steps.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-surface">
+        <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
           <div className="max-w-6xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-16">
@@ -820,7 +820,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Long description */}
       {hasShortDesc && hasLongDesc && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-surface">
+        <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
           <div className="max-w-3xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
@@ -834,7 +834,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Bundle contents */}
       {product.is_bundle && bundleComponents.length > 0 && (
-        <section className="py-16 md:py-24 px-4 md:px-6 bg-surface">
+        <section className="py-12 md:py-24 px-4 md:px-6 bg-surface">
           <div className="max-w-4xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-12">
@@ -868,7 +868,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Specifications */}
       {specifications.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-background">
+        <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
           <div className="max-w-4xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
@@ -892,7 +892,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* FAQ */}
       {faqSection?.enabled && faqSection.items.length > 0 && (
-        <section className="py-20 md:py-28 px-4 md:px-6 bg-surface">
+        <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
           <div className="max-w-3xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
@@ -913,7 +913,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
       {/* Footer */}
       <footer className="bg-[#0A0A0A] text-white">
-        <div className="max-w-6xl mx-auto px-5 pt-10 pb-6 sm:pt-12">
+        <div className="max-w-6xl mx-auto px-5 pt-10 pb-24 sm:pt-12 lg:pb-6">
           {/* Top row: brand + social */}
           <div className="flex items-center justify-between gap-4 pb-8">
             <div className="flex items-center gap-3 min-w-0">

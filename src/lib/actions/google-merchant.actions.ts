@@ -177,8 +177,14 @@ export async function selectMerchantAccount(
   const lang = config.content_language || DEFAULT_CONTENT_LANGUAGE;
 
   // v1 prerequisite: register our GCP project against this account before any
-  // write op. Best-effort — already-registered returns an error we can ignore.
-  await registerGcp(token, accountId, config.connected_email);
+  // write op. Re-registering an already-registered project returns an
+  // ALREADY_EXISTS-style error we treat as success; any other failure is real
+  // (e.g. the user is not an admin of the Merchant account) and must stop here.
+  const reg = await registerGcp(token, accountId, config.connected_email);
+  if ("error" in reg && reg.status !== 409 && !/already/i.test(reg.error)) {
+    logError({ action: "gmc.registerGcp", message: reg.error, details: { businessId, accountId }, userId: user.id });
+    return { error: `Google a refuzat inregistrarea aplicatiei pe contul Merchant: ${reg.error}. Verifica ca esti administrator al contului Merchant Center si ca ai acceptat Termenii si conditiile in Merchant Center.` };
+  }
 
   // Ensure an API data source exists (reuse one named "Edinio" if present).
   let dataSourceName = config.data_source_name;
@@ -191,6 +197,10 @@ export async function selectMerchantAccount(
     const created = await createApiDataSource(token, accountId, "Edinio", feedLabel, lang);
     if ("error" in created) {
       logError({ action: "gmc.createDataSource", message: created.error, details: { businessId, accountId }, userId: user.id });
+      // Fresh GCP registrations take ~5 minutes to propagate on Google's side.
+      if (/not registered/i.test(created.error)) {
+        return { error: "Google tocmai a inregistrat aplicatia Edinio pe contul tau Merchant. Propagarea dureaza cateva minute - reincearca in ~5 minute (alege din nou contul)." };
+      }
       return { error: `Nu am putut crea sursa de date Google: ${created.error}` };
     }
     dataSourceName = created.data.name;

@@ -5,7 +5,7 @@ import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
   MapPin, Mail, Globe, ChevronRight, ChevronLeft, ChevronDown, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
-  Truck, ShieldCheck, RotateCcw, Check, Filter, ArrowUpDown,
+  Truck, ShieldCheck, RotateCcw, Check, Filter, ArrowUpDown, Tag, BadgePercent,
 } from "lucide-react";
 import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format";
 import { cdnImage } from "@/lib/cdn-image";
@@ -235,13 +235,20 @@ function CartCheckoutModal({
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
-  const hiddenFields = checkoutConfig?.hidden_fields ?? [];
+  // Discount code is OFF by default — same semantics as the editor toggle and OrderModal.
+  const hiddenFields = checkoutConfig?.hidden_fields ?? ["discount"];
   const emailField = checkoutConfig?.email_field ?? emailFieldConfig;
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<ValidatedDiscount | null>(null);
+  const [discountInput, setDiscountInput] = useState("");
+  const [discountError, setDiscountError] = useState("");
+  const [isValidatingDiscount, setIsValidatingDiscount] = useState(false);
+  // Collapsed by default — a visible coupon field depresses conversion (shoppers
+  // leave to hunt for codes). Revealed on demand via "Ai un cod?".
+  const [showDiscountField, setShowDiscountField] = useState(false);
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
   const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, total) : 0;
@@ -292,6 +299,43 @@ function CartCheckoutModal({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialDiscountCode, businessId]);
+
+  // Re-validate silently when the cart total changes (min_order_amount may no longer be met).
+  useEffect(() => {
+    if (!appliedDiscount) return;
+    (async () => {
+      const result = await validateDiscount(appliedDiscount.code, businessId, total);
+      if (!result.valid) {
+        setAppliedDiscount(null);
+        setDiscountError(result.error);
+      } else {
+        setAppliedDiscount(result.discount);
+        setDiscountError("");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
+
+  async function handleApplyDiscount() {
+    if (!discountInput.trim()) return;
+    setIsValidatingDiscount(true);
+    setDiscountError("");
+    const result = await validateDiscount(discountInput.trim(), businessId, total);
+    setIsValidatingDiscount(false);
+    if (!result.valid) {
+      setDiscountError(result.error);
+      setAppliedDiscount(null);
+    } else {
+      setAppliedDiscount(result.discount);
+      setDiscountError("");
+    }
+  }
+
+  function handleRemoveDiscount() {
+    setAppliedDiscount(null);
+    setDiscountInput("");
+    setDiscountError("");
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -648,6 +692,70 @@ function CartCheckoutModal({
               })}
             </div>
           )}
+
+          {/* Discount code — collapsed behind a link until needed */}
+          {!hiddenFields.includes("discount") && (appliedDiscount || showDiscountField ? <div>
+            <label className="block text-sm font-semibold text-foreground mb-1">
+              Cod discount
+            </label>
+            {appliedDiscount ? (
+              /* Applied discount banner */
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2" style={{ borderColor: `${color}55`, backgroundColor: `${color}12` }}>
+                {appliedDiscount.type === "free_shipping"
+                  ? <Truck size={15} className="flex-shrink-0" style={{ color }} />
+                  : <BadgePercent size={15} className="flex-shrink-0" style={{ color }} />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold font-mono" style={{ color }}>{appliedDiscount.code}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {appliedDiscount.type === "percent" && `${appliedDiscount.value}% reducere`}
+                    {appliedDiscount.type === "fixed" && `${appliedDiscount.value} lei reducere`}
+                    {appliedDiscount.type === "free_shipping" && "Transport gratuit aplicat"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveDiscount}
+                  className="p-1 rounded-full hover:bg-muted transition-colors flex-shrink-0"
+                >
+                  <X size={14} style={{ color }} />
+                </button>
+              </div>
+            ) : (
+              /* Input + Apply button */
+              <div className="flex gap-2">
+                <div className="flex flex-1 overflow-hidden rounded-lg border border-border focus-within:border-foreground/40 transition-colors">
+                  <span className="flex items-center justify-center w-10 shrink-0 bg-muted/40">
+                    <Tag size={15} className="text-muted-foreground" />
+                  </span>
+                  <input
+                    value={discountInput}
+                    onChange={e => { setDiscountInput(e.target.value.toUpperCase()); setDiscountError(""); }}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleApplyDiscount(); } }}
+                    placeholder="COD DISCOUNT"
+                    className="flex-1 px-3 py-2.5 text-sm text-foreground bg-surface placeholder:text-muted-foreground focus:outline-none font-mono tracking-widest"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleApplyDiscount}
+                  disabled={isValidatingDiscount || !discountInput.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                  style={{ backgroundColor: color }}
+                >
+                  {isValidatingDiscount
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <ChevronRight size={14} />}
+                  Aplica
+                </button>
+              </div>
+            )}
+            {discountError && <p className="text-xs text-red-500 mt-1">{discountError}</p>}
+          </div> : (
+            <button type="button" onClick={() => setShowDiscountField(true)}
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              <Tag size={14} /> Ai un cod de reducere?
+            </button>
+          ))}
 
           <div className="rounded-xl p-3 space-y-1.5 text-sm bg-muted/40 border border-border">
             <div className="flex justify-between text-muted-foreground">

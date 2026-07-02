@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
-  ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Globe,
+  ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Globe, Star, Eye,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { cdnImage } from "@/lib/cdn-image";
@@ -102,6 +102,21 @@ interface PageSections {
 /* ─── Default content ─────────────────────────────────────────────────────── */
 
 /* ─── Sub-components ──────────────────────────────────────────────────────── */
+
+function SocialProof({ count, color }: { count: number; color: string }) {
+  return (
+    <div className="inline-flex items-center gap-2 bg-surface border border-border shadow-sm rounded-full px-4 py-2 text-sm">
+      <span className="relative flex h-2.5 w-2.5">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: color }} />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: color }} />
+      </span>
+      <Eye size={14} className="text-muted-foreground" />
+      <span className="font-medium text-muted-foreground">
+        <span className="text-foreground font-bold">{count}</span> persoane se uita acum
+      </span>
+    </div>
+  );
+}
 
 function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boolean; onToggle: () => void }) {
   return (
@@ -256,6 +271,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const buttonEffect = pageContent.button_effect ?? "none";
   const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
   const deliveryEstimate = pageContent.delivery_estimate;
+  const showQualityBadge = pageContent.show_quality_badge === true; // "Calitate verificata" badge — off unless enabled (ANPC/Omnibus: merchant opt-in)
+  const viewerCount = useRef(18 + Math.floor(Math.random() * 10)).current;
+  const showSocialProof = pageContent.show_social_proof === true; // fake live-viewers counter — off unless enabled
 
   // Variants
   const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
@@ -469,6 +487,14 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   function Content({ mobile }: { mobile: boolean }) {
     return (
       <div className={`flex flex-col ${mobile ? "gap-3" : "gap-4"}`}>
+        {/* Quality badge */}
+        {showQualityBadge && (
+          <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 w-fit" style={{ backgroundColor: `${color}1a` }}>
+            <div className="flex">{[1, 2, 3, 4, 5].map(i => <Star key={i} size={11} style={{ color, fill: color }} />)}</div>
+            <span className="text-[11px] font-semibold" style={{ color }}>Calitate verificata</span>
+          </div>
+        )}
+
         {/* Title */}
         <h1 className={`tracking-tight font-bold text-foreground leading-tight ${mobile ? "text-2xl" : "text-3xl lg:text-4xl"}`}>
           {displayName}
@@ -629,6 +655,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </div>
         )}
 
+        {!mobile && showSocialProof && <SocialProof count={viewerCount} color={color} />}
       </div>
     );
   }

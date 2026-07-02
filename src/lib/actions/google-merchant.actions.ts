@@ -192,6 +192,9 @@ export async function selectMerchantAccount(
   const reg = await registerGcp(token, accountId, config.connected_email);
   if ("error" in reg && reg.status !== 409 && !/already/i.test(reg.error)) {
     logError({ action: "gmc.registerGcp", message: reg.error, details: { businessId, accountId }, userId: user.id });
+    if (/unverified homepage/i.test(reg.error)) {
+      return { error: "Contul Merchant nu are homepage-ul verificat (cerinta Google pentru integrare). In Merchant Center: Setari -> Informatii despre afacere -> Site web -> verifica si revendica site-ul, apoi reincearca aici." };
+    }
     return { error: `Google a refuzat inregistrarea aplicatiei pe contul Merchant: ${reg.error}. Verifica ca esti administrator al contului Merchant Center si ca ai acceptat Termenii si conditiile in Merchant Center.` };
   }
 
@@ -209,6 +212,13 @@ export async function selectMerchantAccount(
       // Fresh GCP registrations take ~5 minutes to propagate on Google's side.
       if (/not registered/i.test(created.error)) {
         return { error: "Google tocmai a inregistrat aplicatia Edinio pe contul tau Merchant. Propagarea dureaza cateva minute - reincearca in ~5 minute (alege din nou contul)." };
+      }
+      // Registration exists but the account lacks an active API developer user.
+      if (/API_DEVELOPER/i.test(created.error)) {
+        return { error: "Contul Merchant are nevoie de un utilizator activ cu rolul \"API developer\". In Merchant Center: Setari -> Persoane si acces -> deschide utilizatorul tau -> bifeaza rolul \"API developer\" -> salveaza (daca utilizatorul e in asteptare, accepta mai intai invitatia de pe email). Apoi reincearca aici." };
+      }
+      if (/unverified homepage/i.test(created.error)) {
+        return { error: "Contul Merchant nu are homepage-ul verificat. In Merchant Center: Setari -> Informatii despre afacere -> Site web -> verifica si revendica site-ul, apoi reincearca aici." };
       }
       return { error: `Nu am putut crea sursa de date Google: ${created.error}` };
     }

@@ -78,8 +78,9 @@ export function createApiDataSource(
 }
 
 // ── Products ───────────────────────────────────────────────────────────────────
+// v1 dropped the channel segment from resource names (was `online~...` in v1beta).
 export function productName(accountId: string, lang: string, feedLabel: string, offerId: string): string {
-  return `accounts/${accountId}/products/online~${lang}~${feedLabel}~${offerId}`;
+  return `accounts/${accountId}/products/${lang}~${feedLabel}~${offerId}`;
 }
 
 export function insertProductInput(
@@ -95,7 +96,7 @@ export function insertProductInput(
 export function deleteProductInput(
   accessToken: string, accountId: string, lang: string, feedLabel: string, offerId: string, dataSourceName: string,
 ) {
-  const name = `accounts/${accountId}/productInputs/online~${lang}~${feedLabel}~${offerId}`;
+  const name = `accounts/${accountId}/productInputs/${lang}~${feedLabel}~${offerId}`;
   return call(accessToken, "DELETE", `/${V.products}/${name}?dataSource=${encodeURIComponent(dataSourceName)}`);
 }
 

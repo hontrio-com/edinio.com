@@ -43,6 +43,16 @@ function priceMicros(value: number) {
   return { amountMicros: String(Math.round((Number(value) || 0) * 1_000_000)), currencyCode: CURRENCY };
 }
 
+// v1 turned these free-text attributes into enums; normalize merchant-entered
+// lowercase values ("new", "male") to the enum names, dropping unknown values.
+function toEnum(value: string | undefined, allowed: string[]): string | undefined {
+  const v = (value ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return allowed.includes(v) ? v : undefined;
+}
+const CONDITIONS = ["NEW", "REFURBISHED", "USED"];
+const GENDERS = ["MALE", "FEMALE", "UNISEX"];
+const AGE_GROUPS = ["ADULT", "KIDS", "TODDLER", "INFANT", "NEWBORN"];
+
 function plainText(html: string | null, fallback: string): string {
   const text = (html ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
   return (text || fallback).slice(0, 4900);
@@ -71,8 +81,8 @@ export function toGoogleProductInput(
     title: product.name.slice(0, 150),
     description: plainText(product.description, product.name),
     link,
-    availability: inStock ? "in_stock" : "out_of_stock",
-    condition: g.condition || config.condition_default || "new",
+    availability: inStock ? "IN_STOCK" : "OUT_OF_STOCK",
+    condition: toEnum(g.condition || config.condition_default, CONDITIONS) ?? "NEW",
     brand: g.brand || config.brand_default || business.store_name || business.business_name,
     // List price shows as the strike-through price when a sale price is present.
     price: hasSale ? priceMicros(compare!) : priceMicros(base),
@@ -86,17 +96,22 @@ export function toGoogleProductInput(
   // v1 renamed the single `gtin` attribute to a `gtins` array.
   if (g.gtin) attributes.gtins = [g.gtin];
   if (g.mpn) attributes.mpn = g.mpn;
-  if (g.gender) attributes.gender = g.gender;
-  if (g.age_group) attributes.ageGroup = g.age_group;
+  const gender = toEnum(g.gender, GENDERS);
+  if (gender) attributes.gender = gender;
+  const ageGroup = toEnum(g.age_group, AGE_GROUPS);
+  if (ageGroup) attributes.ageGroup = ageGroup;
   if (g.color) attributes.color = g.color;
-  if (g.size) attributes.sizes = [g.size];
+  if (g.size) attributes.size = g.size;
   if (g.material) attributes.material = g.material;
-  if (product.weight_grams) attributes.shipping = [{ country: config.country || "RO" }];
+  // Weight feeds carrier-calculated rates; a bare `shipping: [{country}]` entry
+  // (pre-v1 shape) would instead override the account's shipping settings.
+  if (product.weight_grams) attributes.shippingWeight = { value: product.weight_grams, unit: "g" };
 
+  // v1 renamed ProductInput.attributes -> productAttributes.
   return {
     offerId: product.id,
     contentLanguage: lang,
     feedLabel,
-    attributes,
+    productAttributes: attributes,
   };
 }

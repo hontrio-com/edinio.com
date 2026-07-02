@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { GOOGLE_MERCHANT_LIVE } from "@/lib/google-merchant/types";
+import { GOOGLE_ANALYTICS_LIVE } from "@/lib/google-analytics/types";
 import { Lock, ArrowRight, CheckCircle } from "lucide-react";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -83,6 +84,13 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "Google Merchant Center", logo: "/integrations/google-merchant-center.svg", id: "google-merchant" },
     ],
   },
+  {
+    id: "statistici",
+    label: "Statistici",
+    integrations: [
+      { name: "Google Analytics", logo: "/integrations/google-analytics.svg", id: "google-analytics" },
+    ],
+  },
 ];
 
 export default async function IntegrationsPage() {
@@ -96,6 +104,7 @@ export default async function IntegrationsPage() {
   const supabase = await createClient();
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const gmcAvailable = GOOGLE_MERCHANT_LIVE || profile?.role === "admin";
+  const gaAvailable = GOOGLE_ANALYTICS_LIVE || profile?.role === "admin";
 
   let smsoActive = false;
   let noticeActive = false;
@@ -115,6 +124,7 @@ export default async function IntegrationsPage() {
   let ttActive = false;
   let googleActive = false;
   let googleMerchantActive = false;
+  let googleAnalyticsActive = false;
   if (business) {
     const settings = preloadedSettings;
     smsoActive = (settings?.smso_config as SmsoConfig | null)?.enabled === true;
@@ -148,6 +158,8 @@ export default async function IntegrationsPage() {
     googleActive = !!mg?.google_tag_id?.trim();
     const gmc = settings?.google_merchant_config as { connected?: boolean } | null;
     googleMerchantActive = !!gmc?.connected;
+    const ga = settings?.google_analytics_config as { connected?: boolean } | null;
+    googleAnalyticsActive = !!ga?.connected;
   }
 
   return (
@@ -171,9 +183,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "notice" || integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "ipay" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday" || integration.id === "facebook-pixel" || integration.id === "tiktok-pixel" || integration.id === "google-ads" || (integration.id === "google-merchant" && gmcAvailable);
-                const isActive = integration.id === "notice" ? noticeActive : integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "ipay" ? ipayActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : integration.id === "sameday" ? samedayActive : integration.id === "facebook-pixel" ? fbActive : integration.id === "tiktok-pixel" ? ttActive : integration.id === "google-ads" ? googleActive : integration.id === "google-merchant" ? googleMerchantActive : false;
-                const href = integration.id === "notice" ? "/dashboard/features/notice" : integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "ipay" ? "/dashboard/features/ipay" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : integration.id === "sameday" ? "/dashboard/features/sameday" : integration.id === "facebook-pixel" ? "/dashboard/features/facebook-pixel" : integration.id === "tiktok-pixel" ? "/dashboard/features/tiktok-pixel" : integration.id === "google-ads" ? "/dashboard/features/google-ads" : integration.id === "google-merchant" ? "/dashboard/features/google-merchant" : "#";
+                const isUnlocked = integration.id === "notice" || integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "ipay" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday" || integration.id === "facebook-pixel" || integration.id === "tiktok-pixel" || integration.id === "google-ads" || (integration.id === "google-merchant" && gmcAvailable) || (integration.id === "google-analytics" && gaAvailable);
+                const isActive = integration.id === "notice" ? noticeActive : integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "ipay" ? ipayActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : integration.id === "sameday" ? samedayActive : integration.id === "facebook-pixel" ? fbActive : integration.id === "tiktok-pixel" ? ttActive : integration.id === "google-ads" ? googleActive : integration.id === "google-merchant" ? googleMerchantActive : integration.id === "google-analytics" ? googleAnalyticsActive : false;
+                const href = integration.id === "notice" ? "/dashboard/features/notice" : integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "ipay" ? "/dashboard/features/ipay" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : integration.id === "sameday" ? "/dashboard/features/sameday" : integration.id === "facebook-pixel" ? "/dashboard/features/facebook-pixel" : integration.id === "tiktok-pixel" ? "/dashboard/features/tiktok-pixel" : integration.id === "google-ads" ? "/dashboard/features/google-ads" : integration.id === "google-merchant" ? "/dashboard/features/google-merchant" : integration.id === "google-analytics" ? "/dashboard/features/google-analytics" : "#";
 
                 if (isUnlocked) {
                   return (

@@ -6,6 +6,7 @@ import { GoogleTag } from "@/components/public/GoogleTag";
 import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
 import type { MarketingConfig } from "@/lib/marketing";
+import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
 import type { Metadata } from "next";
 
@@ -37,28 +38,35 @@ export default async function StoreLayout({ children, params }: Props) {
 
   const { data: business } = await admin
     .from("businesses")
-    .select("id, slug, store_name, business_name, primary_color, custom_domain, store_settings(marketing_config, cookie_banner_config)")
+    .select("id, slug, store_name, business_name, primary_color, custom_domain, store_settings(marketing_config, cookie_banner_config, google_analytics_config)")
     .eq("slug", slug)
     .single();
 
   let fbPixelId: string | null = null;
   let ttPixelId: string | null = null;
   let googleTagId: string | null = null;
+  let gaMeasurementId: string | null = null;
   let mc: MarketingConfig | null = null;
   let cookieRaw: unknown = null;
 
   if (business) {
-    const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown; cookie_banner_config: unknown } | { marketing_config: unknown; cookie_banner_config: unknown }[] | null }).store_settings;
+    const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown } | { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown }[] | null }).store_settings;
     const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
     mc = (settings?.marketing_config ?? null) as MarketingConfig | null;
     cookieRaw = settings?.cookie_banner_config ?? null;
     fbPixelId = mc?.facebook_pixel_id?.trim() || null;
     ttPixelId = mc?.tiktok_pixel_id?.trim() || null;
     googleTagId = mc?.google_tag_id?.trim() || null;
+    // GA4: connected via OAuth + tracking left on -> inject its Measurement ID.
+    const ga = (settings?.google_analytics_config ?? null) as GoogleAnalyticsConfig | null;
+    gaMeasurementId = ga?.connected && ga.tracking_enabled !== false ? ga.measurement_id?.trim() || null : null;
   }
 
+  // One gtag loader for all Google tags (Ads + GA4), deduplicated.
+  const googleTagIds = [...new Set([googleTagId, gaMeasurementId].filter((v): v is string => !!v))];
+
   const cookieConfig = parseCookieBannerConfig(cookieRaw);
-  const consentCategories = detectConsentCategories(mc);
+  const consentCategories = detectConsentCategories(mc, gaMeasurementId);
   const color = (business?.primary_color as string | null) ?? "#1AB554";
   const storeName = (business?.store_name as string | null) ?? (business?.business_name as string | null) ?? "magazin";
 
@@ -77,8 +85,8 @@ export default async function StoreLayout({ children, params }: Props) {
       {ttPixelId && (
         <ConsentGate slug={slug} category="marketing"><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
       )}
-      {googleTagId && (
-        <ConsentGate slug={slug} category="analytics"><GoogleTag tagId={googleTagId} /></ConsentGate>
+      {googleTagIds.length > 0 && (
+        <ConsentGate slug={slug} category="analytics"><GoogleTag tagIds={googleTagIds} slug={slug} /></ConsentGate>
       )}
       {children}
       {cookieConfig.enabled && (

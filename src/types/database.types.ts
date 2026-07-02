@@ -1648,6 +1648,7 @@ export type Database = {
           fan_courier_config: Json | null
           fgo_config: Json | null
           free_shipping_threshold: number | null
+          google_analytics_config: Json
           google_merchant_config: Json
           id: string
           ipay_config: Json | null
@@ -1690,6 +1691,7 @@ export type Database = {
           fan_courier_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
+          google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null
@@ -1732,6 +1734,7 @@ export type Database = {
           fan_courier_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
+          google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null

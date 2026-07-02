@@ -53,9 +53,12 @@ export function parseCookieBannerConfig(raw: unknown): CookieBannerConfig {
 }
 
 /** Which consent categories are relevant for this store, based on active trackers. */
-export function detectConsentCategories(mc: MarketingConfig | null | undefined): ConsentCategory[] {
+export function detectConsentCategories(
+  mc: MarketingConfig | null | undefined,
+  gaMeasurementId?: string | null,
+): ConsentCategory[] {
   const cats: ConsentCategory[] = [];
-  if (mc?.google_tag_id?.trim()) cats.push("analytics");
+  if (mc?.google_tag_id?.trim() || gaMeasurementId) cats.push("analytics");
   if (mc?.facebook_pixel_id?.trim() || mc?.tiktok_pixel_id?.trim()) cats.push("marketing");
   return cats;
 }

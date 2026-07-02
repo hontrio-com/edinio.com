@@ -8,6 +8,7 @@ import {
   ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Globe, Star, Eye,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
+import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { OrderModal } from "./OrderModal";
@@ -242,6 +243,16 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
+
+  // Pixels / GA4: standard product-view event, once per product.
+  const productId = product.id;
+  const productName = product.name;
+  const productPrice = Number(product.price) || 0;
+  useEffect(() => {
+    gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
+    fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
+    ttqTrack("ViewContent", { content_id: productId, content_name: productName, value: productPrice, currency: "RON" });
+  }, [productId, productName, productPrice]);
   // SEO alt text from the Media Library, falling back to the product name.
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
 

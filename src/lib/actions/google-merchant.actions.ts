@@ -152,7 +152,16 @@ export async function listMerchantAccounts(businessId: string): Promise<{ accoun
   if (!token) return { error: "Sesiunea Google a expirat. Reconecteaza-te." };
 
   const res = await listAccounts(token);
-  if ("error" in res) return { error: res.error };
+  if ("error" in res) {
+    logError({ action: "gmc.listAccounts", message: res.error, details: { businessId }, userId: user.id });
+    // v1 requires developer registration even for listing; if it was removed
+    // (e.g. app deleted from Merchant Center), the manual-ID path below the
+    // list re-registers automatically via selectMerchantAccount -> registerGcp.
+    if (/not registered/i.test(res.error)) {
+      return { error: "Aplicatia Edinio nu mai este inregistrata pe contul tau Merchant Center. Introdu manual ID-ul contului (il gasesti in Merchant Center, coltul din dreapta-sus) si apasa Conecteaza - inregistrarea se reface automat." };
+    }
+    return { error: res.error };
+  }
   const accounts = (res.data.accounts ?? []).map((a) => ({
     id: (a.accountId ?? a.name?.split("/").pop() ?? "").toString(),
     name: a.accountName ?? a.name ?? "",

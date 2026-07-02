@@ -178,6 +178,14 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
 
   const c = status.counts;
 
+  // The cron drains the queue asynchronously — poll while items are queued so
+  // the counts + product table update without a manual page reload.
+  useEffect(() => {
+    if (c.queued <= 0) return;
+    const t = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(t);
+  }, [c.queued, router]);
+
   return (
     <div className="space-y-6">
       {/* Connection banner */}

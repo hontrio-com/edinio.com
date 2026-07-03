@@ -59,20 +59,36 @@ export async function proxy(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Look up business by custom_domain
+    // Look up business by custom_domain. A visitor may arrive on the "www."
+    // twin, whose canonical is the apex — match both and redirect www → apex so
+    // the store resolves regardless of which the customer typed.
+    const isWww = bareHost.startsWith("www.");
+    const apexHost = isWww ? bareHost.slice(4) : bareHost;
+    const candidates = isWww ? [bareHost, apexHost] : [bareHost];
+
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { getAll() { return []; }, setAll() {} } }
     );
 
-    const { data: biz } = await supabase
+    const { data: rows } = await supabase
       .from("businesses")
-      .select("slug")
-      .eq("custom_domain", bareHost)
-      .eq("is_published", true)
-      .single();
+      .select("slug, custom_domain")
+      .in("custom_domain", candidates)
+      .eq("is_published", true);
 
+    const exact = rows?.find((r) => r.custom_domain === bareHost) ?? null;
+    const apexMatch = rows?.find((r) => r.custom_domain === apexHost) ?? null;
+
+    // www is not itself the stored canonical → redirect to the apex, keeping path.
+    if (!exact && isWww && apexMatch) {
+      const target = new URL(`https://${apexHost}${pathname}`);
+      target.search = request.nextUrl.search;
+      return NextResponse.redirect(target, 308);
+    }
+
+    const biz = exact ?? apexMatch;
     if (biz?.slug) {
       // Rewrite: custom-domain.ro/ → /slug, custom-domain.ro/produse → /slug/produse
       const rewritePath = pathname === "/" ? `/${biz.slug}` : `/${biz.slug}${pathname}`;

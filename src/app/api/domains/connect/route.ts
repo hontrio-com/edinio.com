@@ -16,7 +16,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Date incomplete" }, { status: 400 });
   }
 
-  const clean = domain.trim().toLowerCase();
+  // Store the apex as canonical (Vercel registers the www twin as a redirect to
+  // it, and the proxy redirects www → apex), so normalize a pasted "www." away.
+  const clean = domain.trim().toLowerCase().replace(/^www\./, "");
 
   const supabase = await createClient();
 

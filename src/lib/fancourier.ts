@@ -150,7 +150,9 @@ async function fanPost<T>(path: string, token: string, body: unknown): Promise<T
     // recipient data) when we couldn't extract a clean error message.
     if (detail) console.error("[fancourier] POST %s non-success: status=%s detail=%s", path, data.status, detail);
     else console.error("[fancourier] POST %s non-success (no parsable error): status=%s raw=%s", path, data.status, raw.slice(0, 600));
-    const message = detail || data.message?.trim() || `FAN Courier POST ${path} failed`;
+    // When FAN gives no parsable error, include the raw response (it's the
+    // merchant's own order data) so the real shape/reason is visible directly.
+    const message = detail || data.message?.trim() || `raspuns neasteptat — ${raw.slice(0, 400)}`;
     throw new Error(`FAN Courier: ${message}`);
   }
   return data.data as T;

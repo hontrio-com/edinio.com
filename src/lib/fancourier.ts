@@ -85,12 +85,31 @@ async function fanGet<T>(path: string, token: string): Promise<T> {
   return data.data as T;
 }
 
+/** Push FAN error value(s) (string | string[] | Laravel field→messages map) into out. */
+function pushFanErrors(e: unknown, out: string[]): void {
+  if (!e) return;
+  if (typeof e === "string") { if (e.trim()) out.push(e.trim()); return; }
+  if (Array.isArray(e)) {
+    for (const item of e) {
+      if (typeof item === "string" && item.trim()) out.push(item.trim());
+      else if (item && typeof item === "object") {
+        const io = item as Record<string, unknown>;
+        if (typeof io.message === "string" && io.message.trim()) out.push(io.message.trim());
+      }
+    }
+    return;
+  }
+  if (typeof e === "object") {
+    // Laravel-style validation map: { "field.name": ["msg", …], … }
+    for (const v of Object.values(e as Record<string, unknown>)) pushFanErrors(v, out);
+  }
+}
+
 /**
- * FAN Courier's intern-awb endpoint reports the real reason (bad locality,
- * missing zip, "Cont Colector" service not enabled, COD too high, …) inside
- * per-shipment `errors` arrays — NOT in a top-level `message`. Walk the response
- * and collect those human-readable messages so we surface them instead of a
- * useless generic "failed".
+ * intern-awb reports the real reason (bad locality, missing zip/sender, service
+ * not enabled, COD too high, …) inside per-shipment `errors` — which may be a
+ * string, an array, or a Laravel field→messages object — under `response`/`data`.
+ * Walk the body and collect those human-readable messages.
  */
 function collectFanErrors(node: unknown, out: string[] = [], depth = 0): string[] {
   if (!node || depth > 6) return out;
@@ -100,20 +119,8 @@ function collectFanErrors(node: unknown, out: string[] = [], depth = 0): string[
   }
   if (typeof node === "object") {
     const o = node as Record<string, unknown>;
-    const e = o.errors;
-    if (typeof e === "string" && e.trim()) out.push(e.trim());
-    else if (Array.isArray(e)) {
-      for (const item of e) {
-        if (typeof item === "string" && item.trim()) out.push(item.trim());
-        else if (item && typeof item === "object") {
-          const io = item as Record<string, unknown>;
-          if (typeof io.message === "string" && io.message.trim()) out.push(io.message.trim());
-          else collectFanErrors(item, out, depth + 1);
-        }
-      }
-    }
-    // Errors may be nested one level deeper (data / shipments).
-    for (const key of ["data", "shipments", "shipment"]) {
+    pushFanErrors(o.errors, out);
+    for (const key of ["response", "data", "shipments", "shipment"]) {
       if (o[key]) collectFanErrors(o[key], out, depth + 1);
     }
   }
@@ -125,37 +132,18 @@ function fanErrorDetail(parsed: unknown): string {
   return [...new Set(collectFanErrors(parsed))].join("; ");
 }
 
-async function fanPost<T>(path: string, token: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}/${path}`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const raw = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new Error(`FAN Courier POST ${path}: ${res.status} — ${raw.slice(0, 300) || res.statusText}`);
-  }
-  let data: { status?: string; data?: T; message?: string };
-  try {
-    data = JSON.parse(raw) as typeof data;
-  } catch {
-    throw new Error(`FAN Courier POST ${path}: raspuns invalid — ${raw.slice(0, 200)}`);
-  }
-  if (data.status !== "success") {
-    const detail = fanErrorDetail(data);
-    // Surface the real reason in server logs. Only dump the raw body (may echo
-    // recipient data) when we couldn't extract a clean error message.
-    if (detail) console.error("[fancourier] POST %s non-success: status=%s detail=%s", path, data.status, detail);
-    else console.error("[fancourier] POST %s non-success (no parsable error): status=%s raw=%s", path, data.status, raw.slice(0, 600));
-    // When FAN gives no parsable error, include the raw response (it's the
-    // merchant's own order data) so the real shape/reason is visible directly.
-    const message = detail || data.message?.trim() || `raspuns neasteptat — ${raw.slice(0, 400)}`;
-    throw new Error(`FAN Courier: ${message}`);
-  }
-  return data.data as T;
+/**
+ * The sender is NOT part of the intern-awb payload's `shipments`; FAN derives it
+ * from `clientId` (the sender branch) but the live API also validates a
+ * root-level `sender` object, so we fetch the branch matching client_id and send
+ * it explicitly. `reports/branches` returns the branch id (== clientId) plus the
+ * name/phone/address FAN requires for the sender.
+ */
+async function getSenderBranch(config: FanCourierConfig): Promise<FanCourierBranch> {
+  const branches = await getFanCourierBranches(config.username, config.password);
+  const match = branches.find((b) => b.id === config.client_id) ?? branches[0];
+  if (!match) throw new Error("FAN Courier: contul nu are niciun branch expeditor. Reconecteaza contul in Setari.");
+  return match;
 }
 
 async function fanDelete(path: string, token: string): Promise<void> {
@@ -198,6 +186,7 @@ export async function createFanCourierAwb(
   input: FanCourierAwbInput,
 ): Promise<string> {
   const token = await getFanCourierToken(config.username, config.password);
+  const sender = await getSenderBranch(config);
 
   // Determine service: FANbox for locker, Cont Colector for COD, Standard otherwise
   const isFanbox = !!input.fanboxRoutingLocation;
@@ -210,6 +199,18 @@ export async function createFanCourierAwb(
 
   const body = {
     clientId: config.client_id,
+    // Sender lives at the request ROOT (not inside shipments) and is validated
+    // by the live API — build it from the account's sender branch.
+    sender: {
+      name: sender.name,
+      phone: sender.phone,
+      address: {
+        county: sender.address.county,
+        locality: sender.address.locality,
+        street: sender.address.street,
+        streetNo: sender.address.streetNo || undefined,
+      },
+    },
     shipments: [
       {
         info: {
@@ -218,7 +219,7 @@ export async function createFanCourierAwb(
           bankAccount: "",
           packages: {
             parcel: input.parcels,
-            envelopes: 0,
+            envelope: 0, // FAN's field is "envelope" (singular) — see API changelog
           },
           weight: input.weightKg,
           cod: input.cod,
@@ -238,6 +239,7 @@ export async function createFanCourierAwb(
         },
         recipient: {
           name: input.recipientName,
+          contactPerson: input.recipientName, // schema lists contactPerson as mandatory
           phone: normalizePhone(input.recipientPhone),
           email: input.recipientEmail || undefined,
           address: {
@@ -253,35 +255,36 @@ export async function createFanCourierAwb(
     ],
   };
 
-  // Response can be array or object; extract first AWB number
-  const data = await fanPost<unknown>("intern-awb", token, body);
+  const res = await fetch(`${BASE_URL}/intern-awb`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const raw = await res.text().catch(() => "");
 
-  let awbNumber: string | undefined;
-  if (Array.isArray(data)) {
-    const first = data[0] as Record<string, unknown>;
-    awbNumber = String(first["awbNumber"] ?? first["awb"] ?? "");
-  } else if (data && typeof data === "object") {
-    const obj = data as Record<string, unknown>;
-    awbNumber = String(obj["awbNumber"] ?? obj["awb"] ?? "");
-    if (!awbNumber || awbNumber === "undefined") {
-      // Maybe nested
-      const arr = obj["awbs"] ?? obj["shipments"];
-      if (Array.isArray(arr) && arr.length > 0) {
-        const first = arr[0] as Record<string, unknown>;
-        awbNumber = String(first["awbNumber"] ?? first["awb"] ?? "");
-      }
-    }
+  if (!res.ok) {
+    let detail = "";
+    try { detail = fanErrorDetail(JSON.parse(raw)); } catch { /* not JSON */ }
+    throw new Error(`FAN Courier: ${detail || `${res.status} — ${raw.slice(0, 300) || res.statusText}`}`);
   }
 
-  if (!awbNumber || awbNumber === "undefined" || awbNumber === "null" || awbNumber === "0") {
-    // Some rejections come back with status "success" but no AWB and the reason
-    // buried in per-shipment errors — surface it instead of a generic message.
-    const detail = fanErrorDetail(data);
-    if (detail) {
-      console.error("[fancourier] intern-awb no AWB, errors=%s", detail);
-      throw new Error(`FAN Courier: ${detail}`);
-    }
-    throw new Error("AWB FAN Courier nu a fost returnat in raspuns");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`FAN Courier: raspuns invalid — ${raw.slice(0, 200)}`);
+  }
+
+  // Documented shape: { "response": [ { "awbNumber": 2228…, "errors": null } ] }.
+  const container = (parsed as Record<string, unknown>)?.response ?? (parsed as Record<string, unknown>)?.data;
+  const first = (Array.isArray(container) ? container[0] : container) as Record<string, unknown> | undefined;
+  const awbNumber = first ? String(first.awbNumber ?? first.awb ?? "") : "";
+
+  const failed = !awbNumber || awbNumber === "0" || awbNumber === "null" || awbNumber === "undefined" || first?.success === false;
+  if (failed) {
+    const detail = fanErrorDetail(parsed);
+    console.error("[fancourier] intern-awb failed: %s", detail || raw.slice(0, 400));
+    throw new Error(detail ? `FAN Courier: ${detail}` : `FAN Courier: AWB nu a fost creat — ${raw.slice(0, 200)}`);
   }
 
   return awbNumber;

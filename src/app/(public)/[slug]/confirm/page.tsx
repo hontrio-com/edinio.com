@@ -42,12 +42,16 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let cardDiscountAmount = 0;
   let discountCode: string | null = null;
   let orderNumber: string | null = null;
+  // Customer identifiers for pixel Advanced Matching (hashed client-side).
+  let customerName: string | null = null;
+  let customerEmail: string | null = null;
+  let customerPhone: string | null = null;
 
   if (orderId) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, subtotal, total")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, subtotal, total, customer_name, customer_email, customer_phone")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -59,8 +63,13 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       cardDiscountAmount = order.card_discount_amount ?? 0;
       discountCode = order.discount_code ?? null;
       orderNumber = order.order_number ?? null;
+      customerName = order.customer_name ?? null;
+      customerEmail = order.customer_email ?? null;
+      customerPhone = order.customer_phone ?? null;
     }
   }
+
+  const numItems = orderItems.reduce((s, i) => s + (i.quantity || 1), 0);
 
   const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount;
@@ -109,8 +118,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
         <FbPurchaseEvent
           orderId={orderId}
           total={displayTotal}
+          numItems={numItems}
           googleTagId={marketingConfig?.google_tag_id}
           googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
+          fbPixelId={marketingConfig?.facebook_pixel_id}
+          ttPixelId={marketingConfig?.tiktok_pixel_id}
+          customer={{ name: customerName, email: customerEmail, phone: customerPhone }}
         />
       )}
 

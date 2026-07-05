@@ -75,18 +75,22 @@ export default async function StoreLayout({ children, params }: Props) {
   const customDomain = (business?.custom_domain as string | null) ?? null;
   const basePath = customDomain && host === customDomain ? "" : `/${slug}`;
 
-  // Trackers only inject AFTER the visitor consents to the matching category
+  // Trackers inject AFTER the visitor consents to the matching category
   // (GDPR opt-in). marketing = FB/TikTok pixels, analytics = Google Tag.
+  // When the merchant disabled the cookie banner, there is no consent flow, so
+  // the gate is bypassed and trackers load unconditionally (merchant owns the
+  // GDPR responsibility — a warning is shown in Settings → Banner Cookies).
+  const requireConsent = cookieConfig.enabled;
   return (
     <>
       {fbPixelId && (
-        <ConsentGate slug={slug} category="marketing"><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
+        <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
       )}
       {ttPixelId && (
-        <ConsentGate slug={slug} category="marketing"><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
+        <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
       )}
       {googleTagIds.length > 0 && (
-        <ConsentGate slug={slug} category="analytics"><GoogleTag tagIds={googleTagIds} slug={slug} /></ConsentGate>
+        <ConsentGate slug={slug} category="analytics" bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} /></ConsentGate>
       )}
       {children}
       {cookieConfig.enabled && (

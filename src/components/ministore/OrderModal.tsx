@@ -14,6 +14,7 @@ import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
+import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 
@@ -208,6 +209,17 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
   }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, effectiveQty, product.id, product.name, product.price, product.images]);
+
+  // Funnel event: opening the order form = InitiateCheckout / begin_checkout.
+  // The single-product buy-now flow has no cart step, so this is where the
+  // mid-funnel signal is emitted (mirrors the cart checkout modal).
+  useEffect(() => {
+    if (!open) return;
+    const value = Number(product.price) || 0;
+    fbTrack("InitiateCheckout", { value, currency: "RON", content_ids: [product.id], content_name: product.name, content_type: "product", num_items: 1 });
+    ttqTrack("InitiateCheckout", { value, currency: "RON", contents: [{ content_id: product.id, content_type: "product", content_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
+    gtagEvent("begin_checkout", { currency: "RON", value, items: [{ item_id: product.id, item_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
+  }, [open, product.id, product.name, product.price]);
 
   // Reset on open
   useEffect(() => {

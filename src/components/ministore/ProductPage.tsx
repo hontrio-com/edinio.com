@@ -251,7 +251,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   useEffect(() => {
     gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
     fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
-    ttqTrack("ViewContent", { content_id: productId, content_name: productName, value: productPrice, currency: "RON" });
+    ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
   }, [productId, productName, productPrice]);
   // SEO alt text from the Media Library, falling back to the product name.
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;

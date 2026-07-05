@@ -8,20 +8,22 @@ import { CONSENT_EVENT, CONSENT_VERSION, readConsent } from "@/lib/cookie-consen
  * Loads gtag.js and configures one or more Google tags (Google Ads AW-…,
  * GA4 G-…) with Consent Mode v2 signals.
  *
- * Rendered behind ConsentGate (category "analytics"), so by the time it mounts
- * the visitor HAS consented to analytics ("basic" consent mode: nothing loads
- * before consent). We still declare the four consent signals so Google models
- * correctly: ad signals follow the visitor's "marketing" choice, and later
- * changes from the cookie banner are pushed via `consent update`.
+ * With `requireConsent` (the default), this is rendered behind ConsentGate
+ * (category "analytics"), so by mount time the visitor HAS consented to
+ * analytics; ad signals still follow the "marketing" choice and later banner
+ * changes are pushed via `consent update`.
+ *
+ * When the merchant disabled the cookie banner (`requireConsent=false`), there
+ * is no consent flow, so every signal defaults to granted.
  */
-export function GoogleTag({ tagIds, slug }: { tagIds: string[]; slug?: string }) {
+export function GoogleTag({ tagIds, slug, requireConsent = true }: { tagIds: string[]; slug?: string; requireConsent?: boolean }) {
   // Defense-in-depth: these values end up inside an inline script.
   const ids = [...new Set(tagIds.map((t) => (t ?? "").trim().replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean))];
   const safeSlug = (slug ?? "").replace(/[^a-zA-Z0-9-]/g, "");
 
   // Push consent changes (from the cookie banner) into Google tags live.
   useEffect(() => {
-    if (!safeSlug) return;
+    if (!safeSlug || !requireConsent) return;
     const update = () => {
       const consent = readConsent(safeSlug);
       const gtag = (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag;
@@ -35,13 +37,22 @@ export function GoogleTag({ tagIds, slug }: { tagIds: string[]; slug?: string })
     };
     window.addEventListener(CONSENT_EVENT, update);
     return () => window.removeEventListener(CONSENT_EVENT, update);
-  }, [safeSlug]);
+  }, [safeSlug, requireConsent]);
 
   if (ids.length === 0) return null;
 
-  // Consent defaults read from the stored banner choice. This component only
-  // mounts after analytics consent, so analytics_storage defaults to granted.
-  const consentDefault = safeSlug
+  // Consent defaults. Banner disabled → everything granted. Banner enabled →
+  // this component only mounts after analytics consent (so analytics granted);
+  // ad signals read the stored "marketing" choice.
+  const consentDefault = !requireConsent
+    ? `
+        gtag('consent', 'default', {
+          analytics_storage: 'granted',
+          ad_storage: 'granted',
+          ad_user_data: 'granted',
+          ad_personalization: 'granted'
+        });`
+    : safeSlug
     ? `
         var adGranted = false;
         try {
@@ -68,6 +79,7 @@ export function GoogleTag({ tagIds, slug }: { tagIds: string[]; slug?: string })
         ${consentDefault}
         gtag('js', new Date());
         ${ids.map((id) => `gtag('config', '${id}');`).join("\n        ")}
+        if(window.__edinioFlushQueue)window.__edinioFlushQueue('ga');
       `}</Script>
     </>
   );

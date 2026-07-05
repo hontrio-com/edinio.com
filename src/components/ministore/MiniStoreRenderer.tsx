@@ -1419,7 +1419,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     Object.values(selectedOptions).reduce((s, v) => s + v.length, 0) +
     (onSaleOnly ? 1 : 0) +
     (inStockOnly ? 1 : 0);
-  const { addItem, count, total, restoreCart } = useCart();
+  const { addItem, count, total, restoreCart, items: cartItemsForTracking } = useCart();
 
   // Cart recovery: a ?recover=<cartId> link rebuilds the saved cart and opens
   // checkout (optionally pre-applying a discount code from &code=).
@@ -1741,7 +1741,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       imageUrl: images[0] ? String(images[0]) : null,
     });
     fbTrack("AddToCart", { value: Number(product.price), currency: "RON", content_name: product.name, content_ids: [product.id], content_type: "product" });
-    ttqTrack("AddToCart", { value: Number(product.price), currency: "RON", content_id: product.id, content_name: product.name, content_type: "product" });
+    ttqTrack("AddToCart", { value: Number(product.price), currency: "RON", contents: [{ content_id: product.id, content_type: "product", content_name: product.name, price: Number(product.price), quantity: 1 }] });
     gtagEvent("add_to_cart", { currency: "RON", value: Number(product.price), items: [{ item_id: product.id, item_name: product.name, price: Number(product.price), quantity: 1 }] });
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 1500);
@@ -2611,7 +2611,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         onClose={() => setCartOpen(false)}
         color={color}
         basePath={basePath}
-        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count }); ttqTrack("InitiateCheckout", { value: total, currency: "RON" }); gtagEvent("begin_checkout", { currency: "RON", value: total }); }}
+        onCheckout={() => {
+          setCartOpen(false); setCheckoutOpen(true);
+          fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: cartItemsForTracking.map((i) => i.productId) });
+          ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: cartItemsForTracking.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: i.price, quantity: i.quantity })) });
+          gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
+        }}
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
         minOrderAmount={minOrderAmount}

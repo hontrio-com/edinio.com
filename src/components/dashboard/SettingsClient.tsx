@@ -7,6 +7,7 @@ import {
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
   ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package,
+  AlertTriangle,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
@@ -1521,6 +1522,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   <Switch checked={cookieCfg.enabled} onCheckedChange={(v) => setCookieCfg(c => ({ ...c, enabled: v }))} />
                 </div>
               </div>
+
+              {!cookieCfg.enabled && cookieCategories.length > 0 && (
+                <Callout variant="warning" icon={AlertTriangle} title="Instrumentele de marketing se incarca fara consimtamant">
+                  Cu bannerul dezactivat, pixelii (Facebook, TikTok) si Google Analytics se incarca pentru toti vizitatorii, fara sa le ceara acordul. Astfel pixelul e vizibil imediat in Pixel Helper, dar <span className="font-medium">raspunderea conformitatii GDPR iti apartine</span>. Recomandam sa lasi bannerul activ.
+                </Callout>
+              )}
 
               {/* Pozitionare */}
               <div className={`bg-surface border border-border rounded-xl p-5 space-y-4 ${cookieCfg.enabled ? "" : "opacity-50 pointer-events-none"}`}>

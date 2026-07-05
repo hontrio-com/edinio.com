@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { X, Package, Loader2, Download, Trash2, ExternalLink } from "lucide-react";
+import { X, Package, Loader2, Download, Trash2, ExternalLink, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { createCargusAwbAction, deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { getCargusServiceId } from "@/lib/cargus";
@@ -18,6 +18,13 @@ type ShippingAddress = {
   address?: string;
   street?: string;
   postal_code?: string;
+  courier?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
+  locker_address?: string;
+  locker_city?: string;
+  locker_county?: string;
 };
 
 export function CargusAwbModal({
@@ -41,16 +48,26 @@ export function CargusAwbModal({
   const hasAwb = !!orderData.cargus_awb_number;
   const addr = order.shipping_address as ShippingAddress | null;
 
+  // Delivery to a Cargus Ship & Go point: the AWB carries DeliveryPudoPoint +
+  // ServiceId 38 (resolved server-side from the order).
+  const isPudoDelivery =
+    addr?.courier === "cargus" && addr?.delivery_type === "locker" && !!addr?.locker_id;
+
   // Form state
   const [weight, setWeight] = useState("1");
   const [parcels, setParcels] = useState("1");
+  const [shipmentKind, setShipmentKind] = useState<"parcel" | "envelope">("parcel");
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
   const [cashRepayment, setCashRepayment] = useState("");
   const [openPackage, setOpenPackage] = useState(false);
+  const [saturdayDelivery, setSaturdayDelivery] = useState(false);
   const [observations, setObservations] = useState("");
-  const [packageContent, setPackageContent] = useState("");
+  const [packageContent, setPackageContent] = useState(() => {
+    const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
+    return items.map((i) => i?.name).filter(Boolean).join(", ").slice(0, 100);
+  });
 
   const [recipientName, setRecipientName] = useState(order.customer_name);
   const [recipientPhone, setRecipientPhone] = useState(order.customer_phone);
@@ -76,14 +93,23 @@ export function CargusAwbModal({
   }, [open, hasAwb, order.payment_method, order.total]);
 
   const weightNum = parseFloat(weight) || 1;
-  const service = getCargusServiceId(weightNum);
+  const isEnvelope = shipmentKind === "envelope";
+  const service = isPudoDelivery ? { id: 38, name: "Ship & Go" } : getCargusServiceId(weightNum);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!recipientPhone.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
-    if (!recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu");
-    if (!recipientCity.trim()) return toast.error("Localitatea destinatarului este obligatorie");
+    if (!isPudoDelivery) {
+      if (!recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu");
+      if (!recipientCity.trim()) return toast.error("Localitatea destinatarului este obligatorie");
+    }
+    if (isPudoDelivery && !recipientEmail.trim()) return toast.error("Emailul destinatarului este obligatoriu pentru livrarea la Ship & Go");
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
+    const countNum = parseInt(parcels) || 1;
+    if (isEnvelope) {
+      if (weightNum > 1) return toast.error("Un plic cantareste maxim 1 kg. Alege tip Colet pentru greutati mai mari.");
+      if (countNum > 9) return toast.error("Maxim 9 plicuri per AWB");
+    }
 
     setCreating(true);
     const result = await createCargusAwbAction(businessId, order.id, {
@@ -94,10 +120,12 @@ export function CargusAwbModal({
       recipientCity: recipientCity.trim(),
       recipientAddress: recipientAddress.trim(),
       recipientPostalCode: recipientPostalCode.trim(),
-      parcels: parseInt(parcels) || 1,
+      parcels: isEnvelope ? 0 : countNum,
+      envelopes: isEnvelope ? countNum : 0,
       totalWeightKg: weightNum,
       cashRepayment: parseFloat(cashRepayment) || 0,
       openPackage,
+      saturdayDelivery,
       observations: observations.trim(),
       packageContent: packageContent.trim(),
       customString: order.order_number,
@@ -199,6 +227,16 @@ export function CargusAwbModal({
                 </Button>
               </div>
 
+              <a
+                href={`https://www.cargus.ro/personal/urmareste-coletul/?tracking_number=${encodeURIComponent(orderData.cargus_awb_number ?? "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium border border-border rounded-lg text-foreground hover:bg-muted transition-colors"
+              >
+                <MapPin className="h-4 w-4" />
+                Urmareste expedierea
+              </a>
+
               <div className="pt-2 border-t border-border">
                 <Button variant="destructive" size="lg" onClick={handleDelete} disabled={deleting} className="w-full">
                   {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
@@ -237,7 +275,7 @@ export function CargusAwbModal({
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">{isPudoDelivery ? "Email *" : "Email"}</label>
                     <input
                       type="email"
                       value={recipientEmail}
@@ -245,6 +283,21 @@ export function CargusAwbModal({
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />
                   </div>
+                  {isPudoDelivery && (
+                    <div className="p-3 rounded-xl bg-info/5 border border-info/20">
+                      <p className="text-xs font-semibold text-info mb-0.5">Livrare la Cargus Ship &amp; Go</p>
+                      <p className="text-sm font-medium text-foreground">{addr?.locker_name}</p>
+                      {(addr?.locker_address || addr?.locker_city) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {[addr?.locker_address, addr?.locker_city].filter(Boolean).join(", ")}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        AWB-ul se genereaza direct pe punctul ales de client (serviciul Ship &amp; Go), fara adresa de strada.
+                      </p>
+                    </div>
+                  )}
+                  {!isPudoDelivery && (<>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Judet *</label>
@@ -287,6 +340,7 @@ export function CargusAwbModal({
                       />
                     </div>
                   </div>
+                  </>)}
                 </div>
               </div>
 
@@ -294,6 +348,26 @@ export function CargusAwbModal({
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Detalii colet</p>
                 <div className="space-y-3">
+                  <div className="flex gap-2">
+                    {([["parcel", "Colet"], ["envelope", "Plic"]] as const).map(([kind, label]) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        onClick={() => setShipmentKind(kind)}
+                        className={cn(
+                          "flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors",
+                          shipmentKind === kind
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {isEnvelope && (
+                    <p className="text-[11px] text-muted-foreground -mt-1">Plic: maxim 1 kg si maxim 9 plicuri per AWB.</p>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Greutate totala (kg) *</label>
@@ -307,11 +381,11 @@ export function CargusAwbModal({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1">Nr. colete</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">{isEnvelope ? "Nr. plicuri" : "Nr. colete"}</label>
                       <input
                         type="number"
                         min="1"
-                        max="15"
+                        max={isEnvelope ? 9 : 15}
                         value={parcels}
                         onChange={e => setParcels(e.target.value)}
                         className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
@@ -350,9 +424,11 @@ export function CargusAwbModal({
                   )}>
                     <Package className="h-3.5 w-3.5 flex-shrink-0" />
                     Serviciu: <span className="font-bold">{service.name}</span>
-                    <span className="text-primary/60">
-                      ({weightNum <= 31 ? "≤31kg" : weightNum <= 50 ? "31-50kg" : ">50kg"})
-                    </span>
+                    {!isPudoDelivery && (
+                      <span className="text-primary/60">
+                        ({weightNum <= 31 ? "≤31kg" : weightNum <= 50 ? "31-50kg" : ">50kg"})
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -379,6 +455,14 @@ export function CargusAwbModal({
                       <p className="text-[11px] text-muted-foreground">Destinatarul poate verifica coletul inainte de acceptare</p>
                     </div>
                     <Switch checked={openPackage} onCheckedChange={setOpenPackage} className="shrink-0" />
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Livrare sambata</p>
+                      <p className="text-[11px] text-muted-foreground">Coletul se livreaza sambata (unde Cargus opereaza sambata)</p>
+                    </div>
+                    <Switch checked={saturdayDelivery} onCheckedChange={setSaturdayDelivery} className="shrink-0" />
                   </div>
 
                   <div>

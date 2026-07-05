@@ -5,6 +5,7 @@ import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type Sameda
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
+import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 
@@ -81,7 +82,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, default_shipping_cost, shipping_zones")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, default_shipping_cost, shipping_zones")
     .eq("business_id", businessId)
     .single();
 
@@ -341,8 +342,46 @@ export async function getShippingOptions(
       } else {
         pushBoth(zone.price);
       }
+    } else if (courierId === "cargus") {
+      const cargusCfg = settings.cargus_config as CargusConfig | null;
+      const hasApi = !!(cargusCfg?.enabled && cargusCfg.username && cargusCfg.subscription_key && cargusCfg.location_id);
+      const pushBoth = (price: number) => {
+        options.push({
+          courier: "cargus",
+          courierLabel: addrLabel(zone.label, "Livrare prin Cargus"),
+          deliveryType: "address",
+          price,
+        });
+        if (hasApi) {
+          options.push({
+            courier: "cargus",
+            courierLabel: lockerLabel(zone.label, "Cargus Ship & Go (punct)"),
+            deliveryType: "locker",
+            price,
+          });
+        }
+      };
+
+      if (hasApi && useAutoPrice) {
+        // Live quote with the COD fee baked in when the order is ramburs.
+        promises.push(
+          calculateCargusPrice(cargusCfg!, {
+            county: destination.county,
+            city: destination.city,
+            weightKg: weight,
+            cod: destination.cod,
+          })
+            .then((q) => pushBoth(q ? q.price : zone.price))
+            .catch((err) => {
+              console.error("[shipping] Cargus estimate failed:", err.message);
+              pushBoth(zone.price);
+            }),
+        );
+      } else {
+        pushBoth(zone.price);
+      }
     } else {
-      // Generic courier (cargus, colete, own) — flat price
+      // Generic courier (colete, own) — flat price
       options.push({
         courier: courierId,
         courierLabel: zone.label || COURIER_LABELS[courierId] || courierId,
@@ -428,11 +467,13 @@ export async function getLockers(
   businessId: string,
   courier: string,
   city?: string,
+  /** COD amount of the order — Cargus Ship & Go points individually accept or refuse ramburs. */
+  codAmount?: number,
 ): Promise<LockerItem[]> {
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config")
     .eq("business_id", businessId)
     .single();
 
@@ -506,6 +547,34 @@ export async function getLockers(
       }));
     } catch (e) {
       console.error("[shipping] DPD pickup points failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "cargus") {
+    const config = settings.cargus_config as CargusConfig | null;
+    if (!config?.enabled) return [];
+    try {
+      const points = await getCargusPudoPoints(config);
+      let filtered = points;
+      // Ramburs orders can only go to Ship & Go points that accept COD.
+      if (codAmount && codAmount > 0) {
+        filtered = filtered.filter((p) => p.serviceCod);
+      }
+      if (city) {
+        filtered = filtered.filter((p) => cityMatches(p.city, city));
+      }
+      return filtered.map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        address: [p.address, p.city].filter(Boolean).join(", "),
+        city: p.city,
+        county: p.county,
+        lat: p.lat,
+        lng: p.lng,
+      }));
+    } catch (e) {
+      console.error("[shipping] Cargus Ship & Go points failed:", (e as Error).message);
       return [];
     }
   }

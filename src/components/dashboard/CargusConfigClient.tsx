@@ -43,6 +43,8 @@ export function CargusConfigClient({
   const [selectedLocationName, setSelectedLocationName] = useState(initialConfig?.location_name ?? "");
   const [selectedPriceTableId, setSelectedPriceTableId] = useState<number>(initialConfig?.price_table_id ?? 0);
   const [selectedPriceTableName, setSelectedPriceTableName] = useState(initialConfig?.price_table_name ?? "");
+  const [repaymentType, setRepaymentType] = useState<"cash" | "bank">(initialConfig?.repayment_type ?? "cash");
+  const [declaredValue, setDeclaredValue] = useState(initialConfig?.declared_value_enabled ?? false);
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.subscription_key);
 
@@ -81,6 +83,8 @@ export function CargusConfigClient({
     if (!selectedLocationId) return toast.error("Selecteaza un punct de ridicare");
     if (!selectedPriceTableId) return toast.error("Selecteaza un tarif");
 
+    // The sender county/locality feed the live ShippingCalculation quotes.
+    const selectedLocation = locations.find((l) => Number(l.LocationId) === Number(selectedLocationId));
     const config: CargusConfig = {
       enabled: true,
       username: username.trim(),
@@ -90,6 +94,10 @@ export function CargusConfigClient({
       location_name: selectedLocationName,
       price_table_id: selectedPriceTableId,
       price_table_name: selectedPriceTableName,
+      location_county: selectedLocation?.CountyName ?? initialConfig?.location_county,
+      location_locality: selectedLocation?.LocalityName ?? initialConfig?.location_locality,
+      repayment_type: repaymentType,
+      declared_value_enabled: declaredValue,
     };
 
     setSaving(true);
@@ -246,6 +254,34 @@ export function CargusConfigClient({
               </div>
             )}
           </Field>
+
+          <Field label="Returnarea rambursului">
+            <select
+              aria-label="Returnarea rambursului"
+              value={repaymentType}
+              onChange={e => setRepaymentType(e.target.value as "cash" | "bank")}
+              className={selectCls}
+            >
+              <option value="cash">Numerar in plic (adus de curier)</option>
+              <option value="bank">In cont bancar (cont colector Cargus)</option>
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Cum iti returneaza Cargus banii incasati ramburs de la clienti.
+            </p>
+          </Field>
+
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={declaredValue}
+              onChange={e => setDeclaredValue(e.target.checked)}
+              className="mt-0.5 rounded border-border accent-primary"
+            />
+            <span className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
+              Fiecare AWB se asigura pentru valoarea produselor din comanda. Cargus percepe o prima de asigurare conform contractului.
+            </span>
+          </label>
 
           <div className="flex justify-end">
             <Button

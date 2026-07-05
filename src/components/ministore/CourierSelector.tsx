@@ -119,7 +119,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     setLockersLoading(true);
     setSelectedLocker(null);
     setLockerSearch("");
-    getLockers(businessId, opt.courier, city)
+    getLockers(businessId, opt.courier, city, cod)
       .then(setLockers)
       .catch(() => setLockers([]))
       .finally(() => setLockersLoading(false));

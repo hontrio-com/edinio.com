@@ -5,6 +5,8 @@ import {
   createCargusAwb,
   deleteCargusAwb,
   loadCargusAccount,
+  getCargusServiceId,
+  validateCargusPickupOrder,
   type CargusConfig,
   type CargusAwbInput,
   type CargusPickupLocation,
@@ -105,13 +107,27 @@ export async function createCargusAwbAction(
   const orderData = order as typeof order & { cargus_awb_number?: string | null };
   if (orderData.cargus_awb_number) return { error: "AWB Cargus a fost deja creat" };
 
-  try {
-    const barCode = await createCargusAwb(config, input);
+  // Server-derived extras: the Ship & Go point chosen at checkout and the
+  // insured value when the merchant opted in.
+  const shipping = (order.shipping_address ?? {}) as {
+    courier?: string;
+    delivery_type?: string;
+    locker_id?: string;
+  };
+  const isPudoDelivery =
+    shipping.courier === "cargus" && shipping.delivery_type === "locker" && !!shipping.locker_id;
+  const enriched: CargusAwbInput = {
+    ...input,
+    pudoPointId: isPudoDelivery ? (Number(shipping.locker_id) || undefined) : input.pudoPointId,
+    declaredValue: config.declared_value_enabled ? (Number(order.subtotal) || undefined) : undefined,
+  };
 
-    // Determine service name from weight
-    const serviceName =
-      input.totalWeightKg <= 31 ? "Economic Standard" :
-      input.totalWeightKg <= 50 ? "Standard Plus" : "Palet Standard";
+  try {
+    const barCode = await createCargusAwb(config, enriched);
+
+    const serviceName = enriched.pudoPointId
+      ? "Ship & Go"
+      : getCargusServiceId(enriched.totalWeightKg).name;
 
     await supabase.from("orders").update({
       cargus_awb_number: barCode,
@@ -120,6 +136,40 @@ export async function createCargusAwbAction(
     }).eq("id", orderId);
 
     return { barCode, serviceName };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ─── Pickup (courier order validation) ───────────────────────────────────────
+
+/**
+ * Validates the open Cargus order on the configured pickup point so the
+ * courier comes for the created AWBs. Needed when the pickup point has no
+ * AutomaticEOD hour configured in WebExpress.
+ */
+export async function requestCargusPickupAction(
+  businessId: string,
+  input: { pickupStart: string; pickupEnd: string },
+): Promise<{ orderId: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  const { data: settings } = await supabase
+    .from("store_settings").select("cargus_config").eq("business_id", businessId).single();
+  const config = settings?.cargus_config as CargusConfig | null;
+  if (!config?.enabled || !config.username || !config.password || !config.subscription_key) {
+    return { error: "Cargus nu este configurat complet" };
+  }
+
+  try {
+    const orderId = await validateCargusPickupOrder(config, input);
+    return { orderId };
   } catch (e) {
     return { error: (e as Error).message };
   }

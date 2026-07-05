@@ -14,6 +14,7 @@ import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
 import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { FanCourierPickupModal } from "@/components/dashboard/FanCourierPickupModal";
 import { DpdPickupModal } from "@/components/dashboard/DpdPickupModal";
+import { CargusPickupModal } from "@/components/dashboard/CargusPickupModal";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
@@ -67,6 +68,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [fanCourierModalOrder, setFanCourierModalOrder] = useState<Order | null>(null);
   const [fanPickupOpen, setFanPickupOpen] = useState(false);
   const [dpdPickupOpen, setDpdPickupOpen] = useState(false);
+  const [cargusPickupOpen, setCargusPickupOpen] = useState(false);
   const [samedayModalOrder, setSamedayModalOrder] = useState<Order | null>(null);
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
@@ -212,6 +214,13 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
           businessId={businessId}
         />
       )}
+      {cargusPickupOpen && businessId && (
+        <CargusPickupModal
+          open={cargusPickupOpen}
+          onClose={() => setCargusPickupOpen(false)}
+          businessId={businessId}
+        />
+      )}
       {coleteModalOrder && businessId && (
         <ColeteAwbModal
           open={!!coleteModalOrder}
@@ -254,6 +263,15 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                 className="px-3 py-1.5 text-xs font-semibold rounded-full border border-border bg-surface text-foreground hover:bg-muted transition-colors"
               >
                 Cheama curierul DPD
+              </button>
+            )}
+            {cargusEnabled && businessId && (
+              <button
+                type="button"
+                onClick={() => setCargusPickupOpen(true)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-full border border-border bg-surface text-foreground hover:bg-muted transition-colors"
+              >
+                Cheama curierul Cargus
               </button>
             )}
             {pendingCount > 0 && (

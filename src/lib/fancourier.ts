@@ -85,6 +85,46 @@ async function fanGet<T>(path: string, token: string): Promise<T> {
   return data.data as T;
 }
 
+/**
+ * FAN Courier's intern-awb endpoint reports the real reason (bad locality,
+ * missing zip, "Cont Colector" service not enabled, COD too high, …) inside
+ * per-shipment `errors` arrays — NOT in a top-level `message`. Walk the response
+ * and collect those human-readable messages so we surface them instead of a
+ * useless generic "failed".
+ */
+function collectFanErrors(node: unknown, out: string[] = [], depth = 0): string[] {
+  if (!node || depth > 6) return out;
+  if (Array.isArray(node)) {
+    for (const n of node) collectFanErrors(n, out, depth + 1);
+    return out;
+  }
+  if (typeof node === "object") {
+    const o = node as Record<string, unknown>;
+    const e = o.errors;
+    if (typeof e === "string" && e.trim()) out.push(e.trim());
+    else if (Array.isArray(e)) {
+      for (const item of e) {
+        if (typeof item === "string" && item.trim()) out.push(item.trim());
+        else if (item && typeof item === "object") {
+          const io = item as Record<string, unknown>;
+          if (typeof io.message === "string" && io.message.trim()) out.push(io.message.trim());
+          else collectFanErrors(item, out, depth + 1);
+        }
+      }
+    }
+    // Errors may be nested one level deeper (data / shipments).
+    for (const key of ["data", "shipments", "shipment"]) {
+      if (o[key]) collectFanErrors(o[key], out, depth + 1);
+    }
+  }
+  return out;
+}
+
+/** Deduped, joined FAN Courier error detail (empty string if none found). */
+function fanErrorDetail(parsed: unknown): string {
+  return [...new Set(collectFanErrors(parsed))].join("; ");
+}
+
 async function fanPost<T>(path: string, token: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}/${path}`, {
     method: "POST",
@@ -94,12 +134,25 @@ async function fanPost<T>(path: string, token: string, body: unknown): Promise<T
     },
     body: JSON.stringify(body),
   });
+  const raw = await res.text().catch(() => "");
   if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(`FAN Courier POST ${path}: ${res.status} — ${text}`);
+    throw new Error(`FAN Courier POST ${path}: ${res.status} — ${raw.slice(0, 300) || res.statusText}`);
   }
-  const data = await res.json() as { status: string; data?: T; message?: string };
-  if (data.status !== "success") throw new Error(data.message ?? `FAN Courier POST ${path} failed`);
+  let data: { status?: string; data?: T; message?: string };
+  try {
+    data = JSON.parse(raw) as typeof data;
+  } catch {
+    throw new Error(`FAN Courier POST ${path}: raspuns invalid — ${raw.slice(0, 200)}`);
+  }
+  if (data.status !== "success") {
+    const detail = fanErrorDetail(data);
+    // Surface the real reason in server logs. Only dump the raw body (may echo
+    // recipient data) when we couldn't extract a clean error message.
+    if (detail) console.error("[fancourier] POST %s non-success: status=%s detail=%s", path, data.status, detail);
+    else console.error("[fancourier] POST %s non-success (no parsable error): status=%s raw=%s", path, data.status, raw.slice(0, 600));
+    const message = detail || data.message?.trim() || `FAN Courier POST ${path} failed`;
+    throw new Error(`FAN Courier: ${message}`);
+  }
   return data.data as T;
 }
 
@@ -218,7 +271,14 @@ export async function createFanCourierAwb(
     }
   }
 
-  if (!awbNumber || awbNumber === "undefined" || awbNumber === "null") {
+  if (!awbNumber || awbNumber === "undefined" || awbNumber === "null" || awbNumber === "0") {
+    // Some rejections come back with status "success" but no AWB and the reason
+    // buried in per-shipment errors — surface it instead of a generic message.
+    const detail = fanErrorDetail(data);
+    if (detail) {
+      console.error("[fancourier] intern-awb no AWB, errors=%s", detail);
+      throw new Error(`FAN Courier: ${detail}`);
+    }
     throw new Error("AWB FAN Courier nu a fost returnat in raspuns");
   }
 

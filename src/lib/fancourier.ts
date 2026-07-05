@@ -197,22 +197,24 @@ export async function createFanCourierAwb(
   // FANbox: option V = pickup from locker, ePOD (X) for non-locker
   const options = isFanbox ? ["V"] : ["X"];
 
+  // Sender belongs INSIDE each shipment (verified against the live API — the
+  // published PDF schema omits it entirely). Built from the account's branch.
+  const senderInfo = {
+    name: sender.name,
+    phone: sender.phone,
+    address: {
+      county: sender.address.county,
+      locality: sender.address.locality,
+      street: sender.address.street,
+      streetNo: sender.address.streetNo || undefined,
+    },
+  };
+
   const body = {
     clientId: config.client_id,
-    // Sender lives at the request ROOT (not inside shipments) and is validated
-    // by the live API — build it from the account's sender branch.
-    sender: {
-      name: sender.name,
-      phone: sender.phone,
-      address: {
-        county: sender.address.county,
-        locality: sender.address.locality,
-        street: sender.address.street,
-        streetNo: sender.address.streetNo || undefined,
-      },
-    },
     shipments: [
       {
+        sender: senderInfo,
         info: {
           service,
           bank: "",

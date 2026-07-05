@@ -12,6 +12,7 @@ import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.ac
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
 import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
+import { FanCourierPickupModal } from "@/components/dashboard/FanCourierPickupModal";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
@@ -34,7 +35,7 @@ const STATUS_TABS = [
 
 const PAGE_SIZE = 50;
 
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId }: {
+export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   orders: Order[];
   pendingCount: number;
   smartbillEnabled?: boolean;
@@ -47,6 +48,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   businessId?: string;
+  fanPickup?: { lastDate: string | null; lastId: string | null };
 }) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,6 +64,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [cargusModalOrder, setCargusModalOrder] = useState<Order | null>(null);
   const [dpdModalOrder, setDpdModalOrder] = useState<Order | null>(null);
   const [fanCourierModalOrder, setFanCourierModalOrder] = useState<Order | null>(null);
+  const [fanPickupOpen, setFanPickupOpen] = useState(false);
   const [samedayModalOrder, setSamedayModalOrder] = useState<Order | null>(null);
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
@@ -190,6 +193,16 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
           onSuccess={() => { setFanCourierModalOrder(null); router.refresh(); }}
         />
       )}
+      {fanPickupOpen && businessId && (
+        <FanCourierPickupModal
+          open={fanPickupOpen}
+          onClose={() => setFanPickupOpen(false)}
+          businessId={businessId}
+          lastPickupDate={fanPickup?.lastDate}
+          lastPickupId={fanPickup?.lastId}
+          onChanged={() => router.refresh()}
+        />
+      )}
       {coleteModalOrder && businessId && (
         <ColeteAwbModal
           open={!!coleteModalOrder}
@@ -215,11 +228,22 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
             <h1 className="text-xl font-semibold text-foreground">Comenzi</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Toate comenzile primite</p>
           </div>
-          {pendingCount > 0 && (
-            <span className="px-3 py-1.5 bg-warning/10 text-warning text-xs font-semibold rounded-full border border-warning/20 flex-shrink-0">
-              {pendingCount} in asteptare
-            </span>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {fanCourierEnabled && businessId && (
+              <button
+                type="button"
+                onClick={() => setFanPickupOpen(true)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-full border border-border bg-surface text-foreground hover:bg-muted transition-colors"
+              >
+                Cheama curierul FAN
+              </button>
+            )}
+            {pendingCount > 0 && (
+              <span className="px-3 py-1.5 bg-warning/10 text-warning text-xs font-semibold rounded-full border border-warning/20">
+                {pendingCount} in asteptare
+              </span>
+            )}
+          </div>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

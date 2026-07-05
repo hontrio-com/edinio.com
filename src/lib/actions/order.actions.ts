@@ -151,6 +151,9 @@ export async function placeOrder(data: {
   delivery_type?: string;
   locker_id?: string;
   locker_name?: string;
+  locker_address?: string;
+  locker_city?: string;
+  locker_county?: string;
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
@@ -289,6 +292,9 @@ export async function placeOrder(data: {
       ...(data.locker_id && {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
+        locker_address: data.locker_address,
+        locker_city: data.locker_city,
+        locker_county: data.locker_county,
       }),
       ...(data.woot_service_id && {
         woot_service_id: data.woot_service_id,
@@ -659,6 +665,9 @@ export async function placeCartOrder(data: {
   delivery_type?: string;
   locker_id?: string;
   locker_name?: string;
+  locker_address?: string;
+  locker_city?: string;
+  locker_county?: string;
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
@@ -784,6 +793,9 @@ export async function placeCartOrder(data: {
       ...(data.locker_id && {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
+        locker_address: data.locker_address,
+        locker_city: data.locker_city,
+        locker_county: data.locker_county,
       }),
       ...(data.woot_service_id && {
         woot_service_id: data.woot_service_id,

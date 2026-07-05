@@ -12,6 +12,10 @@ export interface CourierSelection {
   lockerId?: string;
   lockerName?: string;
   lockerAddress?: string;
+  // Locker's own city/county — couriers (FAN Courier) require the AWB to carry
+  // the locker's locality, not the customer's, so they must survive into the order.
+  lockerCity?: string;
+  lockerCounty?: string;
   wootServiceId?: number;
   wootCourierName?: string;
   wootServiceName?: string;
@@ -52,7 +56,9 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
 
   // Fetch shipping options when the destination is sufficiently filled in
   useEffect(() => {
-    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}`;
+    // cod is part of the key: COD switches FAN to "Cont Colector" (extra fee)
+    // and changes Woot repayment quotes, so prices must refresh with payment.
+    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}::${cod ?? ""}`;
     if (!ready) {
       setOptions([]);
       setSelectedKey(null);
@@ -99,7 +105,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         if (thisReq === reqId.current) setLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [county, city, country, postCode, weightKg]);
+  }, [county, city, country, postCode, weightKg, cod]);
 
   // Fetch lockers when a locker option is selected
   useEffect(() => {
@@ -158,6 +164,8 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         lockerId: locker.id,
         lockerName: locker.name,
         lockerAddress: locker.address,
+        lockerCity: locker.city,
+        lockerCounty: locker.county,
       });
     }
   }

@@ -4,9 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import {
   createFanCourierAwb,
   deleteFanCourierAwb,
+  createFanCourierPickupOrder,
+  deleteFanCourierPickupOrder,
   loadFanCourierAccount,
   type FanCourierConfig,
   type FanCourierAwbInput,
+  type FanCourierPickupInput,
   type FanCourierBranch,
 } from "@/lib/fancourier";
 
@@ -109,6 +112,83 @@ export async function createFanCourierAwbAction(
     }).eq("id", orderId);
 
     return { awbNumber };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ─── Pickup (courier order) actions ──────────────────────────────────────────
+
+async function getOwnedFanConfig(businessId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" as const };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" as const };
+
+  const { data: settings } = await supabase
+    .from("store_settings").select("fan_courier_config").eq("business_id", businessId).single();
+
+  const config = settings?.fan_courier_config as FanCourierConfig | null;
+  if (!config?.enabled || !config.username || !config.password || !config.client_id) {
+    return { error: "FAN Courier nu este configurat complet" as const };
+  }
+  return { supabase, config };
+}
+
+export async function createFanCourierPickupAction(
+  businessId: string,
+  input: FanCourierPickupInput,
+): Promise<{ orderId: string } | { error: string }> {
+  const ctx = await getOwnedFanConfig(businessId);
+  if ("error" in ctx) return { error: ctx.error as string };
+  const { supabase, config } = ctx;
+
+  try {
+    const orderId = await createFanCourierPickupOrder(config, input);
+
+    // Remember the last pickup so the UI can warn about duplicates / allow cancel.
+    await supabase.from("store_settings").update({
+      fan_courier_config: {
+        ...config,
+        last_pickup_date: input.pickupDate,
+        last_pickup_id: orderId || null,
+      } as unknown as import("@/types/database.types").Json,
+      updated_at: new Date().toISOString(),
+    }).eq("business_id", businessId);
+
+    return { orderId };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function cancelFanCourierPickupAction(
+  businessId: string,
+): Promise<{ success: true } | { error: string }> {
+  const ctx = await getOwnedFanConfig(businessId);
+  if ("error" in ctx) return { error: ctx.error as string };
+  const { supabase, config } = ctx;
+
+  if (!config.last_pickup_id) {
+    return { error: "Nu exista o ridicare programata din platforma care sa poata fi anulata." };
+  }
+
+  try {
+    await deleteFanCourierPickupOrder(config, config.last_pickup_id);
+
+    await supabase.from("store_settings").update({
+      fan_courier_config: {
+        ...config,
+        last_pickup_date: null,
+        last_pickup_id: null,
+      } as unknown as import("@/types/database.types").Json,
+      updated_at: new Date().toISOString(),
+    }).eq("business_id", businessId);
+
+    return { success: true };
   } catch (e) {
     return { error: (e as Error).message };
   }

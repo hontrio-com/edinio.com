@@ -37,6 +37,7 @@ export function FanCourierConfigClient({
   const [branches, setBranches] = useState<FanCourierBranch[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<number>(initialConfig?.client_id ?? 0);
   const [selectedClientName, setSelectedClientName] = useState(initialConfig?.client_name ?? "");
+  const [epod, setEpod] = useState(initialConfig?.epod ?? false);
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_id);
 
@@ -73,6 +74,10 @@ export function FanCourierConfigClient({
       password: password.trim(),
       client_id: selectedClientId,
       client_name: selectedClientName,
+      epod,
+      // Keep the pickup bookkeeping across re-saves.
+      last_pickup_date: initialConfig?.last_pickup_date ?? null,
+      last_pickup_id: initialConfig?.last_pickup_id ?? null,
     };
 
     setSaving(true);
@@ -190,6 +195,22 @@ export function FanCourierConfigClient({
               </div>
             )}
           </Field>
+
+          <label className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={epod}
+              onChange={e => setEpod(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Eticheta proprie (ePOD)</span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                Printezi tu eticheta AWB (A6) in loc de AWB-ul A5 pretiparit adus de curier.
+                Activeaza doar daca printezi etichetele inainte de predare.
+              </span>
+            </span>
+          </label>
 
           <div className="flex justify-end">
             <Button

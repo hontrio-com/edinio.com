@@ -6,6 +6,14 @@ import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfi
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
 import { calculateDpdIntlPrice, type DpdConfig } from "@/lib/dpd";
 import { euCountryByIso2 } from "@/lib/eu-countries";
+import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
+
+/** Diacritics-insensitive locality match ("București"/"Sector 3" find "Bucuresti"). */
+function cityMatches(lockerCity: string, needle: string): boolean {
+  return stripDiacritics(lockerCity).toLowerCase().includes(
+    normalizeLocalityName(needle).toLowerCase(),
+  );
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -186,29 +194,27 @@ export async function getShippingOptions(
     } else if (courierId === "fan-courier") {
       const fanConfig = settings.fan_courier_config as FanCourierConfig | null;
       const hasApi = !!(fanConfig?.enabled && fanConfig.username && fanConfig.client_id);
+      const codAmount = destination.cod ?? 0;
+      // FANbox hard limit is 30 kg — don't offer the locker option beyond it.
+      const fanboxAllowed = hasApi && weight <= 30;
 
       if (hasApi && useAutoPrice) {
-        const service = destination.cod && destination.cod > 0 ? "Cont Colector" : "Standard";
+        // Address and FANbox are different FAN services with different tariffs,
+        // so each option gets its own estimate (COD maps to the Cont Colector
+        // variant of each — that is also what the AWB will be created with).
         promises.push(
           estimateFanCourierCost(fanConfig!, {
             recipientCounty: destination.county,
             recipientLocality: destination.city,
             weightKg: weight,
-            service,
+            service: codAmount > 0 ? "Cont Colector" : "Standard",
           })
             .then((r) => {
-              const price = Math.round(r.total * 100) / 100;
               options.push({
                 courier: "fan-courier",
                 courierLabel: addrLabel(zone.label, "Livrare prin FAN Courier"),
                 deliveryType: "address",
-                price,
-              });
-              options.push({
-                courier: "fan-courier",
-                courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
-                deliveryType: "locker",
-                price,
+                price: Math.round(r.total * 100) / 100,
               });
             })
             .catch((err) => {
@@ -221,6 +227,33 @@ export async function getShippingOptions(
               });
             }),
         );
+        if (fanboxAllowed) {
+          promises.push(
+            estimateFanCourierCost(fanConfig!, {
+              recipientCounty: destination.county,
+              recipientLocality: destination.city,
+              weightKg: weight,
+              service: codAmount > 0 ? "FANbox Cont Colector" : "FANbox",
+            })
+              .then((r) => {
+                options.push({
+                  courier: "fan-courier",
+                  courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
+                  deliveryType: "locker",
+                  price: Math.round(r.total * 100) / 100,
+                });
+              })
+              .catch((err) => {
+                console.error("[shipping] FanCourier FANbox estimate failed:", err.message);
+                options.push({
+                  courier: "fan-courier",
+                  courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
+                  deliveryType: "locker",
+                  price: zone.price,
+                });
+              }),
+          );
+        }
       } else {
         options.push({
           courier: "fan-courier",
@@ -228,7 +261,7 @@ export async function getShippingOptions(
           deliveryType: "address",
           price: zone.price,
         });
-        if (hasApi) {
+        if (fanboxAllowed) {
           options.push({
             courier: "fan-courier",
             courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
@@ -374,8 +407,7 @@ export async function getLockers(
       const lockers = await getSamedayLockers(config);
       let filtered = lockers;
       if (city) {
-        const cityLower = city.toLowerCase();
-        filtered = lockers.filter((l) => l.city.toLowerCase().includes(cityLower));
+        filtered = lockers.filter((l) => cityMatches(l.city, city));
       }
       return filtered.map((l) => ({
         id: String(l.lockerId),
@@ -399,8 +431,7 @@ export async function getLockers(
       const points = await getFanCourierPickupPoints(config.username, config.password, "fanbox");
       let filtered = points;
       if (city) {
-        const cityLower = city.toLowerCase();
-        filtered = points.filter((p) => p.address.locality.toLowerCase().includes(cityLower));
+        filtered = points.filter((p) => cityMatches(p.address.locality, city));
       }
       return filtered.map((p) => ({
         id: p.id,

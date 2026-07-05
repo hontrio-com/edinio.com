@@ -63,7 +63,7 @@ export default async function OrdersPage() {
 
   return (
     <div className="p-6">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} samedayEnabled={samedayEnabled} businessId={business.id} />
+      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} samedayEnabled={samedayEnabled} businessId={business.id} fanPickup={{ lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null }} />
     </div>
   );
 }

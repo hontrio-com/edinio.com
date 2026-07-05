@@ -12,6 +12,7 @@
  * Examples:
  *   "+40 712 345 678" -> "0712345678"
  *   "0040-712-345-678" -> "0712345678"
+ *   "40712345678"      -> "0712345678"
  *   "0712 345 678"     -> "0712345678"
  *   "+49 30 1234567"   -> "+49301234567"
  *   "0049 30 1234567"  -> "+49301234567"
@@ -26,6 +27,8 @@ export function normalizePhone(raw: string | null | undefined): string {
   // Romania → local 0-prefixed form.
   if (digits.startsWith("0040")) return "0" + digits.slice(4);
   if (plus && digits.startsWith("40")) return "0" + digits.slice(2);
+  // Bare country-coded RO number ("40712345678"): 11 digits, unambiguous.
+  if (!plus && digits.length === 11 && digits.startsWith("40")) return "0" + digits.slice(2);
 
   // Other international numbers: keep the +country form.
   if (digits.startsWith("00")) return "+" + digits.slice(2);

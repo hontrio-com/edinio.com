@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { X, Package, Loader2, Download, Trash2 } from "lucide-react";
+import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createDpdShipmentAction, cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,18 @@ type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
   name?: string;
   city?: string;
+  county?: string;
   address?: string;
   street?: string;
   street_no?: string;
   postal_code?: string;
+  courier?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
+  locker_address?: string;
+  locker_city?: string;
+  locker_county?: string;
 };
 
 export function DpdAwbModal({
@@ -40,6 +48,13 @@ export function DpdAwbModal({
   const addr = order.shipping_address as (ShippingAddress & { country?: string; postal_code?: string }) | null;
   // International order? The destination service is auto-discovered server-side.
   const intlCountry = euCountryByIso2(addr?.country);
+  // Delivery to a DPD pickup point (office/locker): the AWB carries
+  // pickupOfficeId instead of a street address (resolved server-side).
+  const isPickupDelivery =
+    !intlCountry &&
+    addr?.courier === "dpd" &&
+    addr?.delivery_type === "locker" &&
+    !!addr?.locker_id;
 
   const [weight, setWeight] = useState("1");
   const [length, setLength] = useState("");
@@ -57,6 +72,7 @@ export function DpdAwbModal({
   const [recipientPhone, setRecipientPhone] = useState(order.customer_phone);
   const [recipientEmail, setRecipientEmail] = useState(order.customer_email ?? "");
   const [recipientCity, setRecipientCity] = useState(addr?.city ?? "");
+  const [recipientCounty, setRecipientCounty] = useState(addr?.county ?? "");
   const [recipientStreet, setRecipientStreet] = useState(addr?.street ?? addr?.address ?? "");
   const [recipientStreetNo, setRecipientStreetNo] = useState(addr?.street_no ?? "");
   const [recipientAddressNote, setRecipientAddressNote] = useState("");
@@ -78,7 +94,8 @@ export function DpdAwbModal({
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!recipientPhone.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
-    if (!recipientCity.trim()) return toast.error("Orasul destinatarului este obligatoriu");
+    if (!isPickupDelivery && !recipientCity.trim()) return toast.error("Orasul destinatarului este obligatoriu");
+    if (!isPickupDelivery && !intlCountry && !recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu (localitatile cu acelasi nume se deosebesc prin judet)");
     if (intlCountry) {
       // DPD: email is mandatory for international shipments, and the address goes
       // into addressLine1 (required for foreign addresses).
@@ -95,6 +112,7 @@ export function DpdAwbModal({
       recipientPhone: recipientPhone.trim(),
       recipientEmail: recipientEmail.trim(),
       recipientCity: recipientCity.trim(),
+      recipientCounty: recipientCounty.trim() || undefined,
       recipientStreet: recipientStreet.trim(),
       recipientStreetNo: recipientStreetNo.trim(),
       recipientAddressNote: recipientAddressNote.trim(),
@@ -198,6 +216,16 @@ export function DpdAwbModal({
                 </Button>
               </div>
 
+              <a
+                href={`https://tracking.dpd.ro/?shipmentNumber=${encodeURIComponent(orderData.dpd_awb_number ?? "")}&language=ro`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium border border-border rounded-lg text-foreground hover:bg-muted transition-colors"
+              >
+                <MapPin className="h-4 w-4" />
+                Urmareste expedierea
+              </a>
+
               <div className="pt-2 border-t border-border">
                 <Button variant="destructive" size="lg" onClick={handleCancel} disabled={cancelling} className="w-full">
                   {cancelling ? <Loader2 className="animate-spin" /> : <Trash2 />}
@@ -244,15 +272,44 @@ export function DpdAwbModal({
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Oras/Localitate *</label>
-                    <input
-                      type="text"
-                      value={recipientCity}
-                      onChange={e => setRecipientCity(e.target.value)}
-                      placeholder="ex: Cluj-Napoca"
-                      className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
-                    />
+                  {isPickupDelivery && (
+                    <div className="p-3 rounded-xl bg-info/5 border border-info/20">
+                      <p className="text-xs font-semibold text-info mb-0.5">Livrare la punct DPD</p>
+                      <p className="text-sm font-medium text-foreground">{addr?.locker_name}</p>
+                      {(addr?.locker_address || addr?.locker_city) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {[addr?.locker_address, addr?.locker_city].filter(Boolean).join(", ")}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        AWB-ul se genereaza direct pe punctul de ridicare ales de client, fara adresa de strada.
+                      </p>
+                    </div>
+                  )}
+                  {!isPickupDelivery && (<>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Oras/Localitate *</label>
+                      <input
+                        type="text"
+                        value={recipientCity}
+                        onChange={e => setRecipientCity(e.target.value)}
+                        placeholder="ex: Cluj-Napoca"
+                        className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                      />
+                    </div>
+                    {!intlCountry && (
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">Judet *</label>
+                        <input
+                          type="text"
+                          value={recipientCounty}
+                          onChange={e => setRecipientCounty(e.target.value)}
+                          placeholder="ex: Cluj"
+                          className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -286,6 +343,7 @@ export function DpdAwbModal({
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />
                   </div>
+                  </>)}
                 </div>
               </div>
 

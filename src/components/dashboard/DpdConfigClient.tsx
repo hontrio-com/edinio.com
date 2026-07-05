@@ -37,6 +37,9 @@ export function DpdConfigClient({
   const [useWeight, setUseWeight] = useState(initialConfig?.use_product_weight ?? false);
   const [iban, setIban] = useState(initialConfig?.iban ?? "");
   const [accountHolder, setAccountHolder] = useState(initialConfig?.account_holder ?? "");
+  const [declaredValue, setDeclaredValue] = useState(initialConfig?.declared_value_enabled ?? false);
+  const [obpd, setObpd] = useState<"" | "OPEN" | "TEST">(initialConfig?.open_before_delivery ?? "");
+  const [obpdPayer, setObpdPayer] = useState<"SENDER" | "RECIPIENT">(initialConfig?.obpd_payer ?? "SENDER");
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_id);
 
@@ -70,6 +73,9 @@ export function DpdConfigClient({
       use_product_weight: useWeight,
       iban: iban.trim() || undefined,
       account_holder: accountHolder.trim() || undefined,
+      declared_value_enabled: declaredValue,
+      open_before_delivery: obpd,
+      obpd_payer: obpdPayer,
     };
 
     setSaving(true);
@@ -197,6 +203,56 @@ export function DpdConfigClient({
               </span>
             </label>
           )}
+        </Panel>
+      )}
+
+      {/* Optiuni expediere */}
+      {clientId && (
+        <Panel className="space-y-4 p-4">
+          <p className="text-sm font-semibold text-foreground">Optiuni expediere</p>
+
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={declaredValue}
+              onChange={e => setDeclaredValue(e.target.checked)}
+              className="mt-0.5 rounded border-border accent-primary"
+            />
+            <span className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
+              Fiecare AWB se asigura pentru valoarea produselor din comanda. DPD percepe o prima de asigurare conform contractului.
+            </span>
+          </label>
+
+          <div className="border-t border-border pt-3">
+            <p className="text-xs font-medium text-foreground mb-1.5">Deschidere / testare la livrare (OBPD)</p>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              Destinatarul poate deschide sau testa coletul inainte de plata. Se aplica doar livrarilor la adresa (nu la punctele de ridicare).
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                aria-label="Optiune OBPD"
+                value={obpd}
+                onChange={e => setObpd(e.target.value as "" | "OPEN" | "TEST")}
+                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary"
+              >
+                <option value="">Dezactivat</option>
+                <option value="OPEN">Deschidere colet (OPEN)</option>
+                <option value="TEST">Testare produs (TEST)</option>
+              </select>
+              {obpd && (
+                <select
+                  aria-label="Platitor retur OBPD"
+                  value={obpdPayer}
+                  onChange={e => setObpdPayer(e.target.value as "SENDER" | "RECIPIENT")}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary"
+                >
+                  <option value="SENDER">Retur platit de expeditor</option>
+                  <option value="RECIPIENT">Retur platit de destinatar</option>
+                </select>
+              )}
+            </div>
+          </div>
         </Panel>
       )}
 

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday";
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
-import { calculateDpdIntlPrice, type DpdConfig } from "@/lib/dpd";
+import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 
@@ -303,8 +303,46 @@ export async function getShippingOptions(
       } else {
         options.push(flat());
       }
+    } else if (courierId === "dpd") {
+      const dpdCfg = settings.dpd_config as DpdConfig | null;
+      const hasApi = !!(dpdCfg?.enabled && dpdCfg.username && dpdCfg.client_id);
+      const pushBoth = (price: number) => {
+        options.push({
+          courier: "dpd",
+          courierLabel: addrLabel(zone.label, "Livrare prin DPD"),
+          deliveryType: "address",
+          price,
+        });
+        if (hasApi) {
+          options.push({
+            courier: "dpd",
+            courierLabel: lockerLabel(zone.label, "DPD punct de ridicare (locker)"),
+            deliveryType: "locker",
+            price,
+          });
+        }
+      };
+
+      if (hasApi && useAutoPrice) {
+        // Live quote with the COD premium baked in when the order is ramburs.
+        promises.push(
+          calculateDpdDomesticPrice(dpdCfg!, {
+            city: destination.city,
+            county: destination.county,
+            weightKg: weight,
+            cod: destination.cod,
+          })
+            .then((q) => pushBoth(q ? q.price : zone.price))
+            .catch((err) => {
+              console.error("[shipping] DPD estimate failed:", err.message);
+              pushBoth(zone.price);
+            }),
+        );
+      } else {
+        pushBoth(zone.price);
+      }
     } else {
-      // Generic courier (dpd, cargus, colete, own) — flat price
+      // Generic courier (cargus, colete, own) — flat price
       options.push({
         courier: courierId,
         courierLabel: zone.label || COURIER_LABELS[courierId] || courierId,
@@ -394,7 +432,7 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config")
+    .select("sameday_config, fan_courier_config, dpd_config")
     .eq("business_id", businessId)
     .single();
 
@@ -444,6 +482,30 @@ export async function getLockers(
       }));
     } catch (e) {
       console.error("[shipping] FanCourier pickup points failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "dpd") {
+    const config = settings.dpd_config as DpdConfig | null;
+    if (!config?.enabled) return [];
+    try {
+      const offices = await getDpdOffices(config);
+      let filtered = offices;
+      if (city) {
+        filtered = offices.filter((o) => cityMatches(o.city, city));
+      }
+      return filtered.map((o) => ({
+        id: String(o.id),
+        name: o.name,
+        address: o.address,
+        city: o.city,
+        county: "",
+        lat: 0,
+        lng: 0,
+      }));
+    } catch (e) {
+      console.error("[shipping] DPD pickup points failed:", (e as Error).message);
       return [];
     }
   }

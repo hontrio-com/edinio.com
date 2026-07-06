@@ -20,12 +20,16 @@ interface HeaderBusiness {
  * desktop, hamburger on mobile) + a cart link back to the store. When `menu` is
  * empty there is no menu and no hamburger — just logo + cart.
  */
-export function StoreHeader({ business, menu, basePath, currentSlug, logoSize = 36 }: {
+export function StoreHeader({ business, menu, basePath, currentSlug, logoSize = 36, topClass = "top-0", showCart = true }: {
   business: HeaderBusiness;
   menu: MenuItem[];
   basePath: string;
   currentSlug?: string | null;
   logoSize?: number;
+  /** Sticky offset — "top-9" when an announcement bar sits above the header. */
+  topClass?: "top-0" | "top-9";
+  /** Hide the cart link (One Product Store homepage: no catalog, no cart). */
+  showCart?: boolean;
 }) {
   const color = business.primary_color ?? "#1AB554";
   const name = business.store_name ?? business.business_name;
@@ -45,7 +49,7 @@ export function StoreHeader({ business, menu, basePath, currentSlug, logoSize = 
   }, [business.slug]);
 
   return (
-    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border">
+    <header className={`sticky ${topClass} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
         <div className="flex items-center gap-2 min-w-0 shrink-0">
           <StoreNavHamburger items={menu} basePath={basePath} color={color} currentSlug={currentSlug} logoUrl={business.logo_url} storeName={name} />
@@ -69,20 +73,22 @@ export function StoreHeader({ business, menu, basePath, currentSlug, logoSize = 
               <Phone className="h-4 w-4" style={{ color }} />
             </a>
           )}
-          <a href={`${basePath}/`} aria-label="Mergi la magazin"
-            className="relative flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-surface hover:bg-muted transition-colors">
-            <ShoppingCart className="h-4 w-4 text-foreground" />
-            {count > 0 ? (
-              <span className="text-sm font-semibold text-foreground tabular-nums">{count}</span>
-            ) : (
-              <span className="hidden sm:inline text-sm text-muted-foreground">Magazin</span>
-            )}
-            {count > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full text-white text-[10px] font-bold flex items-center justify-center" style={{ backgroundColor: color }}>
-                {count > 9 ? "9+" : count}
-              </span>
-            )}
-          </a>
+          {showCart && (
+            <a href={`${basePath}/`} aria-label="Mergi la magazin"
+              className="relative flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-surface hover:bg-muted transition-colors">
+              <ShoppingCart className="h-4 w-4 text-foreground" />
+              {count > 0 ? (
+                <span className="text-sm font-semibold text-foreground tabular-nums">{count}</span>
+              ) : (
+                <span className="hidden sm:inline text-sm text-muted-foreground">Magazin</span>
+              )}
+              {count > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full text-white text-[10px] font-bold flex items-center justify-center" style={{ backgroundColor: color }}>
+                  {count > 9 ? "9+" : count}
+                </span>
+              )}
+            </a>
+          )}
         </div>
       </div>
     </header>

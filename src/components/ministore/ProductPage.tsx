@@ -15,6 +15,8 @@ import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
 import { NetopiaBadge } from "./NetopiaBadge";
 import { EdinioCredit } from "./EdinioCredit";
+import { StoreHeader } from "./StoreHeader";
+import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -31,6 +33,8 @@ interface SpecItem { label: string; value: string; }
 
 interface PageContent {
   announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number; };
+  menu?: MenuItem[];
+  logo_size?: number;
   trust_badges_enabled?: boolean;
   trust_badges?: TrustBadge[];
   benefits_section?: { enabled: boolean; title: string; items: BenefitItem[]; };
@@ -675,7 +679,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     <div className="min-h-screen bg-background">
       {/* Announcement bar */}
       {announcementBar?.enabled && (
-        <div className="h-9 overflow-hidden flex items-center fixed top-0 left-0 right-0 z-50"
+        <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
           style={{ background: announcementBar.bg_color || color }}>
           <div className="flex whitespace-nowrap">
             {Array.from({ length: 8 }, (_, i) => (
@@ -688,42 +692,41 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         </div>
       )}
 
-      {/* Header */}
-      <header className={`fixed left-0 right-0 z-40 bg-surface/95 backdrop-blur-sm border-b border-border shadow-sm transition-all ${announcementBar?.enabled ? "top-9" : "top-0"}`}>
-        <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
-          {isHome ? (
-            /* One Product Store: no catalog behind this page — show the store
-               identity (logo, else name) instead of a "back to store" link. */
-            business.logo_url ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
-                style={{ height: 32 }} className="w-auto object-contain" />
-            ) : (
-              <span className="font-bold text-base text-foreground truncate">{business.store_name ?? business.business_name}</span>
-            )
-          ) : (
-            <>
-              <a href={basePath || "/"} aria-label="Inapoi la magazin"
-                onClick={(e) => {
-                  try {
-                    const p = sessionStorage.getItem(`store_page_${business.slug}`);
-                    if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${basePath || "/"}?page=${p}`; }
-                  } catch {}
-                }}
-                className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0">
-                <ArrowLeft size={16} />
-                <span>Magazin</span>
-              </a>
-              <span className="text-muted-foreground/50">/</span>
-              <span className="font-bold text-sm text-foreground truncate">{business.store_name ?? business.business_name}</span>
-            </>
-          )}
+      {/* Full store header (logo + menu + phone + cart) — same as the homepage.
+          One Product Store: no catalog/cart behind this page — hide the cart link. */}
+      <StoreHeader
+        business={{ slug: business.slug, business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, primary_color: color, phone: business.phone }}
+        menu={pageContent.menu ?? []}
+        basePath={basePath}
+        logoSize={pageContent.logo_size ?? 36}
+        topClass={announcementBar?.enabled ? "top-9" : "top-0"}
+        showCart={!isHome}
+      />
+
+      {/* Breadcrumb back to catalog (restores the catalog page the visitor left from) */}
+      {!isHome && (
+        <div className="bg-surface/80 border-b border-border">
+          <div className="max-w-6xl mx-auto px-4 md:px-6 h-11 flex items-center gap-3">
+            <a href={basePath || "/"} aria-label="Inapoi la magazin"
+              onClick={(e) => {
+                try {
+                  const p = sessionStorage.getItem(`store_page_${business.slug}`);
+                  if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${basePath || "/"}?page=${p}`; }
+                } catch {}
+              }}
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0">
+              <ArrowLeft size={16} />
+              <span>Magazin</span>
+            </a>
+            <span className="text-muted-foreground/50">/</span>
+            <span className="text-sm font-medium text-muted-foreground truncate">{product.name}</span>
+          </div>
         </div>
-      </header>
+      )}
 
       {/* MOBILE hero */}
-      <div className="lg:hidden" style={{ paddingTop: announcementBar?.enabled ? "100px" : "64px" }}>
-        <div className="px-4 pb-2">
+      <div className="lg:hidden">
+        <div className="px-4 pt-3 pb-2">
           <Gallery mobile />
         </div>
         <div className="px-4 pt-4 pb-8">
@@ -732,7 +735,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       </div>
 
       {/* DESKTOP hero */}
-      <div className="hidden lg:block px-6" style={{ paddingTop: announcementBar?.enabled ? "148px" : "80px", paddingBottom: "64px" }}>
+      <div className="hidden lg:block px-6 pt-8 pb-16">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-start">
           <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
             <Gallery mobile={false} />

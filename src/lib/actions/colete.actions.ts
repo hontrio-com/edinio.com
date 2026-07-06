@@ -8,9 +8,22 @@ import {
   getPrices,
   createCOOrder,
   type COConfig,
+  type COOrderExtras,
   type COReceiver,
   type COParcel,
 } from "@/lib/colete";
+
+/** Config-driven extras (repayment routing + insurance), shared by quote and AWB. */
+function configExtras(config: COConfig, subtotal?: number): COOrderExtras {
+  return {
+    repaymentType: config.repayment_type ?? "cash",
+    repaymentIban: config.repayment_iban,
+    repaymentHolder: config.repayment_holder,
+    ...(config.insurance_enabled && subtotal && subtotal > 0
+      ? { insurance: Math.round(subtotal * 100) / 100 }
+      : {}),
+  };
+}
 
 function adminClient() {
   return createAdminClient(
@@ -72,6 +85,8 @@ export async function getCOPrices(
   receiver: COReceiver,
   parcels: COParcel[],
   repayment: number,
+  /** Toggles from the AWB modal; insurance is resolved from the order when orderId is set. */
+  options?: { openAtDelivery?: boolean; saturday?: boolean; orderId?: string },
 ): Promise<{ list: { serviceId: number; courierName: string; serviceName: string; total: number; noVat: number }[] } | { error: string }> {
   try {
     const supabase = await createClient();
@@ -83,8 +98,23 @@ export async function getCOPrices(
     const config = settings?.colete_config as COConfig | null;
     if (!config?.client_id || !config?.client_secret) return { error: "Colete Online nu este configurat" };
 
+    let subtotal: number | undefined;
+    if (options?.orderId && config.insurance_enabled) {
+      const { data: order } = await admin
+        .from("orders")
+        .select("subtotal")
+        .eq("id", options.orderId)
+        .eq("business_id", businessId)
+        .single();
+      subtotal = Number(order?.subtotal) || undefined;
+    }
+
     const token = await getCOToken(config.client_id, config.client_secret);
-    const result = await getPrices(token, config.sandbox ?? false, config.sender, receiver, parcels, repayment);
+    const result = await getPrices(token, config.sandbox ?? false, config.sender, receiver, parcels, repayment, {
+      ...configExtras(config, subtotal),
+      openAtDelivery: options?.openAtDelivery,
+      saturday: options?.saturday,
+    });
 
     const list = (result.list ?? []).map(item => ({
       serviceId: item.service.id,
@@ -110,6 +140,7 @@ export async function createCOAwb(
   receiver: COReceiver,
   parcels: COParcel[],
   repayment: number,
+  options?: { openAtDelivery?: boolean; saturday?: boolean },
 ): Promise<{ awb: string; uniqueId: string } | { error: string }> {
   try {
     const supabase = await createClient();
@@ -121,7 +152,7 @@ export async function createCOAwb(
 
     const admin = adminClient();
     const [{ data: order }, { data: settings }] = await Promise.all([
-      admin.from("orders").select("id, order_number, payment_method, payment_status").eq("id", orderId).eq("business_id", businessId).single(),
+      admin.from("orders").select("id, order_number, payment_method, payment_status, subtotal").eq("id", orderId).eq("business_id", businessId).single(),
       admin.from("store_settings").select("colete_config").eq("business_id", businessId).single(),
     ]);
 
@@ -130,7 +161,12 @@ export async function createCOAwb(
     if (!config?.client_id || !config?.client_secret) return { error: "Colete Online nu este configurat" };
 
     const token = await getCOToken(config.client_id, config.client_secret);
-    const result = await createCOOrder(token, config.sandbox ?? false, config.sender, receiver, parcels, repayment, serviceId);
+    const result = await createCOOrder(token, config.sandbox ?? false, config.sender, receiver, parcels, repayment, serviceId, {
+      ...configExtras(config, Number(order.subtotal) || undefined),
+      openAtDelivery: options?.openAtDelivery,
+      saturday: options?.saturday,
+      clientReference: order.order_number, // shows up in COD payout reports
+    });
 
     // Save to order
     await admin.from("orders").update({

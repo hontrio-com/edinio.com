@@ -15,6 +15,9 @@ interface ShippingAddress {
   city?: string;
   address?: string;
   postal_code?: string;
+  // The service the customer picked from the live checkout offers.
+  colete_service_id?: number;
+  colete_service_name?: string;
 }
 
 interface Props {
@@ -62,6 +65,8 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
   const [height, setHeight] = useState("10");
   const [content, setContent] = useState("Produse comerciale");
   const [repayment, setRepayment] = useState(isCod ? String(Math.round(Number(order.total))) : "0");
+  const [openAtDelivery, setOpenAtDelivery] = useState(false);
+  const [saturday, setSaturday] = useState(false);
 
   // Price state
   const [prices, setPrices] = useState<PriceItem[]>([]);
@@ -108,7 +113,11 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
     setLoadingPrices(true);
     startPriceTransition(async () => {
       const rep = parseFloat(repayment) || 0;
-      const result = await getCOPrices(businessId, buildReceiver(), buildParcels(), rep);
+      const result = await getCOPrices(businessId, buildReceiver(), buildParcels(), rep, {
+        openAtDelivery,
+        saturday,
+        orderId: order.id,
+      });
       setLoadingPrices(false);
       if ("error" in result) {
         setPriceError(result.error);
@@ -116,7 +125,16 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
       } else if (result.list.length === 0) {
         setPriceError("Niciun curier disponibil pentru aceasta ruta");
       } else {
-        setPrices(result.list.sort((a, b) => a.total - b.total));
+        const sorted = result.list.sort((a, b) => a.total - b.total);
+        setPrices(sorted);
+        // Pre-select the courier the customer chose at checkout, if still offered.
+        if (addr.colete_service_id) {
+          const chosen = sorted.find((p) => p.serviceId === addr.colete_service_id);
+          if (chosen) {
+            setSelectedServiceId(chosen.serviceId);
+            setSelectedServiceName(`${chosen.courierName} — ${chosen.serviceName}`);
+          }
+        }
       }
     });
   }
@@ -126,7 +144,10 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
     setCreating(true);
     startCreateTransition(async () => {
       const rep = parseFloat(repayment) || 0;
-      const result = await createCOAwb(businessId, order.id, selectedServiceId, selectedServiceName, buildReceiver(), buildParcels(), rep);
+      const result = await createCOAwb(businessId, order.id, selectedServiceId, selectedServiceName, buildReceiver(), buildParcels(), rep, {
+        openAtDelivery,
+        saturday,
+      });
       setCreating(false);
       if ("error" in result) {
         toast.error(result.error);
@@ -286,9 +307,27 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
                     </div>
                   </div>
                 )}
-                <div className="w-40">
-                  <label className="block text-xs text-muted-foreground mb-1">Ramburs (RON)</label>
-                  <input type="number" min="0" step="0.01" value={repayment} onChange={e => setRepayment(e.target.value)} className={inputCls} />
+                <div className="flex items-end gap-4">
+                  <div className="w-40">
+                    <label className="block text-xs text-muted-foreground mb-1">Ramburs (RON)</label>
+                    <input type="number" min="0" step="0.01" value={repayment} onChange={e => setRepayment(e.target.value)} className={inputCls} />
+                  </div>
+                  <div className="flex flex-col gap-2 pb-0.5">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <button type="button" onClick={() => setOpenAtDelivery(v => !v)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${openAtDelivery ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${openAtDelivery ? "translate-x-4" : "translate-x-0.5"}`} />
+                      </button>
+                      <span className="text-xs font-medium text-foreground">Deschidere la livrare</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <button type="button" onClick={() => setSaturday(v => !v)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${saturday ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${saturday ? "translate-x-4" : "translate-x-0.5"}`} />
+                      </button>
+                      <span className="text-xs font-medium text-foreground">Livrare sambata</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 

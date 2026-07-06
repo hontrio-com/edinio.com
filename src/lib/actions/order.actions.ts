@@ -157,6 +157,8 @@ export async function placeOrder(data: {
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
+  colete_service_id?: number;
+  colete_service_name?: string;
 }) {
   // Anti-abuse: order creation is anonymous and triggers SMS/email (real cost).
   // Throttle per IP so a script can't drain SMS credit or spam the merchant.
@@ -300,6 +302,10 @@ export async function placeOrder(data: {
         woot_service_id: data.woot_service_id,
         woot_courier_name: data.woot_courier_name,
         woot_service_name: data.woot_service_name,
+      }),
+      ...(data.colete_service_id && {
+        colete_service_id: data.colete_service_id,
+        colete_service_name: data.colete_service_name,
       }),
     },
     items: allItems,
@@ -671,6 +677,8 @@ export async function placeCartOrder(data: {
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
+  colete_service_id?: number;
+  colete_service_name?: string;
 }) {
   // Anti-abuse: anonymous + triggers SMS/email (real cost). Throttle per IP.
   const ip = clientIpFromHeaders(await headers());
@@ -801,6 +809,10 @@ export async function placeCartOrder(data: {
         woot_service_id: data.woot_service_id,
         woot_courier_name: data.woot_courier_name,
         woot_service_name: data.woot_service_name,
+      }),
+      ...(data.colete_service_id && {
+        colete_service_id: data.colete_service_id,
+        colete_service_name: data.colete_service_name,
       }),
     },
     items: allItems,

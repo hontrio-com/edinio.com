@@ -12,6 +12,23 @@ export type COConfig = {
   client_id: string;
   client_secret: string;
   sender: COSender;
+  /** Opt-in: insure shipments for the order's product value (extraOption 4). */
+  insurance_enabled?: boolean;
+  /** Where the COD money comes back: cash (extraOption 6) or bank account (extraOption 5). */
+  repayment_type?: "cash" | "bank";
+  repayment_iban?: string;
+  repayment_holder?: string;
+};
+
+/** Extra options attached to an order/quote (see ApiExtraOptionType in the official module). */
+export type COOrderExtras = {
+  insurance?: number;
+  openAtDelivery?: boolean;
+  saturday?: boolean;
+  clientReference?: string;
+  repaymentType?: "cash" | "bank";
+  repaymentIban?: string;
+  repaymentHolder?: string;
 };
 
 export type COSender = {
@@ -138,9 +155,26 @@ function buildOrderBody(
   repayment: number,
   serviceIds: number[],
   selectionType: "bestPrice" | "directId" = "bestPrice",
+  extras: COOrderExtras = {},
 ) {
-  const extraOptions: { id: number; amount?: number }[] = [];
-  if (repayment > 0) extraOptions.push({ id: 6, amount: repayment });
+  // extraOption ids per the official module's ApiExtraOptionType enum.
+  const extraOptions: Record<string, unknown>[] = [];
+  if (repayment > 0) {
+    if (extras.repaymentType === "bank" && extras.repaymentIban) {
+      extraOptions.push({
+        id: 5, // ACCOUNT_REPAYMENT — COD paid out to a bank account
+        amount: repayment,
+        accountRepaymentBankAccount: extras.repaymentIban,
+        ...(extras.repaymentHolder ? { accountRepaymentHolderName: extras.repaymentHolder } : {}),
+      });
+    } else {
+      extraOptions.push({ id: 6, amount: repayment }); // CASH_REPAYMENT
+    }
+  }
+  if (extras.insurance && extras.insurance > 0) extraOptions.push({ id: 4, amount: extras.insurance });
+  if (extras.openAtDelivery) extraOptions.push({ id: 2 });
+  if (extras.saturday) extraOptions.push({ id: 3 });
+  if (extras.clientReference) extraOptions.push({ id: 9, clientReference: extras.clientReference });
 
   const pkg = parcels[0];
   const packagesList = parcels.map(p => ({
@@ -202,9 +236,10 @@ export async function getPrices(
   receiver: COReceiver,
   parcels: COParcel[],
   repayment: number,
+  extras: COOrderExtras = {},
 ): Promise<{ selected: COPriceResult; list: COPriceResult[] }> {
   // Use priceMinimal for recipient to allow price calc without full address
-  const body = buildOrderBody(sender, receiver, parcels, repayment, [], "bestPrice");
+  const body = buildOrderBody(sender, receiver, parcels, repayment, [], "bestPrice", extras);
   // Override recipient validationStrategy for price only
   (body.recipient as Record<string, unknown>).validationStrategy = "priceMinimal";
 
@@ -219,8 +254,9 @@ export async function createCOOrder(
   parcels: COParcel[],
   repayment: number,
   serviceId: number,
+  extras: COOrderExtras = {},
 ): Promise<{ service: COPriceResult; awb: string; uniqueId: string; estimatedPickUpDate?: string }> {
-  const body = buildOrderBody(sender, receiver, parcels, repayment, [serviceId], "directId");
+  const body = buildOrderBody(sender, receiver, parcels, repayment, [serviceId], "directId", extras);
   return coReq(token, sandbox, "POST", "/order", body);
 }
 

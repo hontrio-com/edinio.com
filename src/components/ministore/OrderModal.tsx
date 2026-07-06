@@ -408,6 +408,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         woot_service_id: courierSelection?.wootServiceId,
         woot_courier_name: courierSelection?.wootCourierName,
         woot_service_name: courierSelection?.wootServiceName,
+        colete_service_id: courierSelection?.coleteServiceId,
+        colete_service_name: courierSelection?.coleteServiceName,
         additional_items: cart.length > 0 ? cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity })) : undefined,
       });
       if (result.error) { setErrors({ _: result.error }); return; }

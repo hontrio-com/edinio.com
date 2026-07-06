@@ -37,6 +37,10 @@ export default function ColeteConfigClient({
   const [clientId, setClientId] = useState(initialConfig?.client_id ?? "");
   const [clientSecret, setClientSecret] = useState(initialConfig?.client_secret ?? "");
   const [sender, setSender] = useState<COSender>(initialConfig?.sender ?? DEFAULT_SENDER);
+  const [insuranceEnabled, setInsuranceEnabled] = useState(initialConfig?.insurance_enabled ?? false);
+  const [repaymentType, setRepaymentType] = useState<"cash" | "bank">(initialConfig?.repayment_type ?? "cash");
+  const [repaymentIban, setRepaymentIban] = useState(initialConfig?.repayment_iban ?? "");
+  const [repaymentHolder, setRepaymentHolder] = useState(initialConfig?.repayment_holder ?? "");
   const [testResult, setTestResult] = useState<{ balance?: number; bonus?: number; error?: string } | null>(null);
   const [testing, startTestTransition] = useTransition();
   const [saving, startSaveTransition] = useTransition();
@@ -69,7 +73,16 @@ export default function ColeteConfigClient({
     if (!sender.county || !sender.city || !sender.postal_code || !sender.street || !sender.street_number) {
       toast.error("Adresa expeditorului este incompleta"); return;
     }
-    const config: COConfig = { enabled, sandbox, client_id: clientId, client_secret: clientSecret, sender };
+    if (repaymentType === "bank" && !repaymentIban.trim()) {
+      toast.error("Introdu IBAN-ul pentru rambursul in cont"); return;
+    }
+    const config: COConfig = {
+      enabled, sandbox, client_id: clientId, client_secret: clientSecret, sender,
+      insurance_enabled: insuranceEnabled,
+      repayment_type: repaymentType,
+      repayment_iban: repaymentIban.trim() || undefined,
+      repayment_holder: repaymentHolder.trim() || undefined,
+    };
     startSaveTransition(async () => {
       const result = await saveCOConfig(businessId, config);
       if ("error" in result) toast.error(result.error);
@@ -231,6 +244,55 @@ export default function ColeteConfigClient({
           <Field label="Cod postal" required className="w-40">
             <Input type="text" value={sender.postal_code} onChange={e => updateSender("postal_code", e.target.value)} placeholder="400001" />
           </Field>
+        </Panel>
+
+        {/* Optiuni expediere */}
+        <Panel className="space-y-4 p-4">
+          <p className="text-sm font-medium text-foreground">Optiuni expediere</p>
+
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={insuranceEnabled}
+              onChange={e => setInsuranceEnabled(e.target.checked)}
+              className="mt-0.5 rounded border-border accent-primary"
+            />
+            <span className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
+              Fiecare AWB se asigura pentru valoarea produselor din comanda. Prima de asigurare apare in pret.
+            </span>
+          </label>
+
+          <Field label="Incasare ramburs">
+            <div className="flex gap-2">
+              {([["cash", "Numerar la curier"], ["bank", "In cont bancar"]] as const).map(([kind, label]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setRepaymentType(kind)}
+                  className={cn(
+                    "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                    repaymentType === kind
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          {repaymentType === "bank" && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="IBAN" required>
+                <Input type="text" value={repaymentIban} onChange={e => setRepaymentIban(e.target.value)} placeholder="RO49AAAA1B31007593840000" />
+              </Field>
+              <Field label="Titular cont">
+                <Input type="text" value={repaymentHolder} onChange={e => setRepaymentHolder(e.target.value)} placeholder="Firma SRL" />
+              </Field>
+            </div>
+          )}
         </Panel>
 
         {/* Actions */}

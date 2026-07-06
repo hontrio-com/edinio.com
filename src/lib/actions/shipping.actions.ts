@@ -6,6 +6,7 @@ import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfi
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
+import { getCOToken, getPrices as fetchCOPrices, type COConfig } from "@/lib/colete";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 
@@ -40,6 +41,9 @@ export type ShippingOption = {
   wootServiceId?: number;
   wootCourierName?: string;
   wootServiceName?: string;
+  // Colete Online is a broker too — same mechanism.
+  coleteServiceId?: number;
+  coleteServiceName?: string;
 };
 
 export type LockerItem = {
@@ -93,7 +97,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, default_shipping_cost, shipping_zones")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, default_shipping_cost, shipping_zones")
     .eq("business_id", businessId)
     .single();
 
@@ -414,8 +418,34 @@ export async function getShippingOptions(
       } else {
         pushBoth(zone.price);
       }
+    } else if (courierId === "colete") {
+      const coConfig = settings.colete_config as COConfig | null;
+      const hasApi = !!(coConfig?.enabled && coConfig.client_id && coConfig.client_secret && coConfig.sender?.city);
+      const flat = (): ShippingOption => ({
+        courier: "colete",
+        courierLabel: zone.label || COURIER_LABELS.colete,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (hasApi && useAutoPrice) {
+        // Colete Online is a broker: fetch the live courier offers so the customer picks one.
+        promises.push(
+          buildColeteOptions(coConfig!, destination, weight, zone.label)
+            .then((coOpts) => {
+              if (coOpts.length > 0) options.push(...coOpts);
+              else options.push(flat());
+            })
+            .catch((err) => {
+              console.error("[shipping] Colete Online estimate failed:", err.message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
     } else {
-      // Generic courier (colete, own) — flat price
+      // Generic courier (own) — flat price
       options.push({
         courier: courierId,
         courierLabel: zone.label || COURIER_LABELS[courierId] || courierId,
@@ -501,6 +531,57 @@ async function buildWootOptions(
       wootServiceId: p.service_id,
       wootCourierName: p.courier_name,
       wootServiceName: p.service_name,
+    }))
+    .sort((a, b) => a.price - b.price);
+}
+
+// ─── Colete Online live courier offers ───────────────────────────────────────
+
+/**
+ * Fetch the live Colete Online offers (one per courier service). County/city go
+ * as plain names — the CO nomenclature keeps diacritics and the priceMinimal
+ * validation strategy accepts a locality-only address. [] on no offers (caller
+ * falls back to the flat price). The repayment routing (cash vs bank account)
+ * mirrors the merchant's config so the COD fee matches the final AWB price.
+ */
+async function buildColeteOptions(
+  config: COConfig,
+  destination: { county: string; city: string; cod?: number },
+  weightKg: number,
+  customLabel?: string,
+): Promise<ShippingOption[]> {
+  const token = await getCOToken(config.client_id, config.client_secret);
+  const result = await fetchCOPrices(
+    token,
+    config.sandbox ?? false,
+    config.sender,
+    {
+      name: "Client",
+      phone: "0700000000",
+      county: destination.county,
+      city: destination.city,
+      postal_code: "",
+      street: destination.city,
+      street_number: "",
+    },
+    [{ type: "package", weight: weightKg, length: 30, width: 20, height: 10, content: "Comanda" }],
+    destination.cod && destination.cod > 0 ? destination.cod : 0,
+    {
+      repaymentType: config.repayment_type ?? "cash",
+      repaymentIban: config.repayment_iban,
+      repaymentHolder: config.repayment_holder,
+    },
+  );
+
+  return (result.list ?? [])
+    .filter((item) => item?.service?.id && item?.price?.total > 0)
+    .map((item): ShippingOption => ({
+      courier: "colete",
+      courierLabel: addrLabel(customLabel, item.service.courierName),
+      deliveryType: "address",
+      price: Math.round(item.price.total * 100) / 100,
+      coleteServiceId: item.service.id,
+      coleteServiceName: `${item.service.courierName} — ${item.service.name}`,
     }))
     .sort((a, b) => a.price - b.price);
 }

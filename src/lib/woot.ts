@@ -1,4 +1,17 @@
+import { normalizePhone } from "@/lib/utils/phone";
+
 const WOOT_BASE = "https://ws.woot.ro/latest";
+
+/**
+ * Woot documents phone numbers in INTERNATIONAL format ("+40721234567") — the
+ * opposite of the local 07-form the domestic couriers want. Normalize first
+ * (strips spaces/dashes, folds 0040/+40 to 07), then re-prefix with +4.
+ */
+export function wootPhone(raw: string | null | undefined): string {
+  const local = normalizePhone(raw);
+  if (/^0\d{9}$/.test(local)) return `+4${local}`;
+  return local; // already international (+49...) or empty
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -20,6 +33,8 @@ export type WootConfig = {
   public_key: string;
   secret_key: string;
   sender: WootSender;
+  /** Opt-in: insure shipments for the order's product value (insurance param). */
+  insurance_enabled?: boolean;
 };
 
 export type WootParcel = {
@@ -205,6 +220,7 @@ export async function getPrices(
     receiver: object;
     parcels: WootParcel[];
     repayment?: number;
+    insurance?: number;
   }
 ): Promise<WootPriceResult[]> {
   return wootReq<WootPriceResult[]>(token, "POST", "/orders/prices", params);
@@ -218,6 +234,7 @@ export async function createOrder(
     receiver: object;
     parcels: WootParcel[];
     repayment?: number;
+    insurance?: number;
     payment_method?: "credit" | "card" | "term";
     options?: { opd?: boolean; sat?: boolean; rdc?: boolean; pxc?: boolean };
   }

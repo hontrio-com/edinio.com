@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { X, Loader2, Package, Truck, ChevronRight, Download, AlertCircle, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations } from "@/lib/actions/woot.actions";
+import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations, getWootReceiverLocations } from "@/lib/actions/woot.actions";
 import type { WootPriceResult, WootParcel, WootCounty, WootCity, WootLocation } from "@/lib/woot";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
@@ -52,6 +52,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [content, setContent] = useState("Produse comerciale");
   const [repayment, setRepayment] = useState(isCod ? String(Math.round(Number(order.total))) : "0");
   const [opdEnabled, setOpdEnabled] = useState(false);
+  const [satEnabled, setSatEnabled] = useState(false);
 
   // Prices state
   const [prices, setPrices] = useState<WootPriceResult[]>([]);
@@ -66,6 +67,11 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [loadingSenderLocations, setLoadingSenderLocations] = useState(false);
   const [senderLocationId, setSenderLocationId] = useState<number | null>(null);
 
+  // Receiver delivery location (for "livrare la locker/punct" services)
+  const [receiverLocations, setReceiverLocations] = useState<WootLocation[]>([]);
+  const [loadingReceiverLocations, setLoadingReceiverLocations] = useState(false);
+  const [receiverLocationId, setReceiverLocationId] = useState<number | null>(null);
+
   // Create state
   const [creating, startCreate] = useTransition();
   const [cancelling, startCancel] = useTransition();
@@ -74,6 +80,9 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   // A service whose pickup isn't "door" needs the sender to hand the parcel over
   // at a Woot location, so it requires a sender location_id.
   const needsSenderLocation = !!selectedService?.service_pickup && selectedService.service_pickup !== "door";
+  // A service whose delivery isn't "door" delivers to a Woot location, so the
+  // customer's pickup point (receiver.location_id) must be chosen.
+  const needsReceiverLocation = !!selectedService?.service_delivery && selectedService.service_delivery !== "door";
 
   // Load counties on open
   useEffect(() => {
@@ -177,7 +186,8 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
       businessId,
       buildReceiver(),
       buildParcels(),
-      rep > 0 ? rep : undefined
+      rep > 0 ? rep : undefined,
+      order.id
     );
 
     setCalculatingPrices(false);
@@ -201,6 +211,8 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
     setSelectedService(p);
     setSenderLocationId(null);
     setSenderLocations([]);
+    setReceiverLocationId(null);
+    setReceiverLocations([]);
     // Drop-off service ("predare la locker") → load this courier's sender locations.
     if (p.service_pickup && p.service_pickup !== "door") {
       setLoadingSenderLocations(true);
@@ -211,11 +223,23 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
         else if (res.error) toast.error(res.error);
       })();
     }
+    // Delivery-to-location service ("livrare la locker/punct") → load the
+    // courier's delivery locations in the receiver's city.
+    if (p.service_delivery && p.service_delivery !== "door") {
+      setLoadingReceiverLocations(true);
+      void (async () => {
+        const res = await getWootReceiverLocations(businessId, p.courier_id, cityId);
+        setLoadingReceiverLocations(false);
+        if (res.success && res.locations) setReceiverLocations(res.locations);
+        else if (res.error) toast.error(res.error);
+      })();
+    }
   }
 
   function handleCreate() {
     if (!selectedService) { toast.error("Selecteaza un curier."); return; }
     if (needsSenderLocation && !senderLocationId) { toast.error("Selecteaza locatia de predare."); return; }
+    if (needsReceiverLocation && !receiverLocationId) { toast.error("Selecteaza punctul de livrare (locker) pentru destinatar."); return; }
     startCreate(async () => {
       const rep = Number(repayment);
       const result = await createWootAwb(
@@ -226,8 +250,9 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
         buildReceiver(),
         buildParcels(),
         rep > 0 ? rep : undefined,
-        { opd: opdEnabled || undefined },
-        needsSenderLocation ? senderLocationId ?? undefined : undefined
+        { opd: opdEnabled || undefined, sat: satEnabled || undefined },
+        needsSenderLocation ? senderLocationId ?? undefined : undefined,
+        needsReceiverLocation ? receiverLocationId ?? undefined : undefined
       );
       if (!result.success) {
         toast.error(result.error ?? "Eroare la crearea AWB.");
@@ -402,13 +427,20 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                       <input type="number" min="0" step="0.01" value={repayment}
                         onChange={e => setRepayment(e.target.value)} className={inputCls} />
                     </div>
-                    <div className="flex items-end pb-0.5">
+                    <div className="flex flex-col justify-end gap-2 pb-0.5">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <button type="button" onClick={() => setOpdEnabled(v => !v)}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${opdEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
                           <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${opdEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
                         </button>
                         <span className="text-xs font-medium text-foreground">Deschidere la livrare</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <button type="button" onClick={() => setSatEnabled(v => !v)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${satEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${satEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                        </button>
+                        <span className="text-xs font-medium text-foreground">Livrare sambata</span>
                       </label>
                     </div>
                   </div>
@@ -483,8 +515,33 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                       </div>
                     )}
 
+                    {needsReceiverLocation && (
+                      <div className="pt-2">
+                        <label className="text-sm font-semibold text-foreground">Punct de livrare (destinatar)</label>
+                        <p className="text-xs text-muted-foreground mb-1.5">
+                          Serviciul {selectedService?.courier_name} livreaza intr-un locker/punct. Alege punctul din care clientul isi ridica coletul.
+                        </p>
+                        {loadingReceiverLocations ? (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Se incarca punctele...
+                          </div>
+                        ) : receiverLocations.length > 0 ? (
+                          <select value={receiverLocationId ?? ""} onChange={e => setReceiverLocationId(e.target.value ? Number(e.target.value) : null)} className={inputCls}>
+                            <option value="">Alege punctul de livrare...</option>
+                            {receiverLocations.map(loc => (
+                              <option key={loc.id} value={loc.id}>{loc.name} — {loc.address}, {loc.city_name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-xs text-destructive">
+                            Niciun punct de livrare {selectedService?.courier_name} in orasul destinatarului. Alege un serviciu cu livrare la adresa.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {selectedService && (
-                      <Button onClick={handleCreate} disabled={creating || (needsSenderLocation && !senderLocationId)} size="lg" className="w-full mt-3">
+                      <Button onClick={handleCreate} disabled={creating || (needsSenderLocation && !senderLocationId) || (needsReceiverLocation && !receiverLocationId)} size="lg" className="w-full mt-3">
                         {creating ? <Loader2 className="animate-spin" /> : <ChevronRight />}
                         {creating
                           ? "Se creeaza AWB..."

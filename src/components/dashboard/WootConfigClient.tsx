@@ -358,6 +358,19 @@ export default function WootConfigClient({
               placeholder="000000" className="max-w-40" />
           </div>
 
+          <label className="flex cursor-pointer items-start gap-2.5 border-t border-border pt-4">
+            <input
+              type="checkbox"
+              checked={cfg.insurance_enabled ?? false}
+              onChange={e => setCfg(c => ({ ...c, insurance_enabled: e.target.checked }))}
+              className="mt-0.5 rounded border-border accent-primary"
+            />
+            <span className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
+              Fiecare AWB se asigura pentru valoarea produselor din comanda. Prima de asigurare apare in pretul Woot.
+            </span>
+          </label>
+
         </Panel>
 
         {/* Actions */}

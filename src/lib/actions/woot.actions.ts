@@ -5,10 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   getWootToken, getPrices, createOrder, cancelWootOrder,
-  getAccountInfo, getCredit, getLocations,
+  getAccountInfo, getCredit, getLocations, wootPhone,
   type WootConfig, type WootParcel, type WootPriceResult, type WootLocation,
 } from "@/lib/woot";
-import { normalizePhone } from "@/lib/utils/phone";
 
 function adminClient() {
   return createAdminClient(
@@ -114,7 +113,9 @@ export async function getWootPrices(
     address: string;
   },
   parcels: WootParcel[],
-  repayment?: number
+  repayment?: number,
+  /** When set and the merchant opted into insurance, the order's product value is insured. */
+  orderId?: string
 ): Promise<{ success: boolean; error?: string; prices?: WootPriceResult[] }> {
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
 
@@ -126,14 +127,43 @@ export async function getWootPrices(
   try {
     const token = await getWootToken(config.public_key, config.secret_key);
     const sender = buildSender(config);
+    const insurance = orderId ? await resolveInsurance(config, businessId, orderId) : undefined;
     const prices = await getPrices(token, {
       sender,
-      receiver: { company: 0, ...receiver, phone: normalizePhone(receiver.phone) },
+      receiver: { company: 0, ...receiver, phone: wootPhone(receiver.phone) },
       parcels,
       repayment: repayment && repayment > 0 ? repayment : undefined,
+      insurance,
     });
     const valid = prices.filter(p => p.errors.length === 0);
     return { success: true, prices: valid };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+// Delivery lockers/points for a given service's courier, in the RECEIVER's
+// city. Used by the AWB modal when a "livrare la locker/punct" service is
+// selected — the order then carries receiver.location_id.
+export async function getWootReceiverLocations(
+  businessId: string,
+  courierId: number,
+  cityId: number
+): Promise<{ success: boolean; error?: string; locations?: WootLocation[] }> {
+  if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
+
+  const config = await loadConfig(businessId);
+  if (!config?.public_key || !config?.secret_key) return { success: false, error: "Woot nu este configurat" };
+
+  try {
+    const token = await getWootToken(config.public_key, config.secret_key);
+    const locations = await getLocations(token, {
+      receiver: true,
+      courier_id: courierId,
+      city_id: cityId || undefined,
+    });
+    // Only delivery-capable locations, regardless of how the API treats the flag.
+    return { success: true, locations: locations.filter((l) => Number(l.receiver) === 1) };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
@@ -179,7 +209,9 @@ export async function createWootAwb(
   parcels: WootParcel[],
   repayment?: number,
   options?: { opd?: boolean; sat?: boolean },
-  senderLocationId?: number
+  senderLocationId?: number,
+  /** Delivery-to-location services: id of the Woot location the customer picks up from. */
+  receiverLocationId?: number
 ): Promise<{ success: boolean; error?: string; awbNumber?: string; wootOrderId?: number }> {
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
 
@@ -190,12 +222,19 @@ export async function createWootAwb(
 
   try {
     const token = await getWootToken(config.public_key, config.secret_key);
+    const insurance = await resolveInsurance(config, businessId, orderId);
     const result = await createOrder(token, {
       service_id: serviceId,
       sender: buildSender(config, senderLocationId),
-      receiver: { company: 0, ...receiver, phone: normalizePhone(receiver.phone) },
+      receiver: {
+        company: 0,
+        ...receiver,
+        phone: wootPhone(receiver.phone),
+        ...(receiverLocationId ? { location_id: receiverLocationId } : {}),
+      },
       parcels,
       repayment: repayment && repayment > 0 ? repayment : undefined,
+      insurance,
       options,
     });
 
@@ -258,6 +297,24 @@ export async function cancelWootAwb(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Insured value (order product subtotal) when the merchant opted in. */
+async function resolveInsurance(
+  config: WootConfig,
+  businessId: string,
+  orderId: string,
+): Promise<number | undefined> {
+  if (!config.insurance_enabled) return undefined;
+  const admin = adminClient();
+  const { data } = await admin
+    .from("orders")
+    .select("subtotal")
+    .eq("id", orderId)
+    .eq("business_id", businessId)
+    .single();
+  const value = Number(data?.subtotal);
+  return value > 0 ? Math.round(value * 100) / 100 : undefined;
+}
+
 function buildSender(config: WootConfig, locationId?: number): object {
   return {
     company: config.sender.company,
@@ -265,7 +322,7 @@ function buildSender(config: WootConfig, locationId?: number): object {
       ? { company_name: config.sender.company_name }
       : {}),
     contact: config.sender.contact,
-    phone: normalizePhone(config.sender.phone),
+    phone: wootPhone(config.sender.phone),
     email: config.sender.email,
     country_id: 189,
     city_id: config.sender.city_id,

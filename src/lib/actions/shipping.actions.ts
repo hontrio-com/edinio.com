@@ -439,12 +439,18 @@ export async function getShippingOptions(
 // ─── Woot live courier offers ────────────────────────────────────────────────
 
 function matchByName<T extends { name: string }>(list: T[], name: string): T | undefined {
-  const n = (name || "").trim().toLowerCase();
+  // Diacritics-insensitive: the customer types "București"/"Târgu Mureș", the
+  // Woot nomenclature stores plain ASCII names.
+  const norm = (s: string) => stripDiacritics(s || "").trim().toLowerCase();
+  const n = norm(name);
   if (!n) return undefined;
-  return (
-    list.find((x) => x.name.toLowerCase() === n) ??
-    list.find((x) => x.name.toLowerCase().includes(n) || n.includes(x.name.toLowerCase()))
-  );
+  const exact = list.find((x) => norm(x.name) === n);
+  if (exact) return exact;
+  const partial = list.find((x) => norm(x.name).includes(n) || n.includes(norm(x.name)));
+  if (partial) return partial;
+  // Last resort: fold "Sector X" → Bucuresti for Bucharest lookups.
+  const folded = normalizeLocalityName(name).toLowerCase();
+  return folded !== n ? list.find((x) => norm(x.name) === folded) : undefined;
 }
 
 /**
@@ -472,7 +478,7 @@ async function buildWootOptions(
     receiver: {
       company: 0,
       contact: "Client",
-      phone: "0700000000",
+      phone: "+40700000000", // Woot documents international format
       country_id: 189,
       city_id: city.id,
       address: destination.city,
@@ -483,6 +489,10 @@ async function buildWootOptions(
 
   return prices
     .filter((p) => p.errors.length === 0)
+    // Delivery-to-location services (easybox/points brokered by Woot) need a
+    // location the customer picks — the storefront has no picker for them yet,
+    // so only door-delivery offers are shown.
+    .filter((p) => !p.service_delivery || p.service_delivery === "door")
     .map((p): ShippingOption => ({
       courier: "woot",
       courierLabel: addrLabel(customLabel, p.courier_name),

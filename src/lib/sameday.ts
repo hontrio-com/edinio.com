@@ -210,6 +210,34 @@ export async function loadSamedayAccount(
   }
 }
 
+// ─── Locker (LN) service resolution ──────────────────────────────────────────
+
+// Locker deliveries must run on the LockerNextDay service (code "LN"), not on
+// the merchant's default home-delivery service — same rule as Sameday's
+// official module. Resolved from the account's service list and cached.
+const lockerServiceCache = new Map<string, number | null>();
+
+export async function getSamedayLockerServiceId(config: SamedayConfig): Promise<number | null> {
+  const key = `${config.username}::${config.sandbox}`;
+  const cached = lockerServiceCache.get(key);
+  if (cached !== undefined) return cached;
+
+  try {
+    const token = await getSamedayToken(config.username, config.password, config.sandbox);
+    const res = await samedayGet<{ data?: Record<string, unknown>[] }>(
+      "api/client/services", token, config.sandbox,
+    );
+    const ln = (res.data ?? []).find(
+      (s) => String(s.serviceCode ?? s.code ?? "").toUpperCase() === "LN",
+    );
+    const id = typeof ln?.id === "number" ? ln.id : null;
+    lockerServiceCache.set(key, id);
+    return id;
+  } catch {
+    return null; // best-effort: caller falls back to the configured service
+  }
+}
+
 // ─── AWB creation ─────────────────────────────────────────────────────────────
 
 export async function createSamedayAwb(
@@ -217,6 +245,13 @@ export async function createSamedayAwb(
   input: SamedayAwbInput,
 ): Promise<string> {
   const token = await getSamedayToken(config.username, config.password, config.sandbox);
+
+  // Easybox deliveries run on the LN service; fall back to the configured one
+  // only if the account has no LN service (Sameday will then reject clearly).
+  let serviceId = config.service_id;
+  if (input.lockerId) {
+    serviceId = (await getSamedayLockerServiceId(config)) ?? config.service_id;
+  }
 
   const enc = encodeURIComponent;
   const perParcelWeight = (input.weightKg / Math.max(input.packageNumber, 1));
@@ -227,11 +262,12 @@ export async function createSamedayAwb(
     `packageType=${input.packageType}`,
     `packageNumber=${input.packageNumber}`,
     `packageWeight=${input.weightKg}`,
-    `service=${config.service_id}`,
+    `service=${serviceId}`,
     `awbPayment=1`,   // 1 = platit de expeditor (client)
     `cashOnDelivery=${input.cashOnDelivery}`,
     `insuredValue=${input.insuredValue}`,
     `thirdPartyPickup=0`,
+    `currency=RON`,
     `awbRecipient[name]=${enc(input.recipientName)}`,
     `awbRecipient[phoneNumber]=${enc(normalizePhone(input.recipientPhone))}`,
     `awbRecipient[personType]=0`,
@@ -287,9 +323,17 @@ export async function estimateSamedayCost(
     cashOnDelivery?: number;
     insuredValue?: number;
     lockerId?: number;
+    /** Quote the easybox (LN) service instead of the configured home-delivery one. */
+    useLockerService?: boolean;
   },
 ): Promise<{ amount: number; currency: string; time: number }> {
   const token = await getSamedayToken(config.username, config.password, config.sandbox);
+
+  let serviceId = config.service_id;
+  if (input.lockerId || input.useLockerService) {
+    serviceId = (await getSamedayLockerServiceId(config)) ?? config.service_id;
+  }
+
   const enc = encodeURIComponent;
   const pkgNum = input.packageNumber ?? 1;
   const perParcelWeight = input.weightKg / Math.max(pkgNum, 1);
@@ -300,11 +344,12 @@ export async function estimateSamedayCost(
     `packageType=${input.packageType ?? 0}`,
     `packageNumber=${pkgNum}`,
     `packageWeight=${input.weightKg}`,
-    `service=${config.service_id}`,
+    `service=${serviceId}`,
     `awbPayment=1`,
     `cashOnDelivery=${input.cashOnDelivery ?? 0}`,
     `insuredValue=${input.insuredValue ?? 0}`,
     `thirdPartyPickup=0`,
+    `currency=RON`,
     `awbRecipient[name]=${enc("Estimare")}`,
     `awbRecipient[phoneNumber]=${enc("0700000000")}`,
     `awbRecipient[personType]=0`,

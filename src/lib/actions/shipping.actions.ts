@@ -9,10 +9,21 @@ import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 
-/** Diacritics-insensitive locality match ("București"/"Sector 3" find "Bucuresti"). */
+/**
+ * Diacritics-insensitive locality match ("București"/"Sector 3" find
+ * "Bucuresti"). Sameday keeps Sector 1-6 as separate cities, so the match
+ * also runs with the raw (unfolded) needle and with the locker city folded —
+ * covering every pairing of "Sector X" and "Bucuresti" on either side.
+ */
 function cityMatches(lockerCity: string, needle: string): boolean {
-  return stripDiacritics(lockerCity).toLowerCase().includes(
-    normalizeLocalityName(needle).toLowerCase(),
+  const haystack = stripDiacritics(lockerCity).toLowerCase();
+  const haystackFolded = normalizeLocalityName(lockerCity).toLowerCase();
+  const foldedNeedle = normalizeLocalityName(needle).toLowerCase();
+  const rawNeedle = stripDiacritics(needle).trim().toLowerCase();
+  return (
+    haystack.includes(foldedNeedle) ||
+    (rawNeedle !== foldedNeedle && haystack.includes(rawNeedle)) ||
+    haystackFolded.includes(foldedNeedle)
   );
 }
 
@@ -137,7 +148,8 @@ export async function getShippingOptions(
       const hasApi = !!(samedayConfig?.enabled && samedayConfig.username && samedayConfig.pickup_point_id);
 
       if (hasApi && useAutoPrice) {
-        // API tariff
+        // Home delivery and easybox run on different Sameday services (the
+        // merchant's configured one vs LN LockerNextDay), so quote each.
         promises.push(
           estimateSamedayCost(samedayConfig!, {
             recipientCounty: destination.county,
@@ -155,6 +167,29 @@ export async function getShippingOptions(
                 price,
                 estimatedDays: days,
               });
+            })
+            .catch((err) => {
+              console.error("[shipping] Sameday estimate failed:", err.message);
+              // Fallback to flat price
+              options.push({
+                courier: "sameday",
+                courierLabel: addrLabel(zone.label, "Livrare prin Sameday"),
+                deliveryType: "address",
+                price: zone.price,
+              });
+            }),
+        );
+        promises.push(
+          estimateSamedayCost(samedayConfig!, {
+            recipientCounty: destination.county,
+            recipientCity: destination.city,
+            weightKg: weight,
+            cashOnDelivery: destination.cod ?? 0,
+            useLockerService: true,
+          })
+            .then((r) => {
+              const price = Math.round(r.amount * 100) / 100;
+              const days = r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`;
               options.push({
                 courier: "sameday",
                 courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
@@ -164,12 +199,11 @@ export async function getShippingOptions(
               });
             })
             .catch((err) => {
-              console.error("[shipping] Sameday estimate failed:", err.message);
-              // Fallback to flat price
+              console.error("[shipping] Sameday easybox estimate failed:", err.message);
               options.push({
                 courier: "sameday",
-                courierLabel: addrLabel(zone.label, "Livrare prin Sameday"),
-                deliveryType: "address",
+                courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
+                deliveryType: "locker",
                 price: zone.price,
               });
             }),

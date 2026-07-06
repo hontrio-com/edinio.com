@@ -110,8 +110,36 @@ export async function createSamedayAwbAction(
   const orderData = order as typeof order & { sameday_awb_number?: string | null };
   if (orderData.sameday_awb_number) return { error: "AWB Sameday a fost deja creat" };
 
+  // Easybox delivery: derive the locker server-side from the order and use the
+  // LOCKER's locality/address on the AWB (mirrors Sameday's official module,
+  // which replaces the recipient address with the locker's).
+  const shipping = (order.shipping_address ?? {}) as {
+    courier?: string;
+    delivery_type?: string;
+    locker_id?: string;
+    locker_name?: string;
+    locker_address?: string;
+    locker_city?: string;
+    locker_county?: string;
+  };
+  const isEasyboxDelivery =
+    shipping.courier === "sameday" && shipping.delivery_type === "locker" && !!shipping.locker_id;
+  const lockerIdNum = isEasyboxDelivery ? Number(shipping.locker_id) : NaN;
+  const enriched: SamedayAwbInput =
+    isEasyboxDelivery && !Number.isNaN(lockerIdNum)
+      ? {
+          ...input,
+          lockerId: lockerIdNum,
+          recipientCity: shipping.locker_city || input.recipientCity,
+          recipientCounty: shipping.locker_county || input.recipientCounty,
+          recipientAddress: [shipping.locker_address, shipping.locker_name]
+            .filter(Boolean)
+            .join(" - ") || input.recipientAddress,
+        }
+      : { ...input, lockerId: undefined };
+
   try {
-    const awbNumber = await createSamedayAwb(config, input);
+    const awbNumber = await createSamedayAwb(config, enriched);
 
     await supabase.from("orders").update({
       sameday_awb_number: awbNumber,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { X, Package, Loader2, Download, Trash2 } from "lucide-react";
+import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createSamedayAwbAction, deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
@@ -20,6 +20,9 @@ type ShippingAddress = {
   delivery_type?: string;
   locker_id?: string;
   locker_name?: string;
+  locker_address?: string;
+  locker_city?: string;
+  locker_county?: string;
 };
 
 export function SamedayAwbModal({
@@ -42,8 +45,15 @@ export function SamedayAwbModal({
   const hasAwb = !!orderData.sameday_awb_number;
   const addr = order.shipping_address as ShippingAddress | null;
 
+  // Easybox delivery: only for Sameday locker orders (a DPD/Cargus locker id
+  // must never leak into a Sameday AWB). The AWB runs on the LN service with
+  // the locker's own locality — both resolved server-side.
+  const isEasyboxDelivery =
+    addr?.courier === "sameday" && addr?.delivery_type === "locker" && !!addr?.locker_id;
+
   const [weight, setWeight] = useState("1");
   const [packageNumber, setPackageNumber] = useState("1");
+  const [packageType, setPackageType] = useState<0 | 1 | 2>(0);
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
@@ -80,16 +90,16 @@ export function SamedayAwbModal({
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!recipientPhone.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
-    if (!recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu");
-    if (!recipientCity.trim()) return toast.error("Localitatea destinatarului este obligatorie");
-    if (!recipientAddress.trim()) return toast.error("Adresa destinatarului este obligatorie");
+    if (!isEasyboxDelivery) {
+      if (!recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu");
+      if (!recipientCity.trim()) return toast.error("Localitatea destinatarului este obligatorie");
+      if (!recipientAddress.trim()) return toast.error("Adresa destinatarului este obligatorie");
+    }
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 
     setCreating(true);
-    const lockerId = addr?.delivery_type === "locker" && addr?.locker_id
-      ? parseInt(addr.locker_id)
-      : undefined;
+    // The locker id + its locality are derived server-side from the order.
     const result = await createSamedayAwbAction(businessId, order.id, {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),
@@ -97,7 +107,7 @@ export function SamedayAwbModal({
       recipientCity: recipientCity.trim(),
       recipientAddress: recipientAddress.trim(),
       recipientPostalCode: recipientPostalCode.trim(),
-      packageType: 0,
+      packageType,
       packageNumber: parseInt(packageNumber) || 1,
       weightKg: weightNum,
       length: length ? parseInt(length) : undefined,
@@ -107,7 +117,6 @@ export function SamedayAwbModal({
       insuredValue: parseFloat(insuredValue) || 0,
       observation: observation.trim(),
       clientInternalReference: order.order_number,
-      lockerId: lockerId && !isNaN(lockerId) ? lockerId : undefined,
     });
     setCreating(false);
 
@@ -209,6 +218,16 @@ export function SamedayAwbModal({
                 {downloading ? "Se descarca..." : `Descarca eticheta ${labelFormat} PDF`}
               </Button>
 
+              <a
+                href={`https://sameday.ro/#awb=${encodeURIComponent(orderData.sameday_awb_number ?? "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-medium border border-border rounded-lg text-foreground hover:bg-muted transition-colors"
+              >
+                <MapPin className="h-4 w-4" />
+                Urmareste expedierea
+              </a>
+
               <div className="pt-2 border-t border-border">
                 <Button variant="destructive" size="lg" onClick={handleDelete} disabled={deleting} className="w-full">
                   {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
@@ -246,6 +265,21 @@ export function SamedayAwbModal({
                       />
                     </div>
                   </div>
+                  {isEasyboxDelivery && (
+                    <div className="p-3 rounded-xl bg-info/5 border border-info/20">
+                      <p className="text-xs font-semibold text-info mb-0.5">Livrare la Easybox</p>
+                      <p className="text-sm font-medium text-foreground">{addr?.locker_name}</p>
+                      {(addr?.locker_address || addr?.locker_city) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {[addr?.locker_address, addr?.locker_city].filter(Boolean).join(", ")}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        AWB-ul se genereaza pe serviciul LockerNextDay, cu localitatea si adresa easybox-ului.
+                      </p>
+                    </div>
+                  )}
+                  {!isEasyboxDelivery && (<>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Judet *</label>
@@ -287,6 +321,7 @@ export function SamedayAwbModal({
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />
                   </div>
+                  </>)}
                 </div>
               </div>
 
@@ -294,6 +329,22 @@ export function SamedayAwbModal({
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Detalii colet</p>
                 <div className="space-y-3">
+                  <div className="flex gap-2">
+                    {([[0, "Colet"], [1, "Plic"], [2, "Colet mare"]] as const).map(([kind, label]) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        onClick={() => setPackageType(kind)}
+                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                          packageType === kind
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Greutate totala (kg) *</label>

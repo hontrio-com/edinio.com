@@ -2057,7 +2057,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                   >
                     <ChevronLeft className="w-6 h-6" style={{ color: "var(--color-muted-foreground)" }} />
                   </div>
-                  <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
+                  <span className="text-xs font-medium text-center leading-tight w-[84px] break-words min-h-[30px]"
                     style={{ color: "var(--color-muted-foreground)" }}>
                     {drillParent?.name ?? "Inapoi"}
                   </span>
@@ -2080,7 +2080,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                       <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
                     </svg>
                   </div>
-                  <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
+                  <span className="text-xs font-medium text-center leading-tight w-[84px] break-words min-h-[30px]"
                     style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
                     Toate
                   </span>
@@ -2118,7 +2118,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
                         </span>
                       )}
                     </div>
-                    <span className="text-xs font-medium text-center leading-tight max-w-[80px] truncate"
+                    <span className="text-xs font-medium text-center leading-tight w-[84px] break-words min-h-[30px]"
                       style={{ color: active ? color : "var(--color-muted-foreground)" }}>
                       {item.name}
                     </span>

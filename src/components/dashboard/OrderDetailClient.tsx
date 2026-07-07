@@ -9,6 +9,7 @@ import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
+  ExternalLink,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
@@ -527,6 +528,18 @@ export function OrderDetailClient({
 
   // ── Provider bodies for the unified Facturare card ──
   function renderSmartbill() {
+    // Link privat spre documentul din SmartBill Cloud (returnat la emitere);
+    // editare -> vizualizare, ca in modulul oficial.
+    const sbViewLink = (raw: unknown) =>
+      typeof raw === "string" && raw ? raw.replace("editare", "vizualizare") : null;
+    const invoiceUrl = sbViewLink(ord["smartbill_invoice_url"]);
+    const estimateUrl = sbViewLink(ord["smartbill_estimate_url"]);
+    const sbLinkBtn = (href: string) => (
+      <a href={href} target="_blank" rel="noopener noreferrer"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        <ExternalLink className="h-3.5 w-3.5" />SmartBill
+      </a>
+    );
     return (
       <div className="space-y-5">
         {hasEstimateSeries && (
@@ -540,6 +553,7 @@ export function OrderDetailClient({
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                     <Mail className="h-3.5 w-3.5" />Retrimite
                   </button>
+                  {estimateUrl && sbLinkBtn(estimateUrl)}
                 </DocRow>
                 {showResendEstimate && (
                   <ResendEmailForm defaultEmail={customerEmail} onSend={handleResendEstimate} sending={resendingEstimate} />
@@ -576,13 +590,26 @@ export function OrderDetailClient({
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                   <Mail className="h-3.5 w-3.5" />Retrimite
                 </button>
+                {invoiceUrl && sbLinkBtn(invoiceUrl)}
               </DocRow>
               {showResendInvoice && (
                 <ResendEmailForm defaultEmail={customerEmail} onSend={handleResendInvoice} sending={resendingInvoice} />
               )}
               {stornoNumber && stornoSeries ? (
-                <DocRow label="Factura stornata" docNumber={`${stornoSeries}${stornoNumber}`}
-                  onDownload={() => handleDownloadPdf("storno")} downloading={downloadingPdf === "storno"} />
+                // SmartBill /invoice/reverse nu returneaza mereu numarul stornoului;
+                // in acel caz marcam factura originala ca stornata (fallback), fara
+                // un PDF de storno propriu — asa ca nu oferim un download inselator.
+                (stornoSeries === invoiceSeries && stornoNumber === invoiceNumber) ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
+                    <RotateCcw className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <p className="text-xs text-destructive flex-1">
+                      Factura a fost stornata in SmartBill. Documentul de stornare este disponibil in contul tau SmartBill.
+                    </p>
+                  </div>
+                ) : (
+                  <DocRow label="Factura stornata" docNumber={`${stornoSeries}${stornoNumber}`}
+                    onDownload={() => handleDownloadPdf("storno")} downloading={downloadingPdf === "storno"} />
+                )
               ) : canStorno ? (
                 showStornoConfirm ? (
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">

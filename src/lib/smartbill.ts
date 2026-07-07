@@ -149,11 +149,16 @@ export interface SmartbillConfig {
   send_email: boolean;
   auto_invoice: boolean;
   auto_invoice_trigger: "confirmed" | "processing" | "shipped" | "delivered" | "paid";
+  // Marcheaza factura ca incasata (payment "Card online") cand comanda e platita online.
+  mark_paid_online?: boolean;
+  // Scadenta in zile de la emitere (0/absent = fara dueDate, SmartBill pune data emiterii).
+  due_days?: number;
 }
 
 export interface SmartbillSeriesItem {
   name: string;
-  type: string;
+  type: string; // 'f' factura, 'p' proforma, 'c' chitanta
+  nextNumber?: string;
 }
 
 export interface SmartbillTaxItem {
@@ -186,8 +191,12 @@ export async function getMerchantSeries(
       const body = await res.text().catch(() => "");
       return { error: `Eroare SmartBill (${res.status})${body ? `: ${body}` : ""}` };
     }
-    const data = await res.json() as { list?: Array<{ name: string; type: string }> };
-    return (data.list ?? []).map(s => ({ name: s.name, type: s.type }));
+    const data = await res.json() as { list?: Array<{ name: string; type: string; nextNumber?: string | number }> };
+    return (data.list ?? []).map(s => ({
+      name: s.name,
+      type: s.type,
+      ...(s.nextNumber != null ? { nextNumber: String(s.nextNumber) } : {}),
+    }));
   } catch {
     return { error: "Eroare de retea. Verifica conexiunea." };
   }
@@ -212,6 +221,9 @@ export async function getMerchantTaxes(
 
 export interface MerchantInvoiceProduct {
   name: string;
+  // Cod produs (SKU). Obligatoriu DOAR pentru conturile SmartBill cu optiunea
+  // "Foloseste cod produs" activa — fara el emiterea esueaza la acele conturi.
+  code?: string;
   measuringUnitName: string;
   currency: string;
   quantity: number;
@@ -228,23 +240,39 @@ export interface MerchantInvoiceProduct {
 
 export interface MerchantInvoiceParams {
   companyVatCode: string;
-  client: {
+  // client si products lipsesc la emiterea pe baza de proforma (useEstimateDetails)
+  // — SmartBill le preia din proforma (exemplul oficial le omite complet).
+  client?: {
     name: string;
+    // CIF firma sau CNP persoana fizica; ANAF accepta "-", 0 sau sir de 0 la PF.
+    vatCode?: string;
     country?: string;
     address?: string;
     city?: string;
     county?: string;
     email?: string;
+    phone?: string;
     isTaxPayer?: boolean;
     saveToDb?: boolean;
   };
   issueDate: string;
   seriesName: string;
-  currency: string;
-  products: MerchantInvoiceProduct[];
+  currency?: string;
+  products?: MerchantInvoiceProduct[];
   sendEmail?: boolean;
   email?: { to: string };
   isDraft?: boolean;
+  dueDate?: string;
+  // Apare pe factura (informatii suplimentare) — folosit pentru nr. comenzii.
+  mentions?: string;
+  // Apare doar in rapoarte, nu pe document.
+  observations?: string;
+  // Incasare la emitere: factura iese direct incasata (ex. plata online cu cardul).
+  payment?: {
+    value: number;
+    type: string;
+    isCash: boolean;
+  };
   useEstimateDetails?: boolean;
   estimate?: {
     seriesName: string;
@@ -256,7 +284,7 @@ export interface MerchantInvoiceParams {
 export async function createMerchantInvoice(
   config: Pick<SmartbillConfig, "email" | "token">,
   params: MerchantInvoiceParams
-): Promise<{ number: string; series: string } | { error: string }> {
+): Promise<{ number: string; series: string; documentUrl?: string } | { error: string }> {
   try {
     const res = await fetch(`${SMARTBILL_BASE}/invoice`, {
       method: "POST",
@@ -269,17 +297,24 @@ export async function createMerchantInvoice(
       message?: string;
       number?: string;
       series?: string;
+      documentUrl?: string;
     };
     // If SmartBill returned a number, the document WAS created — record it even if a
     // non-fatal warning (e.g. email server not configured) is present, so we never
     // discard a real document, which would cause a duplicate on retry.
     if (data.number) {
-      return { number: data.number, series: data.series ?? "" };
+      return {
+        number: data.number,
+        series: data.series ?? "",
+        ...(data.documentUrl ? { documentUrl: data.documentUrl } : {}),
+      };
     }
     if (!res.ok || data.errorText) {
       return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
     }
-    return { number: "", series: data.series ?? "" };
+    // 200 fara numar (nu emitem ciorne) — tratat ca eroare ca sa nu salvam un numar
+    // gol care ar dezarma garda anti-duplicat.
+    return { error: data.message || "SmartBill nu a returnat numarul documentului." };
   } catch {
     return { error: "Eroare de retea la crearea facturii." };
   }
@@ -304,7 +339,7 @@ export function getMerchantEstimatePdfUrl(
 export async function createMerchantEstimate(
   config: Pick<SmartbillConfig, "email" | "token">,
   params: MerchantInvoiceParams
-): Promise<{ number: string; series: string } | { error: string }> {
+): Promise<{ number: string; series: string; documentUrl?: string } | { error: string }> {
   try {
     const res = await fetch(`${SMARTBILL_BASE}/estimate`, {
       method: "POST",
@@ -317,49 +352,70 @@ export async function createMerchantEstimate(
       message?: string;
       number?: string;
       series?: string;
+      documentUrl?: string;
     };
     // If SmartBill returned a number, the document WAS created — record it even if a
     // non-fatal warning (e.g. email server not configured) is present, so we never
     // discard a real document, which would cause a duplicate on retry.
     if (data.number) {
-      return { number: data.number, series: data.series ?? "" };
+      return {
+        number: data.number,
+        series: data.series ?? "",
+        ...(data.documentUrl ? { documentUrl: data.documentUrl } : {}),
+      };
     }
     if (!res.ok || data.errorText) {
       return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
     }
-    return { number: "", series: data.series ?? "" };
+    return { error: data.message || "SmartBill nu a returnat numarul documentului." };
   } catch {
     return { error: "Eroare de retea la crearea proformei." };
   }
 }
 
-export async function cancelMerchantInvoice(
+// Stornare (factura inversa) — POST /invoice/reverse cu body JSON. Diferit de
+// anulare (PUT /invoice/cancel): stornarea creeaza un document nou cu minus si e
+// singura cale corecta pentru facturi deja transmise in e-Factura. Raspunsul
+// poate veni FARA numarul stornoului (exemplul oficial il are gol).
+export async function reverseMerchantInvoice(
   config: Pick<SmartbillConfig, "email" | "token">,
   params: { cif: string; seriesName: string; number: string }
 ): Promise<{ stornoNumber?: string; stornoSeries?: string } | { error: string }> {
   try {
-    const qs = new URLSearchParams({
-      cif: params.cif,
+    const body = {
+      companyVatCode: params.cif,
       seriesName: params.seriesName,
       number: params.number,
-    });
-    const res = await fetch(`${SMARTBILL_BASE}/invoice/cancel?${qs}`, {
+      issueDate: new Date().toISOString().split("T")[0],
+    };
+    const res = await fetch(`${SMARTBILL_BASE}/invoice/reverse`, {
       method: "POST",
       headers: merchantHeaders(config.email, config.token),
+      body: JSON.stringify(body),
       cache: "no-store",
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as { errorText?: string; message?: string };
-      return { error: body.errorText || body.message || `Eroare SmartBill (${res.status})` };
+    const data = await res.json().catch(() => ({})) as {
+      errorText?: string;
+      message?: string;
+      number?: string;
+      series?: string;
+    };
+    if (!res.ok || data.errorText) {
+      return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
     }
-    const data = await res.json().catch(() => ({})) as { number?: string; series?: string; errorText?: string };
-    if (data.errorText) return { error: data.errorText };
-    return { stornoNumber: data.number, stornoSeries: data.series };
+    return {
+      ...(data.number ? { stornoNumber: data.number } : {}),
+      ...(data.series ? { stornoSeries: data.series } : {}),
+    };
   } catch {
     return { error: "Eroare de retea la stornarea facturii." };
   }
 }
 
+// Body-ul real pentru /document/send e FLAT (nu obiecte document/email imbricate),
+// cu type "factura"/"proforma" si subject/bodyText OBLIGATORIU Base64. Fara
+// subject/bodyText, SmartBill foloseste sablonul configurat in contul Cloud.
+// Raspunsul e {status:{code,message}} — code 0 inseamna succes.
 export async function sendMerchantDocumentEmail(
   config: Pick<SmartbillConfig, "email" | "token">,
   params: {
@@ -374,15 +430,13 @@ export async function sendMerchantDocumentEmail(
   try {
     const body = {
       companyVatCode: params.companyVatCode,
-      document: {
-        type: params.type,
-        seriesName: params.seriesName,
-        number: params.number,
-      },
-      email: {
-        to: params.to,
-        ...(params.subject ? { subject: params.subject } : {}),
-      },
+      seriesName: params.seriesName,
+      number: params.number,
+      type: params.type === "invoice" ? "factura" : "proforma",
+      to: params.to,
+      ...(params.subject
+        ? { subject: Buffer.from(params.subject, "utf8").toString("base64") }
+        : {}),
     };
     const res = await fetch(`${SMARTBILL_BASE}/document/send`, {
       method: "POST",
@@ -390,13 +444,55 @@ export async function sendMerchantDocumentEmail(
       body: JSON.stringify(body),
       cache: "no-store",
     });
+    const data = await res.json().catch(() => ({})) as {
+      status?: { code?: number | string; message?: string };
+      errorText?: string;
+      message?: string;
+    };
     if (!res.ok) {
-      const data = await res.json().catch(() => ({})) as { errorText?: string; message?: string };
-      return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
+      return { error: data.status?.message || data.errorText || data.message || `Eroare SmartBill (${res.status})` };
+    }
+    if (data.status && Number(data.status.code) !== 0) {
+      return { error: data.status.message || "SmartBill nu a putut trimite emailul." };
     }
     return { success: true };
   } catch {
     return { error: "Eroare de retea la trimiterea emailului." };
+  }
+}
+
+// Stare facturare proforma — GET /estimate/invoices. Spune daca proforma a fost
+// deja facturata (inclusiv manual, din SmartBill Cloud), ca sa nu emitem o a
+// doua factura la conversie.
+export async function getEstimateInvoices(
+  config: Pick<SmartbillConfig, "email" | "token">,
+  params: { cif: string; seriesName: string; number: string }
+): Promise<{ invoiced: boolean; invoices: { series: string; number: string }[] } | { error: string }> {
+  try {
+    const qs = new URLSearchParams({
+      cif: params.cif,
+      seriesname: params.seriesName,
+      number: params.number,
+    });
+    const res = await fetch(`${SMARTBILL_BASE}/estimate/invoices?${qs}`, {
+      headers: merchantHeaders(config.email, config.token),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => ({})) as {
+      errorText?: string;
+      message?: string;
+      areInvoicesCreated?: boolean;
+      invoices?: Array<{ series?: string; seriesName?: string; number?: string }>;
+    };
+    if (!res.ok || data.errorText) {
+      return { error: data.errorText || data.message || `Eroare SmartBill (${res.status})` };
+    }
+    const invoices = (data.invoices ?? [])
+      .map(i => ({ series: i.series ?? i.seriesName ?? "", number: i.number ?? "" }))
+      .filter(i => i.number);
+    return { invoiced: data.areInvoicesCreated === true, invoices };
+  } catch {
+    return { error: "Eroare de retea la verificarea proformei." };
   }
 }
 

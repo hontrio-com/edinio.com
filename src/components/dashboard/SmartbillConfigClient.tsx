@@ -38,7 +38,11 @@ const DEFAULT_CONFIG: SmartbillConfig = {
   send_email: false,
   auto_invoice: false,
   auto_invoice_trigger: "confirmed",
+  mark_paid_online: false,
+  due_days: 0,
 };
+
+type SeriesInfo = { name: string; type: string; nextNumber?: string };
 
 export function SmartbillConfigClient({
   businessId,
@@ -56,7 +60,7 @@ export function SmartbillConfigClient({
   );
   const [testResult, setTestResult] = useState<{
     ok: boolean;
-    series?: string[];
+    series?: SeriesInfo[];
     taxes?: string[];
     message: string;
   } | null>(null);
@@ -351,6 +355,30 @@ export function SmartbillConfigClient({
                   </p>
                 </div>
 
+                {/* Mark paid at issue (online card payments) */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Marcheaza factura incasata la plata online</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Cand comanda e platita cu cardul, factura iese direct incasata (Card online)
+                    </p>
+                  </div>
+                  <Switch checked={!!cfg.mark_paid_online} onCheckedChange={v => set("mark_paid_online", v)} />
+                </div>
+
+                {/* Due days */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-foreground">
+                    Scadenta facturii (zile)
+                  </label>
+                  <Input type="number" min={0} max={120} value={cfg.due_days || ""}
+                    onChange={e => set("due_days", Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                    placeholder="0 = fara scadenta" />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Numarul de zile de la emitere pana la scadenta. Lasa gol pentru data emiterii.
+                  </p>
+                </div>
+
                 {/* Auto-invoice toggle */}
                 <div className="flex items-center justify-between">
                   <div>
@@ -402,19 +430,44 @@ export function SmartbillConfigClient({
               icon={testResult.ok ? CheckCircle : undefined}
               title={testResult.message}
             >
-              {testResult.ok && testResult.series && testResult.series.length > 0 && (
-                <div className="mt-2">
-                  <p className="mb-1.5 text-xs font-semibold text-foreground">Serii disponibile (click pentru selectare):</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {testResult.series.map(s => (
-                      <Button key={s} type="button" variant="outline" size="xs" className="font-mono"
-                        onClick={() => { set("series_name", s); toast.success(`Seria "${s}" selectata ca serie facturi.`); }}>
-                        {s}
-                      </Button>
-                    ))}
+              {testResult.ok && testResult.series && testResult.series.length > 0 && (() => {
+                const invoiceSeries = testResult.series.filter(s => s.type === "f");
+                const estimateSeries = testResult.series.filter(s => s.type === "p");
+                const chipLabel = (s: SeriesInfo) => s.nextNumber ? `${s.name} (urm. ${s.nextNumber})` : s.name;
+                return (
+                  <div className="mt-2 space-y-3">
+                    {invoiceSeries.length > 0 && (
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-foreground">Serii de facturi (click pentru selectare):</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {invoiceSeries.map(s => (
+                            <Button key={s.name} type="button" variant="outline" size="xs" className="font-mono"
+                              onClick={() => { set("series_name", s.name); toast.success(`Seria "${s.name}" selectata ca serie facturi.`); }}>
+                              {chipLabel(s)}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {estimateSeries.length > 0 && (
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-foreground">Serii de proforme (click pentru selectare):</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {estimateSeries.map(s => (
+                            <Button key={s.name} type="button" variant="outline" size="xs" className="font-mono"
+                              onClick={() => { set("estimate_series_name", s.name); toast.success(`Seria "${s.name}" selectata ca serie proforme.`); }}>
+                              {chipLabel(s)}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {invoiceSeries.length === 0 && (
+                      <p className="text-xs text-warning">Nu exista serii de facturi in cont. Creeaza una in SmartBill &gt; Nomenclatoare &gt; Serii.</p>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </Callout>
           )}
         </Panel>

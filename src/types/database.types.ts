@@ -856,8 +856,10 @@ export type Database = {
           shipping_cost: number
           smartbill_estimate_number: string | null
           smartbill_estimate_series: string | null
+          smartbill_estimate_url: string | null
           smartbill_invoice_number: string | null
           smartbill_invoice_series: string | null
+          smartbill_invoice_url: string | null
           smartbill_storno_number: string | null
           smartbill_storno_series: string | null
           status: string
@@ -914,8 +916,10 @@ export type Database = {
           shipping_cost?: number
           smartbill_estimate_number?: string | null
           smartbill_estimate_series?: string | null
+          smartbill_estimate_url?: string | null
           smartbill_invoice_number?: string | null
           smartbill_invoice_series?: string | null
+          smartbill_invoice_url?: string | null
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string
@@ -972,8 +976,10 @@ export type Database = {
           shipping_cost?: number
           smartbill_estimate_number?: string | null
           smartbill_estimate_series?: string | null
+          smartbill_estimate_url?: string | null
           smartbill_invoice_number?: string | null
           smartbill_invoice_series?: string | null
+          smartbill_invoice_url?: string | null
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string

@@ -149,6 +149,11 @@ export default async function DashboardPage() {
     ? `https://${business.custom_domain}`
     : `${process.env.NEXT_PUBLIC_SITE_URL}/${business.slug}`;
 
+  // Vanzarile nu includ comenzile anulate/rambursate — aceeasi regula ca in
+  // Analytics (VALID_STATUSES) si paginile de admin. Lista "Comenzi recente"
+  // ramane nefiltrata (e un jurnal, nu o metrica).
+  const NOT_SALES = "(cancelled,refunded)";
+
   const [
     { count: ordersToday },
     { count: ordersYesterday },
@@ -161,13 +166,13 @@ export default async function DashboardPage() {
     { data: lowStockProducts },
   ] = await Promise.all([
     supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).gte("created_at", today),
+      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", today),
     supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).gte("created_at", yesterday).lt("created_at", today),
+      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", yesterday).lt("created_at", today),
     supabase.from("orders").select("total")
-      .eq("business_id", business.id).gte("created_at", thisMonthStart),
+      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", thisMonthStart),
     supabase.from("orders").select("total")
-      .eq("business_id", business.id).gte("created_at", lastMonthStart).lt("created_at", lastMonthEnd),
+      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", lastMonthStart).lt("created_at", lastMonthEnd),
     supabase.from("products").select("*", { count: "exact", head: true })
       .eq("business_id", business.id).eq("is_active", true),
     supabase.from("orders").select("*", { count: "exact", head: true })
@@ -175,7 +180,7 @@ export default async function DashboardPage() {
     supabase.from("orders").select("id, order_number, customer_name, total, status, created_at")
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
     supabase.from("orders").select("created_at, total")
-      .eq("business_id", business.id).gte("created_at", sevenDaysAgo).order("created_at", { ascending: true }),
+      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", sevenDaysAgo).order("created_at", { ascending: true }),
     supabase.from("products").select("id, name, stock_quantity")
       .eq("business_id", business.id).eq("is_active", true)
       .eq("track_inventory", true).lte("stock_quantity", 5)

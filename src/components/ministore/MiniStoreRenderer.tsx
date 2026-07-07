@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, createContext, useContext, useEffect, useTransition, useMemo, useRef, useCallback, type ReactNode } from "react";
+import { useState, createContext, useContext, useEffect, useTransition, useMemo, useRef, useCallback, useDeferredValue, type ReactNode } from "react";
 import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
@@ -18,6 +18,7 @@ import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount
 import { getCartSessionId } from "@/lib/cart-session";
 import { readBundleConfig } from "@/lib/bundles";
 import { parseProductSections, resolveSectionProducts, type ProductSection } from "@/lib/store-sections";
+import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
@@ -1490,7 +1491,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Sorting is a standard storefront feature — always shown. Honour the saved
   // default sort if present, otherwise newest-first.
-  const [sort, setSort] = useState<string>(pageContent.sort_options?.default_sort ?? "newest");
+  const defaultSort = pageContent.sort_options?.default_sort ?? "newest";
+  const [sort, setSort] = useState<string>(defaultSort);
+  // While a search is active and no sort was explicitly chosen, results order
+  // by relevance — surfaced as a visible "Relevanta" option in the dropdown.
+  const [sortTouched, setSortTouched] = useState(false);
   const showSort = true;
 
   // Banner source: up to 5 hero_banners (page_content), else the legacy single
@@ -1632,15 +1637,31 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     return { options, priceMin: min === Infinity ? 0 : Math.floor(min), priceMax: Math.ceil(max) };
   }, [products]);
 
+  // Search engine — diacritics-insensitive + typo-tolerant, ranked by
+  // relevance (see @/lib/storefront/product-search). Deferred so results
+  // recompute off the urgent keystroke render.
+  const deferredSearch = useDeferredValue(search);
+  const searchIdx = useMemo(() => buildProductSearchIndex(products.map((p) => {
+    const ps = p.page_sections as { variants?: { enabled?: boolean; options?: { name: string; values: string[] }[] } } | null;
+    const optionValues = ps?.variants?.enabled
+      ? (ps.variants.options ?? []).flatMap((o) => (Array.isArray(o?.values) ? o.values.map(String) : []))
+      : undefined;
+    return { id: p.id, name: p.name, category: p.category, description: p.description, optionValues };
+  })), [products]);
+  // null = empty query (no search filtering); otherwise product id → relevance.
+  const searchMatches = useMemo(
+    () => queryProductSearchIndex(searchIdx, deferredSearch),
+    [searchIdx, deferredSearch],
+  );
+  const effectiveSort = searchMatches && !sortTouched ? "relevance" : sort;
+
   // Filtered products
   const filteredProducts = useMemo(() => {
     const pMin = priceMin.trim() ? parseFloat(priceMin) : null;
     const pMax = priceMax.trim() ? parseFloat(priceMax) : null;
     const activeOpts = Object.entries(selectedOptions).filter(([, v]) => v.length > 0);
-    let list = products.filter(p => {
-      const matchesSearch = search === "" ||
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        (p.description ?? "").toLowerCase().includes(search.toLowerCase());
+    const list = products.filter(p => {
+      const matchesSearch = !searchMatches || searchMatches.has(p.id);
       const matchesCategory = categoryFilter === "toate"
         || (catTree.subtreeByName[categoryFilter] ?? [categoryFilter]).includes(p.category ?? "");
       const price = Number(p.price);
@@ -1659,8 +1680,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       }
       return matchesSearch && matchesCategory && matchesPrice && matchesSale && matchesStock && matchesOptions;
     });
-    // Sort
-    switch (sort) {
+    // Sort. "relevance" only exists while a search is active (see effectiveSort).
+    if (searchMatches && effectiveSort === "relevance") {
+      list.sort((a, b) =>
+        ((searchMatches.get(b.id) ?? 0) - (searchMatches.get(a.id) ?? 0))
+        || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return list;
+    }
+    switch (effectiveSort) {
       case "price_asc": list.sort((a, b) => Number(a.price) - Number(b.price)); break;
       case "price_desc": list.sort((a, b) => Number(b.price) - Number(a.price)); break;
       case "popular": list.sort((a, b) => (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0)); break;
@@ -1668,7 +1695,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       case "newest": default: list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
     }
     return list;
-  }, [products, search, categoryFilter, sort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
+  }, [products, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
 
   // Shared filter fields — reused by the desktop inline panel and the mobile sheet.
   const filterFields = (
@@ -1734,7 +1761,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   useEffect(() => {
     if (filtersInitRef.current) { filtersInitRef.current = false; return; }
     goToPage(1);
-  }, [search, categoryFilter, sort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, goToPage]);
+  }, [search, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, goToPage]);
 
   function handleAddToCart(product: Product) {
     const images = Array.isArray(product.images) ? product.images : [];
@@ -1913,16 +1940,27 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               type="search"
               placeholder="Cauta produse..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                // A fresh search starts back on relevance ordering.
+                if (search === "" && v !== "") setSortTouched(false);
+                setSearch(v);
+              }}
               className="w-full pl-10 pr-4 py-3 text-sm border border-border rounded-2xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
             />
           </div>
           {showSort && (
             <div className="relative w-full md:w-auto shrink-0">
               <ArrowUpDown className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <select aria-label="Sorteaza produsele" value={sort} onChange={e => setSort(e.target.value)}
+              <select aria-label="Sorteaza produsele" value={effectiveSort}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v === "relevance") setSortTouched(false);
+                  else { setSort(v); setSortTouched(true); }
+                }}
                 style={{ WebkitAppearance: "none", MozAppearance: "none" }}
                 className="h-[46px] w-full md:w-auto appearance-none cursor-pointer pl-10 pr-9 text-sm border border-border rounded-2xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+                {searchMatches != null && <option value="relevance">Relevanta</option>}
                 <option value="newest">Cele mai noi</option>
                 <option value="price_asc">Pret crescator</option>
                 <option value="price_desc">Pret descrescator</option>

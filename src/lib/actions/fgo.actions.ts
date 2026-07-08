@@ -14,13 +14,30 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type OrderItem = { name: string; price: number; quantity: number };
+type OrderItem = { name: string; price: number; quantity: number; product_id?: string };
 type ShippingAddress = {
   county?: string;
   city?: string;
   address?: string;
   street?: string;
 };
+
+// SKU-urile produselor comandate → CodArticol pe liniile facturii fGO.
+async function fetchSkuMap(items: OrderItem[]): Promise<Map<string, string>> {
+  const ids = [...new Set(items.map(i => i.product_id).filter((v): v is string => !!v))];
+  if (ids.length === 0) return new Map();
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.from("products").select("id, sku").in("id", ids);
+    const map = new Map<string, string>();
+    for (const p of data ?? []) {
+      if (p.sku) map.set(p.id as string, String(p.sku));
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
 
 async function getConfigAndOrder(businessId: string, orderId: string) {
   const supabase = await createClient();
@@ -55,62 +72,76 @@ async function getConfigAndOrder(businessId: string, orderId: string) {
   };
 }
 
-function buildItems(
+async function buildItems(
   order: {
     items: unknown;
     shipping_cost: unknown;
     discount_amount: unknown;
     discount_code: string | null;
+    card_discount_amount?: unknown;
     total: unknown;
     subtotal: unknown;
   },
   vatEnabled: boolean,
   vatRate: number,
   pricesIncludeVat: boolean,
-): FgoLineItem[] {
+): Promise<FgoLineItem[]> {
   const items = (order.items as OrderItem[]) ?? [];
+  const skuById = await fetchSkuMap(items);
   const effectiveVat = vatEnabled ? vatRate : 0;
 
+  // fGO cere PretUnitar FARA TVA; daca preturile includ TVA, extragem netul.
+  const toNet = (gross: number) =>
+    pricesIncludeVat && vatEnabled ? gross / (1 + vatRate / 100) : gross;
+
   const lineItems: FgoLineItem[] = items.map(item => {
-    // fGO expects unit price WITHOUT VAT in PretUnitar
-    const unitPrice = pricesIncludeVat && vatEnabled
-      ? item.price / (1 + vatRate / 100)
-      : item.price;
+    const sku = item.product_id ? skuById.get(item.product_id) : undefined;
     return {
       name: item.name,
       quantity: item.quantity,
-      unitPrice,
+      unitPrice: toNet(item.price),
       vatRate: effectiveVat,
       unit: "BUC",
+      ...(sku ? { code: sku } : {}),
     };
   });
 
   const shippingCost = Number(order.shipping_cost);
   if (shippingCost > 0) {
-    const unitPrice = pricesIncludeVat && vatEnabled
-      ? shippingCost / (1 + vatRate / 100)
-      : shippingCost;
     lineItems.push({
       name: "Transport",
       quantity: 1,
-      unitPrice,
+      unitPrice: toNet(shippingCost),
       vatRate: effectiveVat,
       unit: "BUC",
     });
   }
 
+  // Reducerile = linii Tip "Discount" (mecanismul documentat fGO), cu valoarea
+  // neta pozitiva; fGO le scade (baza + TVA) din total.
   const discountAmount = Number(order.discount_amount);
   if (discountAmount > 0) {
-    // Discount as negative line item
-    const unitPrice = pricesIncludeVat && vatEnabled
-      ? discountAmount / (1 + vatRate / 100)
-      : discountAmount;
     lineItems.push({
       name: `Discount${order.discount_code ? ` (${order.discount_code})` : ""}`,
       quantity: 1,
-      unitPrice: -unitPrice,
+      unitPrice: toNet(discountAmount),
       vatRate: effectiveVat,
       unit: "BUC",
+      isDiscount: true,
+    });
+  }
+
+  // Reducerea la plata online e deja scazuta din orders.total la plasare; fara
+  // linia asta factura ar iesi mai mare decat totalul comenzii.
+  const cardDiscount = Number(order.card_discount_amount);
+  if (cardDiscount > 0) {
+    lineItems.push({
+      name: "Reducere plata online",
+      quantity: 1,
+      unitPrice: toNet(cardDiscount),
+      vatRate: effectiveVat,
+      unit: "BUC",
+      isDiscount: true,
     });
   }
 
@@ -209,13 +240,17 @@ export async function generateFgoInvoice(
 
   try {
     const addr = order.shipping_address as ShippingAddress | null;
-    const items = buildItems(order, vatEnabled, vatRate, pricesIncludeVat);
+    const items = await buildItems(order, vatEnabled, vatRate, pricesIncludeVat);
+
+    const dueDays = Math.floor(Number(config.due_days) || 0);
+    const dueDate = dueDays > 0
+      ? new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString().split("T")[0]
+      : undefined;
 
     const result = await createFgoInvoice(
       config,
       order.customer_name,
       {
-        tara: "Romania",
         judet: addr?.county ?? undefined,
         localitate: addr?.city ?? undefined,
         adresa: addr?.address ?? addr?.street ?? undefined,
@@ -224,6 +259,7 @@ export async function generateFgoInvoice(
         tip: "PF",
       },
       items,
+      { dueDate, idExtern: order.order_number ? String(order.order_number) : undefined },
     );
 
     await supabase.from("orders").update({

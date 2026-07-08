@@ -39,9 +39,10 @@ export function FgoConfigClient({
     valuta: initialConfig?.valuta ?? "RON",
     auto_invoice: initialConfig?.auto_invoice ?? false,
     auto_invoice_trigger: initialConfig?.auto_invoice_trigger ?? "confirmed",
+    due_days: initialConfig?.due_days ?? 0,
   });
 
-  function set(field: keyof FgoConfig, value: string | boolean) {
+  function set(field: keyof FgoConfig, value: string | boolean | number) {
     setTested(false);
     setForm(prev => ({ ...prev, [field]: value }));
   }
@@ -203,6 +204,19 @@ export function FgoConfigClient({
               value={form.platforma_url}
               onChange={e => set("platforma_url", e.target.value.trim())}
               placeholder="https://edinio.com"
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Scadenta factura (zile)" hint="Numarul de zile pana la scadenta. 0 = data emiterii">
+            <Input
+              type="number"
+              min={0}
+              max={120}
+              value={form.due_days || ""}
+              onChange={e => set("due_days", Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+              placeholder="0"
             />
           </Field>
         </div>

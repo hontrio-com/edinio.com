@@ -11,6 +11,7 @@ export type FgoConfig = {
   valuta: string;        // default "RON"
   auto_invoice?: boolean;  // auto-issue an invoice when the trigger fires
   auto_invoice_trigger?: "confirmed" | "processing" | "shipped" | "delivered" | "paid";
+  due_days?: number;     // scadenta in zile de la emitere (0/absent = fara)
 };
 
 export type FgoInvoiceResult = {
@@ -43,14 +44,17 @@ function baseUrl(sandbox: boolean): string {
   return sandbox ? TEST_BASE : PROD_BASE;
 }
 
+// fGO cere OBLIGATORIU body JSON brut cu `Content-Type: application/json`;
+// documentatia avertizeaza explicit contra application/x-www-form-urlencoded
+// (Client si Continut sunt obiect/array imbricate, nu chei bracket).
 async function fgoPost<T>(
   url: string,
-  params: Record<string, string>,
+  payload: Record<string, unknown>,
 ): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(params).toString(),
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     throw new Error(`fGO API error: ${res.status} ${res.statusText}`);
@@ -64,15 +68,17 @@ async function fgoPost<T>(
 
 // ─── Nomenclatoare ────────────────────────────────────────────────────────────
 
+// Nomenclatoarele fGO returneaza {Nume(afisare), Cod(valoarea de trimis)}, ex.
+// tara {Nume:"ROMANIA", Cod:"RO"}, judet {Nume:"Gorj", Cod:"GJ"}.
 export async function getFgoNomenclator(
   type: string,
   sandbox: boolean,
   judet?: string,
-): Promise<{ Nume: string; Valoare: string }[]> {
+): Promise<{ Nume: string; Cod: string }[]> {
   const path = judet ? `/nomenclator/${type}?judet=${encodeURIComponent(judet)}` : `/nomenclator/${type}`;
   const res = await fetch(`${baseUrl(sandbox)}${path}`);
   if (!res.ok) throw new Error(`fGO nomenclator error: ${res.status}`);
-  const data = (await res.json()) as { Success: boolean; Message?: string; List: { Nume: string; Valoare: string }[] };
+  const data = (await res.json()) as { Success: boolean; Message?: string; List: { Nume: string; Cod: string }[] };
   if (!data.Success) throw new Error(data.Message || "Eroare nomenclator fGO");
   return data.List ?? [];
 }
@@ -81,17 +87,18 @@ export async function getFgoNomenclator(
 
 export type FgoLineItem = {
   name: string;
-  quantity: number;       // XXXX.XXX format
-  unitPrice: number;      // pret unitar fara TVA
-  vatRate: number;        // cota TVA ca numar (ex: 19)
-  unit?: string;          // default BUC
+  quantity: number;       // NrProduse (XXXX.XXX)
+  unitPrice: number;      // PretUnitar — pret unitar FARA TVA (la discount: valoarea neta a reducerii, pozitiva)
+  vatRate: number;        // CotaTVA ca numar (ex: 19)
+  unit?: string;          // UM, default BUC
+  code?: string;          // CodArticol (SKU) — doar la articole
+  isDiscount?: boolean;   // Tip: "Discount" (reducere la nivel de factura)
 };
 
 export async function createFgoInvoice(
   config: FgoConfig,
   clientName: string,
   clientData: {
-    tara?: string;
     judet?: string;
     localitate?: string;
     adresa?: string;
@@ -101,39 +108,52 @@ export async function createFgoInvoice(
     codUnic?: string;
   },
   items: FgoLineItem[],
+  opts?: { dueDate?: string; idExtern?: string },
 ): Promise<FgoInvoiceResult> {
   const hash = hashEmitere(config.cod_unic, config.private_key, clientName);
 
-  const params: Record<string, string> = {
+  const client: Record<string, unknown> = {
+    Denumire: clientName,
+    Tara: "RO",                 // Cod-ul din nomenclatorul de tari (NU "Romania")
+    Tip: clientData.tip || "PF",
+  };
+  if (clientData.judet) client.Judet = clientData.judet;          // Nume judet (ex "Cluj")
+  if (clientData.localitate) client.Localitate = clientData.localitate;
+  if (clientData.adresa) client.Adresa = clientData.adresa;
+  if (clientData.email) client.Email = clientData.email;
+  if (clientData.telefon) client.Telefon = clientData.telefon;
+  if (clientData.codUnic) client.CodUnic = clientData.codUnic;
+
+  const continut = items.map(item => {
+    const line: Record<string, unknown> = {
+      Denumire: item.name,
+      NrProduse: Number(item.quantity.toFixed(3)),
+      UM: item.unit || "BUC",
+      CotaTVA: item.vatRate,
+      PretUnitar: Number(item.unitPrice.toFixed(2)),
+    };
+    if (item.code) line.CodArticol = item.code;
+    // Reducere la nivel de factura: doar Tip "Discount", fara NrCrtArticol.
+    if (item.isDiscount) line.Tip = "Discount";
+    return line;
+  });
+
+  const payload: Record<string, unknown> = {
     CodUnic: config.cod_unic,
     Hash: hash,
+    PlatformaUrl: config.platforma_url,
     Serie: config.serie,
     Valuta: config.valuta || "RON",
     TipFactura: config.tip_factura || "Factura",
-    PlatformaUrl: config.platforma_url,
-    "Client[Denumire]": clientName,
-    "Client[Tara]": clientData.tara || "Romania",
-    "Client[Tip]": clientData.tip || "PF",
+    Client: client,
+    Continut: continut,
   };
-
-  if (clientData.judet) params["Client[Judet]"] = clientData.judet;
-  if (clientData.localitate) params["Client[Localitate]"] = clientData.localitate;
-  if (clientData.adresa) params["Client[Adresa]"] = clientData.adresa;
-  if (clientData.email) params["Client[Email]"] = clientData.email;
-  if (clientData.telefon) params["Client[Telefon]"] = clientData.telefon;
-  if (clientData.codUnic) params["Client[CodUnic]"] = clientData.codUnic;
-
-  items.forEach((item, i) => {
-    params[`Continut[${i}][Denumire]`] = item.name;
-    params[`Continut[${i}][NrProduse]`] = item.quantity.toFixed(3);
-    params[`Continut[${i}][UM]`] = item.unit || "BUC";
-    params[`Continut[${i}][CotaTVA]`] = String(item.vatRate);
-    params[`Continut[${i}][PretUnitar]`] = item.unitPrice.toFixed(2);
-  });
+  if (opts?.dueDate) payload.DataScadenta = opts.dueDate;
+  if (opts?.idExtern) payload.IdExtern = opts.idExtern;
 
   const data = await fgoPost<{ Factura: FgoInvoiceResult }>(
     `${baseUrl(config.sandbox)}/factura/emitere`,
-    params,
+    payload,
   );
   return data.Factura;
 }

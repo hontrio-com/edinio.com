@@ -37,6 +37,9 @@ export default function OblioConfigClient({
   const [vatPercentage, setVatPercentage] = useState(initialConfig?.vat_percentage ?? 19);
   const [autoInvoice, setAutoInvoice] = useState(initialConfig?.auto_invoice ?? false);
   const [autoInvoiceTrigger, setAutoInvoiceTrigger] = useState<AutoInvoiceTrigger>(initialConfig?.auto_invoice_trigger ?? "confirmed");
+  const [productType, setProductType] = useState(initialConfig?.product_type ?? "Marfa");
+  const [dueDays, setDueDays] = useState(initialConfig?.due_days ?? 0);
+  const [sendToSpv, setSendToSpv] = useState(initialConfig?.send_to_spv ?? false);
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -117,6 +120,9 @@ export default function OblioConfigClient({
       vat_percentage: vatPercentage,
       auto_invoice: autoInvoice,
       auto_invoice_trigger: autoInvoiceTrigger,
+      product_type: productType,
+      due_days: dueDays,
+      send_to_spv: sendToSpv,
     };
 
     startSaveTransition(async () => {
@@ -299,6 +305,43 @@ export default function OblioConfigClient({
               <p className="mt-1 text-xs text-muted-foreground">
                 Folosita la generarea facturilor daca nu este specificata per produs. Cota va fi aplicata conform setarilor de TVA ale magazinului.
               </p>
+            </div>
+          </Panel>
+        )}
+
+        {/* Optiuni document */}
+        {(accountData || isConnected) && (
+          <Panel className="space-y-4 p-5">
+            <p className="text-sm font-semibold text-foreground">Optiuni document</p>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Tip produse</label>
+              <select aria-label="Tip produse" value={productType} onChange={e => setProductType(e.target.value)} className={selectCls}>
+                {["Marfa", "Serviciu", "Produs finit", "Semifabricate", "Materii prime", "Materiale consumabile", "Ambalaje", "Obiecte de inventar"].map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tipul liniilor de produs pe factura. Pentru magazine cu produse fizice, alege „Marfa". Transportul ramane „Serviciu".
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Scadenta factura (zile)</label>
+              <Input type="number" min={0} max={120} value={dueDays || ""}
+                onChange={e => setDueDays(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                placeholder="0 = fara scadenta" />
+              <p className="mt-1 text-xs text-muted-foreground">Numarul de zile de la emitere pana la scadenta. Lasa gol pentru data emiterii.</p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Trimite in SPV (e-Factura)</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Trimite automat factura in SPV daca trimiterea automata e activata in contul tau Oblio
+                </p>
+              </div>
+              <Switch checked={sendToSpv} onCheckedChange={setSendToSpv} />
             </div>
           </Panel>
         )}

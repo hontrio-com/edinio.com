@@ -16,8 +16,26 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type OrderItem = { name: string; price: number; quantity: number };
+type OrderItem = { name: string; price: number; quantity: number; product_id?: string };
 type ShippingAddress = { county?: string; city?: string; address?: string };
+
+// SKU-urile produselor comandate. Oblio cere `code` pe fiecare linie la conturile
+// cu gestiune (productType obligatoriu la stoc); il trimitem cand exista.
+async function fetchSkuMap(items: OrderItem[]): Promise<Map<string, string>> {
+  const ids = [...new Set(items.map(i => i.product_id).filter((v): v is string => !!v))];
+  if (ids.length === 0) return new Map();
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.from("products").select("id, sku").in("id", ids);
+    const map = new Map<string, string>();
+    for (const p of data ?? []) {
+      if (p.sku) map.set(p.id as string, String(p.sku));
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
 
 async function getConfigAndOrder(businessId: string, orderId: string) {
   const supabase = await createClient();
@@ -45,27 +63,42 @@ async function getConfigAndOrder(businessId: string, orderId: string) {
   return { supabase, config, order, pricesIncludeVat: settings?.prices_include_vat ?? false, vatEnabled: settings?.vat_enabled ?? false };
 }
 
-function buildProducts(
-  order: { items: unknown; shipping_cost: unknown; discount_amount: unknown; discount_code: string | null },
+async function buildProducts(
+  order: {
+    items: unknown;
+    shipping_cost: unknown;
+    discount_amount: unknown;
+    discount_code: string | null;
+    card_discount_amount?: unknown;
+  },
   config: OblioConfig,
   pricesIncludeVat: boolean,
   vatEnabled: boolean,
-): OblioProduct[] {
+): Promise<OblioProduct[]> {
   const items = (order.items as OrderItem[]) ?? [];
+  const skuById = await fetchSkuMap(items);
   const vatIncluded: 0 | 1 = pricesIncludeVat ? 1 : 0;
+  // Platitor de TVA: cota din contul Oblio. Neplatitor: vatName gol + 0% (Oblio
+  // aplica profilul firmei) — ca modulul oficial, NU "SFDD" (nume incert in Oblio).
   const vatFields = vatEnabled && config.vat_name && config.vat_percentage > 0
     ? { vatName: config.vat_name, vatPercentage: config.vat_percentage, vatIncluded }
-    : { vatName: "SFDD", vatPercentage: 0, vatIncluded: 0 as const };
+    : { vatName: "", vatPercentage: 0, vatIncluded: 0 as const };
 
-  const products: OblioProduct[] = items.map(item => ({
-    name: item.name,
-    price: item.price,
-    measuringUnit: "buc",
-    quantity: item.quantity,
-    productType: "Serviciu",
-    save: 0,
-    ...vatFields,
-  }));
+  const itemType = config.product_type?.trim() || "Marfa";
+
+  const products: OblioProduct[] = items.map(item => {
+    const sku = item.product_id ? skuById.get(item.product_id) : undefined;
+    return {
+      name: item.name,
+      ...(sku ? { code: sku } : {}),
+      price: item.price,
+      measuringUnit: "buc",
+      quantity: item.quantity,
+      productType: itemType,
+      save: 0,
+      ...vatFields,
+    };
+  });
 
   if (Number(order.shipping_cost) > 0) {
     products.push({
@@ -88,29 +121,46 @@ function buildProducts(
     });
   }
 
+  // Reducerea la plata online e deja scazuta din orders.total la plasare; fara
+  // linia asta factura ar iesi mai mare decat totalul comenzii (si mai mare decat
+  // incasarea). O adaugam ca linie cu valoare negativa (dupa discountul promo, ca
+  // sa nu interfereze cu discountAllAbove), purtand aceleasi campuri de TVA.
+  if (Number(order.card_discount_amount) > 0) {
+    products.push({
+      name: "Reducere plata online",
+      price: -Math.abs(Number(order.card_discount_amount)),
+      measuringUnit: "buc",
+      quantity: 1,
+      productType: "Serviciu",
+      save: 0,
+      ...vatFields,
+    });
+  }
+
   return products;
 }
 
 function buildCollect(
   paymentMethod: string,
   paymentStatus: string,
-  total: number,
+  orderNumber: string,
 ): OblioInvoiceData["collect"] | undefined {
   if (paymentStatus !== "paid" && paymentMethod !== "cash_on_delivery") return undefined;
 
   const typeMap: Record<string, string> = {
     cash_on_delivery: "Ramburs",
     stripe: "Card",
-    card: "Card",
-    bank_transfer: "Ordin de plata",
+    ipay: "Card",
     netopia: "Card",
   };
 
   const type = typeMap[paymentMethod] ?? "Alta incasare banca";
-  return { type, value: total };
+  // Fara `value`: Oblio incaseaza automat totalul facturii. Trimiterea unei valori
+  // explicite ar risca nepotriviri (factura partial platita) daca totalul difera.
+  return { type, documentNumber: `#${orderNumber}` };
 }
 
-function buildInvoiceData(
+async function buildInvoiceData(
   config: OblioConfig,
   order: {
     customer_name: string;
@@ -121,6 +171,7 @@ function buildInvoiceData(
     shipping_cost: unknown;
     discount_amount: unknown;
     discount_code: string | null;
+    card_discount_amount?: unknown;
     payment_method: string;
     payment_status: string;
     total: unknown;
@@ -130,11 +181,16 @@ function buildInvoiceData(
   pricesIncludeVat: boolean,
   vatEnabled: boolean,
   extra?: Partial<OblioInvoiceData>,
-): OblioInvoiceData {
+): Promise<OblioInvoiceData> {
   const addr = order.shipping_address as ShippingAddress | null;
   const today = new Date().toISOString().split("T")[0];
-  const products = buildProducts(order, config, pricesIncludeVat, vatEnabled);
-  const collect = buildCollect(order.payment_method, order.payment_status, Number(order.total));
+  const products = await buildProducts(order, config, pricesIncludeVat, vatEnabled);
+  const collect = buildCollect(order.payment_method, order.payment_status, order.order_number);
+
+  const dueDays = Math.floor(Number(config.due_days) || 0);
+  const dueDate = dueDays > 0
+    ? new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString().split("T")[0]
+    : undefined;
 
   return {
     cif: config.cif,
@@ -149,13 +205,18 @@ function buildInvoiceData(
       save: 0,
     },
     issueDate: today,
+    ...(dueDate ? { dueDate } : {}),
     seriesName,
     language: "RO",
     precision: 2,
     currency: "RON",
     products,
     ...(collect ? { collect } : {}),
+    // mentions apare PE factura (leaga documentul de comanda vizibil), internalNote
+    // doar in interfata Oblio.
+    mentions: `Comanda ${order.order_number}`,
     internalNote: `Comanda ${order.order_number}`,
+    ...(config.send_to_spv ? { spvExtern: 1 as const } : {}),
     idempotencyKey: `${config.cif}-${seriesName}-${order.order_number}`,
     ...extra,
   };
@@ -269,12 +330,13 @@ export async function generateOblioInvoice(
 
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
-    const data = buildInvoiceData(config, order, config.series_invoice, pricesIncludeVat, vatEnabled);
+    const data = await buildInvoiceData(config, order, config.series_invoice, pricesIncludeVat, vatEnabled);
     const result = await createOblioDoc(token, "invoice", data);
 
     await supabase.from("orders").update({
       oblio_invoice_number: result.number,
       oblio_invoice_series: result.seriesName,
+      oblio_invoice_link: result.link ?? null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
 
@@ -325,14 +387,15 @@ export async function generateOblioProforma(
 
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
-    const data = buildInvoiceData(config, order, config.series_proforma, pricesIncludeVat, vatEnabled);
-    // Proforma doesn't have collect
-    const { collect: _collect, ...dataWithoutCollect } = data;
-    const result = await createOblioDoc(token, "proforma", dataWithoutCollect as OblioInvoiceData);
+    const data = await buildInvoiceData(config, order, config.series_proforma, pricesIncludeVat, vatEnabled);
+    // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).
+    const { collect: _collect, spvExtern: _spv, ...proformaData } = data;
+    const result = await createOblioDoc(token, "proforma", proformaData as OblioInvoiceData);
 
     await supabase.from("orders").update({
       oblio_proforma_number: result.number,
       oblio_proforma_series: result.seriesName,
+      oblio_proforma_link: result.link ?? null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
 
@@ -381,7 +444,11 @@ export async function stornoOblioInvoice(
         seriesName: orderData.oblio_invoice_series,
         number: orderData.oblio_invoice_number,
       },
+      mentions: `Storno comanda ${order.order_number}`,
       internalNote: `Storno comanda ${order.order_number}`,
+      // Stornul urmeaza factura in SPV: daca originala a fost trimisa, si creditul
+      // trebuie trimis (e-Factura).
+      ...(config.send_to_spv ? { spvExtern: 1 as const } : {}),
     };
 
     const result = await createOblioDoc(token, "invoice", stornoData);
@@ -389,6 +456,7 @@ export async function stornoOblioInvoice(
     await supabase.from("orders").update({
       oblio_storno_number: result.number,
       oblio_storno_series: result.seriesName,
+      oblio_storno_link: result.link ?? null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
 

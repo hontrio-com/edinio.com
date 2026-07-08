@@ -842,10 +842,13 @@ export type Database = {
           ipay_order_id: string | null
           items: Json
           notes: string | null
+          oblio_invoice_link: string | null
           oblio_invoice_number: string | null
           oblio_invoice_series: string | null
+          oblio_proforma_link: string | null
           oblio_proforma_number: string | null
           oblio_proforma_series: string | null
+          oblio_storno_link: string | null
           oblio_storno_number: string | null
           oblio_storno_series: string | null
           order_number: string
@@ -902,10 +905,13 @@ export type Database = {
           ipay_order_id?: string | null
           items: Json
           notes?: string | null
+          oblio_invoice_link?: string | null
           oblio_invoice_number?: string | null
           oblio_invoice_series?: string | null
+          oblio_proforma_link?: string | null
           oblio_proforma_number?: string | null
           oblio_proforma_series?: string | null
+          oblio_storno_link?: string | null
           oblio_storno_number?: string | null
           oblio_storno_series?: string | null
           order_number: string
@@ -962,10 +968,13 @@ export type Database = {
           ipay_order_id?: string | null
           items?: Json
           notes?: string | null
+          oblio_invoice_link?: string | null
           oblio_invoice_number?: string | null
           oblio_invoice_series?: string | null
+          oblio_proforma_link?: string | null
           oblio_proforma_number?: string | null
           oblio_proforma_series?: string | null
+          oblio_storno_link?: string | null
           oblio_storno_number?: string | null
           oblio_storno_series?: string | null
           order_number?: string

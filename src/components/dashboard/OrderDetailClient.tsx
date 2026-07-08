@@ -645,10 +645,21 @@ export function OrderDetailClient({
   }
 
   function renderOblio() {
+    // Oblio returneaza un link public semnat = singurul acces la PDF (nu exista
+    // endpoint PDF autentificat), deci deschidem direct link-ul stocat.
+    const oblioPdfBtn = (link: string | null | undefined) => link ? (
+      <a href={link} target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
+        <Download className="h-3.5 w-3.5" /> PDF
+      </a>
+    ) : null;
     return order.oblio_storno_number ? (
-      <div className="flex items-center gap-2">
-        <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-        <p className="text-sm font-mono font-bold text-destructive">Storno {order.oblio_storno_series}{order.oblio_storno_number}</p>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+          <p className="text-sm font-mono font-bold text-destructive">Storno {order.oblio_storno_series}{order.oblio_storno_number}</p>
+        </div>
+        {oblioPdfBtn(order.oblio_storno_link)}
       </div>
     ) : order.oblio_invoice_number ? (
       <div className="space-y-2">
@@ -656,11 +667,14 @@ export function OrderDetailClient({
           <FileCheck className="h-4 w-4 text-success flex-shrink-0" />
           <p className="text-sm font-mono font-bold text-foreground">Factura {order.oblio_invoice_series}{order.oblio_invoice_number}</p>
         </div>
-        <button type="button" onClick={() => handleOblioAction("storno")} disabled={oblioActionPending}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
-          {oblioActionPending && oblioAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Emite storno
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {oblioPdfBtn(order.oblio_invoice_link)}
+          <button type="button" onClick={() => handleOblioAction("storno")} disabled={oblioActionPending}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
+            {oblioActionPending && oblioAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            Emite storno
+          </button>
+        </div>
       </div>
     ) : order.oblio_proforma_number ? (
       <div className="space-y-2">
@@ -668,11 +682,14 @@ export function OrderDetailClient({
           <FileText className="h-4 w-4 text-info flex-shrink-0" />
           <p className="text-sm font-mono font-bold text-foreground">Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}</p>
         </div>
-        <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending}
-          className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-          {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-          Genereaza factura
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {oblioPdfBtn(order.oblio_proforma_link)}
+          <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending}
+            className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+            {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
+            Genereaza factura
+          </button>
+        </div>
       </div>
     ) : (
       <div className="flex flex-wrap gap-2">

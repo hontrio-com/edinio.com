@@ -14,6 +14,13 @@ export type OblioConfig = {
   vat_percentage: number;  // ex: 19
   auto_invoice?: boolean;  // auto-issue an invoice when the trigger fires
   auto_invoice_trigger?: "confirmed" | "processing" | "shipped" | "delivered" | "paid";
+  // Tipul liniilor de produs (Oblio: Marfa/Serviciu/etc). Default "Marfa" pt marfa
+  // fizica (ca modulul oficial); transportul/discountul raman "Serviciu".
+  product_type?: string;
+  // Scadenta in zile de la emitere (0/absent = fara dueDate).
+  due_days?: number;
+  // Trimite automat factura in SPV (e-Factura) daca contul Oblio e configurat.
+  send_to_spv?: boolean;
 };
 
 export type OblioCompany = {
@@ -44,6 +51,7 @@ export type OblioDocResult = {
 
 export type OblioProduct = {
   name: string;
+  code?: string;        // SKU-ul produsului (cerut la conturile cu gestiune)
   price?: number;
   measuringUnit?: string;
   vatName?: string;
@@ -93,6 +101,8 @@ export type OblioInvoiceData = {
   mentions?: string;
   internalNote?: string;
   idempotencyKey?: string;
+  // Trimite factura in SPV (e-Factura) daca trimiterea automata e activa in Oblio.
+  spvExtern?: 0 | 1;
 };
 
 // ─── Token cache ──────────────────────────────────────────────────────────────

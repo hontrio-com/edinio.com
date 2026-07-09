@@ -31,6 +31,7 @@ function announcementToArticle(a: Announcement) {
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
 import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import type { ChartDay } from "@/components/dashboard/RevenueChart";
+import { ActivationChecklist, type ChecklistStep } from "@/components/dashboard/ActivationChecklist";
 
 type StatCardProps = {
   label: string;
@@ -127,7 +128,7 @@ export default async function DashboardPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, slug, custom_domain, business_name, is_published")
+    .select("id, slug, custom_domain, business_name, is_published, logo_url")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -164,6 +165,10 @@ export default async function DashboardPage() {
     { data: recentOrders },
     { data: last7DaysOrders },
     { data: lowStockProducts },
+    { count: productsTotal },
+    { count: ordersTotal },
+    { data: storeSettingsRow },
+    { data: dashProfile },
   ] = await Promise.all([
     supabase.from("orders").select("*", { count: "exact", head: true })
       .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", today),
@@ -185,6 +190,15 @@ export default async function DashboardPage() {
       .eq("business_id", business.id).eq("is_active", true)
       .eq("track_inventory", true).lte("stock_quantity", 5)
       .order("stock_quantity", { ascending: true }).limit(5),
+    // ── Semnale pentru checklist-ul de activare ──
+    supabase.from("products").select("*", { count: "exact", head: true })
+      .eq("business_id", business.id),
+    supabase.from("orders").select("*", { count: "exact", head: true })
+      .eq("business_id", business.id),
+    supabase.from("store_settings")
+      .select("fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, netopia_config, stripe_config, ipay_config")
+      .eq("business_id", business.id).maybeSingle(),
+    supabase.from("users_profile").select("plan, plan_expires_at").eq("id", user.id).maybeSingle(),
   ]);
 
   const fmt = (n: number) => new Intl.NumberFormat("ro-RO").format(n);
@@ -216,11 +230,35 @@ export default async function DashboardPage() {
 
   const latestAnnouncement = await getLatestAnnouncement().catch(() => null);
 
+  // ── Checklist de activare: semnale calculate server-side ──
+  const cfg = (storeSettingsRow ?? {}) as unknown as Record<string, { enabled?: boolean } | null>;
+  const isOn = (c: { enabled?: boolean } | null | undefined) => c?.enabled === true;
+  const hasCourier =
+    isOn(cfg.fan_courier_config) || isOn(cfg.dpd_config) || isOn(cfg.cargus_config) ||
+    isOn(cfg.sameday_config) || isOn(cfg.woot_config) || isOn(cfg.colete_config);
+  const hasPayment = isOn(cfg.netopia_config) || isOn(cfg.stripe_config) || isOn(cfg.ipay_config);
+
+  const activationSteps: ChecklistStep[] = [
+    { id: "product", title: "Adauga primul produs", description: "Fara produse, clientii nu au ce cumpara.", done: (productsTotal ?? 0) > 0, href: "/dashboard/products/new", cta: "Adauga" },
+    { id: "customize", title: "Personalizeaza magazinul", description: "Incarca logo-ul si alege culoarea brandului.", done: !!business.logo_url, href: "/dashboard/editor", cta: "Personalizeaza" },
+    { id: "courier", title: "Conecteaza un curier", description: "Genereaza AWB-uri automat la fiecare comanda.", done: hasCourier, href: "/dashboard/features", cta: "Conecteaza" },
+    { id: "payment", title: "Configureaza platile", description: "Accepta plati cu cardul sau ramburs la livrare.", done: hasPayment, href: "/dashboard/features", cta: "Configureaza" },
+    { id: "publish", title: "Publica magazinul", description: "Fa magazinul vizibil pentru clientii tai.", done: business.is_published, href: "/dashboard/editor", cta: "Publica" },
+    { id: "order", title: "Primeste prima comanda", description: "Distribuie link-ul pe WhatsApp si retele sociale.", done: (ordersTotal ?? 0) > 0, share: true, cta: "Distribuie" },
+  ];
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <SiteStatusBar
         isPublished={business.is_published}
         businessId={business.id}
+        publicUrl={publicUrl}
+      />
+
+      <ActivationChecklist
+        steps={activationSteps}
+        plan={dashProfile?.plan ?? "free"}
+        planExpiresAt={dashProfile?.plan_expires_at ?? null}
         publicUrl={publicUrl}
       />
 

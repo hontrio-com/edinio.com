@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import confetti from "canvas-confetti";
 import { motion } from "framer-motion";
-import { Check, Loader2, Crown, Zap, Rocket, Gift } from "lucide-react";
+import { Check, Loader2, Crown, Zap, Rocket, Gift, ShieldCheck, Infinity as InfinityIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
@@ -12,6 +12,13 @@ import { createBusiness } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { platformFbq } from "@/components/platform/PlatformMetaPixel";
 import { platformTtq } from "@/components/platform/PlatformTikTokPixel";
+import {
+  type BillingInterval,
+  PLAN_PRICES,
+  getAnnualPrice,
+  getAnnualMonthlyEquivalent,
+  ANNUAL_FREE_MONTHS,
+} from "@/lib/plans";
 
 const PLANS = [
   {
@@ -105,6 +112,7 @@ function PlanPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("annual");
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const createdRef = useRef(false);
@@ -122,13 +130,16 @@ function PlanPageContent() {
     if (preselected && ["basic", "premium", "ultra"].includes(preselected) && !isSuccess && !isCancelled) {
       sessionStorage.removeItem("preselected_plan");
       setSelectedPlan(preselected);
-      // Auto-start Stripe checkout
+      // Auto-start Stripe checkout. Redirectionarea e neasistata (userul nu vede
+      // toggle-ul), deci folosim intervalul lunar ca sa nu il facturam anual fara
+      // sa fi ales explicit.
       setLoading(true);
       sessionStorage.setItem("onboarding_pending_plan", preselected);
+      sessionStorage.setItem("onboarding_pending_interval", "monthly");
       fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: preselected, return_to: "onboarding" }),
+        body: JSON.stringify({ plan: preselected, interval: "monthly", return_to: "onboarding" }),
       })
         .then(r => r.json())
         .then((data: { url?: string; error?: string }) => {
@@ -201,15 +212,20 @@ function PlanPageContent() {
         return;
       }
 
+      const paidInterval: BillingInterval =
+        sessionStorage.getItem("onboarding_pending_interval") === "annual" ? "annual" : "monthly";
+
       sessionStorage.removeItem("onboarding_details");
       sessionStorage.removeItem("onboarding_pending_plan");
+      sessionStorage.removeItem("onboarding_pending_interval");
 
       if (plan === "free") {
         platformFbq("StartTrial");
         platformTtq("StartTrial");
       } else {
-        platformFbq("Subscribe", { value: plan === "basic" ? 99 : plan === "premium" ? 249 : 499, currency: "RON", predicted_ltv: 0 });
-        platformTtq("Subscribe", { value: plan === "basic" ? 99 : plan === "premium" ? 249 : 499, currency: "RON" });
+        const value = paidInterval === "annual" ? getAnnualPrice(plan) : (PLAN_PRICES[plan] ?? 0);
+        platformFbq("Subscribe", { value, currency: "RON", predicted_ltv: 0 });
+        platformTtq("Subscribe", { value, currency: "RON" });
       }
 
       toast.success("Magazinul tau a fost creat cu succes!");
@@ -235,11 +251,12 @@ function PlanPageContent() {
     // Paid plan: redirect to Stripe Checkout
     try {
       sessionStorage.setItem("onboarding_pending_plan", selectedPlan);
+      sessionStorage.setItem("onboarding_pending_interval", billingInterval);
 
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan, return_to: "onboarding" }),
+        body: JSON.stringify({ plan: selectedPlan, interval: billingInterval, return_to: "onboarding" }),
       });
 
       const data = await res.json() as { url?: string; error?: string };
@@ -285,10 +302,48 @@ function PlanPageContent() {
           </p>
         </div>
 
+        {/* Toggle facturare lunar / anual */}
+        <div className="mb-6 flex justify-center">
+          <div className="inline-flex items-center gap-1 p-1 rounded-full border border-border bg-muted/40">
+            <button
+              type="button"
+              onClick={() => setBillingInterval("monthly")}
+              disabled={loading}
+              className={cn(
+                "px-4 sm:px-5 py-2 rounded-full text-sm font-semibold transition-colors disabled:opacity-60",
+                billingInterval === "monthly"
+                  ? "bg-surface text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Lunar
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingInterval("annual")}
+              disabled={loading}
+              className={cn(
+                "px-4 sm:px-5 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-60",
+                billingInterval === "annual"
+                  ? "bg-surface text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Anual
+              <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-wide">
+                {ANNUAL_FREE_MONTHS} luni gratis
+              </span>
+            </button>
+          </div>
+        </div>
+
         <div className="grid sm:grid-cols-2 gap-4">
           {PLANS.map((plan) => {
             const isSelected = selectedPlan === plan.id;
             const Icon = plan.icon;
+            const isFree = plan.price === 0;
+            const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
+            const annualTotal = getAnnualPrice(plan.id);
             return (
               <button
                 key={plan.id}
@@ -319,15 +374,25 @@ function PlanPageContent() {
                   </div>
                 </div>
 
-                <div className="mb-4">
-                  <span className="text-3xl font-bold text-foreground">
-                    {plan.price === 0 ? "Gratuit" : plan.price}
-                  </span>
-                  {plan.price > 0 && (
-                    <span className="text-sm text-muted-foreground ml-1">{plan.priceSuffix}</span>
-                  )}
-                  {plan.price === 0 && (
-                    <span className="text-sm text-muted-foreground ml-2">{plan.priceSuffix}</span>
+                <div className="mb-4 min-h-[68px]">
+                  {isFree ? (
+                    <>
+                      <span className="text-3xl font-bold text-foreground">Gratuit</span>
+                      <span className="text-sm text-muted-foreground ml-2">{plan.priceSuffix}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-3xl font-bold text-foreground">{perMonth}</span>
+                      <span className="text-sm text-muted-foreground ml-1">lei/luna</span>
+                      {billingInterval === "annual" ? (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Facturat anual: {annualTotal} lei.{" "}
+                          <span className="text-primary font-semibold">{ANNUAL_FREE_MONTHS} luni gratis</span>
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground mt-1">Facturat lunar</p>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -361,6 +426,18 @@ function PlanPageContent() {
               </button>
             );
           })}
+        </div>
+
+        {/* Garantii */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 text-xs sm:text-sm text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0" />
+            Anulezi oricand, fara costuri
+          </span>
+          <span className="flex items-center gap-2">
+            <InfinityIcon className="h-4 w-4 text-primary flex-shrink-0" />
+            Pretul tau ramane fix pe viata
+          </span>
         </div>
 
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-8 pt-6 border-t border-border">

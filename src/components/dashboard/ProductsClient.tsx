@@ -308,7 +308,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
             {(isAtLimit || isNearLimit) && (
               <button
                 type="button"
-                onClick={() => router.push("/dashboard/settings")}
+                onClick={() => router.push("/dashboard/settings#abonament")}
                 className={cn(
                   "text-xs font-semibold underline underline-offset-2 whitespace-nowrap flex-shrink-0",
                   isAtLimit ? "text-destructive" : "text-warning"

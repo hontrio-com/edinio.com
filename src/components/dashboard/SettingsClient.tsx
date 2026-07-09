@@ -7,7 +7,7 @@ import {
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
   ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package,
-  AlertTriangle,
+  AlertTriangle, Infinity as InfinityIcon,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
@@ -19,7 +19,7 @@ import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
 import type { Database } from "@/types/database.types";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
-import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
+import { PLAN_LABELS, PLAN_PRICES, type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS } from "@/lib/plans";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
@@ -332,13 +332,14 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
   // Stripe checkout
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("annual");
 
   async function startCheckout(planId: string) {
     setCheckoutLoading(planId);
     const res = await fetch("/api/stripe/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan: planId }),
+      body: JSON.stringify({ plan: planId, interval: billingInterval }),
     });
     const data = await res.json() as { url?: string; error?: string };
     if (data.error || !data.url) {
@@ -1095,11 +1096,40 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </span>
               </div>
 
+              {/* Toggle facturare lunar / anual */}
+              <div className="flex justify-center">
+                <div className="inline-flex items-center gap-1 p-1 rounded-full border border-border bg-muted/40">
+                  <button
+                    type="button"
+                    onClick={() => setBillingInterval("monthly")}
+                    className={`px-4 sm:px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
+                      billingInterval === "monthly" ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Lunar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingInterval("annual")}
+                    className={`px-4 sm:px-5 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-2 ${
+                      billingInterval === "annual" ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Anual
+                    <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-wide">
+                      {ANNUAL_FREE_MONTHS} luni gratis
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Carduri planuri */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {PLAN_CARDS.map((plan) => {
                   const Icon = plan.icon;
                   const isActive = profile.plan === plan.id;
+                  const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
+                  const annualTotal = getAnnualPrice(plan.id);
 
                   return (
                     <div
@@ -1127,9 +1157,19 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       </div>
 
                       <p className="text-sm font-semibold text-foreground mb-1">{plan.label}</p>
-                      <div className="flex items-baseline gap-1 mb-4">
-                        <p className="text-2xl font-black text-foreground">{plan.price}</p>
-                        <p className="text-sm text-muted-foreground">lei/luna</p>
+                      <div className="mb-4">
+                        <div className="flex items-baseline gap-1">
+                          <p className="text-2xl font-black text-foreground">{perMonth}</p>
+                          <p className="text-sm text-muted-foreground">lei/luna</p>
+                        </div>
+                        {billingInterval === "annual" ? (
+                          <p className="text-[11px] text-muted-foreground mt-1">
+                            Facturat anual: {annualTotal} lei.{" "}
+                            <span className="text-primary font-semibold">{ANNUAL_FREE_MONTHS} luni gratis</span>
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground mt-1">Facturat lunar</p>
+                        )}
                       </div>
 
                       <ul className="space-y-2 mb-6 flex-1">
@@ -1154,6 +1194,18 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Garantii */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 text-xs sm:text-sm text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0" />
+                  Anulezi oricand, fara costuri
+                </span>
+                <span className="flex items-center gap-2">
+                  <InfinityIcon className="h-4 w-4 text-primary flex-shrink-0" />
+                  Pretul tau ramane fix pe viata
+                </span>
               </div>
 
               <p className="text-xs text-muted-foreground text-center">

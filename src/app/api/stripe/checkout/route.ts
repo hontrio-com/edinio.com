@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { stripe, PLAN_PRICE_IDS } from "@/lib/stripe";
+import { stripe, getPriceId } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
 
-  const { plan, return_to } = await req.json() as { plan: string; return_to?: string };
-  const priceId = PLAN_PRICE_IDS[plan];
-  if (!priceId) return NextResponse.json({ error: "Plan invalid" }, { status: 400 });
+  const { plan, interval: rawInterval, return_to } = await req.json() as { plan: string; interval?: string; return_to?: string };
+  const interval: "monthly" | "annual" = rawInterval === "annual" ? "annual" : "monthly";
+  const priceId = getPriceId(plan, interval);
+  if (!priceId) {
+    return NextResponse.json(
+      { error: interval === "annual" ? "Planul anual nu este disponibil momentan." : "Plan invalid." },
+      { status: 400 }
+    );
+  }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -54,8 +60,8 @@ export async function POST(req: NextRequest) {
     success_url: successUrl,
     cancel_url: cancelUrl,
     client_reference_id: user.id,
-    metadata: { user_id: user.id, plan },
-    subscription_data: { metadata: { user_id: user.id, plan } },
+    metadata: { user_id: user.id, plan, interval },
+    subscription_data: { metadata: { user_id: user.id, plan, interval } },
   };
 
   // Reuse existing Stripe customer or pass email for new one

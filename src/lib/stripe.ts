@@ -18,8 +18,13 @@ export const stripe = new Proxy({} as Stripe, {
   },
 });
 
-export const PLAN_PRICE_IDS: Record<string, string> = {
-  basic:   process.env.STRIPE_PRICE_BASIC ?? "",
-  premium: process.env.STRIPE_PRICE_PREMIUM ?? "",
-  ultra:   process.env.STRIPE_PRICE_ULTRA ?? "",
+export const PLAN_PRICE_IDS: Record<string, { monthly: string; annual: string }> = {
+  basic:   { monthly: process.env.STRIPE_PRICE_BASIC ?? "",   annual: process.env.STRIPE_PRICE_BASIC_ANNUAL ?? "" },
+  premium: { monthly: process.env.STRIPE_PRICE_PREMIUM ?? "", annual: process.env.STRIPE_PRICE_PREMIUM_ANNUAL ?? "" },
+  ultra:   { monthly: process.env.STRIPE_PRICE_ULTRA ?? "",   annual: process.env.STRIPE_PRICE_ULTRA_ANNUAL ?? "" },
 };
+
+/** Returneaza Stripe price ID pentru un plan + interval (implicit lunar). */
+export function getPriceId(plan: string, interval: "monthly" | "annual" = "monthly"): string {
+  return PLAN_PRICE_IDS[plan]?.[interval] ?? "";
+}

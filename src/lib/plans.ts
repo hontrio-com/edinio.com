@@ -23,6 +23,29 @@ export const PLAN_PRICES: Record<string, number> = {
   ultra: 499,
 };
 
+// ─── Facturare: lunar vs anual ──────────────────────────────────────────────
+export type BillingInterval = "monthly" | "annual";
+
+// Alegand plata anuala, clientul primeste 3 luni gratuite: plateste 9 luni,
+// primeste 12. Astfel pretul anual = pretul lunar × 9.
+export const ANNUAL_FREE_MONTHS = 3;
+export const ANNUAL_PAID_MONTHS = 12 - ANNUAL_FREE_MONTHS; // 9
+
+/** Pretul total facturat o data pe an pentru un plan (lunar × 9). */
+export function getAnnualPrice(plan: string): number {
+  return (PLAN_PRICES[plan] ?? 0) * ANNUAL_PAID_MONTHS;
+}
+
+/** Echivalentul lunar cand platesti anual, pentru afisaj "X lei/luna". */
+export function getAnnualMonthlyEquivalent(plan: string): number {
+  return Math.round(getAnnualPrice(plan) / 12);
+}
+
+/** Cat economisesti intr-un an alegand plata anuala (= 3 luni gratuite). */
+export function getAnnualSavings(plan: string): number {
+  return (PLAN_PRICES[plan] ?? 0) * ANNUAL_FREE_MONTHS;
+}
+
 export const PLAN_COLORS: Record<string, string> = {
   free: "#a1a1aa",
   trial: "#1AB554",

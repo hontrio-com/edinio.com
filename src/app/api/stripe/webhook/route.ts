@@ -10,6 +10,19 @@ function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// Data urmatoarei plati in functie de interval: anual = +1 an, altfel +1 luna.
+// Pentru abonamentele existente (fara `interval` in metadata) ramane +1 luna.
+function computeExpiry(interval?: string | null): Date {
+  const d = new Date();
+  if (interval === "annual") d.setFullYear(d.getFullYear() + 1);
+  else d.setMonth(d.getMonth() + 1);
+  return d;
+}
+
+function intervalLabel(interval?: string | null): string {
+  return interval === "annual" ? "anual" : "lunar";
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -152,16 +165,16 @@ export async function POST(req: NextRequest) {
     // ── Subscription plan payment ───────────────────────────────────────────
     const userId = session.metadata?.user_id;
     const plan = session.metadata?.plan;
+    const interval = session.metadata?.interval;
 
-    console.log("[webhook] checkout.session.completed", { userId, plan });
+    console.log("[webhook] checkout.session.completed", { userId, plan, interval });
 
     if (!userId || !plan) {
       console.error("[webhook] Missing userId or plan in metadata");
       return NextResponse.json({ received: true });
     }
 
-    const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + 1);
+    const expiresAt = computeExpiry(interval);
 
     const { error: profileError } = await admin.from("users_profile").update({
       plan: plan as never,
@@ -243,12 +256,12 @@ export async function POST(req: NextRequest) {
 
     const userId = invoice.subscription_details?.metadata?.user_id;
     const plan = invoice.subscription_details?.metadata?.plan;
+    const interval = invoice.subscription_details?.metadata?.interval;
 
     if (!userId || !plan) return NextResponse.json({ received: true });
 
     const stripeInvoiceId = invoice.id;
-    const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + 1);
+    const expiresAt = computeExpiry(interval);
 
     // 1. Update plan + expiry
     await admin.from("users_profile").update({
@@ -295,7 +308,10 @@ export async function POST(req: NextRequest) {
       userEmail ||
       "Client";
 
-    const planPrice = PLAN_PRICES[plan] ?? 0;
+    // Suma reala incasata de Stripe (in bani → lei). Acopera corect atat planul
+    // lunar, cat si cel anual (lunar × 9) sau eventuale proratari/discounturi.
+    const amountPaid = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 0;
+    const planPrice = amountPaid > 0 ? amountPaid / 100 : (PLAN_PRICES[plan] ?? 0);
 
     // 5. Emit Smartbill invoice
     let sbSeries: string | null = null;
@@ -312,7 +328,7 @@ export async function POST(req: NextRequest) {
         county: bizData?.county ?? undefined,
       },
       {
-        name: `Abonament Edinio ${capitalize(plan)}`,
+        name: `Abonament Edinio ${capitalize(plan)} (${intervalLabel(interval)})`,
         price: planPrice,
         quantity: 1,
       }

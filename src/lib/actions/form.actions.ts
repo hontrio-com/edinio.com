@@ -65,6 +65,7 @@ export async function updateForm(
     success_message?: string;
     email_enabled?: boolean;
     email_to?: string | null;
+    mailchimp_enabled?: boolean;
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -86,6 +87,7 @@ export async function updateForm(
     const e = (patch.email_to ?? "").trim();
     update.email_to = e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null;
   }
+  if (patch.mailchimp_enabled !== undefined) update.mailchimp_enabled = !!patch.mailchimp_enabled;
 
   const { error } = await supabase.from("forms").update(update as never).eq("id", formId);
   if (error) {
@@ -127,6 +129,7 @@ export async function duplicateForm(formId: string): Promise<{ error: string } |
     success_message: src.success_message,
     email_enabled: src.email_enabled,
     email_to: src.email_to,
+    mailchimp_enabled: src.mailchimp_enabled,
   }).select("id").single();
   if (error || !data) return { error: "Eroare la duplicarea formularului." };
   revalidatePath("/dashboard/pages/forms");

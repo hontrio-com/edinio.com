@@ -26,6 +26,7 @@ export default async function FormEditorPage({ params }: { params: Promise<{ for
       initialSuccessMessage={form.success_message}
       initialEmailEnabled={form.email_enabled}
       initialEmailTo={form.email_to ?? ""}
+      initialMailchimpEnabled={form.mailchimp_enabled}
     />
   );
 }

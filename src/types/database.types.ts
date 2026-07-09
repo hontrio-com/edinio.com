@@ -595,6 +595,7 @@ export type Database = {
           created_at: string
           email_enabled: boolean
           email_to: string | null
+          mailchimp_enabled: boolean
           fields: Json
           id: string
           name: string
@@ -607,6 +608,7 @@ export type Database = {
           created_at?: string
           email_enabled?: boolean
           email_to?: string | null
+          mailchimp_enabled?: boolean
           fields?: Json
           id?: string
           name: string
@@ -619,6 +621,7 @@ export type Database = {
           created_at?: string
           email_enabled?: boolean
           email_to?: string | null
+          mailchimp_enabled?: boolean
           fields?: Json
           id?: string
           name?: string
@@ -1647,6 +1650,38 @@ export type Database = {
           },
         ]
       }
+      mailchimp_suppressions: {
+        Row: {
+          business_id: string
+          created_at: string
+          email: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          email: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mailchimp_suppressions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_settings: {
         Row: {
           abandoned_cart_automation: Json
@@ -1667,6 +1702,7 @@ export type Database = {
           google_merchant_config: Json
           id: string
           ipay_config: Json | null
+          mailchimp_config: Json | null
           marketing_config: Json | null
           min_order_amount: number | null
           netopia_config: Json | null
@@ -1710,6 +1746,7 @@ export type Database = {
           google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null
+          mailchimp_config?: Json | null
           marketing_config?: Json | null
           min_order_amount?: number | null
           netopia_config?: Json | null
@@ -1753,6 +1790,7 @@ export type Database = {
           google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null
+          mailchimp_config?: Json | null
           marketing_config?: Json | null
           min_order_amount?: number | null
           netopia_config?: Json | null

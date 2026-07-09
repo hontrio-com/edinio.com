@@ -101,6 +101,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const hasTiers = tiers && tiers.length > 0;
   const hasCustomization = customizationFields && customizationFields.length > 0;
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
+  const [newsletterOffer, setNewsletterOffer] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
@@ -262,6 +264,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         setLiveCheckoutConfig(pc.checkout_config);
       }
       setIntlEnabled(data.international_shipping === true);
+      setNewsletterOffer(data.mailchimp_newsletter === true);
       setDpdUseWeight(data.dpd_use_weight === true);
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
@@ -383,6 +386,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         customer_name: form.name,
         customer_phone: form.phone.replace(/[\s\-().]/g, ""),
         customer_email: form.email.trim() || undefined,
+        newsletter_opt_in: newsletterOffer && newsletterOptIn && !!form.email.trim(),
         customer_county: form.county,
         customer_city: form.city,
         customer_country: isIntl ? form.country : undefined,
@@ -756,6 +760,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       placeholder="adresa@email.com" type="email" className={inputCls} />
                   </IconInput>
                   {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
+                  {newsletterOffer && (
+                    <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
+                      <input type="checkbox" checked={newsletterOptIn} onChange={e => setNewsletterOptIn(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ accentColor: color }} />
+                      <span className="text-xs text-muted-foreground">Vreau sa primesc oferte si noutati pe email.</span>
+                    </label>
+                  )}
                 </div>
               )}
 

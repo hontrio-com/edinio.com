@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { resolveNetopiaStatus, type NetopiaIpnPayload } from "@/lib/netopia";
 import { verifyNetopiaIpn } from "@/lib/netopia-ipn";
 
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
     if (newPaymentStatus) update.payment_status = newPaymentStatus;
 
     await admin.from("orders").update(update).eq("id", orderId);
+    if (newPaymentStatus === "paid") void maybeMarkMailchimpOrderPaid(orderId);
     console.log("[netopia/notify] Order updated:", { orderId, orderStatus, newPaymentStatus });
   }
 

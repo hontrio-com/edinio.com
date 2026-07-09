@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib/mailchimp-sync";
 import { createClient } from "@/lib/supabase/server";
 import { getProductLimit } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
@@ -128,6 +129,7 @@ export async function createProduct(businessId: string, data: ProductData) {
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
   }
   if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
+  if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -187,6 +189,7 @@ export async function updateProduct(productId: string, businessId: string, data:
   }
 
   void enqueueGmcSync(businessId, productId, productId, "upsert");
+  void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -301,6 +304,7 @@ export async function deleteProduct(productId: string, businessId: string) {
 
   // Remove from Google Merchant too (product_id is null — the row is now gone).
   void enqueueGmcSync(businessId, null, productId, "delete");
+  void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -343,6 +347,8 @@ export async function bulkProductAction(
         .eq("business_id", businessId).in("id", ids);
       if (error) throw error;
       void enqueueGmcSyncMany(businessId, ids);
+      if (action.kind === "active" && action.value === false) void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
+      else void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       revalidatePath("/dashboard/products");
       return { success: true, count: count ?? ids.length };
     }
@@ -369,6 +375,7 @@ export async function bulkProductAction(
         if (Array.isArray(r.images)) void deleteOrphanImages(supabase, businessId, r.images as string[]);
       }
       for (const id of ids) void enqueueGmcSync(businessId, null, id, "delete");
+      void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       revalidatePath("/dashboard/products");
       return { success: true, count: (rows ?? []).length || ids.length };
     }
@@ -406,6 +413,7 @@ export async function bulkProductAction(
         count += results.filter((res) => !res.error).length;
       }
       void enqueueGmcSyncMany(businessId, ids);
+      void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       revalidatePath("/dashboard/products");
       return { success: true, count };
     }

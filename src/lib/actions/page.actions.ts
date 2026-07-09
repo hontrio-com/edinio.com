@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { maybeSyncMailchimpSubscriber } from "@/lib/mailchimp-sync";
 import { validatePageSlug } from "@/lib/pages/reserved-slugs";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import type { MenuItem } from "@/lib/pages/menu";
@@ -277,16 +278,18 @@ export async function submitPageForm(input: {
   let emailTo = "";
   let title = "Formular";
   let formId: string | null = null;
+  let mailchimpEnabled = false;
 
   if (input.formId) {
     const { data: form } = await admin
-      .from("forms").select("id, name, email_enabled, email_to")
+      .from("forms").select("id, name, email_enabled, email_to, mailchimp_enabled")
       .eq("id", input.formId).eq("business_id", biz.id).single();
     if (form) {
       formId = form.id;
       title = form.name;
       emailEnabled = form.email_enabled;
       emailTo = (form.email_to ?? "").trim();
+      mailchimpEnabled = form.mailchimp_enabled;
     }
   } else if (input.pageId && input.blockId) {
     // Built-in contact block: read its opt-in flag from the stored page (trusted).
@@ -309,6 +312,16 @@ export async function submitPageForm(input: {
   if (error) {
     logError({ action: "submitPageForm", message: error.message, details: { businessId: input.businessId } });
     return { error: "Eroare la trimitere. Incearca din nou." };
+  }
+
+  // Mailchimp — a signup form flagged for sync adds the submitter as a subscriber. Fire-and-forget.
+  if (mailchimpEnabled) {
+    const emailVal = fields.find((f) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.value))?.value;
+    if (emailVal) {
+      const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
+      const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
+      void maybeSyncMailchimpSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal, tags: title ? [title] : undefined });
+    }
   }
 
   // Email the merchant ONLY when they opted in. Recipient is server-trusted.

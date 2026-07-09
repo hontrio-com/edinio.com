@@ -25,6 +25,7 @@ export interface FormDef {
   success_message: string;
   email_enabled: boolean;
   email_to: string | null;
+  mailchimp_enabled: boolean;
 }
 
 /** Public-safe subset rendered on the storefront (no email settings exposed). */

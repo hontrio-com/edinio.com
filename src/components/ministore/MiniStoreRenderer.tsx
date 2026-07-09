@@ -230,6 +230,8 @@ function CartCheckoutModal({
   const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(
     { email_field: emailFieldConfig } as PageContent["checkout_config"]
   );
+  const [newsletterOffer, setNewsletterOffer] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
@@ -354,6 +356,7 @@ function CartCheckoutModal({
         const pc = data.page_content as { checkout_config?: PageContent["checkout_config"] };
         setCheckoutConfig(prev => ({ ...prev, ...pc.checkout_config }));
       }
+      setNewsletterOffer(data.mailchimp_newsletter === true);
       setVatConfig({
         vat_enabled: data.vat_enabled,
         vat_rate: data.vat_rate,
@@ -441,6 +444,7 @@ function CartCheckoutModal({
         customer_name: form.name,
         customer_phone: form.phone.replace(/[\s\-().]/g, ""),
         customer_email: form.email.trim() || undefined,
+        newsletter_opt_in: newsletterOffer && newsletterOptIn && !!form.email.trim(),
         customer_county: form.county,
         customer_city: form.city,
         customer_country: isIntl ? form.country : undefined,
@@ -556,6 +560,13 @@ function CartCheckoutModal({
                 <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="adresa@email.ro" type="email" className={fieldCls} />
               </FieldWrap>
               {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
+              {newsletterOffer && (
+                <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={newsletterOptIn} onChange={e => setNewsletterOptIn(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ accentColor: color }} />
+                  <span className="text-xs text-muted-foreground">Vreau sa primesc oferte si noutati pe email.</span>
+                </label>
+              )}
             </div>
           )}
           {intlEnabled && (

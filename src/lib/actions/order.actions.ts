@@ -16,6 +16,7 @@ import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-meth
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
+import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchimpOrderPaid, orderValueTag } from "@/lib/mailchimp-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
@@ -132,6 +133,7 @@ export async function placeOrder(data: {
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
+  newsletter_opt_in?: boolean;
   customer_county: string;
   customer_city: string;
   customer_address: string;
@@ -415,6 +417,36 @@ export async function placeOrder(data: {
           date_added: formatDate(new Date()),
         },
       });
+
+      // Mailchimp — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      if (data.newsletter_opt_in && data.customer_email) {
+        void maybeSyncMailchimpSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: data.customer_email,
+          name: data.customer_name,
+          phone: data.customer_phone,
+          tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
+        });
+      }
+
+      // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
+      void maybeSyncMailchimpOrder({
+        businessId: data.business_id,
+        storeName: businessName,
+        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        order: {
+          id: order.id,
+          email: data.customer_email,
+          name: data.customer_name,
+          currency: "RON",
+          total,
+          financial_status: "pending",
+          items: allItems
+            .filter((i) => !i.product_id.startsWith("extra_"))
+            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+        },
+      });
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 
@@ -548,6 +580,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     if (paymentChanged) {
       const tk = noticeTriggerForPayment(data.payment_status);
       if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+      if (data.payment_status === "paid") void maybeMarkMailchimpOrderPaid(orderId);
     }
   }
 
@@ -653,6 +686,7 @@ export async function placeCartOrder(data: {
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
+  newsletter_opt_in?: boolean;
   customer_county: string;
   customer_city: string;
   customer_address: string;
@@ -922,6 +956,36 @@ export async function placeCartOrder(data: {
           shipping_method: data.courier_label ?? "",
           store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
           date_added: formatDate(new Date()),
+        },
+      });
+
+      // Mailchimp — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      if (data.newsletter_opt_in && data.customer_email) {
+        void maybeSyncMailchimpSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: data.customer_email,
+          name: data.customer_name,
+          phone: data.customer_phone,
+          tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
+        });
+      }
+
+      // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
+      void maybeSyncMailchimpOrder({
+        businessId: data.business_id,
+        storeName: businessName,
+        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        order: {
+          id: order.id,
+          email: data.customer_email,
+          name: data.customer_name,
+          currency: "RON",
+          total,
+          financial_status: "pending",
+          items: allItems
+            .filter((i) => !i.product_id.startsWith("extra_"))
+            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
         },
       });
     }

@@ -45,6 +45,11 @@ export async function POST(req: NextRequest) {
         limit: 10,
       });
       for (const sub of subscriptions.data) {
+        // Marcam anularea ca "schimbare de plan" ca webhook-ul subscription.deleted
+        // sa NU declanseze perioada de gratie / email de suspendare (nu e churn).
+        try {
+          await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, switching: "1" } });
+        } catch { /* daca update-ul de metadata esueaza, continuam anularea */ }
         await stripe.subscriptions.cancel(sub.id, { prorate: true });
       }
     } catch {

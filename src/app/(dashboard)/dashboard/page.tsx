@@ -167,7 +167,6 @@ export default async function DashboardPage() {
     { data: lowStockProducts },
     { count: productsTotal },
     { count: ordersTotal },
-    { data: storeSettingsRow },
     { data: dashProfile },
   ] = await Promise.all([
     supabase.from("orders").select("*", { count: "exact", head: true })
@@ -195,9 +194,6 @@ export default async function DashboardPage() {
       .eq("business_id", business.id),
     supabase.from("orders").select("*", { count: "exact", head: true })
       .eq("business_id", business.id),
-    supabase.from("store_settings")
-      .select("fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, netopia_config, stripe_config, ipay_config")
-      .eq("business_id", business.id).maybeSingle(),
     supabase.from("users_profile").select("plan, plan_expires_at").eq("id", user.id).maybeSingle(),
   ]);
 
@@ -231,18 +227,11 @@ export default async function DashboardPage() {
   const latestAnnouncement = await getLatestAnnouncement().catch(() => null);
 
   // ── Checklist de activare: semnale calculate server-side ──
-  const cfg = (storeSettingsRow ?? {}) as unknown as Record<string, { enabled?: boolean } | null>;
-  const isOn = (c: { enabled?: boolean } | null | undefined) => c?.enabled === true;
-  const hasCourier =
-    isOn(cfg.fan_courier_config) || isOn(cfg.dpd_config) || isOn(cfg.cargus_config) ||
-    isOn(cfg.sameday_config) || isOn(cfg.woot_config) || isOn(cfg.colete_config);
-  const hasPayment = isOn(cfg.netopia_config) || isOn(cfg.stripe_config) || isOn(cfg.ipay_config);
-
+  // Pasul "customize" e bifat de logo (semnal server) SAU de vizitarea paginii de
+  // editare, marcata client-side in ActivationChecklist (vezi customizeVisitedKey).
   const activationSteps: ChecklistStep[] = [
     { id: "product", title: "Adauga primul produs", description: "Fara produse, clientii nu au ce cumpara.", done: (productsTotal ?? 0) > 0, href: "/dashboard/products/new", cta: "Adauga" },
-    { id: "customize", title: "Personalizeaza magazinul", description: "Incarca logo-ul si alege culoarea brandului.", done: !!business.logo_url, href: "/dashboard/editor", cta: "Personalizeaza" },
-    { id: "courier", title: "Conecteaza un curier", description: "Genereaza AWB-uri automat la fiecare comanda.", done: hasCourier, href: "/dashboard/features", cta: "Conecteaza" },
-    { id: "payment", title: "Configureaza platile", description: "Accepta plati cu cardul sau ramburs la livrare.", done: hasPayment, href: "/dashboard/features", cta: "Configureaza" },
+    { id: "customize", title: "Personalizeaza magazinul", description: "Adauga logo, culori si detaliile magazinului tau.", done: !!business.logo_url, href: "/dashboard/editor", cta: "Personalizeaza" },
     { id: "publish", title: "Publica magazinul", description: "Fa magazinul vizibil pentru clientii tai.", done: business.is_published, href: "/dashboard/editor", cta: "Publica" },
     { id: "order", title: "Primeste prima comanda", description: "Distribuie link-ul pe WhatsApp si retele sociale.", done: (ordersTotal ?? 0) > 0, share: true, cta: "Distribuie" },
   ];

@@ -23,6 +23,12 @@ function intervalLabel(interval?: string | null): string {
   return interval === "annual" ? "anual" : "lunar";
 }
 
+// Normalizeaza intervalul pentru stocare in DB. Abonamentele legacy (fara
+// `interval` in metadata) sunt lunare.
+function normalizeInterval(interval?: string | null): "monthly" | "annual" {
+  return interval === "annual" ? "annual" : "monthly";
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -179,6 +185,7 @@ export async function POST(req: NextRequest) {
     const { error: profileError } = await admin.from("users_profile").update({
       plan: plan as never,
       plan_expires_at: expiresAt.toISOString(),
+      plan_interval: normalizeInterval(interval),
       stripe_customer_id: session.customer as string ?? null,
     }).eq("id", userId);
 
@@ -216,6 +223,14 @@ export async function POST(req: NextRequest) {
     const sub = event.data.object as Stripe.Subscription;
     const userId = sub.metadata?.user_id;
     if (!userId) return NextResponse.json({ received: true });
+
+    // Anulare intentionata pentru schimbarea planului/intervalului (marcata de
+    // ruta de checkout inainte de cancel). NU e churn, deci sarim perioada de
+    // gratie si email-ul de suspendare — noul abonament preia imediat.
+    if (sub.metadata?.switching === "1") {
+      console.log("[webhook] subscription.deleted — schimbare plan in curs, skip grace:", { userId });
+      return NextResponse.json({ received: true });
+    }
 
     const graceUntil = new Date();
     graceUntil.setDate(graceUntil.getDate() + 15);
@@ -263,10 +278,11 @@ export async function POST(req: NextRequest) {
     const stripeInvoiceId = invoice.id;
     const expiresAt = computeExpiry(interval);
 
-    // 1. Update plan + expiry
+    // 1. Update plan + expiry + interval
     await admin.from("users_profile").update({
       plan: plan as never,
       plan_expires_at: expiresAt.toISOString(),
+      plan_interval: normalizeInterval(interval),
     }).eq("id", userId);
 
     // 2. Clear suspension

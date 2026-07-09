@@ -7,6 +7,7 @@ import {
   Check, ChevronDown, ChevronUp, Rocket, Copy, ArrowRight, PartyPopper, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { EDITOR_VISITED_KEY } from "@/lib/activation";
 
 export interface ChecklistStep {
   id: string;
@@ -48,8 +49,21 @@ function setStoredCollapsed(v: boolean): void {
   collapseListeners.forEach((l) => l());
 }
 
+// Pasul "Personalizeaza magazinul" se bifeaza cand utilizatorul a ajuns pe pagina
+// "Editeaza magazinul" (marcata acolo de <MarkEditorVisited/>), nu doar cand a
+// incarcat un logo. Flag persistat local, citit hidratare-safe (server = false).
+function readEditorVisited(): boolean {
+  try { return localStorage.getItem(EDITOR_VISITED_KEY) === "1"; } catch { return false; }
+}
+
+function subscribeStorage(cb: () => void): () => void {
+  window.addEventListener("storage", cb);
+  return () => window.removeEventListener("storage", cb);
+}
+
 export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: Props) {
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
+  const editorVisited = useSyncExternalStore(subscribeStorage, readEditorVisited, () => false);
 
   async function copyLink() {
     try {
@@ -60,12 +74,17 @@ export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: P
     }
   }
 
-  const total = steps.length;
-  const doneCount = steps.filter((s) => s.done).length;
+  // Pasul "customize" e bifat si daca utilizatorul a vizitat pagina de editare.
+  const effectiveSteps = editorVisited
+    ? steps.map((s) => (s.id === "customize" ? { ...s, done: true } : s))
+    : steps;
+
+  const total = effectiveSteps.length;
+  const doneCount = effectiveSteps.filter((s) => s.done).length;
   const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const allDone = doneCount === total;
   const isTrial = plan === "free" || plan === "trial";
-  const firstOpenIndex = steps.findIndex((s) => !s.done);
+  const firstOpenIndex = effectiveSteps.findIndex((s) => !s.done);
 
   // Magazin complet configurat pe plan platit → nu mai aratam nimic.
   if (allDone && !isTrial) return null;
@@ -138,7 +157,7 @@ export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: P
       {/* Pasi */}
       {!collapsed && (
         <ul className="divide-y divide-border">
-          {steps.map((step, i) => {
+          {effectiveSteps.map((step, i) => {
             const isNext = !step.done && i === firstOpenIndex;
             return (
               <li

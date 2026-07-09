@@ -332,7 +332,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
   // Stripe checkout
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
-  const [billingInterval, setBillingInterval] = useState<BillingInterval>("annual");
+  // Planul si intervalul curent (abonamentele legacy fara interval = lunare).
+  const isPaidPlan = profile.plan === "basic" || profile.plan === "premium" || profile.plan === "ultra";
+  const currentInterval: BillingInterval = profile.plan_interval === "annual" ? "annual" : "monthly";
+  // Toggle-ul porneste pe intervalul curent al clientului platitor (ca planul lui
+  // sa apara ca "activ", nu ca invitatie la downgrade); altfel implicit lunar.
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>(isPaidPlan ? currentInterval : "monthly");
 
   async function startCheckout(planId: string) {
     setCheckoutLoading(planId);
@@ -1084,10 +1089,16 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               <div className="bg-surface border border-border rounded-xl px-5 py-4 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground font-medium mb-0.5">Plan activ</p>
-                  <p className="text-base font-bold text-foreground">{PLAN_LABELS[profile.plan] ?? "Gratuit"}</p>
+                  <p className="text-base font-bold text-foreground">
+                    {PLAN_LABELS[profile.plan] ?? "Gratuit"}
+                    {isPaidPlan && (
+                      <span className="text-sm font-medium text-muted-foreground"> · plata {currentInterval === "annual" ? "anuala" : "lunara"}</span>
+                    )}
+                  </p>
                   {profile.plan_expires_at && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Expira pe {new Date(profile.plan_expires_at).toLocaleDateString("ro-RO")}
+                      {isPaidPlan ? "Urmatoarea plata pe " : "Expira pe "}
+                      {new Date(profile.plan_expires_at).toLocaleDateString("ro-RO")}
                     </p>
                   )}
                 </div>
@@ -1127,7 +1138,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {PLAN_CARDS.map((plan) => {
                   const Icon = plan.icon;
-                  const isActive = profile.plan === plan.id;
+                  const isCurrentTier = profile.plan === plan.id;
+                  const isExactCurrent = isCurrentTier && isPaidPlan && billingInterval === currentInterval;
+                  const isIntervalSwitch = isCurrentTier && isPaidPlan && billingInterval !== currentInterval;
                   const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
                   const annualTotal = getAnnualPrice(plan.id);
 
@@ -1135,16 +1148,22 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <div
                       key={plan.id}
                       className={`relative flex flex-col bg-surface border rounded-xl p-5 transition-all ${
-                        isActive
+                        isExactCurrent
                           ? "border-primary ring-2 ring-primary/20"
-                          : plan.highlight
-                            ? "border-border shadow-sm"
-                            : "border-border"
+                          : isIntervalSwitch
+                            ? "border-primary/40"
+                            : plan.highlight
+                              ? "border-border shadow-sm"
+                              : "border-border"
                       }`}
                     >
-                      {isActive ? (
+                      {isExactCurrent ? (
                         <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 text-[10px] font-bold text-white bg-primary rounded-full whitespace-nowrap">
                           Plan activ
+                        </span>
+                      ) : isIntervalSwitch ? (
+                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 text-[10px] font-bold text-primary bg-primary/10 border border-primary/30 rounded-full whitespace-nowrap">
+                          Planul tau
                         </span>
                       ) : plan.badge ? (
                         <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 text-[10px] font-bold text-white bg-foreground rounded-full whitespace-nowrap">
@@ -1181,15 +1200,24 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         ))}
                       </ul>
 
-                      {isActive ? (
+                      {isExactCurrent ? (
                         <div className="py-2 text-center text-xs font-medium text-primary border border-primary/30 rounded-lg bg-primary/5">
                           Plan activ
                         </div>
                       ) : (
-                        <Button type="button" variant="outline" className="w-full" disabled={checkoutLoading === plan.id} onClick={() => startCheckout(plan.id)}>
+                        <Button type="button" variant={isIntervalSwitch ? "default" : "outline"} className="w-full" disabled={checkoutLoading === plan.id} onClick={() => startCheckout(plan.id)}>
                           {checkoutLoading === plan.id && <Loader2 className="animate-spin" />}
-                          {checkoutLoading === plan.id ? "Se redirectioneaza..." : `Alege ${plan.label}`}
+                          {checkoutLoading === plan.id
+                            ? "Se redirectioneaza..."
+                            : isIntervalSwitch
+                              ? (billingInterval === "annual" ? "Treci pe plata anuala" : "Treci pe plata lunara")
+                              : `Alege ${plan.label}`}
                         </Button>
+                      )}
+                      {isIntervalSwitch && billingInterval === "annual" && (
+                        <p className="mt-2 text-[11px] text-muted-foreground text-center leading-snug">
+                          Creditul din planul curent se aplica automat.
+                        </p>
                       )}
                     </div>
                   );
@@ -1219,7 +1247,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
           {/* ── Facturare ── */}
           {activeSection === "facturare" && (
-            <BillingSection plan={profile.plan as "basic" | "premium" | "ultra" | "trial" | "free"} planExpiresAt={profile.plan_expires_at} />
+            <BillingSection plan={profile.plan as "basic" | "premium" | "ultra" | "trial" | "free"} planExpiresAt={profile.plan_expires_at} interval={currentInterval} />
           )}
           {activeSection === "livrare" && (
             <div className="space-y-6">

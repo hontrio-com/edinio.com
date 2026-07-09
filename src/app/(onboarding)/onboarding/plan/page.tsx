@@ -112,7 +112,7 @@ function PlanPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [billingInterval, setBillingInterval] = useState<BillingInterval>("annual");
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("monthly");
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const createdRef = useRef(false);

@@ -5,16 +5,17 @@ import { Loader2, FileText, ExternalLink, CreditCard, AlertCircle } from "lucide
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database.types";
-import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
+import { PLAN_LABELS, PLAN_PRICES, type BillingInterval, getAnnualPrice } from "@/lib/plans";
 
 type Invoice = Database["public"]["Tables"]["invoices"]["Row"];
 
 interface Props {
   plan: "free" | "trial" | "basic" | "premium" | "ultra";
   planExpiresAt: string | null;
+  interval?: BillingInterval;
 }
 
-export function BillingSection({ plan, planExpiresAt }: Props) {
+export function BillingSection({ plan, planExpiresAt, interval = "monthly" }: Props) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -60,7 +61,7 @@ export function BillingSection({ plan, planExpiresAt }: Props) {
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-base font-bold text-foreground">
-                  Plan {PLAN_LABELS[plan]} — {PLAN_PRICES[plan] ?? "—"} lei/luna
+                  Plan {PLAN_LABELS[plan]} · {interval === "annual" ? `${getAnnualPrice(plan)} lei/an` : `${PLAN_PRICES[plan] ?? "—"} lei/luna`}
                 </span>
                 <span className="px-2 py-0.5 text-[10px] font-semibold bg-success/10 text-success border border-success/20 rounded-full">
                   Activ

@@ -1885,6 +1885,7 @@ export type Database = {
           orders_seen_at: string | null
           plan: string
           plan_expires_at: string | null
+          plan_interval: string | null
           role: string
           stripe_customer_id: string | null
           suspended_until: string | null
@@ -1905,6 +1906,7 @@ export type Database = {
           orders_seen_at?: string | null
           plan?: string
           plan_expires_at?: string | null
+          plan_interval?: string | null
           role?: string
           stripe_customer_id?: string | null
           suspended_until?: string | null
@@ -1925,6 +1927,7 @@ export type Database = {
           orders_seen_at?: string | null
           plan?: string
           plan_expires_at?: string | null
+          plan_interval?: string | null
           role?: string
           stripe_customer_id?: string | null
           suspended_until?: string | null

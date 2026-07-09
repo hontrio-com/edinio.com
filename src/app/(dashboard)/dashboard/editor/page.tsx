@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { StoreEditor } from "@/components/editor/StoreEditor";
+import { MarkEditorVisited } from "@/components/dashboard/MarkEditorVisited";
 
 export default async function EditorPage() {
   const supabase = await createClient();
@@ -28,5 +29,10 @@ export default async function EditorPage() {
     supabase.from("categories").select("id, name, parent_id, sort_order").eq("business_id", row.id).order("sort_order"),
   ]);
 
-  return <StoreEditor business={business} storeSettings={storeSettings} plan={profile?.plan ?? "free"} categories={categories ?? []} />;
+  return (
+    <>
+      <MarkEditorVisited />
+      <StoreEditor business={business} storeSettings={storeSettings} plan={profile?.plan ?? "free"} categories={categories ?? []} />
+    </>
+  );
 }

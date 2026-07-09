@@ -73,7 +73,7 @@ const PLANS = [
 ];
 
 export function PricingSection() {
-  const [interval, setInterval] = useState<BillingInterval>("annual");
+  const [interval, setInterval] = useState<BillingInterval>("monthly");
 
   return (
     <section id="preturi" className="py-20 lg:py-28 bg-background">

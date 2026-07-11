@@ -596,6 +596,7 @@ export type Database = {
           email_enabled: boolean
           email_to: string | null
           mailchimp_enabled: boolean
+          brevo_enabled: boolean | null
           fields: Json
           id: string
           name: string
@@ -609,6 +610,7 @@ export type Database = {
           email_enabled?: boolean
           email_to?: string | null
           mailchimp_enabled?: boolean
+          brevo_enabled?: boolean | null
           fields?: Json
           id?: string
           name: string
@@ -622,6 +624,7 @@ export type Database = {
           email_enabled?: boolean
           email_to?: string | null
           mailchimp_enabled?: boolean
+          brevo_enabled?: boolean | null
           fields?: Json
           id?: string
           name?: string
@@ -1650,6 +1653,38 @@ export type Database = {
           },
         ]
       }
+      brevo_suppressions: {
+        Row: {
+          business_id: string
+          created_at: string
+          email: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          email: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brevo_suppressions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mailchimp_suppressions: {
         Row: {
           business_id: string
@@ -1686,6 +1721,7 @@ export type Database = {
         Row: {
           abandoned_cart_automation: Json
           abandoned_cart_enabled: boolean
+          brevo_config: Json | null
           business_id: string
           card_discount_config: Json
           cargus_config: Json | null
@@ -1730,6 +1766,7 @@ export type Database = {
         Insert: {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
+          brevo_config?: Json | null
           business_id: string
           card_discount_config?: Json
           cargus_config?: Json | null
@@ -1774,6 +1811,7 @@ export type Database = {
         Update: {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
+          brevo_config?: Json | null
           business_id?: string
           card_discount_config?: Json
           cargus_config?: Json | null

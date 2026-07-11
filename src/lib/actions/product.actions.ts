@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib/mailchimp-sync";
+import { maybeSyncBrevoProduct, maybeSyncBrevoProductsBulk } from "@/lib/brevo-sync";
 import { createClient } from "@/lib/supabase/server";
 import { getProductLimit } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
@@ -130,6 +131,7 @@ export async function createProduct(businessId: string, data: ProductData) {
   }
   if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
   if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  if (created?.id) void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -190,6 +192,7 @@ export async function updateProduct(productId: string, businessId: string, data:
 
   void enqueueGmcSync(businessId, productId, productId, "upsert");
   void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -305,6 +308,7 @@ export async function deleteProduct(productId: string, businessId: string) {
   // Remove from Google Merchant too (product_id is null — the row is now gone).
   void enqueueGmcSync(businessId, null, productId, "delete");
   void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
+  void maybeSyncBrevoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -349,6 +353,8 @@ export async function bulkProductAction(
       void enqueueGmcSyncMany(businessId, ids);
       if (action.kind === "active" && action.value === false) void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
+      if (action.kind === "active" && action.value === false) void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
+      else void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       revalidatePath("/dashboard/products");
       return { success: true, count: count ?? ids.length };
     }
@@ -376,6 +382,7 @@ export async function bulkProductAction(
       }
       for (const id of ids) void enqueueGmcSync(businessId, null, id, "delete");
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
+      void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       revalidatePath("/dashboard/products");
       return { success: true, count: (rows ?? []).length || ids.length };
     }
@@ -414,6 +421,7 @@ export async function bulkProductAction(
       }
       void enqueueGmcSyncMany(businessId, ids);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
+      void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       revalidatePath("/dashboard/products");
       return { success: true, count };
     }

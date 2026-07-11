@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
+import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import type Stripe from "stripe";
 
 export async function POST(request: NextRequest) {
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
         .update({ payment_status: "paid", status: "confirmed" })
         .eq("id", orderId);
       void maybeMarkMailchimpOrderPaid(orderId);
+      void maybeMarkBrevoOrderPaid(orderId);
     }
   }
 

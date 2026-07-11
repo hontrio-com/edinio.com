@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { ipayGetOrderStatus, resolveIpayStatus, ipayReady, toBani, IPAY_CURRENCY, type IPayConfig } from "@/lib/ipay";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
+import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 
 // iPay has no webhook — this reconciles orders where the customer paid but never
 // returned to the finish route (closed tab). It polls getOrderStatusExtended for
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
           .update({ payment_status: "paid", status: "confirmed", updated_at: new Date().toISOString() })
           .eq("id", o.id)
           .neq("payment_status", "paid");
-        if (!error) { paid++; void maybeMarkMailchimpOrderPaid(o.id); }
+        if (!error) { paid++; void maybeMarkMailchimpOrderPaid(o.id); void maybeMarkBrevoOrderPaid(o.id); }
       }
     } catch (e) {
       console.error("[ipay-reconcile] poll failed for order", o.id, e);

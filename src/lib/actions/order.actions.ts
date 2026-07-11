@@ -17,6 +17,7 @@ import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
 import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchimpOrderPaid, orderValueTag } from "@/lib/mailchimp-sync";
+import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
@@ -430,6 +431,19 @@ export async function placeOrder(data: {
         });
       }
 
+      // Brevo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      if (data.newsletter_opt_in && data.customer_email) {
+        void maybeSyncBrevoSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: data.customer_email,
+          name: data.customer_name,
+          phone: data.customer_phone,
+          county: data.customer_county,
+          orderValue: total,
+        });
+      }
+
       // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncMailchimpOrder({
         businessId: data.business_id,
@@ -442,6 +456,21 @@ export async function placeOrder(data: {
           currency: "RON",
           total,
           financial_status: "pending",
+          items: allItems
+            .filter((i) => !i.product_id.startsWith("extra_"))
+            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+        },
+      });
+
+      // Brevo e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
+      void maybeSyncBrevoOrder({
+        businessId: data.business_id,
+        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        order: {
+          id: order.id,
+          email: data.customer_email,
+          total,
+          status: "pending",
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))
             .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
@@ -580,7 +609,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     if (paymentChanged) {
       const tk = noticeTriggerForPayment(data.payment_status);
       if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
-      if (data.payment_status === "paid") void maybeMarkMailchimpOrderPaid(orderId);
+      if (data.payment_status === "paid") { void maybeMarkMailchimpOrderPaid(orderId); void maybeMarkBrevoOrderPaid(orderId); }
     }
   }
 
@@ -971,6 +1000,19 @@ export async function placeCartOrder(data: {
         });
       }
 
+      // Brevo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      if (data.newsletter_opt_in && data.customer_email) {
+        void maybeSyncBrevoSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: data.customer_email,
+          name: data.customer_name,
+          phone: data.customer_phone,
+          county: data.customer_county,
+          orderValue: total,
+        });
+      }
+
       // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncMailchimpOrder({
         businessId: data.business_id,
@@ -983,6 +1025,21 @@ export async function placeCartOrder(data: {
           currency: "RON",
           total,
           financial_status: "pending",
+          items: allItems
+            .filter((i) => !i.product_id.startsWith("extra_"))
+            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+        },
+      });
+
+      // Brevo e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
+      void maybeSyncBrevoOrder({
+        businessId: data.business_id,
+        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        order: {
+          id: order.id,
+          email: data.customer_email,
+          total,
+          status: "pending",
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))
             .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),

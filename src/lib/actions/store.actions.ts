@@ -28,11 +28,12 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   international_shipping: boolean;
   dpd_use_weight: boolean;
   mailchimp_newsletter: boolean;
+  brevo_newsletter: boolean;
 } | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, dpd_config, payment_methods, card_discount_config, mailchimp_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, dpd_config, payment_methods, card_discount_config, mailchimp_config, brevo_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -57,6 +58,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   // Checkout newsletter opt-in is offered only when Mailchimp is connected, an
   // audience is chosen, and the checkout source is on. Booleans only — no secrets leak.
   const mc = data.mailchimp_config as { enabled?: boolean; audience_id?: string; sources?: { checkout?: boolean } } | null;
+  const bv = data.brevo_config as { enabled?: boolean; list_id?: number; sources?: { checkout?: boolean } } | null;
 
   return {
     page_content: (data.page_content as Json) ?? null,
@@ -71,6 +73,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     international_shipping: internationalShipping,
     dpd_use_weight: dpdUseWeight,
     mailchimp_newsletter: !!(mc?.enabled && mc?.audience_id && mc?.sources?.checkout !== false),
+    brevo_newsletter: !!(bv?.enabled && bv?.list_id && bv?.sources?.checkout !== false),
   };
 }
 

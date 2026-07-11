@@ -26,6 +26,7 @@ export interface FormDef {
   email_enabled: boolean;
   email_to: string | null;
   mailchimp_enabled: boolean;
+  brevo_enabled: boolean;
 }
 
 /** Public-safe subset rendered on the storefront (no email settings exposed). */

@@ -104,6 +104,9 @@ export async function saveBrevoSettings(
   const current = await readConfig(owned.supabase, businessId);
   if (!current?.api_key) return { error: "Conecteaza-ti contul Brevo intai." };
 
+  // Make sure our segmentation attributes exist (retry point if connect could not create them).
+  await ensureAttributes(current);
+
   const next: BrevoConfig = {
     ...current,
     list_id: settings.list_id ?? current.list_id,

@@ -208,7 +208,24 @@ export async function upsertContact(
     ...(Object.keys(attributes).length ? { attributes } : {}),
   };
   const res = await brevoRequest(config, "POST", "/contacts", body);
-  if ("error" in res) return res;
+  if (!("error" in res)) return { ok: true };
+
+  // A bad phone (e.g. a landline in the strict SMS attribute) or a custom attribute
+  // not defined on the account rejects the WHOLE contact. Retry with only the built-in
+  // name attributes so the subscriber is never lost (segmentation is best-effort).
+  const sentRisky = Object.keys(attributes).some((k) => k !== "FIRSTNAME" && k !== "LASTNAME");
+  if (!sentRisky) return res;
+
+  const safe: Record<string, string> = {};
+  if (attributes.FIRSTNAME) safe.FIRSTNAME = attributes.FIRSTNAME;
+  if (attributes.LASTNAME) safe.LASTNAME = attributes.LASTNAME;
+  const retry = await brevoRequest(config, "POST", "/contacts", {
+    email,
+    updateEnabled: true,
+    listIds: [config.list_id],
+    ...(Object.keys(safe).length ? { attributes: safe } : {}),
+  });
+  if ("error" in retry) return res; // report the original (more informative) error
   return { ok: true };
 }
 

@@ -102,6 +102,7 @@ export async function sendOrderConfirmationToCustomer(
     discount_amount?: number;
     card_discount_amount?: number;
     payment_method?: string;
+    store_url?: string;
   }
 ) {
   if (!process.env.RESEND_API_KEY) return;
@@ -164,6 +165,7 @@ export async function sendOrderConfirmationToCustomer(
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:20px;">
       <p style="margin:0;font-size:13px;color:#71717a;">Metoda de plata: <strong>${paymentLabel}</strong></p>
     </div>
+    ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
 
   await getResend().emails.send({
@@ -825,12 +827,18 @@ export async function sendOrderStatusToCustomer(
     status: string;
     business_name: string;
     awb?: string | null;
+    store_url?: string;
   }
 ) {
   if (!process.env.RESEND_API_KEY) return;
 
   const cfg = STATUS_CONFIG[order.status];
   if (!cfg) return;
+
+  // Right of withdrawal is most relevant once the parcel is on its way / received.
+  const returnLink = order.store_url && (order.status === "shipped" || order.status === "delivered")
+    ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>`
+    : "";
 
   const awbSection = order.status === "shipped" && order.awb
     ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
@@ -858,6 +866,7 @@ export async function sendOrderStatusToCustomer(
 
     <p style="margin:0;font-size:14px;color:#71717a;line-height:1.6;">${cfg.message}</p>
     ${awbSection}
+    ${returnLink}
   `;
 
   await getResend().emails.send({
@@ -1009,6 +1018,135 @@ export async function sendStoreSuspendedEmail(
     from: FROM,
     to,
     subject: "Magazinul tau Edinio va fi suspendat",
+    html: baseTemplate(content),
+  });
+}
+
+// ── Retragere din contract (OUG 18/2026) ────────────────────────────────────
+// Confirmarea catre client este ceruta de lege pe "suport durabil" (email cu
+// timestamp). Emailul catre comerciant il anunta despre noua cerere de retur.
+
+const REFUND_METHOD_LABELS: Record<string, string> = {
+  iban: "Transfer bancar (IBAN)",
+  card: "Pe cardul folosit la plata",
+  original: "Aceeasi metoda de plata",
+};
+
+function returnItemsRows(items: { name: string; quantity: number }[]): string {
+  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return items
+    .map(
+      (i) =>
+        `<tr><td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td></tr>`,
+    )
+    .join("");
+}
+
+/** Durable-medium confirmation of a withdrawal request, sent to the customer. */
+export async function sendReturnConfirmationToCustomer(
+  to: string,
+  data: {
+    order_number: string;
+    customer_name?: string | null;
+    business_name: string;
+    items: { name: string; quantity: number }[];
+    reason?: string | null;
+    receivedAt: string;
+  }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const first = data.customer_name?.trim().split(/\s+/)[0];
+  const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cererea ta de retragere a fost inregistrata</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${esc(first)}` : ""}! Am primit cererea ta de retragere din contract pentru comanda <strong>${esc(data.order_number)}</strong> la <strong>${esc(data.business_name)}</strong>. Acest email confirma primirea cererii pe suport durabil, conform legii.</p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;box-sizing:border-box;overflow:hidden;">
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${esc(data.order_number)}</p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Inregistrata la: <strong>${when}</strong></p>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+      <tr><td style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produse pentru retur</td></tr>
+      ${returnItemsRows(data.items)}
+    </table>
+    ${data.reason && data.reason.trim() ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-bottom:20px;"><p style="margin:0;font-size:13px;color:#71717a;">Motiv (optional): <span style="color:#18181b;">${esc(data.reason)}</span></p></div>` : ""}
+
+    <p style="margin:0;font-size:14px;color:#71717a;line-height:1.6;">Vom analiza cererea si te vom contacta cu pasii urmatori (instructiuni de returnare si rambursare). Ai la dispozitie 14 zile de la primirea produsului pentru a-l returna. Rambursarea se face in maximum 14 zile de la primirea cererii.</p>
+  `;
+
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `Cerere de retragere inregistrata - ${data.order_number}`,
+    html: baseTemplate(content),
+  });
+}
+
+/** Notify the merchant about a new withdrawal (return) request. */
+export async function sendReturnRequestToMerchant(
+  to: string,
+  data: {
+    order_number: string;
+    customer_name?: string | null;
+    customer_email?: string | null;
+    customer_phone?: string | null;
+    business_name: string;
+    items: { name: string; quantity: number }[];
+    reason?: string | null;
+    refund_method?: string | null;
+    refund_iban?: string | null;
+    receivedAt: string;
+  }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const infoRow = (label: string, value: string) =>
+    `<tr><td style="padding:3px 0;font-size:14px;color:#71717a;width:140px;vertical-align:top;">${label}</td><td style="padding:3px 0;font-size:14px;color:#18181b;font-weight:500;vertical-align:top;">${value}</td></tr>`;
+  const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  const refundLabel = data.refund_method ? REFUND_METHOD_LABELS[data.refund_method] ?? esc(data.refund_method) : "";
+
+  const detailRows = [
+    infoRow("Comanda", esc(data.order_number)),
+    infoRow("Client", esc(data.customer_name) || "-"),
+    data.customer_email ? infoRow("Email", esc(data.customer_email)) : "",
+    data.customer_phone ? infoRow("Telefon", esc(data.customer_phone)) : "",
+    infoRow("Data cererii", when),
+    refundLabel ? infoRow("Rambursare", refundLabel) : "",
+    data.refund_iban ? infoRow("IBAN", esc(data.refund_iban)) : "",
+  ].join("");
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cerere de retragere (retur)</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un client si-a exercitat dreptul de retragere din contract la <strong>${esc(data.business_name)}</strong>. Trebuie sa procesezi returul si rambursarea in termenul legal.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+      ${detailRows}
+    </table>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+      <tr><td style="font-size:13px;color:#a1a1aa;padding:14px 0 8px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid #f4f4f5;">Produse returnate</td></tr>
+      ${returnItemsRows(data.items)}
+    </table>
+    ${data.reason && data.reason.trim() ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;"><p style="margin:0;font-size:13px;color:#71717a;">Motiv: <span style="color:#18181b;">${esc(data.reason)}</span></p></div>` : ""}
+
+    <div style="text-align:center;margin-top:28px;">
+      <a href="${SITE_URL}/dashboard/returns" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Vezi cererile de retur
+      </a>
+    </div>
+  `;
+
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `Cerere de retur ${data.order_number} - ${data.customer_name ?? ""}`.trim(),
     html: baseTemplate(content),
   });
 }

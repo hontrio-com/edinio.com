@@ -1419,6 +1419,75 @@ export type Database = {
           },
         ]
       }
+      return_requests: {
+        Row: {
+          business_id: string
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          id: string
+          is_read: boolean
+          items: Json
+          order_id: string | null
+          order_number: string
+          reason: string | null
+          refund_iban: string | null
+          refund_method: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          is_read?: boolean
+          items?: Json
+          order_id?: string | null
+          order_number: string
+          reason?: string | null
+          refund_iban?: string | null
+          refund_method?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          is_read?: boolean
+          items?: Json
+          order_id?: string | null
+          order_number?: string
+          reason?: string | null
+          refund_iban?: string | null
+          refund_method?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "return_requests_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_analytics: {
         Row: {
           business_id: string
@@ -1754,6 +1823,7 @@ export type Database = {
           page_content: Json
           payment_methods: Json
           prices_include_vat: boolean
+          returns_config: Json
           sameday_config: Json | null
           shipping_enabled: boolean
           shipping_zones: Json
@@ -1800,6 +1870,7 @@ export type Database = {
           page_content?: Json
           payment_methods?: Json
           prices_include_vat?: boolean
+          returns_config?: Json
           sameday_config?: Json | null
           shipping_enabled?: boolean
           shipping_zones?: Json
@@ -1846,6 +1917,7 @@ export type Database = {
           page_content?: Json
           payment_methods?: Json
           prices_include_vat?: boolean
+          returns_config?: Json
           sameday_config?: Json | null
           shipping_enabled?: boolean
           shipping_zones?: Json

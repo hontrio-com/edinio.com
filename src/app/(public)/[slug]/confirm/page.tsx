@@ -244,6 +244,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
           Inapoi la magazin
         </a>
 
+        <p className="text-center text-xs text-gray-400 mt-4">
+          Te-ai razgandit? Ai dreptul sa te{" "}
+          <a href={`${basePath}/retur${orderNumber ? `?order=${encodeURIComponent(orderNumber)}` : ""}`} className="underline hover:text-gray-600">retragi din contract</a>{" "}
+          in 14 zile de la primire.
+        </p>
+
         <EdinioCredit businessId={business.id} color={color} className="text-center text-xs text-gray-400 mt-4" />
       </div>
     </div>

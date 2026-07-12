@@ -384,6 +384,7 @@ export async function placeOrder(data: {
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         payment_method: data.payment_method ?? "cash_on_delivery",
         business_name: businessName,
+        store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order_id: order.id,
         address: data.customer_address,
         city: data.customer_city,
@@ -574,6 +575,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       status: data.status,
       business_name: storeName,
       awb: data.awb,
+      store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
     }).catch(() => {});
   }
 
@@ -981,6 +983,7 @@ export async function placeCartOrder(data: {
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         payment_method: data.payment_method ?? "cash_on_delivery",
         business_name: businessName,
+        store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order_id: order.id,
         address: data.customer_address,
         city: data.customer_city,

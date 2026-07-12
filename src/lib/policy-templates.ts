@@ -153,8 +153,8 @@ function returnTemplate(name: string, email: string, phone: string): string {
 <p>Termenul de retragere expiră după 14 zile calendaristice din ziua în care tu sau o terță parte indicată de tine (alta decât transportatorul) intri în posesia fizică a produsului. Pentru comenzile cu mai multe produse livrate separat, termenul curge de la data primirii ultimului produs.</p>
 
 <h3>2. Exercitarea Dreptului de Retragere</h3>
-<p>Pentru a exercita dreptul de retragere, trebuie să ne informezi printr-o declarație neechivocă (scrisoare trimisă prin poștă sau e-mail) cu privire la decizia ta de a te retrage din prezentul contract. Poți utiliza modelul de formular de retragere prevăzut în Anexa nr. 2 a OUG nr. 34/2014, dar utilizarea lui nu este obligatorie.</p>
-<p>Ne poți contacta la:</p>
+<p>În conformitate cu OUG nr. 18/2026, poți exercita dreptul de retragere <strong>direct online</strong>, prin funcția de retragere disponibilă pe site: apasă butonul <strong>„Retrage-te din contract"</strong> din subsolul paginii (secțiunea „Informații legale"), completează formularul cu numărul comenzii și produsele pe care dorești să le returnezi, apoi apasă <strong>„Confirmă retragerea din contract"</strong>. Vei primi imediat, prin e-mail, o confirmare pe suport durabil a cererii tale, cu data și ora înregistrării.</p>
+<p>Poți exercita dreptul de retragere și printr-o declarație neechivocă transmisă prin alte mijloace. Poți utiliza modelul de formular de retragere prevăzut în Anexa nr. 2 a OUG nr. 34/2014, dar utilizarea lui nu este obligatorie. Ne poți contacta la:</p>
 <ul>
 <li><strong>E-mail:</strong> ${email}</li>
 <li><strong>Telefon:</strong> ${phone}</li>
@@ -185,7 +185,7 @@ function returnTemplate(name: string, email: string, phone: string): string {
 <h3>5. Procedura de Retur</h3>
 <p>Pașii pentru returnarea unui produs:</p>
 <ul>
-<li>Trimite o notificare de retragere la <strong>${email}</strong> sau <strong>${phone}</strong>, indicând numărul comenzii și produsul/produsele pe care dorești să le returnezi;</li>
+<li>Transmite cererea de retragere folosind <strong>funcția de retragere online</strong> (butonul „Retrage-te din contract" din subsolul site-ului) sau printr-o notificare la <strong>${email}</strong> ori <strong>${phone}</strong>, indicând numărul comenzii și produsul/produsele pe care dorești să le returnezi;</li>
 <li>Vei primi instrucțiunile de returnare și, după caz, eticheta de retur;</li>
 <li>Ambalează produsul corespunzător și expediază-l în termen de <strong>14 zile calendaristice</strong> de la data la care ai comunicat decizia de retragere;</li>
 <li>Păstrează dovada expedierii.</li>

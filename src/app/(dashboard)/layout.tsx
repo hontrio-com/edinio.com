@@ -26,7 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const currentBusiness = allBusinesses[0] ?? null;
   const businessIds = allBusinesses.map(b => b.id);
 
-  const [ordersResult, smsoResult, supportResult, notificationsResult] = await Promise.all([
+  const [ordersResult, smsoResult, supportResult, notificationsResult, returnsResult] = await Promise.all([
     businessIds.length > 0
       ? supabase
           .from("orders")
@@ -50,11 +50,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20),
+    businessIds.length > 0
+      ? supabase
+          .from("return_requests")
+          .select("id", { count: "exact", head: true })
+          .in("business_id", businessIds)
+          .eq("is_read", false)
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const recentOrders = ordersResult.data ?? [];
   const smsoEnabled = (smsoResult.data?.smso_config as { enabled?: boolean } | null)?.enabled === true;
   const unreadSupportCount = supportResult.count ?? 0;
+  const unreadReturnsCount = returnsResult.count ?? 0;
   const notifications = notificationsResult.data ?? [];
 
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
@@ -69,6 +77,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         plan={profile.plan}
         smsoEnabled={smsoEnabled}
         unreadSupportCount={unreadSupportCount}
+        unreadReturnsCount={unreadReturnsCount}
         isAdmin={profile.role === "admin"}
       />
       <div className="lg:pl-[var(--sidebar-width)]">

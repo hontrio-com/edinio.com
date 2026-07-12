@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText, Users,
+  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText, Users, Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -39,6 +39,7 @@ const NAV_ITEMS = [
     ],
   },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
+  { href: "/dashboard/returns", icon: Undo2, label: "Retururi" },
   { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
@@ -85,8 +86,8 @@ export function BusinessCard({ business }: { business: Business | null }) {
   );
 }
 
-function NavItem({ href, icon: Icon, label, active }: {
-  href: string; icon: React.ComponentType<{ className?: string }>; label: string; active: boolean;
+function NavItem({ href, icon: Icon, label, active, badge = 0 }: {
+  href: string; icon: React.ComponentType<{ className?: string }>; label: string; active: boolean; badge?: number;
 }) {
   return (
     <Link href={href} className={cn(
@@ -94,16 +95,22 @@ function NavItem({ href, icon: Icon, label, active }: {
       active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
     )}>
       <Icon className="h-4 w-4 flex-shrink-0" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge > 0 && (
+        <span className="min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-white text-[10px] font-bold rounded-full px-1">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
 
-export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount = 0, isAdmin = false }: {
+export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount = 0, unreadReturnsCount = 0, isAdmin = false }: {
   currentBusiness: Business | null;
   plan: string;
   smsoEnabled?: boolean;
   unreadSupportCount?: number;
+  unreadReturnsCount?: number;
   isAdmin?: boolean;
 }) {
   const pathname = usePathname();
@@ -155,7 +162,8 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
           }
 
           return (
-            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive} />
+            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive}
+              badge={item.href === "/dashboard/returns" ? unreadReturnsCount : 0} />
           );
         })}
 

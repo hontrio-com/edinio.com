@@ -264,7 +264,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         setLiveCheckoutConfig(pc.checkout_config);
       }
       setIntlEnabled(data.international_shipping === true);
-      setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true);
+      setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true || data.klaviyo_newsletter === true);
       setDpdUseWeight(data.dpd_use_weight === true);
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);

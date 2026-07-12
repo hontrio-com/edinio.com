@@ -597,6 +597,7 @@ export type Database = {
           email_to: string | null
           mailchimp_enabled: boolean
           brevo_enabled: boolean | null
+          klaviyo_enabled: boolean | null
           fields: Json
           id: string
           name: string
@@ -611,6 +612,7 @@ export type Database = {
           email_to?: string | null
           mailchimp_enabled?: boolean
           brevo_enabled?: boolean | null
+          klaviyo_enabled?: boolean | null
           fields?: Json
           id?: string
           name: string
@@ -625,6 +627,7 @@ export type Database = {
           email_to?: string | null
           mailchimp_enabled?: boolean
           brevo_enabled?: boolean | null
+          klaviyo_enabled?: boolean | null
           fields?: Json
           id?: string
           name?: string
@@ -1722,6 +1725,7 @@ export type Database = {
           abandoned_cart_automation: Json
           abandoned_cart_enabled: boolean
           brevo_config: Json | null
+          klaviyo_config: Json | null
           business_id: string
           card_discount_config: Json
           cargus_config: Json | null
@@ -1767,6 +1771,7 @@ export type Database = {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           brevo_config?: Json | null
+          klaviyo_config?: Json | null
           business_id: string
           card_discount_config?: Json
           cargus_config?: Json | null
@@ -1812,6 +1817,7 @@ export type Database = {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           brevo_config?: Json | null
+          klaviyo_config?: Json | null
           business_id?: string
           card_discount_config?: Json
           cargus_config?: Json | null

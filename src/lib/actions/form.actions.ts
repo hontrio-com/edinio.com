@@ -67,6 +67,7 @@ export async function updateForm(
     email_to?: string | null;
     mailchimp_enabled?: boolean;
     brevo_enabled?: boolean;
+    klaviyo_enabled?: boolean;
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -90,6 +91,7 @@ export async function updateForm(
   }
   if (patch.mailchimp_enabled !== undefined) update.mailchimp_enabled = !!patch.mailchimp_enabled;
   if (patch.brevo_enabled !== undefined) update.brevo_enabled = !!patch.brevo_enabled;
+  if (patch.klaviyo_enabled !== undefined) update.klaviyo_enabled = !!patch.klaviyo_enabled;
 
   const { error } = await supabase.from("forms").update(update as never).eq("id", formId);
   if (error) {
@@ -133,6 +135,7 @@ export async function duplicateForm(formId: string): Promise<{ error: string } |
     email_to: src.email_to,
     mailchimp_enabled: src.mailchimp_enabled,
     brevo_enabled: src.brevo_enabled,
+    klaviyo_enabled: src.klaviyo_enabled,
   }).select("id").single();
   if (error || !data) return { error: "Eroare la duplicarea formularului." };
   revalidatePath("/dashboard/pages/forms");

@@ -28,6 +28,7 @@ export default async function FormEditorPage({ params }: { params: Promise<{ for
       initialEmailTo={form.email_to ?? ""}
       initialMailchimpEnabled={form.mailchimp_enabled}
       initialBrevoEnabled={form.brevo_enabled ?? false}
+      initialKlaviyoEnabled={form.klaviyo_enabled ?? false}
     />
   );
 }

@@ -11,10 +11,10 @@ import { createFormField, FORM_FIELD_TYPES, type FormField, type FormFieldType }
 const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
 
 export function FormBuilderClient({
-  formId, initialName, initialFields, initialSubmitLabel, initialSuccessMessage, initialEmailEnabled, initialEmailTo, initialMailchimpEnabled, initialBrevoEnabled,
+  formId, initialName, initialFields, initialSubmitLabel, initialSuccessMessage, initialEmailEnabled, initialEmailTo, initialMailchimpEnabled, initialBrevoEnabled, initialKlaviyoEnabled,
 }: {
   formId: string; initialName: string; initialFields: FormField[];
-  initialSubmitLabel: string; initialSuccessMessage: string; initialEmailEnabled: boolean; initialEmailTo: string; initialMailchimpEnabled: boolean; initialBrevoEnabled: boolean;
+  initialSubmitLabel: string; initialSuccessMessage: string; initialEmailEnabled: boolean; initialEmailTo: string; initialMailchimpEnabled: boolean; initialBrevoEnabled: boolean; initialKlaviyoEnabled: boolean;
 }) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
@@ -25,6 +25,7 @@ export function FormBuilderClient({
   const [emailTo, setEmailTo] = useState(initialEmailTo);
   const [mailchimpEnabled, setMailchimpEnabled] = useState(initialMailchimpEnabled);
   const [brevoEnabled, setBrevoEnabled] = useState(initialBrevoEnabled);
+  const [klaviyoEnabled, setKlaviyoEnabled] = useState(initialKlaviyoEnabled);
   const [dirty, setDirty] = useState(false);
   const [isSaving, startSave] = useTransition();
 
@@ -70,7 +71,7 @@ export function FormBuilderClient({
     startSave(async () => {
       const res = await updateForm(formId, {
         name, fields, submit_label: submitLabel, success_message: successMessage,
-        email_enabled: emailEnabled, email_to: emailTo, mailchimp_enabled: mailchimpEnabled, brevo_enabled: brevoEnabled,
+        email_enabled: emailEnabled, email_to: emailTo, mailchimp_enabled: mailchimpEnabled, brevo_enabled: brevoEnabled, klaviyo_enabled: klaviyoEnabled,
       });
       if ("error" in res) { toast.error(res.error); return; }
       setDirty(false);
@@ -167,6 +168,13 @@ export function FormBuilderClient({
               Adauga contactele in Brevo
             </label>
             <p className="text-[11px] text-muted-foreground mt-1">Cine completeaza formularul (cu email) intra in lista ta Brevo. Foloseste pentru formulare de abonare, cu acordul lor.</p>
+          </div>
+          <div className="pt-3 border-t border-border">
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">
+              <input type="checkbox" checked={klaviyoEnabled} onChange={(e) => { setKlaviyoEnabled(e.target.checked); mark(); }} className="w-4 h-4 rounded accent-green-600" />
+              Adauga contactele in Klaviyo
+            </label>
+            <p className="text-[11px] text-muted-foreground mt-1">Cine completeaza formularul (cu email) intra in lista ta Klaviyo, cu acordul lor. Foloseste pentru formulare de abonare.</p>
           </div>
           <div className="pt-3 border-t border-border">
             <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">

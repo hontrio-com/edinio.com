@@ -18,6 +18,7 @@ import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
 import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchimpOrderPaid, orderValueTag } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
@@ -444,6 +445,19 @@ export async function placeOrder(data: {
         });
       }
 
+      // Klaviyo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      if (data.newsletter_opt_in && data.customer_email) {
+        void maybeSyncKlaviyoSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: data.customer_email,
+          name: data.customer_name,
+          phone: data.customer_phone,
+          county: data.customer_county,
+          orderValue: total,
+        });
+      }
+
       // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncMailchimpOrder({
         businessId: data.business_id,
@@ -471,6 +485,21 @@ export async function placeOrder(data: {
           email: data.customer_email,
           total,
           status: "pending",
+          items: allItems
+            .filter((i) => !i.product_id.startsWith("extra_"))
+            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+        },
+      });
+
+      // Klaviyo e-commerce — "Placed Order" event (revenue + purchase segmentation + flows). Fire-and-forget.
+      void maybeTrackKlaviyoOrder({
+        businessId: data.business_id,
+        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        order: {
+          id: order.id,
+          email: data.customer_email,
+          name: data.customer_name,
+          total,
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))
             .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
@@ -1013,6 +1042,19 @@ export async function placeCartOrder(data: {
         });
       }
 
+      // Klaviyo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      if (data.newsletter_opt_in && data.customer_email) {
+        void maybeSyncKlaviyoSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: data.customer_email,
+          name: data.customer_name,
+          phone: data.customer_phone,
+          county: data.customer_county,
+          orderValue: total,
+        });
+      }
+
       // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncMailchimpOrder({
         businessId: data.business_id,
@@ -1040,6 +1082,21 @@ export async function placeCartOrder(data: {
           email: data.customer_email,
           total,
           status: "pending",
+          items: allItems
+            .filter((i) => !i.product_id.startsWith("extra_"))
+            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+        },
+      });
+
+      // Klaviyo e-commerce — "Placed Order" event (revenue + purchase segmentation + flows). Fire-and-forget.
+      void maybeTrackKlaviyoOrder({
+        businessId: data.business_id,
+        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        order: {
+          id: order.id,
+          email: data.customer_email,
+          name: data.customer_name,
+          total,
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))
             .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),

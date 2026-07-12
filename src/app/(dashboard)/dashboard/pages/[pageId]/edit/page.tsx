@@ -30,7 +30,7 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
     supabase.from("products").select("id, name, slug, price, compare_at_price, images, category, is_featured")
       .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order").limit(60),
     supabase.from("categories").select("name").eq("business_id", business.id).order("sort_order"),
-    supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to, mailchimp_enabled, brevo_enabled")
+    supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
       .eq("business_id", business.id).order("created_at"),
   ]);
 
@@ -45,7 +45,7 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
     id: f.id, name: f.name,
     fields: Array.isArray(f.fields) ? (f.fields as unknown as FormField[]) : [],
     submit_label: f.submit_label, success_message: f.success_message,
-    email_enabled: f.email_enabled, email_to: f.email_to, mailchimp_enabled: f.mailchimp_enabled, brevo_enabled: f.brevo_enabled ?? false,
+    email_enabled: f.email_enabled, email_to: f.email_to, mailchimp_enabled: f.mailchimp_enabled, brevo_enabled: f.brevo_enabled ?? false, klaviyo_enabled: f.klaviyo_enabled ?? false,
   }));
 
   return (

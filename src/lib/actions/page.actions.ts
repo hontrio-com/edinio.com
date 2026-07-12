@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { maybeSyncMailchimpSubscriber } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
+import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
 import { validatePageSlug } from "@/lib/pages/reserved-slugs";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import type { MenuItem } from "@/lib/pages/menu";
@@ -281,10 +282,11 @@ export async function submitPageForm(input: {
   let formId: string | null = null;
   let mailchimpEnabled = false;
   let brevoEnabled = false;
+  let klaviyoEnabled = false;
 
   if (input.formId) {
     const { data: form } = await admin
-      .from("forms").select("id, name, email_enabled, email_to, mailchimp_enabled, brevo_enabled")
+      .from("forms").select("id, name, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
       .eq("id", input.formId).eq("business_id", biz.id).single();
     if (form) {
       formId = form.id;
@@ -293,6 +295,7 @@ export async function submitPageForm(input: {
       emailTo = (form.email_to ?? "").trim();
       mailchimpEnabled = form.mailchimp_enabled;
       brevoEnabled = form.brevo_enabled ?? false;
+      klaviyoEnabled = form.klaviyo_enabled ?? false;
     }
   } else if (input.pageId && input.blockId) {
     // Built-in contact block: read its opt-in flag from the stored page (trusted).
@@ -334,6 +337,16 @@ export async function submitPageForm(input: {
       const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
       const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
       void maybeSyncBrevoSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal });
+    }
+  }
+
+  // Klaviyo — a signup form flagged for sync adds the submitter as a subscriber. Fire-and-forget.
+  if (klaviyoEnabled) {
+    const emailVal = fields.find((f) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.value))?.value;
+    if (emailVal) {
+      const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
+      const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
+      void maybeSyncKlaviyoSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal });
     }
   }
 

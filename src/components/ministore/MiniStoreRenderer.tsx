@@ -356,7 +356,7 @@ function CartCheckoutModal({
         const pc = data.page_content as { checkout_config?: PageContent["checkout_config"] };
         setCheckoutConfig(prev => ({ ...prev, ...pc.checkout_config }));
       }
-      setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true);
+      setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true || data.klaviyo_newsletter === true);
       setVatConfig({
         vat_enabled: data.vat_enabled,
         vat_rate: data.vat_rate,

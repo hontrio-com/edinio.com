@@ -2574,6 +2574,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             <div className="flex-1">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
               <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                {/* Funcția de retragere din contract — obligatorie conform OUG 18/2026 */}
+                <a href={`${basePath}/retur`}
+                  className="text-[13px] text-white/70 hover:text-white transition-colors font-medium">
+                  Retrage-te din contract
+                </a>
                 {POLICY_LINKS.map(({ slug: pSlug, label }) => (
                   <a key={pSlug} href={`${basePath}/politici/${pSlug}`}
                     className="text-[13px] text-white/50 hover:text-white transition-colors">

@@ -29,6 +29,44 @@ function normalizeInterval(interval?: string | null): "monthly" | "annual" {
   return interval === "annual" ? "annual" : "monthly";
 }
 
+// Metadata-ul abonamentului (`user_id`, `plan`, `interval`) atasat unei facturi.
+// CRITIC: structura difera intre moduri de facturare / versiuni API Stripe:
+//   - „flexible" / API noi:  invoice.parent.subscription_details.metadata
+//   - „classic" / API vechi: invoice.subscription_details.metadata (top-level)
+// Contul Edinio e pe billing „flexible", deci citirea doar din top-level lasa
+// metadata gol → reinnoirile nu se proceseaza. Citim din AMBELE cai; daca tot
+// lipseste, cadem pe metadata-ul abonamentului (fetch dupa ID). Asa handler-ele
+// invoice.payment_succeeded / _failed functioneaza indiferent de versiune.
+type InvoiceCompat = Stripe.Invoice & {
+  subscription_details?: { metadata?: Record<string, string> | null } | null;
+  subscription?: string | { id: string } | null;
+  parent?: {
+    subscription_details?: {
+      metadata?: Record<string, string> | null;
+      subscription?: string | { id: string } | null;
+    } | null;
+  } | null;
+};
+
+async function resolveInvoiceSubMeta(invoice: Stripe.Invoice): Promise<Record<string, string>> {
+  const inv = invoice as InvoiceCompat;
+  const direct = inv.parent?.subscription_details?.metadata ?? inv.subscription_details?.metadata ?? null;
+  if (direct?.user_id) return direct as Record<string, string>;
+
+  // Fallback: citeste metadata direct de pe abonament.
+  const subRef = inv.parent?.subscription_details?.subscription ?? inv.subscription ?? null;
+  const subId = typeof subRef === "string" ? subRef : subRef?.id;
+  if (subId) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(subId);
+      if (sub.metadata?.user_id) return sub.metadata as Record<string, string>;
+    } catch (err) {
+      console.error("[webhook] subscription retrieve fallback failed:", err);
+    }
+  }
+  return (direct ?? {}) as Record<string, string>;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -265,13 +303,12 @@ export async function POST(req: NextRequest) {
   // This is where we update the plan expiry, clear suspension, and emit
   // the Smartbill invoice for accounting purposes.
   if (event.type === "invoice.payment_succeeded") {
-    const invoice = event.data.object as Stripe.Invoice & {
-      subscription_details?: { metadata?: Record<string, string> };
-    };
+    const invoice = event.data.object as Stripe.Invoice;
 
-    const userId = invoice.subscription_details?.metadata?.user_id;
-    const plan = invoice.subscription_details?.metadata?.plan;
-    const interval = invoice.subscription_details?.metadata?.interval;
+    const subMeta = await resolveInvoiceSubMeta(invoice);
+    const userId = subMeta.user_id;
+    const plan = subMeta.plan;
+    const interval = subMeta.interval;
 
     if (!userId || !plan) return NextResponse.json({ received: true });
 
@@ -292,10 +329,12 @@ export async function POST(req: NextRequest) {
     revalidatePath("/dashboard", "layout");
 
     // 3b. Detecteaza recuperarea unei plati esuate. Semnal: exista o notificare
-    // de esec necitita (marcata de noi la payment_failed) SAU factura a reusit
-    // dupa reincercari (`attempt_count > 1`). La recuperare trimitem confirmare
-    // si curatam notificarea din clopotel. Idempotent: a doua oara nu mai exista
-    // notificare necitita, iar o plata initiala/reinnoire normala are attempt=1.
+    // de esec necitita (marcata de noi la payment_failed). Marcarea ei ca citita
+    // face detectia IDEMPOTENTA — o re-livrare a webhook-ului nu mai gaseste
+    // notificarea necitita, deci nu retrimite emailul. (Nu folosim
+    // invoice.attempt_count: acesta e neschimbat la retry-uri de webhook si ar
+    // duce la email-uri duplicate; o plata initiala/reinnoire normala nu are
+    // oricum notificare de esec.)
     const { data: pendingFailure } = await admin
       .from("notifications")
       .select("id")
@@ -304,14 +343,9 @@ export async function POST(req: NextRequest) {
       .eq("is_read", false)
       .limit(1);
 
-    const hadPendingFailure = !!pendingFailure && pendingFailure.length > 0;
-    const recoveredAfterRetries = typeof invoice.attempt_count === "number" && invoice.attempt_count > 1;
-
-    if (hadPendingFailure || recoveredAfterRetries) {
-      if (hadPendingFailure) {
-        await admin.from("notifications").update({ is_read: true })
-          .eq("user_id", userId).eq("type", "payment").eq("is_read", false);
-      }
+    if (pendingFailure && pendingFailure.length > 0) {
+      await admin.from("notifications").update({ is_read: true })
+        .eq("user_id", userId).eq("type", "payment").eq("is_read", false);
 
       const { data: recAuth } = await admin.auth.admin.getUserById(userId);
       const { data: recProfile } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();
@@ -428,12 +462,11 @@ export async function POST(req: NextRequest) {
   // ── invoice.payment_failed ───────────────────────────────────────────────
   // Fires when Stripe fails to charge the customer's payment method.
   if (event.type === "invoice.payment_failed") {
-    const invoice = event.data.object as Stripe.Invoice & {
-      subscription_details?: { metadata?: Record<string, string> };
-    };
+    const invoice = event.data.object as Stripe.Invoice;
 
-    const userId = invoice.subscription_details?.metadata?.user_id;
-    const plan = invoice.subscription_details?.metadata?.plan;
+    const subMeta = await resolveInvoiceSubMeta(invoice);
+    const userId = subMeta.user_id;
+    const plan = subMeta.plan;
 
     if (userId && plan) {
       const { data: failedAuthData } = await admin.auth.admin.getUserById(userId);

@@ -60,30 +60,27 @@ export async function createBusiness(data: {
   // Create store settings
   await supabase.from("store_settings").insert({ business_id: business.id });
 
-  // Set plan + mark onboarding complete (free = 15-day trial)
+  // Set plan + mark onboarding complete (free = 15-day trial). Pentru planurile
+  // PLATITE nu atingem plan_expires_at: e gestionat exclusiv de webhook-ul Stripe
+  // (checkout.session.completed / invoice.payment_succeeded). Daca l-am seta la
+  // `null` aici, un race cu webhook-ul (care ruleaza in paralel dupa plata) ar
+  // sterge data reala de reinnoire → user platitor cu plan_expires_at gol.
   const plan = data.plan ?? "free";
-  const planExpiresAt = plan === "free"
-    ? new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString()
-    : null;
+  const profilePayload: { onboarding_completed: boolean; plan: string; plan_expires_at?: string } = {
+    onboarding_completed: true,
+    plan,
+  };
+  if (plan === "free") {
+    profilePayload.plan_expires_at = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+  }
 
   const { error: profileError } = await supabase
     .from("users_profile")
-    .update({
-      onboarding_completed: true,
-      plan,
-      plan_expires_at: planExpiresAt,
-    })
+    .update(profilePayload)
     .eq("id", user.id);
 
   if (profileError) {
-    await supabase
-      .from("users_profile")
-      .update({
-        onboarding_completed: true,
-        plan,
-        plan_expires_at: planExpiresAt,
-      })
-      .eq("id", user.id);
+    await supabase.from("users_profile").update(profilePayload).eq("id", user.id);
   }
 
   // Send welcome email + notify admin (non-blocking)
@@ -145,9 +142,9 @@ export async function updateBusiness(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await supabase
     .from("businesses")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .update(data as any)
     .eq("id", businessId)
     .eq("user_id", user.id);

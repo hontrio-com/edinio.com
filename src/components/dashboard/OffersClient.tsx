@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Sparkles, Plus, Pencil, Trash2, Search, Layers, Package, ShoppingCart, Eye, MousePointerClick } from "lucide-react";
+import { Sparkles, Plus, Pencil, Trash2, Search, Layers, Package, ShoppingCart, Eye, MousePointerClick, FlaskConical } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toggleOffer, deleteOffer, type OfferRow } from "@/lib/actions/offer.actions";
 import type { OfferType } from "@/lib/offers/offer.types";
@@ -80,6 +80,17 @@ export function OffersClient({ businessId, offers }: { businessId: string; offer
           className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg transition-all hover:opacity-90 shrink-0">
           <Plus className="h-4 w-4" /> Oferta noua
         </Link>
+      </div>
+
+      {/* BETA notice — merchant-facing only */}
+      <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
+        <FlaskConical className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">Functie in BETA</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Sistemul de oferte este nou si il testam activ, asa ca pot aparea erori. Verifica comenzile care folosesc oferte inainte sa te bazezi complet pe ele si spune-ne daca intampini ceva.
+          </p>
+        </div>
       </div>
 
       {offers.length === 0 ? (

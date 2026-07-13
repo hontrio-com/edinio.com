@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
-  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText, Users, Undo2, Sparkles,
+  Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText, Users, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -38,8 +38,13 @@ const NAV_ITEMS = [
       { href: "/dashboard/products/bundles", label: "Pachete" },
     ],
   },
-  { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
-  { href: "/dashboard/returns", icon: Undo2, label: "Retururi" },
+  {
+    href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi",
+    children: [
+      { href: "/dashboard/orders", label: "Toate comenzile" },
+      { href: "/dashboard/returns", label: "Retururi" },
+    ],
+  },
   { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
@@ -132,14 +137,20 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
       {/* Navigation */}
       <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
+          // A parent is active when the URL is under its own href OR under any child's
+          // href (e.g. Retururi lives at /dashboard/returns, outside /dashboard/orders).
+          const childActive = "children" in item && item.children
+            ? item.children.some((c) => pathname.startsWith(c.href))
+            : false;
           const isActive = item.href === "/dashboard"
             ? pathname === "/dashboard"
-            : pathname.startsWith(item.href);
+            : pathname.startsWith(item.href) || childActive;
 
           if ("children" in item && item.children) {
             return (
               <div key={item.href}>
-                <NavItem href={item.href} icon={item.icon} label={item.label} active={isActive} />
+                <NavItem href={item.href} icon={item.icon} label={item.label} active={isActive}
+                  badge={item.href === "/dashboard/orders" ? unreadReturnsCount : 0} />
                 {isActive && (
                   <div className="ml-7 mt-0.5 space-y-0.5 border-l border-border pl-3">
                     {item.children.map((child) => (
@@ -163,8 +174,7 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
           }
 
           return (
-            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive}
-              badge={item.href === "/dashboard/returns" ? unreadReturnsCount : 0} />
+            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive} />
           );
         })}
 

@@ -6,6 +6,7 @@ import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
+import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanner";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
@@ -67,6 +68,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
 
+  // Abonament platit cu data de reinnoire trecuta = candidat pentru bannerul de
+  // plata restanta (plata esuata, inca in dunning Stripe — inainte de suspendarea
+  // publica gestionata de GracePeriodBanner). Verificarea efectiva a expirarii
+  // (fata de "acum") o face bannerul client, ca layout-ul sa ramana pur.
+  const isPaidPlan = profile.plan !== "free" && profile.plan !== "trial";
+  const showPastDueBanner = isPaidPlan && !suspendedBusiness && !!profile.plan_expires_at;
+
   return (
     <div className="min-h-screen bg-background">
       <ScrollToTop />
@@ -86,6 +94,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         )}
         {suspendedBusiness?.suspended_until && (
           <GracePeriodBanner suspendedUntil={suspendedBusiness.suspended_until} />
+        )}
+        {showPastDueBanner && (
+          <PaymentPastDueBanner planExpiresAt={profile.plan_expires_at!} />
         )}
         <DashboardTopbar
           userFullName={profile.full_name}

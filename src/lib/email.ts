@@ -950,6 +950,46 @@ export async function sendSubscriptionActivatedEmail(
   });
 }
 
+// ── Payment recovered → User ────────────────────────────────────────────────
+// Trimis cand o plata esuata reuseste (reincercare Stripe sau plata manuala a
+// facturii restante). Confirma reactivarea abonamentului.
+
+export async function sendPaymentRecoveredEmail(
+  to: string,
+  data: { name: string; plan: string; expiresAt: string }
+) {
+  if (!process.env.RESEND_API_KEY) return;
+
+  const formattedDate = new Date(data.expiresAt).toLocaleDateString("ro-RO", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Plata a reusit. Abonamentul este activ din nou!</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Am procesat cu succes plata pentru abonamentul tau <strong>${data.plan}</strong>. Iti multumim!</p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${data.plan}</p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Activ pana la: <strong>${formattedDate}</strong></p>
+    </div>
+
+    <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Magazinul tau ramane activ si vizibil pentru clienti. Nu mai ai nimic de facut.</p>
+
+    <div style="text-align:center;">
+      <a href="${SITE_URL}/dashboard" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Mergi la dashboard
+      </a>
+    </div>
+  `;
+
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `Plata pentru abonamentul ${data.plan} a reusit`,
+    html: baseTemplate(content),
+  });
+}
+
 // ── Payment failed → User ───────────────────────────────────────────────────
 
 export async function sendPaymentFailedEmail(

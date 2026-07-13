@@ -291,6 +291,42 @@ export async function POST(req: NextRequest) {
     // 3. Revalidate dashboard
     revalidatePath("/dashboard", "layout");
 
+    // 3b. Detecteaza recuperarea unei plati esuate. Semnal: exista o notificare
+    // de esec necitita (marcata de noi la payment_failed) SAU factura a reusit
+    // dupa reincercari (`attempt_count > 1`). La recuperare trimitem confirmare
+    // si curatam notificarea din clopotel. Idempotent: a doua oara nu mai exista
+    // notificare necitita, iar o plata initiala/reinnoire normala are attempt=1.
+    const { data: pendingFailure } = await admin
+      .from("notifications")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("type", "payment")
+      .eq("is_read", false)
+      .limit(1);
+
+    const hadPendingFailure = !!pendingFailure && pendingFailure.length > 0;
+    const recoveredAfterRetries = typeof invoice.attempt_count === "number" && invoice.attempt_count > 1;
+
+    if (hadPendingFailure || recoveredAfterRetries) {
+      if (hadPendingFailure) {
+        await admin.from("notifications").update({ is_read: true })
+          .eq("user_id", userId).eq("type", "payment").eq("is_read", false);
+      }
+
+      const { data: recAuth } = await admin.auth.admin.getUserById(userId);
+      const { data: recProfile } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();
+      if (recAuth?.user?.email) {
+        import("@/lib/email").then(({ sendPaymentRecoveredEmail }) => {
+          sendPaymentRecoveredEmail(recAuth.user!.email!, {
+            name: recProfile?.full_name ?? "",
+            plan: capitalize(plan),
+            expiresAt: expiresAt.toISOString(),
+          }).catch((err) => console.error("[webhook] payment recovered email failed:", err));
+        }).catch(() => {});
+      }
+      console.log("[webhook] invoice.payment_succeeded — recovery detected:", { userId, plan });
+    }
+
     // 3. Check for existing invoice record for this Stripe payment
     const { data: existingInvoice } = await admin
       .from("invoices")
@@ -410,7 +446,33 @@ export async function POST(req: NextRequest) {
           }).catch((err) => console.error("[webhook] payment failed email failed:", err));
         }).catch(() => {});
       }
-      console.log("[webhook] invoice.payment_failed — email sent:", { userId, plan });
+
+      // Notificare persistenta in clopotel (nu doar email efemer). Stripe reincearca
+      // plata de mai multe ori pe parcursul dunning-ului — nu inseram duplicate cat
+      // timp exista deja una necitita din ultimele 3 zile.
+      const { data: existingNotif } = await admin
+        .from("notifications")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("type", "payment")
+        .eq("is_read", false)
+        .gte("created_at", new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString())
+        .limit(1);
+
+      if (!existingNotif || existingNotif.length === 0) {
+        const { error: notifError } = await admin.from("notifications").insert({
+          user_id: userId,
+          type: "payment",
+          title: "Plata abonamentului a esuat",
+          message: `Nu am putut procesa plata pentru abonamentul ${capitalize(plan)}. Reia plata sau actualizeaza cardul din Setari > Abonament ca sa iti pastrezi magazinul activ.`,
+        });
+        if (notifError) console.error("[webhook] payment failed notification insert failed:", notifError);
+      }
+
+      // Actualizeaza dashboard-ul ca bannerul de plata restanta sa apara imediat.
+      revalidatePath("/dashboard", "layout");
+
+      console.log("[webhook] invoice.payment_failed — email + notification:", { userId, plan });
     }
   }
 

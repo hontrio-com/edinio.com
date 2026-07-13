@@ -403,6 +403,24 @@ export function emailReactivate7d(name: string, businessName: string): Automatio
   };
 }
 
+// F: Magazin OPRIT — perioada de gratie a expirat dupa plata esuata (abonament
+// platit anulat de Stripe). Trimis o singura data per ciclu de suspendare (cron-ul
+// foloseste o cheie de dedup versionata pe suspended_until).
+export function emailStoreOffline(name: string, businessName: string): AutomationEmail {
+  return {
+    key: "store_offline",
+    subject: "Magazinul tau nu mai este vizibil clientilor",
+    html: wrap(`
+      <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Magazinul tau a fost oprit</h2>
+      <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Salut${name ? `, ${name}` : ""},</p>
+      <p style="margin:0 0 16px 0;font-size:14px;color:#3f3f46;line-height:1.6;">Perioada de gratie a expirat, iar abonamentul pentru magazinul <strong>${businessName}</strong> nu a fost reactivat. Din acest motiv, magazinul nu mai este vizibil pentru clienti.</p>
+      <p style="margin:0 0 16px 0;font-size:14px;color:#3f3f46;line-height:1.6;">Vestea buna: toate datele tale (produse, comenzi, setari, domeniu) sunt pastrate integral. Reactivezi magazinul in cateva secunde reluand plata abonamentului.</p>
+      ${btn("Reactiveaza magazinul", "/dashboard/settings#abonament")}
+      ${CONTACT_BLOCK}
+    `),
+  };
+}
+
 // ─── Send helper ──────────────────────────────────────────────────────────────
 
 export async function sendAutomationEmail(to: string, email: AutomationEmail): Promise<boolean> {

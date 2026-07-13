@@ -9,6 +9,7 @@ import {
   emailInactive7d, emailInactive14d,
   emailFirstOrder, emailMilestone10, emailMilestone,
   emailReactivate3d, emailReactivate7d,
+  emailStoreOffline,
 } from "@/lib/email-automations";
 
 // Verify cron secret to prevent unauthorized calls
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
   const authMap = new Map(authList.map(u => [u.id, u]));
 
   // ── Fetch businesses + product counts + order counts ───────────────────────
-  const { data: businesses } = await admin.from("businesses").select("id, user_id, slug, business_name, created_at");
+  const { data: businesses } = await admin.from("businesses").select("id, user_id, slug, business_name, created_at, suspended_until");
   const bizMap = new Map((businesses ?? []).map(b => [b.user_id, b]));
 
   const { data: productCounts } = await admin.from("products").select("business_id");
@@ -136,6 +137,19 @@ export async function GET(req: NextRequest) {
     const bizDaysOld = daysBetween(bizCreatedAt, now);
     const productCount = prodCountMap[biz.id] ?? 0;
     const orderCount = orderCountMap[biz.id] ?? 0;
+
+    // ── F. MAGAZIN OPRIT (gratie expirata dupa plata esuata) ─────────────
+    // Abonament platit anulat de Stripe → suspended_until = start + 15 zile.
+    // Cand a trecut, magazinul devine invizibil public — anuntam userul o
+    // singura data per ciclu (cheie versionata pe suspended_until, care se
+    // schimba la fiecare noua suspendare, deci re-notifica daca lapseaza iar).
+    if (biz.suspended_until && new Date(biz.suspended_until) < now) {
+      const offlineKey = `store_offline:${biz.suspended_until}`;
+      if (!alreadySent(profile.id, offlineKey)) {
+        const e = emailStoreOffline(name, biz.business_name);
+        if (await sendAutomationEmail(email, e)) { await markSent(profile.id, offlineKey); sent++; }
+      }
+    }
 
     // ── B. TRIAL ACTIV ───────────────────────────────────────────────────
     if (profile.plan === "free" && profile.plan_expires_at) {

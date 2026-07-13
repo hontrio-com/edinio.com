@@ -822,6 +822,71 @@ export type Database = {
         }
         Relationships: []
       }
+      offers: {
+        Row: {
+          business_id: string
+          config: Json
+          conversions: number
+          created_at: string
+          display: Json
+          ends_at: string | null
+          id: string
+          impressions: number
+          is_active: boolean
+          name: string
+          priority: number
+          revenue_added: number
+          starts_at: string | null
+          trigger: Json
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          config?: Json
+          conversions?: number
+          created_at?: string
+          display?: Json
+          ends_at?: string | null
+          id?: string
+          impressions?: number
+          is_active?: boolean
+          name: string
+          priority?: number
+          revenue_added?: number
+          starts_at?: string | null
+          trigger?: Json
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          config?: Json
+          conversions?: number
+          created_at?: string
+          display?: Json
+          ends_at?: string | null
+          id?: string
+          impressions?: number
+          is_active?: boolean
+          name?: string
+          priority?: number
+          revenue_added?: number
+          starts_at?: string | null
+          trigger?: Json
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           business_id: string
@@ -860,6 +925,7 @@ export type Database = {
           oblio_storno_link: string | null
           oblio_storno_number: string | null
           oblio_storno_series: string | null
+          offer_discount_amount: number
           order_number: string
           payment_method: string
           payment_status: string
@@ -923,6 +989,7 @@ export type Database = {
           oblio_storno_link?: string | null
           oblio_storno_number?: string | null
           oblio_storno_series?: string | null
+          offer_discount_amount?: number
           order_number: string
           payment_method?: string
           payment_status?: string
@@ -986,6 +1053,7 @@ export type Database = {
           oblio_storno_link?: string | null
           oblio_storno_number?: string | null
           oblio_storno_series?: string | null
+          offer_discount_amount?: number
           order_number?: string
           payment_method?: string
           payment_status?: string
@@ -2101,6 +2169,15 @@ export type Database = {
       decrement_stock_batch: { Args: { p_items: Json }; Returns: undefined }
       increment_discount_uses: {
         Args: { p_discount_id: string }
+        Returns: undefined
+      }
+      increment_offer_stats: {
+        Args: {
+          p_offer_id: string
+          p_impressions?: number
+          p_conversions?: number
+          p_revenue?: number
+        }
         Returns: undefined
       }
       increment_referral_balance: {

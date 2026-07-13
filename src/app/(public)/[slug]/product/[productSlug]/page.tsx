@@ -10,6 +10,7 @@ import { enrichStoreProduct } from "@/lib/storefront/product-data";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { ProductPage } from "@/components/ministore/ProductPage";
+import { resolveProductOffers } from "@/lib/offers/offers";
 
 interface Props {
   params: Promise<{ slug: string; productSlug: string }>;
@@ -143,6 +144,12 @@ export default async function ProductDetailPage({ params }: Props) {
   // components) + server-side rich-text sanitization of the product, in place.
   const { altMap, hasCardPayment, bundleComponents } = await enrichStoreProduct(business, product);
 
+  // Cross-sell / FBT offers for this product. `offers` is owner-only (not anon-readable),
+  // so it's resolved server-side with the service role — exactly like storeSettings above.
+  const productOffers = await resolveProductOffers(createAdminClient(), business.id, {
+    id: product.id, category: product.category, price: Number(product.price) || 0,
+  });
+
   const brand = business.store_name ?? business.business_name;
   const storeBase = storeBaseUrl(business);
   const productUrl = `${storeBase}/product/${product.slug ?? productSlug}`;
@@ -170,6 +177,7 @@ export default async function ProductDetailPage({ params }: Props) {
         hasCardPayment={hasCardPayment}
         bundleComponents={bundleComponents}
         altMap={altMap}
+        productOffers={productOffers}
       />
     </>
   );

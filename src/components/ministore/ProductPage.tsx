@@ -18,6 +18,9 @@ import { EdinioCredit } from "./EdinioCredit";
 import { StoreHeader } from "./StoreHeader";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
+import { ProductOffers } from "./ProductOffers";
+import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
+import { distributeFbtSavings } from "@/lib/offers/offer.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -233,7 +236,7 @@ const POLICY_LINKS = [
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false }: {
+export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [] }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -244,6 +247,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   /** When this product page IS the store homepage (One Product Store mode):
    *  hides the "back to store" breadcrumb since there is no catalog behind it. */
   isHome?: boolean;
+  /** Cross-sell offers resolved server-side for this product (rendered as "Merge bine cu"). */
+  productOffers?: ResolvedOffer[];
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -397,10 +402,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
+  const [fbtOffer, setFbtOffer] = useState<{ id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] } | undefined>(undefined);
   // Cart carried over from the storefront (localStorage) so ordering from a product
   // page includes what the customer already added. Current product excluded to avoid
   // duplication; read once on mount (storefront cart is built before reaching here).
-  const [cartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[]>(() => {
+  const [cartItems, setCartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[]>(() => {
     if (typeof window === "undefined") return [];
     try {
       const raw = localStorage.getItem(`cart_${business.slug}`);
@@ -408,6 +414,26 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       return Array.isArray(parsed) ? parsed.filter((i) => i?.productId && i.productId !== product.id) : [];
     } catch { return []; }
   });
+  // Add a cross-sell product to the store cart (localStorage, shared with the
+  // storefront cart) + the carried cart the OrderModal reads on open, so it rides
+  // into the order. No discount — the price is unchanged.
+  const addOfferProductToCart = useCallback((p: OfferProduct) => {
+    try {
+      const raw = localStorage.getItem(`cart_${business.slug}`);
+      const arr = raw ? JSON.parse(raw) : [];
+      const list: { productId: string; slug?: string | null; name: string; price: number; imageUrl: string | null; quantity: number }[] = Array.isArray(arr) ? arr : [];
+      const i = list.findIndex((x) => x?.productId === p.id);
+      if (i >= 0) list[i].quantity = (list[i].quantity || 1) + 1;
+      else list.push({ productId: p.id, slug: p.slug, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 });
+      localStorage.setItem(`cart_${business.slug}`, JSON.stringify(list));
+    } catch {}
+    setCartItems((prev) => {
+      const i = prev.findIndex((x) => x.productId === p.id);
+      if (i >= 0) return prev.map((x) => x.productId === p.id ? { ...x, quantity: x.quantity + 1 } : x);
+      return [...prev, { productId: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 }];
+    });
+  }, [business.slug]);
+
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [zoomPos] = useState<{x: number; y: number} | null>(null);
   const touchStartX = useRef<number>(0);
@@ -429,6 +455,22 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const goTo = useCallback((idx: number) => {
     setActiveSlide((idx + Math.max(slides.length, 1)) % Math.max(slides.length, 1));
   }, [slides.length]);
+
+  // FBT "Cumpara impreuna": distribute the set savings across the companion prices
+  // (the exact formula the server enforces), pre-accept the offer, open the buy-now modal.
+  function handleBuyTogether(offer: ResolvedOffer) {
+    if (!offer.pricing) return;
+    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings);
+    const items = offer.products.map((p, idx) => ({
+      product_id: p.id,
+      name: p.name,
+      imageUrl: p.imageUrl,
+      price: distributed[idx],
+      quantity: 1,
+    }));
+    setFbtOffer({ id: offer.id, items });
+    setModalOpen(true);
+  }
 
   const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -652,7 +694,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
 
         {/* CTA */}
-        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => setModalOpen(true)} />
+        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} />
 
         {/* Trust mini */}
         {trustBadgesEnabled && (
@@ -756,6 +798,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </motion.div>
         </div>
       </div>
+
+      {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none */}
+      <ProductOffers offers={productOffers} basePath={basePath} color={color}
+        anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+        onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
 
       {/* Benefits */}
       {benefitsSection?.enabled && benefitsSection.items.length > 0 && (
@@ -1056,7 +1103,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 )}
               </div>
             </div>
-            <button type="button" onClick={() => setModalOpen(true)} disabled={isOutOfStock || needsVariant}
+            <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} disabled={isOutOfStock || needsVariant}
               className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl flex-shrink-0 disabled:opacity-40 hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
               style={{ backgroundColor: color }}>
               <ShoppingBag size={16} />
@@ -1069,7 +1116,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       {/* Order Modal */}
       <OrderModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setFbtOffer(undefined); }}
         product={{
           id: product.id,
           name: selectedCombo ? `${product.name} (${selectedCombo.title})` : product.name,
@@ -1086,6 +1133,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
         cartItems={cartItems}
         onCartConsumed={() => { try { localStorage.removeItem(`cart_${business.slug}`); } catch {} }}
+        fbtOffer={fbtOffer}
       />
     </div>
   );

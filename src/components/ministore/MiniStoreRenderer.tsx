@@ -28,6 +28,10 @@ import type { MenuItem } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import type { Database } from "@/types/database.types";
 import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { OrderBump } from "./OrderBump";
+import { CartRecommendations } from "./CartRecommendations";
+import { getCheckoutBumps } from "@/lib/actions/offer.actions";
+import type { ResolvedOffer } from "@/lib/offers/offer.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Pick<
@@ -245,6 +249,8 @@ function CartCheckoutModal({
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
+  const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
+  const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
   const [appliedDiscount, setAppliedDiscount] = useState<ValidatedDiscount | null>(null);
   const [discountInput, setDiscountInput] = useState("");
   const [discountError, setDiscountError] = useState("");
@@ -252,14 +258,20 @@ function CartCheckoutModal({
   // Collapsed by default — a visible coupon field depresses conversion (shoppers
   // leave to hunt for codes). Revealed on demand via "Ai un cod?".
   const [showDiscountField, setShowDiscountField] = useState(false);
+  // Accepted order bumps add their discounted product to the goods value. `goodsTotal`
+  // mirrors the server's bump-inclusive subtotal and drives every money computation
+  // below (VAT, card discount, free shipping, grand total).
+  const acceptedBumpOffers = bumps.filter((o) => acceptedBumps.has(o.id) && o.pricing && o.products[0]);
+  const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
+  const goodsTotal = Math.round((total + bumpSubtotal) * 100) / 100;
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
-  const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, total) : 0;
+  const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, goodsTotal) : 0;
   const isFreeShippingDiscount = appliedDiscount?.type === "free_shipping";
-  const shipping = (isFreeShippingDiscount || (freeShippingThreshold && total >= freeShippingThreshold)) ? 0 : baseShippingCost;
+  const shipping = (isFreeShippingDiscount || (freeShippingThreshold && goodsTotal >= freeShippingThreshold)) ? 0 : baseShippingCost;
 
   // VAT calculation
-  const vatBase = total + extrasTotal;
+  const vatBase = goodsTotal + extrasTotal;
   const vatAmount = vatConfig.vat_enabled
     ? vatConfig.prices_include_vat
       ? Math.round((vatBase - vatBase / (1 + vatConfig.vat_rate / 100)) * 100) / 100
@@ -268,10 +280,10 @@ function CartCheckoutModal({
   const vatAddOn = vatConfig.vat_enabled && !vatConfig.prices_include_vat ? vatAmount : 0;
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Shown live as the customer switches payment method.
-  const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, total + extrasTotal - discountAmount);
+  const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);
   // Round to 2 decimals (cents): float subtraction like 199.29 - 19.93 would
   // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
-  const grandTotal = Math.max(0, Math.round((total + extrasTotal - discountAmount - cardDiscountAmount + shipping + vatAddOn) * 100) / 100);
+  const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount + shipping + vatAddOn) * 100) / 100);
 
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -296,7 +308,7 @@ function CartCheckoutModal({
   useEffect(() => {
     if (!open || !initialDiscountCode) return;
     let cancelled = false;
-    validateDiscount(initialDiscountCode, businessId, total).then((r) => {
+    validateDiscount(initialDiscountCode, businessId, goodsTotal).then((r) => {
       if (!cancelled) setAppliedDiscount(r.valid ? r.discount : null);
     });
     return () => { cancelled = true; };
@@ -307,7 +319,7 @@ function CartCheckoutModal({
   useEffect(() => {
     if (!appliedDiscount) return;
     (async () => {
-      const result = await validateDiscount(appliedDiscount.code, businessId, total);
+      const result = await validateDiscount(appliedDiscount.code, businessId, goodsTotal);
       if (!result.valid) {
         setAppliedDiscount(null);
         setDiscountError(result.error);
@@ -317,13 +329,13 @@ function CartCheckoutModal({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [total]);
+  }, [goodsTotal]);
 
   async function handleApplyDiscount() {
     if (!discountInput.trim()) return;
     setIsValidatingDiscount(true);
     setDiscountError("");
-    const result = await validateDiscount(discountInput.trim(), businessId, total);
+    const result = await validateDiscount(discountInput.trim(), businessId, goodsTotal);
     setIsValidatingDiscount(false);
     if (!result.valid) {
       setDiscountError(result.error);
@@ -338,6 +350,14 @@ function CartCheckoutModal({
     setAppliedDiscount(null);
     setDiscountInput("");
     setDiscountError("");
+  }
+
+  function toggleBump(offer: ResolvedOffer, checked: boolean) {
+    setAcceptedBumps((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(offer.id); else next.delete(offer.id);
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -375,6 +395,14 @@ function CartCheckoutModal({
       setDpdUseWeight(data.dpd_use_weight === true);
     });
   }, [open, businessId]);
+
+  // Order-bump offers applicable to the cart (checkout surface).
+  useEffect(() => {
+    if (!open || items.length === 0) return;
+    let cancelled = false;
+    getCheckoutBumps(businessId, items.map((i) => i.productId)).then((b) => { if (!cancelled) setBumps(b ?? []); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, businessId, items]);
 
   // Abandoned-cart capture: debounced, fire-and-forget. The server ignores it
   // unless the store opted in. Only fires once a contact channel is present.
@@ -434,10 +462,15 @@ function CartCheckoutModal({
     e.preventDefault();
     if (!validate()) return;
     startTransition(async () => {
+      const allItems = [
+        ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
+        ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, price: o.pricing!.price, quantity: 1 })),
+      ];
       const result = await placeCartOrder({
         business_id: businessId,
         cart_session_id: sessionId || undefined,
-        items: items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
+        items: allItems,
+        accepted_offer_ids: acceptedBumpOffers.length > 0 ? acceptedBumpOffers.map((o) => o.id) : undefined,
         shipping_cost: shipping,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
@@ -672,6 +705,9 @@ function CartCheckoutModal({
             </div>
           ))}
 
+          {/* Order bumps — a real discounted product added with one tap */}
+          <OrderBump bumps={bumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
+
           {/* Extras */}
           {extras.length > 0 && (
             <div className="space-y-2">
@@ -779,6 +815,12 @@ function CartCheckoutModal({
               <span>Produse</span>
               <span className="font-medium text-foreground">{total} lei</span>
             </div>
+            {acceptedBumpOffers.map((o) => (
+              <div key={o.id} className="flex justify-between" style={{ color }}>
+                <span className="truncate pr-2">+ {o.products[0]!.name}</span>
+                <span className="font-medium whitespace-nowrap">{o.pricing!.price} lei</span>
+              </div>
+            ))}
             {extrasTotal > 0 && (
               <div className="flex justify-between text-muted-foreground">
                 <span>Optiuni extra</span>
@@ -809,9 +851,9 @@ function CartCheckoutModal({
                 <span className="font-medium">-{cardDiscountAmount} lei</span>
               </div>
             )}
-            {freeShippingThreshold && total < freeShippingThreshold && (
+            {freeShippingThreshold && goodsTotal < freeShippingThreshold && (
               <p className="text-xs text-muted-foreground">
-                Mai adauga <strong>{freeShippingThreshold - total} lei</strong> pentru livrare gratuita
+                Mai adauga <strong>{freeShippingThreshold - goodsTotal} lei</strong> pentru livrare gratuita
               </p>
             )}
             <div className="flex justify-between font-bold text-base border-t border-border pt-2">
@@ -864,12 +906,12 @@ function CartCheckoutModal({
 }
 
 function CartDrawer({
-  open, onClose, color, basePath, onCheckout, shippingCost, freeShippingThreshold, minOrderAmount,
+  open, onClose, color, basePath, businessId, onCheckout, shippingCost, freeShippingThreshold, minOrderAmount,
 }: {
-  open: boolean; onClose: () => void; color: string; basePath: string; onCheckout: () => void;
+  open: boolean; onClose: () => void; color: string; basePath: string; businessId: string; onCheckout: () => void;
   shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null;
 }) {
-  const { items, removeItem, updateQty, total, count } = useCart();
+  const { items, addItem, removeItem, updateQty, total, count } = useCart();
   const shipping = freeShippingThreshold && total >= freeShippingThreshold ? 0 : shippingCost;
   const grandTotal = total + shipping;
   const belowMinOrder = minOrderAmount !== null && total < minOrderAmount;
@@ -978,6 +1020,12 @@ function CartDrawer({
             </div>
           )}
         </div>
+
+        {items.length > 0 && (
+          <CartRecommendations businessId={businessId} color={color} basePath={basePath}
+            cartProductIds={items.map((i) => i.productId)}
+            onAdd={(p) => addItem({ productId: p.id, slug: p.slug ?? undefined, name: p.name, price: p.price, imageUrl: p.imageUrl })} />
+        )}
 
         {items.length > 0 && (
           <div className="px-5 py-5 border-t border-border space-y-4">
@@ -2670,6 +2718,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         onClose={() => setCartOpen(false)}
         color={color}
         basePath={basePath}
+        businessId={business.id}
         onCheckout={() => {
           setCartOpen(false); setCheckoutOpen(true);
           fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: cartItemsForTracking.map((i) => i.productId) });

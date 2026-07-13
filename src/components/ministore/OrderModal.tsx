@@ -17,6 +17,9 @@ import { getCartSessionId } from "@/lib/cart-session";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { OrderBump } from "./OrderBump";
+import { getCheckoutBumps } from "@/lib/actions/offer.actions";
+import type { ResolvedOffer } from "@/lib/offers/offer.types";
 
 const JUDETE = [
   "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
@@ -79,6 +82,8 @@ interface Props {
   cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[];
   /** Called after the order is placed so the caller can clear the cart. */
   onCartConsumed?: () => void;
+  /** Pre-accepted "frequently bought together" set — companions at FBT-distributed prices. */
+  fbtOffer?: { id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] };
 }
 
 const inputCls = "flex-1 px-3 py-2.5 text-sm text-foreground bg-surface placeholder:text-muted-foreground focus:outline-none";
@@ -96,7 +101,7 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, customizationFields, cartItems, onCartConsumed }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, customizationFields, cartItems, onCartConsumed, fbtOffer }: Props) {
   const color = business.primary_color;
   const hasTiers = tiers && tiers.length > 0;
   const hasCustomization = customizationFields && customizationFields.length > 0;
@@ -121,6 +126,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
+  const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
+  const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
   const [intlEnabled, setIntlEnabled] = useState(false);
   const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
@@ -158,7 +165,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // account for it; `productSubtotal` stays for this product's own lines.
   const cart = cartLines;
   const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-  const subtotal = Math.round((productSubtotal + cartSubtotal) * 100) / 100;
+  // Accepted order bumps add their discounted product to the goods subtotal, so it
+  // flows through discount, free-shipping, card-discount and total automatically.
+  // Hide a bump when its product is already in the order (carried cart or FBT set) — it
+  // is already being bought, so offering it again would stack a second discount on it.
+  const visibleBumps = bumps.filter((o) => {
+    const pid = o.products[0]?.id;
+    if (!pid) return false;
+    if (cart.some((c) => c.productId === pid)) return false;
+    if (fbtOffer?.items.some((i) => i.product_id === pid)) return false;
+    return true;
+  });
+  const acceptedBumpOffers = visibleBumps.filter((o) => acceptedBumps.has(o.id) && o.pricing && o.products[0]);
+  const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
+  const fbtSubtotal = fbtOffer ? fbtOffer.items.reduce((s, i) => s + i.price * i.quantity, 0) : 0;
+  const subtotal = Math.round((productSubtotal + cartSubtotal + bumpSubtotal + fbtSubtotal) * 100) / 100;
   const setCartQty = (productId: string, qty: number) =>
     setCartLines((lines) => qty <= 0 ? lines.filter((l) => l.productId !== productId) : lines.map((l) => l.productId === productId ? { ...l, quantity: qty } : l));
   const removeCartLine = (productId: string) => setCartLines((lines) => lines.filter((l) => l.productId !== productId));
@@ -235,6 +256,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setShowDiscountField(false);
     setCourierSelection(null);
     setHasCouriers(false);
+    setAcceptedBumps(new Set());
+    // Re-sync the carried cart from the latest prop on open, so products added from the
+    // page's cross-sell after this modal first mounted are included in the order. Drop any
+    // items that are part of an accepted FBT set — they show in that set, not twice.
+    setCartLines((cartItems ?? []).filter((c) => !fbtOffer?.items.some((i) => i.product_id === c.productId)));
     setCustValues(() => {
       const defaults: Record<string, string | string[]> = {};
       for (const f of customizationFields ?? []) {
@@ -277,6 +303,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     });
   }, [open, business.id]);
 
+  // Order-bump offers applicable to this order (the buy-now product + carried cart).
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const ids = [product.id, ...(cartItems ?? []).map((c) => c.productId)];
+    getCheckoutBumps(business.id, ids).then((b) => { if (!cancelled) setBumps(b ?? []); }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, business.id, product.id]);
+
   // Re-validate discount when quantity/tier changes (min_order_amount may no longer be met)
   useEffect(() => {
     if (appliedDiscount) {
@@ -315,6 +351,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setAppliedDiscount(null);
     setDiscountInput("");
     setDiscountError("");
+  }
+
+  function toggleBump(offer: ResolvedOffer, checked: boolean) {
+    setAcceptedBumps((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(offer.id); else next.delete(offer.id);
+      return next;
+    });
   }
 
   function validate() {
@@ -375,6 +419,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           )
         : undefined;
 
+      const allAdditional = [
+        ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity })),
+        ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
+        ...(fbtOffer ? fbtOffer.items.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })) : []),
+      ];
+      const acceptedOfferIds = [...acceptedBumpOffers.map((o) => o.id), ...(fbtOffer ? [fbtOffer.id] : [])];
       const result = await placeOrder({
         business_id: business.id,
         cart_session_id: sessionId || undefined,
@@ -414,7 +464,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         woot_service_name: courierSelection?.wootServiceName,
         colete_service_id: courierSelection?.coleteServiceId,
         colete_service_name: courierSelection?.coleteServiceName,
-        additional_items: cart.length > 0 ? cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity })) : undefined,
+        additional_items: allAdditional.length > 0 ? allAdditional : undefined,
+        accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,
       });
       if (result.error) { setErrors({ _: result.error }); return; }
       // Order created with the cart folded in — clear it so it isn't re-ordered.
@@ -893,6 +944,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               ))}
 
+              {/* Order bumps — a real discounted product added with one tap */}
+              <OrderBump bumps={visibleBumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
+
               {/* Extras */}
               {extras.length > 0 && (
                 <div className="space-y-2">
@@ -1005,6 +1059,18 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <div key={ci.productId} className="flex justify-between text-muted-foreground">
                     <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
                     <span className="font-medium text-foreground whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
+                  </div>
+                ))}
+                {acceptedBumpOffers.map((o) => (
+                  <div key={o.id} className="flex justify-between" style={{ color }}>
+                    <span className="truncate pr-2">+ {o.products[0]!.name}</span>
+                    <span className="font-medium whitespace-nowrap">{o.pricing!.price} lei</span>
+                  </div>
+                ))}
+                {fbtOffer?.items.map((i) => (
+                  <div key={i.product_id} className="flex justify-between" style={{ color }}>
+                    <span className="truncate pr-2">+ {i.name}</span>
+                    <span className="font-medium whitespace-nowrap">{Math.round(i.price * i.quantity * 100) / 100} lei</span>
                   </div>
                 ))}
                 {extrasTotal > 0 && (

@@ -11,6 +11,7 @@ import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import { expandBundleStock } from "@/lib/bundles";
+import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
 import { sendSms } from "@/lib/smso";
@@ -149,6 +150,8 @@ export async function placeOrder(data: {
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
   /** Items carried over from the storefront cart (priced server-side at base price). */
   additional_items?: { product_id: string; name: string; quantity: number }[];
+  /** Ids of order-bump offers the customer accepted — re-priced server-side (never trusted). */
+  accepted_offer_ids?: string[];
   payment_method?: string;
   selected_courier?: string;
   courier_label?: string;
@@ -211,6 +214,17 @@ export async function placeOrder(data: {
         .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0)
         .map((i) => ({ product_id: i.product_id, name: extraMap.get(i.product_id)!.name, price: extraMap.get(i.product_id)!.price, quantity: Math.floor(i.quantity) }));
     }
+  }
+  // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
+  // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
+  if (data.accepted_offer_ids?.length) {
+    const bumped = await applyBumpPricing(admin, data.business_id, data.accepted_offer_ids, cartItems);
+    cartItems = bumped.items;
+    // FBT: distribute the "bought together" set discount across the companion lines.
+    // Anchor priced at the product's BASE price — matches the set pricing the storefront
+    // showed (resolveProductOffers uses the base price), so preview and charge agree.
+    const fbt = await applyFbtPricing(admin, data.business_id, data.accepted_offer_ids, data.product_id, round2(Number(product.price)), cartItems);
+    cartItems = fbt.items;
   }
   const cartSubtotal = round2(cartItems.reduce((s, i) => s + i.price * i.quantity, 0));
   const subtotal = round2(mainSubtotal + cartSubtotal);
@@ -759,6 +773,7 @@ export async function placeCartOrder(data: {
   custom_fields?: Record<string, string>;
   vat_amount?: number;
   vat_rate?: number;
+  accepted_offer_ids?: string[];
   payment_method?: string;
   selected_courier?: string;
   courier_label?: string;
@@ -804,12 +819,18 @@ export async function placeCartOrder(data: {
     return { error: "Unul dintre produse nu mai este disponibil. Reincarca cosul." };
   }
 
-  const validatedItems = data.items.map((i) => ({
+  let validatedItems = data.items.map((i) => ({
     product_id: i.product_id,
     name: i.name,
     price: priceMap.get(i.product_id)!,
     quantity: i.quantity,
   }));
+  // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
+  // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
+  if (data.accepted_offer_ids?.length) {
+    const bumped = await applyBumpPricing(admin, data.business_id, data.accepted_offer_ids, validatedItems);
+    validatedItems = bumped.items;
+  }
   const subtotal = round2(validatedItems.reduce((s, i) => s + i.price * i.quantity, 0));
 
   // Enforce the merchant's minimum order value (Setari > Livrare) against the authoritative subtotal.

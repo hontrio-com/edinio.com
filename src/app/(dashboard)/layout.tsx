@@ -7,6 +7,7 @@ import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanner";
+import { getInactiveReason } from "@/lib/subscription";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
@@ -26,6 +27,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const allBusinesses = businesses ?? [];
   const currentBusiness = allBusinesses[0] ?? null;
   const businessIds = allBusinesses.map(b => b.id);
+
+  // Blocheaza COMPLET dashboard-ul cand contul e inactiv: trial gratuit expirat
+  // SAU abonament platit neplatit (perioada de gratie expirata → magazin oprit).
+  // Userul e trimis la /reactivare, unde poate plati; plata reactiveaza automat
+  // accesul. Adminii sunt exceptati.
+  if (profile.role !== "admin") {
+    const inactive = getInactiveReason({
+      plan: profile.plan,
+      planExpiresAt: profile.plan_expires_at,
+      suspendedUntils: allBusinesses.map(b => b.suspended_until),
+    });
+    if (inactive) redirect("/reactivare");
+  }
 
   const [ordersResult, smsoResult, supportResult, notificationsResult, returnsResult] = await Promise.all([
     businessIds.length > 0

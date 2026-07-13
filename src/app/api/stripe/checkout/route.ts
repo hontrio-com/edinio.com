@@ -19,12 +19,13 @@ export async function POST(req: NextRequest) {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-  const isOnboarding = return_to === "onboarding";
-  const successUrl = isOnboarding
-    ? `${siteUrl}/onboarding/plan?success=1`
+  const successUrl =
+    return_to === "onboarding" ? `${siteUrl}/onboarding/plan?success=1`
+    : return_to === "reactivare" ? `${siteUrl}/reactivare?success=1`
     : `${siteUrl}/dashboard/settings?plan_success=1`;
-  const cancelUrl = isOnboarding
-    ? `${siteUrl}/onboarding/plan?cancelled=1`
+  const cancelUrl =
+    return_to === "onboarding" ? `${siteUrl}/onboarding/plan?cancelled=1`
+    : return_to === "reactivare" ? `${siteUrl}/reactivare`
     : `${siteUrl}/dashboard/settings`;
 
   // Look up existing Stripe customer to avoid duplicates

@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { stripe } from "@/lib/stripe";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createSmartbillInvoice } from "@/lib/smartbill";
 import { PLAN_PRICES } from "@/lib/plans";
 import type Stripe from "stripe";
@@ -17,6 +17,19 @@ function computeExpiry(interval?: string | null): Date {
   if (interval === "annual") d.setFullYear(d.getFullYear() + 1);
   else d.setMonth(d.getMonth() + 1);
   return d;
+}
+
+// Sfarsitul REAL al perioadei facturate (unix sec) din liniile facturii, ca sa
+// setam plan_expires_at exact cat a platit clientul la Stripe — nu aproximam cu
+// now+interval (care ar drifta la reincercari intarziate). Fallback pe computeExpiry.
+function invoicePeriodEnd(invoice: Stripe.Invoice): number | null {
+  const lines = invoice.lines?.data ?? [];
+  let maxEnd = 0;
+  for (const line of lines) {
+    const end = (line as { period?: { end?: number } }).period?.end;
+    if (typeof end === "number" && end > maxEnd) maxEnd = end;
+  }
+  return maxEnd > 0 ? maxEnd : null;
 }
 
 function intervalLabel(interval?: string | null): string {
@@ -47,6 +60,97 @@ type InvoiceCompat = Stripe.Invoice & {
     } | null;
   } | null;
 };
+
+// Emite factura fiscala Smartbill + salveaza inregistrarea, pentru o plata de
+// abonament reusita. Rulata DEFERAT (dupa raspunsul catre Stripe) prin `after()`
+// ca sa nu blocheze webhook-ul cu apelul lent Smartbill. Idempotenta: sare daca
+// factura e deja emisa, iar unique(stripe_invoice_id) previne duplicate.
+async function emitSubscriptionInvoice(
+  admin: SupabaseClient,
+  invoice: Stripe.Invoice,
+  meta: { userId: string; plan: string; interval?: string; stripeInvoiceId: string },
+): Promise<void> {
+  const { userId, plan, interval, stripeInvoiceId } = meta;
+
+  const { data: existingInvoice } = await admin
+    .from("invoices")
+    .select("id, smartbill_series")
+    .eq("stripe_invoice_id", stripeInvoiceId)
+    .maybeSingle();
+
+  if (existingInvoice?.smartbill_series) {
+    console.log("[webhook] Invoice already fully processed, skipping:", stripeInvoiceId);
+    return;
+  }
+
+  const [{ data: authUserData }, { data: bizData }, { data: profileData }] = await Promise.all([
+    admin.auth.admin.getUserById(userId),
+    admin.from("businesses").select("business_name, address, city, county, cui").eq("user_id", userId).maybeSingle(),
+    admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle(),
+  ]);
+
+  const userEmail = authUserData?.user?.email ?? "";
+  const clientName = bizData?.business_name || profileData?.full_name || userEmail || "Client";
+
+  // Suma reala incasata de Stripe (bani → lei). Acopera lunar, anual (lunar×9) si
+  // eventualele proratari/discounturi.
+  const amountPaid = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 0;
+  const planPrice = amountPaid > 0 ? amountPaid / 100 : (PLAN_PRICES[plan] ?? 0);
+
+  let sbSeries: string | null = null;
+  let sbNumber: string | null = null;
+  let sbError: string | null = null;
+
+  const sbResult = await createSmartbillInvoice(
+    {
+      name: clientName,
+      email: userEmail,
+      vatCode: bizData?.cui ?? undefined,
+      address: bizData?.address ?? undefined,
+      city: bizData?.city ?? undefined,
+      county: bizData?.county ?? undefined,
+    },
+    {
+      name: `Abonament Edinio ${capitalize(plan)} (${intervalLabel(interval)})`,
+      price: planPrice,
+      quantity: 1,
+    },
+  );
+
+  if (sbResult.error) {
+    sbError = sbResult.error;
+    console.error("[webhook] Smartbill failed:", sbError, "| invoice:", stripeInvoiceId);
+  } else {
+    sbSeries = sbResult.series ?? null;
+    sbNumber = sbResult.number ?? null;
+  }
+
+  if (existingInvoice) {
+    await admin.from("invoices").update({
+      smartbill_series: sbSeries,
+      smartbill_number: sbNumber,
+      smartbill_error: sbError,
+    }).eq("id", existingInvoice.id);
+    console.log("[webhook] Invoice updated:", { sbSeries, sbNumber, sbError });
+  } else {
+    const { error: invoiceError } = await admin.from("invoices").insert({
+      user_id: userId,
+      plan,
+      amount: planPrice,
+      currency: "RON",
+      smartbill_series: sbSeries,
+      smartbill_number: sbNumber,
+      smartbill_error: sbError,
+      stripe_invoice_id: stripeInvoiceId,
+      status: "paid",
+    });
+    if (invoiceError) {
+      console.error("[webhook] Failed to save invoice record:", invoiceError);
+    } else {
+      console.log("[webhook] Invoice saved:", { userId, plan, sbSeries, sbNumber, sbError });
+    }
+  }
+}
 
 async function resolveInvoiceSubMeta(invoice: Stripe.Invoice): Promise<Record<string, string>> {
   const inv = invoice as InvoiceCompat;
@@ -235,6 +339,31 @@ export async function POST(req: NextRequest) {
     // Clear any active grace period / suspension
     await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
 
+    // Anuleaza orice ALT abonament al clientului (planul vechi la upgrade/reactivare).
+    // Il anulam ABIA acum, dupa ce noua plata a reusit — daca l-am fi anulat inainte
+    // de checkout si userul abandona plata, ar fi ramas fara abonament (si fara
+    // subscription.deleted → cont in limbo). Marcam `switching=1` ca deletion-ul lor
+    // sa sara peste perioada de gratie/email. Deferat: nu blocheaza raspunsul.
+    if (session.customer && session.subscription) {
+      const newSubId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer.id;
+      after(async () => {
+        try {
+          const subs = await stripe.subscriptions.list({ customer: customerId, limit: 20 });
+          for (const sub of subs.data) {
+            if (sub.id === newSubId || sub.status === "canceled") continue;
+            try {
+              await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, switching: "1" } });
+            } catch { /* continua anularea chiar daca update-ul de metadata esueaza */ }
+            await stripe.subscriptions.cancel(sub.id, { prorate: true });
+            console.log("[webhook] old subscription cancelled after switch:", sub.id);
+          }
+        } catch (err) {
+          console.error("[webhook] cancel old subscriptions failed:", err);
+        }
+      });
+    }
+
     // Send subscription activated email
     const { data: authData } = await admin.auth.admin.getUserById(userId);
     const { data: profileForEmail } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();
@@ -313,7 +442,8 @@ export async function POST(req: NextRequest) {
     if (!userId || !plan) return NextResponse.json({ received: true });
 
     const stripeInvoiceId = invoice.id;
-    const expiresAt = computeExpiry(interval);
+    const periodEnd = invoicePeriodEnd(invoice);
+    const expiresAt = periodEnd ? new Date(periodEnd * 1000) : computeExpiry(interval);
 
     // 1. Update plan + expiry + interval
     await admin.from("users_profile").update({
@@ -361,102 +491,13 @@ export async function POST(req: NextRequest) {
       console.log("[webhook] invoice.payment_succeeded — recovery detected:", { userId, plan });
     }
 
-    // 3. Check for existing invoice record for this Stripe payment
-    const { data: existingInvoice } = await admin
-      .from("invoices")
-      .select("id, smartbill_series")
-      .eq("stripe_invoice_id", stripeInvoiceId)
-      .maybeSingle();
+    // 3. Emite factura fiscala Smartbill DEFERAT (dupa raspuns) prin `after()`, ca
+    // sa returnam 200 rapid la Stripe fara risc de timeout/retry din cauza apelului
+    // lent Smartbill. Starea critica (plan/expirare/suspendare) e deja salvata
+    // sincron mai sus, deci un esec Smartbill nu afecteaza accesul userului.
+    after(() => emitSubscriptionInvoice(admin, invoice, { userId, plan, interval, stripeInvoiceId }));
 
-    // If invoice exists AND Smartbill already emitted — fully done, skip.
-    if (existingInvoice?.smartbill_series) {
-      console.log("[webhook] Invoice already fully processed, skipping:", stripeInvoiceId);
-      return NextResponse.json({ received: true });
-    }
-
-    // 4. Fetch user email and business info for Smartbill
-    const [{ data: authUserData }, { data: bizData }, { data: profileData }] = await Promise.all([
-      admin.auth.admin.getUserById(userId),
-      admin.from("businesses")
-        .select("business_name, address, city, county, cui")
-        .eq("user_id", userId)
-        .maybeSingle(),
-      admin.from("users_profile")
-        .select("full_name")
-        .eq("id", userId)
-        .maybeSingle(),
-    ]);
-
-    const userEmail = authUserData?.user?.email ?? "";
-    const clientName =
-      bizData?.business_name ||
-      profileData?.full_name ||
-      userEmail ||
-      "Client";
-
-    // Suma reala incasata de Stripe (in bani → lei). Acopera corect atat planul
-    // lunar, cat si cel anual (lunar × 9) sau eventuale proratari/discounturi.
-    const amountPaid = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 0;
-    const planPrice = amountPaid > 0 ? amountPaid / 100 : (PLAN_PRICES[plan] ?? 0);
-
-    // 5. Emit Smartbill invoice
-    let sbSeries: string | null = null;
-    let sbNumber: string | null = null;
-    let sbError: string | null = null;
-
-    const sbResult = await createSmartbillInvoice(
-      {
-        name: clientName,
-        email: userEmail,
-        vatCode: bizData?.cui ?? undefined,
-        address: bizData?.address ?? undefined,
-        city: bizData?.city ?? undefined,
-        county: bizData?.county ?? undefined,
-      },
-      {
-        name: `Abonament Edinio ${capitalize(plan)} (${intervalLabel(interval)})`,
-        price: planPrice,
-        quantity: 1,
-      }
-    );
-
-    if (sbResult.error) {
-      sbError = sbResult.error;
-      console.error("[webhook] Smartbill failed:", sbError, "| invoice:", stripeInvoiceId);
-    } else {
-      sbSeries = sbResult.series ?? null;
-      sbNumber = sbResult.number ?? null;
-    }
-
-    // 6. Insert or update invoice record
-    if (existingInvoice) {
-      await admin.from("invoices").update({
-        smartbill_series: sbSeries,
-        smartbill_number: sbNumber,
-        smartbill_error: sbError,
-      }).eq("id", existingInvoice.id);
-      console.log("[webhook] Invoice updated:", { sbSeries, sbNumber, sbError });
-    } else {
-      const { error: invoiceError } = await admin.from("invoices").insert({
-        user_id: userId,
-        plan,
-        amount: planPrice,
-        currency: "RON",
-        smartbill_series: sbSeries,
-        smartbill_number: sbNumber,
-        smartbill_error: sbError,
-        stripe_invoice_id: stripeInvoiceId,
-        status: "paid",
-      });
-
-      if (invoiceError) {
-        console.error("[webhook] Failed to save invoice record:", invoiceError);
-      } else {
-        console.log("[webhook] Invoice saved:", { userId, plan, sbSeries, sbNumber, sbError });
-      }
-    }
-
-    console.log("[webhook] invoice.payment_succeeded processed:", { userId, plan });
+    console.log("[webhook] invoice.payment_succeeded processed (Smartbill deferred):", { userId, plan });
   }
 
   // ── invoice.payment_failed ───────────────────────────────────────────────

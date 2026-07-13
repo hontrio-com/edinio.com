@@ -37,26 +37,10 @@ export async function POST(req: NextRequest) {
 
   const existingCustomerId = profile?.stripe_customer_id ?? null;
 
-  // Cancel any existing active subscription to prevent double billing
-  if (existingCustomerId) {
-    try {
-      const subscriptions = await stripe.subscriptions.list({
-        customer: existingCustomerId,
-        status: "active",
-        limit: 10,
-      });
-      for (const sub of subscriptions.data) {
-        // Marcam anularea ca "schimbare de plan" ca webhook-ul subscription.deleted
-        // sa NU declanseze perioada de gratie / email de suspendare (nu e churn).
-        try {
-          await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, switching: "1" } });
-        } catch { /* daca update-ul de metadata esueaza, continuam anularea */ }
-        await stripe.subscriptions.cancel(sub.id, { prorate: true });
-      }
-    } catch {
-      // Non-critical: continue with checkout even if cancel fails
-    }
-  }
+  // NOTA: abonamentul vechi (la upgrade/reactivare) NU se anuleaza aici. Ar fi
+  // periculos sa-l anulam inainte de plata: daca userul abandoneaza checkout-ul,
+  // ar ramane fara abonament. Anularea vechiului abonament se face din webhook
+  // (checkout.session.completed), abia dupa ce noua plata reuseste.
 
   // Build checkout session params
   const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {

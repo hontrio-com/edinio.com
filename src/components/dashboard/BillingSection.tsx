@@ -19,6 +19,12 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly" }: Pr
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [retryLoading, setRetryLoading] = useState(false);
+
+  // Abonament platit cu data de reinnoire trecuta = plata restanta (renewal esuat).
+  const isPastDue =
+    plan !== "free" && plan !== "trial" && !!planExpiresAt &&
+    new Date(planExpiresAt).getTime() < Date.now();
 
   useEffect(() => {
     const supabase = createClient();
@@ -49,11 +55,28 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly" }: Pr
     }
   }
 
+  async function retryPayment() {
+    setRetryLoading(true);
+    try {
+      const res = await fetch("/api/stripe/retry-payment", { method: "POST" });
+      const data = await res.json() as { url?: string; error?: string };
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error(data.error ?? "Eroare la deschiderea platii.");
+        setRetryLoading(false);
+      }
+    } catch {
+      toast.error("Eroare de retea. Incearca din nou.");
+      setRetryLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {/* Active subscription card */}
       {plan !== "free" && plan !== "trial" ? (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className={`bg-surface border rounded-xl overflow-hidden ${isPastDue ? "border-destructive/40" : "border-border"}`}>
           <div className="px-5 py-4 border-b border-border">
             <p className="text-sm font-semibold text-foreground">Abonamentul tau</p>
           </div>
@@ -63,14 +86,20 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly" }: Pr
                 <span className="text-base font-bold text-foreground">
                   Plan {PLAN_LABELS[plan]} · {interval === "annual" ? `${getAnnualPrice(plan)} lei/an` : `${PLAN_PRICES[plan] ?? "—"} lei/luna`}
                 </span>
-                <span className="px-2 py-0.5 text-[10px] font-semibold bg-success/10 text-success border border-success/20 rounded-full">
-                  Activ
-                </span>
+                {isPastDue ? (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive border border-destructive/20 rounded-full">
+                    Plata restanta
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold bg-success/10 text-success border border-success/20 rounded-full">
+                    Activ
+                  </span>
+                )}
               </div>
               {planExpiresAt && (
                 <p className="text-sm text-muted-foreground">
-                  Urmatoarea plata:{" "}
-                  <span className="font-medium text-foreground">
+                  {isPastDue ? "A expirat pe:" : "Urmatoarea plata:"}{" "}
+                  <span className={`font-medium ${isPastDue ? "text-destructive" : "text-foreground"}`}>
                     {new Date(planExpiresAt).toLocaleDateString("ro-RO", {
                       day: "numeric",
                       month: "long",
@@ -80,23 +109,41 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly" }: Pr
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                Prin portalul de plata poti actualiza cardul, anula abonamentul sau descarca chitantele Stripe.
+                {isPastDue
+                  ? "Plata reinnoirii a esuat. Reia plata ca sa iti pastrezi magazinul activ."
+                  : "Prin portalul de plata poti actualiza cardul, anula abonamentul sau descarca chitantele Stripe."}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={openPortal}
-              disabled={portalLoading}
-              className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-60 whitespace-nowrap"
-            >
-              {portalLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard className="h-4 w-4" />
-              )}
-              {portalLoading ? "Se redirectioneaza..." : "Gestioneaza abonamentul"}
-              {!portalLoading && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
-            </button>
+            {isPastDue ? (
+              <button
+                type="button"
+                onClick={retryPayment}
+                disabled={retryLoading}
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-destructive rounded-xl hover:opacity-90 transition-opacity disabled:opacity-60 whitespace-nowrap"
+              >
+                {retryLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CreditCard className="h-4 w-4" />
+                )}
+                {retryLoading ? "Se deschide..." : "Reia plata"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={openPortal}
+                disabled={portalLoading}
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-60 whitespace-nowrap"
+              >
+                {portalLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CreditCard className="h-4 w-4" />
+                )}
+                {portalLoading ? "Se redirectioneaza..." : "Gestioneaza abonamentul"}
+                {!portalLoading && <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
+              </button>
+            )}
           </div>
         </div>
       ) : plan === "trial" ? (

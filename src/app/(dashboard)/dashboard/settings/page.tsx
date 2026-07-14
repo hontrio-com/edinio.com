@@ -84,10 +84,12 @@ export default async function SettingsPage({ searchParams }: Props) {
   const ncfg = storeSettings?.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
   const scfg = storeSettings?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
   const icfg = storeSettings?.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
+  const kcfg = storeSettings?.klarna_config as { enabled?: boolean; username?: string; password?: string } | null;
   const paymentReadiness = {
     netopia: !!(ncfg?.enabled && ncfg?.pos_signature && ncfg?.api_key),
     stripe: !!(scfg?.enabled && scfg?.charges_enabled && scfg?.account_id),
     ipay: !!(icfg?.enabled && icfg?.username && icfg?.password),
+    klarna: !!(kcfg?.enabled && kcfg?.username && kcfg?.password),
   };
   const paymentMethods = resolvePaymentMethods(storeSettings?.payment_methods, paymentReadiness);
 

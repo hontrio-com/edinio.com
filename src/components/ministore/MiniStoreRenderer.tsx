@@ -294,11 +294,13 @@ function CartCheckoutModal({
   // Total cart weight (kg) from per-product weights; used for the live intl quote.
   const totalWeightKg = items.reduce((s, i) => s + ((productWeights?.[i.productId] ?? 0) * i.quantity), 0) / 1000;
   // DPD international services don't support cash-on-delivery — EU orders pay online.
+  // Klarna is hardcoded to RO/RON (the store currency); Klarna requires the consumer
+  // country to match the currency, so it can't serve non-RO orders — exclude it abroad.
   const availablePaymentMethods = isIntl
-    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery")
+    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && m.type !== "klarna")
     : paymentMethods;
   useEffect(() => {
-    if (isIntl && paymentMethod === "cash_on_delivery") {
+    if (isIntl && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
       setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -511,6 +513,7 @@ function CartCheckoutModal({
       if (paymentMethod !== "cash_on_delivery") {
         const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"
           : paymentMethod === "netopia" ? "/api/netopia/start"
+          : paymentMethod === "klarna" ? "/api/klarna/start"
           : "/api/ipay/start";
         const res = await fetch(endpoint, {
           method: "POST",

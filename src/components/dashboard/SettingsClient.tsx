@@ -62,6 +62,7 @@ const PAYMENT_TYPE_NAMES: Record<PaymentMethodType, string> = {
   netopia: "Netopia",
   stripe: "Stripe",
   ipay: "BT iPay",
+  klarna: "Klarna",
 };
 
 // PLAN_LABELS, PLAN_PRICES imported from @/lib/plans
@@ -247,7 +248,7 @@ interface Props {
   shippingConfig: ShippingConfig;
   activeCourierIds: string[];
   paymentMethods: PaymentMethodEntry[];
-  paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean };
+  paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean; klarna: boolean };
   cardDiscount: CardDiscountConfig;
   cookieBanner: CookieBannerConfig;
   cookieCategories: ConsentCategory[];
@@ -1685,7 +1686,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div className="px-5 py-5 space-y-3">
                   {methods.map((m, i) => {
                     const isCod = m.type === "cash_on_delivery";
-                    const ready = isCod || paymentReadiness[m.type as "netopia" | "stripe" | "ipay"];
+                    const ready = isCod || paymentReadiness[m.type as "netopia" | "stripe" | "ipay" | "klarna"];
                     return (
                       <div key={m.type} className="border border-border rounded-xl p-3 flex items-start gap-3">
                         <div className="flex flex-col gap-1 pt-1 flex-shrink-0">

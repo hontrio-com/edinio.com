@@ -132,11 +132,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
   // DPD international services don't support cash-on-delivery — EU orders pay online.
+  // Klarna is hardcoded to RO/RON (the store currency); Klarna requires the consumer
+  // country to match the currency, so it can't serve non-RO orders — exclude it abroad.
   const availablePaymentMethods = isIntl
-    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery")
+    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && m.type !== "klarna")
     : paymentMethods;
   useEffect(() => {
-    if (isIntl && paymentMethod === "cash_on_delivery") {
+    if (isIntl && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
       setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -474,6 +476,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       if (paymentMethod !== "cash_on_delivery") {
         const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"
           : paymentMethod === "netopia" ? "/api/netopia/start"
+          : paymentMethod === "klarna" ? "/api/klarna/start"
           : "/api/ipay/start";
         const res = await fetch(endpoint, {
           method: "POST",

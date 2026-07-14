@@ -34,7 +34,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, dpd_config, payment_methods, card_discount_config, mailchimp_config, brevo_config, klaviyo_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, dpd_config, payment_methods, card_discount_config, mailchimp_config, brevo_config, klaviyo_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -42,6 +42,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const sc = data.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
   const nc = data.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
   const ic = data.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
+  const kc = data.klarna_config as { enabled?: boolean; username?: string; password?: string } | null;
 
   // International (EU) checkout is available only when DPD is enabled as a courier,
   // opted into international, and credentialed. Booleans only — no secrets leak.
@@ -54,6 +55,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     netopia: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
     stripe: !!(sc?.enabled && sc?.charges_enabled && sc?.account_id),
     ipay: !!(ic?.enabled && ic?.username && ic?.password),
+    klarna: !!(kc?.enabled && kc?.username && kc?.password),
   };
 
   // Checkout newsletter opt-in is offered only when Mailchimp is connected, an

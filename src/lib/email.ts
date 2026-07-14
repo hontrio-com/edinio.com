@@ -135,7 +135,11 @@ export async function sendOrderConfirmationToCustomer(
     ? "Card online (Stripe)"
     : order.payment_method === "netopia"
       ? "Card online (Netopia)"
-      : "ramburs la livrare";
+      : order.payment_method === "ipay"
+        ? "Card bancar (BT iPay)"
+        : order.payment_method === "klarna"
+          ? "Klarna"
+          : "ramburs la livrare";
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda ta a fost plasata!</h2>
@@ -651,6 +655,7 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   stripe: "Card online (Stripe)",
   netopia: "Card online (Netopia)",
   ipay: "Card bancar (BT iPay)",
+  klarna: "Klarna",
 };
 
 export async function sendNewOrderEmail(

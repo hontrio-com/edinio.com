@@ -12,9 +12,9 @@
  *   merchant can then disable / reorder / rename them.
  */
 
-export type PaymentMethodType = "cash_on_delivery" | "netopia" | "stripe" | "ipay";
+export type PaymentMethodType = "cash_on_delivery" | "netopia" | "stripe" | "ipay" | "klarna";
 
-export const PAYMENT_PROCESSOR_TYPES = ["netopia", "stripe", "ipay"] as const;
+export const PAYMENT_PROCESSOR_TYPES = ["netopia", "stripe", "ipay", "klarna"] as const;
 export type PaymentProcessorType = (typeof PAYMENT_PROCESSOR_TYPES)[number];
 
 export type PaymentMethodEntry = {
@@ -28,6 +28,7 @@ export const PAYMENT_METHOD_DEFAULT_LABELS: Record<PaymentMethodType, string> = 
   netopia: "Card online (Netopia)",
   stripe: "Card online (Stripe)",
   ipay: "Card bancar (BT iPay)",
+  klarna: "Klarna",
 };
 
 const ALL_TYPES: PaymentMethodType[] = ["cash_on_delivery", ...PAYMENT_PROCESSOR_TYPES];
@@ -49,6 +50,7 @@ const LEGACY_CODE_MAP: Record<string, PaymentMethodType> = {
   netopia: "netopia",
   stripe: "stripe",
   ipay: "ipay",
+  klarna: "klarna",
 };
 
 function coerceEntry(x: unknown): PaymentMethodEntry | null {
@@ -164,8 +166,13 @@ export type CardDiscountConfig = {
 
 export const DEFAULT_CARD_DISCOUNT: CardDiscountConfig = { enabled: false, type: "percent", value: 0 };
 
-/** Online card methods eligible for the card-payment discount (excludes ramburs). */
-const CARD_DISCOUNT_METHODS = new Set<PaymentMethodType>(["netopia", "stripe", "ipay"]);
+/**
+ * Online prepaid methods eligible for the card-payment discount (excludes ramburs).
+ * `isCardPaymentMethod` doubles as the "paid online ⇒ mark collected on the invoice"
+ * signal (see smartbill.actions.ts), so Klarna belongs here — it is auto-captured at
+ * checkout, i.e. paid upfront just like the card processors.
+ */
+const CARD_DISCOUNT_METHODS = new Set<PaymentMethodType>(["netopia", "stripe", "ipay", "klarna"]);
 
 export function isCardPaymentMethod(method: string | null | undefined): boolean {
   return !!method && CARD_DISCOUNT_METHODS.has(method as PaymentMethodType);

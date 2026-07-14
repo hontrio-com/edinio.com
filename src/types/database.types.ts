@@ -2111,6 +2111,7 @@ export type Database = {
           onboarding_completed: boolean
           onboarding_step: string
           orders_seen_at: string | null
+          payment_failed_at: string | null
           plan: string
           plan_expires_at: string | null
           plan_interval: string | null
@@ -2132,6 +2133,7 @@ export type Database = {
           onboarding_completed?: boolean
           onboarding_step?: string
           orders_seen_at?: string | null
+          payment_failed_at?: string | null
           plan?: string
           plan_expires_at?: string | null
           plan_interval?: string | null
@@ -2153,6 +2155,7 @@ export type Database = {
           onboarding_completed?: boolean
           onboarding_step?: string
           orders_seen_at?: string | null
+          payment_failed_at?: string | null
           plan?: string
           plan_expires_at?: string | null
           plan_interval?: string | null

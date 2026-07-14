@@ -1248,7 +1248,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
           {/* ── Facturare ── */}
           {activeSection === "facturare" && (
-            <BillingSection plan={profile.plan as "basic" | "premium" | "ultra" | "trial" | "free"} planExpiresAt={profile.plan_expires_at} interval={currentInterval} />
+            <BillingSection plan={profile.plan as "basic" | "premium" | "ultra" | "trial" | "free"} planExpiresAt={profile.plan_expires_at} interval={currentInterval} paymentFailed={!!profile.payment_failed_at} />
           )}
           {activeSection === "livrare" && (
             <div className="space-y-6">

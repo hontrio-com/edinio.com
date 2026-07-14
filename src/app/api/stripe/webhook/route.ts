@@ -329,6 +329,7 @@ export async function POST(req: NextRequest) {
       plan_expires_at: expiresAt.toISOString(),
       plan_interval: normalizeInterval(interval),
       stripe_customer_id: session.customer as string ?? null,
+      payment_failed_at: null, // reactivare → curata orice stare de plata restanta
     }).eq("id", userId);
 
     if (profileError) {
@@ -445,11 +446,14 @@ export async function POST(req: NextRequest) {
     const periodEnd = invoicePeriodEnd(invoice);
     const expiresAt = periodEnd ? new Date(periodEnd * 1000) : computeExpiry(interval);
 
-    // 1. Update plan + expiry + interval
+    // 1. Update plan + expiry + interval. Curata `payment_failed_at`: orice plata
+    // reusita (initiala, reinnoire normala sau recuperare in dunning) inseamna ca
+    // abonamentul e la zi → bannerul/badge-ul de plata restanta dispare.
     await admin.from("users_profile").update({
       plan: plan as never,
       plan_expires_at: expiresAt.toISOString(),
       plan_interval: normalizeInterval(interval),
+      payment_failed_at: null,
     }).eq("id", userId);
 
     // 2. Clear suspension
@@ -510,6 +514,15 @@ export async function POST(req: NextRequest) {
     const plan = subMeta.plan;
 
     if (userId && plan) {
+      // Marcheaza starea REALA de plata restanta (dunning Stripe). Acesta e semnalul
+      // pe care se leaga bannerul + badge-ul din Setari — nu `plan_expires_at < now()`,
+      // care devine true si in fereastra draft/finalizare a Stripe (inainte de orice
+      // incercare de plata), producand un fals „plata esuata". Setat abia cand Stripe
+      // chiar a incercat si a esuat plata; sters la urmatoarea plata reusita.
+      await admin.from("users_profile").update({
+        payment_failed_at: new Date().toISOString(),
+      }).eq("id", userId);
+
       const { data: failedAuthData } = await admin.auth.admin.getUserById(userId);
       const { data: failedProfile } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();
       if (failedAuthData?.user?.email) {

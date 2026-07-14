@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
-    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at").eq("id", user.id).single(),
+    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at").eq("id", user.id).single(),
     supabase.from("businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
   ]);
 
@@ -82,12 +82,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const suspendedBusiness = allBusinesses.find(b => b.suspended_until !== null && b.suspended_until !== undefined);
 
-  // Abonament platit cu data de reinnoire trecuta = candidat pentru bannerul de
-  // plata restanta (plata esuata, inca in dunning Stripe — inainte de suspendarea
-  // publica gestionata de GracePeriodBanner). Verificarea efectiva a expirarii
-  // (fata de "acum") o face bannerul client, ca layout-ul sa ramana pur.
+  // Banner de plata restanta pentru abonamente platite aflate in dunning Stripe
+  // (inainte de suspendarea publica gestionata de GracePeriodBanner). Semnalul e
+  // `payment_failed_at` — starea REALA de esec setata din webhook-ul
+  // invoice.payment_failed si stearsa la urmatoarea plata reusita. NU folosim
+  // `plan_expires_at < now()`: acela devine true si in fereastra draft/finalizare
+  // a Stripe (inainte de orice incercare de plata) → fals „plata esuata".
   const isPaidPlan = profile.plan !== "free" && profile.plan !== "trial";
-  const showPastDueBanner = isPaidPlan && !suspendedBusiness && !!profile.plan_expires_at;
+  const showPastDueBanner = isPaidPlan && !suspendedBusiness && !!profile.payment_failed_at;
 
   return (
     <div className="min-h-screen bg-background">
@@ -109,9 +111,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {suspendedBusiness?.suspended_until && (
           <GracePeriodBanner suspendedUntil={suspendedBusiness.suspended_until} />
         )}
-        {showPastDueBanner && (
-          <PaymentPastDueBanner planExpiresAt={profile.plan_expires_at!} />
-        )}
+        {showPastDueBanner && <PaymentPastDueBanner />}
         <DashboardTopbar
           userFullName={profile.full_name}
           plan={profile.plan}

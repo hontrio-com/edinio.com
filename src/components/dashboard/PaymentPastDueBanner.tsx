@@ -4,20 +4,15 @@ import { useState } from "react";
 import { AlertTriangle, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 
-interface Props {
-  planExpiresAt: string; // ISO string — data ultimei plati reusite + interval
-}
-
-// Afisat cand un abonament PLATIT a expirat fara reinnoire (plata esuata in
-// fereastra de dunning Stripe), inainte ca abonamentul sa fie sters complet.
-// Dupa stergere preia GracePeriodBanner (magazin suspendat). Butonul „Reia
-// plata" duce direct la factura restanta Stripe (`/api/stripe/retry-payment`),
-// unde userul plateste pe loc; plata reusita reactiveaza abonamentul automat.
-export function PaymentPastDueBanner({ planExpiresAt }: Props) {
+// Afisat cand plata unui abonament PLATIT a esuat cu adevarat (webhook Stripe
+// invoice.payment_failed → users_profile.payment_failed_at), inca in fereastra de
+// dunning, inainte ca abonamentul sa fie sters complet. Layout-ul decide afisarea
+// pe baza flag-ului `payment_failed_at`; componenta nu mai face verificare de timp.
+// Dupa stergere preia GracePeriodBanner (magazin suspendat). Butonul „Reia plata"
+// duce direct la factura restanta Stripe (`/api/stripe/retry-payment`), unde userul
+// plateste pe loc; plata reusita reactiveaza abonamentul automat.
+export function PaymentPastDueBanner() {
   const [loading, setLoading] = useState(false);
-
-  // Inca activ (data de reinnoire in viitor) — nu afisam nimic.
-  if (new Date(planExpiresAt).getTime() >= Date.now()) return null;
 
   async function openPortal() {
     setLoading(true);

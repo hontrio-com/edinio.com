@@ -13,18 +13,19 @@ interface Props {
   plan: "free" | "trial" | "basic" | "premium" | "ultra";
   planExpiresAt: string | null;
   interval?: BillingInterval;
+  paymentFailed?: boolean;
 }
 
-export function BillingSection({ plan, planExpiresAt, interval = "monthly" }: Props) {
+export function BillingSection({ plan, planExpiresAt, interval = "monthly", paymentFailed = false }: Props) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
   const [retryLoading, setRetryLoading] = useState(false);
 
-  // Abonament platit cu data de reinnoire trecuta = plata restanta (renewal esuat).
-  const isPastDue =
-    plan !== "free" && plan !== "trial" && !!planExpiresAt &&
-    new Date(planExpiresAt).getTime() < Date.now();
+  // Plata restanta = starea REALA de dunning Stripe (users_profile.payment_failed_at),
+  // nu `plan_expires_at < now()` (care e true si in fereastra draft a Stripe, inainte
+  // de orice incercare de plata). `planExpiresAt` ramane doar pentru afisarea datei.
+  const isPastDue = plan !== "free" && plan !== "trial" && paymentFailed;
 
   useEffect(() => {
     const supabase = createClient();

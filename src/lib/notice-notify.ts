@@ -70,6 +70,7 @@ const NOTICE_PAYMENT_LABELS: Record<string, string> = {
   netopia: "Card online (Netopia)",
   ipay: "Card bancar (BT iPay)",
   klarna: "Klarna",
+  revolut: "Card online (Revolut)",
   bank_transfer: "Transfer bancar",
 };
 

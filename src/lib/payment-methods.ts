@@ -12,9 +12,9 @@
  *   merchant can then disable / reorder / rename them.
  */
 
-export type PaymentMethodType = "cash_on_delivery" | "netopia" | "stripe" | "ipay" | "klarna";
+export type PaymentMethodType = "cash_on_delivery" | "netopia" | "stripe" | "ipay" | "klarna" | "revolut";
 
-export const PAYMENT_PROCESSOR_TYPES = ["netopia", "stripe", "ipay", "klarna"] as const;
+export const PAYMENT_PROCESSOR_TYPES = ["netopia", "stripe", "ipay", "klarna", "revolut"] as const;
 export type PaymentProcessorType = (typeof PAYMENT_PROCESSOR_TYPES)[number];
 
 export type PaymentMethodEntry = {
@@ -29,6 +29,7 @@ export const PAYMENT_METHOD_DEFAULT_LABELS: Record<PaymentMethodType, string> = 
   stripe: "Card online (Stripe)",
   ipay: "Card bancar (BT iPay)",
   klarna: "Klarna",
+  revolut: "Card online (Revolut)",
 };
 
 const ALL_TYPES: PaymentMethodType[] = ["cash_on_delivery", ...PAYMENT_PROCESSOR_TYPES];
@@ -51,6 +52,7 @@ const LEGACY_CODE_MAP: Record<string, PaymentMethodType> = {
   stripe: "stripe",
   ipay: "ipay",
   klarna: "klarna",
+  revolut: "revolut",
 };
 
 function coerceEntry(x: unknown): PaymentMethodEntry | null {
@@ -172,7 +174,7 @@ export const DEFAULT_CARD_DISCOUNT: CardDiscountConfig = { enabled: false, type:
  * signal (see smartbill.actions.ts), so Klarna belongs here — it is auto-captured at
  * checkout, i.e. paid upfront just like the card processors.
  */
-const CARD_DISCOUNT_METHODS = new Set<PaymentMethodType>(["netopia", "stripe", "ipay", "klarna"]);
+const CARD_DISCOUNT_METHODS = new Set<PaymentMethodType>(["netopia", "stripe", "ipay", "klarna", "revolut"]);
 
 export function isCardPaymentMethod(method: string | null | undefined): boolean {
   return !!method && CARD_DISCOUNT_METHODS.has(method as PaymentMethodType);

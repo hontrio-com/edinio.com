@@ -92,8 +92,8 @@ export function BusinessCard({ business }: { business: Business | null }) {
   );
 }
 
-function NavItem({ href, icon: Icon, label, active, badge = 0, beta = false }: {
-  href: string; icon: React.ComponentType<{ className?: string }>; label: string; active: boolean; badge?: number; beta?: boolean;
+function NavItem({ href, icon: Icon, label, active, badge = 0, beta = false, nou = false }: {
+  href: string; icon: React.ComponentType<{ className?: string }>; label: string; active: boolean; badge?: number; beta?: boolean; nou?: boolean;
 }) {
   return (
     <Link href={href} className={cn(
@@ -104,6 +104,9 @@ function NavItem({ href, icon: Icon, label, active, badge = 0, beta = false }: {
       <span className="flex-1">{label}</span>
       {beta && (
         <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-warning/15 text-warning">Beta</span>
+      )}
+      {nou && (
+        <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-primary text-white">Nou</span>
       )}
       {badge > 0 && (
         <span className="min-w-[18px] h-[18px] flex items-center justify-center bg-primary text-white text-[10px] font-bold rounded-full px-1">
@@ -178,7 +181,7 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
 
           return (
             <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive}
-              beta={item.href === "/dashboard/offers"} />
+              beta={item.href === "/dashboard/offers"} nou={item.href === "/dashboard/features"} />
           );
         })}
 

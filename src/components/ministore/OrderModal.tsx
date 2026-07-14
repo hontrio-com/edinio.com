@@ -477,6 +477,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"
           : paymentMethod === "netopia" ? "/api/netopia/start"
           : paymentMethod === "klarna" ? "/api/klarna/start"
+          : paymentMethod === "revolut" ? "/api/revolut/start"
           : "/api/ipay/start";
         const res = await fetch(endpoint, {
           method: "POST",

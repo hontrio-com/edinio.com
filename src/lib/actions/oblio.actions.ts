@@ -153,6 +153,7 @@ function buildCollect(
     ipay: "Card",
     netopia: "Card",
     klarna: "Alta incasare banca",
+    revolut: "Card",
   };
 
   const type = typeMap[paymentMethod] ?? "Alta incasare banca";

@@ -19,6 +19,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   netopia: { src: "/integrations/netopia.svg", alt: "Netopia Payments", filter: "invert(1)" },
   ipay: { src: "/integrations/ipay.webp", alt: "BT iPay" },
   klarna: { src: "/integrations/klarna.svg", alt: "Klarna" },
+  revolut: { src: "/integrations/revolut.svg", alt: "Revolut" },
   "facebook-pixel": { src: "/integrations/facebook-pixel.svg", alt: "Facebook Pixel" },
   "tiktok-pixel": { src: "/integrations/tiktok-pixel.svg", alt: "TikTok Pixel" },
   "google-ads": { src: "/integrations/google-ads.svg", alt: "Google Ads" },

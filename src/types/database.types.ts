@@ -915,6 +915,7 @@ export type Database = {
           internal_notes: string | null
           ipay_order_id: string | null
           klarna_order_id: string | null
+          revolut_order_id: string | null
           items: Json
           notes: string | null
           oblio_invoice_link: string | null
@@ -980,6 +981,7 @@ export type Database = {
           internal_notes?: string | null
           ipay_order_id?: string | null
           klarna_order_id?: string | null
+          revolut_order_id?: string | null
           items: Json
           notes?: string | null
           oblio_invoice_link?: string | null
@@ -1045,6 +1047,7 @@ export type Database = {
           internal_notes?: string | null
           ipay_order_id?: string | null
           klarna_order_id?: string | null
+          revolut_order_id?: string | null
           items?: Json
           notes?: string | null
           oblio_invoice_link?: string | null
@@ -1867,6 +1870,7 @@ export type Database = {
           brevo_config: Json | null
           klaviyo_config: Json | null
           klarna_config: Json | null
+          revolut_config: Json | null
           business_id: string
           card_discount_config: Json
           cargus_config: Json | null
@@ -1915,6 +1919,7 @@ export type Database = {
           brevo_config?: Json | null
           klaviyo_config?: Json | null
           klarna_config?: Json | null
+          revolut_config?: Json | null
           business_id: string
           card_discount_config?: Json
           cargus_config?: Json | null
@@ -1963,6 +1968,7 @@ export type Database = {
           brevo_config?: Json | null
           klaviyo_config?: Json | null
           klarna_config?: Json | null
+          revolut_config?: Json | null
           business_id?: string
           card_discount_config?: Json
           cargus_config?: Json | null

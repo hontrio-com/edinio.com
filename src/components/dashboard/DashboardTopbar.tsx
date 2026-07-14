@@ -504,7 +504,10 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                   active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}>
                 <Icon className="h-4 w-4 flex-shrink-0" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.href === "/dashboard/features" && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-primary text-white">Nou</span>
+                )}
               </Link>
             );
           })}

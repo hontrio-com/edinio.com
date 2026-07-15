@@ -21,7 +21,9 @@ export type NetopiaConfig = {
 };
 
 export const NETOPIA_SANDBOX_URL = "https://secure.sandbox.netopia-payments.com";
-export const NETOPIA_PRODUCTION_URL = "https://secure.mobilpay.ro";
+// v2 live API is served under /pay on secure.mobilpay.ro — without it every
+// request 404s. (secure.netopia-payments.com just redirects to the marketing site.)
+export const NETOPIA_PRODUCTION_URL = "https://secure.mobilpay.ro/pay";
 
 function getBaseUrl(sandbox: boolean) {
   return sandbox ? NETOPIA_SANDBOX_URL : NETOPIA_PRODUCTION_URL;
@@ -47,6 +49,9 @@ export interface NetopiaStartParams {
 
 export interface NetopiaStartResponse {
   error?: { code: string; message: string };
+  // Gateway-level errors (e.g. 401 Unauthorized) come flat, not under `error`.
+  code?: string;
+  message?: string;
   payment?: {
     paymentURL?: string;
     ntpID?: string;
@@ -173,9 +178,15 @@ export async function startNetopiaPayment(
       return { redirectUrl: data.payment.paymentURL, ntpID: data.payment.ntpID };
     }
 
-    if (data.error?.code && data.error.code !== "00") {
-      console.error(`[netopia] error code ${data.error.code}: ${data.error.message ?? ""}`);
-      return { error: data.error.message || `Netopia error: ${data.error.code}` };
+    if (res.status === 401) {
+      return { error: "Netopia a refuzat autentificarea: API Key invalid sau nepotrivit cu modul selectat (Sandbox/Live)." };
+    }
+
+    const errCode = data.error?.code ?? data.code;
+    const errMessage = data.error?.message ?? data.message;
+    if (errCode && errCode !== "00") {
+      console.error(`[netopia] error code ${errCode}: ${errMessage ?? ""}`);
+      return { error: errMessage || `Netopia error: ${errCode}` };
     }
 
     console.error("[netopia] no paymentURL in response:", JSON.stringify(data).slice(0, 800));

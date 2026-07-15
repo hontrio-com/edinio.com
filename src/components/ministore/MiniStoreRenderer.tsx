@@ -288,6 +288,10 @@ function CartCheckoutModal({
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
+  // Order created by a previous identical submit (e.g. retry after the card
+  // processor errored) — reused so the retry doesn't place a duplicate order
+  // and re-send merchant/customer notifications.
+  const placedRef = useRef<{ payloadKey: string; orderId: string } | null>(null);
   const [intlEnabled, setIntlEnabled] = useState(false);
   const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
@@ -468,7 +472,7 @@ function CartCheckoutModal({
         ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, price: o.pricing!.price, quantity: 1 })),
       ];
-      const result = await placeCartOrder({
+      const payload = {
         business_id: businessId,
         cart_session_id: sessionId || undefined,
         items: allItems,
@@ -505,10 +509,15 @@ function CartCheckoutModal({
         woot_service_name: courierSelection?.wootServiceName,
         colete_service_id: courierSelection?.coleteServiceId,
         colete_service_name: courierSelection?.coleteServiceName,
-      });
-      if ("error" in result) { setErrors({ _: result.error as string }); return; }
-
-      const orderId = (result as { orderId: string }).orderId;
+      };
+      const payloadKey = JSON.stringify(payload);
+      let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;
+      if (!orderId) {
+        const result = await placeCartOrder(payload);
+        if ("error" in result) { setErrors({ _: result.error as string }); return; }
+        orderId = (result as { orderId: string }).orderId;
+        placedRef.current = { payloadKey, orderId };
+      }
 
       if (paymentMethod !== "cash_on_delivery") {
         const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"

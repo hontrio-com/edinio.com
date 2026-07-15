@@ -125,6 +125,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
+  // Order created by a previous identical submit (e.g. retry after the card
+  // processor errored) — reused so the retry doesn't place a duplicate order
+  // and re-send merchant/customer notifications.
+  const placedRef = useRef<{ payloadKey: string; orderId: string } | null>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
@@ -427,7 +431,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         ...(fbtOffer ? fbtOffer.items.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })) : []),
       ];
       const acceptedOfferIds = [...acceptedBumpOffers.map((o) => o.id), ...(fbtOffer ? [fbtOffer.id] : [])];
-      const result = await placeOrder({
+      const payload = {
         business_id: business.id,
         cart_session_id: sessionId || undefined,
         product_id: product.id,
@@ -468,10 +472,15 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         colete_service_name: courierSelection?.coleteServiceName,
         additional_items: allAdditional.length > 0 ? allAdditional : undefined,
         accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,
-      });
-      if (result.error) { setErrors({ _: result.error }); return; }
-      // Order created with the cart folded in — clear it so it isn't re-ordered.
-      if (cart.length > 0) onCartConsumed?.();
+      };
+      const payloadKey = JSON.stringify(payload);
+      let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;
+      if (!orderId) {
+        const result = await placeOrder(payload);
+        if (result.error || !result.orderId) { setErrors({ _: result.error ?? "Eroare la plasarea comenzii." }); return; }
+        orderId = result.orderId;
+        placedRef.current = { payloadKey, orderId };
+      }
 
       if (paymentMethod !== "cash_on_delivery") {
         const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"
@@ -482,18 +491,26 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId: result.orderId, businessId: business.id }),
+          body: JSON.stringify({ orderId, businessId: business.id }),
         });
         let data: { url?: string; redirectUrl?: string; error?: string } = {};
         try { data = await res.json(); } catch { /* non-JSON response (e.g. error page) — show generic error below */ }
         const redirect = data.url ?? data.redirectUrl;
-        if (redirect) { window.location.href = redirect; return; }
+        if (redirect) {
+          // Order created with the cart folded in — clear it so it isn't re-ordered.
+          // Deferred to here so a failed payment start keeps the form (and payloadKey)
+          // intact for the retry above.
+          if (cart.length > 0) onCartConsumed?.();
+          window.location.href = redirect;
+          return;
+        }
         setErrors({ _: data.error ?? "Eroare la initierea platii cu cardul." });
         return;
       }
 
+      if (cart.length > 0) onCartConsumed?.();
       onClose();
-      window.location.href = `${business.basePath}/confirm?orderId=${result.orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
+      window.location.href = `${business.basePath}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
     });
   }
 

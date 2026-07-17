@@ -19,17 +19,38 @@ function toCsvRow(values: unknown[]): string {
   return values.map(escapeCsvValue).join(",");
 }
 
-async function exportUsers(adminClient: ReturnType<typeof createAdminClient>): Promise<string> {
-  const { data: profiles, error } = await adminClient
-    .from("users_profile")
-    .select("id, full_name, plan, role, created_at, suspended_until")
-    .order("created_at", { ascending: false });
+/**
+ * Exporturile trebuie sa fie COMPLETE: PostgREST taie silentios orice raspuns
+ * la 1000 de randuri, deci citim in ferestre .range(). Spre deosebire de
+ * fetchAllRows (log + partial), aici o eroare ARUNCA — un CSV partial care
+ * arata complet e mai periculos decat un export esuat.
+ */
+async function fetchAllOrThrow<T>(
+  query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await query(from, from + 999);
+    if (error) throw new Error(error.message);
+    all.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  return all;
+}
 
-  if (error) throw new Error(error.message);
+async function exportUsers(adminClient: ReturnType<typeof createAdminClient>): Promise<string> {
+  const profiles = await fetchAllOrThrow((from, to) =>
+    adminClient
+      .from("users_profile")
+      .select("id, full_name, plan, role, created_at, suspended_until")
+      .order("created_at", { ascending: false })
+      .order("id")
+      .range(from, to)
+  );
 
   // Fetch auth users for emails and last sign in
   const authUsers: Record<string, { email: string; last_sign_in_at: string | null }> = {};
-  if (profiles && profiles.length > 0) {
+  if (profiles.length > 0) {
     const authList = await listAllAuthUsers(adminClient);
     for (const u of authList) {
       authUsers[u.id] = {
@@ -40,19 +61,17 @@ async function exportUsers(adminClient: ReturnType<typeof createAdminClient>): P
   }
 
   // Fetch business counts per user
-  const { data: businesses } = await adminClient
-    .from("businesses")
-    .select("user_id");
+  const businesses = await fetchAllOrThrow((from, to) =>
+    adminClient.from("businesses").select("user_id").order("id").range(from, to)
+  );
 
   const businessCounts: Record<string, number> = {};
-  if (businesses) {
-    for (const b of businesses) {
-      businessCounts[b.user_id] = (businessCounts[b.user_id] ?? 0) + 1;
-    }
+  for (const b of businesses) {
+    businessCounts[b.user_id] = (businessCounts[b.user_id] ?? 0) + 1;
   }
 
   const headers = ["ID", "Email", "Nume", "Plan", "Rol", "Creat la", "Ultima autentificare", "Afaceri", "Suspendat pana la"];
-  const rows = (profiles ?? []).map((p) => {
+  const rows = profiles.map((p) => {
     const auth = authUsers[p.id];
     return toCsvRow([
       p.id,
@@ -71,31 +90,29 @@ async function exportUsers(adminClient: ReturnType<typeof createAdminClient>): P
 }
 
 async function exportInvoices(adminClient: ReturnType<typeof createAdminClient>): Promise<string> {
-  const { data: invoices, error } = await adminClient
-    .from("invoices")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const invoices = await fetchAllOrThrow((from, to) =>
+    adminClient
+      .from("invoices")
+      .select("id, user_id, plan, amount, currency, status, smartbill_series, smartbill_number, stripe_invoice_id, created_at")
+      .order("created_at", { ascending: false })
+      .order("id")
+      .range(from, to)
+  );
 
-  if (error) throw new Error(error.message);
-
-  // Fetch user names
-  const userIds = [...new Set((invoices ?? []).map((i) => i.user_id))];
+  // Fetch user names (windowed full read — .in() cu >1000 de id-uri se
+  // trunchiaza si el si depaseste limita de URL)
   const userNames: Record<string, string> = {};
-  if (userIds.length > 0) {
-    const { data: profiles } = await adminClient
-      .from("users_profile")
-      .select("id, full_name")
-      .in("id", userIds);
-
-    if (profiles) {
-      for (const p of profiles) {
-        userNames[p.id] = p.full_name;
-      }
+  if (invoices.length > 0) {
+    const profiles = await fetchAllOrThrow((from, to) =>
+      adminClient.from("users_profile").select("id, full_name").order("id").range(from, to)
+    );
+    for (const p of profiles) {
+      userNames[p.id] = p.full_name;
     }
   }
 
   const headers = ["ID", "Utilizator", "Nume utilizator", "Plan", "Suma", "Moneda", "Status", "SmartBill serie", "SmartBill numar", "Stripe Invoice ID", "Creat la"];
-  const rows = (invoices ?? []).map((inv) =>
+  const rows = invoices.map((inv) =>
     toCsvRow([
       inv.id,
       inv.user_id,
@@ -115,31 +132,28 @@ async function exportInvoices(adminClient: ReturnType<typeof createAdminClient>)
 }
 
 async function exportOrders(adminClient: ReturnType<typeof createAdminClient>): Promise<string> {
-  const { data: orders, error } = await adminClient
-    .from("orders")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const orders = await fetchAllOrThrow((from, to) =>
+    adminClient
+      .from("orders")
+      .select("id, order_number, business_id, customer_name, customer_phone, customer_email, total, status, payment_method, payment_status, created_at")
+      .order("created_at", { ascending: false })
+      .order("id")
+      .range(from, to)
+  );
 
-  if (error) throw new Error(error.message);
-
-  // Fetch business names
-  const businessIds = [...new Set((orders ?? []).map((o) => o.business_id))];
+  // Fetch business names (windowed full read, vezi nota din exportInvoices)
   const businessNames: Record<string, string> = {};
-  if (businessIds.length > 0) {
-    const { data: businesses } = await adminClient
-      .from("businesses")
-      .select("id, business_name")
-      .in("id", businessIds);
-
-    if (businesses) {
-      for (const b of businesses) {
-        businessNames[b.id] = b.business_name;
-      }
+  if (orders.length > 0) {
+    const businesses = await fetchAllOrThrow((from, to) =>
+      adminClient.from("businesses").select("id, business_name").order("id").range(from, to)
+    );
+    for (const b of businesses) {
+      businessNames[b.id] = b.business_name;
     }
   }
 
   const headers = ["ID", "Numar comanda", "Afacere", "Client", "Telefon client", "Email client", "Total", "Status", "Metoda plata", "Status plata", "Creat la"];
-  const rows = (orders ?? []).map((ord) =>
+  const rows = orders.map((ord) =>
     toCsvRow([
       ord.id,
       ord.order_number,

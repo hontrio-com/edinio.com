@@ -37,16 +37,23 @@ export default async function SettingsPage({ searchParams }: Props) {
 
   // One Product Store (Settings > Tip magazin): current mode + active products picker.
   const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
-  let opsProducts: { id: string; name: string }[] = [];
+  // Windowed: la cataloage mari, un query simplu e taiat silentios la 1000 de
+  // randuri (cap PostgREST) si produse valide ar lipsi din selectorul One Product.
+  const opsProducts: { id: string; name: string }[] = [];
   if (bizRow?.id) {
-    const { data } = await supabase
-      .from("products")
-      .select("id, name")
-      .eq("business_id", bizRow.id)
-      .eq("is_active", true)
-      .order("is_featured", { ascending: false })
-      .order("sort_order");
-    opsProducts = data ?? [];
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase
+        .from("products")
+        .select("id, name")
+        .eq("business_id", bizRow.id)
+        .eq("is_active", true)
+        .order("is_featured", { ascending: false })
+        .order("sort_order")
+        .order("id")
+        .range(from, from + 999);
+      opsProducts.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
   }
 
   // Store-level SEO: current overrides + the auto-derived defaults shown as

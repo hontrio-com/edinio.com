@@ -8,6 +8,7 @@ import {
   brevoWebhookUrl, registerWebhook, deleteWebhook,
   type BrevoConfig, type BrevoList, type BrevoContactInput, type BrevoPublicConfig,
 } from "@/lib/brevo";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -161,20 +162,28 @@ export async function syncExistingCustomers(
     return { error: "Conecteaza contul si alege o lista intai." };
   }
 
-  const [{ data: orders }, { data: sup }] = await Promise.all([
-    owned.supabase
-      .from("orders")
-      .select("customer_email, customer_name, customer_phone, created_at")
-      .eq("business_id", businessId)
-      .not("customer_email", "is", null)
-      .order("created_at", { ascending: false }),
-    owned.supabase.from("brevo_suppressions").select("email").eq("business_id", businessId),
+  // fetchAllRows: sync-ul trebuie sa acopere TOATE comenzile, nu doar primele
+  // 1000 (cap-ul silentios PostgREST) — altfel clientii vechi lipsesc din lista.
+  const [orders, sup] = await Promise.all([
+    fetchAllRows("brevo.syncExistingCustomers.orders", (from, to) =>
+      owned.supabase
+        .from("orders")
+        .select("customer_email, customer_name, customer_phone, created_at")
+        .eq("business_id", businessId)
+        .not("customer_email", "is", null)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to)
+    ),
+    fetchAllRows("brevo.syncExistingCustomers.suppressions", (from, to) =>
+      owned.supabase.from("brevo_suppressions").select("email").eq("business_id", businessId).order("id").range(from, to)
+    ),
   ]);
-  const suppressed = new Set((sup ?? []).map((s) => (s.email as string).toLowerCase()));
+  const suppressed = new Set(sup.map((s) => s.email.toLowerCase()));
 
   const seen = new Set<string>();
   const contacts: BrevoContactInput[] = [];
-  for (const o of orders ?? []) {
+  for (const o of orders) {
     const email = (o.customer_email ?? "").trim().toLowerCase();
     if (!email || seen.has(email) || suppressed.has(email)) continue;
     seen.add(email);

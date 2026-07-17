@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminStatsClient } from "@/components/admin/AdminStatsClient";
 import { PLAN_PRICES } from "@/lib/plans";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const metadata = { title: "Statistici" };
 
@@ -28,18 +29,20 @@ export default async function AdminStatsPage() {
   twelveMonthsAgo.setDate(1);
   twelveMonthsAgo.setHours(0, 0, 0, 0);
 
-  const [
-    { data: profiles },
-    { data: orders },
-    { data: invoices },
-    { data: businesses },
-    { data: tickets },
-  ] = await Promise.all([
-    admin.from("users_profile").select("id, plan, created_at").gte("created_at", twelveMonthsAgo.toISOString()),
-    admin.from("orders").select("id, total, status, created_at, business_id").gte("created_at", twelveMonthsAgo.toISOString()),
-    admin.from("invoices").select("id, amount, status, created_at, plan").gte("created_at", twelveMonthsAgo.toISOString()),
-    admin.from("businesses").select("id, store_name, business_name, niche_id, type"),
-    admin.from("support_tickets").select("id, created_at").gte("created_at", twelveMonthsAgo.toISOString()),
+  // Toate seturile platform-wide se citesc in ferestre .range(): un query
+  // simplu e trunchiat silentios la 1000 de randuri de PostgREST, iar cifrele
+  // de aici (venituri, comenzi, MRR) trebuie sa fie complete.
+  const [profiles, orders, invoices, businesses, tickets] = await Promise.all([
+    fetchAllRows("admin.stats.profiles12m", (f, t) =>
+      admin.from("users_profile").select("id, plan, created_at").gte("created_at", twelveMonthsAgo.toISOString()).order("id").range(f, t)),
+    fetchAllRows("admin.stats.orders12m", (f, t) =>
+      admin.from("orders").select("id, total, status, created_at, business_id").gte("created_at", twelveMonthsAgo.toISOString()).order("id").range(f, t)),
+    fetchAllRows("admin.stats.invoices12m", (f, t) =>
+      admin.from("invoices").select("id, amount, status, created_at, plan").gte("created_at", twelveMonthsAgo.toISOString()).order("id").range(f, t)),
+    fetchAllRows("admin.stats.businesses", (f, t) =>
+      admin.from("businesses").select("id, store_name, business_name, niche_id, type").order("id").range(f, t)),
+    fetchAllRows("admin.stats.tickets12m", (f, t) =>
+      admin.from("support_tickets").select("id, created_at").gte("created_at", twelveMonthsAgo.toISOString()).order("id").range(f, t)),
   ]);
 
   const months = buildMonthLabels(12);
@@ -47,12 +50,12 @@ export default async function AdminStatsPage() {
   // Users by month
   const usersByMonth = months.map((m) => ({
     month: m,
-    count: (profiles ?? []).filter((p) => monthKey(p.created_at) === m).length,
+    count: profiles.filter((p) => monthKey(p.created_at) === m).length,
   }));
 
   // Orders by month
   const ordersByMonth = months.map((m) => {
-    const mo = (orders ?? []).filter((o) => monthKey(o.created_at) === m);
+    const mo = orders.filter((o) => monthKey(o.created_at) === m);
     return {
       month: m,
       count: mo.length,
@@ -62,7 +65,7 @@ export default async function AdminStatsPage() {
 
   // Invoice revenue by month (paid only)
   const invoicesByMonth = months.map((m) => {
-    const mi = (invoices ?? []).filter((i) => monthKey(i.created_at) === m && i.status === "paid" && i.plan !== "domain");
+    const mi = invoices.filter((i) => monthKey(i.created_at) === m && i.status === "paid" && i.plan !== "domain");
     return {
       month: m,
       count: mi.length,
@@ -73,18 +76,19 @@ export default async function AdminStatsPage() {
   // Tickets by month
   const ticketsByMonth = months.map((m) => ({
     month: m,
-    count: (tickets ?? []).filter((t) => monthKey(t.created_at) === m).length,
+    count: tickets.filter((t) => monthKey(t.created_at) === m).length,
   }));
 
   // Plan distribution (all time)
-  const { data: allProfiles } = await admin.from("users_profile").select("plan");
-  const planCounts = (allProfiles ?? []).reduce<Record<string, number>>((acc, p) => {
+  const allProfiles = await fetchAllRows("admin.stats.allProfiles", (f, t) =>
+    admin.from("users_profile").select("plan").order("id").range(f, t));
+  const planCounts = allProfiles.reduce<Record<string, number>>((acc, p) => {
     acc[p.plan] = (acc[p.plan] ?? 0) + 1;
     return acc;
   }, {});
 
   // Niche distribution
-  const nicheCounts = (businesses ?? []).reduce<Record<string, number>>((acc, b) => {
+  const nicheCounts = businesses.reduce<Record<string, number>>((acc, b) => {
     if (b.niche_id) acc[b.niche_id] = (acc[b.niche_id] ?? 0) + 1;
     return acc;
   }, {});
@@ -92,34 +96,40 @@ export default async function AdminStatsPage() {
   // MRR / ARR: last 30 days paid invoices
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const { data: recentPaidInvoices } = await admin
-    .from("invoices")
-    .select("amount")
-    .eq("status", "paid")
-    .neq("plan", "domain")
-    .gte("created_at", thirtyDaysAgo.toISOString());
-  const mrr = (recentPaidInvoices ?? []).reduce((s, i) => s + (i.amount ?? 0), 0);
+  const recentPaidInvoices = await fetchAllRows("admin.stats.recentPaidInvoices", (f, t) =>
+    admin
+      .from("invoices")
+      .select("amount")
+      .eq("status", "paid")
+      .neq("plan", "domain")
+      .gte("created_at", thirtyDaysAgo.toISOString())
+      .order("id")
+      .range(f, t));
+  const mrr = recentPaidInvoices.reduce((s, i) => s + (i.amount ?? 0), 0);
   const arr = mrr * 12;
 
   // Plan-based MRR estimate: count active paid users x plan price
-  const { data: activePaidProfiles } = await admin
-    .from("users_profile")
-    .select("plan")
-    .in("plan", ["basic", "premium", "ultra"]);
-  const mrrByPlan = (activePaidProfiles ?? []).reduce((s, p) => s + (PLAN_PRICES[p.plan] ?? 0), 0);
+  const activePaidProfiles = await fetchAllRows("admin.stats.activePaidProfiles", (f, t) =>
+    admin
+      .from("users_profile")
+      .select("plan")
+      .in("plan", ["basic", "premium", "ultra"])
+      .order("id")
+      .range(f, t));
+  const mrrByPlan = activePaidProfiles.reduce((s, p) => s + (PLAN_PRICES[p.plan] ?? 0), 0);
 
   // ARPU = total revenue / total paying users
-  const totalPaidInvoices = (invoices ?? []).filter((i) => i.status === "paid" && i.plan !== "domain");
+  const totalPaidInvoices = invoices.filter((i) => i.status === "paid" && i.plan !== "domain");
   const totalInvRevenue = totalPaidInvoices.reduce((s, i) => s + (i.amount ?? 0), 0);
   const uniquePayers = new Set(totalPaidInvoices.map((i) => i.id)).size; // approximate
   const arpu = uniquePayers > 0 ? totalInvRevenue / uniquePayers : 0;
 
   // Churn: users on free plan who had paid invoices before (approximate)
-  const { data: allProfilesForChurn } = await admin.from("users_profile").select("id, plan, created_at");
-  const freeUsers = (allProfilesForChurn ?? []).filter((p) => p.plan === "free");
-  const paidUserIds = new Set((activePaidProfiles ?? []).map((p) => p.plan)); // not useful, let's count differently
-  const totalActive = (allProfilesForChurn ?? []).length;
-  const paidActive = (activePaidProfiles ?? []).length;
+  const allProfilesForChurn = await fetchAllRows("admin.stats.allProfilesForChurn", (f, t) =>
+    admin.from("users_profile").select("id, plan, created_at").order("id").range(f, t));
+  const freeUsers = allProfilesForChurn.filter((p) => p.plan === "free");
+  const totalActive = allProfilesForChurn.length;
+  const paidActive = activePaidProfiles.length;
   const churnRate = totalActive > 0 ? Math.round(((totalActive - paidActive - freeUsers.filter((u) => {
     // users who registered more than 30 days ago and are still free
     return new Date(u.created_at) < new Date(Date.now() - 30 * 86400000);
@@ -129,16 +139,17 @@ export default async function AdminStatsPage() {
   const ltv = arpu * 12;
 
   // Top 10 businesses by order count (all time)
-  const { data: allOrders } = await admin.from("orders").select("business_id, total, status");
+  const allOrders = await fetchAllRows("admin.stats.allOrders", (f, t) =>
+    admin.from("orders").select("business_id, total, status").order("id").range(f, t));
   const bizOrderMap = new Map<string, { count: number; revenue: number }>();
-  for (const o of allOrders ?? []) {
+  for (const o of allOrders) {
     const curr = bizOrderMap.get(o.business_id) ?? { count: 0, revenue: 0 };
     curr.count += 1;
     if (!["cancelled", "refunded"].includes(o.status)) curr.revenue += o.total ?? 0;
     bizOrderMap.set(o.business_id, curr);
   }
 
-  const topBusinesses = (businesses ?? [])
+  const topBusinesses = businesses
     .map((b) => ({
       name: b.store_name ?? b.business_name ?? "—",
       order_count: bizOrderMap.get(b.id)?.count ?? 0,

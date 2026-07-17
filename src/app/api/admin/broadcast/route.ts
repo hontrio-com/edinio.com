@@ -24,27 +24,30 @@ export async function POST(req: NextRequest) {
 
   const adminClient = createAdminClient();
 
-  // Build query to find matching users
-  let query = adminClient.from("users_profile").select("id");
-
-  if (body.filter?.plan) {
-    query = query.eq("plan", body.filter.plan);
+  // Toti userii care se potrivesc filtrului, in ferestre .range() — un query
+  // simplu e taiat silentios la 1000 si broadcast-ul ar sari peste restul.
+  const users: { id: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    let query = adminClient.from("users_profile").select("id");
+    if (body.filter?.plan) {
+      query = query.eq("plan", body.filter.plan);
+    }
+    if (body.filter?.role) {
+      query = query.eq("role", body.filter.role);
+    }
+    const { data, error } = await query.order("id").range(from, from + 999);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    users.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
   }
-  if (body.filter?.role) {
-    query = query.eq("role", body.filter.role);
-  }
 
-  const { data: users, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  const recipientCount = users?.length ?? 0;
+  const recipientCount = users.length;
 
   // Insert notifications for each user
   if (recipientCount > 0) {
-    const rows = users!.map((u) => ({
+    const rows = users.map((u) => ({
       user_id: u.id,
       title: body.subject,
       message: body.message,

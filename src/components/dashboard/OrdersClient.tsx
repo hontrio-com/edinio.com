@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
@@ -20,6 +20,7 @@ import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
+import { ORDERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -35,10 +36,16 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-const PAGE_SIZE = 50;
-
-export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+  /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
+  /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
+  totalCount: number;
+  /** Comenzi per status, pe tot magazinul (pentru tab-uri). */
+  statusCounts: Record<string, number>;
+  page: number;
+  searchQuery: string;
+  statusFilter: string;
   pendingCount: number;
   smartbillEnabled?: boolean;
   wootEnabled?: boolean;
@@ -53,9 +60,10 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   fanPickup?: { lastDate: string | null; lastId: string | null };
 }) {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [page, setPage] = useState(1);
+  const pathname = usePathname();
+  const [isPending, startNavTransition] = useTransition();
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  const lastNavQ = useRef(searchQuery);
   const [generatingOrderId, setGeneratingOrderId] = useState<string | null>(null);
   const [, startGenerateTransition] = useTransition();
   const [wootModalOrder, setWootModalOrder] = useState<Order | null>(null);
@@ -74,30 +82,52 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return orders.filter(o => {
-      const matchesSearch = !q ||
-        o.order_number.toLowerCase().includes(q) ||
-        o.customer_name.toLowerCase().includes(q) ||
-        (o.customer_phone ?? "").toLowerCase().includes(q);
-      const matchesStatus = statusFilter === "all" || o.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [orders, searchQuery, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Datele vin gata filtrate si paginate de pe server; interactiunile devin
+  // parametri de URL (q, status, page), deci functioneaza la orice volum.
+  const totalPages = Math.max(1, Math.ceil(totalCount / ORDERS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const allCount = Object.values(statusCounts).reduce((s, n) => s + n, 0);
+
+  const buildUrl = useCallback((next: { q?: string; status?: string; page?: number }) => {
+    const params = new URLSearchParams();
+    const nq = next.q ?? searchQuery;
+    const nstatus = next.status ?? statusFilter;
+    const npage = next.page ?? page;
+    if (nq) params.set("q", nq);
+    if (nstatus !== "all") params.set("status", nstatus);
+    if (npage > 1) params.set("page", String(npage));
+    const qs = params.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  }, [pathname, searchQuery, statusFilter, page]);
+
+  // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
+  useEffect(() => {
+    if (searchQuery !== lastNavQ.current) {
+      lastNavQ.current = searchQuery;
+      setSearchInput(searchQuery);
+    }
+  }, [searchQuery]);
+
+  // Cautarea e debounced si dusa in URL; filtrarea o face serverul, in SQL.
+  useEffect(() => {
+    if (searchInput === searchQuery) return;
+    const t = setTimeout(() => {
+      lastNavQ.current = searchInput;
+      startNavTransition(() => router.replace(buildUrl({ q: searchInput, page: 1 }), { scroll: false }));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput, searchQuery, buildUrl, router]);
+
+  function goTo(next: { q?: string; status?: string; page?: number }) {
+    startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
+  }
 
   function handleFilterChange(key: string) {
-    setStatusFilter(key);
-    setPage(1);
+    goTo({ status: key, page: 1 });
   }
 
   function handleSearch(q: string) {
-    setSearchQuery(q);
-    setPage(1);
+    setSearchInput(q);
   }
 
   function handleOblioAction(e: React.MouseEvent, orderId: string, action: "invoice" | "proforma" | "storno") {
@@ -285,12 +315,12 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <input
             type="search"
-            value={searchQuery}
+            value={searchInput}
             onChange={e => handleSearch(e.target.value)}
             placeholder="Cauta comanda, client..."
             className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
           />
-          {searchQuery && (
+          {searchInput && (
             <button
               type="button"
               onClick={() => handleSearch("")}
@@ -305,7 +335,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
       {/* Status tabs */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-4 scrollbar-hide">
         {STATUS_TABS.map(tab => {
-          const count = tab.key === "all" ? orders.length : orders.filter(o => o.status === tab.key).length;
+          const count = tab.key === "all" ? allCount : (statusCounts[tab.key] ?? 0);
           if (count === 0 && tab.key !== "all") return null;
           return (
             <button
@@ -334,15 +364,15 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
       {/* Search result info */}
       {searchQuery.trim() && (
         <p className="text-sm text-muted-foreground mb-3">
-          {filtered.length === 0
+          {totalCount === 0
             ? `Niciun rezultat pentru "${searchQuery}"`
-            : `${filtered.length} ${filtered.length === 1 ? "rezultat" : "rezultate"} pentru "${searchQuery}"`}
+            : `${totalCount} ${totalCount === 1 ? "rezultat" : "rezultate"} pentru "${searchQuery}"`}
         </p>
       )}
 
       {/* Table */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        {filtered.length > 0 ? (
+      <div className={cn("bg-surface border border-border rounded-xl overflow-hidden transition-opacity", isPending && "opacity-60")}>
+        {orders.length > 0 ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -384,7 +414,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {paginated.map((order) => {
+                  {orders.map((order) => {
                     const status = orderStatus(order.status);
                     return (
                       <tr
@@ -709,12 +739,12 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-5 py-3 border-t border-border">
                 <p className="text-xs text-muted-foreground">
-                  {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} comenzi
+                  {(currentPage - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(currentPage * ORDERS_PAGE_SIZE, totalCount)} din {totalCount} comenzi
                 </p>
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    onClick={() => goTo({ page: Math.max(1, currentPage - 1) })}
                     disabled={currentPage === 1}
                     className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
@@ -734,7 +764,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                         <button
                           key={item}
                           type="button"
-                          onClick={() => setPage(item as number)}
+                          onClick={() => goTo({ page: item as number })}
                           className={cn(
                             "min-w-[28px] h-7 px-2 rounded-lg text-xs font-medium border transition-colors",
                             currentPage === item
@@ -748,7 +778,7 @@ export function OrdersClient({ orders, pendingCount, smartbillEnabled, wootEnabl
                     )}
                   <button
                     type="button"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    onClick={() => goTo({ page: Math.min(totalPages, currentPage + 1) })}
                     disabled={currentPage === totalPages}
                     className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >

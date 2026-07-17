@@ -8,6 +8,7 @@ import { ProductPage } from "@/components/ministore/ProductPage";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
@@ -162,24 +163,34 @@ export default async function SlugPage({ params, searchParams }: Props) {
     }
   }
 
-  const [{ data: products }, { data: storeSettings }, { data: categoriesData }] = await Promise.all([
-    supabase
-      .from("products")
-      .select("id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id, page_sections, weight_grams")
-      .eq("business_id", business.id)
-      .eq("is_active", true)
-      .order("is_featured", { ascending: false })
-      .order("sort_order"),
+  // Catalogul complet, in ferestre .range(): un query simplu se trunchiaza
+  // silentios la 1000 de randuri (cap PostgREST) si ar ascunde produse.
+  const [products, { data: storeSettings }, categoriesData] = await Promise.all([
+    fetchAllRows("storefront.home.products", (from, to) =>
+      supabase
+        .from("products")
+        .select("id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id, page_sections, weight_grams")
+        .eq("business_id", business.id)
+        .eq("is_active", true)
+        .order("is_featured", { ascending: false })
+        .order("sort_order")
+        .order("id")
+        .range(from, to)
+    ),
     createAdminClient()
       .from("store_settings")
       .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
       .eq("business_id", business.id)
       .single(),
-    supabase
-      .from("categories")
-      .select("id, name, parent_id, image_url, sort_order")
-      .eq("business_id", business.id)
-      .order("sort_order"),
+    fetchAllRows("storefront.home.categories", (from, to) =>
+      supabase
+        .from("categories")
+        .select("id, name, parent_id, image_url, sort_order")
+        .eq("business_id", business.id)
+        .order("sort_order")
+        .order("id")
+        .range(from, to)
+    ),
   ]);
 
   // Detect custom domain access
@@ -261,10 +272,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
       />
       <MiniStoreRenderer
         business={business}
-        products={products ?? []}
+        products={products}
         storeSettings={storeSettings}
         basePath={basePath}
-        categories={categoriesData ?? []}
+        categories={categoriesData}
         initialPage={initialPage}
       />
     </>

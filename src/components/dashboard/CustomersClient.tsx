@@ -1,14 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Users, Search, Phone, Mail, MapPin, ShoppingBag, TrendingUp, Repeat,
-  X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown,
+  X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
-import { normalizePhone, type Customer, type CustomersSummary } from "@/lib/customers";
+import type { Customer, CustomerOrder, CustomersSummary } from "@/lib/customers";
+import { getCustomerOrders } from "@/lib/actions/customer.actions";
+import { CUSTOMERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { orderStatus } from "@/lib/orders/status";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -19,8 +22,6 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "orders", label: "Numar comenzi" },
   { key: "name",   label: "Nume (A-Z)" },
 ];
-
-const PAGE_SIZE = 50;
 
 function StatCard({ icon: Icon, label, value, tint }: {
   icon: typeof Users; label: string; value: string; tint: string;
@@ -38,36 +39,62 @@ function StatCard({ icon: Icon, label, value, tint }: {
   );
 }
 
-export function CustomersClient({ customers, summary }: { customers: Customer[]; summary: CustomersSummary }) {
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortKey>("recent");
+export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, businessId }: {
+  /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
+  customers: Customer[];
+  summary: CustomersSummary;
+  /** Total clienti pentru cautarea curenta (count exact din DB). */
+  totalCount: number;
+  page: number;
+  searchQuery: string;
+  sort: string;
+  businessId: string;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isPending, startNavTransition] = useTransition();
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  const lastNavQ = useRef(searchQuery);
   const [selected, setSelected] = useState<Customer | null>(null);
-  const [page, setPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const qPhone = normalizePhone(search);
-    let list = customers;
-    if (q) {
-      list = customers.filter((c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.email ?? "").toLowerCase().includes(q) ||
-        (qPhone.length >= 3 && normalizePhone(c.phone).includes(qPhone))
-      );
-    }
-    const out = list.slice();
-    switch (sort) {
-      case "spent": out.sort((a, b) => b.totalSpent - a.totalSpent); break;
-      case "orders": out.sort((a, b) => b.orderCount - a.orderCount); break;
-      case "name": out.sort((a, b) => a.name.localeCompare(b.name, "ro")); break;
-      case "recent": default: out.sort((a, b) => new Date(b.lastOrderAt).getTime() - new Date(a.lastOrderAt).getTime()); break;
-    }
-    return out;
-  }, [customers, search, sort]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Datele vin gata agregate/cautate/paginate din SQL; interactiunile devin
+  // parametri de URL (q, sort, page), deci functioneaza la orice volum.
+  const totalPages = Math.max(1, Math.ceil(totalCount / CUSTOMERS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number }) => {
+    const params = new URLSearchParams();
+    const nq = next.q ?? searchQuery;
+    const nsort = next.sort ?? sort;
+    const npage = next.page ?? page;
+    if (nq) params.set("q", nq);
+    if (nsort !== "recent") params.set("sort", nsort);
+    if (npage > 1) params.set("page", String(npage));
+    const qs = params.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  }, [pathname, searchQuery, sort, page]);
+
+  // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
+  useEffect(() => {
+    if (searchQuery !== lastNavQ.current) {
+      lastNavQ.current = searchQuery;
+      setSearchInput(searchQuery);
+    }
+  }, [searchQuery]);
+
+  // Cautarea e debounced si dusa in URL; cautarea reala se face in SQL.
+  useEffect(() => {
+    if (searchInput === searchQuery) return;
+    const t = setTimeout(() => {
+      lastNavQ.current = searchInput;
+      startNavTransition(() => router.replace(buildUrl({ q: searchInput, page: 1 }), { scroll: false }));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput, searchQuery, buildUrl, router]);
+
+  function goTo(next: { q?: string; sort?: string; page?: number }) {
+    startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
+  }
 
   return (
     <div>
@@ -93,8 +120,8 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Cauta dupa nume, telefon sau email..."
             className="w-full pl-10 pr-3 py-2.5 text-sm border border-border rounded-xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
           />
@@ -103,7 +130,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
           <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <select
             value={sort}
-            onChange={(e) => { setSort(e.target.value as SortKey); setPage(1); }}
+            onChange={(e) => goTo({ sort: e.target.value, page: 1 })}
             className="appearance-none w-full sm:w-auto pl-10 pr-9 py-2.5 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary cursor-pointer"
           >
             {SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -112,21 +139,21 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
       </div>
 
       {/* List */}
-      {filtered.length === 0 ? (
+      {customers.length === 0 ? (
         <div className="text-center py-20 border border-dashed border-border rounded-2xl">
           <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
             <Users className="h-6 w-6 text-muted-foreground" />
           </div>
           <p className="font-medium text-foreground mb-1">
-            {search ? "Niciun client gasit" : "Niciun client inca"}
+            {searchQuery ? "Niciun client gasit" : "Niciun client inca"}
           </p>
           <p className="text-sm text-muted-foreground">
-            {search ? "Incearca alta cautare." : "Clientii apar aici dupa prima comanda din magazin."}
+            {searchQuery ? "Incearca alta cautare." : "Clientii apar aici dupa prima comanda din magazin."}
           </p>
         </div>
       ) : (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden divide-y divide-border">
-          {paginated.map((c) => (
+        <div className={cn("bg-surface border border-border rounded-xl overflow-hidden divide-y divide-border transition-opacity", isPending && "opacity-60")}>
+          {customers.map((c) => (
             <button
               key={c.key}
               type="button"
@@ -165,12 +192,12 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3">
               <p className="text-xs text-muted-foreground">
-                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} clienti
+                {(currentPage - 1) * CUSTOMERS_PAGE_SIZE + 1}–{Math.min(currentPage * CUSTOMERS_PAGE_SIZE, totalCount)} din {totalCount} clienti
               </p>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  onClick={() => goTo({ page: Math.max(1, currentPage - 1) })}
                   disabled={currentPage === 1}
                   className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
@@ -190,7 +217,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
                       <button
                         key={item}
                         type="button"
-                        onClick={() => setPage(item as number)}
+                        onClick={() => goTo({ page: item as number })}
                         className={cn(
                           "min-w-[28px] h-7 px-2 rounded-lg text-xs font-medium border transition-colors",
                           currentPage === item
@@ -204,7 +231,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
                   )}
                 <button
                   type="button"
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => goTo({ page: Math.min(totalPages, currentPage + 1) })}
                   disabled={currentPage === totalPages}
                   className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
@@ -216,13 +243,38 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
         </div>
       )}
 
-      {selected && <CustomerDetail customer={selected} onClose={() => setSelected(null)} />}
+      {selected && <CustomerDetail customer={selected} businessId={businessId} onClose={() => setSelected(null)} />}
     </div>
   );
 }
 
-function CustomerDetail({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function CustomerDetail({ customer, businessId, onClose }: { customer: Customer; businessId: string; onClose: () => void }) {
   const addressParts = [customer.address, customer.city, customer.county].filter(Boolean);
+
+  // Istoricul se incarca on-demand (paginat) — clientul poate avea mii de
+  // comenzi, deci lista de clienti nu il mai cara pe tot in payload.
+  const [history, setHistory] = useState<CustomerOrder[]>([]);
+  const [historyTotal, setHistoryTotal] = useState<number | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [isLoading, startLoadTransition] = useTransition();
+
+  const fetchHistory = useCallback((offset: number) => {
+    startLoadTransition(async () => {
+      const res = await getCustomerOrders(businessId, customer.key, offset);
+      if ("error" in res) {
+        setHistoryError(res.error);
+        return;
+      }
+      setHistoryError(null);
+      setHistory(prev => (offset === 0 ? res.orders : [...prev, ...res.orders]));
+      setHistoryTotal(res.total);
+    });
+  }, [businessId, customer.key]);
+
+  useEffect(() => {
+    fetchHistory(0);
+  }, [fetchHistory]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -294,30 +346,60 @@ function CustomerDetail({ customer, onClose }: { customer: Customer; onClose: ()
           {/* Order history */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Istoric comenzi</p>
-            <div className="space-y-1.5">
-              {customer.orders.map((o) => {
-                const st = orderStatus(o.status);
-                return (
-                  <Link
-                    key={o.id}
-                    href={`/dashboard/orders/${o.id}`}
-                    className="flex items-center gap-3 p-2.5 rounded-xl border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors group"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-foreground truncate">#{o.order_number}</p>
-                        <span className={cn("text-[10px] font-semibold rounded-full px-1.5 py-0.5", st.className)}>{st.label}</span>
+
+            {historyError ? (
+              <div className="text-center py-6">
+                <p className="text-xs text-destructive mb-3">{historyError}</p>
+                <button
+                  type="button"
+                  onClick={() => fetchHistory(history.length)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-muted transition-colors"
+                >
+                  Incearca din nou
+                </button>
+              </div>
+            ) : historyTotal === null ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {history.map((o) => {
+                  const st = orderStatus(o.status);
+                  return (
+                    <Link
+                      key={o.id}
+                      href={`/dashboard/orders/${o.id}`}
+                      className="flex items-center gap-3 p-2.5 rounded-xl border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors group"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground truncate">#{o.order_number}</p>
+                          <span className={cn("text-[10px] font-semibold rounded-full px-1.5 py-0.5", st.className)}>{st.label}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {formatDate(o.created_at)} · {o.item_count} {o.item_count === 1 ? "produs" : "produse"}
+                        </p>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {formatDate(o.created_at)} · {o.item_count} {o.item_count === 1 ? "produs" : "produse"}
-                      </p>
-                    </div>
-                    <p className="text-sm font-bold text-foreground tabular-nums flex-shrink-0">{formatPrice(o.total)}</p>
-                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary flex-shrink-0" />
-                  </Link>
-                );
-              })}
-            </div>
+                      <p className="text-sm font-bold text-foreground tabular-nums flex-shrink-0">{formatPrice(o.total)}</p>
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary flex-shrink-0" />
+                    </Link>
+                  );
+                })}
+
+                {history.length < historyTotal && (
+                  <button
+                    type="button"
+                    onClick={() => fetchHistory(history.length)}
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-semibold rounded-xl border border-border hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Incarca mai multe ({historyTotal - history.length} ramase)
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -16,7 +16,6 @@ import { RomaniaMap, COUNTY_CODE_MAP } from "@/components/dashboard/RomaniaMap";
 import { createClient } from "@/lib/supabase/client";
 
 const MONTHS_RO = ["Ian", "Feb", "Mar", "Apr", "Mai", "Iun", "Iul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const VALID_STATUSES = ["pending", "confirmed", "processing", "shipped", "delivered"];
 
 interface DayData { date: string; label: string; revenue: number; orders: number }
 interface Metrics {
@@ -294,73 +293,59 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
     const since = new Date(now - p * 86400000).toISOString();
     const prevSince = new Date(now - p * 2 * 86400000).toISOString();
 
-    const [eventsRes, ordersRes, prevOrdersRes, allOrdersRes] = await Promise.all([
-      supabase.from("site_analytics")
-        .select("event_type, device, source, created_at")
-        .eq("business_id", businessId)
-        .gte("created_at", since),
-      supabase.from("orders")
-        .select("total, created_at, status")
-        .eq("business_id", businessId)
-        .gte("created_at", since),
-      supabase.from("orders")
-        .select("total, status")
-        .eq("business_id", businessId)
-        .gte("created_at", prevSince)
-        .lt("created_at", since),
-      supabase.from("orders")
-        .select("shipping_address, status")
-        .eq("business_id", businessId),
+    // Totul vine agregat din SQL (functiile *_breakdown / orders_daily_revenue /
+    // orders_county_counts): fetch-ul de evenimente/comenzi brute se trunchia
+    // silentios la 1000 de randuri, deci cifrele mineau la magazine cu volum.
+    const [eventsRes, dailyRes, prevDailyRes, countyRes] = await Promise.all([
+      supabase.rpc("site_analytics_breakdown", { bid: businessId, t_from: since }),
+      supabase.rpc("orders_daily_revenue", { bid: businessId, t_from: since }),
+      supabase.rpc("orders_daily_revenue", { bid: businessId, t_from: prevSince, t_to: since }),
+      supabase.rpc("orders_county_counts", { bid: businessId }),
     ]);
 
     const events = eventsRes.data ?? [];
-    const orders = ordersRes.data ?? [];
-    const prevOrders = prevOrdersRes.data ?? [];
-    const allOrders = allOrdersRes.data ?? [];
+    const daily = dailyRes.data ?? [];
+    const prevDaily = prevDailyRes.data ?? [];
+    const countyRows = countyRes.data ?? [];
 
-    // Metrics
-    const validOrders = orders.filter(o => VALID_STATUSES.includes(o.status));
-    const totalRevenue = validOrders.reduce((s, o) => s + Number(o.total), 0);
-    const ordersCount = validOrders.length;
+    // Metrics (statusurile anulate/rambursate sunt deja excluse in SQL)
+    const totalRevenue = daily.reduce((s, r) => s + Number(r.revenue), 0);
+    const ordersCount = daily.reduce((s, r) => s + Number(r.order_count), 0);
     const aov = ordersCount > 0 ? totalRevenue / ordersCount : 0;
-    const visits = events.filter(e => e.event_type === "visit");
-    const visitsCount = visits.length;
+    const visitRows = events.filter(e => e.event_type === "visit");
+    const visitsCount = visitRows.reduce((s, e) => s + Number(e.cnt), 0);
     const conversionRate = visitsCount > 0 ? (ordersCount / visitsCount) * 100 : 0;
-    const prevValidOrders = prevOrders.filter(o => VALID_STATUSES.includes(o.status));
-    const prevRevenue = prevValidOrders.reduce((s, o) => s + Number(o.total), 0);
-    const prevOrdersCount = prevValidOrders.length;
+    const prevRevenue = prevDaily.reduce((s, r) => s + Number(r.revenue), 0);
+    const prevOrdersCount = prevDaily.reduce((s, r) => s + Number(r.order_count), 0);
 
     // Daily sales
+    const dailyMap = new Map(daily.map(r => [r.day, r]));
     const salesByDay: DayData[] = Array.from({ length: p }, (_, i) => {
       const d = new Date(now - (p - 1 - i) * 86400000);
       d.setHours(0, 0, 0, 0);
       const dayStr = d.toISOString().slice(0, 10);
-      const dayOrders = validOrders.filter(o => o.created_at.slice(0, 10) === dayStr);
+      const dayRow = dailyMap.get(dayStr);
       return {
         date: dayStr,
         label: `${d.getDate()} ${MONTHS_RO[d.getMonth()]}`,
-        revenue: Math.round(dayOrders.reduce((s, o) => s + Number(o.total), 0)),
-        orders: dayOrders.length,
+        revenue: Math.round(Number(dayRow?.revenue ?? 0)),
+        orders: Number(dayRow?.order_count ?? 0),
       };
     });
 
     // Traffic sources
     const sourceMap: Record<string, number> = {};
-    visits.forEach(e => { sourceMap[e.source ?? "direct"] = (sourceMap[e.source ?? "direct"] ?? 0) + 1; });
+    visitRows.forEach(e => { const k = e.source ?? "direct"; sourceMap[k] = (sourceMap[k] ?? 0) + Number(e.cnt); });
     const trafficSources = Object.entries(sourceMap).map(([source, count]) => ({ source, count }));
 
     // Devices
     const deviceMap: Record<string, number> = {};
-    events.forEach(e => { if (e.device) deviceMap[e.device] = (deviceMap[e.device] ?? 0) + 1; });
+    events.forEach(e => { if (e.device) deviceMap[e.device] = (deviceMap[e.device] ?? 0) + Number(e.cnt); });
     const devices = Object.entries(deviceMap).map(([device, count]) => ({ device, count }));
 
     // County orders
     const countyOrderMap: Record<string, number> = {};
-    allOrders.forEach(o => {
-      if (!VALID_STATUSES.includes(o.status)) return;
-      const addr = o.shipping_address as { county?: string } | null;
-      if (addr?.county) countyOrderMap[addr.county] = (countyOrderMap[addr.county] ?? 0) + 1;
-    });
+    countyRows.forEach(r => { if (r.county) countyOrderMap[r.county] = Number(r.cnt); });
     const ordersByCounty: CountyEntry[] = Object.entries(COUNTY_CODE_MAP).map(([county, code]) => ({
       county, code, orders: countyOrderMap[county] ?? 0,
     }));

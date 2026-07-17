@@ -6,6 +6,7 @@ import {
   pingKlaviyo, getLists, subscribeProfiles, toPublicKlaviyoConfig,
   type KlaviyoConfig, type KlaviyoList, type KlaviyoPublicConfig,
 } from "@/lib/klaviyo";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -138,14 +139,20 @@ export async function syncExistingCustomers(
     return { error: "Conecteaza contul si alege o lista intai." };
   }
 
-  const { data: orders } = await owned.supabase
-    .from("orders")
-    .select("customer_email")
-    .eq("business_id", businessId)
-    .not("customer_email", "is", null);
+  // fetchAllRows: sync-ul trebuie sa acopere TOATE comenzile, nu doar primele
+  // 1000 (cap-ul silentios PostgREST) — altfel clientii vechi lipsesc din lista.
+  const orders = await fetchAllRows("klaviyo.syncExistingCustomers.orders", (from, to) =>
+    owned.supabase
+      .from("orders")
+      .select("customer_email")
+      .eq("business_id", businessId)
+      .not("customer_email", "is", null)
+      .order("id")
+      .range(from, to)
+  );
 
   const emails = Array.from(new Set(
-    (orders ?? []).map((o) => (o.customer_email ?? "").trim().toLowerCase()).filter(Boolean),
+    orders.map((o) => (o.customer_email ?? "").trim().toLowerCase()).filter(Boolean),
   ));
   if (emails.length === 0) return { total: 0 };
 

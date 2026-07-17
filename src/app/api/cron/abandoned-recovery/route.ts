@@ -54,13 +54,21 @@ export async function GET(req: NextRequest) {
   const thresholdIso = new Date(now.getTime() - ABANDON_MINUTES * 60_000).toISOString();
   let sent = 0;
 
-  // Stores opted in + with automation enabled.
-  const { data: settingsRows } = await admin
-    .from("store_settings")
-    .select("business_id, abandoned_cart_automation, smso_config, notice_config")
-    .eq("abandoned_cart_enabled", true);
+  // Stores opted in + with automation enabled. Windowed — un query simplu e
+  // taiat silentios la 1000 de randuri (cap PostgREST).
+  const settingsRows: { business_id: string; abandoned_cart_automation: unknown; smso_config: unknown; notice_config: unknown }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await admin
+      .from("store_settings")
+      .select("business_id, abandoned_cart_automation, smso_config, notice_config")
+      .eq("abandoned_cart_enabled", true)
+      .order("business_id")
+      .range(from, from + 999);
+    settingsRows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
 
-  const active = (settingsRows ?? [])
+  const active = settingsRows
     .map((s) => ({
       businessId: s.business_id,
       automation: readAutomationConfig(s.abandoned_cart_automation),
@@ -71,21 +79,39 @@ export async function GET(req: NextRequest) {
 
   if (active.length === 0) return NextResponse.json({ ok: true, sent: 0 });
 
+  // Lookup-urile pe .in() merg in chunk-uri de 500 de id-uri: o lista mai mare
+  // depaseste limita de URL si raspunsul oricum se taie la 1000 de randuri.
   const bizIds = active.map((a) => a.businessId);
-  const { data: businesses } = await admin
-    .from("businesses").select("id, user_id, slug, custom_domain, store_name, business_name, primary_color").in("id", bizIds);
-  const bizMap = new Map((businesses ?? []).map((b) => [b.id, b]));
+  const businesses: { id: string; user_id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string; primary_color: string | null }[] = [];
+  for (let i = 0; i < bizIds.length; i += 500) {
+    const { data } = await admin
+      .from("businesses").select("id, user_id, slug, custom_domain, store_name, business_name, primary_color").in("id", bizIds.slice(i, i + 500));
+    businesses.push(...(data ?? []));
+  }
+  const bizMap = new Map(businesses.map((b) => [b.id, b]));
 
   // Automations are a Premium feature — skip stores whose owner isn't on Premium/Ultra.
-  const ownerIds = [...new Set((businesses ?? []).map((b) => b.user_id))];
-  const { data: profiles } = ownerIds.length
-    ? await admin.from("users_profile").select("id, plan").in("id", ownerIds)
-    : { data: [] as { id: string; plan: string }[] };
-  const planMap = new Map((profiles ?? []).map((p) => [p.id, p.plan]));
+  const ownerIds = [...new Set(businesses.map((b) => b.user_id))];
+  const profiles: { id: string; plan: string }[] = [];
+  for (let i = 0; i < ownerIds.length; i += 500) {
+    const { data } = await admin.from("users_profile").select("id, plan").in("id", ownerIds.slice(i, i + 500));
+    profiles.push(...(data ?? []));
+  }
+  const planMap = new Map(profiles.map((p) => [p.id, p.plan]));
 
-  const { data: optouts } = await admin
-    .from("recovery_optout").select("business_id, email").in("business_id", bizIds);
-  const optoutSet = new Set((optouts ?? []).map((o) => `${o.business_id}:${o.email.toLowerCase()}`));
+  // Optout-urile pot fi multe per magazin — ferestre .range() per chunk.
+  const optouts: { business_id: string; email: string }[] = [];
+  for (let i = 0; i < bizIds.length; i += 500) {
+    const chunk = bizIds.slice(i, i + 500);
+    for (let from = 0; ; from += 1000) {
+      const { data } = await admin
+        .from("recovery_optout").select("business_id, email").in("business_id", chunk)
+        .order("business_id").order("email").range(from, from + 999);
+      optouts.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
+  }
+  const optoutSet = new Set(optouts.map((o) => `${o.business_id}:${o.email.toLowerCase()}`));
 
   for (const store of active) {
     const biz = bizMap.get(store.businessId);

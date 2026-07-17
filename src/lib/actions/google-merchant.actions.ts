@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { buildAuthUrl, signState, googleMerchantConfigured, getAccessToken } from "@/lib/google-merchant/oauth";
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription } from "@/lib/google-merchant/client";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
@@ -74,19 +75,22 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
 
   const config = await loadConfig(supabase, businessId);
 
-  const [{ count: total }, { count: active }, { data: statusRows }, { count: queued }] = await Promise.all([
+  // Numaratori exclusiv prin count/head (exacte la orice volum) — fetch-ul de
+  // randuri pentru numarat se trunchia silentios la 1000 (cap PostgREST).
+  const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId),
-    supabase.from("gmc_products").select("status").eq("business_id", businessId),
+    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active"),
+    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "pending"),
+    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "disapproved"),
     supabase.from("gmc_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId),
   ]);
-  const rows = statusRows ?? [];
   const counts = {
     total: total ?? 0,
-    synced: active ?? 0,
-    active: rows.filter((r) => r.status === "active").length,
-    pending: rows.filter((r) => r.status === "pending").length,
-    disapproved: rows.filter((r) => r.status === "disapproved").length,
+    synced: synced ?? 0,
+    active: activeCnt ?? 0,
+    pending: pendingCnt ?? 0,
+    disapproved: disapprovedCnt ?? 0,
     queued: queued ?? 0,
   };
 
@@ -302,13 +306,17 @@ export async function queueSyncAll(businessId: string): Promise<{ queued: number
   const config = await loadConfig(supabase, businessId);
   if (!config.connected || !config.account_id) return { error: "Conecteaza mai intai Google Merchant." };
 
-  const { data: products } = await supabase
-    .from("products").select("id").eq("business_id", businessId).eq("is_active", true);
-  const rows = (products ?? []).map((p) => ({ business_id: businessId, product_id: p.id, offer_id: p.id, op: "upsert" }));
+  // Windowed: catalogul intreg intra in coada, nu doar primele 1000 de produse.
+  const products = await fetchAllRows("gmc.queueSyncAll.products", (from, to) =>
+    supabase.from("products").select("id").eq("business_id", businessId).eq("is_active", true).order("id").range(from, to)
+  );
+  const rows = products.map((p) => ({ business_id: businessId, product_id: p.id, offer_id: p.id, op: "upsert" }));
   if (rows.length === 0) return { queued: 0 };
 
   const admin = createAdminClient();
-  await admin.from("gmc_sync_queue").upsert(rows as never, { onConflict: "business_id,offer_id,op" });
+  for (let i = 0; i < rows.length; i += 1000) {
+    await admin.from("gmc_sync_queue").upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+  }
   revalidatePath("/dashboard/features/google-merchant");
   return { queued: rows.length };
 }

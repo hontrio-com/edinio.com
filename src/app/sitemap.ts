@@ -4,6 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN, isPlatformHost, parseStoreSeo } from "@/lib/seo";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
+
+// Un fisier de sitemap accepta maxim 50.000 de URL-uri (limita Google) —
+// peste, fisierul intreg e respins. Pastram ordinea de prioritate
+// static → magazine → produse → pagini si taiem la limita.
+const SITEMAP_URL_LIMIT = 50000;
 
 /** Whether a store's homepage opted out of indexing (Settings > SEO > noindex).
  *  Reads the nested store_settings(page_content) selected on a businesses row. */
@@ -45,14 +51,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // skip the individual /product/* URLs (the main one 301s to the homepage; the
     // rest are noindex). Custom pages below still get listed.
     if (parseStoreModeFromSettings(biz.store_settings).mode !== "one_product") {
-      const { data: products } = await supabase
-        .from("products")
-        .select("slug, updated_at")
-        .eq("business_id", biz.id)
-        .eq("is_active", true)
-        .not("slug", "is", null);
+      const products = await fetchAllRows("sitemap.store.products", (from, to) =>
+        supabase
+          .from("products")
+          .select("slug, updated_at")
+          .eq("business_id", biz.id)
+          .eq("is_active", true)
+          .not("slug", "is", null)
+          .order("id")
+          .range(from, to)
+      );
 
-      for (const p of products ?? []) {
+      for (const p of products) {
         if (!p.slug) continue;
         entries.push({
           url: `${base}/product/${p.slug}`,
@@ -63,12 +73,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }
     }
 
-    const { data: pages } = await supabase
-      .from("custom_pages")
-      .select("slug, updated_at, seo")
-      .eq("business_id", biz.id)
-      .eq("is_published", true);
-    for (const pg of pages ?? []) {
+    const pages = await fetchAllRows("sitemap.store.pages", (from, to) =>
+      supabase
+        .from("custom_pages")
+        .select("slug, updated_at, seo")
+        .eq("business_id", biz.id)
+        .eq("is_published", true)
+        .order("id")
+        .range(from, to)
+    );
+    for (const pg of pages) {
       if ((pg.seo as { noindex?: boolean } | null)?.noindex) continue;
       entries.push({
         url: `${base}/${pg.slug}`,
@@ -77,7 +91,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.5,
       });
     }
-    return entries;
+    return entries.slice(0, SITEMAP_URL_LIMIT);
   }
 
   // ── Platform (www.edinio.com): marketing + stores WITHOUT a custom domain ──
@@ -92,12 +106,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${PLATFORM_ORIGIN}/gdpr`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
   ];
 
-  const { data: businesses } = await createAdminClient()
-    .from("businesses")
-    .select("slug, updated_at, custom_domain, store_settings(page_content)")
-    .eq("is_published", true);
+  const admin = createAdminClient();
+  const businesses = await fetchAllRows("sitemap.platform.businesses", (from, to) =>
+    admin
+      .from("businesses")
+      .select("slug, updated_at, custom_domain, store_settings(page_content)")
+      .eq("is_published", true)
+      .order("id")
+      .range(from, to)
+  );
 
-  const businessPages: MetadataRoute.Sitemap = (businesses ?? [])
+  const businessPages: MetadataRoute.Sitemap = businesses
     .filter((b) => !b.custom_domain && !homepageNoindex(b))
     .map((b) => ({
       url: `${PLATFORM_ORIGIN}/${b.slug}`,
@@ -110,18 +129,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // /product/* URLs are excluded below (the main one 301s to the homepage; the
   // rest are noindex).
   const opsSlugs = new Set(
-    (businesses ?? [])
+    businesses
       .filter((b) => parseStoreModeFromSettings(b.store_settings).mode === "one_product")
       .map((b) => b.slug),
   );
 
-  const { data: products } = await supabase
-    .from("products")
-    .select("slug, updated_at, businesses!inner(slug, is_published, custom_domain)")
-    .eq("is_active", true)
-    .eq("businesses.is_published", true);
+  const products = await fetchAllRows("sitemap.platform.products", (from, to) =>
+    supabase
+      .from("products")
+      .select("slug, updated_at, businesses!inner(slug, is_published, custom_domain)")
+      .eq("is_active", true)
+      .eq("businesses.is_published", true)
+      .order("id")
+      .range(from, to)
+  );
 
-  const productPages: MetadataRoute.Sitemap = (products ?? [])
+  const productPages: MetadataRoute.Sitemap = products
     .filter((p) => {
       const biz = p.businesses as unknown as { slug: string; custom_domain: string | null };
       return p.slug && !biz.custom_domain && !opsSlugs.has(biz.slug);
@@ -136,13 +159,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       };
     });
 
-  const { data: pages } = await supabase
-    .from("custom_pages")
-    .select("slug, updated_at, seo, businesses!inner(slug, is_published, custom_domain)")
-    .eq("is_published", true)
-    .eq("businesses.is_published", true);
+  const pages = await fetchAllRows("sitemap.platform.pages", (from, to) =>
+    supabase
+      .from("custom_pages")
+      .select("slug, updated_at, seo, businesses!inner(slug, is_published, custom_domain)")
+      .eq("is_published", true)
+      .eq("businesses.is_published", true)
+      .order("id")
+      .range(from, to)
+  );
 
-  const customPagePages: MetadataRoute.Sitemap = (pages ?? [])
+  const customPagePages: MetadataRoute.Sitemap = pages
     .filter((p) => !(p.businesses as unknown as { custom_domain: string | null }).custom_domain)
     .filter((p) => !(p.seo as { noindex?: boolean } | null)?.noindex)
     .map((p) => {
@@ -155,5 +182,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       };
     });
 
-  return [...staticPages, ...businessPages, ...productPages, ...customPagePages];
+  return [...staticPages, ...businessPages, ...productPages, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
 }

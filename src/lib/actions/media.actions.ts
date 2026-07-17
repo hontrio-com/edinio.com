@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { deleteFromR2 } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
 import { collectMediaUrls, parseMediaUrl, inferMediaType, inferFolder } from "@/lib/media/scan";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import type { Database } from "@/types/database.types";
 
 export type MediaRow = Database["public"]["Tables"]["media_library"]["Row"];
@@ -124,17 +125,26 @@ export async function listMedia(): Promise<{ rows: MediaRow[] } | { error: strin
   const ctx = await resolveBusiness();
   if (!ctx.ok) return { error: ctx.error };
 
-  const { data, error } = await ctx.supabase
-    .from("media_library")
-    .select("*")
-    .eq("business_id", ctx.businessId)
-    .order("created_at", { ascending: false })
-    .limit(5000);
-  if (error) {
-    logError({ action: "listMedia", message: error.message, userId: ctx.userId });
-    return { error: "Nu am putut incarca biblioteca." };
+  // .limit(5000) singur NU functioneaza: PostgREST taie orice raspuns la 1000
+  // de randuri, deci biblioteca parea completa la 1000. Ferestre de 1000, cu
+  // acelasi plafon intentionat de 5000.
+  const rows: MediaRow[] = [];
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data, error } = await ctx.supabase
+      .from("media_library")
+      .select("*")
+      .eq("business_id", ctx.businessId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + 999);
+    if (error) {
+      logError({ action: "listMedia", message: error.message, userId: ctx.userId });
+      return { error: "Nu am putut incarca biblioteca." };
+    }
+    rows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
   }
-  return { rows: data ?? [] };
+  return { rows };
 }
 
 /* ─── Update metadata (SEO) ──────────────────────────────────────────────────── */
@@ -325,31 +335,43 @@ export async function getMediaPageData(): Promise<{ rows: MediaRow[]; usage: Usa
   if (!ctx.ok) return { error: ctx.error };
   const { supabase, businessId, userId } = ctx;
 
-  const [catalog, existing] = await Promise.all([
+  const [catalog, existingKeys] = await Promise.all([
     fetchCatalog(supabase, businessId),
-    supabase.from("media_library").select("r2_key").eq("business_id", businessId),
+    // Setul de chei trebuie sa fie COMPLET (peste cap-ul de 1000 PostgREST),
+    // altfel reconcile-ul re-insereaza randuri deja existente.
+    fetchAllRows("media.pageData.keys", (from, to) =>
+      supabase.from("media_library").select("r2_key").eq("business_id", businessId).order("id").range(from, to)
+    ),
   ]);
 
   // Self-healing reconcile: catalogue any store media not yet in the library
   // (legacy Supabase Storage, category images, freshly imported products, …).
-  const known = new Set((existing.data ?? []).map((r) => r.r2_key));
+  const known = new Set(existingKeys.map((r) => r.r2_key));
   const newRows = buildBackfillRows(collectCatalogUrls(catalog), known, businessId, userId);
   if (newRows.length > 0) {
     await supabase.from("media_library").upsert(newRows, { onConflict: "business_id,r2_key", ignoreDuplicates: true });
   }
 
-  const { data, error } = await supabase
-    .from("media_library")
-    .select("*")
-    .eq("business_id", businessId)
-    .order("created_at", { ascending: false })
-    .limit(5000);
-  if (error) {
-    logError({ action: "getMediaPageData", message: error.message, userId });
-    return { error: "Nu am putut incarca biblioteca." };
+  // Ferestre de 1000 pana la plafonul intentionat de 5000 (.limit(5000) singur
+  // e taiat silentios la 1000 de PostgREST).
+  const rows: MediaRow[] = [];
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data, error } = await supabase
+      .from("media_library")
+      .select("*")
+      .eq("business_id", businessId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + 999);
+    if (error) {
+      logError({ action: "getMediaPageData", message: error.message, userId });
+      return { error: "Nu am putut incarca biblioteca." };
+    }
+    rows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
   }
 
-  return { rows: data ?? [], usage: computeUsage(catalog) };
+  return { rows, usage: computeUsage(catalog) };
 }
 
 /* ─── Backfill (idempotent scan + upsert of existing media; manual "Re-scaneaza") ─ */
@@ -359,12 +381,14 @@ export async function backfillMediaLibrary(): Promise<{ success: true; added: nu
   if (!ctx.ok) return { error: ctx.error };
   const { supabase, businessId, userId } = ctx;
 
-  const [catalog, existing] = await Promise.all([
+  const [catalog, existingKeys] = await Promise.all([
     fetchCatalog(supabase, businessId),
-    supabase.from("media_library").select("r2_key").eq("business_id", businessId),
+    fetchAllRows("media.backfill.keys", (from, to) =>
+      supabase.from("media_library").select("r2_key").eq("business_id", businessId).order("id").range(from, to)
+    ),
   ]);
 
-  const known = new Set((existing.data ?? []).map((r) => r.r2_key));
+  const known = new Set(existingKeys.map((r) => r.r2_key));
   const rows = buildBackfillRows(collectCatalogUrls(catalog), known, businessId, userId);
   if (rows.length === 0) return { success: true, added: 0 };
 

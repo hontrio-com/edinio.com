@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { checkCredit, sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 
@@ -34,20 +35,23 @@ async function fetchOrderPhones(
 ): Promise<string[]> {
   const supabase = await createClient();
 
-  let query = supabase
-    .from("orders")
-    .select("customer_phone, shipping_address")
-    .eq("business_id", businessId);
+  // Audienta campaniei trebuie sa acopere TOATE comenzile care trec de filtre
+  // — un query simplu e taiat silentios la 1000 de randuri de PostgREST.
+  const orders = await fetchAllRows("sms.fetchOrderPhones", (f, t) => {
+    let query = supabase
+      .from("orders")
+      .select("customer_phone, shipping_address")
+      .eq("business_id", businessId);
 
-  if (filters.date_from) query = query.gte("created_at", filters.date_from);
-  if (filters.date_to)   query = query.lte("created_at", filters.date_to + "T23:59:59Z");
-  if (filters.min_amount && filters.min_amount > 0) query = query.gte("total", filters.min_amount);
-  if (filters.order_statuses && filters.order_statuses.length > 0) {
-    query = query.in("status", filters.order_statuses as OrderStatus[]);
-  }
-
-  const { data: orders } = await query;
-  if (!orders || orders.length === 0) return [];
+    if (filters.date_from) query = query.gte("created_at", filters.date_from);
+    if (filters.date_to)   query = query.lte("created_at", filters.date_to + "T23:59:59Z");
+    if (filters.min_amount && filters.min_amount > 0) query = query.gte("total", filters.min_amount);
+    if (filters.order_statuses && filters.order_statuses.length > 0) {
+      query = query.in("status", filters.order_statuses as OrderStatus[]);
+    }
+    return query.order("id").range(f, t);
+  });
+  if (orders.length === 0) return [];
 
   const filtered = orders.filter(o => {
     if (filters.counties && filters.counties.length > 0) {

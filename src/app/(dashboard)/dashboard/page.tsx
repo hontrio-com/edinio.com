@@ -158,12 +158,12 @@ export default async function DashboardPage() {
   const [
     { count: ordersToday },
     { count: ordersYesterday },
-    { data: ordersMonth },
-    { data: ordersLastMonth },
+    { data: monthRevenueRpc },
+    { data: lastMonthRevenueRpc },
     { count: activeProducts },
     { count: pendingOrders },
     { data: recentOrders },
-    { data: last7DaysOrders },
+    { data: last7DaysRevenue },
     { data: lowStockProducts },
     { count: productsTotal },
     { count: ordersTotal },
@@ -173,18 +173,18 @@ export default async function DashboardPage() {
       .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", today),
     supabase.from("orders").select("*", { count: "exact", head: true })
       .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", yesterday).lt("created_at", today),
-    supabase.from("orders").select("total")
-      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", thisMonthStart),
-    supabase.from("orders").select("total")
-      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", lastMonthStart).lt("created_at", lastMonthEnd),
+    // Sumele de venit se calculeaza in SQL (nu din randuri aduse in JS):
+    // PostgREST trunchiaza orice raspuns la 1000 de randuri, deci reduce-ul
+    // in JS subestima veniturile la magazinele cu volum mare.
+    supabase.rpc("orders_revenue_sum", { bid: business.id, t_from: thisMonthStart }),
+    supabase.rpc("orders_revenue_sum", { bid: business.id, t_from: lastMonthStart, t_to: lastMonthEnd }),
     supabase.from("products").select("*", { count: "exact", head: true })
       .eq("business_id", business.id).eq("is_active", true),
     supabase.from("orders").select("*", { count: "exact", head: true })
       .eq("business_id", business.id).eq("status", "pending"),
     supabase.from("orders").select("id, order_number, customer_name, total, status, created_at")
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
-    supabase.from("orders").select("created_at, total")
-      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", sevenDaysAgo).order("created_at", { ascending: true }),
+    supabase.rpc("orders_daily_revenue", { bid: business.id, t_from: sevenDaysAgo }),
     supabase.from("products").select("id, name, stock_quantity")
       .eq("business_id", business.id).eq("is_active", true)
       .eq("track_inventory", true).lte("stock_quantity", 5)
@@ -200,8 +200,8 @@ export default async function DashboardPage() {
   const fmt = (n: number) => new Intl.NumberFormat("ro-RO").format(n);
   const fmtDelta = (pct: number) => `${Math.abs(pct)}%`;
 
-  const monthRevenue     = (ordersMonth ?? []).reduce((s, o) => s + Number(o.total), 0);
-  const lastMonthRevenue = (ordersLastMonth ?? []).reduce((s, o) => s + Number(o.total), 0);
+  const monthRevenue     = Number(monthRevenueRpc ?? 0);
+  const lastMonthRevenue = Number(lastMonthRevenueRpc ?? 0);
   const revenuePct = lastMonthRevenue > 0
     ? Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
     : null;
@@ -212,15 +212,16 @@ export default async function DashboardPage() {
     ? Math.round(((ordersTodayCount - ordersYesterdayCount) / ordersYesterdayCount) * 100)
     : null;
 
-  // Build 7-day chart data
+  // Build 7-day chart data (bucketed per-day in SQL, UTC — same as toISOString)
+  const revenueByDay = new Map((last7DaysRevenue ?? []).map(r => [r.day, r]));
   const chartData: ChartDay[] = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(now.getTime() - (6 - i) * 86400000);
     const dateStr = d.toISOString().split("T")[0];
-    const dayOrders = (last7DaysOrders ?? []).filter(o => o.created_at.startsWith(dateStr));
+    const dayRow = revenueByDay.get(dateStr);
     return {
       label: d.toLocaleDateString("ro-RO", { weekday: "short", day: "numeric" }),
-      revenue: dayOrders.reduce((s, o) => s + Number(o.total), 0),
-      orders: dayOrders.length,
+      revenue: Number(dayRow?.revenue ?? 0),
+      orders: Number(dayRow?.order_count ?? 0),
     };
   });
 

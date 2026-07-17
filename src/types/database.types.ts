@@ -173,6 +173,38 @@ export type Database = {
         }
         Relationships: []
       }
+      brevo_suppressions: {
+        Row: {
+          business_id: string
+          created_at: string
+          email: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          email: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brevo_suppressions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       businesses: {
         Row: {
           address: string | null
@@ -591,45 +623,45 @@ export type Database = {
       }
       forms: {
         Row: {
+          brevo_enabled: boolean | null
           business_id: string
           created_at: string
           email_enabled: boolean
           email_to: string | null
-          mailchimp_enabled: boolean
-          brevo_enabled: boolean | null
-          klaviyo_enabled: boolean | null
           fields: Json
           id: string
+          klaviyo_enabled: boolean | null
+          mailchimp_enabled: boolean
           name: string
           submit_label: string
           success_message: string
           updated_at: string
         }
         Insert: {
+          brevo_enabled?: boolean | null
           business_id: string
           created_at?: string
           email_enabled?: boolean
           email_to?: string | null
-          mailchimp_enabled?: boolean
-          brevo_enabled?: boolean | null
-          klaviyo_enabled?: boolean | null
           fields?: Json
           id?: string
+          klaviyo_enabled?: boolean | null
+          mailchimp_enabled?: boolean
           name: string
           submit_label?: string
           success_message?: string
           updated_at?: string
         }
         Update: {
+          brevo_enabled?: boolean | null
           business_id?: string
           created_at?: string
           email_enabled?: boolean
           email_to?: string | null
-          mailchimp_enabled?: boolean
-          brevo_enabled?: boolean | null
-          klaviyo_enabled?: boolean | null
           fields?: Json
           id?: string
+          klaviyo_enabled?: boolean | null
+          mailchimp_enabled?: boolean
           name?: string
           submit_label?: string
           success_message?: string
@@ -792,6 +824,232 @@ export type Database = {
         }
         Relationships: []
       }
+      mailchimp_suppressions: {
+        Row: {
+          business_id: string
+          created_at: string
+          email: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          email: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mailchimp_suppressions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_library: {
+        Row: {
+          alt_text: string | null
+          business_id: string
+          caption: string | null
+          created_at: string
+          description: string | null
+          duration_seconds: number | null
+          file_name: string | null
+          folder: string | null
+          height: number | null
+          id: string
+          mime_type: string | null
+          r2_key: string
+          size_bytes: number | null
+          tags: string[]
+          title: string | null
+          type: string
+          updated_at: string
+          url: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          alt_text?: string | null
+          business_id: string
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          file_name?: string | null
+          folder?: string | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          r2_key: string
+          size_bytes?: number | null
+          tags?: string[]
+          title?: string | null
+          type?: string
+          updated_at?: string
+          url: string
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          alt_text?: string | null
+          business_id?: string
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          file_name?: string | null
+          folder?: string | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          r2_key?: string
+          size_bytes?: number | null
+          tags?: string[]
+          title?: string | null
+          type?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_library_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notice_inbox: {
+        Row: {
+          body: string | null
+          business_id: string
+          channel: string
+          created_at: string
+          from_number: string | null
+          id: string
+          order_id: string | null
+          raw: Json | null
+          received_at: string
+        }
+        Insert: {
+          body?: string | null
+          business_id: string
+          channel?: string
+          created_at?: string
+          from_number?: string | null
+          id?: string
+          order_id?: string | null
+          raw?: Json | null
+          received_at?: string
+        }
+        Update: {
+          body?: string | null
+          business_id?: string
+          channel?: string
+          created_at?: string
+          from_number?: string | null
+          id?: string
+          order_id?: string | null
+          raw?: Json | null
+          received_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notice_inbox_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_inbox_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notice_sms_log: {
+        Row: {
+          business_id: string
+          channel: string
+          created_at: string
+          delivered_at: string | null
+          delivery_status: string | null
+          error: string | null
+          id: string
+          message: string | null
+          order_id: string | null
+          phone: string | null
+          provider_id: string | null
+          success: boolean
+          template_id: string | null
+          trigger_key: string
+        }
+        Insert: {
+          business_id: string
+          channel?: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_status?: string | null
+          error?: string | null
+          id?: string
+          message?: string | null
+          order_id?: string | null
+          phone?: string | null
+          provider_id?: string | null
+          success?: boolean
+          template_id?: string | null
+          trigger_key: string
+        }
+        Update: {
+          business_id?: string
+          channel?: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_status?: string | null
+          error?: string | null
+          id?: string
+          message?: string | null
+          order_id?: string | null
+          phone?: string | null
+          provider_id?: string | null
+          success?: boolean
+          template_id?: string | null
+          trigger_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notice_sms_log_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_sms_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
@@ -914,9 +1172,8 @@ export type Database = {
           id: string
           internal_notes: string | null
           ipay_order_id: string | null
-          klarna_order_id: string | null
-          revolut_order_id: string | null
           items: Json
+          klarna_order_id: string | null
           notes: string | null
           oblio_invoice_link: string | null
           oblio_invoice_number: string | null
@@ -931,6 +1188,7 @@ export type Database = {
           order_number: string
           payment_method: string
           payment_status: string
+          revolut_order_id: string | null
           sameday_awb_number: string | null
           shipping_address: Json
           shipping_cost: number
@@ -980,9 +1238,8 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           ipay_order_id?: string | null
-          klarna_order_id?: string | null
-          revolut_order_id?: string | null
           items: Json
+          klarna_order_id?: string | null
           notes?: string | null
           oblio_invoice_link?: string | null
           oblio_invoice_number?: string | null
@@ -997,6 +1254,7 @@ export type Database = {
           order_number: string
           payment_method?: string
           payment_status?: string
+          revolut_order_id?: string | null
           sameday_awb_number?: string | null
           shipping_address: Json
           shipping_cost?: number
@@ -1046,9 +1304,8 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           ipay_order_id?: string | null
-          klarna_order_id?: string | null
-          revolut_order_id?: string | null
           items?: Json
+          klarna_order_id?: string | null
           notes?: string | null
           oblio_invoice_link?: string | null
           oblio_invoice_number?: string | null
@@ -1063,6 +1320,7 @@ export type Database = {
           order_number?: string
           payment_method?: string
           payment_status?: string
+          revolut_order_id?: string | null
           sameday_awb_number?: string | null
           shipping_address?: Json
           shipping_cost?: number
@@ -1301,83 +1559,6 @@ export type Database = {
           },
         ]
       }
-      media_library: {
-        Row: {
-          alt_text: string | null
-          business_id: string
-          caption: string | null
-          created_at: string
-          description: string | null
-          duration_seconds: number | null
-          file_name: string | null
-          folder: string | null
-          height: number | null
-          id: string
-          mime_type: string | null
-          r2_key: string
-          size_bytes: number | null
-          tags: string[]
-          title: string | null
-          type: string
-          updated_at: string
-          url: string
-          user_id: string
-          width: number | null
-        }
-        Insert: {
-          alt_text?: string | null
-          business_id: string
-          caption?: string | null
-          created_at?: string
-          description?: string | null
-          duration_seconds?: number | null
-          file_name?: string | null
-          folder?: string | null
-          height?: number | null
-          id?: string
-          mime_type?: string | null
-          r2_key: string
-          size_bytes?: number | null
-          tags?: string[]
-          title?: string | null
-          type?: string
-          updated_at?: string
-          url: string
-          user_id: string
-          width?: number | null
-        }
-        Update: {
-          alt_text?: string | null
-          business_id?: string
-          caption?: string | null
-          created_at?: string
-          description?: string | null
-          duration_seconds?: number | null
-          file_name?: string | null
-          folder?: string | null
-          height?: number | null
-          id?: string
-          mime_type?: string | null
-          r2_key?: string
-          size_bytes?: number | null
-          tags?: string[]
-          title?: string | null
-          type?: string
-          updated_at?: string
-          url?: string
-          user_id?: string
-          width?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "media_library_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       products: {
         Row: {
           business_id: string
@@ -1606,123 +1787,6 @@ export type Database = {
           },
         ]
       }
-      notice_inbox: {
-        Row: {
-          body: string | null
-          business_id: string
-          channel: string
-          created_at: string
-          from_number: string | null
-          id: string
-          order_id: string | null
-          raw: Json | null
-          received_at: string
-        }
-        Insert: {
-          body?: string | null
-          business_id: string
-          channel?: string
-          created_at?: string
-          from_number?: string | null
-          id?: string
-          order_id?: string | null
-          raw?: Json | null
-          received_at?: string
-        }
-        Update: {
-          body?: string | null
-          business_id?: string
-          channel?: string
-          created_at?: string
-          from_number?: string | null
-          id?: string
-          order_id?: string | null
-          raw?: Json | null
-          received_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notice_inbox_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notice_inbox_order_id_fkey"
-            columns: ["order_id"]
-            isOneToOne: false
-            referencedRelation: "orders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      notice_sms_log: {
-        Row: {
-          business_id: string
-          created_at: string
-          error: string | null
-          id: string
-          message: string | null
-          order_id: string | null
-          phone: string | null
-          success: boolean
-          template_id: string | null
-          trigger_key: string
-          channel: string
-          provider_id: string | null
-          delivery_status: string | null
-          delivered_at: string | null
-        }
-        Insert: {
-          business_id: string
-          created_at?: string
-          error?: string | null
-          id?: string
-          message?: string | null
-          order_id?: string | null
-          phone?: string | null
-          success?: boolean
-          template_id?: string | null
-          trigger_key: string
-          channel?: string
-          provider_id?: string | null
-          delivery_status?: string | null
-          delivered_at?: string | null
-        }
-        Update: {
-          business_id?: string
-          created_at?: string
-          error?: string | null
-          id?: string
-          message?: string | null
-          order_id?: string | null
-          phone?: string | null
-          success?: boolean
-          template_id?: string | null
-          trigger_key?: string
-          channel?: string
-          provider_id?: string | null
-          delivery_status?: string | null
-          delivered_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "notice_sms_log_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notice_sms_log_order_id_fkey"
-            columns: ["order_id"]
-            isOneToOne: false
-            referencedRelation: "orders"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       sms_campaigns: {
         Row: {
           business_id: string
@@ -1799,78 +1863,11 @@ export type Database = {
           },
         ]
       }
-      brevo_suppressions: {
-        Row: {
-          business_id: string
-          created_at: string
-          email: string
-          id: string
-          reason: string | null
-        }
-        Insert: {
-          business_id: string
-          created_at?: string
-          email: string
-          id?: string
-          reason?: string | null
-        }
-        Update: {
-          business_id?: string
-          created_at?: string
-          email?: string
-          id?: string
-          reason?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "brevo_suppressions_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      mailchimp_suppressions: {
-        Row: {
-          business_id: string
-          created_at: string
-          email: string
-          id: string
-          reason: string | null
-        }
-        Insert: {
-          business_id: string
-          created_at?: string
-          email: string
-          id?: string
-          reason?: string | null
-        }
-        Update: {
-          business_id?: string
-          created_at?: string
-          email?: string
-          id?: string
-          reason?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "mailchimp_suppressions_business_id_fkey"
-            columns: ["business_id"]
-            isOneToOne: false
-            referencedRelation: "businesses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       store_settings: {
         Row: {
           abandoned_cart_automation: Json
           abandoned_cart_enabled: boolean
           brevo_config: Json | null
-          klaviyo_config: Json | null
-          klarna_config: Json | null
-          revolut_config: Json | null
           business_id: string
           card_discount_config: Json
           cargus_config: Json | null
@@ -1887,6 +1884,8 @@ export type Database = {
           google_merchant_config: Json
           id: string
           ipay_config: Json | null
+          klarna_config: Json | null
+          klaviyo_config: Json | null
           mailchimp_config: Json | null
           marketing_config: Json | null
           min_order_amount: number | null
@@ -1900,6 +1899,7 @@ export type Database = {
           payment_methods: Json
           prices_include_vat: boolean
           returns_config: Json
+          revolut_config: Json | null
           sameday_config: Json | null
           shipping_enabled: boolean
           shipping_zones: Json
@@ -1917,9 +1917,6 @@ export type Database = {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           brevo_config?: Json | null
-          klaviyo_config?: Json | null
-          klarna_config?: Json | null
-          revolut_config?: Json | null
           business_id: string
           card_discount_config?: Json
           cargus_config?: Json | null
@@ -1936,6 +1933,8 @@ export type Database = {
           google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null
+          klarna_config?: Json | null
+          klaviyo_config?: Json | null
           mailchimp_config?: Json | null
           marketing_config?: Json | null
           min_order_amount?: number | null
@@ -1949,6 +1948,7 @@ export type Database = {
           payment_methods?: Json
           prices_include_vat?: boolean
           returns_config?: Json
+          revolut_config?: Json | null
           sameday_config?: Json | null
           shipping_enabled?: boolean
           shipping_zones?: Json
@@ -1966,9 +1966,6 @@ export type Database = {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
           brevo_config?: Json | null
-          klaviyo_config?: Json | null
-          klarna_config?: Json | null
-          revolut_config?: Json | null
           business_id?: string
           card_discount_config?: Json
           cargus_config?: Json | null
@@ -1985,6 +1982,8 @@ export type Database = {
           google_merchant_config?: Json
           id?: string
           ipay_config?: Json | null
+          klarna_config?: Json | null
+          klaviyo_config?: Json | null
           mailchimp_config?: Json | null
           marketing_config?: Json | null
           min_order_amount?: number | null
@@ -1998,6 +1997,7 @@ export type Database = {
           payment_methods?: Json
           prices_include_vat?: boolean
           returns_config?: Json
+          revolut_config?: Json | null
           sameday_config?: Json | null
           shipping_enabled?: boolean
           shipping_zones?: Json
@@ -2177,6 +2177,60 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      customer_orders: {
+        Args: {
+          bid: string
+          cust_key: string
+          page_limit?: number
+          page_offset?: number
+        }
+        Returns: {
+          created_at: string
+          id: string
+          item_count: number
+          order_number: string
+          payment_method: string
+          payment_status: string
+          status: string
+          total: number
+          total_count: number
+        }[]
+      }
+      customers_aggregate: {
+        Args: {
+          bid: string
+          page_limit?: number
+          page_offset?: number
+          search?: string
+          sort_key?: string
+        }
+        Returns: {
+          address: string
+          aov: number
+          city: string
+          county: string
+          email: string
+          first_order_at: string
+          key: string
+          last_order_at: string
+          last_status: string
+          name: string
+          order_count: number
+          paid_order_count: number
+          phone: string
+          total_count: number
+          total_spent: number
+        }[]
+      }
+      customers_summary: {
+        Args: { bid: string }
+        Returns: {
+          average_order_value: number
+          returning_customers: number
+          total_customers: number
+          total_revenue: number
+        }[]
+      }
       decrement_stock: {
         Args: { p_product_id: string; p_quantity: number }
         Returns: undefined
@@ -2188,9 +2242,9 @@ export type Database = {
       }
       increment_offer_stats: {
         Args: {
-          p_offer_id: string
-          p_impressions?: number
           p_conversions?: number
+          p_impressions?: number
+          p_offer_id: string
           p_revenue?: number
         }
         Returns: undefined
@@ -2206,9 +2260,53 @@ export type Database = {
         Returns: undefined
       }
       next_order_number: { Args: { p_business_id: string }; Returns: number }
+      normalize_phone: { Args: { raw: string }; Returns: string }
+      order_customer_key: {
+        Args: {
+          customer_email: string
+          customer_phone: string
+          order_id: string
+        }
+        Returns: string
+      }
+      orders_county_counts: {
+        Args: { bid: string }
+        Returns: {
+          cnt: number
+          county: string
+        }[]
+      }
+      orders_daily_revenue: {
+        Args: { bid: string; t_from: string; t_to?: string }
+        Returns: {
+          day: string
+          order_count: number
+          revenue: number
+        }[]
+      }
+      orders_revenue_sum: {
+        Args: { bid: string; t_from: string; t_to?: string }
+        Returns: number
+      }
+      orders_status_counts: {
+        Args: { bid: string }
+        Returns: {
+          cnt: number
+          status: string
+        }[]
+      }
       reserve_payout_balance: {
         Args: { p_amount: number; p_user_id: string }
         Returns: undefined
+      }
+      site_analytics_breakdown: {
+        Args: { bid: string; t_from: string }
+        Returns: {
+          cnt: number
+          device: string
+          event_type: string
+          source: string
+        }[]
       }
     }
     Enums: {

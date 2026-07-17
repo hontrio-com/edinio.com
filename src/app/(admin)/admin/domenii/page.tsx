@@ -1,22 +1,26 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminDomainOrdersClient } from "@/components/admin/AdminDomainOrdersClient";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export const metadata = { title: "Comenzi domenii" };
 
 export default async function AdminDomainOrdersPage() {
   const admin = createAdminClient();
 
-  const [{ data: orders }, { data: businesses }] = await Promise.all([
+  // Lista ramane la ultimele 500; harta de business-uri trebuie completa
+  // (peste 1000 de magazine, numele apareau "—" din cauza cap-ului PostgREST).
+  const [{ data: orders }, businesses] = await Promise.all([
     admin
       .from("domain_orders")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(500),
-    admin.from("businesses").select("id, business_name, store_name"),
+    fetchAllRows("admin.domains.businesses", (f, t) =>
+      admin.from("businesses").select("id, business_name, store_name").order("id").range(f, t)),
   ]);
 
   const bizMap = new Map(
-    (businesses ?? []).map((b) => [b.id, b.store_name ?? b.business_name])
+    businesses.map((b) => [b.id, b.store_name ?? b.business_name])
   );
 
   const enriched = (orders ?? []).map((o) => ({

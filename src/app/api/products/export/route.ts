@@ -91,11 +91,19 @@ export async function GET() {
   if (!biz) return NextResponse.json({ error: "Magazin negasit" }, { status: 404 });
 
   // Categories → resolve full hierarchical path (Parinte > Copil) for round-trip.
-  const { data: catRows } = await supabase
-    .from("categories")
-    .select("id, name, parent_id")
-    .eq("business_id", biz.id);
-  const cats = (catRows ?? []) as Cat[];
+  // Windowed: cataloagele importate pot depasi cap-ul de 1000 de randuri PostgREST.
+  const catRows: Cat[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase
+      .from("categories")
+      .select("id, name, parent_id")
+      .eq("business_id", biz.id)
+      .order("id")
+      .range(from, from + PAGE - 1);
+    catRows.push(...((data ?? []) as Cat[]));
+    if (!data || data.length < PAGE) break;
+  }
+  const cats = catRows;
   const catById = new Map(cats.map((c) => [c.id, c]));
   const catByName = new Map<string, Cat>();
   for (const c of cats) if (!catByName.has(c.name)) catByName.set(c.name, c);

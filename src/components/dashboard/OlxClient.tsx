@@ -163,7 +163,13 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
         </Callout>
       )}
       {c.queued > 0 && (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {c.queued} produse în coada de publicare (se procesează automat).</p>
+        <div className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4">
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Se publică {c.queued} {c.queued === 1 ? "produs" : "produse"} pe OLX…</p>
+            <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină — statusul se actualizează singur.</p>
+          </div>
+        </div>
       )}
 
       {showSettings && <OlxSettings businessId={businessId} status={status} onSaved={() => router.refresh()} />}
@@ -287,8 +293,8 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
           </SettingField>
         )}
 
-        <SettingField label="Nume de contact"><Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="numele afișat pe anunț" /></SettingField>
-        <SettingField label="Telefon de contact (opțional)"><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="07xxxxxxxx" /></SettingField>
+        <SettingField label="Nume de contact" required><Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="numele afișat pe anunț" /></SettingField>
+        <SettingField label="Telefon de contact" required><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="07xxxxxxxx" /></SettingField>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-3">
@@ -302,6 +308,8 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
           size="lg"
           onClick={() => startSave(async () => {
             if (!cityId) { toast.error("Alege localitatea."); return; }
+            if (!contactName.trim()) { toast.error("Completează numele de contact."); return; }
+            if (!contactPhone.trim()) { toast.error("Completează telefonul de contact."); return; }
             const district = districts.find((d) => d.id === districtId);
             const res = await saveOlxSettings(businessId, {
               advertiser_type: advertiserType,
@@ -444,8 +452,8 @@ export function AdvertStatusBadge({ status }: { status: string }) {
   return <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold", s.cls)}><Icon className="h-3 w-3" /> {s.label}</span>;
 }
 
-function SettingField({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="mb-1 block text-xs font-medium text-foreground">{label}</label>{children}</div>;
+function SettingField({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
+  return <div><label className="mb-1 block text-xs font-medium text-foreground">{label}{required && <span className="text-destructive"> *</span>}</label>{children}</div>;
 }
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {

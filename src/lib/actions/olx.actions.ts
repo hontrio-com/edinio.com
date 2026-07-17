@@ -10,8 +10,8 @@ import {
 } from "@/lib/olx/oauth";
 import {
   advertCommand, getAccountBalance, getAvailablePackets, getBoughtPackets, getPaidFeatures,
-  getPaymentMethods, getThreads, isOlxError, purchaseAdvertPacket,
-  purchaseCategoryPacket, purchasePaidFeature,
+  getPaymentMethods, getThreadMessages, getThreads, isOlxError, markThreadRead,
+  postThreadMessage, purchaseAdvertPacket, purchaseCategoryPacket, purchasePaidFeature,
 } from "@/lib/olx/client";
 import {
   getOlxCategoriesCached, getOlxCategoryAttributesCached, getOlxCityDistrictsCached,
@@ -21,7 +21,7 @@ import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNo
 import { olxReadinessError } from "@/lib/olx/mapping";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
-  OlxCity, OlxConfig, OlxDistrict, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread,
+  OlxCity, OlxConfig, OlxDistrict, OlxMessage, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread,
 } from "@/lib/olx/types";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -476,6 +476,29 @@ export async function getOlxThreads(businessId: string): Promise<{ threads: OlxT
   if ("error" in res) return res;
   if (isOlxError(res)) return { error: res.error };
   return { threads: Array.isArray(res.data) ? res.data : [] };
+}
+
+export async function getOlxThreadMessages(businessId: string, threadId: number): Promise<{ messages: OlxMessage[] } | { error: string }> {
+  const res = await withToken(businessId, async (token) => {
+    const msgs = await getThreadMessages(token, threadId);
+    // Mark the thread read once it's opened (best-effort).
+    void markThreadRead(token, threadId);
+    return msgs;
+  });
+  if ("error" in res) return res;
+  if (isOlxError(res)) return { error: res.error };
+  // API returns newest-first in some locales — sort ascending by id for a chat view.
+  const messages = (Array.isArray(res.data) ? res.data : []).slice().sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  return { messages };
+}
+
+export async function replyOlxThread(businessId: string, threadId: number, text: string): Promise<{ success: true } | { error: string }> {
+  const clean = text.trim();
+  if (!clean) return { error: "Mesajul este gol." };
+  const res = await withToken(businessId, (token) => postThreadMessage(token, threadId, clean));
+  if ("error" in res) return res;
+  if (isOlxError(res)) return { error: res.error };
+  return { success: true };
 }
 
 // Translate OLX payment error details into actionable Romanian guidance.

@@ -1,23 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Wallet, Loader2, ChevronDown, Package, Megaphone, MessageSquare, ExternalLink, ShoppingCart,
+  Wallet, Loader2, ChevronDown, Package, Megaphone, MessageSquare, ShoppingCart, Send,
 } from "lucide-react";
 import {
   getOlxAccountInfo, getOlxPackets, buyOlxCategoryPacket,
   getOlxPaidFeatures, buyOlxPaidFeature, getOlxThreads,
+  getOlxThreadMessages, replyOlxThread,
   type OlxAdvertRow, type OlxAccountInfo,
 } from "@/lib/actions/olx.actions";
-import type { OlxBoughtPacket, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread } from "@/lib/olx/types";
+import type { OlxBoughtPacket, OlxMessage, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread } from "@/lib/olx/types";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { selectCls } from "@/lib/ui";
 
-function money(value: number, currency: string): string {
-  return `${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value)} ${currency}`;
+function money(value: number | null | undefined, currency: string | null | undefined): string {
+  const n = Number(value) || 0;
+  return `${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)} ${currency || "RON"}`;
 }
 
 export function OlxAccountPanel({ businessId, adverts }: { businessId: string; adverts: OlxAdvertRow[] }) {
@@ -107,27 +110,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
               <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} />
 
               {/* Inbox */}
-              <div>
-                <SectionLabel icon={MessageSquare}>Mesaje de la cumpărători</SectionLabel>
-                {threads && threads.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {threads.slice(0, 8).map((t) => (
-                      <div key={t.id} className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm">
-                        <span className="text-foreground">Conversație #{t.id}{t.advert_id ? ` · anunț ${t.advert_id}` : ""}</span>
-                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {t.unread_count ? <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">{t.unread_count} noi</span> : null}
-                          {t.total_count ?? 0} mesaje
-                        </span>
-                      </div>
-                    ))}
-                    <a href="https://www.olx.ro/mesaje/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 pt-1 text-xs text-primary hover:underline">
-                      Deschide toate mesajele pe OLX <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Nicio conversație încă.</p>
-                )}
-              </div>
+              <Inbox businessId={businessId} threads={threads ?? []} adverts={adverts} />
             </>
           )}
         </div>
@@ -238,5 +221,111 @@ function SectionLabel({ icon: Icon, children }: { icon: React.ElementType; child
     <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
       <Icon className="h-3.5 w-3.5 text-muted-foreground" /> {children}
     </p>
+  );
+}
+
+function Inbox({ businessId, threads, adverts }: { businessId: string; threads: OlxThread[]; adverts: OlxAdvertRow[] }) {
+  // Map an OLX advert id back to the product name for a friendly thread title.
+  const advertName = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const a of adverts) if (a.olx_advert_id) m.set(a.olx_advert_id, a.name);
+    return m;
+  }, [adverts]);
+
+  return (
+    <div>
+      <SectionLabel icon={MessageSquare}>Mesaje de la cumpărători</SectionLabel>
+      {threads.length > 0 ? (
+        <div className="space-y-1.5">
+          {threads.map((t) => (
+            <InboxThread key={t.id} businessId={businessId} thread={t} advertName={t.advert_id ? advertName.get(t.advert_id) : undefined} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">Nicio conversație încă.</p>
+      )}
+    </div>
+  );
+}
+
+function InboxThread({ businessId, thread, advertName }: { businessId: string; thread: OlxThread; advertName?: string }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<OlxMessage[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [reply, setReply] = useState("");
+  const [sending, startSend] = useTransition();
+  const [unread, setUnread] = useState(thread.unread_count ?? 0);
+
+  async function load() {
+    setLoading(true);
+    const res = await getOlxThreadMessages(businessId, thread.id);
+    setLoading(false);
+    if ("error" in res) { toast.error(res.error); setMessages([]); return; }
+    setMessages(res.messages);
+    setUnread(0);
+  }
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && messages === null && !loading) void load();
+  }
+
+  function send() {
+    const text = reply.trim();
+    if (!text) return;
+    startSend(async () => {
+      const res = await replyOlxThread(businessId, thread.id, text);
+      if ("error" in res) { toast.error(res.error); return; }
+      setReply("");
+      toast.success("Mesaj trimis.");
+      void load();
+    });
+  }
+
+  const title = advertName ?? (thread.advert_id ? `Anunț ${thread.advert_id}` : `Conversație #${thread.id}`);
+
+  return (
+    <div className="rounded-xl border border-border">
+      <button onClick={toggle} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
+        <span className="min-w-0 truncate text-sm text-foreground">{title}</span>
+        <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+          {unread > 0 && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">{unread} noi</span>}
+          {thread.total_count ?? 0} mesaje
+          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-border p-3">
+          {loading ? (
+            <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+          ) : messages && messages.length > 0 ? (
+            <div className="mb-3 max-h-64 space-y-2 overflow-y-auto">
+              {messages.map((m) => (
+                <div key={m.id} className={cn("flex", m.type === "sent" ? "justify-end" : "justify-start")}>
+                  <div className={cn("max-w-[80%] rounded-2xl px-3 py-1.5 text-sm", m.type === "sent" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
+                    <span className="whitespace-pre-wrap break-words">{m.text}</span>
+                    {m.created_at && <span className="mt-0.5 block text-[10px] opacity-70">{m.created_at.slice(0, 16)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mb-3 text-center text-xs text-muted-foreground">Niciun mesaj în această conversație.</p>
+          )}
+          <div className="flex gap-2">
+            <Input
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              placeholder="Scrie un răspuns..."
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            />
+            <Button size="sm" onClick={send} disabled={sending || !reply.trim()} aria-label="Trimite">
+              {sending ? <Loader2 className="animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

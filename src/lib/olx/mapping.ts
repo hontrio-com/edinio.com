@@ -5,7 +5,6 @@
 //  - capital letters must stay under 50% of the text
 // Violations get the advert rejected at POST time, so we sanitize proactively.
 
-import { storeBaseUrl } from "@/lib/seo";
 import { OLX_CURRENCY, type OlxCategoryMapEntry, type OlxConfig } from "./types";
 
 export interface MappableBusiness {
@@ -105,10 +104,6 @@ export function buildOlxDescription(product: Pick<MappableProduct, "name" | "des
   return desc.slice(0, 9000);
 }
 
-export function olxProductUrl(business: MappableBusiness, product: Pick<MappableProduct, "id" | "slug">): string {
-  return `${storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain })}/product/${product.slug ?? product.id}`;
-}
-
 // ── Advert payload ──────────────────────────────────────────────────────────────
 
 export function toOlxAdvertBody(
@@ -136,8 +131,10 @@ export function toOlxAdvertBody(
     description: buildOlxDescription(product, business),
     category_id: entry.category_id,
     advertiser_type: config.advertiser_type ?? "private",
+    // external_id lets us dedup; external_url is NOT sent — many partner accounts
+    // are not allowed to set it and OLX rejects the advert ("partner is not
+    // allowed to set external_url"). The shop link lives in the description flow.
     external_id: product.id,
-    external_url: olxProductUrl(business, product),
     contact,
     location,
     price: { value: Number(product.price) || 0, currency: OLX_CURRENCY, negotiable: false },
@@ -155,6 +152,7 @@ export function olxReadinessError(config: OlxConfig): string | null {
   if (!config.connected || !config.refresh_token) return "Conecteaza mai intai contul OLX.";
   if (config.needs_reconnect) return "Sesiunea OLX a expirat. Reconecteaza contul OLX.";
   if (!config.default_city_id) return "Seteaza localitatea anunturilor in setarile OLX.";
-  if (!config.contact_name && !config.contact_phone) return "Completeaza datele de contact in setarile OLX.";
+  if (!config.contact_name) return "Completeaza numele de contact in setarile OLX.";
+  if (!config.contact_phone) return "Completeaza telefonul de contact in setarile OLX.";
   return null;
 }

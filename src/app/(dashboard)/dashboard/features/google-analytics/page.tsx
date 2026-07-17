@@ -16,15 +16,18 @@ export default async function GoogleAnalyticsPage() {
     .order("created_at", { ascending: false }).limit(1).single();
   if (!biz) redirect("/dashboard");
 
-  // Hidden from the public while OAuth verification is pending; admins keep access.
+  // OAuth (account connect + in-app reports) is hidden from the public while
+  // Google verification is pending; admins keep access. The manual Measurement
+  // ID path works for everyone.
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const available = GOOGLE_ANALYTICS_LIVE || profile?.role === "admin";
 
   const statusRes = await getGaStatus(biz.id);
   const status = "error" in statusRes ? null : statusRes;
 
-  // Preload the default dashboard (28 zile) + realtime for connected stores.
-  const [dashRes, rtRes] = status?.connected
+  // Preload the default dashboard (28 zile) + realtime for OAuth-connected
+  // stores (manual mode has no Data API access).
+  const [dashRes, rtRes] = status?.connected && !status.manual
     ? await Promise.all([getGaDashboard(biz.id, 28), getGaRealtime(biz.id)])
     : [null, null];
 

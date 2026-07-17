@@ -2,6 +2,7 @@
 
 export interface GoogleAnalyticsConfig {
   connected?: boolean;
+  manual?: boolean;             // connected WITHOUT OAuth: merchant pasted the Measurement ID (tracking only, no reports)
   refresh_token?: string;
   connected_email?: string;
   account_name?: string;        // GA account display name

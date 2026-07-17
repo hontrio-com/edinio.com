@@ -15,7 +15,7 @@ import {
   ArrowDownRight, AlertTriangle,
 } from "lucide-react";
 import {
-  startGoogleAnalyticsOAuth, listGaProperties, selectGaProperty,
+  startGoogleAnalyticsOAuth, connectGaManual, listGaProperties, selectGaProperty,
   disconnectGoogleAnalytics, setGaTracking, getGaDashboard, getGaRealtime,
   type GaStatus, type GaPropertyGroup, type GaDashboardData, type GaRealtimeData, type GaTotals,
 } from "@/lib/actions/google-analytics.actions";
@@ -93,8 +93,6 @@ export function GoogleAnalyticsClient({ businessId, status, available = true, in
   initialDashboard: GaDashboardData | null;
   initialRealtime: GaRealtimeData | null;
 }) {
-  const [busy, startBusy] = useTransition();
-
   // Surface the OAuth callback result.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("ga");
@@ -110,44 +108,20 @@ export function GoogleAnalyticsClient({ businessId, status, available = true, in
     return <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
   }
 
-  // Not yet live for the public (OAuth verification pending), or platform
-  // hasn't configured Google OAuth credentials yet.
-  if (!available || !status.configured) {
-    return (
-      <EmptyState icon={Clock} title="Disponibil în curând">
-        Integrarea Google Analytics se activează în curând pentru magazinul tău. Revino mai târziu.
-      </EmptyState>
-    );
-  }
+  // OAuth (account connect + in-app reports) is gated while Google verifies the
+  // app; the manual Measurement ID path below works for everyone regardless.
+  const oauthAvailable = available && status.configured;
 
-  if (!status.connected && status.needsProperty) {
+  if (status.needsProperty) {
     return <PropertyPicker businessId={businessId} />;
   }
 
+  if (status.connected && status.manual) {
+    return <ManualConnected businessId={businessId} status={status} oauthAvailable={oauthAvailable} />;
+  }
+
   if (!status.connected) {
-    return (
-      <EmptyState icon={BarChart3} title="Conectează Google Analytics">
-        Vezi statisticile magazinului direct în Edinio: vizitatori, surse de trafic, conversii și venituri.
-        Măsurarea pornește automat, fără cod.
-        <ul className="mx-auto mt-4 max-w-sm space-y-1.5 text-left text-sm text-muted-foreground">
-          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Tag-ul GA4 se instalează automat pe magazin</li>
-          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Evenimente e-commerce: vizualizări, coș, achiziții</li>
-          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Statistici și vizitatori în timp real, aici în dashboard</li>
-        </ul>
-        <Button
-          size="lg"
-          className="mt-6"
-          onClick={() => startBusy(async () => {
-            const res = await startGoogleAnalyticsOAuth(businessId);
-            if ("error" in res) { toast.error(res.error); return; }
-            window.location.href = res.url;
-          })}
-          disabled={busy}
-        >
-          {busy ? <><Loader2 className="animate-spin" /> Se deschide Google...</> : <><Plug /> Conectează Google Analytics</>}
-        </Button>
-      </EmptyState>
-    );
+    return <ConnectCard businessId={businessId} oauthAvailable={oauthAvailable} />;
   }
 
   return (
@@ -157,6 +131,195 @@ export function GoogleAnalyticsClient({ businessId, status, available = true, in
       initialDashboard={initialDashboard}
       initialRealtime={initialRealtime}
     />
+  );
+}
+
+/* ─── Connect card (OAuth + manual Measurement ID) ────────────────────────── */
+
+function ConnectCard({ businessId, oauthAvailable }: { businessId: string; oauthAvailable: boolean }) {
+  const [busy, startBusy] = useTransition();
+
+  return (
+    <EmptyState icon={BarChart3} title="Conectează Google Analytics">
+      Măsoară vizitatorii, sursele de trafic și vânzările magazinului în Google Analytics.
+      Măsurarea pornește automat, fără cod.
+      <ul className="mx-auto mt-4 max-w-sm space-y-1.5 text-left text-sm text-muted-foreground">
+        <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Tag-ul GA4 se instalează automat pe magazin</li>
+        <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Evenimente e-commerce: vizualizări, coș, achiziții</li>
+        {oauthAvailable ? (
+          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Statistici și vizitatori în timp real, aici în dashboard</li>
+        ) : (
+          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Statistici complete în contul tău Google Analytics</li>
+        )}
+      </ul>
+
+      {oauthAvailable && (
+        <>
+          <Button
+            size="lg"
+            className="mt-6"
+            onClick={() => startBusy(async () => {
+              const res = await startGoogleAnalyticsOAuth(businessId);
+              if ("error" in res) { toast.error(res.error); return; }
+              window.location.href = res.url;
+            })}
+            disabled={busy}
+          >
+            {busy ? <><Loader2 className="animate-spin" /> Se deschide Google...</> : <><Plug /> Conectează Google Analytics</>}
+          </Button>
+          <div className="mx-auto mt-6 flex max-w-sm items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">sau manual</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+        </>
+      )}
+
+      <ManualConnectForm businessId={businessId} />
+
+      {!oauthAvailable && (
+        <p className="mx-auto mt-4 max-w-sm text-xs text-muted-foreground">
+          Conectarea cu contul Google — cu rapoarte și vizitatori în timp real direct aici, în dashboard — se activează în curând.
+        </p>
+      )}
+    </EmptyState>
+  );
+}
+
+function ManualConnectForm({ businessId }: { businessId: string }) {
+  const router = useRouter();
+  const [id, setId] = useState("");
+  const [saving, startSave] = useTransition();
+
+  function submit() {
+    if (!id) return;
+    startSave(async () => {
+      const res = await connectGaManual(businessId, id);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success("Măsurarea Google Analytics este activă pe magazin.");
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="mx-auto mt-5 max-w-sm text-left">
+      <label className="mb-1 block text-xs font-medium text-foreground">ID de măsurare GA4</label>
+      <div className="flex gap-2">
+        <Input
+          value={id}
+          onChange={(e) => setId(e.target.value.toUpperCase().replace(/\s/g, ""))}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          placeholder="G-XXXXXXXXXX"
+          className="font-mono"
+        />
+        <Button onClick={submit} disabled={saving || !id} className="shrink-0">
+          {saving ? <Loader2 className="animate-spin" /> : "Activează"}
+        </Button>
+      </div>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        Îl găsești pe <a href="https://analytics.google.com" target="_blank" rel="noreferrer" className="font-medium underline">analytics.google.com</a>
+        {" "}→ Administrare → Fluxuri de date → fluxul web al site-ului.
+      </p>
+    </div>
+  );
+}
+
+/* ─── Manual mode (tracking only, no in-app reports) ──────────────────────── */
+
+function ManualConnected({ businessId, status, oauthAvailable }: {
+  businessId: string;
+  status: GaStatus;
+  oauthAvailable: boolean;
+}) {
+  const router = useRouter();
+  const [togglingTracking, startTracking] = useTransition();
+  const [disconnecting, startDisconnect] = useTransition();
+  const [busy, startBusy] = useTransition();
+
+  return (
+    <div className="space-y-6">
+      {/* Connection banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Google Analytics conectat manual</p>
+            <p className="truncate text-xs text-muted-foreground">
+              ID de măsurare: <span className="font-mono font-medium text-foreground">{status.measurementId}</span>
+            </p>
+          </div>
+        </div>
+        <a href="https://analytics.google.com" target="_blank" rel="noreferrer">
+          <Button variant="outline" size="sm"><ExternalLink /> Deschide în GA</Button>
+        </a>
+      </div>
+
+      {/* Tracking toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Măsurare pe magazin</p>
+          <p className="text-xs text-muted-foreground">
+            Tag-ul <span className="font-mono font-medium text-foreground">{status.measurementId}</span> se încarcă automat pe magazin
+            (după consimțământul cookie) și trimite evenimentele: vizualizare produs, adăugare în coș, checkout, achiziție.
+          </p>
+        </div>
+        <label className="flex shrink-0 cursor-pointer items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">{status.trackingEnabled ? "Activă" : "Oprită"}</span>
+          <Switch
+            checked={status.trackingEnabled}
+            disabled={togglingTracking}
+            onCheckedChange={(v) => startTracking(async () => {
+              const res = await setGaTracking(businessId, v);
+              if ("error" in res) { toast.error(res.error); return; }
+              toast.success(v ? "Măsurarea pe magazin este activă." : "Măsurarea pe magazin a fost oprită.");
+              router.refresh();
+            })}
+          />
+        </label>
+      </div>
+
+      {/* In-app reports pending */}
+      <Callout variant="info" icon={Clock}>
+        Rapoartele direct în Edinio (vizitatori în timp real, surse, venituri) se activează în curând, prin conectarea contului Google.
+        Până atunci, toate statisticile magazinului sunt disponibile în contul tău de pe{" "}
+        <a href="https://analytics.google.com" target="_blank" rel="noreferrer" className="font-medium underline">analytics.google.com</a>.
+      </Callout>
+
+      {oauthAvailable && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Adu rapoartele în Edinio</p>
+            <p className="text-xs text-muted-foreground">Conectează contul Google pentru statistici și vizitatori în timp real, direct aici.</p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => startBusy(async () => {
+              const res = await startGoogleAnalyticsOAuth(businessId);
+              if ("error" in res) { toast.error(res.error); return; }
+              window.location.href = res.url;
+            })}
+            disabled={busy}
+          >
+            {busy ? <><Loader2 className="animate-spin" /> Se deschide Google...</> : <><Plug /> Conectează contul Google</>}
+          </Button>
+        </div>
+      )}
+
+      {/* Disconnect */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => startDisconnect(async () => {
+            const res = await disconnectGoogleAnalytics(businessId);
+            if ("error" in res) { toast.error(res.error); return; }
+            toast.success("Google Analytics deconectat.");
+            router.refresh();
+          })}
+          disabled={disconnecting}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50">
+          {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />} Deconectează Google Analytics
+        </button>
+      </div>
+    </div>
   );
 }
 

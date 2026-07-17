@@ -49,7 +49,8 @@ async function saveConfig(supabase: ServerClient, businessId: string, config: Go
 
 export interface GaStatus {
   configured: boolean;          // platform has Google OAuth credentials
-  connected: boolean;           // OAuth done + property picked
+  connected: boolean;           // OAuth done + property picked, OR manual Measurement ID saved
+  manual: boolean;              // connected without OAuth (tracking only, no in-app reports)
   needsProperty: boolean;       // OAuth done but no property picked yet
   email?: string;
   propertyId?: string;
@@ -68,7 +69,8 @@ export async function getGaStatus(businessId: string): Promise<GaStatus | { erro
   const config = await loadConfig(supabase, businessId);
   return {
     configured: googleAnalyticsConfigured(),
-    connected: !!config.connected && !!config.property_id,
+    connected: !!config.connected && (!!config.property_id || !!config.manual),
+    manual: !!config.manual,
     needsProperty: !!config.refresh_token && !config.property_id,
     email: config.connected_email,
     propertyId: config.property_id,
@@ -88,6 +90,40 @@ export async function startGoogleAnalyticsOAuth(businessId: string): Promise<{ u
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
   if (!googleAnalyticsConfigured()) return { error: "Integrarea Google nu este configurata pe server." };
   return { url: buildAuthUrl(signState(businessId)) };
+}
+
+// ── Manual connect (no OAuth) ────────────────────────────────────────────────────
+// Storefront tracking only needs the Measurement ID, so merchants can activate
+// measurement before Google approves our OAuth app. In-app reports stay off in
+// this mode (they need the Data API, i.e. OAuth); connecting with Google later
+// upgrades the config and clears `manual`.
+
+export async function connectGaManual(businessId: string, measurementId: string): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const id = (measurementId ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  if (id.startsWith("UA-")) return { error: "Acesta este un ID Universal Analytics (UA-), care nu mai functioneaza. Creeaza o proprietate GA4 si foloseste ID-ul de masurare care incepe cu G-." };
+  if (id.startsWith("GTM-")) return { error: "Acesta este un container Google Tag Manager (GTM-). Introdu ID-ul de masurare GA4, care incepe cu G-." };
+  if (id.startsWith("AW-")) return { error: "Acesta este un ID Google Ads (AW-). Introdu ID-ul de masurare GA4, care incepe cu G-." };
+  if (!/^G-[A-Z0-9]{4,16}$/.test(id)) return { error: "ID de masurare invalid. Trebuie sa inceapa cu G- (ex: G-ABC12DEF34)." };
+
+  // Fresh config on purpose (no spread): manual connect means "use ONLY this
+  // ID" — leftover OAuth state (refresh_token without property) would otherwise
+  // strand the UI on the property picker.
+  const config = await loadConfig(supabase, businessId);
+  const ok = await saveConfig(supabase, businessId, {
+    connected: true,
+    manual: true,
+    measurement_id: id,
+    tracking_enabled: config.tracking_enabled ?? true,
+    connected_at: config.connected_at ?? new Date().toISOString(),
+  });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
 }
 
 // ── Property discovery + selection ───────────────────────────────────────────────
@@ -164,6 +200,7 @@ export async function selectGaProperty(
   const ok = await saveConfig(supabase, businessId, {
     ...config,
     connected: true,
+    manual: undefined, // OAuth path replaces a previous manual (tracking-only) connect
     property_id: cleanId,
     property_name: propertyName ?? config.property_name,
     account_name: accountName ?? config.account_name,

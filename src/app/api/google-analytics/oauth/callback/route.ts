@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
     const stream = webStreams.find((s) => !!(domain && (s.webStreamData?.defaultUri ?? "").toLowerCase().includes(domain))) ?? webStreams[0];
 
     config.connected = true;
+    config.manual = undefined; // OAuth path replaces a previous manual (tracking-only) connect
     config.property_id = prop.id;
     config.property_name = prop.name;
     config.account_name = prop.account;

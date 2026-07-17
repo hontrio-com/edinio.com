@@ -167,7 +167,10 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
 // ─── Public endpoints (no auth) ───────────────────────────────────────────────
 
 export async function fetchCounties(): Promise<WootCounty[]> {
-  const res = await fetch(`${WOOT_BASE}/general/counties?country_id=189`, { cache: "force-cache" });
+  // no-store intentionat: cu force-cache (Vercel Data Cache) fetch-ul dadea 500
+  // constant la runtime pe Vercel (2026-07-17) desi upstream-ul raspundea normal;
+  // fetchCities cu no-store nu a fost afectat. Lista e mica, nu merita cache.
+  const res = await fetch(`${WOOT_BASE}/general/counties?country_id=189`, { cache: "no-store" });
   if (!res.ok) throw new Error("Nu s-au putut incarca judetele");
   return res.json() as Promise<WootCounty[]>;
 }

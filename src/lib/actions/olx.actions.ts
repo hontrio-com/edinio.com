@@ -386,7 +386,7 @@ export async function getOlxAdverts(businessId: string): Promise<OlxAdvertRow[]>
 }
 
 // ── Monetization: balance, packets, paid features ──────────────────────────────────
-async function withToken<T>(businessId: string, fn: (token: string) => Promise<T>): Promise<T | { error: string }> {
+async function withToken<T>(businessId: string, fn: (token: string, config: OlxConfig) => Promise<T>): Promise<T | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
   const admin = createAdminClient();
@@ -394,7 +394,7 @@ async function withToken<T>(businessId: string, fn: (token: string) => Promise<T
   if (!config.connected || !config.refresh_token) return { error: "Conecteaza mai intai contul OLX." };
   const tok = await ensureMerchantToken(admin, businessId, config);
   if ("error" in tok) return { error: tok.error };
-  return fn(tok.token);
+  return fn(tok.token, tok.config);
 }
 
 export interface OlxAccountInfo {
@@ -414,16 +414,50 @@ export async function getOlxAccountInfo(businessId: string): Promise<OlxAccountI
   });
 }
 
-export async function getOlxPackets(businessId: string): Promise<{ available: OlxPacket[]; bought: OlxBoughtPacket[] } | { error: string }> {
-  return withToken(businessId, async (token) => {
-    const [availRes, boughtRes] = await Promise.all([
-      getAvailablePackets(token, { type: "all" }),
-      getBoughtPackets(token, "active"),
-    ]);
-    return {
-      available: isOlxError(availRes) ? [] : (Array.isArray(availRes.data) ? availRes.data : []),
-      bought: isOlxError(boughtRes) ? [] : (Array.isArray(boughtRes.data) ? boughtRes.data : []),
-    };
+export interface OlxPacketGroup { categoryId: number; label: string; packets: OlxPacket[] }
+
+export interface OlxPacketsResult {
+  groups: OlxPacketGroup[];
+  bought: OlxBoughtPacket[];
+  paymentMethod: OlxPaymentMethod;
+  hasMappedCategories: boolean;
+}
+
+export async function getOlxPackets(businessId: string): Promise<OlxPacketsResult | { error: string }> {
+  return withToken(businessId, async (token, config) => {
+    // Price packets against the wallet-credit method when available.
+    const pmRes = await getPaymentMethods(token);
+    const methods = isOlxError(pmRes) ? [] : (Array.isArray(pmRes.data) ? pmRes.data : []);
+    const paymentMethod: OlxPaymentMethod = methods.includes("account") ? "account" : (methods[0] ?? "account");
+
+    // Packets are per category — fetch for each distinct mapped OLX category.
+    const cats = new Map<number, string>();
+    for (const entry of Object.values(config.category_map ?? {})) {
+      if (entry?.category_id) cats.set(entry.category_id, entry.label);
+    }
+    const groups: OlxPacketGroup[] = [];
+    let fetched = 0;
+    for (const [categoryId, label] of cats) {
+      if (fetched >= 20) break; // bound the panel load
+      fetched++;
+      const res = await getAvailablePackets(token, { category_id: categoryId, payment_method: paymentMethod, type: "all", with_features: true });
+      if (!isOlxError(res) && Array.isArray(res.data) && res.data.length > 0) {
+        groups.push({ categoryId, label, packets: res.data });
+      }
+      await new Promise((r) => setTimeout(r, 250)); // pace OLX calls
+    }
+
+    // Bought packets — paginate past the default page size of 50.
+    const bought: OlxBoughtPacket[] = [];
+    for (let offset = 0; offset < 1000; offset += 50) {
+      const res = await getBoughtPackets(token, { availability: "active", offset, limit: 50 });
+      if (isOlxError(res)) break;
+      const batch = Array.isArray(res.data) ? res.data : [];
+      bought.push(...batch);
+      if (batch.length < 50) break;
+    }
+
+    return { groups, bought, paymentMethod, hasMappedCategories: cats.size > 0 };
   });
 }
 
@@ -438,13 +472,18 @@ export async function buyOlxCategoryPacket(
   return { success: true };
 }
 
+// Buy a packet for a single advert and activate it (the direct fix for a
+// `limited` advert). Resolves the payment method server-side.
 export async function buyOlxAdvertPacket(
-  businessId: string, advertId: number, paymentMethod: OlxPaymentMethod, isPremium = false,
+  businessId: string, advertId: number, isPremium = false,
 ): Promise<{ success: true } | { error: string }> {
   const res = await withToken(businessId, async (token) => {
-    const buy = await purchaseAdvertPacket(token, advertId, { payment_method: paymentMethod, is_premium: isPremium });
+    const pmRes = await getPaymentMethods(token);
+    const methods = isOlxError(pmRes) ? [] : (Array.isArray(pmRes.data) ? pmRes.data : []);
+    const method: OlxPaymentMethod = methods.includes("account") ? "account" : (methods[0] ?? "account");
+    const buy = await purchaseAdvertPacket(token, advertId, { payment_method: method, is_premium: isPremium });
     if (isOlxError(buy)) return buy;
-    // After buying a packet for a `limited` advert, activate it.
+    // After buying, activate the (previously limited) advert.
     return advertCommand(token, advertId, "activate");
   });
   if ("error" in res) return res;
@@ -489,24 +528,31 @@ export interface OlxConversation {
 export async function getOlxConversation(
   businessId: string, threadId: number, opts: { advertId?: number; interlocutorId?: number } = {},
 ): Promise<OlxConversation | { error: string }> {
-  const res = await withToken(businessId, async (token) => {
+  const res = await withToken(businessId, async (token, config) => {
     const [msgsRes, buyerRes, advertRes] = await Promise.all([
       getThreadMessages(token, threadId),
       opts.interlocutorId ? getUser(token, opts.interlocutorId) : Promise.resolve(null),
       opts.advertId ? getAdvert(token, opts.advertId) : Promise.resolve(null),
     ]);
     void markThreadRead(token, threadId);
-    return { msgsRes, buyerRes, advertRes };
+    return { msgsRes, buyerRes, advertRes, sellerName: config.olx_user_name ?? "" };
   });
   if ("error" in res) return res;
-  const { msgsRes, buyerRes, advertRes } = res;
+  const { msgsRes, buyerRes, advertRes, sellerName } = res;
   if (isOlxError(msgsRes)) return { error: msgsRes.error };
 
   // API can return newest-first — sort ascending by id for a chat view.
   const messages = (Array.isArray(msgsRes.data) ? msgsRes.data : []).slice().sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-  const buyer = buyerRes && !isOlxError(buyerRes) && buyerRes.data
-    ? { id: buyerRes.data.id, name: buyerRes.data.name, avatar: buyerRes.data.avatar ?? null }
-    : null;
+  // Buyer profile: keep it only when it's a real, distinct name. OLX sometimes
+  // returns the seller's own account here — drop it so the UI falls back to a
+  // generic label instead of showing the shop's own name as the "buyer".
+  let buyer: OlxConversation["buyer"] = null;
+  if (buyerRes && !isOlxError(buyerRes) && buyerRes.data) {
+    const name = (buyerRes.data.name ?? "").trim();
+    if (name && name.toLowerCase() !== sellerName.trim().toLowerCase()) {
+      buyer = { id: buyerRes.data.id, name, avatar: buyerRes.data.avatar ?? null };
+    }
+  }
   let advert: OlxConversation["advert"] = null;
   if (advertRes && !isOlxError(advertRes) && advertRes.data) {
     const a = advertRes.data;

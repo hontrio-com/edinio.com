@@ -9,9 +9,9 @@ import {
 import {
   getOlxAccountInfo, getOlxPackets, buyOlxCategoryPacket,
   getOlxPaidFeatures, buyOlxPaidFeature,
-  type OlxAdvertRow, type OlxAccountInfo,
+  type OlxAdvertRow, type OlxAccountInfo, type OlxPacketGroup, type OlxPacketsResult,
 } from "@/lib/actions/olx.actions";
-import type { OlxBoughtPacket, OlxPacket, OlxPaidFeature, OlxPaymentMethod } from "@/lib/olx/types";
+import type { OlxPaidFeature, OlxPaymentMethod } from "@/lib/olx/types";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { selectCls } from "@/lib/ui";
@@ -25,7 +25,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<OlxAccountInfo | null>(null);
-  const [packets, setPackets] = useState<{ available: OlxPacket[]; bought: OlxBoughtPacket[] } | null>(null);
+  const [packets, setPackets] = useState<OlxPacketsResult | null>(null);
   const [features, setFeatures] = useState<OlxPaidFeature[] | null>(null);
 
   async function loadAll() {
@@ -100,7 +100,13 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
               )}
 
               {/* Buy category packet */}
-              <BuyPacket businessId={businessId} packets={packets?.available ?? []} methods={methods} />
+              <BuyPacket
+                businessId={businessId}
+                groups={packets?.groups ?? []}
+                hasMappedCategories={packets?.hasMappedCategories ?? false}
+                methods={methods}
+                defaultMethod={packets?.paymentMethod ?? "account"}
+              />
 
               {/* Promote advert */}
               <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} />
@@ -112,45 +118,66 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   );
 }
 
-function BuyPacket({ businessId, packets, methods }: { businessId: string; packets: OlxPacket[]; methods: OlxPaymentMethod[] }) {
+function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod }: {
+  businessId: string; groups: OlxPacketGroup[]; hasMappedCategories: boolean; methods: OlxPaymentMethod[]; defaultMethod: OlxPaymentMethod;
+}) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
+  const [categoryId, setCategoryId] = useState<number | undefined>(groups[0]?.categoryId);
   const [selected, setSelected] = useState<string>("");
-  const [method, setMethod] = useState<OlxPaymentMethod>(methods[0] ?? "account");
+  const [method, setMethod] = useState<OlxPaymentMethod>(defaultMethod);
 
-  if (packets.length === 0) return null;
-  // Group by a stable key of category+size+type.
-  const options = packets.map((p, i) => ({ key: `${p.category_id}:${p.size}:${p.type ?? "base"}:${i}`, p }));
+  const group = groups.find((g) => g.categoryId === categoryId) ?? groups[0];
+  const options = (group?.packets ?? []).map((p, i) => ({ key: `${p.size}:${p.type ?? "base"}:${i}`, p }));
   const chosen = options.find((o) => o.key === selected)?.p;
 
   return (
     <div>
       <SectionLabel icon={ShoppingCart}>Cumpără pachet de anunțuri</SectionLabel>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <select aria-label="Pachet" value={selected} onChange={(e) => setSelected(e.target.value)} className={cn(selectCls, "flex-1")}>
-          <option value="">— alege pachet —</option>
-          {options.map((o) => (
-            <option key={o.key} value={o.key}>
-              {(o.p.name ?? `${o.p.size} anunțuri`)}{o.p.price != null ? ` — ${o.p.price} RON` : ""}
-            </option>
-          ))}
-        </select>
-        {methods.length > 1 && (
-          <select aria-label="Metodă de plată" value={method} onChange={(e) => setMethod(e.target.value as OlxPaymentMethod)} className={selectCls}>
-            {methods.map((m) => <option key={m} value={m}>{m === "account" ? "Din credit" : "Pe factură"}</option>)}
-          </select>
-        )}
-        <Button
-          disabled={saving || !chosen}
-          onClick={() => chosen && startSave(async () => {
-            const res = await buyOlxCategoryPacket(businessId, chosen.category_id, chosen.size, method, (chosen.type as "base" | "mega") ?? "base");
-            if ("error" in res) { toast.error(res.error); return; }
-            toast.success("Pachet cumpărat.");
-            router.refresh();
-          })}>
-          {saving ? <Loader2 className="animate-spin" /> : "Cumpără"}
-        </Button>
-      </div>
+      {groups.length === 0 ? (
+        <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+          {hasMappedCategories
+            ? "Nu sunt pachete disponibile pentru categoriile tale în acest moment."
+            : "Mapează întâi o categorie la OLX ca să vezi pachetele de anunțuri (pachetele sunt per categorie)."}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {groups.length > 1 && (
+            <select aria-label="Categorie" value={String(categoryId ?? "")}
+              onChange={(e) => { setCategoryId(Number(e.target.value)); setSelected(""); }} className={selectCls}>
+              {groups.map((g) => <option key={g.categoryId} value={g.categoryId}>{g.label}</option>)}
+            </select>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select aria-label="Pachet" value={selected} onChange={(e) => setSelected(e.target.value)} className={cn(selectCls, "flex-1")}>
+              <option value="">— alege pachet —</option>
+              {options.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {(o.p.name ?? `${o.p.size} anunțuri`)}{o.p.price != null ? ` — ${o.p.price} RON` : ""}{o.p.is_premium ? " (premium)" : ""}
+                </option>
+              ))}
+            </select>
+            {methods.length > 1 && (
+              <select aria-label="Metodă de plată" value={method} onChange={(e) => setMethod(e.target.value as OlxPaymentMethod)} className={selectCls}>
+                {methods.map((m) => <option key={m} value={m}>{m === "account" ? "Din credit" : "Pe factură"}</option>)}
+              </select>
+            )}
+            <Button
+              disabled={saving || !chosen || !group}
+              onClick={() => chosen && group && startSave(async () => {
+                const res = await buyOlxCategoryPacket(businessId, group.categoryId, chosen.size, method, (chosen.type as "base" | "mega") ?? "base");
+                if ("error" in res) { toast.error(res.error); return; }
+                toast.success("Pachet cumpărat.");
+                router.refresh();
+              })}>
+              {saving ? <Loader2 className="animate-spin" /> : "Cumpără"}
+            </Button>
+          </div>
+          {chosen?.features && chosen.features.length > 0 && (
+            <p className="text-xs text-muted-foreground">Include: {chosen.features.map((f) => f.label).filter(Boolean).join(", ")}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

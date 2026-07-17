@@ -68,13 +68,21 @@ function MessengerModal({ businessId, threads, adverts, onClose, onThreadRead }:
   onThreadRead: (threadId: number) => void;
 }) {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
-  const [selectedId, setSelectedId] = useState<number | null>(threads[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [localThreads, setLocalThreads] = useState<OlxThread[]>(threads);
+
+  // On desktop, pre-open the first conversation (two-pane view). On mobile we
+  // leave nothing selected so the CONVERSATION LIST shows first (like OLX).
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setMounted(true);
+      if (typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches) {
+        setSelectedId((cur) => cur ?? threads[0]?.id ?? null);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Map advert id -> product name for friendly list labels.
   const advertName = useMemo(() => {
@@ -217,7 +225,7 @@ function ConversationView({ businessId, thread, fallbackTitle, onBack }: {
     });
   }
 
-  const buyerName = convo?.buyer?.name ?? "Cumpărător OLX";
+  const buyerName = convo?.buyer?.name ?? "Utilizator OLX";
   const advert = convo?.advert;
 
   return (

@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Loader2, RefreshCw, Check, X, CircleCheck, Clock, CircleX, Settings as SettingsIcon,
-  Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag,
+  Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag, ShoppingCart,
 } from "lucide-react";
 import {
   startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx,
   publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert,
-  searchCities, getCityDistricts,
+  buyOlxAdvertPacket, searchCities, getCityDistricts,
   type OlxStatus, type OlxAdvertRow,
 } from "@/lib/actions/olx.actions";
 import type { OlxCity, OlxDistrict } from "@/lib/olx/types";
@@ -366,7 +366,8 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
           {adverts.map((a) => {
             const rowBusy = busyId === a.offer_id;
             const canDeactivate = ["active", "new", "unconfirmed"].includes(a.status);
-            const canActivate = ["removed_by_user", "outdated", "limited"].includes(a.status);
+            const canActivate = ["removed_by_user", "outdated"].includes(a.status);
+            const isLimited = a.status === "limited" && !!a.olx_advert_id;
             return (
               <div key={a.offer_id} className="flex items-center gap-3 px-5 py-3">
                 <AdvertStatusBadge status={a.status} />
@@ -395,7 +396,16 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
                       {canActivate && a.product_id && (
                         <IconBtn title="Activează" onClick={() => act(a.offer_id, () => activateOlxProduct(businessId, a.product_id!), "Anunț activat.")}><Play className="h-3.5 w-3.5" /></IconBtn>
                       )}
-                      <IconBtn title="Șterge anunțul" danger onClick={() => act(a.offer_id, () => deleteOlxAdvert(businessId, a.offer_id), "Anunț șters de pe OLX.")}><Trash2 className="h-3.5 w-3.5" /></IconBtn>
+                      {isLimited && (
+                        <IconBtn title="Cumpără pachet și activează" onClick={() => {
+                          if (!window.confirm(`Cumperi un pachet pentru anunțul „${a.name}” (se plătește din creditul contului tău OLX) și îl activezi?`)) return;
+                          act(a.offer_id, () => buyOlxAdvertPacket(businessId, a.olx_advert_id!), "Pachet cumpărat, anunț activat.");
+                        }}><ShoppingCart className="h-3.5 w-3.5" /></IconBtn>
+                      )}
+                      <IconBtn title="Șterge anunțul" danger onClick={() => {
+                        if (!window.confirm(`Sigur ștergi anunțul „${a.name}” de pe OLX? Acțiunea nu poate fi anulată.`)) return;
+                        act(a.offer_id, () => deleteOlxAdvert(businessId, a.offer_id), "Anunț șters de pe OLX.");
+                      }}><Trash2 className="h-3.5 w-3.5" /></IconBtn>
                     </>
                   )}
                 </div>

@@ -139,18 +139,30 @@ export function getCityDistricts(token: string, cityId: number) {
 }
 
 // ── Packets & paid features (monetization) ──────────────────────────────────────
-export function getAvailablePackets(token: string, params: { category_id?: number; payment_method?: OlxPaymentMethod; type?: "base" | "all" } = {}) {
+// GET /packets requires BOTH category_id and payment_method (packets are priced
+// per category). `with_features=1` returns what each packet bundles.
+export function getAvailablePackets(
+  token: string,
+  params: { category_id: number; payment_method: OlxPaymentMethod; type?: "base" | "mega" | "all"; with_features?: boolean },
+) {
   const q = new URLSearchParams();
-  if (params.category_id != null) q.set("category_id", String(params.category_id));
-  if (params.payment_method) q.set("payment_method", params.payment_method);
+  q.set("category_id", String(params.category_id));
+  q.set("payment_method", params.payment_method);
   if (params.type) q.set("type", params.type);
-  const qs = q.toString();
-  return call<OlxPacket[]>(token, "GET", `/packets${qs ? `?${qs}` : ""}`);
+  if (params.with_features) q.set("with_features", "1");
+  return call<OlxPacket[]>(token, "GET", `/packets?${q.toString()}`);
 }
 
-export function getBoughtPackets(token: string, availability?: "active" | "inactive") {
-  const qs = availability ? `?availability=${availability}` : "";
-  return call<OlxBoughtPacket[]>(token, "GET", `/users/me/packets${qs}`);
+export function getBoughtPackets(
+  token: string,
+  params: { availability?: "active" | "inactive"; offset?: number; limit?: number } = {},
+) {
+  const q = new URLSearchParams();
+  if (params.availability) q.set("availability", params.availability);
+  if (params.offset != null) q.set("offset", String(params.offset));
+  if (params.limit != null) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return call<OlxBoughtPacket[]>(token, "GET", `/users/me/packets${qs ? `?${qs}` : ""}`);
 }
 
 // Packet for a whole category. `size` must match an available packet variant.

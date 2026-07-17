@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
+import { fetchAllOrders } from "@/lib/orders/fetch-all";
+import type { Database } from "@/types/database.types";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
@@ -29,12 +31,8 @@ export default async function OrdersPage() {
   const business = { id: bizRow.id, business_name: bizRow.business_name };
   const settings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] ?? null : bizRow.store_settings ?? null;
 
-  const [{ data: orders }, { count: pendingCount }] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("*")
-      .eq("business_id", business.id)
-      .order("created_at", { ascending: false }),
+  const [orders, { count: pendingCount }] = await Promise.all([
+    fetchAllOrders<Database["public"]["Tables"]["orders"]["Row"]>(supabase, business.id, "*"),
     supabase
       .from("orders")
       .select("*", { count: "exact", head: true })
@@ -63,7 +61,7 @@ export default async function OrdersPage() {
 
   return (
     <div className="p-6">
-      <OrdersClient orders={orders ?? []} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} samedayEnabled={samedayEnabled} businessId={business.id} fanPickup={{ lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null }} />
+      <OrdersClient orders={orders} pendingCount={pendingCount ?? 0} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} samedayEnabled={samedayEnabled} businessId={business.id} fanPickup={{ lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null }} />
     </div>
   );
 }

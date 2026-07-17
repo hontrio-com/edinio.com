@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Users, Search, Phone, Mail, MapPin, ShoppingBag, TrendingUp, Repeat,
-  X, ChevronRight, Calendar, ExternalLink, ArrowUpDown,
+  X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -19,6 +19,8 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "orders", label: "Numar comenzi" },
   { key: "name",   label: "Nume (A-Z)" },
 ];
+
+const PAGE_SIZE = 50;
 
 function StatCard({ icon: Icon, label, value, tint }: {
   icon: typeof Users; label: string; value: string; tint: string;
@@ -40,6 +42,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -61,6 +64,10 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
     }
     return out;
   }, [customers, search, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div>
@@ -87,7 +94,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Cauta dupa nume, telefon sau email..."
             className="w-full pl-10 pr-3 py-2.5 text-sm border border-border rounded-xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
           />
@@ -96,7 +103,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
           <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <select
             value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
+            onChange={(e) => { setSort(e.target.value as SortKey); setPage(1); }}
             className="appearance-none w-full sm:w-auto pl-10 pr-9 py-2.5 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary cursor-pointer"
           >
             {SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -119,7 +126,7 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
         </div>
       ) : (
         <div className="bg-surface border border-border rounded-xl overflow-hidden divide-y divide-border">
-          {filtered.map((c) => (
+          {paginated.map((c) => (
             <button
               key={c.key}
               type="button"
@@ -153,6 +160,59 @@ export function CustomersClient({ customers, summary }: { customers: Customer[];
               <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </button>
           ))}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3">
+              <p className="text-xs text-muted-foreground">
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} clienti
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce<(number | "...")[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("...");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    item === "..." ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-xs text-muted-foreground">...</span>
+                    ) : (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setPage(item as number)}
+                        className={cn(
+                          "min-w-[28px] h-7 px-2 rounded-lg text-xs font-medium border transition-colors",
+                          currentPage === item
+                            ? "bg-primary text-white border-primary"
+                            : "border-border hover:bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {item}
+                      </button>
+                    )
+                  )}
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

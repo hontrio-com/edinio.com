@@ -8,6 +8,7 @@ import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
 import { computeBundlePricing, type BundleConfig, type BundleComponent, type BundlePricingMode } from "@/lib/bundles";
 import { enqueueGmcSync } from "@/lib/google-merchant/queue";
+import { enqueueOlxSync } from "@/lib/olx/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -152,6 +153,7 @@ export async function createBundle(
     return { error: "Eroare la salvarea pachetului. Incearca din nou." };
   }
   if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
+  if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
   revalidatePath("/dashboard/products/bundles");
   return { success: true };
 }
@@ -205,6 +207,7 @@ export async function updateBundle(
   }
 
   void enqueueGmcSync(businessId, bundleId, bundleId, "upsert");
+  void enqueueOlxSync(businessId, bundleId, bundleId, "upsert");
   revalidatePath("/dashboard/products/bundles");
   revalidatePath(`/dashboard/products/bundles/${bundleId}/edit`);
   return { success: true };

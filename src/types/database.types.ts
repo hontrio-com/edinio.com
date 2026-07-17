@@ -782,6 +782,120 @@ export type Database = {
           },
         ]
       }
+      olx_adverts: {
+        Row: {
+          business_id: string
+          created_at: string
+          error: string | null
+          id: string
+          issues: Json
+          last_status_at: string | null
+          last_synced_at: string | null
+          offer_id: string
+          olx_advert_id: number | null
+          olx_url: string | null
+          product_id: string | null
+          status: string
+          updated_at: string
+          valid_to: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          offer_id: string
+          olx_advert_id?: number | null
+          olx_url?: string | null
+          product_id?: string | null
+          status?: string
+          updated_at?: string
+          valid_to?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          offer_id?: string
+          olx_advert_id?: number | null
+          olx_url?: string | null
+          product_id?: string | null
+          status?: string
+          updated_at?: string
+          valid_to?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "olx_adverts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "olx_adverts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      olx_sync_queue: {
+        Row: {
+          attempts: number
+          business_id: string
+          created_at: string
+          id: string
+          last_error: string | null
+          offer_id: string
+          op: string
+          product_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          business_id: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id: string
+          op?: string
+          product_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          business_id?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id?: string
+          op?: string
+          product_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "olx_sync_queue_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "olx_sync_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           amount: number
@@ -1893,6 +2007,7 @@ export type Database = {
           notice_config: Json | null
           notifications_config: Json
           oblio_config: Json | null
+          olx_config: Json
           order_counter: number
           order_number_format: string
           page_content: Json
@@ -1942,6 +2057,7 @@ export type Database = {
           notice_config?: Json | null
           notifications_config?: Json
           oblio_config?: Json | null
+          olx_config?: Json
           order_counter?: number
           order_number_format?: string
           page_content?: Json
@@ -1991,6 +2107,7 @@ export type Database = {
           notice_config?: Json | null
           notifications_config?: Json
           oblio_config?: Json | null
+          olx_config?: Json
           order_counter?: number
           order_number_format?: string
           page_content?: Json

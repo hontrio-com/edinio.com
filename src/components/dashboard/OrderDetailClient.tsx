@@ -9,7 +9,7 @@ import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
-  ExternalLink,
+  ExternalLink, Pencil,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
@@ -29,6 +29,7 @@ import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
+import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -287,6 +288,7 @@ export function OrderDetailClient({
   const canStorno = !stornoNumber && (status === "cancelled" || status === "refunded");
 
   // Courier AWB modals
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [wootModalOpen, setWootModalOpen] = useState(false);
   const [cargusModalOpen, setCargusModalOpen] = useState(false);
   const [dpdModalOpen, setDpdModalOpen] = useState(false);
@@ -757,6 +759,12 @@ export function OrderDetailClient({
           </div>
           <StatusStepper status={status} />
         </div>
+        <button type="button" onClick={() => setEditModalOpen(true)}
+          className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors flex-shrink-0">
+          <Pencil className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Editeaza comanda</span>
+          <span className="sm:hidden">Editeaza</span>
+        </button>
       </div>
 
       {/* ── Two-column operational area (single column on mobile) ── */}
@@ -1125,6 +1133,15 @@ export function OrderDetailClient({
           </Button>
         </div>
       )}
+
+      {/* ── Order edit modal ── */}
+      <OrderEditModal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        order={order}
+        businessId={businessId}
+        onSaved={() => { setEditModalOpen(false); router.refresh(); }}
+      />
 
       {/* ── Courier AWB Modals ── */}
       {wootEnabled && (

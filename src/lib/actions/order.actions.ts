@@ -663,6 +663,166 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   return { success: true };
 }
 
+// ── Order editing (merchant fixes customer mistakes) ────────────────────────
+// Deliberately SEPARATE from updateOrder: editing customer data / address /
+// items must never fire the status & payment hooks (customer email, SMS,
+// notice.ro, auto-invoicing) that updateOrder triggers.
+
+export async function searchOrderProducts(businessId: string, query: string): Promise<
+  { products: { id: string; name: string; price: number; stock_quantity: number | null; track_inventory: boolean; is_bundle: boolean }[] } | { error: string }
+> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  let q = supabase.from("products")
+    .select("id, name, price, stock_quantity, track_inventory, is_bundle")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .order("name")
+    .limit(20);
+  const term = query.trim();
+  if (term) q = q.ilike("name", `%${term}%`);
+  const { data: rows, error } = await q;
+  if (error) return { error: "Eroare la cautarea produselor." };
+  return {
+    products: (rows ?? []).map((p) => ({
+      id: p.id as string,
+      name: String(p.name),
+      price: round2(Number(p.price)),
+      stock_quantity: p.stock_quantity as number | null,
+      track_inventory: !!p.track_inventory,
+      is_bundle: !!p.is_bundle,
+    })),
+  };
+}
+
+export async function updateOrderDetails(orderId: string, data: {
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  address: string;
+  city: string;
+  county: string;
+  postal_code?: string;
+  /** Products to append to the order; re-priced server-side from the live catalog. */
+  added_items?: { product_id: string; quantity: number }[];
+}): Promise<{ success: true; newTotal: number } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, business_id, status, items, subtotal, total, shipping_address")
+    .eq("id", orderId)
+    .single();
+  if (!order) return { error: "Comanda negasita" };
+
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  if (order.status === "cancelled" || order.status === "refunded") {
+    return { error: "Comenzile anulate sau rambursate nu pot fi editate." };
+  }
+
+  const name = data.customer_name.trim();
+  const phone = data.customer_phone.trim();
+  const address = data.address.trim();
+  const city = data.city.trim();
+  const county = data.county.trim();
+  if (!name || !phone) return { error: "Numele si telefonul clientului sunt obligatorii." };
+  if (!address || !city || !county) return { error: "Adresa, orasul si judetul sunt obligatorii." };
+
+  // Merge duplicate additions; integer quantities only.
+  const wanted = new Map<string, number>();
+  for (const it of data.added_items ?? []) {
+    const qty = Math.floor(Number(it.quantity));
+    if (!it.product_id || !Number.isFinite(qty) || qty <= 0) continue;
+    wanted.set(it.product_id, Math.min(999, (wanted.get(it.product_id) ?? 0) + qty));
+  }
+
+  // Re-price added products from the live catalog (never trust the client) and
+  // validate stock bundle-aware, exactly like order placement does.
+  const admin = createAdminClient();
+  let newItems: { product_id: string; name: string; price: number; quantity: number }[] = [];
+  let decrements: { product_id: string; quantity: number }[] = [];
+  if (wanted.size > 0) {
+    const ids = [...wanted.keys()];
+    const { data: products } = await admin.from("products")
+      .select("id, name, price, is_active")
+      .in("id", ids)
+      .eq("business_id", order.business_id);
+    const live = new Map((products ?? []).filter((p) => p.is_active).map((p) => [p.id as string, p]));
+    if (ids.some((id) => !live.has(id))) {
+      return { error: "Unul dintre produsele adaugate nu mai este disponibil. Reincarca pagina si incearca din nou." };
+    }
+
+    const stockExp = await expandBundleStock(admin, order.business_id, ids.map((id) => ({ product_id: id, quantity: wanted.get(id)! })));
+    if ("error" in stockExp) return { error: stockExp.error };
+    decrements = stockExp.decrements;
+
+    newItems = ids.map((id) => ({
+      product_id: id,
+      name: String(live.get(id)!.name),
+      price: round2(Number(live.get(id)!.price)),
+      quantity: wanted.get(id)!,
+    }));
+  }
+
+  const addedSum = round2(newItems.reduce((s, i) => s + i.price * i.quantity, 0));
+  const newSubtotal = round2(Number(order.subtotal) + addedSum);
+  const newTotal = round2(Number(order.total) + addedSum);
+
+  // Merge the address into shipping_address WITHOUT touching courier/locker/
+  // service keys — those belong to the checkout choice and the AWB flow.
+  const prevShip = (order.shipping_address ?? {}) as Record<string, unknown>;
+  const newShip = {
+    ...prevShip,
+    county,
+    city,
+    address,
+    ...(data.postal_code?.trim() ? { postal_code: data.postal_code.trim() } : {}),
+  };
+
+  // Refuse to touch a row whose items are not the expected array — appending
+  // onto a corrupt value would silently replace the customer's original items.
+  if (!Array.isArray(order.items)) {
+    logError({ action: "updateOrderDetails", message: "orders.items is not an array", details: { orderId }, userId: user.id, severity: "warning" });
+    return { error: "Structura comenzii nu permite editarea. Contacteaza suportul." };
+  }
+  const prevItems = order.items as unknown[];
+
+  const { error } = await supabase.from("orders").update({
+    customer_name: name,
+    customer_phone: phone,
+    customer_email: data.customer_email?.trim() || null,
+    shipping_address: newShip,
+    items: [...prevItems, ...newItems],
+    subtotal: newSubtotal,
+    total: newTotal,
+    updated_at: new Date().toISOString(),
+  } as never).eq("id", orderId);
+
+  if (error) {
+    logError({ action: "updateOrderDetails", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
+    return { error: "Eroare la salvarea modificarilor." };
+  }
+
+  // Stock decrement + Google Merchant availability sync for the added items
+  // (mirrors placeOrder; runs only after the order update committed).
+  if (decrements.length > 0) {
+    await admin.rpc("decrement_stock_batch" as never, { p_items: decrements } as never);
+    void enqueueGmcSyncMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
+  }
+
+  revalidatePath("/dashboard/orders");
+  revalidatePath(`/dashboard/orders/${orderId}`);
+  return { success: true, newTotal };
+}
+
 export async function deleteOrder(orderId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

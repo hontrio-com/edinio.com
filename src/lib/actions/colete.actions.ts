@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
@@ -182,4 +183,39 @@ export async function createCOAwb(
   } catch (e) {
     return { error: (e as Error).message };
   }
+}
+
+// ─── Detach AWB (manual cancellation) ─────────────────────────────────────────
+// Colete Online has NO cancellation endpoint: the merchant cancels the shipment
+// in their Colete Online account, then detaches the AWB here so the order can
+// get a fresh one (e.g. after editing a wrong address).
+
+export async function detachCOAwb(businessId: string, orderId: string): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Business negasit" };
+
+  const admin = adminClient();
+  const { data: order } = await admin.from("orders")
+    .select("id, colete_awb_number, tracking_number")
+    .eq("id", orderId).eq("business_id", businessId).single();
+  if (!order) return { error: "Comanda negasita" };
+  if (!order.colete_awb_number) return { error: "Comanda nu are AWB Colete Online." };
+
+  const { error } = await admin.from("orders").update({
+    colete_awb_number: null,
+    colete_order_id: null,
+    colete_unique_id: null,
+    colete_service_name: null,
+    // tracking_number is shared across couriers — clear it only if it belongs to this AWB.
+    ...(order.tracking_number === order.colete_awb_number ? { tracking_number: null } : {}),
+    updated_at: new Date().toISOString(),
+  }).eq("id", orderId);
+  if (error) return { error: "Eroare la actualizare." };
+
+  revalidatePath(`/dashboard/orders/${orderId}`);
+  return { success: true };
 }

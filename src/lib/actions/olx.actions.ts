@@ -9,9 +9,9 @@ import {
   buildAuthUrl, ensureMerchantToken, olxConfigured, signState,
 } from "@/lib/olx/oauth";
 import {
-  advertCommand, getAccountBalance, getAvailablePackets, getBoughtPackets, getPaidFeatures,
-  getPaymentMethods, getThreadMessages, getThreads, isOlxError, markThreadRead,
-  postThreadMessage, purchaseAdvertPacket, purchaseCategoryPacket, purchasePaidFeature,
+  advertCommand, getAccountBalance, getAdvert, getAvailablePackets, getBoughtPackets,
+  getPaidFeatures, getPaymentMethods, getThreadMessages, getThreads, getUser, isOlxError,
+  markThreadRead, postThreadMessage, purchaseAdvertPacket, purchaseCategoryPacket, purchasePaidFeature,
 } from "@/lib/olx/client";
 import {
   getOlxCategoriesCached, getOlxCategoryAttributesCached, getOlxCityDistrictsCached,
@@ -478,18 +478,47 @@ export async function getOlxThreads(businessId: string): Promise<{ threads: OlxT
   return { threads: Array.isArray(res.data) ? res.data : [] };
 }
 
-export async function getOlxThreadMessages(businessId: string, threadId: number): Promise<{ messages: OlxMessage[] } | { error: string }> {
+export interface OlxConversation {
+  messages: OlxMessage[];
+  buyer: { id: number; name: string; avatar: string | null } | null;
+  advert: { id: number; title: string; url: string | null; price: string | null; image: string | null } | null;
+}
+
+// One round-trip for a full OLX-style conversation view: messages + the buyer's
+// profile (name/avatar) + the advert card (title/price/thumbnail). Marks read.
+export async function getOlxConversation(
+  businessId: string, threadId: number, opts: { advertId?: number; interlocutorId?: number } = {},
+): Promise<OlxConversation | { error: string }> {
   const res = await withToken(businessId, async (token) => {
-    const msgs = await getThreadMessages(token, threadId);
-    // Mark the thread read once it's opened (best-effort).
+    const [msgsRes, buyerRes, advertRes] = await Promise.all([
+      getThreadMessages(token, threadId),
+      opts.interlocutorId ? getUser(token, opts.interlocutorId) : Promise.resolve(null),
+      opts.advertId ? getAdvert(token, opts.advertId) : Promise.resolve(null),
+    ]);
     void markThreadRead(token, threadId);
-    return msgs;
+    return { msgsRes, buyerRes, advertRes };
   });
   if ("error" in res) return res;
-  if (isOlxError(res)) return { error: res.error };
-  // API returns newest-first in some locales — sort ascending by id for a chat view.
-  const messages = (Array.isArray(res.data) ? res.data : []).slice().sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-  return { messages };
+  const { msgsRes, buyerRes, advertRes } = res;
+  if (isOlxError(msgsRes)) return { error: msgsRes.error };
+
+  // API can return newest-first — sort ascending by id for a chat view.
+  const messages = (Array.isArray(msgsRes.data) ? msgsRes.data : []).slice().sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  const buyer = buyerRes && !isOlxError(buyerRes) && buyerRes.data
+    ? { id: buyerRes.data.id, name: buyerRes.data.name, avatar: buyerRes.data.avatar ?? null }
+    : null;
+  let advert: OlxConversation["advert"] = null;
+  if (advertRes && !isOlxError(advertRes) && advertRes.data) {
+    const a = advertRes.data;
+    advert = {
+      id: a.id,
+      title: a.title ?? "",
+      url: a.url ?? null,
+      price: a.price?.value != null ? `${a.price.value} ${a.price.currency ?? "RON"}` : null,
+      image: a.images?.[0]?.url ?? null,
+    };
+  }
+  return { messages, buyer, advert };
 }
 
 export async function replyOlxThread(businessId: string, threadId: number, text: string): Promise<{ success: true } | { error: string }> {

@@ -1,21 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Wallet, Loader2, ChevronDown, Package, Megaphone, MessageSquare, ShoppingCart, Send,
+  Wallet, Loader2, ChevronDown, Package, Megaphone, ShoppingCart,
 } from "lucide-react";
 import {
   getOlxAccountInfo, getOlxPackets, buyOlxCategoryPacket,
-  getOlxPaidFeatures, buyOlxPaidFeature, getOlxThreads,
-  getOlxThreadMessages, replyOlxThread,
+  getOlxPaidFeatures, buyOlxPaidFeature,
   type OlxAdvertRow, type OlxAccountInfo,
 } from "@/lib/actions/olx.actions";
-import type { OlxBoughtPacket, OlxMessage, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread } from "@/lib/olx/types";
+import type { OlxBoughtPacket, OlxPacket, OlxPaidFeature, OlxPaymentMethod } from "@/lib/olx/types";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { selectCls } from "@/lib/ui";
 
 function money(value: number | null | undefined, currency: string | null | undefined): string {
@@ -29,17 +27,15 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   const [account, setAccount] = useState<OlxAccountInfo | null>(null);
   const [packets, setPackets] = useState<{ available: OlxPacket[]; bought: OlxBoughtPacket[] } | null>(null);
   const [features, setFeatures] = useState<OlxPaidFeature[] | null>(null);
-  const [threads, setThreads] = useState<OlxThread[] | null>(null);
 
   async function loadAll() {
     setLoading(true);
-    const [acc, pk, ft, th] = await Promise.all([
-      getOlxAccountInfo(businessId), getOlxPackets(businessId), getOlxPaidFeatures(businessId), getOlxThreads(businessId),
+    const [acc, pk, ft] = await Promise.all([
+      getOlxAccountInfo(businessId), getOlxPackets(businessId), getOlxPaidFeatures(businessId),
     ]);
     if (!("error" in acc)) setAccount(acc);
     if (!("error" in pk)) setPackets(pk);
     if (!("error" in ft)) setFeatures(ft.features);
-    if (!("error" in th)) setThreads(th.threads);
     if ("error" in acc) toast.error(acc.error);
     setLoading(false);
   }
@@ -108,9 +104,6 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
 
               {/* Promote advert */}
               <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} />
-
-              {/* Inbox */}
-              <Inbox businessId={businessId} threads={threads ?? []} adverts={adverts} />
             </>
           )}
         </div>
@@ -221,111 +214,5 @@ function SectionLabel({ icon: Icon, children }: { icon: React.ElementType; child
     <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
       <Icon className="h-3.5 w-3.5 text-muted-foreground" /> {children}
     </p>
-  );
-}
-
-function Inbox({ businessId, threads, adverts }: { businessId: string; threads: OlxThread[]; adverts: OlxAdvertRow[] }) {
-  // Map an OLX advert id back to the product name for a friendly thread title.
-  const advertName = useMemo(() => {
-    const m = new Map<number, string>();
-    for (const a of adverts) if (a.olx_advert_id) m.set(a.olx_advert_id, a.name);
-    return m;
-  }, [adverts]);
-
-  return (
-    <div>
-      <SectionLabel icon={MessageSquare}>Mesaje de la cumpărători</SectionLabel>
-      {threads.length > 0 ? (
-        <div className="space-y-1.5">
-          {threads.map((t) => (
-            <InboxThread key={t.id} businessId={businessId} thread={t} advertName={t.advert_id ? advertName.get(t.advert_id) : undefined} />
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">Nicio conversație încă.</p>
-      )}
-    </div>
-  );
-}
-
-function InboxThread({ businessId, thread, advertName }: { businessId: string; thread: OlxThread; advertName?: string }) {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<OlxMessage[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [reply, setReply] = useState("");
-  const [sending, startSend] = useTransition();
-  const [unread, setUnread] = useState(thread.unread_count ?? 0);
-
-  async function load() {
-    setLoading(true);
-    const res = await getOlxThreadMessages(businessId, thread.id);
-    setLoading(false);
-    if ("error" in res) { toast.error(res.error); setMessages([]); return; }
-    setMessages(res.messages);
-    setUnread(0);
-  }
-
-  function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next && messages === null && !loading) void load();
-  }
-
-  function send() {
-    const text = reply.trim();
-    if (!text) return;
-    startSend(async () => {
-      const res = await replyOlxThread(businessId, thread.id, text);
-      if ("error" in res) { toast.error(res.error); return; }
-      setReply("");
-      toast.success("Mesaj trimis.");
-      void load();
-    });
-  }
-
-  const title = advertName ?? (thread.advert_id ? `Anunț ${thread.advert_id}` : `Conversație #${thread.id}`);
-
-  return (
-    <div className="rounded-xl border border-border">
-      <button onClick={toggle} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
-        <span className="min-w-0 truncate text-sm text-foreground">{title}</span>
-        <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-          {unread > 0 && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">{unread} noi</span>}
-          {thread.total_count ?? 0} mesaje
-          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-border p-3">
-          {loading ? (
-            <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-          ) : messages && messages.length > 0 ? (
-            <div className="mb-3 max-h-64 space-y-2 overflow-y-auto">
-              {messages.map((m) => (
-                <div key={m.id} className={cn("flex", m.type === "sent" ? "justify-end" : "justify-start")}>
-                  <div className={cn("max-w-[80%] rounded-2xl px-3 py-1.5 text-sm", m.type === "sent" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
-                    <span className="whitespace-pre-wrap break-words">{m.text}</span>
-                    {m.created_at && <span className="mt-0.5 block text-[10px] opacity-70">{m.created_at.slice(0, 16)}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mb-3 text-center text-xs text-muted-foreground">Niciun mesaj în această conversație.</p>
-          )}
-          <div className="flex gap-2">
-            <Input
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-              placeholder="Scrie un răspuns..."
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            />
-            <Button size="sm" onClick={send} disabled={sending || !reply.trim()} aria-label="Trimite">
-              {sending ? <Loader2 className="animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }

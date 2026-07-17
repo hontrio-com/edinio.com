@@ -66,6 +66,10 @@ export function getMe(token: string) {
   return call<OlxUser>(token, "GET", "/users/me");
 }
 
+export function getUser(token: string, userId: number) {
+  return call<OlxUser>(token, "GET", `/users/${userId}`);
+}
+
 export function getAccountBalance(token: string) {
   return call<OlxAccountBalance>(token, "GET", "/users/me/account-balance");
 }

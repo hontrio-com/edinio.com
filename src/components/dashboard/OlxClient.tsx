@@ -21,6 +21,7 @@ import { Callout } from "@/components/ui/callout";
 import { selectCls } from "@/lib/ui";
 import { OlxCategoryMapper } from "./OlxCategoryMapper";
 import { OlxAccountPanel } from "./OlxAccountPanel";
+import { OlxMessenger } from "./OlxMessenger";
 
 export function OlxClient({ businessId, status, adverts, categories }: {
   businessId: string;
@@ -179,6 +180,9 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
 
       {/* Account / monetization */}
       <OlxAccountPanel businessId={businessId} adverts={adverts} />
+
+      {/* Buyer messages (OLX-style messenger) */}
+      <OlxMessenger businessId={businessId} adverts={adverts} />
 
       {/* Advert table */}
       <AdvertTable businessId={businessId} adverts={adverts} ready={status.ready} />

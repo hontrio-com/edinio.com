@@ -14,6 +14,7 @@ import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
+import { getAttribution } from "@/lib/storefront/attribution";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
@@ -472,6 +473,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         colete_service_name: courierSelection?.coleteServiceName,
         additional_items: allAdditional.length > 0 ? allAdditional : undefined,
         accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,
+        source: getAttribution() ?? undefined,
       };
       const payloadKey = JSON.stringify(payload);
       let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;

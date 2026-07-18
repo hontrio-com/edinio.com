@@ -151,6 +151,8 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   }
 
   function runBulkInvoices() {
+    const n = selected.size;
+    if (!window.confirm(`Generezi facturi pentru ${n} ${n === 1 ? "comandă" : "comenzi"}? Se emit documente fiscale reale (nu pot fi șterse, doar stornate).`)) return;
     void runBulk("Facturi", () => bulkGenerateInvoices(businessId!, [...selected], invoiceProvider));
   }
   function runBulkAwbs() {

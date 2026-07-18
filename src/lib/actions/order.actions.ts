@@ -10,6 +10,7 @@ import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCus
 import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
+import type { OrderSource } from "@/lib/storefront/attribution";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
@@ -126,6 +127,13 @@ async function buildOrderNumber(supabase: SupabaseClient, businessId: string): P
   return `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 }
 
+// Merge client-captured attribution with the server-side user-agent into the
+// stored order_source (null when there's nothing to record).
+function buildOrderSource(source: OrderSource | undefined, userAgent: string | undefined): OrderSource | null {
+  if (!source && !userAgent) return null;
+  return { ...(source ?? {}), ...(userAgent ? { user_agent: userAgent } : {}) };
+}
+
 export async function placeOrder(data: {
   business_id: string;
   cart_session_id?: string;
@@ -167,10 +175,14 @@ export async function placeOrder(data: {
   woot_service_name?: string;
   colete_service_id?: number;
   colete_service_name?: string;
+  /** First-touch attribution captured client-side (utm / referrer / ad click id). */
+  source?: OrderSource;
 }) {
   // Anti-abuse: order creation is anonymous and triggers SMS/email (real cost).
   // Throttle per IP so a script can't drain SMS credit or spam the merchant.
-  const ip = clientIpFromHeaders(await headers());
+  const hdrs = await headers();
+  const ip = clientIpFromHeaders(hdrs);
+  const userAgent = hdrs.get("user-agent")?.slice(0, 300) || undefined;
   if (!rateLimit(`placeOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
@@ -338,6 +350,7 @@ export async function placeOrder(data: {
     payment_method: data.payment_method ?? "cash_on_delivery",
     payment_status: "unpaid",
     status: "pending",
+    order_source: buildOrderSource(data.source, userAgent) as never,
   }).select("id, order_number").single();
 
   if (error) {
@@ -951,9 +964,13 @@ export async function placeCartOrder(data: {
   woot_service_name?: string;
   colete_service_id?: number;
   colete_service_name?: string;
+  /** First-touch attribution captured client-side (utm / referrer / ad click id). */
+  source?: OrderSource;
 }) {
   // Anti-abuse: anonymous + triggers SMS/email (real cost). Throttle per IP.
-  const ip = clientIpFromHeaders(await headers());
+  const hdrs = await headers();
+  const ip = clientIpFromHeaders(hdrs);
+  const userAgent = hdrs.get("user-agent")?.slice(0, 300) || undefined;
   if (!rateLimit(`placeCartOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
@@ -1106,6 +1123,7 @@ export async function placeCartOrder(data: {
     payment_method: data.payment_method ?? "cash_on_delivery",
     payment_status: "unpaid",
     status: "pending",
+    order_source: buildOrderSource(data.source, userAgent) as never,
   }).select("id, order_number, total").single();
 
   if (error) {

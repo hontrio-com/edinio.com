@@ -5,6 +5,7 @@ import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { GoogleTag } from "@/components/public/GoogleTag";
 import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
+import { AttributionCapture } from "@/components/public/AttributionCapture";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
@@ -83,6 +84,7 @@ export default async function StoreLayout({ children, params }: Props) {
   const requireConsent = cookieConfig.enabled;
   return (
     <>
+      <AttributionCapture />
       {fbPixelId && (
         <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
       )}

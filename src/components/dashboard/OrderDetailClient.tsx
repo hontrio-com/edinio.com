@@ -9,9 +9,10 @@ import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
-  ExternalLink, Pencil,
+  ExternalLink, Pencil, Compass,
 } from "lucide-react";
 import { formatDate, formatPrice } from "@/lib/utils/format";
+import { deriveOrigin } from "@/lib/orders/origin";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
 import {
   generateOrderInvoice,
@@ -811,6 +812,19 @@ export function OrderDetailClient({
                   {order.payment_method === "cash_on_delivery" ? "Plata la livrare" : order.payment_method}
                 </span>
               </div>
+              {(() => {
+                const origin = deriveOrigin(order.order_source);
+                return (
+                  <div className="flex items-start gap-2.5 text-sm">
+                    <Compass className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <span className="text-muted-foreground">
+                      Origine: <span className="font-medium text-foreground">{origin.label}</span>
+                      {origin.detail && <span className="text-muted-foreground"> · {origin.detail}</span>}
+                      {origin.device && <span className="text-muted-foreground"> · {origin.device}</span>}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

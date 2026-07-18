@@ -11,6 +11,7 @@ import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format"
 import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { placeCartOrder } from "@/lib/actions/order.actions";
+import { getAttribution } from "@/lib/storefront/attribution";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart, getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
@@ -509,6 +510,7 @@ function CartCheckoutModal({
         woot_service_name: courierSelection?.wootServiceName,
         colete_service_id: courierSelection?.coleteServiceId,
         colete_service_name: courierSelection?.coleteServiceName,
+        source: getAttribution() ?? undefined,
       };
       const payloadKey = JSON.stringify(payload);
       let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;

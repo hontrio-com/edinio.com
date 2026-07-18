@@ -1300,6 +1300,7 @@ export type Database = {
           oblio_storno_series: string | null
           offer_discount_amount: number
           order_number: string
+          order_source: Json | null
           payment_method: string
           payment_status: string
           revolut_order_id: string | null
@@ -1366,6 +1367,7 @@ export type Database = {
           oblio_storno_series?: string | null
           offer_discount_amount?: number
           order_number: string
+          order_source?: Json | null
           payment_method?: string
           payment_status?: string
           revolut_order_id?: string | null
@@ -1432,6 +1434,7 @@ export type Database = {
           oblio_storno_series?: string | null
           offer_discount_amount?: number
           order_number?: string
+          order_source?: Json | null
           payment_method?: string
           payment_status?: string
           revolut_order_id?: string | null

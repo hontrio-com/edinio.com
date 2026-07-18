@@ -57,6 +57,12 @@ async function fgoPost<T>(
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
+    // 409 on document issuance = fGO already has a document with this IdExtern
+    // (this order was already invoiced in fGO) or a numbering conflict from
+    // concurrent issuance. Make it actionable instead of a bare status line.
+    if (res.status === 409) {
+      throw new Error("fGO: factura pare deja emisa pentru aceasta comanda (verifica in contul fGO) sau conflict de numerotare. Reincearca.");
+    }
     throw new Error(`fGO API error: ${res.status} ${res.statusText}`);
   }
   const data = (await res.json()) as { Success: boolean; Message?: string } & T;

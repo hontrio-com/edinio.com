@@ -14,6 +14,10 @@ import type { DpdConfig } from "@/lib/dpd";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday";
 
+// Bulk invoice issuance runs sequentially (one document number at a time) and can
+// span dozens of orders, so give this route's server actions ample headroom.
+export const maxDuration = 300;
+
 export default async function OrdersPage({
   searchParams,
 }: {

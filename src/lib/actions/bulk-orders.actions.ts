@@ -33,8 +33,12 @@ export interface BulkResult {
 // The Orders page shows at most one page (ORDERS_PAGE_SIZE = 50), so selection is
 // naturally bounded. We still cap defensively.
 const MAX_BULK = 50;
-// Small concurrency keeps wall-time low without hammering courier/invoice APIs.
-const CONCURRENCY = 4;
+// Invoices MUST be issued one at a time: providers assign sequential document
+// numbers on a shared series, so concurrent issuance races and the API rejects
+// the collisions (e.g. fGO returns 409 Conflict). AWBs are independent shipments
+// (the courier assigns each number server-side), so a little concurrency is safe.
+const INVOICE_CONCURRENCY = 1;
+const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
 export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd";
@@ -63,7 +67,7 @@ function cleanIds(orderIds: string[]): string[] {
 
 // Concurrency-limited runner. JS is single-threaded, so the shared result object
 // is mutated safely between awaits (no locks needed).
-async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, size = CONCURRENCY): Promise<void> {
+async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, size: number): Promise<void> {
   let cursor = 0;
   const runners = Array.from({ length: Math.min(size, items.length) }, async () => {
     while (cursor < items.length) {
@@ -127,7 +131,7 @@ export async function bulkGenerateInvoices(
       result.failed++;
       result.errors.push({ order: o.order_number, message: (e as Error).message });
     }
-  });
+  }, INVOICE_CONCURRENCY);
 
   logError({ action: "bulkGenerateInvoices", message: `provider=${pick} done=${result.done} skipped=${result.skipped} failed=${result.failed}`, details: { businessId }, businessId, userId: g.userId, severity: "info" });
   revalidatePath("/dashboard/orders");
@@ -207,7 +211,7 @@ export async function bulkGenerateAwbs(
       result.failed++;
       result.errors.push({ order: o.order_number, message: (e as Error).message });
     }
-  });
+  }, AWB_CONCURRENCY);
 
   logError({ action: "bulkGenerateAwbs", message: `courier=${courier} done=${result.done} skipped=${result.skipped} failed=${result.failed}`, details: { businessId }, businessId, userId: g.userId, severity: "info" });
   revalidatePath("/dashboard/orders");

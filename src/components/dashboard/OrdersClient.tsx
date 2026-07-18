@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Package } from "lucide-react";
+import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Package, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
+import {
+  bulkGenerateInvoices, bulkGenerateAwbs, bulkUpdateOrderStatus,
+  type BulkResult, type InvoiceProvider, type BulkCourier,
+} from "@/lib/actions/bulk-orders.actions";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
@@ -82,6 +86,93 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
 
+  // ── Bulk selection ──
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ title: string; result: BulkResult } | null>(null);
+  const [invoiceProvider, setInvoiceProvider] = useState<InvoiceProvider>("auto");
+  const [awbCourier, setAwbCourier] = useState<BulkCourier>("auto");
+  const [bulkStatus, setBulkStatus] = useState("");
+
+  const invoiceProviders = useMemo(() => {
+    const list: { key: InvoiceProvider; label: string }[] = [];
+    if (smartbillEnabled) list.push({ key: "smartbill", label: "SmartBill" });
+    if (oblioEnabled) list.push({ key: "oblio", label: "Oblio" });
+    if (fgoEnabled) list.push({ key: "fgo", label: "fGO" });
+    return list;
+  }, [smartbillEnabled, oblioEnabled, fgoEnabled]);
+  const anyInvoice = invoiceProviders.length > 0;
+
+  const awbCouriers = useMemo(() => {
+    const list: { key: BulkCourier; label: string }[] = [];
+    if (cargusEnabled) list.push({ key: "cargus", label: "Cargus" });
+    if (samedayEnabled) list.push({ key: "sameday", label: "Sameday" });
+    if (fanCourierEnabled) list.push({ key: "fancourier", label: "FAN Courier" });
+    if (dpdEnabled) list.push({ key: "dpd", label: "DPD" });
+    return list;
+  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled]);
+  const anyAwb = awbCouriers.length > 0;
+
+  const pageOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);
+  const selectedOnPage = pageOrderIds.filter((id) => selected.has(id));
+  const allPageSelected = pageOrderIds.length > 0 && selectedOnPage.length === pageOrderIds.length;
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAllPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) pageOrderIds.forEach((id) => next.delete(id));
+      else pageOrderIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+  function clearSelection() { setSelected(new Set()); setBulkResult(null); }
+
+  async function runBulk(title: string, fn: () => Promise<BulkResult | { error: string }>) {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    setBulkResult(null);
+    const res = await fn();
+    setBulkBusy(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    setBulkResult({ title, result: res });
+    const parts = [`${res.done} reușite`];
+    if (res.skipped) parts.push(`${res.skipped} sărite`);
+    if (res.failed) parts.push(`${res.failed} eșuate`);
+    if (res.failed > 0) toast.error(`${title}: ${parts.join(", ")}`);
+    else toast.success(`${title}: ${parts.join(", ")}`);
+    router.refresh();
+  }
+
+  function runBulkInvoices() {
+    void runBulk("Facturi", () => bulkGenerateInvoices(businessId!, [...selected], invoiceProvider));
+  }
+  function runBulkAwbs() {
+    // With a single connected courier, target it directly; otherwise honor the
+    // dropdown ("după client" = each order's checkout courier).
+    const courier: BulkCourier = awbCouriers.length === 1 ? awbCouriers[0].key : awbCourier;
+    void runBulk("AWB-uri", () => bulkGenerateAwbs(businessId!, [...selected], courier));
+  }
+  function runBulkStatus() {
+    if (!bulkStatus) { toast.error("Alege un status."); return; }
+    const label = ORDER_STATUS[bulkStatus as OrderStatus]?.label ?? bulkStatus;
+    setBulkBusy(true);
+    setBulkResult(null);
+    bulkUpdateOrderStatus(businessId!, [...selected], bulkStatus).then((res) => {
+      setBulkBusy(false);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(`${res.updated} comenzi → ${label}`);
+      clearSelection();
+      router.refresh();
+    });
+  }
+
   // Datele vin gata filtrate si paginate de pe server; interactiunile devin
   // parametri de URL (q, status, page), deci functioneaza la orice volum.
   const totalPages = Math.max(1, Math.ceil(totalCount / ORDERS_PAGE_SIZE));
@@ -113,12 +204,18 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (searchInput === searchQuery) return;
     const t = setTimeout(() => {
       lastNavQ.current = searchInput;
+      setSelected(new Set());
+      setBulkResult(null);
       startNavTransition(() => router.replace(buildUrl({ q: searchInput, page: 1 }), { scroll: false }));
     }, 400);
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
   function goTo(next: { q?: string; status?: string; page?: number }) {
+    // Selection is per-view — reset it when changing page / filter so a bulk
+    // action never spans invisible orders on other pages.
+    setSelected(new Set());
+    setBulkResult(null);
     startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
   }
 
@@ -370,6 +467,132 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
         </p>
       )}
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="sticky top-2 z-20 mb-3 rounded-xl border border-primary/30 bg-surface shadow-sm">
+          <div className="flex flex-wrap items-center gap-2 p-3">
+            <div className="mr-auto flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <CheckSquare className="h-4 w-4 text-primary" />
+                {selected.size} {selected.size === 1 ? "selectată" : "selectate"}
+              </span>
+              <button type="button" onClick={clearSelection} className="text-xs text-muted-foreground underline hover:text-foreground">
+                Deselectează
+              </button>
+            </div>
+
+            {/* Status change */}
+            <div className="flex items-center gap-1.5">
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                disabled={bulkBusy}
+                aria-label="Schimbă statusul"
+                className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-surface text-foreground disabled:opacity-50"
+              >
+                <option value="">Schimbă status…</option>
+                {STATUS_TABS.filter((t) => t.key !== "all").map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={runBulkStatus}
+                disabled={bulkBusy || !bulkStatus}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-surface text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                Aplică
+              </button>
+            </div>
+
+            {/* Bulk invoices */}
+            {anyInvoice && businessId && (
+              <div className="flex items-center gap-1.5">
+                {invoiceProviders.length > 1 && (
+                  <select
+                    value={invoiceProvider}
+                    onChange={(e) => setInvoiceProvider(e.target.value as InvoiceProvider)}
+                    disabled={bulkBusy}
+                    aria-label="Furnizor factură"
+                    className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-surface text-foreground disabled:opacity-50"
+                  >
+                    <option value="auto">Factură: automat</option>
+                    {invoiceProviders.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={runBulkInvoices}
+                  disabled={bulkBusy}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-surface text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  <FileCheck className="h-3.5 w-3.5" /> Generează facturi
+                </button>
+              </div>
+            )}
+
+            {/* Bulk AWBs */}
+            {anyAwb && businessId && (
+              <div className="flex items-center gap-1.5">
+                {awbCouriers.length > 1 && (
+                  <select
+                    value={awbCourier}
+                    onChange={(e) => setAwbCourier(e.target.value as BulkCourier)}
+                    disabled={bulkBusy}
+                    aria-label="Curier AWB"
+                    className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-surface text-foreground disabled:opacity-50"
+                  >
+                    <option value="auto">AWB: după client</option>
+                    {awbCouriers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={runBulkAwbs}
+                  disabled={bulkBusy}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-surface text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  <Package className="h-3.5 w-3.5" /> Generează AWB{awbCouriers.length === 1 ? ` ${awbCouriers[0].label}` : "-uri"}
+                </button>
+              </div>
+            )}
+
+            {bulkBusy && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+          </div>
+
+          {/* Results (esp. failures) */}
+          {bulkResult && (
+            <div className="border-t border-border px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{bulkResult.title}:</span>{" "}
+                  <span className="text-success">{bulkResult.result.done} reușite</span>
+                  {bulkResult.result.skipped > 0 && <span> · {bulkResult.result.skipped} sărite</span>}
+                  {bulkResult.result.failed > 0 && <span className="text-destructive"> · {bulkResult.result.failed} eșuate</span>}
+                </p>
+                <button type="button" onClick={() => setBulkResult(null)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {bulkResult.result.errors.length > 0 && (
+                <ul className="mt-1.5 max-h-28 space-y-0.5 overflow-y-auto">
+                  {bulkResult.result.errors.slice(0, 20).map((er, i) => (
+                    <li key={i} className="text-[11px] text-destructive">
+                      <span className="font-mono font-semibold">{er.order}</span>: {er.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {bulkResult.result.skipped > 0 && bulkResult.title === "AWB-uri" && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Comenzile Woot / Colete sau cele fără curier potrivit se generează individual din tabel.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className={cn("bg-surface border border-border rounded-xl overflow-hidden transition-opacity", isPending && "opacity-60")}>
         {orders.length > 0 ? (
@@ -378,6 +601,16 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        ref={(el) => { if (el) el.indeterminate = selectedOnPage.length > 0 && !allPageSelected; }}
+                        onChange={toggleAllPage}
+                        aria-label="Selectează toate comenzile de pe pagină"
+                        className="h-4 w-4 rounded border-border accent-primary cursor-pointer align-middle"
+                      />
+                    </th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Comanda</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Client</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
@@ -419,9 +652,18 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     return (
                       <tr
                         key={order.id}
-                        className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                        className={cn("hover:bg-muted/30 transition-colors cursor-pointer group", selected.has(order.id) && "bg-primary/5")}
                         onClick={() => window.location.href = `/dashboard/orders/${order.id}`}
                       >
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(order.id)}
+                            onChange={() => toggleOne(order.id)}
+                            aria-label={`Selectează comanda ${order.order_number}`}
+                            className="h-4 w-4 rounded border-border accent-primary cursor-pointer align-middle"
+                          />
+                        </td>
                         <td className="px-5 py-3.5 font-mono text-sm font-semibold text-foreground">{order.order_number}</td>
                         <td className="px-5 py-3.5 text-muted-foreground hidden sm:table-cell">
                           <div className="font-medium text-foreground">{order.customer_name}</div>

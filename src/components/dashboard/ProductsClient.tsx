@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent } from "lucide-react";
 import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
+import { publishProductsToOlx } from "@/lib/actions/olx.actions";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -18,7 +19,7 @@ type Product = Pick<
   "id" | "name" | "slug" | "sku" | "price" | "compare_at_price" | "images" | "category" | "is_active" | "is_featured" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
 >;
 
-export function ProductsClient({ products, businessId, initialSearch = "", initialPage = 1, categories = [], productLimit, productCount, plan }: {
+export function ProductsClient({ products, businessId, initialSearch = "", initialPage = 1, categories = [], productLimit, productCount, plan, olxConnected = false }: {
   products: Product[];
   businessId: string;
   initialSearch?: string;
@@ -27,6 +28,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   productLimit: number;
   productCount: number;
   plan: string;
+  olxConnected?: boolean;
 }) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState(initialSearch);
@@ -190,6 +192,21 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
     if (bulkCategory === "") { toast.error("Alege o categorie."); return; }
     runBulk({ kind: "category", value: bulkCategory === "__none__" ? null : bulkCategory }, "Categorie setata la {n} produse");
   }
+  async function publishSelectedToOlx() {
+    setBulkBusy(true);
+    const res = await publishProductsToOlx(businessId, [...selected]);
+    setBulkBusy(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    if (res.queued === 0) {
+      toast.error(res.skipped > 0 ? "Niciun produs eligibil (inactive sau categorie nemapata pe OLX)." : "Niciun produs de publicat.");
+      return;
+    }
+    toast.success(res.skipped > 0
+      ? `${res.queued} produse trimise la OLX. ${res.skipped} sarite (inactive sau categorie nemapata).`
+      : `${res.queued} produse trimise la publicare pe OLX.`);
+    clearSelection();
+    router.refresh();
+  }
 
   return (
     <>
@@ -349,6 +366,11 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
             <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "featured", value: false }, "Recomandat eliminat de la {n} produse")} className={bulkBtn}>Scoate recomandat</button>
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "price" ? null : "price"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "price" && "border-primary ring-1 ring-primary/30")}><Percent className="h-3.5 w-3.5" /> Pret</button>
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "category" ? null : "category"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "category" && "border-primary ring-1 ring-primary/30")}><Tag className="h-3.5 w-3.5" /> Categorie</button>
+            {olxConnected && (
+              <button type="button" disabled={bulkBusy} onClick={publishSelectedToOlx} className={bulkBtn}>
+                <Image src="/integrations/olx.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 rounded-[3px]" /> Publica pe OLX
+              </button>
+            )}
             <button type="button" disabled={bulkBusy} onClick={() => { setConfirmBulkDelete(true); setBulkPanel(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/20 bg-surface hover:bg-destructive/5 rounded-lg transition-colors disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Sterge</button>
             <div className="flex-1" />
             {bulkBusy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}

@@ -263,6 +263,16 @@ export async function publishOlxProduct(businessId: string, productId: string): 
   const readiness = olxReadinessError(config);
   if (readiness) return { error: readiness };
 
+  // Actionable pre-checks so a single "Postează pe OLX" gives a clear reason
+  // instead of silently doing nothing (unmapped category / inactive product).
+  const { data: prod } = await g.supabase
+    .from("products").select("category, is_active").eq("id", productId).eq("business_id", businessId).single();
+  if (!prod) return { error: "Produs negasit." };
+  if (!prod.is_active) return { error: "Produsul este inactiv. Activeaza-l ca sa il poti publica pe OLX." };
+  if (!prod.category || !config.category_map?.[prod.category]) {
+    return { error: "Categoria produsului nu este mapata la OLX. Mapeaz-o in Integrari > OLX." };
+  }
+
   const admin = createAdminClient();
   const ctx = await loadOlxContext(admin, businessId);
   if (!ctx) return { error: "Conexiunea OLX nu este disponibila. Reconecteaza contul." };
@@ -273,7 +283,41 @@ export async function publishOlxProduct(businessId: string, productId: string): 
     return { error: res.error };
   }
   revalidatePath(FEATURE_PATH);
+  revalidatePath("/dashboard/products");
   return { success: true, status: res.status, url: res.url ?? null };
+}
+
+// Bulk publish a specific set of products (from the Products list). Enqueues the
+// ones that are active AND have a mapped category; reports the rest as skipped.
+export async function publishProductsToOlx(
+  businessId: string, productIds: string[],
+): Promise<{ queued: number; skipped: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(g.supabase, businessId);
+  const readiness = olxReadinessError(config);
+  if (readiness) return { error: readiness };
+  const mapped = new Set(Object.keys(config.category_map ?? {}));
+  if (mapped.size === 0) return { error: "Mapeaza mai intai cel putin o categorie la OLX (Integrari > OLX)." };
+
+  const ids = [...new Set((productIds ?? []).filter(Boolean))].slice(0, 1000);
+  if (ids.length === 0) return { error: "Niciun produs selectat." };
+
+  const { data: prods } = await g.supabase
+    .from("products").select("id, category, is_active").eq("business_id", businessId).in("id", ids);
+  const rows = (prods ?? [])
+    .filter((p) => p.is_active && p.category && mapped.has(p.category as string))
+    .map((p) => ({ business_id: businessId, product_id: p.id, offer_id: p.id, op: "upsert" as const }));
+
+  if (rows.length > 0) {
+    const admin = createAdminClient();
+    for (let i = 0; i < rows.length; i += 1000) {
+      await admin.from("olx_sync_queue").upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+    }
+  }
+  revalidatePath(FEATURE_PATH);
+  revalidatePath("/dashboard/products");
+  return { queued: rows.length, skipped: ids.length - rows.length };
 }
 
 export async function deactivateOlxProduct(businessId: string, productId: string): Promise<{ success: true } | { error: string }> {

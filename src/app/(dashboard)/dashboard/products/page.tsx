@@ -16,7 +16,7 @@ export default async function ProductsPage({
   const [{ data: bizRow }, { search: searchQuery, page: pageParam }, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id, products(id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id), categories(id, name, parent_id, sort_order)")
+      .select("id, products(id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id), categories(id, name, parent_id, sort_order), store_settings(olx_config)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -41,6 +41,9 @@ export default async function ProductsPage({
   const plan = profile?.plan ?? "free";
   const productLimit = getProductLimit(plan);
 
+  const olxSettings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] : bizRow.store_settings;
+  const olxConnected = !!(olxSettings?.olx_config as { connected?: boolean } | null)?.connected;
+
   return (
     <div className="p-4 sm:p-6">
       <ProductsClient
@@ -52,6 +55,7 @@ export default async function ProductsPage({
         productLimit={productLimit}
         productCount={products.length}
         plan={plan}
+        olxConnected={olxConnected}
       />
     </div>
   );

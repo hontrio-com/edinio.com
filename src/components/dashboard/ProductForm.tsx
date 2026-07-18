@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
+import { publishOlxProduct } from "@/lib/actions/olx.actions";
 import { createCategory } from "@/lib/actions/category.actions";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { formatPrice } from "@/lib/utils/format";
@@ -437,11 +438,26 @@ interface Props {
   // Store slug + publish status, so we can show "Vezi produsul" only when the
   // public product page is actually live (active product + published store).
   business?: { slug: string; is_published: boolean };
+  olxConnected?: boolean;
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false }: Props) {
   const router = useRouter();
   const isEditing = !!product;
+  const [olxPublishing, startOlxPublish] = useTransition();
+
+  function handlePublishOlx() {
+    if (!product) return;
+    startOlxPublish(async () => {
+      const res = await publishOlxProduct(businessId, product.id);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(
+        res.status === "active" ? "Anunț activ pe OLX."
+        : res.status === "limited" ? "Publicat, dar categoria a atins limita gratuită. Cumpără un pachet în Integrări > OLX."
+        : "Trimis pe OLX. Intră în moderare (câteva minute).",
+      );
+    });
+  }
   const [form, setForm] = useState<FormState>(product ? productToForm(product) : EMPTY_FORM);
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const toggleHelp = (k: string) => setHelpOpen((p) => (p === k ? null : k));
@@ -648,13 +664,26 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
             </span>
           ) : "Produs nou"}
         </h1>
-        {/* Live only when the product is active AND the store is published — otherwise the page 404s. */}
-        {isEditing && product?.is_active && product?.slug && business?.is_published && (
-          <a href={`/${business.slug}/product/${product.slug}`} target="_blank" rel="noopener noreferrer"
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground">
-            <ExternalLink className="h-4 w-4" />
-            Vezi produsul
-          </a>
+        {isEditing && (olxConnected || (product?.is_active && product?.slug && business?.is_published)) && (
+          <div className="ml-auto flex items-center gap-2">
+            {olxConnected && (
+              <button type="button" onClick={handlePublishOlx} disabled={olxPublishing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
+                {olxPublishing
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Image src="/integrations/olx.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                Postează pe OLX
+              </button>
+            )}
+            {/* Live only when the product is active AND the store is published — otherwise the page 404s. */}
+            {product?.is_active && product?.slug && business?.is_published && (
+              <a href={`/${business.slug}/product/${product.slug}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground">
+                <ExternalLink className="h-4 w-4" />
+                Vezi produsul
+              </a>
+            )}
+          </div>
         )}
       </div>
 

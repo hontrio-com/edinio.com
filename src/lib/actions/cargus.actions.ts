@@ -1,4 +1,5 @@
 "use server";
+import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -134,6 +135,7 @@ export async function createCargusAwbAction(
       cargus_service_name: serviceName,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+    void enqueueAboutYouShip(businessId, orderId);
 
     return { barCode, serviceName };
   } catch (e) {

@@ -782,6 +782,327 @@ export type Database = {
           },
         ]
       }
+      aboutyou_listings: {
+        Row: {
+          attributes: Json
+          ay_master_id: string | null
+          brand_id: number | null
+          business_id: string
+          category_id: number | null
+          color_id: number | null
+          country_of_origin: string | null
+          created_at: string
+          error: string | null
+          hs_code: string | null
+          id: string
+          issues: Json
+          last_status_at: string | null
+          last_synced_at: string | null
+          material_composition: Json
+          product_id: string | null
+          rejection_reasons: Json
+          size_option_name: string | null
+          status: string
+          style_key: string
+          updated_at: string
+        }
+        Insert: {
+          attributes?: Json
+          ay_master_id?: string | null
+          brand_id?: number | null
+          business_id: string
+          category_id?: number | null
+          color_id?: number | null
+          country_of_origin?: string | null
+          created_at?: string
+          error?: string | null
+          hs_code?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          material_composition?: Json
+          product_id?: string | null
+          rejection_reasons?: Json
+          size_option_name?: string | null
+          status?: string
+          style_key: string
+          updated_at?: string
+        }
+        Update: {
+          attributes?: Json
+          ay_master_id?: string | null
+          brand_id?: number | null
+          business_id?: string
+          category_id?: number | null
+          color_id?: number | null
+          country_of_origin?: string | null
+          created_at?: string
+          error?: string | null
+          hs_code?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          material_composition?: Json
+          product_id?: string | null
+          rejection_reasons?: Json
+          size_option_name?: string | null
+          status?: string
+          style_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aboutyou_listings_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aboutyou_listings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aboutyou_variants: {
+        Row: {
+          ay_status: string | null
+          business_id: string
+          color_id: number | null
+          created_at: string
+          ean: string | null
+          enabled: boolean
+          id: string
+          listing_id: string
+          product_id: string | null
+          quantity: number | null
+          retail_price_eur: number | null
+          sale_price_eur: number | null
+          second_size_id: number | null
+          size_id: number | null
+          sku: string
+          updated_at: string
+        }
+        Insert: {
+          ay_status?: string | null
+          business_id: string
+          color_id?: number | null
+          created_at?: string
+          ean?: string | null
+          enabled?: boolean
+          id?: string
+          listing_id: string
+          product_id?: string | null
+          quantity?: number | null
+          retail_price_eur?: number | null
+          sale_price_eur?: number | null
+          second_size_id?: number | null
+          size_id?: number | null
+          sku: string
+          updated_at?: string
+        }
+        Update: {
+          ay_status?: string | null
+          business_id?: string
+          color_id?: number | null
+          created_at?: string
+          ean?: string | null
+          enabled?: boolean
+          id?: string
+          listing_id?: string
+          product_id?: string | null
+          quantity?: number | null
+          retail_price_eur?: number | null
+          sale_price_eur?: number | null
+          second_size_id?: number | null
+          size_id?: number | null
+          sku?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aboutyou_variants_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aboutyou_variants_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "aboutyou_listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aboutyou_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aboutyou_batches: {
+        Row: {
+          attempts: number
+          batch_request_id: string
+          business_id: string
+          created_at: string
+          id: string
+          kind: string
+          polled_at: string | null
+          related_ids: Json
+          result_summary: Json | null
+          status: string
+          submitted_at: string
+        }
+        Insert: {
+          attempts?: number
+          batch_request_id: string
+          business_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          polled_at?: string | null
+          related_ids?: Json
+          result_summary?: Json | null
+          status?: string
+          submitted_at?: string
+        }
+        Update: {
+          attempts?: number
+          batch_request_id?: string
+          business_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          polled_at?: string | null
+          related_ids?: Json
+          result_summary?: Json | null
+          status?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aboutyou_batches_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aboutyou_orders: {
+        Row: {
+          aboutyou_order_number: string
+          business_id: string
+          created_at: string
+          fulfillment_type: string | null
+          id: string
+          items: Json
+          last_synced_at: string | null
+          order_id: string | null
+          shop_country: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          aboutyou_order_number: string
+          business_id: string
+          created_at?: string
+          fulfillment_type?: string | null
+          id?: string
+          items?: Json
+          last_synced_at?: string | null
+          order_id?: string | null
+          shop_country?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          aboutyou_order_number?: string
+          business_id?: string
+          created_at?: string
+          fulfillment_type?: string | null
+          id?: string
+          items?: Json
+          last_synced_at?: string | null
+          order_id?: string | null
+          shop_country?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aboutyou_orders_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aboutyou_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aboutyou_sync_queue: {
+        Row: {
+          attempts: number
+          business_id: string
+          created_at: string
+          id: string
+          last_error: string | null
+          offer_id: string
+          op: string
+          product_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          business_id: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id: string
+          op?: string
+          product_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          business_id?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id?: string
+          op?: string
+          product_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aboutyou_sync_queue_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aboutyou_sync_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       olx_adverts: {
         Row: {
           business_id: string
@@ -1984,6 +2305,7 @@ export type Database = {
         Row: {
           abandoned_cart_automation: Json
           abandoned_cart_enabled: boolean
+          aboutyou_config: Json
           brevo_config: Json | null
           business_id: string
           card_discount_config: Json
@@ -2034,6 +2356,7 @@ export type Database = {
         Insert: {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
+          aboutyou_config?: Json
           brevo_config?: Json | null
           business_id: string
           card_discount_config?: Json
@@ -2084,6 +2407,7 @@ export type Database = {
         Update: {
           abandoned_cart_automation?: Json
           abandoned_cart_enabled?: boolean
+          aboutyou_config?: Json
           brevo_config?: Json | null
           business_id?: string
           card_discount_config?: Json

@@ -1,4 +1,5 @@
 "use server";
+import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -143,6 +144,7 @@ export async function createDpdShipmentAction(
         dpd_awb_number: result.barcode,
         updated_at: new Date().toISOString(),
       }).eq("id", orderId);
+      void enqueueAboutYouShip(businessId, orderId);
       return result;
     }
 
@@ -153,6 +155,7 @@ export async function createDpdShipmentAction(
       dpd_awb_number: result.barcode,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+    void enqueueAboutYouShip(businessId, orderId);
 
     return result;
   } catch (e) {

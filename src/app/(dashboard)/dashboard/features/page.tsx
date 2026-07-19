@@ -24,6 +24,7 @@ import type { NoticeConfig } from "@/lib/notice";
 import type { MailchimpConfig } from "@/lib/mailchimp";
 import type { BrevoConfig } from "@/lib/brevo";
 import type { KlaviyoConfig } from "@/lib/klaviyo";
+import { aboutyouGloballyEnabled } from "@/lib/aboutyou/auth";
 
 type Integration = {
   name: string;
@@ -104,6 +105,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "Marketplace",
     integrations: [
       { name: "OLX", logo: "/integrations/olx.svg", id: "olx" },
+      { name: "About You", logo: "/integrations/aboutyou.png", id: "aboutyou" },
     ],
   },
   {
@@ -126,6 +128,7 @@ export default async function IntegrationsPage() {
   const supabase = await createClient();
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const gmcAvailable = GOOGLE_MERCHANT_LIVE || profile?.role === "admin";
+  const aboutyouAvailable = aboutyouGloballyEnabled();
   // Google Analytics is unlocked for everyone: the manual Measurement ID path
   // works without OAuth, so the card no longer waits for verification.
 
@@ -151,6 +154,7 @@ export default async function IntegrationsPage() {
   let googleMerchantActive = false;
   let googleAnalyticsActive = false;
   let olxActive = false;
+  let aboutyouActive = false;
   let mailchimpActive = false;
   let brevoActive = false;
   let klaviyoActive = false;
@@ -195,6 +199,8 @@ export default async function IntegrationsPage() {
     googleAnalyticsActive = !!ga?.connected;
     const olx = settings?.olx_config as { connected?: boolean } | null;
     olxActive = !!olx?.connected;
+    const ay = settings?.aboutyou_config as { connected?: boolean } | null;
+    aboutyouActive = !!ay?.connected;
     const mch = settings?.mailchimp_config as MailchimpConfig | null;
     mailchimpActive = !!(mch?.enabled && mch?.audience_id);
     const bv = settings?.brevo_config as BrevoConfig | null;
@@ -224,9 +230,9 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
-                const isUnlocked = integration.id === "notice" || integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "ipay" || integration.id === "klarna" || integration.id === "revolut" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday" || integration.id === "facebook-pixel" || integration.id === "tiktok-pixel" || integration.id === "google-ads" || integration.id === "mailchimp" || integration.id === "brevo" || integration.id === "klaviyo" || (integration.id === "google-merchant" && gmcAvailable) || integration.id === "google-analytics" || integration.id === "olx";
-                const isActive = integration.id === "notice" ? noticeActive : integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "ipay" ? ipayActive : integration.id === "klarna" ? klarnaActive : integration.id === "revolut" ? revolutActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : integration.id === "sameday" ? samedayActive : integration.id === "facebook-pixel" ? fbActive : integration.id === "tiktok-pixel" ? ttActive : integration.id === "google-ads" ? googleActive : integration.id === "google-merchant" ? googleMerchantActive : integration.id === "mailchimp" ? mailchimpActive : integration.id === "brevo" ? brevoActive : integration.id === "klaviyo" ? klaviyoActive : integration.id === "google-analytics" ? googleAnalyticsActive : integration.id === "olx" ? olxActive : false;
-                const href = integration.id === "notice" ? "/dashboard/features/notice" : integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "ipay" ? "/dashboard/features/ipay" : integration.id === "klarna" ? "/dashboard/features/klarna" : integration.id === "revolut" ? "/dashboard/features/revolut" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : integration.id === "sameday" ? "/dashboard/features/sameday" : integration.id === "facebook-pixel" ? "/dashboard/features/facebook-pixel" : integration.id === "tiktok-pixel" ? "/dashboard/features/tiktok-pixel" : integration.id === "google-ads" ? "/dashboard/features/google-ads" : integration.id === "google-merchant" ? "/dashboard/features/google-merchant" : integration.id === "mailchimp" ? "/dashboard/features/mailchimp" : integration.id === "brevo" ? "/dashboard/features/brevo" : integration.id === "klaviyo" ? "/dashboard/features/klaviyo" : integration.id === "google-analytics" ? "/dashboard/features/google-analytics" : integration.id === "olx" ? "/dashboard/features/olx" : "#";
+                const isUnlocked = integration.id === "notice" || integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "ipay" || integration.id === "klarna" || integration.id === "revolut" || integration.id === "woot" || integration.id === "colete" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday" || integration.id === "facebook-pixel" || integration.id === "tiktok-pixel" || integration.id === "google-ads" || integration.id === "mailchimp" || integration.id === "brevo" || integration.id === "klaviyo" || (integration.id === "google-merchant" && gmcAvailable) || integration.id === "google-analytics" || integration.id === "olx" || (integration.id === "aboutyou" && aboutyouAvailable);
+                const isActive = integration.id === "notice" ? noticeActive : integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "ipay" ? ipayActive : integration.id === "klarna" ? klarnaActive : integration.id === "revolut" ? revolutActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : integration.id === "sameday" ? samedayActive : integration.id === "facebook-pixel" ? fbActive : integration.id === "tiktok-pixel" ? ttActive : integration.id === "google-ads" ? googleActive : integration.id === "google-merchant" ? googleMerchantActive : integration.id === "mailchimp" ? mailchimpActive : integration.id === "brevo" ? brevoActive : integration.id === "klaviyo" ? klaviyoActive : integration.id === "google-analytics" ? googleAnalyticsActive : integration.id === "olx" ? olxActive : integration.id === "aboutyou" ? aboutyouActive : false;
+                const href = integration.id === "notice" ? "/dashboard/features/notice" : integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "ipay" ? "/dashboard/features/ipay" : integration.id === "klarna" ? "/dashboard/features/klarna" : integration.id === "revolut" ? "/dashboard/features/revolut" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : integration.id === "sameday" ? "/dashboard/features/sameday" : integration.id === "facebook-pixel" ? "/dashboard/features/facebook-pixel" : integration.id === "tiktok-pixel" ? "/dashboard/features/tiktok-pixel" : integration.id === "google-ads" ? "/dashboard/features/google-ads" : integration.id === "google-merchant" ? "/dashboard/features/google-merchant" : integration.id === "mailchimp" ? "/dashboard/features/mailchimp" : integration.id === "brevo" ? "/dashboard/features/brevo" : integration.id === "klaviyo" ? "/dashboard/features/klaviyo" : integration.id === "google-analytics" ? "/dashboard/features/google-analytics" : integration.id === "olx" ? "/dashboard/features/olx" : integration.id === "aboutyou" ? "/dashboard/features/aboutyou" : "#";
 
                 if (isUnlocked) {
                   return (
@@ -250,7 +256,7 @@ export default async function IntegrationsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <p className="text-sm font-semibold text-foreground">{integration.name}</p>
-                          {["klarna", "mailchimp", "brevo", "klaviyo", "revolut", "olx"].includes(integration.id ?? "") && (
+                          {["klarna", "mailchimp", "brevo", "klaviyo", "revolut", "olx", "aboutyou"].includes(integration.id ?? "") && (
                             <span className="text-[9px] font-bold uppercase tracking-wide bg-primary text-white px-1.5 py-0.5 rounded-full leading-none">Nou</span>
                           )}
                         </div>

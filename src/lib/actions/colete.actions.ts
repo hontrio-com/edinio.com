@@ -1,4 +1,5 @@
 "use server";
+import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -178,6 +179,7 @@ export async function createCOAwb(
       status: "processing",
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+    void enqueueAboutYouShip(businessId, orderId);
 
     return { awb: result.awb, uniqueId: result.uniqueId };
   } catch (e) {

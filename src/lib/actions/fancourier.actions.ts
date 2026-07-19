@@ -1,4 +1,5 @@
 "use server";
+import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -110,6 +111,7 @@ export async function createFanCourierAwbAction(
       fan_courier_awb_number: awbNumber,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+    void enqueueAboutYouShip(businessId, orderId);
 
     return { awbNumber };
   } catch (e) {

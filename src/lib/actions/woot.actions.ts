@@ -1,4 +1,5 @@
 "use server";
+import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -253,6 +254,7 @@ export async function createWootAwb(
       })
       .eq("id", orderId)
       .eq("business_id", businessId);
+    void enqueueAboutYouShip(businessId, orderId);
 
     revalidatePath("/dashboard/orders");
     revalidatePath(`/dashboard/orders/${orderId}`);

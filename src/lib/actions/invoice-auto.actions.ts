@@ -23,13 +23,17 @@ export async function maybeAutoInvoice(
     const supabase = await createClient();
     const { data: order } = await supabase
       .from("orders")
-      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number")
+      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, payment_method, order_source")
       .eq("id", orderId)
       .eq("business_id", businessId)
       .single();
     if (!order) return;
 
     const o = order as Record<string, unknown>;
+    // About You collects payment and invoices the end customer itself, so we never
+    // auto-invoice marketplace orders (the merchant invoices About You B2B instead).
+    const src = o.order_source as { marketplace?: string } | null;
+    if (o.payment_method === "aboutyou" || src?.marketplace === "aboutyou") return;
     if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number) return;
 
     const smartbill = await import("@/lib/actions/smartbill.actions");

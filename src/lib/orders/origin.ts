@@ -72,6 +72,11 @@ export function deriveOrigin(raw: unknown): OrderOrigin {
     return { label: "Magazin online", channel: "store", device };
   }
 
+  // Marketplace orders (About You etc.) carry an explicit channel marker.
+  if ((src as { marketplace?: string }).marketplace === "aboutyou") {
+    return { label: "About You", channel: "store", device };
+  }
+
   const medium = (src.utm_medium ?? "").toLowerCase();
   const hasClickId = !!(src.gclid || src.fbclid || src.ttclid);
   const paid = hasClickId || PAID_MEDIA.test(medium);

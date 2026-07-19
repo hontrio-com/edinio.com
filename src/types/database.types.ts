@@ -1103,6 +1103,315 @@ export type Database = {
           },
         ]
       }
+      trendyol_listings: {
+        Row: {
+          attributes: Json
+          brand_id: number | null
+          business_id: string
+          cargo_company_id: number | null
+          category_id: number | null
+          created_at: string
+          dimensional_weight: number | null
+          error: string | null
+          id: string
+          issues: Json
+          last_status_at: string | null
+          last_synced_at: string | null
+          product_id: string | null
+          product_main_id: string
+          rejection_reasons: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attributes?: Json
+          brand_id?: number | null
+          business_id: string
+          cargo_company_id?: number | null
+          category_id?: number | null
+          created_at?: string
+          dimensional_weight?: number | null
+          error?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          product_id?: string | null
+          product_main_id: string
+          rejection_reasons?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attributes?: Json
+          brand_id?: number | null
+          business_id?: string
+          cargo_company_id?: number | null
+          category_id?: number | null
+          created_at?: string
+          dimensional_weight?: number | null
+          error?: string | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          product_id?: string | null
+          product_main_id?: string
+          rejection_reasons?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trendyol_listings_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trendyol_listings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trendyol_variants: {
+        Row: {
+          attributes: Json
+          barcode: string
+          business_id: string
+          created_at: string
+          enabled: boolean
+          id: string
+          list_price: number | null
+          listing_id: string
+          product_id: string | null
+          quantity: number | null
+          sale_price: number | null
+          stock_code: string | null
+          ty_status: string | null
+          updated_at: string
+          vat_rate: number | null
+        }
+        Insert: {
+          attributes?: Json
+          barcode: string
+          business_id: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          list_price?: number | null
+          listing_id: string
+          product_id?: string | null
+          quantity?: number | null
+          sale_price?: number | null
+          stock_code?: string | null
+          ty_status?: string | null
+          updated_at?: string
+          vat_rate?: number | null
+        }
+        Update: {
+          attributes?: Json
+          barcode?: string
+          business_id?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          list_price?: number | null
+          listing_id?: string
+          product_id?: string | null
+          quantity?: number | null
+          sale_price?: number | null
+          stock_code?: string | null
+          ty_status?: string | null
+          updated_at?: string
+          vat_rate?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trendyol_variants_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trendyol_variants_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "trendyol_listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trendyol_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trendyol_batches: {
+        Row: {
+          attempts: number
+          batch_request_id: string
+          business_id: string
+          created_at: string
+          id: string
+          kind: string
+          polled_at: string | null
+          related_ids: Json
+          result_summary: Json | null
+          status: string
+          submitted_at: string
+        }
+        Insert: {
+          attempts?: number
+          batch_request_id: string
+          business_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          polled_at?: string | null
+          related_ids?: Json
+          result_summary?: Json | null
+          status?: string
+          submitted_at?: string
+        }
+        Update: {
+          attempts?: number
+          batch_request_id?: string
+          business_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          polled_at?: string | null
+          related_ids?: Json
+          result_summary?: Json | null
+          status?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trendyol_batches_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trendyol_sync_queue: {
+        Row: {
+          attempts: number
+          business_id: string
+          created_at: string
+          id: string
+          last_error: string | null
+          offer_id: string
+          op: string
+          product_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          business_id: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id: string
+          op?: string
+          product_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          business_id?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id?: string
+          op?: string
+          product_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trendyol_sync_queue_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trendyol_sync_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trendyol_orders: {
+        Row: {
+          business_id: string
+          cargo_tracking_number: string | null
+          created_at: string
+          currency: string | null
+          id: string
+          last_synced_at: string | null
+          lines: Json
+          order_id: string | null
+          order_number: string | null
+          shipment_package_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          cargo_tracking_number?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          last_synced_at?: string | null
+          lines?: Json
+          order_id?: string | null
+          order_number?: string | null
+          shipment_package_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          cargo_tracking_number?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          last_synced_at?: string | null
+          lines?: Json
+          order_id?: string | null
+          order_number?: string | null
+          shipment_package_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trendyol_orders_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trendyol_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       olx_adverts: {
         Row: {
           business_id: string
@@ -2348,6 +2657,7 @@ export type Database = {
           smso_config: Json | null
           store_policies: Json
           stripe_config: Json | null
+          trendyol_config: Json
           updated_at: string
           vat_enabled: boolean
           vat_rate: number
@@ -2399,6 +2709,7 @@ export type Database = {
           smso_config?: Json | null
           store_policies?: Json
           stripe_config?: Json | null
+          trendyol_config?: Json
           updated_at?: string
           vat_enabled?: boolean
           vat_rate?: number
@@ -2450,6 +2761,7 @@ export type Database = {
           smso_config?: Json | null
           store_policies?: Json
           stripe_config?: Json | null
+          trendyol_config?: Json
           updated_at?: string
           vat_enabled?: boolean
           vat_rate?: number

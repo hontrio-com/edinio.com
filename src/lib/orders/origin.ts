@@ -72,9 +72,11 @@ export function deriveOrigin(raw: unknown): OrderOrigin {
     return { label: "Magazin online", channel: "store", device };
   }
 
-  // Marketplace orders (About You etc.) carry an explicit channel marker.
-  if ((src as { marketplace?: string }).marketplace === "aboutyou") {
-    return { label: "About You", channel: "store", device };
+  // Marketplace orders (About You, Trendyol, ...) carry an explicit channel marker.
+  const marketplace = (src as { marketplace?: string }).marketplace;
+  if (marketplace) {
+    const MARKETPLACE_LABELS: Record<string, string> = { aboutyou: "About You", trendyol: "Trendyol" };
+    return { label: MARKETPLACE_LABELS[marketplace] ?? titleCase(marketplace), channel: "store", device };
   }
 
   const medium = (src.utm_medium ?? "").toLowerCase();

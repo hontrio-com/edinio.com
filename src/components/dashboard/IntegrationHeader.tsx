@@ -27,6 +27,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   "google-merchant": { src: "/integrations/google-merchant-center.svg", alt: "Google Merchant Center" },
   olx: { src: "/integrations/olx.svg", alt: "OLX" },
   aboutyou: { src: "/integrations/aboutyou.png", alt: "About You" },
+  trendyol: { src: "/integrations/trendyol.svg", alt: "Trendyol" },
   marketing: { src: "/integrations/facebook-pixel.svg", alt: "Marketing" },
 };
 

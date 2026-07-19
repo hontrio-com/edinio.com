@@ -30,10 +30,11 @@ export async function maybeAutoInvoice(
     if (!order) return;
 
     const o = order as Record<string, unknown>;
-    // About You collects payment and invoices the end customer itself, so we never
-    // auto-invoice marketplace orders (the merchant invoices About You B2B instead).
+    // Marketplaces (About You, Trendyol, ...) collect payment and invoice the end
+    // customer themselves, so we never auto-invoice their orders (the merchant
+    // invoices the marketplace B2B instead).
     const src = o.order_source as { marketplace?: string } | null;
-    if (o.payment_method === "aboutyou" || src?.marketplace === "aboutyou") return;
+    if (src?.marketplace || o.payment_method === "aboutyou" || o.payment_method === "trendyol") return;
     if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number) return;
 
     const smartbill = await import("@/lib/actions/smartbill.actions");

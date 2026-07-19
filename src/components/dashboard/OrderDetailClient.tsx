@@ -31,6 +31,7 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
+import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -244,6 +245,8 @@ export function OrderDetailClient({
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
   const notes = order.notes as Record<string, string> | null;
   const ord = order as unknown as Record<string, unknown>;
+  // Trendyol ships with its own cargo (no courier AWB) — swap the shipping panel.
+  const isTrendyol = (order.order_source as { marketplace?: string } | null)?.marketplace === "trendyol";
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -525,7 +528,7 @@ export function OrderDetailClient({
   // Mobile sticky action bar: single most relevant next action.
   const mobileAction = hasChanges
     ? { label: isPending ? "Se salveaza..." : "Salveaza modificarile", onClick: () => setShowSaveConfirm(true), disabled: isPending }
-    : (!shippedCourier && primaryCourier)
+    : (!isTrendyol && !shippedCourier && primaryCourier)
       ? { label: `Creeaza AWB ${primaryCourier.name}`, onClick: primaryCourier.open, disabled: false }
       : null;
 
@@ -980,7 +983,9 @@ export function OrderDetailClient({
           )}
 
           {/* Expediere */}
-          {enabledCouriers.length > 0 && (
+          {isTrendyol ? (
+            <TrendyolFulfillmentPanel businessId={businessId} orderId={order.id} />
+          ) : enabledCouriers.length > 0 ? (
             <div className={`${CARD} overflow-hidden`}>
               <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
                 <Truck className="h-4 w-4 text-muted-foreground" />
@@ -1032,7 +1037,7 @@ export function OrderDetailClient({
                 ) : null}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

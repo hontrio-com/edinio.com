@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/aboutyou-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/trendyol-sync",
+      "schedule": "* * * * *"
     }
   ]
 }

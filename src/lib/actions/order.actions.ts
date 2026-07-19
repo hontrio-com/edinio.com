@@ -16,6 +16,7 @@ import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
+import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
 import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
@@ -370,6 +371,7 @@ export async function placeOrder(data: {
   void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
   void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
   void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
+  void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.
@@ -835,6 +837,7 @@ export async function updateOrderDetails(orderId: string, data: {
     void enqueueGmcSyncMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
     void enqueueOlxSyncMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
     void enqueueAboutYouStockMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
+    void enqueueTrendyolInventoryMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
   }
 
   revalidatePath("/dashboard/orders");
@@ -1145,6 +1148,7 @@ export async function placeCartOrder(data: {
   void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
+  void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.

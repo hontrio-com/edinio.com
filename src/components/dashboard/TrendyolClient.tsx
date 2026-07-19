@@ -26,7 +26,6 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [environment, setEnvironment] = useState<"stage" | "production">(status?.environment ?? "production");
-  const [company, setCompany] = useState("");
 
   const [shipmentAddressId, setShipmentAddressId] = useState(status?.shipmentAddressId != null ? String(status.shipmentAddressId) : "");
   const [returningAddressId, setReturningAddressId] = useState(status?.returningAddressId != null ? String(status.returningAddressId) : "");
@@ -63,7 +62,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     }
     startTransition(async () => {
       const res = await connectTrendyol(businessId, {
-        supplierId: supplierId.trim(), apiKey, apiSecret, environment, company: company.trim() || undefined,
+        supplierId: supplierId.trim(), apiKey, apiSecret, environment,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont Trendyol conectat.");
@@ -140,7 +139,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
         <div className="rounded-xl border border-border bg-surface p-5">
           <h2 className="text-base font-semibold text-foreground mb-1">Conectează contul Trendyol</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Ia SupplierID, API Key și API Secret din panoul Trendyol: Hesap Bilgileri {">"} Entegrasyon Bilgileri.
+            Găsești SupplierID, API Key și API Secret în contul tău de vânzător Trendyol, la secțiunea de integrare (Integrare / API).
           </p>
           <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -161,17 +160,12 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">API Key</label>
               <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off"
-                placeholder="cheia API" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
+                placeholder="Cheia API" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
             </div>
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">API Secret</label>
               <input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="off"
-                placeholder="secretul API" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Nume companie integrare (opțional)</label>
-              <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="SelfIntegration"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+                placeholder="Cheia secretă API" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
             </div>
             <button onClick={handleConnect} disabled={pending}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">

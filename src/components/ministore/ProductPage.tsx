@@ -406,7 +406,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   // Cart carried over from the storefront (localStorage) so ordering from a product
   // page includes what the customer already added. Current product excluded to avoid
   // duplication; read once on mount (storefront cart is built before reaching here).
-  const [cartItems, setCartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[]>(() => {
+  const [cartItems, setCartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[]>(() => {
     if (typeof window === "undefined") return [];
     try {
       const raw = localStorage.getItem(`cart_${business.slug}`);

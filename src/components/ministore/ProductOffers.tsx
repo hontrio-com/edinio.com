@@ -153,13 +153,14 @@ function OfferCard({ product, basePath, color, onAddToCart }: {
             <span className="text-sm font-bold text-foreground">{formatPrice(product.price)}</span>
             {hasDiscount && <span className="text-xs text-muted-foreground line-through">{formatPrice(product.compareAtPrice!)}</span>}
           </div>
-          {onAddToCart ? (
+          {onAddToCart && !product.hasVariants ? (
             <button type="button" onClick={handleAdd} disabled={product.outOfStock} aria-label={`Adauga ${product.name}`}
               className="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-semibold text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ backgroundColor: color }}>
               {product.outOfStock ? "Epuizat" : added ? <><Check className="h-3.5 w-3.5" /> Adaugat</> : <><Plus className="h-3.5 w-3.5" /> Adauga</>}
             </button>
           ) : (
+            /* Variable product (or link-only card): send the shopper to its page to choose options. */
             <a href={href} aria-label={`Vezi ${product.name}`} className="shrink-0">
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" style={{ color }} />
             </a>

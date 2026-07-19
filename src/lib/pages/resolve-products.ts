@@ -5,7 +5,7 @@ import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 
 type DB = SupabaseClient<Database>;
 
-const COLS = "id, name, slug, price, compare_at_price, images, category, is_featured";
+const COLS = "id, name, slug, price, compare_at_price, images, category, is_featured, page_sections";
 const MAX = 24;
 
 function toPageProduct(p: Record<string, unknown>): PageProduct {
@@ -18,6 +18,7 @@ function toPageProduct(p: Record<string, unknown>): PageProduct {
     images: Array.isArray(p.images) ? (p.images as unknown[]).map(String).filter(Boolean) : [],
     category: (p.category as string | null) ?? null,
     is_featured: !!p.is_featured,
+    page_sections: p.page_sections ?? null,
   };
 }
 

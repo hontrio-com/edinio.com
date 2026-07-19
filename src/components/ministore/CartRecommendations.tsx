@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Plus, Check, Package } from "lucide-react";
+import { Plus, Check, Package, ChevronRight } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { getCartCrossSell } from "@/lib/actions/offer.actions";
 import type { OfferProduct } from "@/lib/offers/offer.types";
@@ -64,11 +64,20 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
             <p className="text-xs font-medium text-foreground mt-1.5 line-clamp-2 leading-snug">{p.name}</p>
             <div className="flex items-center justify-between gap-1 mt-1">
               <span className="text-xs font-bold text-foreground">{formatPrice(p.price)}</span>
-              <button type="button" onClick={() => handleAdd(p)} aria-label={`Adauga ${p.name}`}
-                className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0 transition-transform active:scale-90"
-                style={{ backgroundColor: color }}>
-                {added.has(p.id) ? <Check size={13} /> : <Plus size={13} />}
-              </button>
+              {p.hasVariants ? (
+                /* Variable product — send the shopper to its page to choose options. */
+                <a href={p.slug ? `${basePath}/product/${p.slug}` : basePath || "/"} aria-label={`Alege optiunile pentru ${p.name}`}
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0 transition-transform active:scale-90"
+                  style={{ backgroundColor: color }}>
+                  <ChevronRight size={13} />
+                </a>
+              ) : (
+                <button type="button" onClick={() => handleAdd(p)} aria-label={`Adauga ${p.name}`}
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0 transition-transform active:scale-90"
+                  style={{ backgroundColor: color }}>
+                  {added.has(p.id) ? <Check size={13} /> : <Plus size={13} />}
+                </button>
+              )}
             </div>
           </div>
         ))}

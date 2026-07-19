@@ -10,6 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { computeBundlePricing, type BundlePricingMode } from "@/lib/bundles";
+import { hasVariants } from "@/lib/storefront/variants";
 import {
   parseOfferTrigger, parseOfferConfig, parseOfferDisplay,
   defaultTitleFor, isOfferType, PHASE1_OFFER_TYPES,
@@ -86,7 +87,7 @@ function triggerMatchesCart(trigger: OfferTrigger, products: { id: string; categ
 function toOfferProduct(p: {
   id: string; name: string; slug: string | null; price: number | string;
   compare_at_price: number | string | null; images: unknown;
-  track_inventory: boolean; stock_quantity: number | null;
+  track_inventory: boolean; stock_quantity: number | null; page_sections?: unknown;
 }): OfferProduct {
   return {
     id: p.id,
@@ -96,11 +97,12 @@ function toOfferProduct(p: {
     compareAtPrice: p.compare_at_price != null ? Number(p.compare_at_price) : null,
     imageUrl: firstImage(p.images),
     outOfStock: p.track_inventory && p.stock_quantity !== null && p.stock_quantity <= 0,
+    hasVariants: hasVariants(p.page_sections),
   };
 }
 
 const OFFER_PRODUCT_COLS =
-  "id, name, slug, price, compare_at_price, images, is_bundle, is_active, track_inventory, stock_quantity";
+  "id, name, slug, price, compare_at_price, images, is_bundle, is_active, track_inventory, stock_quantity, page_sections";
 
 // Resolve product ids to authoritative display data. Skips missing, inactive,
 // bundle, and excluded products; preserves the requested order.

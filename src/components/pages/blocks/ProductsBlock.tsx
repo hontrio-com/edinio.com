@@ -12,6 +12,10 @@ export interface PageProduct {
   images: string[];
   category: string | null;
   is_featured: boolean;
+  /** Raw product.page_sections — carries variant config so variable products on a
+   *  custom page open the option picker instead of adding at base price. Optional
+   *  because the editor preview builds PageProduct from a lighter source. */
+  page_sections?: unknown;
 }
 
 /**

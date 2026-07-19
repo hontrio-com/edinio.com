@@ -192,6 +192,8 @@ export interface OfferProduct {
   compareAtPrice: number | null;
   imageUrl: string | null;
   outOfStock: boolean;
+  /** Variable product — must be configured on its own page, not quick-added. */
+  hasVariants?: boolean;
 }
 
 // One offer, resolved with real product data + computed pricing, ready to render.

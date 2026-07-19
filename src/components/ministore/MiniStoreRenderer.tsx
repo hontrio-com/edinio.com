@@ -31,6 +31,8 @@ import type { Database } from "@/types/database.types";
 import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { CartRecommendations } from "./CartRecommendations";
+import { VariantQuickAdd, type QuickAddLine } from "./VariantQuickAdd";
+import { parseVariants } from "@/lib/storefront/variants";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 
@@ -114,13 +116,26 @@ interface CartItem {
   price: number;
   imageUrl: string | null;
   quantity: number;
+  /** Chosen variant combination ("S / Rosu") — absent for simple products. */
+  variantTitle?: string;
+  variantSku?: string;
+}
+
+/**
+ * A cart line is identified by product + chosen variant, so two variants of the
+ * same product (e.g. size S and size L) are distinct lines instead of merging.
+ * Simple products fall back to the product id, matching pre-variant carts stored
+ * in localStorage.
+ */
+function lineKey(item: Pick<CartItem, "productId" | "variantTitle">): string {
+  return item.variantTitle ? `${item.productId}::${item.variantTitle}` : item.productId;
 }
 
 interface CartContextValue {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">) => void;
-  removeItem: (productId: string) => void;
-  updateQty: (productId: string, qty: number) => void;
+  removeItem: (key: string) => void;
+  updateQty: (key: string, qty: number) => void;
   total: number;
   count: number;
   clear: () => void;
@@ -184,22 +199,23 @@ function CartProvider({ children, slug }: { children: React.ReactNode; slug: str
 
   function addItem(item: Omit<CartItem, "quantity">) {
     setItems((prev) => {
-      const exists = prev.find((i) => i.productId === item.productId);
+      const key = lineKey(item);
+      const exists = prev.find((i) => lineKey(i) === key);
       const next = exists
-        ? prev.map((i) => i.productId === item.productId ? { ...i, quantity: i.quantity + 1 } : i)
+        ? prev.map((i) => lineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i)
         : [...prev, { ...item, quantity: 1 }];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
   }
 
-  function removeItem(productId: string) {
-    save(items.filter((i) => i.productId !== productId));
+  function removeItem(key: string) {
+    save(items.filter((i) => lineKey(i) !== key));
   }
 
-  function updateQty(productId: string, qty: number) {
-    if (qty <= 0) { removeItem(productId); return; }
-    save(items.map((i) => i.productId === productId ? { ...i, quantity: qty } : i));
+  function updateQty(key: string, qty: number) {
+    if (qty <= 0) { removeItem(key); return; }
+    save(items.map((i) => lineKey(i) === key ? { ...i, quantity: qty } : i));
   }
 
   function clear() { save([]); }
@@ -428,7 +444,7 @@ function CartCheckoutModal({
         name: form.name.trim() || undefined,
         email: form.email.trim() || undefined,
         phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
-        items: items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, image_url: i.imageUrl })),
+        items: items.map(i => ({ product_id: i.productId, name: i.variantTitle ? `${i.name} (${i.variantTitle})` : i.name, price: i.price, quantity: i.quantity, image_url: i.imageUrl })),
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
@@ -470,7 +486,7 @@ function CartCheckoutModal({
     if (!validate()) return;
     startTransition(async () => {
       const allItems = [
-        ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
+        ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, variant_title: i.variantTitle })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, price: o.pricing!.price, quantity: 1 })),
       ];
       const payload = {
@@ -569,12 +585,13 @@ function CartCheckoutModal({
         <form onSubmit={handleSubmit} className="px-5 pt-4 pb-6 space-y-4">
           <div className="space-y-2">
             {items.map((item) => (
-              <div key={item.productId} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/40">
+              <div key={lineKey(item)} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/40">
                 {item.imageUrl && (
                   <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="rounded-lg object-cover border border-border shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-foreground truncate">{item.name}</p>
+                  {item.variantTitle && <p className="text-xs text-muted-foreground truncate">{item.variantTitle}</p>}
                   <p className="text-xs text-muted-foreground mt-0.5">{item.quantity} buc &times; {item.price} lei</p>
                 </div>
                 <p className="text-sm font-bold shrink-0" style={{ color }}>{item.price * item.quantity} lei</p>
@@ -997,8 +1014,9 @@ function CartDrawer({
                     <Package className="h-5 w-5 text-muted-foreground" />
                   </div>
                 );
+                const key = lineKey(item);
                 return (
-                <div key={item.productId} className="flex items-start gap-3">
+                <div key={key} className="flex items-start gap-3">
                   {href ? (
                     <a href={href} onClick={onClose} className={thumbCls}>{thumb}</a>
                   ) : (
@@ -1012,20 +1030,21 @@ function CartDrawer({
                     ) : (
                       <p className="text-sm font-medium text-foreground leading-snug truncate">{item.name}</p>
                     )}
+                    {item.variantTitle && <p className="text-xs text-muted-foreground leading-snug truncate">{item.variantTitle}</p>}
                     <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(item.price)}</p>
                     <div className="flex items-center gap-2 mt-2">
-                      <button type="button" aria-label="Scade cantitatea" onClick={() => updateQty(item.productId, item.quantity - 1)}
+                      <button type="button" aria-label="Scade cantitatea" onClick={() => updateQty(key, item.quantity - 1)}
                         className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                         <Minus className="h-3 w-3" />
                       </button>
                       <span className="text-sm font-semibold w-5 text-center tabular-nums">{item.quantity}</span>
-                      <button type="button" aria-label="Creste cantitatea" onClick={() => updateQty(item.productId, item.quantity + 1)}
+                      <button type="button" aria-label="Creste cantitatea" onClick={() => updateQty(key, item.quantity + 1)}
                         className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                         <Plus className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
-                  <button type="button" aria-label="Sterge produsul" onClick={() => removeItem(item.productId)}
+                  <button type="button" aria-label="Sterge produsul" onClick={() => removeItem(key)}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors mt-0.5 rounded-md hover:bg-muted">
                     <X className="h-4 w-4" />
                   </button>
@@ -1092,6 +1111,8 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
     ? Math.round((1 - Number(product.price) / Number(product.compare_at_price)) * 100)
     : 0;
   const isOutOfStock = outOfStock ?? (product.track_inventory && product.stock_quantity === 0);
+  // Variable product: the card opens the option picker instead of adding directly.
+  const isVariable = parseVariants(product.page_sections) !== null;
 
   return (
     <div className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
@@ -1186,6 +1207,11 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
             <>
               <Check className="h-4 w-4" strokeWidth={3} />
               Adaugat!
+            </>
+          ) : isVariable ? (
+            <>
+              <ShoppingCart className="h-4 w-4" />
+              Alege optiunile
             </>
           ) : (
             <>
@@ -1429,6 +1455,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [categoryFilter, setCategoryFilter] = useState("toate");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
+  // Variable product whose option picker is open (grid quick-add).
+  const [quickAddProduct, setQuickAddProduct] = useState<Product | null>(null);
   // Page is seeded from the URL (?page=N, read server-side as initialPage) so
   // returning from a product page (browser back) lands on the same page instead
   // of resetting to 1. goToPage keeps the URL in sync without a navigation.
@@ -1837,20 +1865,35 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     goToPage(1);
   }, [search, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, goToPage]);
 
+  // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
+  // that just entered the cart (shared by simple products and variant quick-add).
+  function trackAndFlash(productId: string, name: string, price: number) {
+    fbTrack("AddToCart", { value: price, currency: "RON", content_name: name, content_ids: [productId], content_type: "product" });
+    ttqTrack("AddToCart", { value: price, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: name, price, quantity: 1 }] });
+    gtagEvent("add_to_cart", { currency: "RON", value: price, items: [{ item_id: productId, item_name: name, price, quantity: 1 }] });
+    setAddedId(productId);
+    setTimeout(() => setAddedId(null), 1500);
+  }
+
   function handleAddToCart(product: Product) {
+    // Variable product: open the picker instead of silently adding at base price.
+    if (parseVariants(product.page_sections)) { setQuickAddProduct(product); return; }
     const images = Array.isArray(product.images) ? product.images : [];
+    const price = Number(product.price);
     addItem({
       productId: product.id,
       slug: product.slug ?? undefined,
       name: product.name,
-      price: Number(product.price),
+      price,
       imageUrl: images[0] ? String(images[0]) : null,
     });
-    fbTrack("AddToCart", { value: Number(product.price), currency: "RON", content_name: product.name, content_ids: [product.id], content_type: "product" });
-    ttqTrack("AddToCart", { value: Number(product.price), currency: "RON", contents: [{ content_id: product.id, content_type: "product", content_name: product.name, price: Number(product.price), quantity: 1 }] });
-    gtagEvent("add_to_cart", { currency: "RON", value: Number(product.price), items: [{ item_id: product.id, item_name: product.name, price: Number(product.price), quantity: 1 }] });
-    setAddedId(product.id);
-    setTimeout(() => setAddedId(null), 1500);
+    trackAndFlash(product.id, product.name, price);
+  }
+
+  // Quick-add confirm: the fully resolved variant line from the picker sheet.
+  function handleQuickAdd(line: QuickAddLine) {
+    addItem(line);
+    trackAndFlash(line.productId, line.name, line.price);
   }
 
   // Has any policy text
@@ -2757,6 +2800,23 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
         initialDiscountCode={recoverDiscountCode}
         productWeights={productWeights}
+      />
+
+      {/* Variant picker (opened by "Alege optiunile" on a variable product card) */}
+      <VariantQuickAdd
+        open={quickAddProduct !== null}
+        product={quickAddProduct ? {
+          id: quickAddProduct.id,
+          name: quickAddProduct.name,
+          slug: quickAddProduct.slug,
+          price: Number(quickAddProduct.price),
+          compare_at_price: quickAddProduct.compare_at_price != null ? Number(quickAddProduct.compare_at_price) : null,
+          images: Array.isArray(quickAddProduct.images) ? quickAddProduct.images.map(String).filter(Boolean) : [],
+          page_sections: quickAddProduct.page_sections,
+        } : null}
+        color={color}
+        onClose={() => setQuickAddProduct(null)}
+        onAdd={handleQuickAdd}
       />
 
       {/* Gallery lightbox */}

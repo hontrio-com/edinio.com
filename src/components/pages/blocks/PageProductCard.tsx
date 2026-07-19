@@ -29,7 +29,9 @@ export function PageProductCard({ p, color, basePath, storeSlug, addToCart, clas
           {hasDiscount && <span className="text-sm text-gray-400 line-through">{formatPrice(p.compare_at_price!)}</span>}
         </div>
         {addToCart && storeSlug && (
-          <AddToCartButton product={{ id: p.id, name: p.name, price: p.price, image: img }} storeSlug={storeSlug} color={color} />
+          <AddToCartButton
+            product={{ id: p.id, name: p.name, slug: p.slug, price: p.price, compareAtPrice: p.compare_at_price, image: img, images: p.images, pageSections: p.page_sections }}
+            storeSlug={storeSlug} color={color} />
         )}
       </div>
     </div>

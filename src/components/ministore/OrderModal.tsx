@@ -80,7 +80,7 @@ interface Props {
   tiers?: QuantityTier[];
   customizationFields?: CustomizationFieldDef[];
   /** Items already in the storefront cart, carried into this order. */
-  cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[];
+  cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[];
   /** Called after the order is placed so the caller can clear the cart. */
   onCartConsumed?: () => void;
   /** Pre-accepted "frequently bought together" set — companions at FBT-distributed prices. */
@@ -153,7 +153,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
   const [custUploading, setCustUploading] = useState<Record<string, boolean>>({});
   // Editable copy of the carried-over cart (change quantity / remove inside the form).
-  const [cartLines, setCartLines] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number }[]>(cartItems ?? []);
+  const [cartLines, setCartLines] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[]>(cartItems ?? []);
 
   // Discount state
   const [discountInput, setDiscountInput] = useState("");
@@ -171,6 +171,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
   const cart = cartLines;
+  // A carried line is identified by product + variant, so two variants of the same
+  // product stay distinct when editing quantity / removing / rendering.
+  const cartLineKey = (l: { productId: string; variantTitle?: string }) => l.variantTitle ? `${l.productId}::${l.variantTitle}` : l.productId;
   const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   // Accepted order bumps add their discounted product to the goods subtotal, so it
   // flows through discount, free-shipping, card-discount and total automatically.
@@ -187,9 +190,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
   const fbtSubtotal = fbtOffer ? fbtOffer.items.reduce((s, i) => s + i.price * i.quantity, 0) : 0;
   const subtotal = Math.round((productSubtotal + cartSubtotal + bumpSubtotal + fbtSubtotal) * 100) / 100;
-  const setCartQty = (productId: string, qty: number) =>
-    setCartLines((lines) => qty <= 0 ? lines.filter((l) => l.productId !== productId) : lines.map((l) => l.productId === productId ? { ...l, quantity: qty } : l));
-  const removeCartLine = (productId: string) => setCartLines((lines) => lines.filter((l) => l.productId !== productId));
+  const setCartQty = (key: string, qty: number) =>
+    setCartLines((lines) => qty <= 0 ? lines.filter((l) => cartLineKey(l) !== key) : lines.map((l) => cartLineKey(l) === key ? { ...l, quantity: qty } : l));
+  const removeCartLine = (key: string) => setCartLines((lines) => lines.filter((l) => cartLineKey(l) !== key));
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
 
   // Apply discount to subtotal
@@ -427,7 +430,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         : undefined;
 
       const allAdditional = [
-        ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity })),
+        ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
         ...(fbtOffer ? fbtOffer.items.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })) : []),
       ];
@@ -630,8 +633,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     <Package size={12} /> Din cosul tau
                   </p>
-                  {cart.map((ci) => (
-                    <div key={ci.productId} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-border bg-muted/40">
+                  {cart.map((ci) => {
+                    const key = cartLineKey(ci);
+                    return (
+                    <div key={key} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-border bg-muted/40">
                       <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border shrink-0 bg-surface flex-shrink-0">
                         {ci.imageUrl ? (
                           <Image src={ci.imageUrl} alt={ci.name} fill sizes="48px" className="object-contain p-1" />
@@ -641,25 +646,27 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-foreground truncate">{ci.name}</p>
+                        {ci.variantTitle && <p className="text-xs text-muted-foreground truncate">{ci.variantTitle}</p>}
                         <p className="text-sm font-bold mt-0.5" style={{ color }}>{ci.price} lei</p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <button type="button" aria-label="Scade cantitatea" onClick={() => setCartQty(ci.productId, ci.quantity - 1)}
+                        <button type="button" aria-label="Scade cantitatea" onClick={() => setCartQty(key, ci.quantity - 1)}
                           className="w-6 h-6 rounded-md border border-border flex items-center justify-center hover:bg-muted transition-colors">
                           <Minus size={11} />
                         </button>
                         <span className="w-5 text-center text-sm font-bold tabular-nums">{ci.quantity}</span>
-                        <button type="button" aria-label="Creste cantitatea" onClick={() => setCartQty(ci.productId, ci.quantity + 1)}
+                        <button type="button" aria-label="Creste cantitatea" onClick={() => setCartQty(key, ci.quantity + 1)}
                           className="w-6 h-6 rounded-md border border-border flex items-center justify-center hover:bg-muted transition-colors">
                           <Plus size={11} />
                         </button>
                       </div>
-                      <button type="button" aria-label="Elimina produsul" onClick={() => removeCartLine(ci.productId)}
+                      <button type="button" aria-label="Elimina produsul" onClick={() => removeCartLine(key)}
                         className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors shrink-0">
                         <X size={14} />
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

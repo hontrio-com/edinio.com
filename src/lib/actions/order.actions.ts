@@ -11,6 +11,7 @@ import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
+import { enabledComboPriceMap } from "@/lib/storefront/variants";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
@@ -159,8 +160,9 @@ export async function placeOrder(data: {
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
-  /** Items carried over from the storefront cart (priced server-side at base price). */
-  additional_items?: { product_id: string; name: string; quantity: number }[];
+  /** Items carried over from the storefront cart (priced server-side; variant lines
+   *  are re-priced from the product's enabled combination, base otherwise). */
+  additional_items?: { product_id: string; name: string; quantity: number; variant_title?: string }[];
   /** Ids of order-bump offers the customer accepted — re-priced server-side (never trusted). */
   accepted_offer_ids?: string[];
   payment_method?: string;
@@ -223,11 +225,25 @@ export async function placeOrder(data: {
   if (data.additional_items?.length) {
     const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
     if (ids.length > 0) {
-      const { data: extraProducts } = await admin.from("products").select("id, name, price, is_active").in("id", ids).eq("business_id", data.business_id);
-      const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => [p.id, { name: String(p.name), price: round2(Number(p.price)) }]));
+      const { data: extraProducts } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
+      const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => {
+        const base = round2(Number(p.price));
+        return [p.id, { name: String(p.name), price: base, combos: enabledComboPriceMap(p.page_sections, base) }];
+      }));
       cartItems = data.additional_items
         .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0)
-        .map((i) => ({ product_id: i.product_id, name: extraMap.get(i.product_id)!.name, price: extraMap.get(i.product_id)!.price, quantity: Math.floor(i.quantity) }));
+        .map((i) => {
+          const meta = extraMap.get(i.product_id)!;
+          // Named variant priced from its enabled combination; unknown/disabled
+          // variants and simple products fall back to the product's base price.
+          const variantPrice = i.variant_title ? meta.combos.get(i.variant_title) : undefined;
+          return {
+            product_id: i.product_id,
+            name: i.variant_title ? `${meta.name} (${i.variant_title})` : meta.name,
+            price: variantPrice != null ? round2(variantPrice) : meta.price,
+            quantity: Math.floor(i.quantity),
+          };
+        });
     }
   }
   // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
@@ -937,7 +953,7 @@ export async function sendCustomerSms(orderId: string, message: string) {
 export async function placeCartOrder(data: {
   business_id: string;
   cart_session_id?: string;
-  items: { product_id: string; name: string; price: number; quantity: number }[];
+  items: { product_id: string; name: string; price: number; quantity: number; variant_title?: string }[];
   shipping_cost: number;
   customer_name: string;
   customer_phone: string;
@@ -988,7 +1004,7 @@ export async function placeCartOrder(data: {
   const productIds = [...new Set(data.items.map((i) => i.product_id))];
   const [{ data: dbProducts }, { data: cfgRow }] = await Promise.all([
     admin.from("products")
-      .select("id, price, is_active")
+      .select("id, price, is_active, page_sections")
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
@@ -997,20 +1013,33 @@ export async function placeCartOrder(data: {
       .single(),
   ]);
 
-  const priceMap = new Map(
-    (dbProducts ?? []).filter((p) => p.is_active).map((p) => [p.id, round2(Number(p.price))]),
+  const activeProducts = (dbProducts ?? []).filter((p) => p.is_active);
+  const priceMap = new Map(activeProducts.map((p) => [p.id, round2(Number(p.price))]));
+  // Per-product map of enabled variant title -> authoritative unit price. A cart
+  // line that names a variant is re-priced from this, never from the browser.
+  const comboMap = new Map(
+    activeProducts.map((p) => [p.id, enabledComboPriceMap(p.page_sections, round2(Number(p.price)))]),
   );
   if (data.items.some((i) => !priceMap.has(i.product_id))) {
     logError({ action: "placeCartOrder.itemUnavailable", message: "Cart item missing/inactive for business", details: { businessId: data.business_id, productIds }, severity: "warning" });
     return { error: "Unul dintre produse nu mai este disponibil. Reincarca cosul." };
   }
+  // A named variant that no longer maps to an enabled combination (merchant
+  // disabled or renamed it) must not silently fall back to the base price.
+  if (data.items.some((i) => i.variant_title && !comboMap.get(i.product_id)?.has(i.variant_title))) {
+    logError({ action: "placeCartOrder.variantUnavailable", message: "Cart variant no longer enabled", details: { businessId: data.business_id, productIds }, severity: "warning" });
+    return { error: "O varianta din cos nu mai este disponibila. Reincarca cosul." };
+  }
 
-  let validatedItems = data.items.map((i) => ({
-    product_id: i.product_id,
-    name: i.name,
-    price: priceMap.get(i.product_id)!,
-    quantity: i.quantity,
-  }));
+  let validatedItems = data.items.map((i) => {
+    const variantPrice = i.variant_title ? comboMap.get(i.product_id)!.get(i.variant_title) : undefined;
+    return {
+      product_id: i.product_id,
+      name: i.variant_title ? `${i.name} (${i.variant_title})` : i.name,
+      price: variantPrice != null ? round2(variantPrice) : priceMap.get(i.product_id)!,
+      quantity: i.quantity,
+    };
+  });
   // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
   // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
   if (data.accepted_offer_ids?.length) {

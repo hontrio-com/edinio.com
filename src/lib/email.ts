@@ -3,6 +3,7 @@ import { formatPrice } from "@/lib/utils/format";
 import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
 import { deliverStoreEmail } from "@/lib/email/deliver";
+import { renderTemplate } from "@/lib/email/templates";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -158,9 +159,18 @@ export async function sendOrderConfirmationToCustomer(
             ? "Card online (Revolut)"
             : "ramburs la livrare";
 
+  const { subject, intro } = renderTemplate(sender, "order_confirmation", {
+    subject: `Comanda ta ${order.order_number} a fost primita`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${order.customer_name}</strong>! Comanda ta la <strong>${order.business_name}</strong> a fost primita si va fi procesata in curand.</p>`,
+  }, {
+    nume_client: order.customer_name,
+    nume_magazin: order.business_name,
+    numar_comanda: order.order_number,
+    total: formatPrice(order.total),
+  });
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda ta a fost plasata!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${order.customer_name}</strong>! Comanda ta la <strong>${order.business_name}</strong> a fost primita si va fi procesata in curand.</p>
+    ${intro}
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;box-sizing:border-box;overflow:hidden;">
       <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${order.order_number}</p>
@@ -189,7 +199,7 @@ export async function sendOrderConfirmationToCustomer(
     ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
 
-  await sendStoreOrEdinio(sender, to, `Comanda ta ${order.order_number} a fost primita`, content);
+  await sendStoreOrEdinio(sender, to, subject, content);
 }
 
 export async function sendAbandonedCartRecovery(
@@ -857,9 +867,18 @@ export async function sendOrderStatusToCustomer(
       </div>`
     : "";
 
+  const { subject, intro } = renderTemplate(sender, "order_status", {
+    subject: `${cfg.subject} — ${order.order_number}`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${order.customer_name}</strong>! Iti trimitem un update despre comanda ta la <strong>${order.business_name}</strong>.</p>`,
+  }, {
+    nume_client: order.customer_name,
+    nume_magazin: order.business_name,
+    numar_comanda: order.order_number,
+    status: cfg.label,
+  });
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${cfg.subject}</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${order.customer_name}</strong>! Iti trimitem un update despre comanda ta la <strong>${order.business_name}</strong>.</p>
+    ${intro}
 
     <div style="background:${cfg.bgColor};border:1px solid ${cfg.borderColor};border-radius:10px;padding:14px 18px;margin-bottom:16px;">
       <table width="100%" cellpadding="0" cellspacing="0">
@@ -880,7 +899,7 @@ export async function sendOrderStatusToCustomer(
     ${returnLink}
   `;
 
-  await sendStoreOrEdinio(sender, to, `${cfg.subject} — ${order.order_number}`, content);
+  await sendStoreOrEdinio(sender, to, subject, content);
 }
 
 // ── Custom message from merchant → Customer ─────────────────────────────────

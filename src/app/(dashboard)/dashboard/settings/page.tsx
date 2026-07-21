@@ -71,7 +71,8 @@ export default async function SettingsPage({ searchParams }: Props) {
     : "https://www.edinio.com";
 
   // Custom email (SMTP) — send the config WITHOUT the password (write-only field).
-  const emailSmtp = parseEmailConfig(storeSettings?.email_config).smtp ?? {};
+  const emailCfg = parseEmailConfig(storeSettings?.email_config);
+  const emailSmtp = emailCfg.smtp ?? {};
   const emailInitial = {
     enabled: !!emailSmtp.enabled,
     host: emailSmtp.host ?? "",
@@ -82,6 +83,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     from_name: emailSmtp.from_name ?? "",
     reply_to: emailSmtp.reply_to ?? "",
     hasPassword: !!emailSmtp.pass,
+    templates: emailCfg.templates ?? {},
   };
 
   type CourierCfg = Record<string, unknown>;

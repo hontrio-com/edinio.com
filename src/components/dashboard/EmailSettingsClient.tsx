@@ -3,19 +3,83 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Save, Send, Mail } from "lucide-react";
+import { Loader2, Save, Send, Mail, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { updateSmtpConfig, sendTestEmail } from "@/lib/actions/email-settings.actions";
-import { SMTP_PRESETS } from "@/lib/email/config";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { cn } from "@/lib/utils/cn";
+import { updateSmtpConfig, sendTestEmail, updateEmailTemplate } from "@/lib/actions/email-settings.actions";
+import { SMTP_PRESETS, type EmailTemplateKind } from "@/lib/email/config";
+import { TEMPLATE_DEFS, type TemplateDef } from "@/lib/email/templates";
 
 export interface EmailSettingsInitial {
   enabled: boolean; host: string; port: number; secure: boolean;
   user: string; from_email: string; from_name: string; reply_to: string; hasPassword: boolean;
+  templates: Partial<Record<EmailTemplateKind, { subject?: string; intro?: string }>>;
 }
 
 const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+function TemplateCard({ businessId, def, initial }: { businessId: string | null; def: TemplateDef; initial: { subject?: string; intro?: string } }) {
+  const router = useRouter();
+  const [subject, setSubject] = useState(initial.subject ?? "");
+  const [intro, setIntro] = useState(initial.intro ?? "");
+  const [open, setOpen] = useState(false);
+  const [saving, startSave] = useTransition();
+  const customized = !!(initial.subject || initial.intro);
+
+  function save() {
+    if (!businessId) return;
+    startSave(async () => {
+      const res = await updateEmailTemplate(businessId, def.kind, { subject, intro });
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success("Sablon salvat."); router.refresh();
+    });
+  }
+
+  return (
+    <div className="border border-border rounded-xl overflow-hidden">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors">
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-foreground">{def.label}</span>
+          <span className="block text-xs text-muted-foreground">{def.description}</span>
+        </span>
+        <span className="flex items-center gap-2 shrink-0">
+          {customized && <span className="text-[10px] font-bold text-primary bg-primary/10 rounded-full px-2 py-0.5">Personalizat</span>}
+          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 py-4 border-t border-border space-y-3">
+          <div>
+            <label className="text-xs font-medium text-foreground mb-1 block">Subiect</label>
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={def.defaultSubject} className={inputCls} disabled={!businessId} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-foreground mb-1 block">Mesaj</label>
+            <RichTextEditor content={intro} onChange={setIntro} disabled={!businessId} placeholder={def.defaultIntro} />
+          </div>
+          <div>
+            <p className="text-[11px] text-muted-foreground mb-1.5">Variabile disponibile (apasa ca sa copiezi):</p>
+            <div className="flex flex-wrap gap-1.5">
+              {def.variables.map((v) => (
+                <button key={v.token} type="button" title={v.label}
+                  onClick={() => { navigator.clipboard?.writeText(`{{${v.token}}}`); toast.success(`Copiat {{${v.token}}}`); }}
+                  className="text-[11px] font-mono rounded border border-border px-2 py-0.5 text-muted-foreground hover:border-primary hover:text-foreground transition-colors">
+                  {`{{${v.token}}}`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button size="sm" disabled={saving || !businessId} onClick={save}>{saving ? <Loader2 className="animate-spin" /> : <Save />} Salveaza sablonul</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function EmailSettingsClient({ businessId, initial }: { businessId: string | null; initial: EmailSettingsInitial }) {
   const router = useRouter();
@@ -130,6 +194,18 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
           <Button disabled={saving || !businessId} onClick={save}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />} {saving ? "Se salveaza..." : "Salveaza"}
           </Button>
+        </div>
+      </div>
+
+      <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Sabloane de email</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Personalizeaza subiectul si mesajul fiecarui email catre clienti. Tabelul cu produse si butoanele se genereaza automat. Daca lasi gol, folosim textul standard.</p>
+        </div>
+        <div className="space-y-2">
+          {TEMPLATE_DEFS.map((def) => (
+            <TemplateCard key={def.kind} businessId={businessId} def={def} initial={initial.templates[def.kind] ?? {}} />
+          ))}
         </div>
       </div>
     </div>

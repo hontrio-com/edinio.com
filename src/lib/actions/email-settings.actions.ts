@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { parseEmailConfig, smtpReady, type SmtpConfig, type EmailConfig } from "@/lib/email/config";
+import { parseEmailConfig, smtpReady, type SmtpConfig, type EmailConfig, type EmailTemplateKind } from "@/lib/email/config";
 import { sendViaSmtp, verifySmtp } from "@/lib/email/smtp";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -89,4 +89,27 @@ export async function sendTestEmail(businessId: string): Promise<{ success: true
   } catch (e) {
     return { error: `Trimiterea a esuat: ${(e as Error).message}` };
   }
+}
+
+export async function updateEmailTemplate(
+  businessId: string,
+  kind: EmailTemplateKind,
+  override: { subject?: string; intro?: string },
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const config = await loadConfig(supabase, businessId);
+  const templates = { ...(config.templates ?? {}) };
+  const subject = override.subject?.trim() || undefined;
+  const intro = override.intro?.trim() || undefined;
+  if (!subject && !intro) delete templates[kind];
+  else templates[kind] = { subject, intro };
+
+  const ok = await saveConfig(supabase, businessId, { ...config, templates });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath("/dashboard/settings");
+  return { success: true };
 }

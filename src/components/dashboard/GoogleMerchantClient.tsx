@@ -307,12 +307,12 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
         ) : (
           <div className="divide-y divide-border">
             {products.map((p) => (
-              <div key={p.product_id} className="flex items-center gap-3 px-5 py-3">
+              <div key={p.product_id} className="flex items-start gap-3 px-5 py-3">
                 <StatusBadge status={p.status} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
                   {p.issues.length > 0 ? (
-                    <p className="truncate text-xs text-warning">{p.issues[0]?.description ?? p.issues[0]?.code}</p>
+                    <IssueList issues={p.issues} />
                   ) : p.error ? (
                     <p className="truncate text-xs text-destructive">{p.error}</p>
                   ) : (
@@ -372,6 +372,24 @@ function StatusBadge({ status }: { status: string }) {
   const s = map[status] ?? map.pending;
   const Icon = s.icon;
   return <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold", s.cls)}><Icon className="h-3 w-3" /> {s.label}</span>;
+}
+
+function IssueList({ issues }: { issues: MerchantProductRow["issues"] }) {
+  return (
+    <ul className="mt-0.5 space-y-1">
+      {issues.map((iss, idx) => {
+        const sev = String(iss.severity ?? "").toUpperCase();
+        const cls = sev === "DISAPPROVED" ? "text-destructive" : sev === "DEMOTED" ? "text-warning" : "text-muted-foreground";
+        return (
+          <li key={idx} className="text-xs leading-snug">
+            <span className={cn("font-medium", cls)}>{iss.description ?? iss.code ?? "Problemă"}</span>
+            {iss.detail ? <span className="text-muted-foreground"> — {iss.detail}</span> : null}
+            {iss.documentationUri ? <> <a href={iss.documentationUri} target="_blank" rel="noreferrer" className="font-medium text-primary underline">cum rezolv</a></> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function SettingField({ label, children }: { label: string; children: React.ReactNode }) {

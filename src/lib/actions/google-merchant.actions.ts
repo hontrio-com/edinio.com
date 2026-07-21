@@ -329,7 +329,7 @@ export interface MerchantProductRow {
   name: string;
   offer_id: string;
   status: string;
-  issues: { code?: string; severity?: string; description?: string }[];
+  issues: { code?: string; severity?: string; description?: string; detail?: string; documentationUri?: string; resolution?: string; attribute?: string }[];
   last_synced_at: string | null;
   error: string | null;
 }
@@ -355,7 +355,7 @@ export async function getMerchantProducts(businessId: string): Promise<MerchantP
       name: name ?? "Produs",
       offer_id: r.offer_id,
       status: r.status,
-      issues: Array.isArray(r.issues) ? (r.issues as { code?: string; severity?: string; description?: string }[]) : [],
+      issues: Array.isArray(r.issues) ? (r.issues as MerchantProductRow["issues"]) : [],
       last_synced_at: r.last_synced_at,
       error: r.error,
     };

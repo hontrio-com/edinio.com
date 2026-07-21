@@ -100,10 +100,20 @@ export function deleteProductInput(
   return call(accessToken, "DELETE", `/${V.products}/${name}?dataSource=${encodeURIComponent(dataSourceName)}`);
 }
 
+export interface MerchantItemLevelIssue {
+  code?: string;
+  severity?: string;         // NOT_IMPACTED | DEMOTED | DISAPPROVED
+  resolution?: string;       // MERCHANT_ACTION | PENDING_PROCESSING
+  attribute?: string;
+  reportingContext?: string;
+  description?: string;
+  detail?: string;
+  documentationUri?: string;
+}
 export interface MerchantProductStatus {
   productStatus?: {
-    destinationStatuses?: { reportingContext?: string; status?: string }[];
-    itemLevelIssues?: { code?: string; severity?: string; description?: string; detail?: string; resolution?: string }[];
+    destinationStatuses?: { reportingContext?: string; approvedCountries?: string[]; pendingCountries?: string[]; disapprovedCountries?: string[] }[];
+    itemLevelIssues?: MerchantItemLevelIssue[];
   };
 }
 
@@ -115,13 +125,17 @@ export function getProduct(accessToken: string, accountId: string, lang: string,
 // Normalize a Merchant API product status into our simplified shape.
 export function mapProductStatus(data: Record<string, unknown>): { status: string; issues: unknown[]; destinations: unknown[] } {
   const ps = (data?.productStatus ?? {}) as {
-    destinationStatuses?: { reportingContext?: string; status?: string }[];
-    itemLevelIssues?: { code?: string; severity?: string; description?: string }[];
+    destinationStatuses?: { approvedCountries?: string[]; pendingCountries?: string[]; disapprovedCountries?: string[] }[];
+    itemLevelIssues?: { severity?: string }[];
   };
   const issues = ps.itemLevelIssues ?? [];
   const destinations = ps.destinationStatuses ?? [];
-  const disapproved = issues.some((i) => String(i.severity ?? "").toLowerCase() === "error" || String(i.severity ?? "").toLowerCase() === "disapproval");
-  const approved = destinations.some((d) => String(d.status ?? "").toLowerCase() === "approved");
+  // v1 item severities are NOT_IMPACTED | DEMOTED | DISAPPROVED; destinations carry
+  // approved/pending/disapproved COUNTRY lists (there is no single status field).
+  const disapproved =
+    issues.some((i) => String(i.severity ?? "").toUpperCase() === "DISAPPROVED") ||
+    destinations.some((d) => (d.disapprovedCountries?.length ?? 0) > 0);
+  const approved = destinations.some((d) => (d.approvedCountries?.length ?? 0) > 0);
   return { status: disapproved ? "disapproved" : approved ? "active" : "pending", issues, destinations };
 }
 

@@ -15,7 +15,7 @@ export default async function GoogleMerchantPage() {
     .from("businesses").select("id").eq("user_id", user.id).eq("type", "ministore").limit(1).single();
   if (!biz) redirect("/dashboard");
 
-  // Hidden from the public while OAuth verification is pending; admins keep access.
+  // Live for everyone (OAuth verified 2026-07-21); GOOGLE_MERCHANT_LIVE is now a kill-switch.
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const available = GOOGLE_MERCHANT_LIVE || profile?.role === "admin";
 

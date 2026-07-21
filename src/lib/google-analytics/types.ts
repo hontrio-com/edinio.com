@@ -14,7 +14,8 @@ export interface GoogleAnalyticsConfig {
   connected_at?: string;
 }
 
-// Public availability switch. While false, the feature shows "Disponibil în
-// curând" to everyone EXCEPT admins (so the owner can still test/connect while
-// Google OAuth verification is pending). Flip to true once verified.
-export const GOOGLE_ANALYTICS_LIVE = false;
+// Public availability switch (kill-switch) for the OAuth path (account connect +
+// in-app reports). Google OAuth verification approved 2026-07-21, so it is live
+// for all merchants. The manual Measurement ID path was always public. Set back
+// to false to hide the OAuth path from non-admins again (admins retain access).
+export const GOOGLE_ANALYTICS_LIVE = true;

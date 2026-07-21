@@ -125,8 +125,9 @@ export default async function IntegrationsPage() {
 
   const { business, settings: preloadedSettings } = await getCachedBusinessWithSettings(user.id);
 
-  // Google Merchant is hidden (locked) for the public while OAuth verification is
-  // pending; admins keep access to test. Flip GOOGLE_MERCHANT_LIVE once verified.
+  // Google Merchant is live for everyone (OAuth verification approved 2026-07-21).
+  // GOOGLE_MERCHANT_LIVE stays as a kill-switch: flip to false to hide it from
+  // non-admins again.
   const supabase = await createClient();
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const gmcAvailable = GOOGLE_MERCHANT_LIVE || profile?.role === "admin";

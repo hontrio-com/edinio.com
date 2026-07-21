@@ -16,9 +16,9 @@ export default async function GoogleAnalyticsPage() {
     .order("created_at", { ascending: false }).limit(1).single();
   if (!biz) redirect("/dashboard");
 
-  // OAuth (account connect + in-app reports) is hidden from the public while
-  // Google verification is pending; admins keep access. The manual Measurement
-  // ID path works for everyone.
+  // OAuth (account connect + in-app reports) is live for everyone (Google
+  // verification approved 2026-07-21); GOOGLE_ANALYTICS_LIVE is now a kill-switch.
+  // The manual Measurement ID path was always public.
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const available = GOOGLE_ANALYTICS_LIVE || profile?.role === "admin";
 

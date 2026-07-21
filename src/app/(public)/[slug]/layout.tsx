@@ -9,6 +9,7 @@ import { AttributionCapture } from "@/components/public/AttributionCapture";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
+import { parseStoreSeo } from "@/lib/seo";
 import type { Metadata } from "next";
 
 interface Props {
@@ -28,7 +29,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const rawSettings = (data as unknown as { store_settings: { page_content: unknown } | { page_content: unknown }[] | null }).store_settings;
   const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
   const favicon = ((settings?.page_content ?? null) as { favicon_url?: string | null } | null)?.favicon_url || data.logo_url;
-  return favicon ? { icons: { icon: favicon } } : {};
+  // Google Search Console "HTML tag" verification, set in Settings > SEO.
+  const gsc = parseStoreSeo(settings?.page_content ?? null).googleVerification;
+  const meta: Metadata = {};
+  if (favicon) meta.icons = { icon: favicon };
+  if (gsc) meta.verification = { google: gsc };
+  return meta;
 }
 
 export default async function StoreLayout({ children, params }: Props) {

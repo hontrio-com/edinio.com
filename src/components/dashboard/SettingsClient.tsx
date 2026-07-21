@@ -641,6 +641,14 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     if (d) cleaned.description = d;
     if (og) cleaned.ogImage = og;
     if (seo.noindex) cleaned.noindex = true;
+    // Google Search Console: accept either the raw token or the full
+    // <meta ... content="TOKEN"> tag the merchant copied; store the sanitized token.
+    const gv = seo.googleVerification?.trim();
+    if (gv) {
+      const m = gv.match(/content=["']([^"']+)["']/i);
+      const token = (m ? m[1] : gv).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 200);
+      if (token) cleaned.googleVerification = token;
+    }
     startSeoTransition(async () => {
       const result = await updatePageContent(businessId, { seo: cleaned });
       if ("error" in result) toast.error(result.error);
@@ -1869,6 +1877,48 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <span className="block text-xs text-muted-foreground mt-0.5">Optiune avansata. Activeaza doar daca NU vrei ca pagina principala sa apara in motoarele de cautare. Lasa dezactivat pentru SEO normal.</span>
                   </span>
                 </label>
+              </div>
+
+              {/* Google Search Console */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Google Search Console</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Vezi cum apare magazinul in Google: cautari, clicuri, pozitii si probleme de indexare. Configurezi in 3 pasi.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">1.</span> Intra in <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer" className="text-primary underline">Search Console</a>, adauga o proprietate de tip Prefix URL si lipeste adresa magazinului:</p>
+                  <div className="flex items-center gap-2">
+                    <input readOnly value={seoPreviewUrl} onFocus={(e) => e.target.select()} className={`${inputCls} font-mono text-xs`} />
+                    <Button type="button" variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(seoPreviewUrl); toast.success("Copiat."); }}>Copiaza</Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">2.</span> La verificare alege metoda Eticheta HTML, copiaza codul de la Google si lipeste-l aici:</p>
+                  <input
+                    value={seo.googleVerification ?? ""}
+                    onChange={(e) => setSeo(s => ({ ...s, googleVerification: e.target.value }))}
+                    placeholder={'<meta name="google-site-verification" content="..." />'}
+                    className={`${inputCls} font-mono text-xs`}
+                    disabled={!businessId}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Salveaza cu butonul de jos, apoi apasa Verifica in Search Console. Codul se adauga automat in pagina magazinului.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">3.</span> Dupa verificare, la sectiunea Sitemaps din Search Console lipeste adresa sitemap-ului:</p>
+                  <div className="flex items-center gap-2">
+                    <input readOnly value={`${seoPreviewUrl}/sitemap.xml`} onFocus={(e) => e.target.select()} className={`${inputCls} font-mono text-xs`} />
+                    <Button type="button" variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(`${seoPreviewUrl}/sitemap.xml`); toast.success("Copiat."); }}>Copiaza</Button>
+                  </div>
+                </div>
+
+                {businessData?.custom_domain ? (
+                  <p className="text-[11px] text-muted-foreground">Magazinul are domeniu propriu, deci verificarea si sitemap-ul folosesc adresa {seoPreviewUrl}.</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Magazinul e pe adresa edinio.com. Daca vrei domeniul tau propriu in Google, conecteaza-l din Setari, sectiunea Domeniu, apoi reia pasii cu noua adresa.</p>
+                )}
               </div>
 
               <div className="flex justify-end">

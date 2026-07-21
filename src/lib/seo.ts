@@ -38,6 +38,8 @@ export interface StoreSeo {
   ogImage?: string | null;
   /** Advanced opt-in: hide the store homepage from search engines. */
   noindex?: boolean;
+  /** Google Search Console "HTML tag" verification token (injected into <head>). */
+  googleVerification?: string;
 }
 
 /** Recommended lengths — counters turn green inside [ideal_min, max], red past max. */
@@ -56,6 +58,7 @@ export function parseStoreSeo(pageContent: unknown): StoreSeo {
   if (typeof s.description === "string" && s.description.trim()) out.description = s.description.trim();
   if (typeof s.ogImage === "string" && s.ogImage.trim()) out.ogImage = s.ogImage.trim();
   if (s.noindex === true) out.noindex = true;
+  if (typeof s.googleVerification === "string" && s.googleVerification.trim()) out.googleVerification = s.googleVerification.trim();
   return out;
 }
 

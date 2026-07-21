@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import {
   startGoogleAnalyticsOAuth, connectGaManual, listGaProperties, selectGaProperty,
-  disconnectGoogleAnalytics, setGaTracking, getGaDashboard, getGaRealtime,
+  disconnectGoogleAnalytics, setGaTracking, setGaApiSecret, getGaDashboard, getGaRealtime,
   type GaStatus, type GaPropertyGroup, type GaDashboardData, type GaRealtimeData, type GaTotals,
 } from "@/lib/actions/google-analytics.actions";
 import { cn } from "@/lib/utils/cn";
@@ -226,6 +226,42 @@ function ManualConnectForm({ businessId }: { businessId: string }) {
 
 /* ─── Manual mode (tracking only, no in-app reports) ──────────────────────── */
 
+function ServerTrackingCard({ businessId, hasApiSecret }: { businessId: string; hasApiSecret: boolean }) {
+  const router = useRouter();
+  const [value, setValue] = useState("");
+  const [saving, startSaving] = useTransition();
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Măsurare server-side (opțional)</p>
+          <p className="text-xs text-muted-foreground">
+            Trimite achizițiile și rambursările direct de pe server (rezistent la ad-blockere; rambursările nu pot fi urmărite din browser).
+            Lipește un <span className="font-medium text-foreground">Measurement Protocol API secret</span> din GA4: Administrare → Fluxuri de date → alege fluxul → Measurement Protocol API secrets.
+          </p>
+        </div>
+        {hasApiSecret && <span className="shrink-0 text-xs font-medium text-success">Activ</span>}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={hasApiSecret ? "•••••••• (înlocuiește)" : "API secret"} className="min-w-0 flex-1 font-mono" />
+        <Button size="sm" disabled={saving || !value.trim()} onClick={() => startSaving(async () => {
+          const res = await setGaApiSecret(businessId, value.trim());
+          if ("error" in res) { toast.error(res.error); return; }
+          toast.success("Măsurare server-side activată."); setValue(""); router.refresh();
+        })}>Salvează</Button>
+        {hasApiSecret && (
+          <button type="button" className="text-xs text-muted-foreground underline disabled:opacity-50" disabled={saving}
+            onClick={() => startSaving(async () => {
+              const res = await setGaApiSecret(businessId, "");
+              if ("error" in res) { toast.error(res.error); return; }
+              toast.success("Măsurare server-side dezactivată."); router.refresh();
+            })}>Dezactivează</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ManualConnected({ businessId, status, oauthAvailable }: {
   businessId: string;
   status: GaStatus;
@@ -277,6 +313,8 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
           />
         </label>
       </div>
+
+      <ServerTrackingCard businessId={businessId} hasApiSecret={status.hasApiSecret} />
 
       {/* In-app reports pending */}
       <Callout variant="info" icon={Clock}>
@@ -504,6 +542,8 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
           </button>.
         </Callout>
       )}
+
+      <ServerTrackingCard businessId={businessId} hasApiSecret={status.hasApiSecret} />
 
       {/* Realtime */}
       <RealtimeCard realtime={realtime} />

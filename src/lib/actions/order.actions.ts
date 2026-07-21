@@ -15,6 +15,8 @@ import { enabledComboPriceMap } from "@/lib/storefront/variants";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
+import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
+import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
@@ -135,6 +137,29 @@ async function buildOrderNumber(supabase: SupabaseClient, businessId: string): P
 function buildOrderSource(source: OrderSource | undefined, userAgent: string | undefined): OrderSource | null {
   if (!source && !userAgent) return null;
   return { ...(source ?? {}), ...(userAgent ? { user_agent: userAgent } : {}) };
+}
+
+// Fire a server-side GA4 event (Measurement Protocol) for an order — purchase at
+// checkout, refund on cancel/refund. Fire-and-forget: loads the store's GA config
+// and never throws into the caller.
+async function ga4OrderEvent(
+  businessId: string,
+  kind: "purchase" | "refund",
+  o: { transactionId: string; value: number; clientId?: string; items: { product_id?: string; name: string; price: number; quantity: number }[] },
+): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin.from("store_settings").select("google_analytics_config").eq("business_id", businessId).single();
+    const cfg = (data?.google_analytics_config as GoogleAnalyticsConfig | null) ?? null;
+    if (!cfg?.measurement_id || !cfg?.api_secret) return;
+    const mp = { measurementId: cfg.measurement_id, apiSecret: cfg.api_secret };
+    const items = o.items.map((i) => ({ item_id: i.product_id, item_name: i.name, price: i.price, quantity: i.quantity }));
+    const payload = { transactionId: o.transactionId, value: o.value, clientId: o.clientId, items };
+    if (kind === "purchase") await sendGa4Purchase(mp, payload);
+    else await sendGa4Refund(mp, payload);
+  } catch {
+    // best-effort
+  }
 }
 
 export async function placeOrder(data: {
@@ -389,6 +414,10 @@ export async function placeOrder(data: {
   void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
   void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
 
+  // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
+  // by transaction_id; captures the conversion even when the browser tag is blocked.
+  void ga4OrderEvent(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
+
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.
   await markCartConverted(admin, data.business_id, {
@@ -594,7 +623,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   const { data: order } = await supabase
     .from("orders")
-    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status, shipping_address, payment_method, created_at")
+    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status, shipping_address, payment_method, created_at, items, order_source")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -614,6 +643,15 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   const statusChanged = data.status !== (order.status as string);
   const paymentChanged = data.payment_status !== (order.payment_status as string);
+
+  // Server-side GA4 refund (Measurement Protocol) when the sale is reversed —
+  // refunds can't be tracked from the customer's browser. Offset by transaction_id.
+  const GA4_REVERSAL = new Set(["refunded", "cancelled"]);
+  if (statusChanged && GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string)) {
+    const refundItems = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
+    const gaClientId = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
+    void ga4OrderEvent(order.business_id, "refund", { transactionId: orderId, value: order.total ?? 0, clientId: gaClientId, items: refundItems });
+  }
 
   // Send status change email to customer
   if (statusChanged && order.customer_email) {
@@ -1178,6 +1216,10 @@ export async function placeCartOrder(data: {
   void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
+
+  // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
+  // by transaction_id; captures the conversion even when the browser tag is blocked.
+  void ga4OrderEvent(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.

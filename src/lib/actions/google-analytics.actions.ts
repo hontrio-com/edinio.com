@@ -58,6 +58,7 @@ export interface GaStatus {
   accountName?: string;
   measurementId?: string;       // undefined = property has no web data stream
   trackingEnabled: boolean;
+  hasApiSecret: boolean;        // server-side Measurement Protocol configured
 }
 
 export async function getGaStatus(businessId: string): Promise<GaStatus | { error: string }> {
@@ -78,6 +79,7 @@ export async function getGaStatus(businessId: string): Promise<GaStatus | { erro
     accountName: config.account_name,
     measurementId: config.measurement_id,
     trackingEnabled: config.tracking_enabled !== false,
+    hasApiSecret: !!config.api_secret,
   };
 }
 
@@ -225,6 +227,21 @@ export async function setGaTracking(businessId: string, enabled: boolean): Promi
   const config = await loadConfig(supabase, businessId);
   if (!config.connected) return { error: "Conecteaza mai intai Google Analytics." };
   const ok = await saveConfig(supabase, businessId, { ...config, tracking_enabled: enabled });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+export async function setGaApiSecret(businessId: string, apiSecret: string): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const secret = (apiSecret ?? "").trim();
+  const config = await loadConfig(supabase, businessId);
+  if (!config.connected) return { error: "Conecteaza mai intai Google Analytics." };
+  const ok = await saveConfig(supabase, businessId, { ...config, api_secret: secret || undefined });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };

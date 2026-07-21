@@ -11,6 +11,7 @@ export interface GoogleAnalyticsConfig {
   measurement_id?: string;      // web stream Measurement ID, e.g. "G-XXXXXXXXXX"
   stream_name?: string;         // full resource name properties/x/dataStreams/y
   tracking_enabled?: boolean;   // inject gtag on the storefront (default true)
+  api_secret?: string;          // GA4 Measurement Protocol API secret (server-side purchase/refund)
   connected_at?: string;
 }
 

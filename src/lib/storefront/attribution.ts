@@ -24,6 +24,7 @@ export interface OrderSource {
   direct?: boolean;  // true when the visit had no source signal at all
   captured_at?: string;
   user_agent?: string; // filled server-side at order creation
+  ga_client_id?: string; // GA4 client id from the _ga cookie, for server-side Measurement Protocol
 }
 
 function externalReferrerHost(): string | undefined {
@@ -84,14 +85,26 @@ export function captureAttribution(): void {
   }
 }
 
-/** Read the stored attribution to attach to an order at checkout. */
+/** GA4 client id from the _ga cookie ("GA1.1.<clientId>"), for server-side MP. */
+function readGaClientId(): string | undefined {
+  try {
+    const m = document.cookie.match(/(?:^|;\s*)_ga=GA\d\.\d\.([\d.]+)/);
+    return m ? m[1] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Read the stored attribution (+ the live GA client id) to attach to an order at checkout. */
 export function getAttribution(): OrderSource | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as OrderSource;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    const parsed = raw ? (JSON.parse(raw) as OrderSource) : null;
+    const src: OrderSource = parsed && typeof parsed === "object" ? { ...parsed } : {};
+    const gaClientId = readGaClientId();
+    if (gaClientId) src.ga_client_id = gaClientId;
+    return Object.keys(src).length > 0 ? src : null;
   } catch {
     return null;
   }

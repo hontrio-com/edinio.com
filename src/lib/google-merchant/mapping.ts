@@ -65,6 +65,17 @@ function plainText(html: string | null, fallback: string): string {
   return (text || fallback).slice(0, 4900);
 }
 
+// A GTIN must be 8/12/13/14 digits with a valid mod-10 check digit; sending an
+// invalid one gets the product disapproved, so we drop it rather than submit it.
+function isValidGtin(raw: string | undefined): boolean {
+  const s = (raw ?? "").replace(/\s/g, "");
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
+  const d = s.split("").map(Number);
+  const check = d.pop()!;
+  const sum = d.reverse().reduce((acc, n, i) => acc + n * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
 export function toGoogleProductInput(
   business: MappableBusiness,
   product: MappableProduct,
@@ -82,7 +93,8 @@ export function toGoogleProductInput(
   const hasSale = compare != null && compare > base;
 
   const g = ((product.page_sections as { google?: GoogleAttrs } | null)?.google) ?? {};
-  const hasIdentifier = !!(g.gtin || g.mpn);
+  const validGtin = isValidGtin(g.gtin);
+  const hasIdentifier = !!(validGtin || g.mpn);
 
   const attributes: Record<string, unknown> = {
     title: product.name.slice(0, 150),
@@ -100,8 +112,9 @@ export function toGoogleProductInput(
   if (images.length > 1) attributes.additionalImageLinks = images.slice(1, 10);
   const googleCat = g.google_product_category || (product.category ? config.category_map?.[product.category] : undefined);
   if (googleCat) attributes.googleProductCategory = googleCat;
-  // v1 renamed the single `gtin` attribute to a `gtins` array.
-  if (g.gtin) attributes.gtins = [g.gtin];
+  // v1 renamed the single `gtin` attribute to a `gtins` array. Only valid GTINs
+  // are submitted; an invalid one would disapprove the product.
+  if (validGtin) attributes.gtins = [g.gtin!.replace(/\s/g, "")];
   if (g.mpn) attributes.mpn = g.mpn;
   const gender = toEnum(g.gender, GENDERS);
   if (gender) attributes.gender = gender;
@@ -135,9 +148,10 @@ export interface OfferInput {
   input: Record<string, unknown>;
 }
 
-// Option axes we can auto-map to Google's color/size attributes.
+// Option axes we can auto-map to Google's color/size/material attributes by name.
 const COLOR_OPTION_RE = /cul|colou?r/i;
-const SIZE_OPTION_RE = /m[aă]rim|size|talie/i;
+const SIZE_OPTION_RE = /m[aă]rim|size|talie|numar|număr/i;
+const MATERIAL_OPTION_RE = /material|tesatur|țesătur|compozi/i;
 
 /**
  * Expand a product into one or more Merchant offers. Simple products yield a
@@ -164,8 +178,24 @@ export function expandProductOffers(
   const baseAttrs = base.productAttributes as Record<string, unknown>;
   const basePrice = Number(product.price) || 0;
   const baseCompare = product.compare_at_price != null ? Number(product.compare_at_price) : null;
-  const colorIdx = variants.options.findIndex((o) => COLOR_OPTION_RE.test(o.name));
-  const sizeIdx = variants.options.findIndex((o) => SIZE_OPTION_RE.test(o.name));
+  // Assign each option axis to a DISTINCT Google variant attribute so every
+  // combination has a unique attribute set — Google disapproves an item_group
+  // whose members don't each differ by a variant attribute. Recognized axes map
+  // by name (color/size/material); the rest fill the leftover slots.
+  const VARIANT_SLOTS = ["color", "size", "material", "pattern"] as const;
+  const usedSlots = new Set<string>();
+  const slotFor: (string | undefined)[] = variants.options.map((o) => {
+    const named = COLOR_OPTION_RE.test(o.name) ? "color"
+      : SIZE_OPTION_RE.test(o.name) ? "size"
+      : MATERIAL_OPTION_RE.test(o.name) ? "material" : undefined;
+    if (named && !usedSlots.has(named)) { usedSlots.add(named); return named; }
+    return undefined;
+  });
+  variants.options.forEach((_, i) => {
+    if (slotFor[i]) return;
+    const free = VARIANT_SLOTS.find((s) => !usedSlots.has(s));
+    if (free) { usedSlots.add(free); slotFor[i] = free; }
+  });
 
   return enabled.map((combo) => {
     const offerId = `${product.id}-${combo.id}`.slice(0, 50);
@@ -173,8 +203,13 @@ export function expandProductOffers(
     const attrs: Record<string, unknown> = { ...baseAttrs };
     attrs.title = `${product.name} - ${combo.title}`.slice(0, 150);
     attrs.itemGroupId = product.id;
+    // No per-variant identifiers exist in our model; a product-level GTIN shared
+    // across variants would be a duplicate-GTIN disapproval, so strip identifiers.
+    delete attrs.gtins;
+    delete attrs.mpn;
+    attrs.identifierExists = false;
 
-    const unit = comboUnitPrice(combo, basePrice);
+    const unit = comboUnitPrice(combo, basePrice) || basePrice;
     const compare = comboCompareAtPrice(combo, baseCompare);
     const hasSale = compare != null && compare > unit;
     attrs.price = priceMicros(hasSale ? compare : unit);
@@ -185,8 +220,11 @@ export function expandProductOffers(
     if (product.track_inventory && stock != null && Number.isFinite(stock)) {
       attrs.availability = stock > 0 ? "IN_STOCK" : "OUT_OF_STOCK";
     }
-    if (colorIdx >= 0 && parts[colorIdx]) attrs.color = parts[colorIdx];
-    if (sizeIdx >= 0 && parts[sizeIdx]) attrs.size = parts[sizeIdx];
+    // Differentiating attributes — guarantees a unique variant attribute set.
+    variants.options.forEach((_, i) => {
+      const slot = slotFor[i];
+      if (slot && parts[i]) attrs[slot] = parts[i];
+    });
     if (combo.image) attrs.imageLink = combo.image;
 
     return { offerId, input: { offerId, contentLanguage: lang, feedLabel, productAttributes: attrs } };

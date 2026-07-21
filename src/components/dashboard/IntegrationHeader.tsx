@@ -21,6 +21,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   klarna: { src: "/integrations/klarna.svg", alt: "Klarna" },
   revolut: { src: "/integrations/revolut.svg", alt: "Revolut" },
   "facebook-pixel": { src: "/integrations/facebook-pixel.svg", alt: "Facebook Pixel" },
+  "facebook-catalog": { src: "/integrations/facebook-pixel.svg", alt: "Facebook Catalog" },
   "tiktok-pixel": { src: "/integrations/tiktok-pixel.svg", alt: "TikTok Pixel" },
   "google-ads": { src: "/integrations/google-ads.svg", alt: "Google Ads" },
   "google-analytics": { src: "/integrations/google-analytics.svg", alt: "Google Analytics" },

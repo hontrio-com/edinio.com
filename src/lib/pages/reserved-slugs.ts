@@ -15,7 +15,7 @@ export const RESERVED_PAGE_SLUGS = new Set<string>([
   // cart / checkout (future-proofing)
   "cos", "cart", "checkout",
   // platform / framework
-  "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico",
+  "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
   // app sections that live at the root path
   "dashboard", "admin", "login", "register", "forgot-password",
   "reset-password", "onboarding", "auth",

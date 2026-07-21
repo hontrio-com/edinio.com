@@ -531,6 +531,11 @@ function CartCheckoutModal({
       const payloadKey = JSON.stringify(payload);
       let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;
       if (!orderId) {
+        // GA4 funnel: shipping + payment info captured once, right before the order
+        // is created (single-page checkout; retries reuse placedRef so no re-fire).
+        const gaItems = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity }));
+        gtagEvent("add_shipping_info", { currency: "RON", value: grandTotal, shipping_tier: courierSelection?.courierLabel, items: gaItems });
+        gtagEvent("add_payment_info", { currency: "RON", value: grandTotal, payment_type: paymentMethod, items: gaItems });
         const result = await placeCartOrder(payload);
         if ("error" in result) { setErrors({ _: result.error as string }); return; }
         orderId = (result as { orderId: string }).orderId;
@@ -951,6 +956,13 @@ function CartDrawer({
     ? Math.round((total / freeShippingThreshold) * 100)
     : 100;
 
+  // GA4 view_cart when the drawer opens with items.
+  useEffect(() => {
+    if (!open || items.length === 0) return;
+    gtagEvent("view_cart", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -1044,7 +1056,7 @@ function CartDrawer({
                       </button>
                     </div>
                   </div>
-                  <button type="button" aria-label="Sterge produsul" onClick={() => removeItem(key)}
+                  <button type="button" aria-label="Sterge produsul" onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: item.price * item.quantity, items: [{ item_id: item.productId, item_name: item.name, price: item.price, quantity: item.quantity }] }); removeItem(key); }}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors mt-0.5 rounded-md hover:bg-muted">
                     <X className="h-4 w-4" />
                   </button>

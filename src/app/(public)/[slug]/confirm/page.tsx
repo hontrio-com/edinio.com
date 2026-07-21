@@ -36,7 +36,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   // Fetch order details via admin client (orders RLS restricts anonymous SELECT)
-  let orderItems: { name: string; price: number; quantity: number }[] = [];
+  let orderItems: { product_id?: string; name: string; price: number; quantity: number }[] = [];
   let shippingCost = 0;
   let discountAmount = 0;
   let cardDiscountAmount = 0;
@@ -57,7 +57,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       .single();
 
     if (order) {
-      orderItems = (order.items as { name: string; price: number; quantity: number }[]) ?? [];
+      orderItems = (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) ?? [];
       shippingCost = order.shipping_cost ?? 0;
       discountAmount = order.discount_amount ?? 0;
       cardDiscountAmount = order.card_discount_amount ?? 0;
@@ -70,6 +70,8 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   }
 
   const numItems = orderItems.reduce((s, i) => s + (i.quantity || 1), 0);
+  // GA4/Meta/TikTok item payloads for the purchase conversion (item-level revenue).
+  const purchaseItems = orderItems.map((i) => ({ item_id: i.product_id, item_name: i.name, price: i.price, quantity: i.quantity }));
 
   const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount;
@@ -119,6 +121,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
           orderId={orderId}
           total={displayTotal}
           numItems={numItems}
+          items={purchaseItems}
           googleTagId={marketingConfig?.google_tag_id}
           googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
           fbPixelId={marketingConfig?.facebook_pixel_id}

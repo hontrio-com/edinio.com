@@ -232,7 +232,9 @@ export async function selectMerchantAccount(
   // Subscribe to product-status-change push notifications (real-time statuses).
   let subscriptionName = config.notification_subscription_name;
   if (!subscriptionName) {
-    const sub = await createNotificationSubscription(token, accountId, `${PLATFORM_ORIGIN}/api/google-merchant/webhook`);
+    const webhookSecret = process.env.GMC_WEBHOOK_SECRET;
+    const callbackUri = `${PLATFORM_ORIGIN}/api/google-merchant/webhook${webhookSecret ? `?token=${encodeURIComponent(webhookSecret)}` : ""}`;
+    const sub = await createNotificationSubscription(token, accountId, callbackUri);
     if (!("error" in sub)) subscriptionName = sub.data.name;
   }
 

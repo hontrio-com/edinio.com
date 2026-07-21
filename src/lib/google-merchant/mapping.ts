@@ -22,6 +22,7 @@ export interface MappableProduct {
   track_inventory: boolean;
   stock_quantity: number | null;
   weight_grams: number | null;
+  is_bundle?: boolean;
   page_sections?: unknown;
 }
 
@@ -37,6 +38,11 @@ interface GoogleAttrs {
   color?: string;
   size?: string;
   material?: string;
+  custom_label_0?: string;
+  custom_label_1?: string;
+  custom_label_2?: string;
+  custom_label_3?: string;
+  custom_label_4?: string;
 }
 
 function priceMicros(value: number) {
@@ -103,6 +109,13 @@ export function toGoogleProductInput(
   if (g.color) attributes.color = g.color;
   if (g.size) attributes.size = g.size;
   if (g.material) attributes.material = g.material;
+  if (g.custom_label_0) attributes.customLabel0 = g.custom_label_0;
+  if (g.custom_label_1) attributes.customLabel1 = g.custom_label_1;
+  if (g.custom_label_2) attributes.customLabel2 = g.custom_label_2;
+  if (g.custom_label_3) attributes.customLabel3 = g.custom_label_3;
+  if (g.custom_label_4) attributes.customLabel4 = g.custom_label_4;
+  // Bundles (Edinio is_bundle) map to Google's is_bundle attribute.
+  if (product.is_bundle) attributes.isBundle = true;
   // Weight feeds carrier-calculated rates; a bare `shipping: [{country}]` entry
   // (pre-v1 shape) would instead override the account's shipping settings.
   if (product.weight_grams) attributes.shippingWeight = { value: product.weight_grams, unit: "g" };

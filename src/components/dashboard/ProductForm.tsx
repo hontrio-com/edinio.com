@@ -117,6 +117,25 @@ interface FormState {
   seo_description: string;
   variants: VariantsState;
   customization: CustomizationState;
+  google: GoogleShoppingState;
+}
+
+interface GoogleShoppingState {
+  gtin: string;
+  brand: string;
+  mpn: string;
+  google_product_category: string;
+  condition: "" | "new" | "refurbished" | "used";
+  gender: "" | "male" | "female" | "unisex";
+  age_group: "" | "adult" | "kids" | "toddler" | "infant" | "newborn";
+  color: string;
+  size: string;
+  material: string;
+  custom_label_0: string;
+  custom_label_1: string;
+  custom_label_2: string;
+  custom_label_3: string;
+  custom_label_4: string;
 }
 
 function toSlug(name: string) {
@@ -195,6 +214,7 @@ const EMPTY_FORM: FormState = {
   seo_title: "", seo_description: "",
   variants: { enabled: false, options: [], combinations: [] },
   customization: { enabled: false, fields: [] },
+  google: { gtin: "", brand: "", mpn: "", google_product_category: "", condition: "", gender: "", age_group: "", color: "", size: "", material: "", custom_label_0: "", custom_label_1: "", custom_label_2: "", custom_label_3: "", custom_label_4: "" },
 };
 
 type PageSections = {
@@ -207,6 +227,12 @@ type PageSections = {
   seo?: { title: string; description: string };
   variants?: { enabled: boolean; options: Omit<VariantOption, "inputValue">[]; combinations: VariantCombination[] };
   customization?: { enabled: boolean; fields: CustomizationField[] };
+  google?: {
+    gtin?: string; brand?: string; mpn?: string; google_product_category?: string;
+    condition?: string; gender?: string; age_group?: string;
+    color?: string; size?: string; material?: string;
+    custom_label_0?: string; custom_label_1?: string; custom_label_2?: string; custom_label_3?: string; custom_label_4?: string;
+  };
 };
 
 function productToForm(p: Product): FormState {
@@ -261,6 +287,23 @@ function productToForm(p: Product): FormState {
     customization: ps.customization
       ? { enabled: ps.customization.enabled, fields: ps.customization.fields }
       : { enabled: false, fields: [] },
+    google: {
+      gtin: ps.google?.gtin ?? "",
+      brand: ps.google?.brand ?? "",
+      mpn: ps.google?.mpn ?? "",
+      google_product_category: ps.google?.google_product_category ?? "",
+      condition: (ps.google?.condition as FormState["google"]["condition"]) ?? "",
+      gender: (ps.google?.gender as FormState["google"]["gender"]) ?? "",
+      age_group: (ps.google?.age_group as FormState["google"]["age_group"]) ?? "",
+      color: ps.google?.color ?? "",
+      size: ps.google?.size ?? "",
+      material: ps.google?.material ?? "",
+      custom_label_0: ps.google?.custom_label_0 ?? "",
+      custom_label_1: ps.google?.custom_label_1 ?? "",
+      custom_label_2: ps.google?.custom_label_2 ?? "",
+      custom_label_3: ps.google?.custom_label_3 ?? "",
+      custom_label_4: ps.google?.custom_label_4 ?? "",
+    },
   };
 }
 
@@ -621,6 +664,23 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
         customization: {
           enabled: form.customization.enabled,
           fields: form.customization.fields,
+        },
+        google: {
+          gtin: form.google.gtin.trim(),
+          brand: form.google.brand.trim(),
+          mpn: form.google.mpn.trim(),
+          google_product_category: form.google.google_product_category.trim(),
+          condition: form.google.condition,
+          gender: form.google.gender,
+          age_group: form.google.age_group,
+          color: form.google.color.trim(),
+          size: form.google.size.trim(),
+          material: form.google.material.trim(),
+          custom_label_0: form.google.custom_label_0.trim(),
+          custom_label_1: form.google.custom_label_1.trim(),
+          custom_label_2: form.google.custom_label_2.trim(),
+          custom_label_3: form.google.custom_label_3.trim(),
+          custom_label_4: form.google.custom_label_4.trim(),
         },
       },
     };
@@ -1428,6 +1488,104 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                     placeholder="Descriere scurta pentru rezultatele Google..."
                     maxLength={180} rows={3} className={inputCls + " resize-none"} />
                   <p className="text-xs text-muted-foreground mt-1">Ideal: 140-160 caractere</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Google Shopping / Merchant Center ── */}
+            <div className={sectionCls}>
+              <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Google Shopping</p>
+                  <p className="text-xs text-muted-foreground">Atribute pentru feed-ul Google Merchant Center (optionale, dar imbunatatesc reclamele si vizibilitatea)</p>
+                </div>
+              </div>
+              <div className="px-5 py-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Cod de bare (GTIN/EAN)</label>
+                    <input type="text" value={form.google.gtin} onChange={e => set("google", { ...form.google, gtin: e.target.value })}
+                      placeholder="ex: 5941234567890" className={inputCls} />
+                    <p className="text-xs text-muted-foreground mt-1">Recomandat de Google; creste performanta in Shopping.</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Brand</label>
+                    <input type="text" value={form.google.brand} onChange={e => set("google", { ...form.google, brand: e.target.value })}
+                      placeholder="Marca produsului" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">MPN (cod producator)</label>
+                    <input type="text" value={form.google.mpn} onChange={e => set("google", { ...form.google, mpn: e.target.value })}
+                      placeholder="ex: ABC-123" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Categorie Google</label>
+                    <input type="text" value={form.google.google_product_category} onChange={e => set("google", { ...form.google, google_product_category: e.target.value })}
+                      placeholder="ID sau lasa gol pentru maparea magazinului" className={inputCls} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Stare</label>
+                    <select value={form.google.condition} onChange={e => set("google", { ...form.google, condition: e.target.value as FormState["google"]["condition"] })} className={inputCls}>
+                      <option value="">Automat (nou)</option>
+                      <option value="new">Nou</option>
+                      <option value="refurbished">Resigilat</option>
+                      <option value="used">Folosit</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Gen</label>
+                    <select value={form.google.gender} onChange={e => set("google", { ...form.google, gender: e.target.value as FormState["google"]["gender"] })} className={inputCls}>
+                      <option value="">-</option>
+                      <option value="male">Barbati</option>
+                      <option value="female">Femei</option>
+                      <option value="unisex">Unisex</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Grupa de varsta</label>
+                    <select value={form.google.age_group} onChange={e => set("google", { ...form.google, age_group: e.target.value as FormState["google"]["age_group"] })} className={inputCls}>
+                      <option value="">-</option>
+                      <option value="adult">Adulti</option>
+                      <option value="kids">Copii</option>
+                      <option value="toddler">Prescolari</option>
+                      <option value="infant">Bebelusi</option>
+                      <option value="newborn">Nou-nascuti</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Culoare</label>
+                    <input type="text" value={form.google.color} onChange={e => set("google", { ...form.google, color: e.target.value })}
+                      placeholder="ex: Rosu" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Marime</label>
+                    <input type="text" value={form.google.size} onChange={e => set("google", { ...form.google, size: e.target.value })}
+                      placeholder="ex: M" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Material</label>
+                    <input type="text" value={form.google.material} onChange={e => set("google", { ...form.google, material: e.target.value })}
+                      placeholder="ex: Bumbac" className={inputCls} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">Etichete personalizate (campanii Google Ads)</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input type="text" value={form.google.custom_label_0} onChange={e => set("google", { ...form.google, custom_label_0: e.target.value })} placeholder="Eticheta 0" className={inputCls} />
+                    <input type="text" value={form.google.custom_label_1} onChange={e => set("google", { ...form.google, custom_label_1: e.target.value })} placeholder="Eticheta 1" className={inputCls} />
+                    <input type="text" value={form.google.custom_label_2} onChange={e => set("google", { ...form.google, custom_label_2: e.target.value })} placeholder="Eticheta 2" className={inputCls} />
+                    <input type="text" value={form.google.custom_label_3} onChange={e => set("google", { ...form.google, custom_label_3: e.target.value })} placeholder="Eticheta 3" className={inputCls} />
+                    <input type="text" value={form.google.custom_label_4} onChange={e => set("google", { ...form.google, custom_label_4: e.target.value })} placeholder="Eticheta 4" className={inputCls} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Ex: sezon, marja, best-seller. Le folosesti pentru a segmenta produsele in campanii.</p>
                 </div>
               </div>
             </div>

@@ -8,6 +8,15 @@ import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig
 // Receives Merchant API PRODUCT_STATUS_CHANGE notifications. We always ack (2xx)
 // so Google doesn't retry forever, then refresh the affected product's status.
 export async function POST(req: NextRequest) {
+  // Optional shared-secret check: when GMC_WEBHOOK_SECRET is set, the notification
+  // subscription registers a callback URL carrying ?token=<secret>, so forged POSTs
+  // (which can't know the secret) are acked-and-ignored. Left open when the secret
+  // is unset, for backward compatibility with older subscriptions.
+  const secret = process.env.GMC_WEBHOOK_SECRET;
+  if (secret && req.nextUrl.searchParams.get("token") !== secret) {
+    return NextResponse.json({ ok: true });
+  }
+
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { return NextResponse.json({ ok: true }); }
   // Pub/Sub-style envelope: { message: { data: base64 } }

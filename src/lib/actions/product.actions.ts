@@ -56,6 +56,12 @@ interface ProductData {
         helper_text?: string;
       }[];
     };
+    google?: {
+      gtin?: string; brand?: string; mpn?: string; google_product_category?: string;
+      condition?: string; gender?: string; age_group?: string;
+      color?: string; size?: string; material?: string;
+      custom_label_0?: string; custom_label_1?: string; custom_label_2?: string; custom_label_3?: string; custom_label_4?: string;
+    };
   };
 }
 

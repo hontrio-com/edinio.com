@@ -20,7 +20,7 @@ export function renderTemplate(
   const o = sender?.templates?.[kind];
   const subject = o?.subject?.trim() ? subst(o.subject, vars) : defaults.subject;
   const intro = o?.intro?.trim()
-    ? `<div style="font-size:14px;color:#3f3f46;line-height:1.7;margin:0 0 24px 0;">${subst(o.intro, vars)}</div>`
+    ? `<div style="font-size:14px;color:#71717a;line-height:1.7;margin:0 0 24px 0;">${subst(o.intro, vars)}</div>`
     : defaults.intro;
   return { subject, intro };
 }
@@ -61,6 +61,30 @@ export const TEMPLATE_DEFS: TemplateDef[] = [
       { token: "nume_magazin", label: "Nume magazin" },
       { token: "numar_comanda", label: "Numar comanda" },
       { token: "status", label: "Status comanda" },
+    ],
+  },
+  {
+    kind: "abandoned_cart",
+    label: "Cos abandonat",
+    description: "Emailul de recuperare trimis clientilor care au lasat produse in cos.",
+    defaultSubject: "Ai uitat ceva in cos la {{nume_magazin}}",
+    defaultIntro: "Buna, {{nume_client}}! Ai lasat cateva produse in cosul tau la {{nume_magazin}}. Le-am pastrat pentru tine, finalizeaza comanda inainte sa se epuizeze.",
+    variables: [
+      { token: "nume_client", label: "Nume client" },
+      { token: "nume_magazin", label: "Nume magazin" },
+    ],
+  },
+  {
+    kind: "new_order",
+    label: "Comanda noua (catre tine)",
+    description: "Notificarea pe care o primesti tu cand intra o comanda noua in magazin.",
+    defaultSubject: "Comanda noua {{numar_comanda}} - {{nume_client}}",
+    defaultIntro: "Ai primit o comanda noua la magazinul {{nume_magazin}}.",
+    variables: [
+      { token: "nume_magazin", label: "Nume magazin" },
+      { token: "numar_comanda", label: "Numar comanda" },
+      { token: "nume_client", label: "Nume client" },
+      { token: "total", label: "Total comanda" },
     ],
   },
 ];

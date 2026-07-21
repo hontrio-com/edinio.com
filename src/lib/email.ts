@@ -231,9 +231,17 @@ export async function sendAbandonedCartRecovery(
     )
     .join("");
 
+  const { subject, intro: tplIntro } = renderTemplate(sender, "abandoned_cart", {
+    subject: `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${first}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${data.storeName}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`,
+  }, {
+    nume_client: first ?? "",
+    nume_magazin: data.storeName,
+  });
+  // Per-campaign message (recovery automation) takes priority over the template/default.
   const intro = data.message?.trim()
     ? `<p style="margin:0 0 24px 0;font-size:14px;color:#3f3f46;line-height:1.6;white-space:pre-wrap;">${data.message.trim()}</p>`
-    : `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${first}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${data.storeName}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`;
+    : tplIntro;
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Ti-au ramas produse in cos</h2>
@@ -265,7 +273,7 @@ export async function sendAbandonedCartRecovery(
     </p>` : ""}
   `;
 
-  await sendStoreOrEdinio(sender, to, `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`, content);
+  await sendStoreOrEdinio(sender, to, subject, content);
 }
 
 export async function sendAccountWelcomeEmail(
@@ -760,9 +768,18 @@ export async function sendNewOrderEmail(
 
   const dashboardUrl = `${SITE_URL}/dashboard/orders/${order.order_id}`;
 
+  const { subject, intro } = renderTemplate(sender, "new_order", {
+    subject: `Comanda noua ${order.order_number} - ${order.customer_name}`,
+    intro: `<p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Ai primit o comanda noua la magazinul <strong>${esc(order.business_name)}</strong>.</p>`,
+  }, {
+    nume_magazin: order.business_name,
+    numar_comanda: order.order_number,
+    nume_client: order.customer_name,
+    total: formatPrice(order.total),
+  });
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda noua!</h2>
-    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Ai primit o comanda noua la magazinul <strong>${esc(order.business_name)}</strong>.</p>
+    ${intro}
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:8px;box-sizing:border-box;overflow:hidden;">
       <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${esc(order.order_number)}</p>
@@ -798,7 +815,7 @@ export async function sendNewOrderEmail(
     </div>
   `;
 
-  await sendStoreOrEdinio(sender, to, `Comanda noua ${order.order_number} - ${order.customer_name}`, content);
+  await sendStoreOrEdinio(sender, to, subject, content);
 }
 
 // ── Order status change → Customer ──────────────────────────────────────────

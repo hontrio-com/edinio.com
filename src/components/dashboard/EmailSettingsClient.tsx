@@ -23,8 +23,8 @@ const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2
 
 function TemplateCard({ businessId, def, initial }: { businessId: string | null; def: TemplateDef; initial: { subject?: string; intro?: string } }) {
   const router = useRouter();
-  const [subject, setSubject] = useState(initial.subject ?? "");
-  const [intro, setIntro] = useState(initial.intro ?? "");
+  const [subject, setSubject] = useState(initial.subject ?? def.defaultSubject);
+  const [intro, setIntro] = useState(initial.intro ?? def.defaultIntro);
   const [open, setOpen] = useState(false);
   const [saving, startSave] = useTransition();
   const customized = !!(initial.subject || initial.intro);
@@ -35,6 +35,16 @@ function TemplateCard({ businessId, def, initial }: { businessId: string | null;
       const res = await updateEmailTemplate(businessId, def.kind, { subject, intro });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Sablon salvat."); router.refresh();
+    });
+  }
+
+  function reset() {
+    if (!businessId) return;
+    startSave(async () => {
+      const res = await updateEmailTemplate(businessId, def.kind, {});
+      if ("error" in res) { toast.error(res.error); return; }
+      setSubject(def.defaultSubject); setIntro(def.defaultIntro);
+      toast.success("Revenit la sablonul standard."); router.refresh();
     });
   }
 
@@ -72,7 +82,10 @@ function TemplateCard({ businessId, def, initial }: { businessId: string | null;
               ))}
             </div>
           </div>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2">
+            {customized ? (
+              <button type="button" disabled={saving} onClick={reset} className="text-xs text-muted-foreground underline disabled:opacity-50">Reseteaza la standard</button>
+            ) : <span />}
             <Button size="sm" disabled={saving || !businessId} onClick={save}>{saving ? <Loader2 className="animate-spin" /> : <Save />} Salveaza sablonul</Button>
           </div>
         </div>
@@ -200,7 +213,7 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
       <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
         <div>
           <p className="text-sm font-semibold text-foreground">Sabloane de email</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Personalizeaza subiectul si mesajul fiecarui email catre clienti. Tabelul cu produse si butoanele se genereaza automat. Daca lasi gol, folosim textul standard.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Sabloanele sunt pre-completate cu textul standard (deja cu logo-ul si culorile tale). Modifica ce vrei; tabelul cu produse si butoanele se genereaza automat.</p>
         </div>
         <div className="space-y-2">
           {TEMPLATE_DEFS.map((def) => (

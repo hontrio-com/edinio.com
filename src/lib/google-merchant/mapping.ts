@@ -1,6 +1,7 @@
 // Maps an Edinio product to a Merchant API productInput payload.
 
 import { storeBaseUrl } from "@/lib/seo";
+import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice } from "@/lib/storefront/variants";
 import { CURRENCY, DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "./types";
 
 export interface MappableBusiness {
@@ -127,4 +128,67 @@ export function toGoogleProductInput(
     feedLabel,
     productAttributes: attributes,
   };
+}
+
+export interface OfferInput {
+  offerId: string;
+  input: Record<string, unknown>;
+}
+
+// Option axes we can auto-map to Google's color/size attributes.
+const COLOR_OPTION_RE = /cul|colou?r/i;
+const SIZE_OPTION_RE = /m[aă]rim|size|talie/i;
+
+/**
+ * Expand a product into one or more Merchant offers. Simple products yield a
+ * single offer (offerId = product.id). Variable products yield one offer per
+ * ENABLED combination, linked by `itemGroupId`, each carrying its own price,
+ * sale price, availability and (auto-derived) color/size from the variant axes.
+ * The cron reconciles the returned offer ids against what was previously synced,
+ * so switching a product simple<->variable cleans up stale offers automatically.
+ */
+export function expandProductOffers(
+  business: MappableBusiness,
+  product: MappableProduct,
+  config: GoogleMerchantConfig,
+): OfferInput[] {
+  const variants = parseVariants(product.page_sections);
+  const enabled = variants?.combinations.filter((c) => c.enabled && c.title) ?? [];
+  const base = toGoogleProductInput(business, product, config);
+  if (!variants || enabled.length === 0) {
+    return [{ offerId: product.id, input: base }];
+  }
+
+  const lang = base.contentLanguage as string;
+  const feedLabel = base.feedLabel as string;
+  const baseAttrs = base.productAttributes as Record<string, unknown>;
+  const basePrice = Number(product.price) || 0;
+  const baseCompare = product.compare_at_price != null ? Number(product.compare_at_price) : null;
+  const colorIdx = variants.options.findIndex((o) => COLOR_OPTION_RE.test(o.name));
+  const sizeIdx = variants.options.findIndex((o) => SIZE_OPTION_RE.test(o.name));
+
+  return enabled.map((combo) => {
+    const offerId = `${product.id}-${combo.id}`.slice(0, 50);
+    const parts = combo.title.split(VARIANT_TITLE_SEP);
+    const attrs: Record<string, unknown> = { ...baseAttrs };
+    attrs.title = `${product.name} - ${combo.title}`.slice(0, 150);
+    attrs.itemGroupId = product.id;
+
+    const unit = comboUnitPrice(combo, basePrice);
+    const compare = comboCompareAtPrice(combo, baseCompare);
+    const hasSale = compare != null && compare > unit;
+    attrs.price = priceMicros(hasSale ? compare : unit);
+    if (hasSale) attrs.salePrice = priceMicros(unit);
+    else delete attrs.salePrice;
+
+    const stock = combo.stock_quantity != null && String(combo.stock_quantity).trim() !== "" ? Number(combo.stock_quantity) : null;
+    if (product.track_inventory && stock != null && Number.isFinite(stock)) {
+      attrs.availability = stock > 0 ? "IN_STOCK" : "OUT_OF_STOCK";
+    }
+    if (colorIdx >= 0 && parts[colorIdx]) attrs.color = parts[colorIdx];
+    if (sizeIdx >= 0 && parts[sizeIdx]) attrs.size = parts[sizeIdx];
+    if (combo.image) attrs.imageLink = combo.image;
+
+    return { offerId, input: { offerId, contentLanguage: lang, feedLabel, productAttributes: attrs } };
+  });
 }

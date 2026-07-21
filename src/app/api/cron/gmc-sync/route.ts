@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { getAccessToken } from "@/lib/google-merchant/oauth";
 import { insertProductInput, deleteProductInput, getProduct, mapProductStatus } from "@/lib/google-merchant/client";
-import { toGoogleProductInput, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
+import { expandProductOffers, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 
 type Admin = SupabaseClient<Database>;
@@ -62,23 +62,47 @@ export async function GET(req: NextRequest) {
     for (const item of items ?? []) {
       try {
         if (item.op === "delete" || (item.op === "upsert" && item.product_id && !productMap.has(item.product_id))) {
-          // delete from Google (also covers upsert of a now-inactive/removed product)
-          const res = await deleteProductInput(token, config.account_id!, lang, feedLabel, item.offer_id, config.data_source_name!);
-          if ("error" in res && res.status !== 404) throw new Error(res.error);
-          await admin.from("gmc_products").delete().eq("business_id", businessId).eq("offer_id", item.offer_id);
+          // Remove every offer we ever synced for this product — including variant
+          // offers (offer_id = "<product>-<combo>"). On deletes product_id is null,
+          // so match by the product key on either column.
+          const productKey = item.product_id ?? item.offer_id;
+          const { data: rows } = await admin.from("gmc_products")
+            .select("offer_id").eq("business_id", businessId)
+            .or(`product_id.eq.${productKey},offer_id.eq.${item.offer_id}`);
+          const offerIds = (rows ?? []).map((r) => r.offer_id);
+          for (const oid of offerIds.length ? offerIds : [item.offer_id]) {
+            const res = await deleteProductInput(token, config.account_id!, lang, feedLabel, oid, config.data_source_name!);
+            if ("error" in res && res.status !== 404) throw new Error(res.error);
+          }
+          await admin.from("gmc_products").delete().eq("business_id", businessId)
+            .or(`product_id.eq.${productKey},offer_id.eq.${item.offer_id}`);
           await admin.from("gmc_sync_queue").delete().eq("id", item.id);
           deleted++;
         } else {
+          // Expand into one offer (simple) or one per enabled variant (linked by
+          // itemGroupId), then reconcile: any previously-synced offer for this
+          // product that is no longer produced gets deleted from Google.
           const product = productMap.get(item.product_id!)!;
-          const input = toGoogleProductInput(business, product, config);
-          const res = await insertProductInput(token, config.account_id!, config.data_source_name!, input);
-          if ("error" in res) throw new Error(res.error);
-          await admin.from("gmc_products").upsert(
-            { business_id: businessId, product_id: product.id, offer_id: item.offer_id, status: "pending", last_synced_at: now, error: null, updated_at: now },
-            { onConflict: "business_id,product_id" },
-          );
+          const offers = expandProductOffers(business, product, config);
+          const desired = new Set(offers.map((o) => o.offerId));
+          for (const offer of offers) {
+            const res = await insertProductInput(token, config.account_id!, config.data_source_name!, offer.input);
+            if ("error" in res) throw new Error(res.error);
+            await admin.from("gmc_products").upsert(
+              { business_id: businessId, product_id: product.id, offer_id: offer.offerId, status: "pending", last_synced_at: now, error: null, updated_at: now },
+              { onConflict: "business_id,offer_id" },
+            );
+            synced++;
+          }
+          const { data: prior } = await admin.from("gmc_products")
+            .select("offer_id").eq("business_id", businessId).eq("product_id", product.id);
+          for (const row of prior ?? []) {
+            if (desired.has(row.offer_id)) continue;
+            const res = await deleteProductInput(token, config.account_id!, lang, feedLabel, row.offer_id, config.data_source_name!);
+            if ("error" in res && res.status !== 404) continue; // best-effort; retried next pass
+            await admin.from("gmc_products").delete().eq("business_id", businessId).eq("offer_id", row.offer_id);
+          }
           await admin.from("gmc_sync_queue").delete().eq("id", item.id);
-          synced++;
         }
       } catch (e) {
         failed++;
@@ -88,7 +112,7 @@ export async function GET(req: NextRequest) {
           if (item.product_id) {
             await admin.from("gmc_products").upsert(
               { business_id: businessId, product_id: item.product_id, offer_id: item.offer_id, status: "error", error: String((e as Error).message).slice(0, 500), updated_at: now },
-              { onConflict: "business_id,product_id" },
+              { onConflict: "business_id,offer_id" },
             );
           }
         } else {

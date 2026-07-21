@@ -86,28 +86,22 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     ],
   },
   {
-    id: "marketing",
-    label: "Marketing",
-    integrations: [
-      { name: "Facebook Pixel", logo: "/integrations/facebook-pixel.svg", id: "facebook-pixel" },
-      { name: "TikTok Pixel",   logo: "/integrations/tiktok-pixel.svg", id: "tiktok-pixel" },
-      { name: "Google Ads",     logo: "/integrations/google-ads.svg", id: "google-ads" },
-    ],
-  },
-  {
-    id: "google-shopping",
-    label: "Google Shopping",
-    integrations: [
-      { name: "Google Merchant Center", logo: "/integrations/google-merchant-center.svg", id: "google-merchant" },
-    ],
-  },
-  {
     id: "marketplace",
     label: "Marketplace",
     integrations: [
       { name: "OLX", logo: "/integrations/olx.svg", id: "olx" },
       { name: "About You", logo: "/integrations/aboutyou.png", id: "aboutyou" },
       { name: "Trendyol", logo: "/integrations/trendyol.svg", id: "trendyol" },
+    ],
+  },
+  {
+    id: "marketing",
+    label: "Marketing",
+    integrations: [
+      { name: "Facebook Pixel", logo: "/integrations/facebook-pixel.svg", id: "facebook-pixel" },
+      { name: "TikTok Pixel",   logo: "/integrations/tiktok-pixel.svg", id: "tiktok-pixel" },
+      { name: "Google Ads",     logo: "/integrations/google-ads.svg", id: "google-ads" },
+      { name: "Google Merchant Center", logo: "/integrations/google-merchant-center.svg", id: "google-merchant" },
     ],
   },
   {

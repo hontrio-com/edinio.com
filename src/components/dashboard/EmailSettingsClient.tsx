@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, Save, Send, Mail, ChevronDown } from "lucide-react";
@@ -10,24 +10,30 @@ import { Callout } from "@/components/ui/callout";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { cn } from "@/lib/utils/cn";
 import { updateSmtpConfig, sendTestEmail, updateEmailTemplate } from "@/lib/actions/email-settings.actions";
-import { SMTP_PRESETS, type EmailTemplateKind } from "@/lib/email/config";
+import { SMTP_PRESETS, type EmailTemplateKind, type EmailBranding } from "@/lib/email/config";
 import { TEMPLATE_DEFS, type TemplateDef } from "@/lib/email/templates";
+import { buildEmailPreview } from "@/lib/email/preview";
 
 export interface EmailSettingsInitial {
   enabled: boolean; host: string; port: number; secure: boolean;
   user: string; from_email: string; from_name: string; reply_to: string; hasPassword: boolean;
   templates: Partial<Record<EmailTemplateKind, { subject?: string; intro?: string }>>;
+  branding: EmailBranding;
 }
 
 const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-function TemplateCard({ businessId, def, initial }: { businessId: string | null; def: TemplateDef; initial: { subject?: string; intro?: string } }) {
+function TemplateCard({ businessId, def, initial, branding }: { businessId: string | null; def: TemplateDef; initial: { subject?: string; intro?: string }; branding: EmailBranding }) {
   const router = useRouter();
   const [subject, setSubject] = useState(initial.subject ?? def.defaultSubject);
   const [intro, setIntro] = useState(initial.intro ?? def.defaultIntro);
   const [open, setOpen] = useState(false);
   const [saving, startSave] = useTransition();
   const customized = !!(initial.subject || initial.intro);
+  // Debounced live preview (avoids reloading the iframe on every keystroke).
+  const [pv, setPv] = useState({ subject, intro });
+  useEffect(() => { const t = setTimeout(() => setPv({ subject, intro }), 350); return () => clearTimeout(t); }, [subject, intro]);
+  const preview = buildEmailPreview(def.kind, branding, pv.subject, pv.intro);
 
   function save() {
     if (!businessId) return;
@@ -82,6 +88,16 @@ function TemplateCard({ businessId, def, initial }: { businessId: string | null;
               ))}
             </div>
           </div>
+
+          <div>
+            <p className="text-[11px] font-medium text-foreground mb-1.5">Preview (asa il vede clientul)</p>
+            <div className="rounded-lg border border-border overflow-hidden bg-white">
+              <div className="border-b border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">Subiect: <span className="font-medium text-foreground">{preview.subject}</span></div>
+              <iframe srcDoc={preview.html} title="Preview email" className="w-full h-[380px] border-0 bg-white" />
+            </div>
+            {!branding.logoUrl && <p className="text-[11px] text-muted-foreground mt-1.5">Nu ai logo setat, deci se afiseaza numele magazinului. Adauga un logo din Setari, sectiunea General.</p>}
+          </div>
+
           <div className="flex items-center justify-between gap-2">
             {customized ? (
               <button type="button" disabled={saving} onClick={reset} className="text-xs text-muted-foreground underline disabled:opacity-50">Reseteaza la standard</button>
@@ -217,7 +233,7 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
         </div>
         <div className="space-y-2">
           {TEMPLATE_DEFS.map((def) => (
-            <TemplateCard key={def.kind} businessId={businessId} def={def} initial={initial.templates[def.kind] ?? {}} />
+            <TemplateCard key={def.kind} businessId={businessId} def={def} initial={initial.templates[def.kind] ?? {}} branding={initial.branding} />
           ))}
         </div>
       </div>

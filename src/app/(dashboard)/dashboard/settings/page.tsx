@@ -6,6 +6,7 @@ import { resolvePaymentMethods, parseCardDiscountConfig } from "@/lib/payment-me
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
 import type { MarketingConfig } from "@/lib/marketing";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
+import { parseEmailConfig } from "@/lib/email/config";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 
 interface Props {
@@ -22,7 +23,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cookie_banner_config, marketing_config, page_content)")
+      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, address, city, county, phone, email, cui, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cookie_banner_config, marketing_config, email_config, page_content)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -68,6 +69,20 @@ export default async function SettingsPage({ searchParams }: Props) {
   const seoPreviewUrl = bizRow?.slug
     ? storeBaseUrl({ slug: bizRow.slug, custom_domain: bizRow.custom_domain })
     : "https://www.edinio.com";
+
+  // Custom email (SMTP) — send the config WITHOUT the password (write-only field).
+  const emailSmtp = parseEmailConfig(storeSettings?.email_config).smtp ?? {};
+  const emailInitial = {
+    enabled: !!emailSmtp.enabled,
+    host: emailSmtp.host ?? "",
+    port: emailSmtp.port ?? 465,
+    secure: emailSmtp.secure ?? true,
+    user: emailSmtp.user ?? "",
+    from_email: emailSmtp.from_email ?? "",
+    from_name: emailSmtp.from_name ?? "",
+    reply_to: emailSmtp.reply_to ?? "",
+    hasPassword: !!emailSmtp.pass,
+  };
 
   type CourierCfg = Record<string, unknown>;
   const fc = storeSettings?.fan_courier_config as CourierCfg | null;
@@ -140,6 +155,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       storeSeo={storeSeo}
       seoDefaults={seoDefaults}
       seoPreviewUrl={seoPreviewUrl}
+      emailInitial={emailInitial}
       storeMode={storeMode.mode}
       oneProductId={storeMode.productId}
       products={opsProducts}

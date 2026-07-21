@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
+import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
@@ -472,12 +473,13 @@ export async function placeOrder(data: {
         locker_name: data.locker_name,
         custom_fields: data.custom_fields,
       };
+      const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([
         config.new_order !== false && notifyEmail
-          ? sendNewOrderEmail(notifyEmail, emailPayload)
+          ? sendNewOrderEmail(notifyEmail, emailPayload, emailSender)
           : null,
         data.customer_email
-          ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)
+          ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload, emailSender)
           : null,
       ].filter(Boolean));
 
@@ -655,6 +657,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   // Send status change email to customer
   if (statusChanged && order.customer_email) {
+    const emailSender = await getStoreEmailSender(createAdminClient(), order.business_id);
     sendOrderStatusToCustomer(order.customer_email, {
       order_number: order.order_number,
       customer_name: order.customer_name,
@@ -663,7 +666,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       business_name: storeName,
       awb: data.awb,
       store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
-    }).catch(() => {});
+    }, emailSender).catch(() => {});
   }
 
   // Send status change SMS to customer (opt-in per store via SMSO)
@@ -939,12 +942,13 @@ export async function sendCustomerNotification(orderId: string, subject: string,
 
   if (!order.customer_email) return { error: "Clientul nu a lasat o adresa de email." };
 
+  const emailSender = await getStoreEmailSender(createAdminClient(), order.business_id);
   const res = await sendCustomerMessage(order.customer_email, {
     subject: subject.trim(),
     message: message.trim(),
     businessName: biz.store_name || biz.business_name,
     orderNumber: order.order_number,
-  });
+  }, emailSender);
   if ("error" in res) return { error: res.error };
   return { success: true };
 }
@@ -1275,12 +1279,13 @@ export async function placeCartOrder(data: {
         locker_name: data.locker_name,
         custom_fields: data.custom_fields,
       };
+      const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([
         config.new_order !== false && notifyEmail
-          ? sendNewOrderEmail(notifyEmail, emailPayload)
+          ? sendNewOrderEmail(notifyEmail, emailPayload, emailSender)
           : null,
         data.customer_email
-          ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload)
+          ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload, emailSender)
           : null,
       ].filter(Boolean));
 

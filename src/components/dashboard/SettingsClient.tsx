@@ -17,6 +17,7 @@ import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMet
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
+import { EmailSettingsClient, type EmailSettingsInitial } from "@/components/dashboard/EmailSettingsClient";
 import type { Database } from "@/types/database.types";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { PLAN_LABELS, PLAN_PRICES, type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS } from "@/lib/plans";
@@ -32,7 +33,7 @@ type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
 
 type SectionId =
   | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"
-  | "taxe" | "plati" | "domeniu" | "seo" | "notificari" | "politici" | "cookies" | "securitate";
+  | "taxe" | "plati" | "domeniu" | "seo" | "email" | "notificari" | "politici" | "cookies" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
@@ -44,6 +45,7 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "plati",      label: "Metode de plata", icon: Wallet },
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
   { id: "seo",        label: "SEO",         icon: Search    },
+  { id: "email",      label: "Email",       icon: Mail      },
   { id: "notificari", label: "Notificari",  icon: Bell      },
   { id: "politici",   label: "Politici",    icon: FileText  },
   { id: "cookies",    label: "Banner Cookies", icon: Cookie },
@@ -256,6 +258,7 @@ interface Props {
   storeSeo: StoreSeo;
   seoDefaults: { title: string; description: string; ogImage: string | null };
   seoPreviewUrl: string;
+  emailInitial: EmailSettingsInitial;
   storeMode: StoreMode;
   oneProductId: string | null;
   products: { id: string; name: string }[];
@@ -276,7 +279,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, storeMode, oneProductId, products, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -1928,6 +1931,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </Button>
               </div>
             </div>
+          )}
+
+          {activeSection === "email" && (
+            <EmailSettingsClient businessId={businessId} initial={emailInitial} />
           )}
 
           {activeSection === "notificari" && (

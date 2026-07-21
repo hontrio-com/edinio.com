@@ -1,5 +1,8 @@
 import { Resend } from "resend";
 import { formatPrice } from "@/lib/utils/format";
+import type { StoreEmailSender } from "@/lib/email/config";
+import { storeEmailShell } from "@/lib/email/store-shell";
+import { deliverStoreEmail } from "@/lib/email/deliver";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -66,6 +69,17 @@ function baseTemplate(content: string): string {
 </html>`;
 }
 
+// Send a store-facing email: when the store opted in (sender.smtp present) use its
+// own branding + SMTP; otherwise the Edinio sender + Edinio shell (unchanged default).
+async function sendStoreOrEdinio(sender: StoreEmailSender | undefined, to: string, subject: string, content: string): Promise<void> {
+  if (sender?.smtp) {
+    await deliverStoreEmail(sender, { to, subject, html: storeEmailShell(sender.branding, content) });
+    return;
+  }
+  if (!process.env.RESEND_API_KEY) return;
+  await getResend().emails.send({ from: FROM, to, subject, html: baseTemplate(content) });
+}
+
 export function buildAdminNotifyHtml(name: string, message: string): string {
   return baseTemplate(`
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj de la echipa Edinio</h2>
@@ -103,7 +117,8 @@ export async function sendOrderConfirmationToCustomer(
     card_discount_amount?: number;
     payment_method?: string;
     store_url?: string;
-  }
+  },
+  sender?: StoreEmailSender,
 ) {
   if (!process.env.RESEND_API_KEY) return;
 
@@ -174,12 +189,7 @@ export async function sendOrderConfirmationToCustomer(
     ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
 
-  await getResend().emails.send({
-    from: FROM,
-    to,
-    subject: `Comanda ta ${order.order_number} a fost primita`,
-    html: baseTemplate(content),
-  });
+  await sendStoreOrEdinio(sender, to, `Comanda ta ${order.order_number} a fost primita`, content);
 }
 
 export async function sendAbandonedCartRecovery(
@@ -194,7 +204,8 @@ export async function sendAbandonedCartRecovery(
     message?: string;
     discountCode?: string | null;
     unsubscribeUrl?: string | null;
-  }
+  },
+  sender?: StoreEmailSender,
 ) {
   if (!process.env.RESEND_API_KEY) return;
   const color = data.color || "#1AB554";
@@ -244,12 +255,7 @@ export async function sendAbandonedCartRecovery(
     </p>` : ""}
   `;
 
-  await getResend().emails.send({
-    from: FROM,
-    to,
-    subject: `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`,
-    html: baseTemplate(content),
-  });
+  await sendStoreOrEdinio(sender, to, `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`, content);
 }
 
 export async function sendAccountWelcomeEmail(
@@ -686,7 +692,8 @@ export async function sendNewOrderEmail(
     delivery_type?: string | null;
     locker_name?: string | null;
     custom_fields?: Record<string, string> | null;
-  }
+  },
+  sender?: StoreEmailSender,
 ) {
   if (!process.env.RESEND_API_KEY) return;
 
@@ -781,12 +788,7 @@ export async function sendNewOrderEmail(
     </div>
   `;
 
-  await getResend().emails.send({
-    from: FROM,
-    to,
-    subject: `Comanda noua ${order.order_number} - ${order.customer_name}`,
-    html: baseTemplate(content),
-  });
+  await sendStoreOrEdinio(sender, to, `Comanda noua ${order.order_number} - ${order.customer_name}`, content);
 }
 
 // ── Order status change → Customer ──────────────────────────────────────────
@@ -836,7 +838,8 @@ export async function sendOrderStatusToCustomer(
     business_name: string;
     awb?: string | null;
     store_url?: string;
-  }
+  },
+  sender?: StoreEmailSender,
 ) {
   if (!process.env.RESEND_API_KEY) return;
 
@@ -877,19 +880,15 @@ export async function sendOrderStatusToCustomer(
     ${returnLink}
   `;
 
-  await getResend().emails.send({
-    from: FROM,
-    to,
-    subject: `${cfg.subject} — ${order.order_number}`,
-    html: baseTemplate(content),
-  });
+  await sendStoreOrEdinio(sender, to, `${cfg.subject} — ${order.order_number}`, content);
 }
 
 // ── Custom message from merchant → Customer ─────────────────────────────────
 
 export async function sendCustomerMessage(
   to: string,
-  data: { subject: string; message: string; businessName: string; orderNumber: string }
+  data: { subject: string; message: string; businessName: string; orderNumber: string },
+  sender?: StoreEmailSender,
 ): Promise<{ success: true } | { error: string }> {
   if (!process.env.RESEND_API_KEY) return { error: "Serviciul de email nu este configurat." };
 
@@ -902,12 +901,7 @@ export async function sendCustomerMessage(
   `;
 
   try {
-    await getResend().emails.send({
-      from: FROM,
-      to,
-      subject: data.subject,
-      html: baseTemplate(content),
-    });
+    await sendStoreOrEdinio(sender, to, data.subject, content);
     return { success: true };
   } catch {
     return { error: "Trimiterea emailului a esuat. Incearca din nou." };

@@ -8,6 +8,7 @@ import type { SmsoConfig } from "@/lib/smso";
 import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
 import type { NoticeConfig } from "@/lib/notice";
 import { sendAbandonedCartRecovery } from "@/lib/email";
+import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
 import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
@@ -330,6 +331,7 @@ export async function sendAbandonedCartEmail(
 
   try {
     const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
+    const emailSender = await getStoreEmailSender(supabase, businessId);
     await sendAbandonedCartRecovery(cart.email, {
       storeName: biz.store_name ?? biz.business_name,
       recoverUrl: buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null),
@@ -339,7 +341,7 @@ export async function sendAbandonedCartEmail(
       color: biz.primary_color ?? "#1AB554",
       message: message?.trim() ? interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name }) : undefined,
       discountCode: discountCode?.trim() || undefined,
-    });
+    }, emailSender);
   } catch {
     return { error: "Emailul nu a putut fi trimis." };
   }

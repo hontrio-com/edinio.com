@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { sendAbandonedCartRecovery } from "@/lib/email";
+import { getStoreEmailSender } from "@/lib/email/sender";
 import { sendSms, type SmsoConfig } from "@/lib/smso";
 import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
 import type { NoticeConfig } from "@/lib/notice";
@@ -147,6 +148,7 @@ export async function GET(req: NextRequest) {
         const optedOut = !!(cart.email && optoutSet.has(`${store.businessId}:${cart.email.toLowerCase()}`));
         if (!cart.email || optedOut) { await advance(admin, cart.id, cart, now); continue; }
         try {
+          const emailSender = await getStoreEmailSender(admin, store.businessId);
           await sendAbandonedCartRecovery(cart.email, {
             storeName,
             recoverUrl,
@@ -157,7 +159,7 @@ export async function GET(req: NextRequest) {
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,
             unsubscribeUrl: `${PLATFORM_ORIGIN}/api/recovery/unsubscribe?b=${store.businessId}&e=${encodeURIComponent(cart.email)}`,
-          });
+          }, emailSender);
           await advance(admin, cart.id, cart, now, "email");
           sent++;
         } catch { /* leave for next run */ }

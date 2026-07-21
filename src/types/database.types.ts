@@ -2639,6 +2639,7 @@ export type Database = {
           min_order_amount: number | null
           netopia_config: Json | null
           notice_config: Json | null
+          email_config: Json
           notifications_config: Json
           oblio_config: Json | null
           olx_config: Json
@@ -2691,6 +2692,7 @@ export type Database = {
           min_order_amount?: number | null
           netopia_config?: Json | null
           notice_config?: Json | null
+          email_config?: Json
           notifications_config?: Json
           oblio_config?: Json | null
           olx_config?: Json
@@ -2743,6 +2745,7 @@ export type Database = {
           min_order_amount?: number | null
           netopia_config?: Json | null
           notice_config?: Json | null
+          email_config?: Json
           notifications_config?: Json
           oblio_config?: Json | null
           olx_config?: Json

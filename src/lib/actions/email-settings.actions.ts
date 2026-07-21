@@ -94,7 +94,7 @@ export async function sendTestEmail(businessId: string): Promise<{ success: true
 export async function updateEmailTemplate(
   businessId: string,
   kind: EmailTemplateKind,
-  override: { subject?: string; intro?: string },
+  override: { subject?: string; heading?: string; intro?: string; button?: string },
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -104,11 +104,37 @@ export async function updateEmailTemplate(
   const config = await loadConfig(supabase, businessId);
   const templates = { ...(config.templates ?? {}) };
   const subject = override.subject?.trim() || undefined;
+  const heading = override.heading?.trim() || undefined;
   const intro = override.intro?.trim() || undefined;
-  if (!subject && !intro) delete templates[kind];
-  else templates[kind] = { subject, intro };
+  const button = override.button?.trim() || undefined;
+  if (!subject && !heading && !intro && !button) delete templates[kind];
+  else templates[kind] = { subject, heading, intro, button };
 
   const ok = await saveConfig(supabase, businessId, { ...config, templates });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+// Email-level branding overrides (logo + accent color) shared by every email
+// kind. Passing logo/color = null or "" clears that override (falls back to the
+// store's own logo/color).
+export async function updateEmailBranding(
+  businessId: string,
+  input: { logo?: string | null; color?: string },
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const config = await loadConfig(supabase, businessId);
+  const branding = { ...(config.branding ?? {}) };
+  if (input.logo !== undefined) branding.logo = input.logo?.trim() ? input.logo.trim() : undefined;
+  if (input.color !== undefined) branding.color = input.color?.trim() ? input.color.trim() : undefined;
+  const cleaned = branding.logo || branding.color ? branding : undefined;
+
+  const ok = await saveConfig(supabase, businessId, { ...config, branding: cleaned });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath("/dashboard/settings");
   return { success: true };

@@ -159,8 +159,9 @@ export async function sendOrderConfirmationToCustomer(
             ? "Card online (Revolut)"
             : "ramburs la livrare";
 
-  const { subject, intro } = renderTemplate(sender, "order_confirmation", {
+  const { subject, intro, heading } = renderTemplate(sender, "order_confirmation", {
     subject: `Comanda ta ${order.order_number} a fost primita`,
+    heading: "Comanda ta a fost plasata!",
     intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${order.customer_name}</strong>! Comanda ta la <strong>${order.business_name}</strong> a fost primita si va fi procesata in curand.</p>`,
   }, {
     nume_client: order.customer_name,
@@ -169,7 +170,7 @@ export async function sendOrderConfirmationToCustomer(
     total: formatPrice(order.total),
   });
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda ta a fost plasata!</h2>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${heading}</h2>
     ${intro}
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;box-sizing:border-box;overflow:hidden;">
@@ -231,9 +232,11 @@ export async function sendAbandonedCartRecovery(
     )
     .join("");
 
-  const { subject, intro: tplIntro } = renderTemplate(sender, "abandoned_cart", {
+  const { subject, intro: tplIntro, heading, button } = renderTemplate(sender, "abandoned_cart", {
     subject: `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`,
+    heading: "Ti-au ramas produse in cos",
     intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${first}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${data.storeName}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`,
+    button: "Finalizeaza comanda",
   }, {
     nume_client: first ?? "",
     nume_magazin: data.storeName,
@@ -244,7 +247,7 @@ export async function sendAbandonedCartRecovery(
     : tplIntro;
 
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Ti-au ramas produse in cos</h2>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${heading}</h2>
     ${intro}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
       <tr><td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cosul tau</td></tr>
@@ -264,7 +267,7 @@ export async function sendAbandonedCartRecovery(
     </table>` : ""}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
       <tr><td align="center">
-        <a href="${data.recoverUrl}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">Finalizeaza comanda</a>
+        <a href="${data.recoverUrl}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">${button}</a>
       </td></tr>
     </table>
     ${data.unsubscribeUrl ? `
@@ -768,8 +771,9 @@ export async function sendNewOrderEmail(
 
   const dashboardUrl = `${SITE_URL}/dashboard/orders/${order.order_id}`;
 
-  const { subject, intro } = renderTemplate(sender, "new_order", {
+  const { subject, intro, heading } = renderTemplate(sender, "new_order", {
     subject: `Comanda noua ${order.order_number} - ${order.customer_name}`,
+    heading: "Comanda noua!",
     intro: `<p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Ai primit o comanda noua la magazinul <strong>${esc(order.business_name)}</strong>.</p>`,
   }, {
     nume_magazin: order.business_name,
@@ -778,7 +782,7 @@ export async function sendNewOrderEmail(
     total: formatPrice(order.total),
   });
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda noua!</h2>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${heading}</h2>
     ${intro}
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:8px;box-sizing:border-box;overflow:hidden;">

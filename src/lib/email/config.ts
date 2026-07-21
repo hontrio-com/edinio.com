@@ -21,12 +21,22 @@ export type EmailTemplateKind =
 
 export interface EmailTemplateOverride {
   subject?: string;
-  intro?: string;         // rich-text HTML: the merchant's own message/greeting
+  heading?: string;       // plain text: the big title inside the email
+  intro?: string;         // plain text (line breaks kept): the merchant's message/greeting
+  button?: string;        // plain text: the call-to-action label (where the email has one)
+}
+
+// Email-level branding overrides (shared by every email kind), so a merchant can
+// use a logo / accent color specific to their emails without touching the store.
+export interface EmailBrandingOverride {
+  logo?: string | null;
+  color?: string;
 }
 
 export interface EmailConfig {
   smtp?: Partial<SmtpConfig>;
   templates?: Partial<Record<EmailTemplateKind, EmailTemplateOverride>>;
+  branding?: EmailBrandingOverride;
 }
 
 export interface EmailBranding {
@@ -44,7 +54,7 @@ export interface StoreEmailSender {
 
 export function parseEmailConfig(raw: unknown): EmailConfig {
   const c = (raw ?? {}) as EmailConfig;
-  return { smtp: c.smtp, templates: c.templates };
+  return { smtp: c.smtp, templates: c.templates, branding: c.branding };
 }
 
 /** SMTP is usable only when enabled and every required field is present. */
@@ -63,12 +73,14 @@ export interface SenderBusiness {
 
 export function buildStoreSender(emailConfig: EmailConfig, business: SenderBusiness): StoreEmailSender {
   const smtp = emailConfig.smtp;
+  const bo = emailConfig.branding;
   return {
     smtp: smtpReady(smtp) ? smtp : undefined,
     branding: {
       storeName: business.store_name || business.business_name,
-      logoUrl: business.logo_url,
-      color: business.primary_color || "#1AB554",
+      // Email-specific logo/color override, falling back to the store's own.
+      logoUrl: bo?.logo ? bo.logo : business.logo_url,
+      color: bo?.color || business.primary_color || "#1AB554",
       storeUrl: storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain }),
     },
     templates: emailConfig.templates ?? {},

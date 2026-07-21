@@ -90,6 +90,10 @@ export default async function SettingsPage({ searchParams }: Props) {
       color: bizRow?.primary_color || "#1AB554",
       storeUrl: seoPreviewUrl,
     },
+    emailBranding: {
+      logo: emailCfg.branding?.logo ?? null,
+      color: emailCfg.branding?.color ?? null,
+    },
   };
 
   type CourierCfg = Record<string, unknown>;

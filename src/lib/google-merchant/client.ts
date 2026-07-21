@@ -136,3 +136,16 @@ export function createNotificationSubscription(accessToken: string, accountId: s
 export function deleteNotificationSubscription(accessToken: string, subscriptionName: string) {
   return call(accessToken, "DELETE", `/${V.notifications}/${subscriptionName}`);
 }
+
+// ── Account issues (account-level problems: shipping/tax not configured, policy) ──
+export interface MerchantAccountIssue {
+  title?: string;
+  severity?: string;      // CRITICAL | ERROR | SUGGESTION
+  detail?: string;
+  documentationUri?: string;
+}
+export function listAccountIssues(accessToken: string, accountId: string) {
+  return call<{ accountIssues?: MerchantAccountIssue[] }>(
+    accessToken, "GET", `/${V.accounts}/accounts/${accountId}/issues?languageCode=ro&pageSize=100`,
+  );
+}

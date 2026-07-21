@@ -1126,9 +1126,11 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
   // Variable product: the card opens the option picker instead of adding directly.
   const isVariable = parseVariants(product.page_sections) !== null;
 
+  const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
+
   return (
     <div className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
-      <a href={`${basePath}/product/${product.slug}`} className="block">
+      <a href={`${basePath}/product/${product.slug}`} className="block" onClick={fireSelect}>
         <div className="relative aspect-square bg-muted/40 overflow-hidden">
           {imageUrl ? (
             <Image
@@ -1190,7 +1192,7 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
       </a>
 
       <div className="p-3 sm:p-4 flex flex-col flex-1">
-        <a href={`${basePath}/product/${product.slug}`} className="flex-1">
+        <a href={`${basePath}/product/${product.slug}`} className="flex-1" onClick={fireSelect}>
           <h3 className="font-semibold text-foreground text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
             {product.name}
           </h3>
@@ -1868,6 +1870,17 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     (currentPage - 1) * PRODUCTS_PER_PAGE,
     currentPage * PRODUCTS_PER_PAGE,
   );
+
+  // GA4 view_item_list for the visible catalog page (fires on filter / page change).
+  useEffect(() => {
+    if (paginatedProducts.length === 0) return;
+    gtagEvent("view_item_list", {
+      item_list_id: "catalog",
+      item_list_name: "Produse",
+      items: paginatedProducts.map((p, i) => ({ item_id: p.id, item_name: p.name, price: Number(p.price) || 0, index: (currentPage - 1) * PRODUCTS_PER_PAGE + i, quantity: 1 })),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, filteredProducts]);
 
   // Reset to page 1 when filters change — but not on the initial mount, which
   // would clobber a page restored from the URL.

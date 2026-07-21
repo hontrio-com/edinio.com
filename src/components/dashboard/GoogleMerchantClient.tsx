@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import {
   startGoogleMerchantOAuth, listMerchantAccounts, selectMerchantAccount,
-  disconnectMerchant, setMerchantSettings, queueSyncAll, setCategoryMap,
-  type MerchantStatus, type MerchantProductRow,
+  disconnectMerchant, setMerchantSettings, queueSyncAll, setCategoryMap, getMerchantAccountIssues,
+  type MerchantStatus, type MerchantProductRow, type MerchantAccountIssueRow,
 } from "@/lib/actions/google-merchant.actions";
 import { GOOGLE_CATEGORIES } from "@/lib/google-merchant/taxonomy";
 import { cn } from "@/lib/utils/cn";
@@ -160,6 +160,33 @@ function AccountPicker({ businessId }: { businessId: string }) {
   );
 }
 
+function AccountIssuesBanner({ businessId }: { businessId: string }) {
+  const [issues, setIssues] = useState<MerchantAccountIssueRow[]>([]);
+  useEffect(() => {
+    let alive = true;
+    getMerchantAccountIssues(businessId).then((rows) => { if (alive) setIssues(rows); });
+    return () => { alive = false; };
+  }, [businessId]);
+  if (issues.length === 0) return null;
+  return (
+    <Callout variant="warning" icon={AlertTriangle}>
+      <p className="font-semibold">Probleme la nivel de cont Merchant Center</p>
+      <p className="mt-0.5 text-xs">Acestea pot bloca aprobarea tuturor produselor până le rezolvi în Merchant Center:</p>
+      <ul className="mt-2 space-y-1.5">
+        {issues.map((i, idx) => (
+          <li key={idx} className="text-xs">
+            <span className="font-medium">{i.title}</span>
+            {i.detail ? ` — ${i.detail}` : ""}
+            {i.documentationUri && (
+              <> <a href={i.documentationUri} target="_blank" rel="noreferrer" className="font-medium underline">soluție</a></>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Callout>
+  );
+}
+
 function ConnectedDashboard({ businessId, status, products, categories }: {
   businessId: string; status: MerchantStatus; products: MerchantProductRow[]; categories: string[];
 }) {
@@ -188,6 +215,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
 
   return (
     <div className="space-y-6">
+      <AccountIssuesBanner businessId={businessId} />
       {/* Connection banner */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
         <div className="flex min-w-0 items-center gap-3">

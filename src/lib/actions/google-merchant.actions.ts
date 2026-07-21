@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { buildAuthUrl, signState, googleMerchantConfigured, getAccessToken } from "@/lib/google-merchant/oauth";
-import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription } from "@/lib/google-merchant/client";
+import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription, listAccountIssues } from "@/lib/google-merchant/client";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 import {
   DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig,
@@ -360,4 +360,26 @@ export async function getMerchantProducts(businessId: string): Promise<MerchantP
       error: r.error,
     };
   });
+}
+
+// ── Account-level issues (surfaces WHY products may be disapproved: shipping/tax
+// not set up in Merchant Center, policy problems, etc. — not visible per-product). ─
+export interface MerchantAccountIssueRow { title: string; severity: string; detail?: string; documentationUri?: string; }
+
+export async function getMerchantAccountIssues(businessId: string): Promise<MerchantAccountIssueRow[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return [];
+
+  const config = await loadConfig(supabase, businessId);
+  if (!config.connected || !config.account_id || !config.refresh_token) return [];
+  const token = await getAccessToken(config.refresh_token);
+  if (!token) return [];
+
+  const res = await listAccountIssues(token, config.account_id);
+  if ("error" in res) return [];
+  return (res.data.accountIssues ?? [])
+    .map((i) => ({ title: i.title ?? "Problemă cont", severity: (i.severity ?? "").toUpperCase(), detail: i.detail, documentationUri: i.documentationUri }))
+    .filter((i) => i.severity === "CRITICAL" || i.severity === "ERROR");
 }

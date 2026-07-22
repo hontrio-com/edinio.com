@@ -148,7 +148,7 @@ export default async function CustomPage({ params }: Props) {
         />
       </main>
       <StoreFooter
-        business={{ business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, store_city: business.store_city, primary_color: color, social }}
+        business={{ business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, primary_color: color, social, cui: business.cui, reg_com: business.reg_com, address: business.address, city: business.city, county: business.county, store_address: business.store_address, store_city: business.store_city, store_county: business.store_county }}
         menu={menu}
         basePath={basePath}
         businessId={business.id}

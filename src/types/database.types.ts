@@ -227,6 +227,7 @@ export type Database = {
           niche_id: string | null
           phone: string | null
           primary_color: string
+          reg_com: string | null
           slug: string
           social: Json
           store_address: string | null
@@ -262,6 +263,7 @@ export type Database = {
           niche_id?: string | null
           phone?: string | null
           primary_color?: string
+          reg_com?: string | null
           slug: string
           social?: Json
           store_address?: string | null
@@ -297,6 +299,7 @@ export type Database = {
           niche_id?: string | null
           phone?: string | null
           primary_color?: string
+          reg_com?: string | null
           slug?: string
           social?: Json
           store_address?: string | null

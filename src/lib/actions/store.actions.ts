@@ -220,7 +220,7 @@ export async function updatePageContent(businessId: string, pageContent: Record<
 
 export async function updateGeneralSettings(
   businessId: string,
-  business: { business_name: string; address: string; city: string; county: string; phone: string; email: string; cui: string },
+  business: { business_name: string; address: string; city: string; county: string; phone: string; email: string; cui: string; reg_com: string },
   orderNumberFormat: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -239,6 +239,7 @@ export async function updateGeneralSettings(
     phone: business.phone || null,
     email: business.email || null,
     cui: business.cui || null,
+    reg_com: business.reg_com || null,
     updated_at: new Date().toISOString(),
   }).eq("id", businessId);
   if (bizError) {

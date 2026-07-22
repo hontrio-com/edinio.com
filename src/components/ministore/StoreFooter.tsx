@@ -2,6 +2,7 @@ import Image from "next/image";
 import { Globe } from "lucide-react";
 import { InstagramIcon, FacebookIcon, TikTokIcon, YoutubeIcon } from "./social-icons";
 import { NetopiaBadge } from "./NetopiaBadge";
+import { CompanyIdentity } from "./CompanyIdentity";
 import { EdinioCredit } from "./EdinioCredit";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { cdnImage } from "@/lib/cdn-image";
@@ -18,7 +19,12 @@ const POLICY_LINKS = [
 ] as const;
 
 export function StoreFooter({ business, menu, basePath, businessId, footerLogoSize = 36 }: {
-  business: { business_name: string; store_name: string | null; logo_url: string | null; store_city: string | null; primary_color: string; social: Social };
+  business: {
+    business_name: string; store_name: string | null; logo_url: string | null; primary_color: string; social: Social;
+    cui: string | null; reg_com: string | null;
+    address: string | null; city: string | null; county: string | null;
+    store_address: string | null; store_city: string | null; store_county: string | null;
+  };
   menu: MenuItem[];
   basePath: string;
   businessId: string;
@@ -55,6 +61,8 @@ export function StoreFooter({ business, menu, basePath, businessId, footerLogoSi
         <div className="h-px bg-white/[0.06]" />
 
         <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
+          {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
+          <CompanyIdentity business={business} />
           {pageLinks.length > 0 && (
             <div className="flex-1">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Pagini</p>

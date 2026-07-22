@@ -9,6 +9,7 @@ interface AnafDateGenerale {
   adresa?: string;
   judet?: string;
   cui?: number;
+  nrRegCom?: string;
 }
 
 interface AnafAdresaDomiciliu {
@@ -28,6 +29,7 @@ interface AnafFoundItem {
   denumire?: string;
   adresa?: string;
   judet?: string;
+  nrRegCom?: string;
 }
 
 interface AnafResponse {
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
     const adresa = item.adresa_domiciliu_fiscal;
 
     const businessName = (dateGenerale.denumire ?? "").trim();
-    let county = (adresa?.ddenumire_Judet ?? dateGenerale.judet ?? "").trim();
+    const county = (adresa?.ddenumire_Judet ?? dateGenerale.judet ?? "").trim();
     let city = (adresa?.ddenumire_Localitate ?? "").trim();
 
     // Build street address from domiciliu fiscal fields
@@ -120,6 +122,7 @@ export async function POST(req: NextRequest) {
       county: capitalize(county),
       city: capitalize(city),
       address: street,
+      reg_com: (dateGenerale.nrRegCom ?? "").trim(),
     });
   } catch (err) {
     clearTimeout(timer);

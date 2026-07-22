@@ -146,6 +146,7 @@ interface BusinessData {
   phone: string | null;
   email: string | null;
   cui: string | null;
+  reg_com: string | null;
   custom_domain: string | null;
 }
 
@@ -318,6 +319,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     phone: businessData?.phone ?? "",
     email: businessData?.email ?? "",
     cui: businessData?.cui ?? "",
+    reg_com: businessData?.reg_com ?? "",
   });
   const [anafLoading, setAnafLoading] = useState(false);
   const [orderFormat, setOrderFormat] = useState<"sequential" | "random">(
@@ -517,7 +519,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cui: biz.cui }),
       });
-      const data = await res.json() as { business_name?: string; county?: string; city?: string; address?: string; error?: string };
+      const data = await res.json() as { business_name?: string; county?: string; city?: string; address?: string; reg_com?: string; error?: string };
       if (!res.ok || data.error) {
         toast.error(data.error ?? "CUI negasit in ANAF.");
       } else {
@@ -527,6 +529,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           county: data.county ?? b.county,
           city: data.city ?? b.city,
           address: data.address ?? b.address,
+          reg_com: data.reg_com ?? b.reg_com,
         }));
         toast.success("Date completate automat din ANAF.");
       }
@@ -902,6 +905,17 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       </Button>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">Apare pe facturile emise catre tine. Butonul completeaza automat datele din ANAF.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Nr. Registrul Comertului</label>
+                    <input
+                      type="text"
+                      value={biz.reg_com}
+                      onChange={(e) => setBiz(b => ({ ...b, reg_com: e.target.value }))}
+                      className={inputCls}
+                      placeholder="ex: J40/1234/2017"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">Se afiseaza public in footer-ul magazinului. Obligatoriu pentru procesatorii de plati (ex: Netopia).</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">Adresa</label>

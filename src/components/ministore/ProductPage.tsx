@@ -14,6 +14,7 @@ import { getProductPriceRange } from "@/lib/utils/product-price";
 import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
 import { NetopiaBadge } from "./NetopiaBadge";
+import { CompanyIdentity } from "./CompanyIdentity";
 import { EdinioCredit } from "./EdinioCredit";
 import { StoreHeader } from "./StoreHeader";
 import type { MenuItem } from "@/lib/pages/menu";
@@ -1036,6 +1037,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
           {/* Middle: policies + consumer protection */}
           <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
+            {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
+            <CompanyIdentity business={business} />
             <div className="flex-1">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
               <div className="flex flex-wrap gap-x-5 gap-y-1.5">

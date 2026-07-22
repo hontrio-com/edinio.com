@@ -1896,6 +1896,7 @@ export type Database = {
         Row: {
           business_id: string
           card_discount_amount: number
+          cod_discount_amount: number
           cargus_awb_number: string | null
           cargus_service_name: string | null
           colete_awb_number: string | null
@@ -1963,6 +1964,7 @@ export type Database = {
         Insert: {
           business_id: string
           card_discount_amount?: number
+          cod_discount_amount?: number
           cargus_awb_number?: string | null
           cargus_service_name?: string | null
           colete_awb_number?: string | null
@@ -2030,6 +2032,7 @@ export type Database = {
         Update: {
           business_id?: string
           card_discount_amount?: number
+          cod_discount_amount?: number
           cargus_awb_number?: string | null
           cargus_service_name?: string | null
           colete_awb_number?: string | null
@@ -2621,6 +2624,7 @@ export type Database = {
           brevo_config: Json | null
           business_id: string
           card_discount_config: Json
+          cod_discount_config: Json
           cargus_config: Json | null
           colete_config: Json | null
           cookie_banner_config: Json | null
@@ -2674,6 +2678,7 @@ export type Database = {
           brevo_config?: Json | null
           business_id: string
           card_discount_config?: Json
+          cod_discount_config?: Json
           cargus_config?: Json | null
           colete_config?: Json | null
           cookie_banner_config?: Json | null
@@ -2727,6 +2732,7 @@ export type Database = {
           brevo_config?: Json | null
           business_id?: string
           card_discount_config?: Json
+          cod_discount_config?: Json
           cargus_config?: Json | null
           colete_config?: Json | null
           cookie_banner_config?: Json | null

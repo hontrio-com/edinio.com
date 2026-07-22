@@ -17,7 +17,7 @@ import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
-import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
@@ -104,7 +104,10 @@ function IconInput({ icon: Icon, error, children }: {
 
 export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, customizationFields, cartItems, onCartConsumed, fbtOffer }: Props) {
   const color = business.primary_color;
-  const hasTiers = tiers && tiers.length > 0;
+  // Upsell-ul de cantitate se suprima in fluxul "Cumpara impreuna" (FBT): setul FBT
+  // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
+  // discount FBT), fara ca discountul de cantitate sa se cumuleze peste cel de set.
+  const hasTiers = !!tiers && tiers.length > 0 && !fbtOffer;
   const hasCustomization = customizationFields && customizationFields.length > 0;
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
   const [newsletterOffer, setNewsletterOffer] = useState(false);
@@ -112,6 +115,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
+  const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
   // Discount code is OFF by default (hidden unless the merchant enabled it in the editor).
@@ -211,8 +215,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Updates live as the customer switches method.
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
+  // Ramburs discount (mirrors the server): only when the customer picks cash on delivery.
+  const codDiscountAmount = computeCodDiscount(codDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
   // Round to 2 decimals (cents): float math would otherwise show e.g. 179.35999999999999.
-  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount) * 100) / 100);
+  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount) * 100) / 100);
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
@@ -306,6 +312,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       setPaymentMethods(methods);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
+      setCodDiscountConfig(data.cod_discount);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
@@ -614,17 +621,22 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <p className="font-bold text-sm text-foreground truncate">{product.name}</p>
                     <p className="text-sm font-bold mt-0.5" style={{ color }}>{product.price} lei</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
-                      <Minus size={12} />
-                    </button>
-                    <span className="w-5 text-center text-sm font-bold tabular-nums">{quantity}</span>
-                    <button type="button" onClick={() => setQuantity(q => q + 1)}
-                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
-                      <Plus size={12} />
-                    </button>
-                  </div>
+                  {/* In fluxul FBT cantitatea e fixa la 1 buc (setul afisat pe card); steperul apare doar in comanda simpla. */}
+                  {fbtOffer ? (
+                    <span className="text-xs font-semibold text-muted-foreground shrink-0">1 buc</span>
+                  ) : (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                        className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
+                        <Minus size={12} />
+                      </button>
+                      <span className="w-5 text-center text-sm font-bold tabular-nums">{quantity}</span>
+                      <button type="button" onClick={() => setQuantity(q => q + 1)}
+                        className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
+                        <Plus size={12} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1119,6 +1131,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <div className="flex justify-between" style={{ color }}>
                     <span>Reducere plata cu cardul</span>
                     <span className="font-semibold">-{cardDiscountAmount.toFixed(2)} lei</span>
+                  </div>
+                )}
+                {codDiscountAmount > 0 && (
+                  <div className="flex justify-between" style={{ color }}>
+                    <span>Reducere plata ramburs</span>
+                    <span className="font-semibold">-{codDiscountAmount.toFixed(2)} lei</span>
                   </div>
                 )}
                 {appliedDiscount?.type === "free_shipping" && (

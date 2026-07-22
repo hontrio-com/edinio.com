@@ -295,15 +295,22 @@ export async function POST(req: NextRequest) {
         // Send admin notification
         const { sendDomainOrderToAdmin } = await import("@/lib/email");
         const ci = contactInfo as Record<string, string>;
+        // Titularul poate fi persoana fizica (nume) sau juridica (firma).
+        const registrantName = ci.entityType === "pj"
+          ? (ci.companyname || "").trim()
+          : (ci.fullname || `${ci.firstname ?? ""} ${ci.lastname ?? ""}`).trim();
         sendDomainOrderToAdmin({
           orderId: createdOrder?.id ?? domain,
           domain,
           tld,
           period: Number(period) || 1,
           totalPrice: domainPrice,
-          customerName: `${ci.firstname ?? ""} ${ci.lastname ?? ""}`.trim(),
+          customerName: registrantName || ci.email || "N/A",
           customerEmail: ci.email ?? session.customer_email ?? "",
           businessName: bizData?.business_name ?? "N/A",
+          entityType: ci.entityType === "pj" ? "pj" : "pf",
+          cnp: ci.cnp ?? "",
+          cui: ci.cui ?? "",
         }).catch((err) => console.error("[webhook] domain admin email failed:", err));
       }
 

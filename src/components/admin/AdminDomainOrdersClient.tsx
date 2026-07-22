@@ -299,14 +299,35 @@ export function AdminDomainOrdersClient({ orders }: { orders: DomainOrder[] }) {
               <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date titular</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-xs text-muted-foreground">Nume: </span>
-                    <span className="font-medium">{selected.contact_info?.firstname} {selected.contact_info?.lastname}</span>
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground">Tip: </span>
+                    <span className="font-medium">
+                      {selected.contact_info?.entityType === "pj" ? "Persoana juridica" : "Persoana fizica"}
+                    </span>
                   </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">Firma: </span>
-                    <span className="font-medium">{selected.contact_info?.companyname || "—"}</span>
-                  </div>
+                  {selected.contact_info?.entityType === "pj" ? (
+                    <>
+                      <div>
+                        <span className="text-xs text-muted-foreground">Firma: </span>
+                        <span className="font-medium">{selected.contact_info?.companyname || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted-foreground">CUI: </span>
+                        <span className="font-medium">{selected.contact_info?.cui || "—"}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <span className="text-xs text-muted-foreground">Nume: </span>
+                        <span className="font-medium">{selected.contact_info?.fullname || `${selected.contact_info?.firstname ?? ""} ${selected.contact_info?.lastname ?? ""}`.trim() || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted-foreground">CNP: </span>
+                        <span className="font-medium">{selected.contact_info?.cnp || "—"}</span>
+                      </div>
+                    </>
+                  )}
                   <div>
                     <span className="text-xs text-muted-foreground">Email: </span>
                     <span className="font-medium">{selected.contact_info?.email}</span>

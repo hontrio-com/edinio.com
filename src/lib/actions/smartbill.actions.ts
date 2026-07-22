@@ -80,6 +80,7 @@ async function buildInvoiceProducts(
     discount_amount: unknown;
     discount_code: string | null;
     card_discount_amount?: unknown;
+    cod_discount_amount?: unknown;
     vat_rate: unknown;
   },
   pricesIncludeVat: boolean,
@@ -184,6 +185,22 @@ async function buildInvoiceProducts(
       ...taxFields,
     });
   }
+  // Reducerea la plata ramburs — aceeasi logica, linie de discount separata.
+  if (Number(order.cod_discount_amount) > 0) {
+    products.push({
+      isDiscount: true,
+      name: "Reducere plata ramburs",
+      measuringUnitName: "buc",
+      currency: "RON",
+      quantity: 1,
+      price: 0,
+      numberOfItems: products.length,
+      discountType: 1,
+      discountValue: -Math.abs(Number(order.cod_discount_amount)),
+      isTaxIncluded: taxIncluded,
+      ...taxFields,
+    });
+  }
 
   return products;
 }
@@ -200,6 +217,7 @@ type InvoiceableOrder = {
   discount_amount: unknown;
   discount_code: string | null;
   card_discount_amount?: unknown;
+  cod_discount_amount?: unknown;
   vat_rate: unknown;
 };
 

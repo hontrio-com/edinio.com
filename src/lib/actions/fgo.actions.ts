@@ -79,6 +79,7 @@ async function buildItems(
     discount_amount: unknown;
     discount_code: string | null;
     card_discount_amount?: unknown;
+    cod_discount_amount?: unknown;
     total: unknown;
     subtotal: unknown;
   },
@@ -139,6 +140,18 @@ async function buildItems(
       name: "Reducere plata online",
       quantity: 1,
       unitPrice: toNet(cardDiscount),
+      vatRate: effectiveVat,
+      unit: "BUC",
+      isDiscount: true,
+    });
+  }
+  // Reducerea la plata ramburs — aceeasi logica, linie de discount separata.
+  const codDiscount = Number(order.cod_discount_amount);
+  if (codDiscount > 0) {
+    lineItems.push({
+      name: "Reducere plata ramburs",
+      quantity: 1,
+      unitPrice: toNet(codDiscount),
       vatRate: effectiveVat,
       unit: "BUC",
       isDiscount: true,

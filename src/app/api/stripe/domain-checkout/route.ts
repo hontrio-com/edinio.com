@@ -9,9 +9,13 @@ interface DomainCheckoutBody {
   pricePerYear: number;
   businessId: string;
   contact: {
+    entityType: "pf" | "pj";
     firstname: string;
     lastname: string;
+    fullname: string;
     companyname: string;
+    cnp: string;
+    cui: string;
     email: string;
     phonenumber: string;
     address1: string;

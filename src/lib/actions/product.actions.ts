@@ -262,7 +262,7 @@ export async function duplicateProduct(productId: string, businessId: string) {
     original.slug ? `${original.slug}-copie` : null,
   );
 
-  const { error } = await supabase.from("products").insert({
+  const { data: created, error } = await supabase.from("products").insert({
     business_id: businessId,
     name: `${original.name} (copie)`,
     slug,
@@ -278,14 +278,15 @@ export async function duplicateProduct(productId: string, businessId: string) {
     is_active: false,
     weight_grams: original.weight_grams,
     page_sections: original.page_sections as never,
-  });
+  }).select("id").single();
 
   if (error) {
     logError({ action: "duplicateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la duplicare." };
   }
   revalidatePath("/dashboard/products");
-  return { success: true };
+  // Intoarcem id-ul ca UI-ul sa deschidă direct editarea copiei.
+  return { success: true, id: created.id };
 }
 
 export async function deleteProduct(productId: string, businessId: string) {

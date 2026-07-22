@@ -21,7 +21,7 @@ import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
-import { computeCardDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
@@ -228,7 +228,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config")
+      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -316,13 +316,20 @@ export async function placeOrder(data: {
     data.payment_method,
     subtotal + extrasTotal - discountAmount,
   );
+  // Ramburs (cash-on-delivery) discount — mutually exclusive with the card discount
+  // (an order has a single payment method), computed on the same goods base.
+  const codDiscount = computeCodDiscount(
+    parseCardDiscountConfig(cfgRow?.cod_discount_config),
+    data.payment_method,
+    subtotal + extrasTotal - discountAmount,
+  );
 
   // Shipping clamped non-negative; zeroed when free-shipping rules apply.
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   let shipping = Math.max(0, round2(data.shipping_cost));
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount + shipping));
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping));
 
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -389,6 +396,7 @@ export async function placeOrder(data: {
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
     card_discount_amount: cardDiscount,
+    cod_discount_amount: codDiscount,
     total,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
     payment_method: data.payment_method ?? "cash_on_delivery",
@@ -461,6 +469,7 @@ export async function placeOrder(data: {
         discount_code: data.discount_code,
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
+        cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
         payment_method: data.payment_method ?? "cash_on_delivery",
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
@@ -1050,7 +1059,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config")
+      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1132,12 +1141,18 @@ export async function placeCartOrder(data: {
     data.payment_method,
     subtotal + extrasTotal - discountAmount,
   );
+  // Ramburs (cash-on-delivery) discount — mutually exclusive with the card discount.
+  const codDiscount = computeCodDiscount(
+    parseCardDiscountConfig(cfgRow?.cod_discount_config),
+    data.payment_method,
+    subtotal + extrasTotal - discountAmount,
+  );
 
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   let shipping = Math.max(0, round2(data.shipping_cost));
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount + shipping + vatAddOn));
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping + vatAddOn));
 
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -1193,6 +1208,7 @@ export async function placeCartOrder(data: {
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
     card_discount_amount: cardDiscount,
+    cod_discount_amount: codDiscount,
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
@@ -1267,6 +1283,7 @@ export async function placeCartOrder(data: {
         discount_code: data.discount_code,
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
+        cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
         payment_method: data.payment_method ?? "cash_on_delivery",
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,

@@ -32,10 +32,14 @@ type DomainOrder = {
   created_at: string;
 };
 
+type EntityType = "pf" | "pj";
+
 type ContactForm = {
-  firstname: string;
-  lastname: string;
-  companyname: string;
+  entityType: EntityType;
+  fullname: string;      // Persoana fizica: nume complet
+  cnp: string;           // Persoana fizica
+  cui: string;           // Persoana juridica
+  companyname: string;   // Persoana juridica: denumire firma
   email: string;
   phonenumber: string;
   address1: string;
@@ -69,6 +73,18 @@ function splitName(fullName: string): [string, string] {
   const parts = fullName.trim().split(/\s+/);
   if (parts.length === 1) return [parts[0], parts[0]];
   return [parts[0], parts.slice(1).join(" ")];
+}
+
+// Extrage eticheta domeniului din ce tasteaza utilizatorul. Scoate un TLD tastat
+// (.ro/.com/...) INAINTE de a elimina punctele, ca "suplio.ro" si "suplio" sa dea
+// amandoua eticheta "suplio" (altfel "suplio.ro" devenea "suplioro").
+function cleanDomainLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/\.[a-z]{2,}$/, "")   // scoate TLD-ul tastat, daca exista
+    .replace(/[^a-z0-9-]/g, "");    // apoi curata restul caracterelor nepermise
 }
 
 // Vercel nameservers — used for the "full delegation" connect method, where the
@@ -124,20 +140,49 @@ export function DomainSection({
   // Buy modal
   const [buyPeriod, setBuyPeriod] = useState(1);
   const [buying, setBuying] = useState(false);
-  const [contact, setContact] = useState<ContactForm>(() => {
-    const [first, last] = splitName(profileFullName);
-    return {
-      firstname:   first,
-      lastname:    last,
-      companyname: businessName,
-      email,
-      phonenumber: phone?.replace(/\s+/g, "") ?? "",
-      address1:    address ?? "",
-      city:        city ?? "",
-      state:       county ?? "",
-      postcode:    "",
-    };
-  });
+  const [contact, setContact] = useState<ContactForm>(() => ({
+    entityType:  "pf",
+    fullname:    profileFullName,
+    cnp:         "",
+    cui:         "",
+    companyname: businessName,
+    email,
+    phonenumber: phone?.replace(/\s+/g, "") ?? "",
+    address1:    address ?? "",
+    city:        city ?? "",
+    state:       county ?? "",
+    postcode:    "",
+  }));
+  // Autocompletare ANAF pentru persoana juridica (identic cu Setari).
+  const [anafLoading, setAnafLoading] = useState(false);
+  async function lookupCui() {
+    if (!contact.cui.trim()) { toast.error("Introdu CUI-ul mai intai."); return; }
+    setAnafLoading(true);
+    try {
+      const res = await fetch("/api/anaf/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cui: contact.cui }),
+      });
+      const data = await res.json() as { business_name?: string; county?: string; city?: string; address?: string; error?: string };
+      if (!res.ok || data.error) {
+        toast.error(data.error ?? "CUI negasit in ANAF.");
+      } else {
+        setContact((c) => ({
+          ...c,
+          companyname: data.business_name ?? c.companyname,
+          state:       data.county ?? c.state,
+          city:        data.city ?? c.city,
+          address1:    data.address ?? c.address1,
+        }));
+        toast.success("Date completate automat din ANAF.");
+      }
+    } catch {
+      toast.error("Eroare la interogarea ANAF.");
+    } finally {
+      setAnafLoading(false);
+    }
+  }
 
   // Connect external domain
   const [externalInput, setExternalInput] = useState("");
@@ -183,12 +228,7 @@ export function DomainSection({
 
   // ── Cleaned domain name ────────────────────────────────────────────────────
 
-  const cleanName = domainName
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/\.[a-z]+$/, "");
+  const cleanName = cleanDomainLabel(domainName);
 
   const isValidName = cleanName.length >= 2;
 
@@ -199,12 +239,7 @@ export function DomainSection({
     setAvailability({});
     if (searchTimer.current) clearTimeout(searchTimer.current);
 
-    const clean = value
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-      .replace(/\.[a-z]+$/, "");
+    const clean = cleanDomainLabel(value);
 
     if (clean.length < 2) return;
 
@@ -235,18 +270,28 @@ export function DomainSection({
   async function handleBuy() {
     if (!selectedTld || !businessId || !isValidName) return;
 
-    const required: (keyof ContactForm)[] = [
-      "firstname", "lastname", "email", "phonenumber",
-      "address1", "city", "state", "postcode",
+    // Campuri comune, necesare pentru inregistrare indiferent de tipul titularului.
+    const commonRequired: (keyof ContactForm)[] = [
+      "email", "phonenumber", "address1", "city", "state", "postcode",
     ];
-    for (const f of required) {
-      if (!contact[f].trim()) {
+    for (const f of commonRequired) {
+      if (!String(contact[f]).trim()) {
         toast.error("Completeaza toate campurile marcate cu *.");
         return;
       }
     }
+    // Campuri specifice tipului de titular.
+    if (contact.entityType === "pf") {
+      if (!contact.fullname.trim()) { toast.error("Completeaza numele complet."); return; }
+      if (!/^\d{13}$/.test(contact.cnp.trim())) { toast.error("CNP invalid: trebuie sa aiba 13 cifre."); return; }
+    } else {
+      if (!contact.cui.trim()) { toast.error("Completeaza CUI-ul firmei."); return; }
+      if (!contact.companyname.trim()) { toast.error("Completeaza denumirea firmei (sau apasa Completeaza automat)."); return; }
+    }
 
     const fullDomain = `${cleanName}${selectedTld.tld}`;
+    // Registrarul are nevoie de prenume/nume — le derivam din numele complet (PF).
+    const [firstname, lastname] = splitName(contact.entityType === "pf" ? contact.fullname : contact.companyname);
 
     setBuying(true);
     try {
@@ -259,7 +304,22 @@ export function DomainSection({
           period:       buyPeriod,
           pricePerYear: selectedTld.price,
           businessId,
-          contact:      { ...contact, country: "RO" },
+          contact: {
+            entityType:  contact.entityType,
+            firstname:   contact.entityType === "pf" ? firstname : "",
+            lastname:    contact.entityType === "pf" ? lastname : "",
+            fullname:    contact.entityType === "pf" ? contact.fullname.trim() : "",
+            companyname: contact.entityType === "pj" ? contact.companyname.trim() : "",
+            cnp:         contact.entityType === "pf" ? contact.cnp.trim() : "",
+            cui:         contact.entityType === "pj" ? contact.cui.trim() : "",
+            email:       contact.email.trim(),
+            phonenumber: contact.phonenumber.trim(),
+            address1:    contact.address1.trim(),
+            city:        contact.city.trim(),
+            state:       contact.state.trim(),
+            postcode:    contact.postcode.trim(),
+            country:     "RO",
+          },
         }),
       });
       const data = await res.json() as { url?: string; error?: string };
@@ -857,40 +917,103 @@ export function DomainSection({
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Date titular
                 </p>
+
+                {/* Tip titular — obligatoriu de ales */}
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: "pf", label: "Persoana fizica" },
+                    { id: "pj", label: "Persoana juridica" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setContact((c) => ({ ...c, entityType: opt.id }))}
+                      className={cn(
+                        "py-2.5 rounded-xl text-sm font-semibold border transition-all",
+                        contact.entityType === opt.id
+                          ? "bg-primary text-white border-primary"
+                          : "border-border text-muted-foreground hover:border-primary/40 bg-background"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1.5">
-                      Prenume <span className="text-destructive">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={contact.firstname}
-                      onChange={(e) => setContact((c) => ({ ...c, firstname: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-1.5">
-                      Nume <span className="text-destructive">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={contact.lastname}
-                      onChange={(e) => setContact((c) => ({ ...c, lastname: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-foreground mb-1.5">
-                      Firma (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={contact.companyname}
-                      onChange={(e) => setContact((c) => ({ ...c, companyname: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
+                  {/* ── Persoana fizica ── */}
+                  {contact.entityType === "pf" && (
+                    <>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-foreground mb-1.5">
+                          Nume complet <span className="text-destructive">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={contact.fullname}
+                          onChange={(e) => setContact((c) => ({ ...c, fullname: e.target.value }))}
+                          className={inputCls}
+                          placeholder="ex: Ion Popescu"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-foreground mb-1.5">
+                          CNP <span className="text-destructive">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={contact.cnp}
+                          onChange={(e) => setContact((c) => ({ ...c, cnp: e.target.value.replace(/\D/g, "").slice(0, 13) }))}
+                          className={inputCls}
+                          placeholder="13 cifre"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── Persoana juridica ── */}
+                  {contact.entityType === "pj" && (
+                    <>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-foreground mb-1.5">
+                          CUI <span className="text-destructive">*</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={contact.cui}
+                            onChange={(e) => setContact((c) => ({ ...c, cui: e.target.value }))}
+                            className={cn(inputCls, "flex-1")}
+                            placeholder="ex: RO12345678"
+                          />
+                          <button
+                            type="button"
+                            onClick={lookupCui}
+                            disabled={anafLoading || !contact.cui.trim()}
+                            className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap shrink-0"
+                          >
+                            {anafLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                            {anafLoading ? "Se cauta..." : "Completeaza automat"}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Introdu CUI-ul si apasa &bdquo;Completeaza automat&rdquo; pentru a prelua datele firmei din ANAF.
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-foreground mb-1.5">
+                          Denumire firma <span className="text-destructive">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={contact.companyname}
+                          onChange={(e) => setContact((c) => ({ ...c, companyname: e.target.value }))}
+                          className={inputCls}
+                        />
+                      </div>
+                    </>
+                  )}
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-foreground mb-1.5">
                       Email <span className="text-destructive">*</span>

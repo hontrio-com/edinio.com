@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
@@ -254,6 +254,7 @@ interface Props {
   paymentMethods: PaymentMethodEntry[];
   paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean; klarna: boolean; revolut: boolean };
   cardDiscount: CardDiscountConfig;
+  codDiscount: CardDiscountConfig;
   cookieBanner: CookieBannerConfig;
   cookieCategories: ConsentCategory[];
   storeSeo: StoreSeo;
@@ -280,7 +281,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -486,6 +487,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateCardDiscount(businessId, cardDisc);
       if ("error" in result) toast.error(result.error);
       else toast.success("Discountul la plata cu cardul a fost salvat.");
+    });
+  }
+
+  // Discount la plata ramburs (cash on delivery) — se aplica doar cand clientul alege ramburs.
+  const [codDisc, setCodDisc] = useState<CardDiscountConfig>(codDiscount);
+  const [savingCodDisc, startCodDiscTransition] = useTransition();
+  function saveCodDiscount() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    if (codDisc.enabled && (!Number.isFinite(codDisc.value) || codDisc.value <= 0)) {
+      toast.error("Introdu o valoare mai mare ca 0 pentru discount.");
+      return;
+    }
+    if (codDisc.enabled && codDisc.type === "percent" && codDisc.value > 100) {
+      toast.error("Procentul nu poate depasi 100%.");
+      return;
+    }
+    startCodDiscTransition(async () => {
+      const result = await updateCodDiscount(businessId, codDisc);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Discountul la plata ramburs a fost salvat.");
     });
   }
 
@@ -1301,6 +1322,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     const canToggle = isIntegrated || !needsIntegration;
                     const zone = shippingZones[method.id] ?? { enabled: false, price: method.defaultPrice };
                     const autoPrice = zone.auto_price ?? true;
+                    // Pretul automat "din contract" exista doar la curierii reali integrati prin API.
+                    // "Curier propriu" si "Ridicare personala" nu au contract, deci folosesc pret fix.
+                    const supportsAutoPrice = needsIntegration && isIntegrated;
                     return (
                       <div key={method.id} className={`rounded-xl border transition-colors ${!canToggle ? "opacity-50 bg-surface border-border" : zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
                         <div className="flex items-center gap-3 p-3.5">
@@ -1331,8 +1355,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           />
                         </div>
 
-                        {/* Price mode selector — only for enabled couriers with API integration */}
-                        {zone.enabled && canToggle && isIntegrated && (
+                        {/* Price mode selector — only for real API couriers (contract auto-price) */}
+                        {zone.enabled && canToggle && supportsAutoPrice && (
                           <div className="px-3.5 pb-3 space-y-2">
                             <div className="flex items-center gap-4">
                               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -1375,8 +1399,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           </div>
                         )}
 
-                        {/* Price input for non-API couriers */}
-                        {zone.enabled && canToggle && !isIntegrated && (
+                        {/* Flat price — own / pickup and any courier without contract auto-pricing */}
+                        {zone.enabled && canToggle && !supportsAutoPrice && (
                           <div className="px-3.5 pb-3">
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs text-muted-foreground">Pret:</span>
@@ -1796,6 +1820,59 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div className="px-5 py-4 border-t border-border">
                   <Button onClick={saveCardDiscount} disabled={savingCardDisc}>
                     {savingCardDisc ? <Loader2 className="animate-spin" /> : <Save />}
+                    Salveaza
+                  </Button>
+                </div>
+              </div>
+
+              {/* Discount la plata ramburs */}
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Discount la plata ramburs</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Ofera clientilor o reducere automata cand aleg plata ramburs (la livrare). Nu se aplica la plata cu cardul.
+                    </p>
+                  </div>
+                  <Switch checked={codDisc.enabled} onCheckedChange={(v) => setCodDisc(c => ({ ...c, enabled: v }))} className="mt-1 shrink-0" aria-label={codDisc.enabled ? "Dezactiveaza" : "Activeaza"} />
+                </div>
+                {codDisc.enabled && (
+                  <div className="px-5 py-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tip discount</label>
+                      <div className="grid grid-cols-2 gap-2 max-w-sm">
+                        <button type="button" onClick={() => setCodDisc(c => ({ ...c, type: "percent" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codDisc.type === "percent" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Procent (%)
+                        </button>
+                        <button type="button" onClick={() => setCodDisc(c => ({ ...c, type: "fixed" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codDisc.type === "fixed" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Suma fixa (lei)
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                        {codDisc.type === "percent" ? "Valoare discount (%)" : "Valoare discount (lei)"}
+                      </label>
+                      <input
+                        type="number" min={0} max={codDisc.type === "percent" ? 100 : undefined} step="0.01"
+                        value={codDisc.value || ""}
+                        onChange={e => setCodDisc(c => ({ ...c, value: Math.max(0, Number(e.target.value) || 0) }))}
+                        className={`${inputCls} max-w-[200px]`}
+                        placeholder={codDisc.type === "percent" ? "ex: 5" : "ex: 20"}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        {codDisc.type === "percent"
+                          ? "Se aplica la valoarea produselor (fara transport), dupa eventualul cod de reducere."
+                          : "Se scade din valoarea produselor (fara transport), dupa eventualul cod de reducere."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="px-5 py-4 border-t border-border">
+                  <Button onClick={saveCodDiscount} disabled={savingCodDisc}>
+                    {savingCodDisc ? <Loader2 className="animate-spin" /> : <Save />}
                     Salveaza
                   </Button>
                 </div>

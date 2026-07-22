@@ -70,6 +70,7 @@ async function buildProducts(
     discount_amount: unknown;
     discount_code: string | null;
     card_discount_amount?: unknown;
+    cod_discount_amount?: unknown;
   },
   config: OblioConfig,
   pricesIncludeVat: boolean,
@@ -136,6 +137,18 @@ async function buildProducts(
       ...vatFields,
     });
   }
+  // Reducerea la plata ramburs — aceeasi logica, linie negativa separata.
+  if (Number(order.cod_discount_amount) > 0) {
+    products.push({
+      name: "Reducere plata ramburs",
+      price: -Math.abs(Number(order.cod_discount_amount)),
+      measuringUnit: "buc",
+      quantity: 1,
+      productType: "Serviciu",
+      save: 0,
+      ...vatFields,
+    });
+  }
 
   return products;
 }
@@ -174,6 +187,7 @@ async function buildInvoiceData(
     discount_amount: unknown;
     discount_code: string | null;
     card_discount_amount?: unknown;
+    cod_discount_amount?: unknown;
     payment_method: string;
     payment_status: string;
     total: unknown;

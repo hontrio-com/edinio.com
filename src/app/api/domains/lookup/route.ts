@@ -79,7 +79,13 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json()) as { searchTerm?: string };
-  const searchTerm = body.searchTerm?.trim().toLowerCase();
+  // Curata si aici: scoate un TLD tastat (.ro/.com) inainte de a elimina punctele,
+  // ca sa nu ajungem sa interogam "nume.ro.ro" daca primim din greseala eticheta cu TLD.
+  const searchTerm = body.searchTerm
+    ?.trim()
+    .toLowerCase()
+    .replace(/\.[a-z]{2,}$/, "")
+    .replace(/[^a-z0-9-]/g, "");
 
   if (!searchTerm || searchTerm.length < 2) {
     return NextResponse.json({ error: "searchTerm prea scurt" }, { status: 400 });

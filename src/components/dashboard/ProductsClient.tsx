@@ -489,7 +489,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                           const res = await duplicateProduct(product.id, businessId);
                           setDuplicatingId(null);
                           if ("error" in res) { toast.error(res.error); }
-                          else { toast.success("Produs duplicat"); router.refresh(); }
+                          else { toast.success("Produs duplicat"); router.push(editHref(res.id)); }
                         });
                       }}
                       className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
@@ -595,7 +595,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                               const res = await duplicateProduct(product.id, businessId);
                               setDuplicatingId(null);
                               if ("error" in res) { toast.error(res.error); }
-                              else { toast.success("Produs duplicat"); router.refresh(); }
+                              else { toast.success("Produs duplicat"); router.push(editHref(res.id)); }
                             });
                           }}
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"

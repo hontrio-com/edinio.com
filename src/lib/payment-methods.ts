@@ -216,3 +216,32 @@ export function computeCardDiscount(
   const raw = config.type === "percent" ? base * (config.value / 100) : config.value;
   return Math.round(Math.min(raw, base) * 100) / 100;
 }
+
+// ── Ramburs (cash-on-delivery) discount ──────────────────────────────────────
+// Optional incentive mirroring the card discount, but applied ONLY when the
+// customer pays cash on delivery (ramburs). Same jsonb shape (CardDiscountConfig),
+// stored in store_settings.cod_discount_config. A given order has a single payment
+// method, so the card and ramburs discounts are mutually exclusive — at most one is
+// ever non-zero on the same order.
+
+export function isCodPaymentMethod(method: string | null | undefined): boolean {
+  return method === "cash_on_delivery";
+}
+
+/**
+ * Ramburs (cash-on-delivery) discount amount for a goods base (subtotal + extras,
+ * AFTER any promo discount — never including shipping). Returns 0 when disabled or
+ * when the method isn't ramburs. Capped at the base so total never goes negative.
+ */
+export function computeCodDiscount(
+  config: CardDiscountConfig,
+  paymentMethod: string | null | undefined,
+  goodsBase: number,
+): number {
+  if (!config.enabled || config.value <= 0) return 0;
+  if (!isCodPaymentMethod(paymentMethod)) return 0;
+  const base = Math.max(0, goodsBase);
+  if (base <= 0) return 0;
+  const raw = config.type === "percent" ? base * (config.value / 100) : config.value;
+  return Math.round(Math.min(raw, base) * 100) / 100;
+}

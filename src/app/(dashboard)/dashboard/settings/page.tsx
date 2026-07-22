@@ -23,7 +23,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cookie_banner_config, marketing_config, email_config, page_content)")
+      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cookie_banner_config, marketing_config, email_config, page_content)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -162,6 +162,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       paymentMethods={paymentMethods}
       paymentReadiness={paymentReadiness}
       cardDiscount={parseCardDiscountConfig(storeSettings?.card_discount_config)}
+      codDiscount={parseCardDiscountConfig(storeSettings?.cod_discount_config)}
       cookieBanner={parseCookieBannerConfig(storeSettings?.cookie_banner_config)}
       cookieCategories={detectConsentCategories(storeSettings?.marketing_config as MarketingConfig | null)}
       storeSeo={storeSeo}

@@ -25,6 +25,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   min_order_amount: number | null;
   payment_methods: { type: PaymentMethodType; label: string }[];
   card_discount: CardDiscountConfig;
+  cod_discount: CardDiscountConfig;
   international_shipping: boolean;
   dpd_use_weight: boolean;
   mailchimp_newsletter: boolean;
@@ -34,7 +35,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, mailchimp_config, brevo_config, klaviyo_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, mailchimp_config, brevo_config, klaviyo_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -76,6 +77,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     min_order_amount: data.min_order_amount != null ? Number(data.min_order_amount) : null,
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
     card_discount: parseCardDiscountConfig(data.card_discount_config),
+    cod_discount: parseCardDiscountConfig(data.cod_discount_config),
     international_shipping: internationalShipping,
     dpd_use_weight: dpdUseWeight,
     mailchimp_newsletter: !!(mc?.enabled && mc?.audience_id && mc?.sources?.checkout !== false),
@@ -109,6 +111,38 @@ export async function updateCardDiscount(
   if (error) {
     logError({ action: "updateCardDiscount", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea discountului la plata cu cardul." };
+  }
+
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+/**
+ * Save the merchant's ramburs (cash-on-delivery) discount config. Mirror of
+ * updateCardDiscount, persisted to store_settings.cod_discount_config.
+ */
+export async function updateCodDiscount(
+  businessId: string,
+  config: CardDiscountConfig,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const sanitized = sanitizeCardDiscountConfig(config);
+  const { error } = await supabase
+    .from("store_settings")
+    .update({ cod_discount_config: sanitized as never })
+    .eq("business_id", businessId);
+
+  if (error) {
+    logError({ action: "updateCodDiscount", message: error.message, details: { code: error.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea discountului la plata ramburs." };
   }
 
   if (biz.slug) revalidatePath(`/${biz.slug}`);

@@ -19,15 +19,17 @@ export default async function EditProductPage({ params, searchParams }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, slug, is_published, store_settings(olx_config)")
+    .select("id, slug, is_published, store_settings(olx_config, google_merchant_config)")
     .eq("user_id", user.id)
     .order("created_at")
     .limit(1)
     .single();
   if (!business) redirect("/dashboard");
 
-  const olxSettings = Array.isArray(business.store_settings) ? business.store_settings[0] : business.store_settings;
-  const olxConnected = !!(olxSettings?.olx_config as { connected?: boolean } | null)?.connected;
+  const settings = Array.isArray(business.store_settings) ? business.store_settings[0] : business.store_settings;
+  const olxConnected = !!(settings?.olx_config as { connected?: boolean } | null)?.connected;
+  const gmcConfig = settings?.google_merchant_config as { connected?: boolean; account_id?: string } | null;
+  const gmcConnected = !!gmcConfig?.connected && !!gmcConfig?.account_id;
 
   const [{ data: product }, { data: categories }] = await Promise.all([
     supabase.from("products").select("*").eq("id", productId).eq("business_id", business.id).single(),
@@ -44,6 +46,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       backHref={backHref}
       business={business.slug ? { slug: business.slug, is_published: !!business.is_published } : undefined}
       olxConnected={olxConnected}
+      gmcConnected={gmcConnected}
     />
   );
 }

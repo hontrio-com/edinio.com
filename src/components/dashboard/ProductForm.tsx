@@ -138,6 +138,12 @@ interface GoogleShoppingState {
   custom_label_4: string;
 }
 
+// True daca produsul are deja macar un atribut Google Shopping completat — folosit
+// ca sa deschidem sectiunea din start la editare (altfel ar ascunde date existente).
+function hasGoogleData(g: GoogleShoppingState): boolean {
+  return Object.values(g).some((v) => typeof v === "string" && v.trim() !== "");
+}
+
 function toSlug(name: string) {
   return name
     .toLowerCase()
@@ -482,9 +488,11 @@ interface Props {
   // public product page is actually live (active product + published store).
   business?: { slug: string; is_published: boolean };
   olxConnected?: boolean;
+  // Sectiunea Google Shopping se afiseaza doar cand contul are Google Merchant conectat.
+  gmcConnected?: boolean;
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, gmcConnected = false }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
@@ -502,6 +510,9 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
     });
   }
   const [form, setForm] = useState<FormState>(product ? productToForm(product) : EMPTY_FORM);
+  // Toggle vizual pentru sectiunea Google Shopping: inchis implicit, dar deschis
+  // din start daca produsul editat are deja atribute completate.
+  const [showGoogle, setShowGoogle] = useState(() => hasGoogleData(form.google));
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const toggleHelp = (k: string) => setHelpOpen((p) => (p === k ? null : k));
   const [isPending, startTransition] = useTransition();
@@ -1492,15 +1503,20 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
               </div>
             </div>
 
-            {/* ── Google Shopping / Merchant Center ── */}
+            {/* ── Google Shopping / Merchant Center (doar cand GMC e conectat) ── */}
+            {gmcConnected && (
             <div className={sectionCls}>
-              <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-                <Globe className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Google Shopping</p>
-                  <p className="text-xs text-muted-foreground">Atribute pentru feed-ul Google Merchant Center (optionale, dar imbunatatesc reclamele si vizibilitatea)</p>
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Google Shopping</p>
+                    <p className="text-xs text-muted-foreground">Atribute pentru feed-ul Google Merchant Center (optionale, dar imbunatatesc reclamele si vizibilitatea)</p>
+                  </div>
                 </div>
+                <Switch checked={showGoogle} onCheckedChange={setShowGoogle} className="shrink-0" />
               </div>
+              {showGoogle && (
               <div className="px-5 py-5 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -1588,7 +1604,9 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   <p className="text-xs text-muted-foreground mt-1">Ex: sezon, marja, best-seller. Le folosesti pentru a segmenta produsele in campanii.</p>
                 </div>
               </div>
+              )}
             </div>
+            )}
           </div>
 
           {/* ── Sidebar ── */}

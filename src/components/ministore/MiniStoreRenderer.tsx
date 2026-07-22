@@ -29,7 +29,7 @@ import { EdinioCredit } from "./EdinioCredit";
 import type { MenuItem } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import type { Database } from "@/types/database.types";
-import { computeCardDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { CartRecommendations } from "./CartRecommendations";
 import { VariantQuickAdd, type QuickAddLine } from "./VariantQuickAdd";
@@ -258,6 +258,7 @@ function CartCheckoutModal({
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
+  const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   // Discount code is OFF by default — same semantics as the editor toggle and OrderModal.
@@ -299,9 +300,11 @@ function CartCheckoutModal({
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Shown live as the customer switches payment method.
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);
+  // Ramburs discount (mirrors the server): only when the customer picks cash on delivery.
+  const codDiscountAmount = computeCodDiscount(codDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);
   // Round to 2 decimals (cents): float subtraction like 199.29 - 19.93 would
   // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
-  const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount + shipping + vatAddOn) * 100) / 100);
+  const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount - codDiscountAmount + shipping + vatAddOn) * 100) / 100);
 
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -411,6 +414,7 @@ function CartCheckoutModal({
       setPaymentMethods(methods);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
+      setCodDiscountConfig(data.cod_discount);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
@@ -887,6 +891,12 @@ function CartCheckoutModal({
               <div className="flex justify-between" style={{ color }}>
                 <span>Reducere plata cu cardul</span>
                 <span className="font-medium">-{cardDiscountAmount} lei</span>
+              </div>
+            )}
+            {codDiscountAmount > 0 && (
+              <div className="flex justify-between" style={{ color }}>
+                <span>Reducere plata ramburs</span>
+                <span className="font-medium">-{codDiscountAmount} lei</span>
               </div>
             )}
             {freeShippingThreshold && goodsTotal < freeShippingThreshold && (

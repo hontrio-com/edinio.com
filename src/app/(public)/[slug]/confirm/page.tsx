@@ -40,6 +40,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let shippingCost = 0;
   let discountAmount = 0;
   let cardDiscountAmount = 0;
+  let codDiscountAmount = 0;
   let discountCode: string | null = null;
   let orderNumber: string | null = null;
   // Customer identifiers for pixel Advanced Matching (hashed client-side).
@@ -51,7 +52,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, subtotal, total, customer_name, customer_email, customer_phone")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, subtotal, total, customer_name, customer_email, customer_phone")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -61,6 +62,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       shippingCost = order.shipping_cost ?? 0;
       discountAmount = order.discount_amount ?? 0;
       cardDiscountAmount = order.card_discount_amount ?? 0;
+      codDiscountAmount = order.cod_discount_amount ?? 0;
       discountCode = order.discount_code ?? null;
       orderNumber = order.order_number ?? null;
       customerName = order.customer_name ?? null;
@@ -74,7 +76,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const purchaseItems = orderItems.map((i) => ({ item_id: i.product_id, item_name: i.name, price: i.price, quantity: i.quantity }));
 
   const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
-  const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount;
+  const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount - codDiscountAmount;
   const displayTotal = computedTotal || Number(total) || 0;
 
   const { data: storeSettings } = await createAdminClient()
@@ -195,6 +197,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-500">Reducere plata cu cardul</span>
                       <span className="font-medium text-green-600">- {formatPrice(cardDiscountAmount)}</span>
+                    </div>
+                  )}
+                  {codDiscountAmount > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Reducere plata ramburs</span>
+                      <span className="font-medium text-green-600">- {formatPrice(codDiscountAmount)}</span>
                     </div>
                   )}
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100">

@@ -116,6 +116,7 @@ export async function sendOrderConfirmationToCustomer(
     discount_code?: string;
     discount_amount?: number;
     card_discount_amount?: number;
+    cod_discount_amount?: number;
     payment_method?: string;
     store_url?: string;
   },
@@ -144,6 +145,13 @@ export async function sendOrderConfirmationToCustomer(
     ? `<tr>
         <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere plata cu cardul</td>
         <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.card_discount_amount)}</td>
+      </tr>`
+    : "";
+
+  const codDiscountRow = order.cod_discount_amount && order.cod_discount_amount > 0
+    ? `<tr>
+        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere plata ramburs</td>
+        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.cod_discount_amount)}</td>
       </tr>`
     : "";
 
@@ -184,6 +192,7 @@ export async function sendOrderConfirmationToCustomer(
       ${itemsRows}
       ${discountRow}
       ${cardDiscountRow}
+      ${codDiscountRow}
       <tr>
         <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
         <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
@@ -564,8 +573,14 @@ export async function sendDomainOrderToAdmin(data: {
   customerName: string;
   customerEmail: string;
   businessName: string;
+  entityType?: "pf" | "pj";
+  cnp?: string;
+  cui?: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
+  const registrantLine = data.entityType === "pj"
+    ? `Persoana juridica${data.cui ? ` &middot; CUI ${data.cui}` : ""}`
+    : `Persoana fizica${data.cnp ? ` &middot; CNP ${data.cnp}` : ""}`;
   const adminUrl = `${SITE_URL}/admin/domenii`;
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda noua de domeniu</h2>
@@ -581,9 +596,10 @@ export async function sendDomainOrderToAdmin(data: {
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td style="width:50%;vertical-align:top;">
-                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Client</span>
+                <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Titular</span>
                 <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${data.customerName}</p>
                 <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${data.customerEmail}</p>
+                <p style="margin:2px 0 0 0;font-size:12px;color:#71717a;">${registrantLine}</p>
               </td>
               <td style="width:50%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Magazin</span>
@@ -702,6 +718,7 @@ export async function sendNewOrderEmail(
     discount_code?: string | null;
     discount_amount?: number;
     card_discount_amount?: number;
+    cod_discount_amount?: number;
     vat_amount?: number;
     payment_method?: string;
     business_name: string;
@@ -807,6 +824,7 @@ export async function sendNewOrderEmail(
       ${order.subtotal != null ? totalRow("Subtotal", formatPrice(order.subtotal)) : ""}
       ${order.discount_amount && order.discount_amount > 0 ? totalRow(`Reducere${order.discount_code ? ` (${esc(order.discount_code)})` : ""}`, `- ${formatPrice(order.discount_amount)}`, { color: "#16a34a" }) : ""}
       ${order.card_discount_amount && order.card_discount_amount > 0 ? totalRow("Reducere plata cu cardul", `- ${formatPrice(order.card_discount_amount)}`, { color: "#16a34a" }) : ""}
+      ${order.cod_discount_amount && order.cod_discount_amount > 0 ? totalRow("Reducere plata ramburs", `- ${formatPrice(order.cod_discount_amount)}`, { color: "#16a34a" }) : ""}
       ${totalRow("Transport", order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost))}
       ${totalRow("Total", formatPrice(order.total), { bold: true, color: "#1AB554", border: true })}
       ${order.vat_amount && order.vat_amount > 0 ? `<tr><td colspan="2" style="padding-top:6px;font-size:12px;color:#a1a1aa;text-align:right;">din care TVA: ${formatPrice(order.vat_amount)}</td></tr>` : ""}

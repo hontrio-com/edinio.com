@@ -14,14 +14,20 @@ import {
 } from "lucide-react";
 import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
 import { BlockSettings } from "./BlockSettings";
+import { BlockShell } from "./BlockShell";
 import { updatePage } from "@/lib/actions/page.actions";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import {
   createBlock, BLOCK_META, BLOCK_PALETTE_ORDER,
-  type Block, type BlockType, type PageSeo,
+  type Block, type BlockType, type ColumnsBlock, type PageSeo,
 } from "@/lib/pages/blocks.types";
+import {
+  findBlock, updateBlockInTree, removeBlockFromTree, moveBlockInTree,
+  duplicateBlockInTree, insertAtTop, insertIntoColumn, columnBlocks,
+  columnsGridTemplate, isFlexibleColumns,
+} from "@/lib/pages/block-tree";
 import type { PageProduct } from "./blocks/ProductsBlock";
 import type { FormDef } from "@/lib/pages/forms.types";
 
@@ -38,6 +44,14 @@ interface BuilderBusiness {
 }
 
 const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
+
+/** Where the block palette will insert the next block. */
+type InsertTarget =
+  | { kind: "top"; index: number }
+  | { kind: "column"; columnBlockId: string; columnIndex: number; index: number };
+
+/** Blocks that don't belong inside a column (no columns-in-columns; hero is full-bleed). */
+const COLUMN_EXCLUDED: BlockType[] = ["columns", "hero"];
 
 export function PageBuilder({
   pageId, initialTitle, initialSlug, initialPublished, initialBlocks, initialCss, initialSeo,
@@ -57,7 +71,7 @@ export function PageBuilder({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [tab, setTab] = useState<"block" | "page">("page");
-  const [paletteAt, setPaletteAt] = useState<number | null>(null);
+  const [palette, setPalette] = useState<InsertTarget | null>(null);
   const [dirty, setDirty] = useState(false);
   const [isSaving, startSave] = useTransition();
 
@@ -94,37 +108,29 @@ export function PageBuilder({
   }
 
   function patchBlock(id: string, patch: Partial<Block>) {
-    setBlocks((bs) => bs.map((b) => (b.id === id ? ({ ...b, ...patch } as Block) : b)));
+    setBlocks((bs) => updateBlockInTree(bs, id, patch));
     mark();
   }
-  function addBlock(type: BlockType, index: number) {
-    const nb = createBlock(type);
-    setBlocks((bs) => { const next = [...bs]; next.splice(index, 0, nb); return next; });
-    setPaletteAt(null);
+  function addBlock(type: BlockType, target: InsertTarget) {
+    const nb = createBlock(type, { inColumn: target.kind === "column" });
+    setBlocks((bs) => target.kind === "top"
+      ? insertAtTop(bs, target.index, nb)
+      : insertIntoColumn(bs, target.columnBlockId, target.columnIndex, target.index, nb));
+    setPalette(null);
     selectBlock(nb.id);
     mark();
   }
   function removeBlock(id: string) {
-    setBlocks((bs) => bs.filter((b) => b.id !== id));
+    setBlocks((bs) => removeBlockFromTree(bs, id));
     if (selectedId === id) selectBlock(null);
     mark();
   }
   function duplicateBlock(id: string) {
-    setBlocks((bs) => {
-      const i = bs.findIndex((b) => b.id === id);
-      if (i < 0) return bs;
-      const copy = { ...bs[i], id: `b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}` } as Block;
-      const next = [...bs]; next.splice(i + 1, 0, copy); return next;
-    });
+    setBlocks((bs) => duplicateBlockInTree(bs, id));
     mark();
   }
   function moveBlock(id: string, dir: -1 | 1) {
-    setBlocks((bs) => {
-      const i = bs.findIndex((b) => b.id === id);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= bs.length) return bs;
-      const next = [...bs]; [next[i], next[j]] = [next[j], next[i]]; return next;
-    });
+    setBlocks((bs) => moveBlockInTree(bs, id, dir));
     mark();
   }
 
@@ -139,7 +145,7 @@ export function PageBuilder({
     });
   }
 
-  const selected = blocks.find((b) => b.id === selectedId) ?? null;
+  const selected = findBlock(blocks, selectedId);
 
   if (!mounted) return null;
 
@@ -180,17 +186,29 @@ export function PageBuilder({
         <div className="flex-1 overflow-y-auto" onClick={() => selectBlock(null)}>
           <div className={device === "mobile" ? "min-h-full flex justify-center items-start py-8 px-4" : "min-h-full"}>
           <div className={`bg-background transition-all ${device === "mobile" ? "w-[400px] max-w-full rounded-[28px] border-4 border-gray-200 shadow-2xl overflow-hidden" : "max-w-full min-h-full"}`}>
-            <InsertButton onClick={(e) => { e.stopPropagation(); setPaletteAt(0); }} />
+            <InsertButton onClick={(e) => { e.stopPropagation(); setPalette({ kind: "top", index: 0 }); }} />
             {blocks.map((block, i) => (
               <div key={block.id}>
                 <div
                   onClick={(e) => { e.stopPropagation(); selectBlock(block.id); }}
                   className={`relative group cursor-pointer ${selectedId === block.id ? "ring-2 ring-primary ring-inset" : "hover:ring-1 hover:ring-primary/40 ring-inset"}`}
                 >
-                  <div className="pointer-events-none">
-                    <BlockRenderer blocks={[block]} ctx={ctx} />
-                  </div>
-                  {blocks.length === 0 ? null : null}
+                  {block.type === "columns" ? (
+                    <EditableColumns
+                      block={block}
+                      ctx={ctx}
+                      selectedId={selectedId}
+                      onSelectBlock={selectBlock}
+                      onMoveNested={moveBlock}
+                      onDuplicateNested={duplicateBlock}
+                      onRemoveNested={removeBlock}
+                      onAddToColumn={(columnIndex, index) => setPalette({ kind: "column", columnBlockId: block.id, columnIndex, index })}
+                    />
+                  ) : (
+                    <div className="pointer-events-none">
+                      <BlockRenderer blocks={[block]} ctx={ctx} />
+                    </div>
+                  )}
                   {/* hover toolbar */}
                   <div className={`absolute top-2 right-2 z-10 flex items-center gap-1 bg-background border border-border rounded-lg shadow-sm p-0.5 ${selectedId === block.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}>
                     <span className="px-2 text-[11px] font-medium text-muted-foreground">{BLOCK_META[block.type]?.label ?? block.type}</span>
@@ -201,12 +219,12 @@ export function PageBuilder({
                     <ToolBtn title="Sterge" onClick={(e) => { e.stopPropagation(); removeBlock(block.id); }}><Trash2 className="h-3.5 w-3.5 text-red-500" /></ToolBtn>
                   </div>
                 </div>
-                <InsertButton onClick={(e) => { e.stopPropagation(); setPaletteAt(i + 1); }} />
+                <InsertButton onClick={(e) => { e.stopPropagation(); setPalette({ kind: "top", index: i + 1 }); }} />
               </div>
             ))}
             {blocks.length > 0 && (
               <div className="p-5 flex justify-center border-t border-dashed border-border">
-                <button type="button" onClick={(e) => { e.stopPropagation(); setPaletteAt(blocks.length); }}
+                <button type="button" onClick={(e) => { e.stopPropagation(); setPalette({ kind: "top", index: blocks.length }); }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
                   <Plus className="h-4 w-4" /> Adauga bloc
                 </button>
@@ -217,7 +235,7 @@ export function PageBuilder({
                 <Square className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
                 <p className="text-sm font-medium text-foreground mb-1">Pagina e goala</p>
                 <p className="text-xs text-muted-foreground mb-4">Adauga primul bloc ca sa incepi.</p>
-                <button type="button" onClick={(e) => { e.stopPropagation(); setPaletteAt(0); }}
+                <button type="button" onClick={(e) => { e.stopPropagation(); setPalette({ kind: "top", index: 0 }); }}
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90">
                   <Plus className="h-4 w-4" /> Adauga bloc
                 </button>
@@ -259,20 +277,20 @@ export function PageBuilder({
       )}
 
       {/* Block palette */}
-      {paletteAt !== null && (
+      {palette !== null && (
         <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setPaletteAt(null)} />
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setPalette(null)} />
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 w-full max-w-lg max-h-[80vh] overflow-y-auto bg-background rounded-2xl border border-border shadow-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold">Adauga un bloc</h3>
-              <button type="button" onClick={() => setPaletteAt(null)} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
+              <h3 className="text-base font-semibold">{palette.kind === "column" ? "Adauga in coloana" : "Adauga un bloc"}</h3>
+              <button type="button" onClick={() => setPalette(null)} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {BLOCK_PALETTE_ORDER.map((type) => {
+              {(palette.kind === "column" ? BLOCK_PALETTE_ORDER.filter((t) => !COLUMN_EXCLUDED.includes(t)) : BLOCK_PALETTE_ORDER).map((type) => {
                 const meta = BLOCK_META[type];
                 const Icon = ICONS[meta.icon] ?? Square;
                 return (
-                  <button key={type} type="button" onClick={() => addBlock(type, paletteAt)}
+                  <button key={type} type="button" onClick={() => addBlock(type, palette)}
                     className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition-colors">
                     <Icon className="h-5 w-5 text-foreground" />
                     <span className="text-xs font-medium text-foreground text-center">{meta.label}</span>
@@ -306,6 +324,100 @@ function InsertButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
       </button>
       <div className="h-3" />
     </div>
+  );
+}
+
+/** Thin "+" affordance shown between nested blocks inside a column. */
+function NestedInsert({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <div className="relative h-0 group/ni">
+      <button type="button" onClick={onClick} title="Adauga aici"
+        className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center shadow opacity-0 group-hover/ni:opacity-100 hover:scale-110 transition-all">
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+      <div className="h-2" />
+    </div>
+  );
+}
+
+/**
+ * Editor-only rendering of a columns block. Classic (legacy) columns render as a
+ * plain preview and are edited from the side panel. Flexible columns become live
+ * drop zones: each column shows its nested blocks (selectable, movable) plus a
+ * "+" to add any block into that column.
+ */
+function EditableColumns({
+  block, ctx, selectedId, onSelectBlock, onMoveNested, onDuplicateNested, onRemoveNested, onAddToColumn,
+}: {
+  block: ColumnsBlock;
+  ctx: BlockRendererCtx;
+  selectedId: string | null;
+  onSelectBlock: (id: string) => void;
+  onMoveNested: (id: string, dir: -1 | 1) => void;
+  onDuplicateNested: (id: string) => void;
+  onRemoveNested: (id: string) => void;
+  onAddToColumn: (columnIndex: number, index: number) => void;
+}) {
+  // Classic columns keep the read-only preview; content is edited in the panel.
+  if (!isFlexibleColumns(block)) {
+    return (
+      <div className="pointer-events-none">
+        <BlockRenderer blocks={[block]} ctx={ctx} />
+      </div>
+    );
+  }
+
+  const count = block.count ?? 2;
+  const fr = columnsGridTemplate(block);
+  const gap = block.gap === "sm" ? "gap-3" : block.gap === "lg" ? "gap-8" : "gap-6";
+
+  return (
+    <BlockShell style={block.style}>
+      <div className={`grid grid-cols-1 items-stretch ${gap} md:[grid-template-columns:var(--tpl)]`} style={{ "--tpl": fr } as React.CSSProperties}>
+        {Array.from({ length: count }).map((_, ci) => {
+          const list = columnBlocks(block, ci);
+          return (
+            <div key={ci} className={`min-w-0 rounded-xl ${block.bordered ? "border border-border" : "border border-dashed border-border/70"}`}>
+              {list.length === 0 ? (
+                <button type="button" onClick={(e) => { e.stopPropagation(); onAddToColumn(ci, 0); }}
+                  className="w-full min-h-[120px] flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl transition-colors">
+                  <Plus className="h-5 w-5" />
+                  <span className="text-xs font-medium">Adauga bloc</span>
+                </button>
+              ) : (
+                <div className="py-1">
+                  {list.map((nb, ni) => (
+                    <div key={nb.id}>
+                      <NestedInsert onClick={(e) => { e.stopPropagation(); onAddToColumn(ci, ni); }} />
+                      <div
+                        onClick={(e) => { e.stopPropagation(); onSelectBlock(nb.id); }}
+                        className={`relative group/nested cursor-pointer ${selectedId === nb.id ? "ring-2 ring-primary ring-inset" : "hover:ring-1 hover:ring-primary/40 ring-inset"}`}
+                      >
+                        <div className="pointer-events-none">
+                          <BlockRenderer blocks={[nb]} ctx={ctx} />
+                        </div>
+                        <div className={`absolute top-1 right-1 z-10 flex items-center gap-0.5 bg-background border border-border rounded-md shadow-sm p-0.5 ${selectedId === nb.id ? "opacity-100" : "opacity-0 group-hover/nested:opacity-100"} transition-opacity`}>
+                          <ToolBtn title="Sus" onClick={(e) => { e.stopPropagation(); onMoveNested(nb.id, -1); }} disabled={ni === 0}><ArrowUp className="h-3.5 w-3.5" /></ToolBtn>
+                          <ToolBtn title="Jos" onClick={(e) => { e.stopPropagation(); onMoveNested(nb.id, 1); }} disabled={ni === list.length - 1}><ArrowDown className="h-3.5 w-3.5" /></ToolBtn>
+                          <ToolBtn title="Duplica" onClick={(e) => { e.stopPropagation(); onDuplicateNested(nb.id); }}><Copy className="h-3.5 w-3.5" /></ToolBtn>
+                          <ToolBtn title="Sterge" onClick={(e) => { e.stopPropagation(); onRemoveNested(nb.id); }}><Trash2 className="h-3.5 w-3.5 text-red-500" /></ToolBtn>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="px-2 pb-2 pt-1">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onAddToColumn(ci, list.length); }}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
+                      <Plus className="h-3.5 w-3.5" /> Adauga
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </BlockShell>
   );
 }
 

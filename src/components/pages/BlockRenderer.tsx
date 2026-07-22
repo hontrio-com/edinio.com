@@ -50,7 +50,7 @@ function BlockOne({ block, ctx }: { block: Block; ctx: BlockRendererCtx }) {
     case "image":    return <ImageBlockView block={block} basePath={ctx.basePath} />;
     case "gallery":  return <GalleryBlockView block={block} />;
     case "button":   return <ButtonBlockView block={block} color={ctx.color} basePath={ctx.basePath} />;
-    case "columns":  return <ColumnsBlockView block={block} color={ctx.color} basePath={ctx.basePath} />;
+    case "columns":  return <ColumnsBlockView block={block} color={ctx.color} basePath={ctx.basePath} renderBlocks={(bs) => <BlockRenderer blocks={bs} ctx={ctx} />} />;
     case "spacer":   return <SpacerBlockView block={block} />;
     case "divider":  return <DividerBlockView block={block} />;
     case "video":    return <VideoBlockView block={block} />;

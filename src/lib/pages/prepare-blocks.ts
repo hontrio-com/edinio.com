@@ -13,28 +13,35 @@ import type { Block } from "@/lib/pages/blocks.types";
  *      safe HTML/CSS          -> `sanitizeEmbedHtml` (allows layout markup + safe iframes)
  */
 export function prepareBlocksForPublic(blocks: Block[]): Block[] {
-  return blocks.map((b) => {
-    switch (b.type) {
-      case "text":
-        return { ...b, html: sanitizeHtml(b.html) };
-      case "columns":
-        return {
-          ...b,
-          items: (b.items ?? []).map((it) => ({ ...it, html: it.html ? sanitizeHtml(it.html) : it.html })),
-        };
-      case "html": {
-        if (b.raw && b.rawApprovedBy) return b;
-        if ((b.js ?? "").trim()) return b;
-        return { ...b, html: sanitizeEmbedHtml(b.html) };
-      }
-      case "video": {
-        // Uploaded video/poster URLs come from our own R2 upload flow; still pin
-        // them to http(s) so a hand-crafted block can't smuggle another scheme.
-        const safeUrl = (u?: string | null) => (u && /^https?:\/\//i.test(u) ? u : null);
-        return { ...b, src: safeUrl(b.src), poster: safeUrl(b.poster) };
-      }
-      default:
-        return b;
+  return (blocks ?? []).map(prepareBlock);
+}
+
+function prepareBlock(b: Block): Block {
+  switch (b.type) {
+    case "text":
+      return { ...b, html: sanitizeHtml(b.html) };
+    case "columns":
+      return {
+        ...b,
+        items: (b.items ?? []).map((it) => ({
+          ...it,
+          html: it.html ? sanitizeHtml(it.html) : it.html,
+          // Recurse: nested blocks (text/html/video/…) must be sanitized too.
+          blocks: Array.isArray(it.blocks) ? it.blocks.map(prepareBlock) : it.blocks,
+        })),
+      };
+    case "html": {
+      if (b.raw && b.rawApprovedBy) return b;
+      if ((b.js ?? "").trim()) return b;
+      return { ...b, html: sanitizeEmbedHtml(b.html) };
     }
-  });
+    case "video": {
+      // Uploaded video/poster URLs come from our own R2 upload flow; still pin
+      // them to http(s) so a hand-crafted block can't smuggle another scheme.
+      const safeUrl = (u?: string | null) => (u && /^https?:\/\//i.test(u) ? u : null);
+      return { ...b, src: safeUrl(b.src), poster: safeUrl(b.poster) };
+    }
+    default:
+      return b;
+  }
 }

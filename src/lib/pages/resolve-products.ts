@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { Block, ProductsBlock } from "@/lib/pages/blocks.types";
+import { flattenBlocks } from "@/lib/pages/block-tree";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 
 type DB = SupabaseClient<Database>;
@@ -51,7 +52,8 @@ export async function resolveBlockProducts(supabase: DB, businessId: string, blo
 /** Resolve products for every products-block on a page (one bounded query each). */
 export async function resolveAllProductsBlocks(supabase: DB, businessId: string, blocks: Block[]): Promise<Record<string, PageProduct[]>> {
   const map: Record<string, PageProduct[]> = {};
-  const productBlocks = blocks.filter((b): b is ProductsBlock => b.type === "products");
+  // flatten so products blocks nested inside columns are resolved too.
+  const productBlocks = flattenBlocks(blocks).filter((b): b is ProductsBlock => b.type === "products");
   await Promise.all(productBlocks.map(async (b) => { map[b.id] = await resolveBlockProducts(supabase, businessId, b); }));
   return map;
 }

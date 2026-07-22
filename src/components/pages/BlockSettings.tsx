@@ -8,6 +8,7 @@ import { MediaPicker } from "@/components/media/MediaPicker";
 import { uploadImage, uploadVideo } from "@/lib/upload";
 import { MAX_VIDEO_MB } from "@/lib/pages/video-config";
 import { PageIcon, PAGE_ICON_NAMES } from "./icon-registry";
+import { isFlexibleColumns, classicItemToBlocks, columnsPerRow, gridTemplateFor } from "@/lib/pages/block-tree";
 import type {
   Block, BlockStyle, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock,
   ButtonBlock, ColumnsBlock, SpacerBlock, DividerBlock, VideoBlock, MapBlock, FaqBlock,
@@ -252,6 +253,55 @@ function StyleControls({ style, onChange, hide, showTextColor }: { style?: Block
   );
 }
 
+/* ─── Columns layout picker ────────────────────────────────────────────────── */
+
+interface ColumnLayout { key: string; label: string; count: number; perRow: number; template?: string }
+
+/** Preset arrangements. Single-row ratios + wrapping grids (e.g. 6 = 3 sus / 3 jos). */
+const COLUMN_LAYOUTS: ColumnLayout[] = [
+  { key: "1-1",   label: "2 egale",        count: 2, perRow: 2, template: "1-1" },
+  { key: "1-2",   label: "Stanga mica",    count: 2, perRow: 2, template: "1-2" },
+  { key: "2-1",   label: "Dreapta mica",   count: 2, perRow: 2, template: "2-1" },
+  { key: "1-1-1", label: "3 egale",        count: 3, perRow: 3, template: "1-1-1" },
+  { key: "2-1-1", label: "3: prima lata",  count: 3, perRow: 3, template: "2-1-1" },
+  { key: "1-2-1", label: "3: mijloc lat",  count: 3, perRow: 3, template: "1-2-1" },
+  { key: "1-1-2", label: "3: ultima lata", count: 3, perRow: 3, template: "1-1-2" },
+  { key: "4",     label: "4 egale",        count: 4, perRow: 4 },
+  { key: "2x2",   label: "2 x 2",          count: 4, perRow: 2 },
+  { key: "3x2",   label: "3 x 2 (6)",      count: 6, perRow: 3 },
+  { key: "2x3",   label: "2 x 3 (6)",      count: 6, perRow: 2 },
+  { key: "4x2",   label: "4 x 2 (8)",      count: 8, perRow: 4 },
+];
+
+function LayoutPreview({ count, perRow, template }: { count: number; perRow: number; template?: string }) {
+  return (
+    <div className="w-full grid gap-0.5" style={{ gridTemplateColumns: gridTemplateFor(perRow, template) }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="h-2.5 rounded-[2px] bg-current opacity-30" />
+      ))}
+    </div>
+  );
+}
+
+function LayoutPicker({ current, onPick }: { current: string; onPick: (l: ColumnLayout) => void }) {
+  return (
+    <Field label="Aspect coloane">
+      <div className="grid grid-cols-3 gap-2">
+        {COLUMN_LAYOUTS.map((l) => {
+          const active = l.key === current;
+          return (
+            <button key={l.key} type="button" onClick={() => onPick(l)} title={l.label}
+              className={`p-2 rounded-lg border flex flex-col items-center justify-between gap-1.5 min-h-[54px] transition-colors ${active ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground hover:border-primary/50"}`}>
+              <LayoutPreview count={l.count} perRow={l.perRow} template={l.template} />
+              <span className="text-[10px] leading-tight text-center text-muted-foreground">{l.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </Field>
+  );
+}
+
 /* ─── Main ─────────────────────────────────────────────────────────────────── */
 
 export function BlockSettings({ block, onChange, categories, forms, businessId, isAdmin }: {
@@ -372,29 +422,49 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       const items = b.items ?? [];
       const setItem = (i: number, p: Partial<ColumnItem>) => patch({ items: items.map((it, k) => (k === i ? { ...it, ...p } : it)) });
       const count = b.count ?? 2;
+      const flex = isFlexibleColumns(b);
+      const currentLayout = COLUMN_LAYOUTS.find(
+        (l) => l.count === count && l.perRow === columnsPerRow(b) && (l.template ?? "") === (b.template ?? ""),
+      )?.key ?? "";
+      const applyLayout = (l: ColumnLayout) => {
+        const next = [...items];
+        // Grow to the new cell count (keep existing content; never truncate so a
+        // cell's blocks survive a smaller layout and reappear if it grows again).
+        while (next.length < l.count) next.push(flex ? { blocks: [] } : { heading: "Coloana", html: "<p></p>" });
+        patch({ count: l.count, perRow: l.perRow, template: l.template, items: next });
+      };
+      const convertToFlexible = () => {
+        const next: ColumnItem[] = [];
+        for (let i = 0; i < count; i++) next.push({ blocks: classicItemToBlocks(items[i] ?? {}) });
+        patch({ items: next });
+      };
       return (
         <div className="space-y-4">
-          <Select label="Numar coloane" value={String(count) as "2" | "3"} onChange={(v) => {
-            const n = Number(v) as 2 | 3;
-            const next = [...items];
-            while (next.length < n) next.push({ heading: "Coloana", html: "<p></p>" });
-            patch({ count: n, template: n === 3 ? "1-1-1" : "1-1", items: next.slice(0, n) });
-          }} options={[{ value: "2", label: "2" }, { value: "3", label: "3" }]} />
-          <Select label="Structura (latimi)" value={b.template ?? (count === 3 ? "1-1-1" : "1-1")} onChange={(v) => patch({ template: v })}
-            options={count === 3
-              ? [{ value: "1-1-1", label: "Egale" }, { value: "2-1-1", label: "Prima mai lata" }, { value: "1-2-1", label: "Mijloc mai lat" }, { value: "1-1-2", label: "Ultima mai lata" }]
-              : [{ value: "1-1", label: "Egale (50/50)" }, { value: "1-2", label: "Stanga mica (33/66)" }, { value: "2-1", label: "Dreapta mica (66/33)" }]} />
+          <LayoutPicker current={currentLayout} onPick={applyLayout} />
           <Select label="Distanta" value={b.gap ?? "md"} onChange={(v) => patch({ gap: v })} options={[{ value: "sm", label: "Mica" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }]} />
           <Select label="Aliniere verticala" value={b.verticalAlign ?? "top"} onChange={(v) => patch({ verticalAlign: v })} options={[{ value: "top", label: "Sus" }, { value: "center", label: "Centru" }]} />
           <Toggle label="Contur coloane" checked={!!b.bordered} onChange={(v) => patch({ bordered: v })} />
-          {items.slice(0, count).map((it, i) => (
-            <div key={i} className="p-3 rounded-lg border border-border space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground">Coloana {i + 1}</p>
-              <input value={it.heading ?? ""} onChange={(e) => setItem(i, { heading: e.target.value })} placeholder="Titlu" className={inputCls} />
-              <RichTextEditor content={it.html ?? ""} onChange={(html) => setItem(i, { html })} />
-              <ImageField label="Imagine" value={it.image} onChange={(v) => setItem(i, { image: v })} />
+          {flex ? (
+            <div className="p-3 rounded-lg bg-muted/50 border border-border text-[11px] text-muted-foreground leading-relaxed">
+              Adauga continut direct in coloane: apasa <span className="font-semibold text-foreground">+ Adauga</span> in fiecare coloana, pe pagina. Poti pune text, imagine, buton, formular, produse si orice alt bloc.
             </div>
-          ))}
+          ) : (
+            <>
+              {items.slice(0, count).map((it, i) => (
+                <div key={i} className="p-3 rounded-lg border border-border space-y-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground">Coloana {i + 1}</p>
+                  <input value={it.heading ?? ""} onChange={(e) => setItem(i, { heading: e.target.value })} placeholder="Titlu" className={inputCls} />
+                  <RichTextEditor content={it.html ?? ""} onChange={(html) => setItem(i, { html })} />
+                  <ImageField label="Imagine" value={it.image} onChange={(v) => setItem(i, { image: v })} />
+                </div>
+              ))}
+              <button type="button" onClick={convertToFlexible}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-primary border border-primary/40 rounded-lg hover:bg-primary/5 transition-colors">
+                <Plus className="h-3.5 w-3.5" /> Foloseste coloane flexibile
+              </button>
+              <p className="text-[11px] text-muted-foreground">Iti pastreaza continutul actual si iti permite sa adaugi formulare, produse, butoane si orice alt bloc direct in fiecare coloana.</p>
+            </>
+          )}
           <StyleControls style={b.style} onChange={setStyle} />
         </div>
       );

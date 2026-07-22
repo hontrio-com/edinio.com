@@ -7,9 +7,10 @@ import { videoEmbedUrl, mapEmbedUrl } from "@/lib/pages/embeds";
 import { NativeVideo } from "./NativeVideo";
 import type { CSSProperties, ReactNode } from "react";
 import type {
-  HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock, GalleryItem, ButtonBlock,
+  Block, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock, GalleryItem, ButtonBlock,
   ColumnsBlock, SpacerBlock, DividerBlock, VideoBlock, MapBlock, TrustBlock, SocialBlock,
 } from "@/lib/pages/blocks.types";
+import { columnsGridTemplate, isFlexibleColumns } from "@/lib/pages/block-tree";
 
 /* Pure presentational components. HTML passed to dangerouslySetInnerHTML is
    sanitized upstream by the public route (prepare-blocks); in the editor preview
@@ -168,31 +169,44 @@ export function ButtonBlockView({ block, color, basePath }: { block: ButtonBlock
   );
 }
 
-const TPL_FR: Record<string, string> = {
-  "1-1": "1fr 1fr", "1-2": "1fr 2fr", "2-1": "2fr 1fr",
-  "1-1-1": "1fr 1fr 1fr", "2-1-1": "2fr 1fr 1fr", "1-2-1": "1fr 2fr 1fr", "1-1-2": "1fr 1fr 2fr",
-};
-
-export function ColumnsBlockView({ block, color, basePath }: { block: ColumnsBlock; color: string; basePath: string }) {
+export function ColumnsBlockView({ block, color, basePath, renderBlocks }: {
+  block: ColumnsBlock; color: string; basePath: string;
+  /** Renders a column's nested blocks (injected by BlockRenderer to keep recursion in one place). */
+  renderBlocks: (blocks: Block[]) => ReactNode;
+}) {
   const items = block.items ?? [];
   const count = block.count ?? 2;
-  const fr = TPL_FR[block.template ?? ""] ?? (count === 3 ? "1fr 1fr 1fr" : "1fr 1fr");
+  const flex = isFlexibleColumns(block);
+  const fr = columnsGridTemplate(block);
   const gap = block.gap === "sm" ? "gap-3" : block.gap === "lg" ? "gap-8" : "gap-6";
   const valign = block.verticalAlign === "center" ? "items-center" : "items-start";
   return (
     <BlockShell style={block.style}>
       <div className={`grid grid-cols-1 ${gap} ${valign} md:[grid-template-columns:var(--tpl)]`} style={{ "--tpl": fr } as CSSProperties}>
-        {items.slice(0, count).map((it, i) => (
-          <div key={i} className={`flex flex-col gap-3 text-left ${block.bordered ? "border border-border rounded-2xl p-5" : ""}`}>
-            {it.image && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={it.image} alt={it.heading ?? ""} className="w-full h-auto rounded-xl" />
-            )}
-            {it.heading && <h3 className="text-lg font-bold text-foreground">{it.heading}</h3>}
-            {it.html && <div className="policy-content text-foreground/75 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: it.html }} />}
-            {it.buttonLabel && <div className="mt-1"><Btn href={it.buttonHref} basePath={basePath} label={it.buttonLabel} color={color} variant="outline" /></div>}
-          </div>
-        ))}
+        {Array.from({ length: count }).map((_, i) => {
+          const it = items[i] ?? (flex ? { blocks: [] as Block[] } : {});
+          // Flexible column: render its nested blocks; keep the cell minimal (each
+          // nested block brings its own padding/width via BlockShell).
+          if (Array.isArray(it.blocks)) {
+            return (
+              <div key={i} className={`min-w-0 ${block.bordered ? "border border-border rounded-2xl overflow-hidden" : ""}`}>
+                {renderBlocks(it.blocks)}
+              </div>
+            );
+          }
+          // Classic column: the legacy flat layout.
+          return (
+            <div key={i} className={`flex flex-col gap-3 text-left ${block.bordered ? "border border-border rounded-2xl p-5" : ""}`}>
+              {it.image && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={it.image} alt={it.heading ?? ""} className="w-full h-auto rounded-xl" />
+              )}
+              {it.heading && <h3 className="text-lg font-bold text-foreground">{it.heading}</h3>}
+              {it.html && <div className="policy-content text-foreground/75 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: it.html }} />}
+              {it.buttonLabel && <div className="mt-1"><Btn href={it.buttonHref} basePath={basePath} label={it.buttonLabel} color={color} variant="outline" /></div>}
+            </div>
+          );
+        })}
       </div>
     </BlockShell>
   );

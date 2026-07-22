@@ -6,7 +6,9 @@
  * Design rule: a page is a VERTICAL STACK of full-width blocks (no absolute /
  * free positioning). That keeps it far simpler than Elementor and responsive by
  * default. Multi-column layout is only available via the `columns` block, which
- * collapses on mobile. All new fields are optional for backward compatibility.
+ * collapses on mobile. A columns block is the one place nesting is allowed: each
+ * column can hold its own list of blocks (one level deep, no columns-in-columns).
+ * All new fields are optional for backward compatibility.
  */
 
 export type BlockType =
@@ -115,19 +117,27 @@ export interface ButtonBlock extends BaseBlock {
   newTab?: boolean;
 }
 
-/** A single column cell — intentionally a flat set of optional parts (no recursion). */
+/**
+ * A single column cell. Two modes, chosen per block:
+ *  - classic (legacy): the flat heading/html/image/button fields below.
+ *  - flexible: `blocks` holds nested blocks the merchant composes freely
+ *    (text, form, products, button, image, …). When `blocks` is present it wins.
+ */
 export interface ColumnItem {
   heading?: string;
   html?: string;     // rich text, sanitized
   image?: string | null;
   buttonLabel?: string;
   buttonHref?: string;
+  blocks?: Block[];  // flexible mode: nested blocks (one level of nesting)
 }
 
 export interface ColumnsBlock extends BaseBlock {
   type: "columns";
-  count?: 2 | 3;
-  template?: string;           // ratio preset, e.g. "1-1", "1-2", "2-1", "1-1-1", "2-1-1"
+  count?: number;              // total number of cells (>= 2)
+  perRow?: number;             // cells per row (grid tracks); cells wrap to new rows.
+                               // Defaults to the track count of `template`, else `count`.
+  template?: string;           // width-ratio preset for a single row, e.g. "1-1", "1-2", "2-1", "1-1-1", "2-1-1"
   items?: ColumnItem[];
   bordered?: boolean;
   gap?: "sm" | "md" | "lg";
@@ -299,9 +309,19 @@ export function newBlockId(): string {
   return `b_${Date.now().toString(36)}_${counter.toString(36)}`;
 }
 
-/** Factory for a freshly added block with sensible defaults. */
-export function createBlock(type: BlockType): Block {
-  const id = newBlockId();
+/**
+ * Factory for a freshly added block with sensible defaults.
+ * `inColumn` tightens spacing and lets the block fill its column cell.
+ */
+export function createBlock(type: BlockType, opts?: { inColumn?: boolean }): Block {
+  const block = buildBlock(newBlockId(), type);
+  if (opts?.inColumn) {
+    block.style = { ...(block.style ?? {}), padding: "sm", width: "full" };
+  }
+  return block;
+}
+
+function buildBlock(id: string, type: BlockType): Block {
   switch (type) {
     case "hero":
       return { id, type, title: "Titlul tau aici", subtitle: "Un subtitlu scurt si convingator.", buttonLabel: "Vezi produsele", buttonHref: "", align: "center", height: "md", overlay: true };
@@ -316,7 +336,8 @@ export function createBlock(type: BlockType): Block {
     case "button":
       return { id, type, label: "Apasa aici", href: "", variant: "solid", effect: "none", size: "md", rounded: "lg", style: { align: "center", padding: "md" } };
     case "columns":
-      return { id, type, count: 2, template: "1-1", gap: "md", items: [{ heading: "Coloana 1", html: "<p>Text coloana.</p>" }, { heading: "Coloana 2", html: "<p>Text coloana.</p>" }], style: { padding: "md" } };
+      // Flexible by default: two empty columns, each ready to receive any block.
+      return { id, type, count: 2, template: "1-1", gap: "md", items: [{ blocks: [] }, { blocks: [] }], style: { padding: "md" } };
     case "spacer":
       return { id, type, size: "md" };
     case "divider":

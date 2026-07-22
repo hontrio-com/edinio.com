@@ -52,14 +52,43 @@ async function resolveUniquePageSlug(
   return `${base}-${n}`;
 }
 
-/** Strip the admin-only `raw` flag from html blocks unless the actor is admin. */
+/**
+ * Strip the admin-only `raw` flag from html blocks unless the actor is admin.
+ * Recurses into columns so a raw html block hidden inside a column is gated too.
+ */
 function gateRawBlocks(blocks: Block[], isAdmin: boolean, actorId: string): Block[] {
   return blocks.map((b) => {
+    if (b.type === "columns") {
+      return {
+        ...b,
+        items: (b.items ?? []).map((it) =>
+          Array.isArray(it.blocks) ? { ...it, blocks: gateRawBlocks(it.blocks, isAdmin, actorId) } : it),
+      };
+    }
     if (b.type !== "html") return b;
     if (b.raw && !isAdmin) return { ...b, raw: false, rawApprovedBy: null };
     if (b.raw && isAdmin) return { ...b, raw: true, rawApprovedBy: b.rawApprovedBy ?? actorId };
     return b;
   });
+}
+
+/** Find a stored block by id, descending into columns' nested blocks. */
+function findRawBlockById(
+  blocks: Array<Record<string, unknown>>,
+  id: string,
+): Record<string, unknown> | null {
+  for (const b of blocks) {
+    if (b.id === id) return b;
+    if (b.type === "columns" && Array.isArray(b.items)) {
+      for (const it of b.items as Array<Record<string, unknown>>) {
+        if (Array.isArray(it.blocks)) {
+          const hit = findRawBlockById(it.blocks as Array<Record<string, unknown>>, id);
+          if (hit) return hit;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function revalidatePage(slug: string | null, pageSlug?: string) {
@@ -303,7 +332,7 @@ export async function submitPageForm(input: {
       .from("custom_pages").select("blocks, title")
       .eq("id", input.pageId).eq("business_id", biz.id).single();
     const blocks = (page?.blocks as Array<Record<string, unknown>> | null) ?? [];
-    const block = blocks.find((b) => b.id === input.blockId);
+    const block = findRawBlockById(blocks, input.blockId);
     if (block && block.emailEnabled === true) emailEnabled = true;
     if (page?.title) title = page.title;
   }

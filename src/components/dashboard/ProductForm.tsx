@@ -101,6 +101,7 @@ interface FormState {
   price: string;
   compare_at_price: string;
   category: string;
+  shipping_class: string;
   sku: string;
   images: string[];
   track_inventory: boolean;
@@ -209,7 +210,7 @@ const EMPTY_TIERS: QuantityTiers = {
 
 const EMPTY_FORM: FormState = {
   name: "", slug: "", description: "", short_description: "", price: "", compare_at_price: "",
-  category: "", sku: "", images: [],
+  category: "", shipping_class: "", sku: "", images: [],
   track_inventory: false, stock_quantity: "", low_stock_threshold: "",
   stock_status: "in_stock",
   is_featured: false, is_active: true,
@@ -254,6 +255,7 @@ function productToForm(p: Product): FormState {
     price: String(p.price),
     compare_at_price: p.compare_at_price ? String(p.compare_at_price) : "",
     category: p.category ?? "",
+    shipping_class: p.shipping_class ?? "",
     sku: p.sku ?? "",
     images: Array.isArray(p.images) ? p.images.map(String) : [],
     track_inventory: p.track_inventory,
@@ -490,9 +492,11 @@ interface Props {
   olxConnected?: boolean;
   // Sectiunea Google Shopping se afiseaza doar cand contul are Google Merchant conectat.
   gmcConnected?: boolean;
+  // Clasele de transport definite in Setari > Livrare (pentru selectorul de pe produs).
+  shippingClasses?: { id: string; name: string }[];
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, gmcConnected = false }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, gmcConnected = false, shippingClasses = [] }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
@@ -639,6 +643,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
       price,
       compare_at_price: form.compare_at_price ? parseFloat(form.compare_at_price.replace(",", ".")) : null,
       category: form.category,
+      shipping_class: form.shipping_class || null,
       sku: form.sku,
       images: form.images,
       track_inventory: form.track_inventory,
@@ -1343,6 +1348,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                       placeholder="0" min="0" className={inputCls} />
                   </div>
                 </div>
+                {shippingClasses.length > 0 && (
+                  <div className="mt-4">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Clasa de transport</label>
+                    <select value={form.shipping_class} onChange={(e) => set("shipping_class", e.target.value)} className={inputCls}>
+                      <option value="">Standard (implicit)</option>
+                      {shippingClasses.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">Regulile din Setari &gt; Livrare pot aplica preturi diferite in functie de clasa.</p>
+                  </div>
+                )}
               </div>
             </div>
 

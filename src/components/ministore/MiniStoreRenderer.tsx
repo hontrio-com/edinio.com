@@ -700,6 +700,8 @@ function CartCheckoutModal({
               postCode={isIntl ? form.postCode : undefined}
               weightKg={isIntl && dpdUseWeight && totalWeightKg > 0 ? totalWeightKg : undefined}
               cod={paymentMethod === "cash_on_delivery" ? total : 0}
+              cart={items.map((i) => ({ productId: i.productId, quantity: i.quantity }))}
+              subtotal={Math.max(0, goodsTotal - discountAmount)}
               onSelect={setCourierSelection}
             />
           )}

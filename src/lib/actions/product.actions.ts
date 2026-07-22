@@ -21,6 +21,7 @@ interface ProductData {
   price: number;
   compare_at_price?: number | null;
   category?: string;
+  shipping_class?: string | null;
   sku?: string;
   images: string[];
   track_inventory: boolean;
@@ -125,6 +126,7 @@ export async function createProduct(businessId: string, data: ProductData) {
     price: data.price,
     compare_at_price: data.compare_at_price || null,
     category: data.category?.trim() || null,
+    shipping_class: data.shipping_class ?? null,
     sku: data.sku?.trim() || null,
     images: data.images,
     track_inventory: data.track_inventory,
@@ -180,6 +182,7 @@ export async function updateProduct(productId: string, businessId: string, data:
     price: data.price,
     compare_at_price: data.compare_at_price || null,
     category: data.category?.trim() || null,
+    shipping_class: data.shipping_class ?? null,
     sku: data.sku?.trim() || null,
     images: data.images,
     track_inventory: data.track_inventory,
@@ -270,6 +273,7 @@ export async function duplicateProduct(productId: string, businessId: string) {
     price: original.price,
     compare_at_price: original.compare_at_price,
     category: original.category,
+    shipping_class: original.shipping_class,
     sku: original.sku ? `${original.sku}-COPY` : null,
     images: original.images,
     track_inventory: original.track_inventory,

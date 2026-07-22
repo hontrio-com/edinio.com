@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { ProductForm } from "@/components/dashboard/ProductForm";
+import { parseShippingClasses } from "@/lib/shipping/rules";
 
 interface Props {
   params: Promise<{ productId: string }>;
@@ -19,7 +20,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, slug, is_published, store_settings(olx_config, google_merchant_config)")
+    .select("id, slug, is_published, store_settings(olx_config, google_merchant_config, shipping_classes)")
     .eq("user_id", user.id)
     .order("created_at")
     .limit(1)
@@ -30,6 +31,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
   const olxConnected = !!(settings?.olx_config as { connected?: boolean } | null)?.connected;
   const gmcConfig = settings?.google_merchant_config as { connected?: boolean; account_id?: string } | null;
   const gmcConnected = !!gmcConfig?.connected && !!gmcConfig?.account_id;
+  const shippingClasses = parseShippingClasses(settings?.shipping_classes);
 
   const [{ data: product }, { data: categories }] = await Promise.all([
     supabase.from("products").select("*").eq("id", productId).eq("business_id", business.id).single(),
@@ -47,6 +49,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       business={business.slug ? { slug: business.slug, is_published: !!business.is_published } : undefined}
       olxConnected={olxConnected}
       gmcConnected={gmcConnected}
+      shippingClasses={shippingClasses}
     />
   );
 }

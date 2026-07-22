@@ -34,10 +34,14 @@ interface Props {
   country?: string;
   /** Required for international (used by DPD to price + create the AWB). */
   postCode?: string;
+  /** Cart lines for conditional shipping rules (weight/value/class-based pricing). */
+  cart?: { productId: string; quantity: number }[];
+  /** Goods value after promo — feeds value-based shipping rules. */
+  subtotal?: number;
   onSelect: (selection: CourierSelection | null) => void;
 }
 
-export function CourierSelector({ businessId, county, city, weightKg, cod, color, country, postCode, onSelect }: Props) {
+export function CourierSelector({ businessId, county, city, weightKg, cod, color, country, postCode, cart, subtotal, onSelect }: Props) {
   const [options, setOptions] = useState<ShippingOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -56,11 +60,15 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     ? (!!postCode && postCode.trim().length >= 3 && city.trim().length >= 2)
     : (!!county && city.trim().length >= 2);
 
+  // Stable signature of the cart — recomputes options when contents/value change
+  // (conditional rules depend on weight/classes/value derived from the cart).
+  const cartSig = (cart ?? []).map((c) => `${c.productId}x${c.quantity}`).join(",");
+
   // Fetch shipping options when the destination is sufficiently filled in
   useEffect(() => {
     // cod is part of the key: COD switches FAN to "Cont Colector" (extra fee)
     // and changes Woot repayment quotes, so prices must refresh with payment.
-    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}::${cod ?? ""}`;
+    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}::${cod ?? ""}::${subtotal ?? ""}::${cartSig}`;
     if (!ready) {
       setOptions([]);
       setSelectedKey(null);
@@ -78,7 +86,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     setSelectedLocker(null);
     onSelect(null);
 
-    getShippingOptions(businessId, { county, city, weightKg, cod, country, postCode })
+    getShippingOptions(businessId, { county, city, weightKg, cod, country, postCode, cart, subtotal })
       .then((opts) => {
         if (thisReq !== reqId.current) return; // stale response
         setOptions(opts);
@@ -109,7 +117,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         if (thisReq === reqId.current) setLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [county, city, country, postCode, weightKg, cod]);
+  }, [county, city, country, postCode, weightKg, cod, subtotal, cartSig]);
 
   // Fetch lockers when a locker option is selected
   useEffect(() => {

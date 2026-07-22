@@ -938,6 +938,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   postCode={isIntl ? form.postCode : undefined}
                   weightKg={isIntl && dpdUseWeight && product.weight_grams ? (product.weight_grams * effectiveQty) / 1000 : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
+                  cart={[
+                    { productId: product.id, quantity: effectiveQty },
+                    ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+                    ...(fbtOffer ? fbtOffer.items.map((i) => ({ productId: i.product_id, quantity: i.quantity })) : []),
+                    ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
+                  ]}
+                  subtotal={Math.max(0, discountedSubtotal)}
                   onSelect={setCourierSelection}
                 />
               )}

@@ -8,6 +8,7 @@ import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
 import { checkoutPaymentMethods, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
+import { parseShippingClasses, parseShippingRules, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
 
 /**
  * Public, secret-free view of a store's checkout configuration.
@@ -464,6 +465,9 @@ export async function updateShippingConfig(
     free_shipping_threshold: number | null;
     min_order_amount: number | null;
     shipping_zones: Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string }>;
+    // Clase de transport + reguli condiționale (Faza 1). Sanitizate defensiv la salvare.
+    shipping_classes?: ShippingClass[];
+    shipping_rules?: ShippingRule[];
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -478,6 +482,10 @@ export async function updateShippingConfig(
   const enabledZone = Object.values(config.shipping_zones).find(z => z.enabled);
   const defaultShippingCost = enabledZone ? enabledZone.price : 20;
 
+  // Re-parse clasele/regulile prin parserele partajate — garanteaza forma jsonb valida.
+  const classesRow = parseShippingClasses(config.shipping_classes ?? []);
+  const rulesRow = parseShippingRules(config.shipping_rules ?? []);
+
   const { data: existing } = await supabase
     .from("store_settings").select("id").eq("business_id", businessId).single();
 
@@ -489,6 +497,8 @@ export async function updateShippingConfig(
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,
         shipping_zones: config.shipping_zones as never,
+        shipping_classes: classesRow as never,
+        shipping_rules: rulesRow as never,
         default_shipping_cost: defaultShippingCost,
         updated_at: new Date().toISOString(),
       })
@@ -501,6 +511,8 @@ export async function updateShippingConfig(
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,
         shipping_zones: config.shipping_zones as never,
+        shipping_classes: classesRow as never,
+        shipping_rules: rulesRow as never,
         default_shipping_cost: defaultShippingCost,
       }));
   }

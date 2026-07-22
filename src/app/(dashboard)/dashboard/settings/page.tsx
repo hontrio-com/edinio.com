@@ -4,6 +4,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
 import { resolvePaymentMethods, parseCardDiscountConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
+import { parseShippingClasses, parseShippingRules } from "@/lib/shipping/rules";
 import type { MarketingConfig } from "@/lib/marketing";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 import { parseEmailConfig } from "@/lib/email/config";
@@ -23,7 +24,7 @@ export default async function SettingsPage({ searchParams }: Props) {
     supabase.from("users_profile").select("*").eq("id", user.id).single(),
     supabase
       .from("businesses")
-      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cookie_banner_config, marketing_config, email_config, page_content)")
+      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cookie_banner_config, marketing_config, email_config, page_content)")
       .eq("user_id", user.id)
       .order("created_at")
       .limit(1)
@@ -40,12 +41,12 @@ export default async function SettingsPage({ searchParams }: Props) {
   const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
   // Windowed: la cataloage mari, un query simplu e taiat silentios la 1000 de
   // randuri (cap PostgREST) si produse valide ar lipsi din selectorul One Product.
-  const opsProducts: { id: string; name: string }[] = [];
+  const opsProducts: { id: string; name: string; category: string | null }[] = [];
   if (bizRow?.id) {
     for (let from = 0; ; from += 1000) {
       const { data } = await supabase
         .from("products")
-        .select("id, name")
+        .select("id, name, category")
         .eq("business_id", bizRow.id)
         .eq("is_active", true)
         .order("is_featured", { ascending: false })
@@ -56,6 +57,8 @@ export default async function SettingsPage({ searchParams }: Props) {
       if (!data || data.length < 1000) break;
     }
   }
+  // Categoriile distincte folosite de produse — pentru conditia „Categorie" din regulile de transport.
+  const shippingCategories = [...new Set(opsProducts.map((p) => p.category).filter((c): c is string => !!c && c.trim() !== ""))].sort();
 
   // Store-level SEO: current overrides + the auto-derived defaults shown as
   // placeholders / in the live Google preview (single source of truth: @/lib/seo).
@@ -157,6 +160,8 @@ export default async function SettingsPage({ searchParams }: Props) {
         free_shipping_threshold: storeSettings?.free_shipping_threshold ?? null,
         min_order_amount: storeSettings?.min_order_amount ?? null,
         shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
+        shipping_classes: parseShippingClasses(storeSettings?.shipping_classes),
+        shipping_rules: parseShippingRules(storeSettings?.shipping_rules),
       }}
       activeCourierIds={activeCourierIds}
       paymentMethods={paymentMethods}
@@ -172,6 +177,7 @@ export default async function SettingsPage({ searchParams }: Props) {
       storeMode={storeMode.mode}
       oneProductId={storeMode.productId}
       products={opsProducts}
+      shippingCategories={shippingCategories}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={plan_success === "1"}
       domainSuccess={domain_success === "1"}

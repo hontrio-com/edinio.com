@@ -2334,6 +2334,7 @@ export type Database = {
           source: string | null
           stock_quantity: number | null
           tags: Json
+          shipping_class: string | null
           track_inventory: boolean
           updated_at: string
           weight_grams: number | null
@@ -2361,6 +2362,7 @@ export type Database = {
           tags?: Json
           track_inventory?: boolean
           updated_at?: string
+          shipping_class?: string | null
           weight_grams?: number | null
         }
         Update: {
@@ -2386,6 +2388,7 @@ export type Database = {
           tags?: Json
           track_inventory?: boolean
           updated_at?: string
+          shipping_class?: string | null
           weight_grams?: number | null
         }
         Relationships: [
@@ -2658,6 +2661,8 @@ export type Database = {
           returns_config: Json
           revolut_config: Json | null
           sameday_config: Json | null
+          shipping_classes: Json
+          shipping_rules: Json
           shipping_enabled: boolean
           shipping_zones: Json
           show_vat_breakdown: boolean
@@ -2712,6 +2717,8 @@ export type Database = {
           returns_config?: Json
           revolut_config?: Json | null
           sameday_config?: Json | null
+          shipping_classes?: Json
+          shipping_rules?: Json
           shipping_enabled?: boolean
           shipping_zones?: Json
           show_vat_breakdown?: boolean
@@ -2766,6 +2773,8 @@ export type Database = {
           returns_config?: Json
           revolut_config?: Json | null
           sameday_config?: Json | null
+          shipping_classes?: Json
+          shipping_rules?: Json
           shipping_enabled?: boolean
           shipping_zones?: Json
           show_vat_breakdown?: boolean

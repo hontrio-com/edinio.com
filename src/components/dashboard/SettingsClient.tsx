@@ -14,6 +14,8 @@ import { createClient } from "@/lib/supabase/client";
 import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
+import type { ShippingClass, ShippingRule } from "@/lib/shipping/rules";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
@@ -205,6 +207,8 @@ interface ShippingConfig {
   free_shipping_threshold: number | null;
   min_order_amount: number | null;
   shipping_zones: Record<string, ShippingMethodConfig>;
+  shipping_classes: ShippingClass[];
+  shipping_rules: ShippingRule[];
 }
 
 const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice: number; filter?: string }[] = [
@@ -264,6 +268,7 @@ interface Props {
   storeMode: StoreMode;
   oneProductId: string | null;
   products: { id: string; name: string }[];
+  shippingCategories: string[];
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
   domainSuccess?: boolean;
@@ -281,7 +286,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -429,6 +434,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [shippingZones, setShippingZones] = useState<Record<string, ShippingMethodConfig>>(
     () => buildDefaultZones(shippingConfig.shipping_zones)
   );
+  const [shippingClasses, setShippingClasses] = useState<ShippingClass[]>(shippingConfig.shipping_classes);
+  const [shippingRules, setShippingRules] = useState<ShippingRule[]>(shippingConfig.shipping_rules);
   const [savingShipping, startShippingTransition] = useTransition();
 
   // Mirrors the <Input> primitive so every native input in Settings matches the
@@ -602,6 +609,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
         free_shipping_threshold: threshold,
         min_order_amount: minOrderValue,
         shipping_zones: shippingZones,
+        shipping_classes: shippingClasses,
+        shipping_rules: shippingRules,
       });
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile de livrare au fost salvate.");
@@ -1480,6 +1489,16 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   <span className="text-sm text-muted-foreground">lei</span>
                 </div>
               </div>
+
+              {/* Clase de transport + reguli condiționale (Faza 1) */}
+              <ShippingRulesEditor
+                classes={shippingClasses}
+                rules={shippingRules}
+                categories={shippingCategories}
+                products={products}
+                onClassesChange={setShippingClasses}
+                onRulesChange={setShippingRules}
+              />
 
               {/* Save button */}
               <div className="flex justify-end">

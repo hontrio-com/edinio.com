@@ -9,6 +9,7 @@ import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/
 import { getCOToken, getPrices as fetchCOPrices, type COConfig } from "@/lib/colete";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
+import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 
 /**
  * Diacritics-insensitive locality match ("București"/"Sector 3" find
@@ -90,6 +91,11 @@ export async function getShippingOptions(
     cod?: number;
     country?: string;  // EU ISO alpha-2 for international; absent or "RO" = domestic
     postCode?: string;
+    // Cart context for conditional shipping rules (weight/value/class/category).
+    // Product shipping data is loaded server-side (authoritative); subtotal is the
+    // goods value after promo. Absent => behaves exactly like before (no rules).
+    cart?: { productId: string; quantity: number }[];
+    subtotal?: number;
   },
 ): Promise<ShippingOption[]> {
   // Service role: anonymous customers trigger this; courier secrets are read
@@ -97,7 +103,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, default_shipping_cost, shipping_zones")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -109,7 +115,43 @@ export async function getShippingOptions(
   // No courier enabled in shipping_zones — nothing to show
   if (enabledZones.length === 0) return [];
 
-  const weight = destination.weightKg && destination.weightKg > 0 ? destination.weightKg : 1;
+  // Cart-derived shipping context (weight/classes/categories/quantity). Loaded once,
+  // authoritative from the DB. Feeds both the domestic weight (below) and the rules
+  // engine. When no cart is passed (legacy callers) everything stays as before.
+  const rules = parseShippingRules(settings.shipping_rules);
+  let cartWeightKg = 0;
+  const cartClassIds = new Set<string>();
+  const cartCategories = new Set<string>();
+  let cartQuantity = 0;
+  const cartProductIds: string[] = [];
+  // Only load cart data when the store actually has rules — otherwise this function
+  // stays byte-identical to before (no extra query, weight = intl override || 1kg).
+  if (rules.length > 0 && destination.cart && destination.cart.length > 0) {
+    cartProductIds.push(...new Set(destination.cart.map((c) => c.productId)));
+    const { data: cartProducts } = await supabase
+      .from("products")
+      .select("id, shipping_class, category, weight_grams")
+      .eq("business_id", businessId)
+      .in("id", cartProductIds);
+    const byId = new Map((cartProducts ?? []).map((p) => [p.id, p]));
+    let totalWeightG = 0;
+    for (const line of destination.cart) {
+      const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
+      cartQuantity += qty;
+      const p = byId.get(line.productId);
+      if (!p) continue;
+      if (p.shipping_class) cartClassIds.add(p.shipping_class);
+      if (p.category) cartCategories.add(p.category);
+      totalWeightG += (Number(p.weight_grams) || 0) * qty;
+    }
+    cartWeightKg = totalWeightG / 1000;
+  }
+
+  // Domestic weight now reflects the real cart (when products carry weights); the
+  // intl override (destination.weightKg) still wins for the DPD international quote.
+  const weight = destination.weightKg && destination.weightKg > 0
+    ? destination.weightKg
+    : (cartWeightKg > 0 ? cartWeightKg : 1);
   const options: ShippingOption[] = [];
 
   // International (EU): only DPD international applies. Short-circuit here so the
@@ -459,8 +501,32 @@ export async function getShippingOptions(
 
   if (options.length === 0) return [];
 
+  // Conditional shipping rules: post-process the base options (surcharge/free/hide on
+  // any courier; flat price only on fixed-price couriers — own/pickup or "Pret fix").
+  // No-op when the store has no rules, so output is byte-identical to before.
+  let finalOptions = options;
+  if (rules.length > 0) {
+    const flatCourierIds = new Set<string>();
+    for (const [courierId, zone] of enabledZones) {
+      if (courierId === "own" || courierId === "pickup" || zone.auto_price === false) {
+        flatCourierIds.add(courierId);
+      }
+    }
+    const ctx: ShippingCartContext = {
+      subtotal: Math.max(0, Number(destination.subtotal) || 0),
+      weightKg: destination.weightKg && destination.weightKg > 0 ? destination.weightKg : cartWeightKg,
+      quantity: cartQuantity,
+      classIds: [...cartClassIds],
+      categories: [...cartCategories],
+      productIds: cartProductIds,
+      county: destination.county,
+    };
+    finalOptions = applyShippingRules(options, rules, ctx, flatCourierIds);
+    if (finalOptions.length === 0) return [];
+  }
+
   // Sort: address first, then lockers, by price
-  return options.sort((a, b) => {
+  return finalOptions.sort((a, b) => {
     if (a.deliveryType !== b.deliveryType) return a.deliveryType === "address" ? -1 : 1;
     return a.price - b.price;
   });

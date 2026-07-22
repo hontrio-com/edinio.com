@@ -271,8 +271,9 @@ export function DomainSection({
     if (!selectedTld || !businessId || !isValidName) return;
 
     // Campuri comune, necesare pentru inregistrare indiferent de tipul titularului.
+    // Codul postal e optional.
     const commonRequired: (keyof ContactForm)[] = [
-      "email", "phonenumber", "address1", "city", "state", "postcode",
+      "email", "phonenumber", "address1", "city", "state",
     ];
     for (const f of commonRequired) {
       if (!String(contact[f]).trim()) {
@@ -1073,7 +1074,7 @@ export function DomainSection({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-foreground mb-1.5">
-                      Cod postal <span className="text-destructive">*</span>
+                      Cod postal <span className="text-muted-foreground font-normal">(optional)</span>
                     </label>
                     <input
                       type="text"

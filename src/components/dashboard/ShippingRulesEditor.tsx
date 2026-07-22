@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Plus, Trash2, Tag, Layers, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { ROMANIAN_COUNTIES } from "@/lib/validations/business";
@@ -68,13 +69,44 @@ function ChipMultiSelect({ options, selected, onChange, placeholder }: {
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const sel = new Set(selected);
   const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v;
   const filtered = options.filter((o) => !q || o.label.toLowerCase().includes(q.toLowerCase())).slice(0, 60);
   const toggle = (v: string) => onChange(sel.has(v) ? selected.filter((x) => x !== v) : [...selected, v]);
 
+  // Dropdown randat in portal la <body> ca sa nu fie taiat de containerele parinte
+  // cu overflow-hidden (cardul de reguli). Repozitionat la scroll/resize; se inchide
+  // la click in afara (trigger sau dropdown) — fara backdrop care ar acoperi inputul.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    const onOutside = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || dropdownRef.current?.contains(t)) return;
+      setOpen(false);
+      setQ("");
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    document.addEventListener("mousedown", onOutside);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+      document.removeEventListener("mousedown", onOutside);
+    };
+  }, [open]);
+
   return (
-    <div className="relative min-w-[180px] flex-1">
+    <div ref={triggerRef} className="min-w-[180px] flex-1">
       <div className="flex flex-wrap gap-1 items-center min-h-[34px] px-2 py-1 border border-border rounded-lg bg-background cursor-text" onClick={() => setOpen(true)}>
         {selected.map((v) => (
           <span key={v} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-xs text-foreground">
@@ -86,24 +118,23 @@ function ChipMultiSelect({ options, selected, onChange, placeholder }: {
           placeholder={selected.length ? "" : placeholder}
           className="flex-1 min-w-[70px] text-sm bg-transparent focus:outline-none text-foreground placeholder:text-muted-foreground" />
       </div>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => { setOpen(false); setQ(""); }} />
-          <div className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-auto bg-surface border border-border rounded-lg shadow-lg">
-            {filtered.length === 0 ? (
-              <p className="p-2 text-xs text-muted-foreground">Niciun rezultat</p>
-            ) : filtered.map((o) => (
-              <button key={o.value} type="button" onClick={() => toggle(o.value)}
-                className="w-full text-left px-2.5 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2 text-foreground">
-                <span className="w-3.5 h-3.5 rounded border flex items-center justify-center"
-                  style={sel.has(o.value) ? { backgroundColor: "var(--color-primary)", borderColor: "var(--color-primary)" } : { borderColor: "var(--color-border)" }}>
-                  {sel.has(o.value) && <span className="text-white text-[9px]">&#10003;</span>}
-                </span>
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </>
+      {open && rect && createPortal(
+        <div ref={dropdownRef} className="fixed z-50 max-h-60 overflow-auto bg-surface border border-border rounded-lg shadow-lg"
+          style={{ top: rect.top, left: rect.left, width: rect.width }}>
+          {filtered.length === 0 ? (
+            <p className="p-2 text-xs text-muted-foreground">Niciun rezultat</p>
+          ) : filtered.map((o) => (
+            <button key={o.value} type="button" onClick={() => toggle(o.value)}
+              className="w-full text-left px-2.5 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2 text-foreground">
+              <span className="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0"
+                style={sel.has(o.value) ? { backgroundColor: "var(--color-primary)", borderColor: "var(--color-primary)" } : { borderColor: "var(--color-border)" }}>
+                {sel.has(o.value) && <span className="text-white text-[9px]">&#10003;</span>}
+              </span>
+              {o.label}
+            </button>
+          ))}
+        </div>,
+        document.body,
       )}
     </div>
   );

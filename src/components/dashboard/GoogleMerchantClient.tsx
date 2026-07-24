@@ -36,6 +36,7 @@ export function GoogleMerchantClient({ businessId, status, products, categories,
     if (p === "connected") toast.success("Google Merchant conectat.");
     else if (p === "choose") toast.message("Alege contul Merchant Center.");
     else if (p === "norefresh") toast.error("Reconectează-te și acceptă accesul offline.");
+    else if (p === "noscope") toast.error("Nu ai acordat permisiunea pentru Google Shopping. Reconectează-te și lasă bifată permisiunea de gestionare a produselor Shopping.");
     else if (p === "error") toast.error("Conectarea Google a eșuat. Încearcă din nou.");
     window.history.replaceState({}, "", "/dashboard/features/google-merchant");
   }, []);
@@ -153,6 +154,22 @@ function AccountPicker({ businessId }: { businessId: string }) {
                 {saving ? <Loader2 className="animate-spin" /> : "Conectează"}
               </Button>
             </div>
+          </div>
+          <div className="mt-1 border-t border-border pt-3">
+            <p className="mb-2 text-xs text-muted-foreground">
+              Primești o eroare de permisiuni (&bdquo;insufficient scopes&rdquo;)? Reconectează contul Google și lasă
+              <strong> bifată</strong> permisiunea pentru Google Shopping.
+            </p>
+            <Button
+              variant="outline" size="sm" className="w-full" disabled={saving}
+              onClick={() => startSave(async () => {
+                const res = await startGoogleMerchantOAuth(businessId);
+                if ("error" in res) { toast.error(res.error); return; }
+                window.location.href = res.url;
+              })}
+            >
+              <Plug className="h-4 w-4" /> Reconectează contul Google
+            </Button>
           </div>
         </div>
       )}

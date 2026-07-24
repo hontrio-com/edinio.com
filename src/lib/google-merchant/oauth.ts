@@ -22,6 +22,15 @@ export function googleMerchantConfigured(): boolean {
   return !!(clientId() && clientSecret());
 }
 
+// The `scope` string Google returns is a space-separated list of full scope URLs.
+// If the user unticks the Shopping permission on the consent screen (or the app
+// wasn't configured for it), `content` is absent and every Merchant API call
+// fails with "Request had insufficient authentication scopes" — so we check up
+// front instead of surfacing that cryptic error later at registration time.
+export function hasContentScope(scope: string | null | undefined): boolean {
+  return !!scope && scope.split(/\s+/).includes(CONTENT_SCOPE);
+}
+
 export function buildAuthUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: clientId(),
@@ -41,13 +50,14 @@ interface TokenResponse {
   refresh_token?: string;
   id_token?: string;
   expires_in?: number;
+  scope?: string;
   error?: string;
   error_description?: string;
 }
 
 export async function exchangeCode(
   code: string,
-): Promise<{ accessToken: string; refreshToken: string | null; email: string | null } | { error: string }> {
+): Promise<{ accessToken: string; refreshToken: string | null; email: string | null; scope: string } | { error: string }> {
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
@@ -68,6 +78,7 @@ export async function exchangeCode(
       accessToken: data.access_token,
       refreshToken: data.refresh_token ?? null,
       email: decodeEmail(data.id_token),
+      scope: data.scope ?? "",
     };
   } catch {
     return { error: "Eroare de retea la conectarea Google." };

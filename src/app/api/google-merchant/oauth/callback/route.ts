@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { verifyState, exchangeCode } from "@/lib/google-merchant/oauth";
+import { verifyState, exchangeCode, hasContentScope } from "@/lib/google-merchant/oauth";
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription } from "@/lib/google-merchant/client";
 import { DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
@@ -30,6 +30,10 @@ export async function GET(req: NextRequest) {
   const tok = await exchangeCode(url.searchParams.get("code")!);
   if ("error" in tok) return back(req, "gmc=error");
   if (!tok.refreshToken) return back(req, "gmc=norefresh");
+  // Without the `content` scope the token is useless for the Merchant API (every
+  // call 403s with "insufficient authentication scopes"). Don't store it — send
+  // the user back to reconnect and keep the Shopping permission ticked.
+  if (!hasContentScope(tok.scope)) return back(req, "gmc=noscope");
 
   const { data: ss } = await supabase
     .from("store_settings").select("id, google_merchant_config").eq("business_id", businessId).single();

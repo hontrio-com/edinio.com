@@ -158,6 +158,11 @@ export async function listMerchantAccounts(businessId: string): Promise<{ accoun
   const res = await listAccounts(token);
   if ("error" in res) {
     logError({ action: "gmc.listAccounts", message: res.error, details: { businessId }, userId: user.id });
+    // Token lacks the Shopping (`content`) scope — the stored connection was
+    // granted without it. Point to the reconnect button rather than the raw error.
+    if (/insufficient.*scope|scope.*insufficient|insufficient_scope|ACCESS_TOKEN_SCOPE/i.test(res.error)) {
+      return { error: "Conexiunea Google nu include permisiunea pentru Google Shopping. Apasa \"Reconecteaza contul Google\" mai jos si lasa BIFATA permisiunea de gestionare a produselor Shopping." };
+    }
     // v1 requires developer registration even for listing; if it was removed
     // (e.g. app deleted from Merchant Center), the manual-ID path below the
     // list re-registers automatically via selectMerchantAccount -> registerGcp.
@@ -196,6 +201,11 @@ export async function selectMerchantAccount(
   const reg = await registerGcp(token, accountId, config.connected_email);
   if ("error" in reg && reg.status !== 409 && !/already/i.test(reg.error)) {
     logError({ action: "gmc.registerGcp", message: reg.error, details: { businessId, accountId }, userId: user.id });
+    // "Insufficient authentication scopes" is NOT an admin/T&C problem — the Google
+    // connection simply lacks the Shopping (`content`) permission. Guide the real fix.
+    if (/insufficient.*scope|scope.*insufficient|insufficient_scope|ACCESS_TOKEN_SCOPE/i.test(reg.error)) {
+      return { error: "Conexiunea Google nu include permisiunea pentru Google Shopping. Deconecteaza-te si reconecteaza-te, iar pe ecranul Google lasa BIFATA permisiunea de gestionare a produselor pentru Google Shopping (nu o debifa)." };
+    }
     if (/unverified homepage/i.test(reg.error)) {
       return { error: "Contul Merchant nu are homepage-ul verificat (cerinta Google pentru integrare). In Merchant Center: Setari -> Informatii despre afacere -> Site web -> verifica si revendica site-ul, apoi reincearca aici." };
     }

@@ -1,5 +1,6 @@
 // Computed once at module load (not during render — keeps callers pure).
 const PRICE_VALID_UNTIL = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const TODAY = new Date().toISOString().slice(0, 10);
 
 /**
  * schema.org Product JSON-LD for a storefront product. Shared by the product
@@ -16,6 +17,7 @@ export function buildProductJsonLd(
     sku?: string | null;
     track_inventory?: boolean;
     stock_quantity?: number | null;
+    created_at?: string | null;
   },
   productUrl: string,
   brand: string,
@@ -25,6 +27,13 @@ export function buildProductJsonLd(
   const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
   const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
   const freeReturn = shipping.cost <= 0;
+  // `validFrom` = date the price became valid. Google recommends it for merchant
+  // listings (bounds a price/sale window) and Search Console warns when it's
+  // absent. We don't track price-change time, so use the product's creation date
+  // (always <= priceValidUntil, as Google requires); fall back to today.
+  const validFrom = (typeof product.created_at === "string" && product.created_at)
+    ? product.created_at.slice(0, 10)
+    : TODAY;
   return {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -40,6 +49,7 @@ export function buildProductJsonLd(
       price: product.price ?? 0,
       itemCondition: "https://schema.org/NewCondition",
       availability: inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      validFrom,
       priceValidUntil: PRICE_VALID_UNTIL,
       url: productUrl,
       shippingDetails: {

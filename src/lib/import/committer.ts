@@ -13,7 +13,7 @@ import type {
   ValidationSummary,
 } from "./types";
 import { EMPTY_TOTALS } from "./types";
-import { rehostProductImages, needsRehost } from "./image-rehost";
+import { rehostProductImages, rehostImageUrl, needsRehost, isR2Url } from "./image-rehost";
 import { parseShippingClasses } from "@/lib/shipping/rules";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -254,14 +254,35 @@ async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; f
       await admin.from("product_import_rows").update({ images_done: true }).eq("id", row.id);
       continue;
     }
-    const { data: product } = await admin.from("products").select("images").eq("id", row.product_id).single();
+    const { data: product } = await admin.from("products").select("images, page_sections").eq("id", row.product_id).single();
     const images = Array.isArray(product?.images) ? (product!.images as string[]) : [];
+    const update: Record<string, unknown> = {};
 
     if (images.length && needsRehost(images)) {
       const res = await rehostProductImages(images, businessId, job.id, cache);
       imagesDone += res.done;
       imagesFailed += res.failed;
-      await admin.from("products").update({ images: res.images as unknown as never }).eq("id", row.product_id);
+      update.images = res.images as unknown as never;
+    }
+
+    // Rehost per-variant images too, reusing the SAME cache: a variant image shared
+    // with the gallery resolves to the identical rehosted URL, so it can never end up
+    // as an external duplicate of the gallery image on the storefront. Runs after the
+    // gallery loop above so the cache is already primed with the shared URLs.
+    const ps = (product?.page_sections ?? null) as { variants?: { combinations?: { image?: string }[] } } | null;
+    const combos = ps?.variants?.combinations;
+    if (ps && Array.isArray(combos) && combos.some((c) => c?.image && !isR2Url(c.image))) {
+      for (const c of combos) {
+        if (c?.image && !isR2Url(c.image)) {
+          const res = await rehostImageUrl(c.image, businessId, job.id, cache);
+          c.image = res.url;
+        }
+      }
+      update.page_sections = ps as unknown as never;
+    }
+
+    if (Object.keys(update).length > 0) {
+      await admin.from("products").update(update as never).eq("id", row.product_id);
     }
     await admin.from("product_import_rows").update({ images_done: true }).eq("id", row.id);
   }

@@ -322,22 +322,32 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   // still need the full combination.
   const variantImage = useMemo(() => {
     if (!variantsData) return null;
-    if (selectedCombo?.image) return selectedCombo.image;
-    const chosen = variantsData.options
-      .map(o => selectedOptions[o.name])
-      .filter(Boolean) as string[];
-    if (chosen.length === 0) return null;
-    // Only preview when the partial selection pins down ONE image. Choosing the
-    // colour (which carries the image) is unambiguous; choosing only the size still
-    // spans several colour images, so we keep the base gallery in that case.
-    const imgs = new Set<string>();
-    for (const c of variantsData.combinations) {
-      if (!c.enabled || !c.image) continue;
-      const parts = c.title.split(" / ");
-      if (chosen.every(s => parts.includes(s))) imgs.add(c.image);
+    let candidate: string | null = null;
+    if (selectedCombo?.image) {
+      candidate = selectedCombo.image;
+    } else {
+      const chosen = variantsData.options
+        .map(o => selectedOptions[o.name])
+        .filter(Boolean) as string[];
+      if (chosen.length === 0) return null;
+      // Only preview when the partial selection pins down ONE image. Choosing the
+      // colour (which carries the image) is unambiguous; choosing only the size still
+      // spans several colour images, so we keep the base gallery in that case.
+      const imgs = new Set<string>();
+      for (const c of variantsData.combinations) {
+        if (!c.enabled || !c.image) continue;
+        const parts = c.title.split(" / ");
+        if (chosen.every(s => parts.includes(s))) imgs.add(c.image);
+      }
+      if (imgs.size !== 1) return null;
+      candidate = [...imgs][0];
     }
-    return imgs.size === 1 ? [...imgs][0] : null;
-  }, [variantsData, selectedCombo, selectedOptions]);
+    // Honour a variant image ONLY if it is actually one of the product's gallery
+    // images. Variant images are picked FROM the gallery in the editor, so a value
+    // outside it is stale (e.g. an imported external URL not rehosted to match the
+    // gallery) and would otherwise render as a DUPLICATE of the real gallery image.
+    return candidate && images.includes(candidate) ? candidate : null;
+  }, [variantsData, selectedCombo, selectedOptions, images]);
 
   // Title reflects the selected variation(s) live (e.g. "Saltea - 80*180").
   const displayName = useMemo(() => {

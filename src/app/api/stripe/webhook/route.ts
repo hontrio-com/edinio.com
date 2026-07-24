@@ -171,6 +171,22 @@ async function resolveInvoiceSubMeta(invoice: Stripe.Invoice): Promise<Record<st
   return (direct ?? {}) as Record<string, string>;
 }
 
+// Rezolva userul Edinio pentru un abonament: intai din metadata.user_id (setat la
+// checkout), altfel dupa stripe_customer_id. Fara acest fallback, o anulare a unui
+// abonament fara user_id in metadata (abonamente vechi / cazuri limita) ar fi
+// pierduta silentios — exact tipul de bug care lasa un cont anulat marcat „activ".
+async function resolveSubUserId(admin: SupabaseClient, sub: Stripe.Subscription): Promise<string | null> {
+  if (sub.metadata?.user_id) return sub.metadata.user_id;
+  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
+  if (!customerId) return null;
+  const { data } = await admin
+    .from("users_profile")
+    .select("id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -396,14 +412,19 @@ export async function POST(req: NextRequest) {
   // We give a 15-day grace period before suspending the store publicly.
   if (event.type === "customer.subscription.deleted") {
     const sub = event.data.object as Stripe.Subscription;
-    const userId = sub.metadata?.user_id;
-    if (!userId) return NextResponse.json({ received: true });
 
     // Anulare intentionata pentru schimbarea planului/intervalului (marcata de
     // ruta de checkout inainte de cancel). NU e churn, deci sarim perioada de
     // gratie si email-ul de suspendare — noul abonament preia imediat.
     if (sub.metadata?.switching === "1") {
-      console.log("[webhook] subscription.deleted — schimbare plan in curs, skip grace:", { userId });
+      console.log("[webhook] subscription.deleted — schimbare plan in curs, skip grace");
+      return NextResponse.json({ received: true });
+    }
+
+    // Rezolva userul din metadata SAU dupa stripe_customer_id (fallback).
+    const userId = await resolveSubUserId(admin, sub);
+    if (!userId) {
+      console.error("[webhook] subscription.deleted — user negasit (metadata + fallback):", sub.id);
       return NextResponse.json({ received: true });
     }
 

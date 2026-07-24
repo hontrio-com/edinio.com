@@ -915,6 +915,13 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                     <input type="text" value={form.sku} onChange={(e) => set("sku", e.target.value)}
                       placeholder="ex: GNT-001" className={inputCls} />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Cod EAN / Cod de bare</label>
+                    <input type="text" inputMode="numeric" value={form.google.gtin}
+                      onChange={(e) => set("google", { ...form.google, gtin: e.target.value })}
+                      placeholder="ex: 5941234567890" className={inputCls} />
+                    <p className="text-xs text-muted-foreground mt-1">GTIN / EAN / UPC. Recomandat pentru Google Shopping si marketplace-uri.</p>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1.5">Stare stoc</label>
@@ -1535,13 +1542,10 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
               </div>
               {showGoogle && (
               <div className="px-5 py-5 space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  Codul de bare (GTIN/EAN) se completeaza in sectiunea <span className="font-medium text-foreground">Organizare</span>, mai sus.
+                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">Cod de bare (GTIN/EAN)</label>
-                    <input type="text" value={form.google.gtin} onChange={e => set("google", { ...form.google, gtin: e.target.value })}
-                      placeholder="ex: 5941234567890" className={inputCls} />
-                    <p className="text-xs text-muted-foreground mt-1">Recomandat de Google; creste performanta in Shopping.</p>
-                  </div>
                   <div>
                     <label className="text-sm font-medium text-foreground mb-1.5 block">Brand</label>
                     <input type="text" value={form.google.brand} onChange={e => set("google", { ...form.google, brand: e.target.value })}

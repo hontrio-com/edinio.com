@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { EMPTY_TOTALS } from "./types";
 import { rehostProductImages, needsRehost } from "./image-rehost";
+import { parseShippingClasses } from "@/lib/shipping/rules";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -137,6 +138,8 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
   // Preload existing slugs + category tree for in-memory dedupe/upsert.
   const slugSet = await loadSlugs(admin, businessId);
   const catMap = await loadCategories(admin, businessId);
+  // Shipping classes are keyed by name in the CSV; map them to their stored ids.
+  const shipClassMap = await loadShippingClasses(admin, businessId);
 
   for (const row of pending) {
     const p = row.parsed as unknown as StagedProduct | null;
@@ -162,6 +165,10 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
     }
 
     const category = await upsertCategoryPath(admin, businessId, p.category_path, catMap);
+    // Match the CSV shipping-class name to a stored class id (case-insensitive); unknown -> standard.
+    const shippingClassId = p.shipping_class
+      ? shipClassMap.get(p.shipping_class.trim().toLowerCase()) ?? null
+      : null;
 
     // Overwrite path: update an existing product matched by (source, external_id).
     let existingId: string | null = null;
@@ -176,7 +183,7 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       existingId = ex?.id ?? null;
     }
 
-    const payload = buildPayload(p, businessId, source, category);
+    const payload = buildPayload(p, businessId, source, category, shippingClassId);
 
     if (existingId) {
       // Keep the existing slug (avoid collisions); update everything else.
@@ -336,6 +343,7 @@ function buildPayload(
   businessId: string,
   source: string,
   category: string | null,
+  shippingClassId: string | null,
 ) {
   const page_sections: Record<string, unknown> = {};
   if (p.variants && p.variants.combinations.length > 0) page_sections.variants = p.variants;
@@ -346,6 +354,11 @@ function buildPayload(
   if (p.dimensions && (p.dimensions.length || p.dimensions.width || p.dimensions.height)) page_sections.dimensions = p.dimensions;
   if (p.specifications && p.specifications.length > 0) page_sections.specifications = p.specifications;
   if (p.quantity_tiers) page_sections.quantity_tiers = p.quantity_tiers;
+  // EAN/brand share page_sections.google with the product form (Google/Facebook feeds read them).
+  const google: Record<string, string> = {};
+  if (p.gtin) google.gtin = p.gtin;
+  if (p.brand) google.brand = p.brand;
+  if (Object.keys(google).length > 0) page_sections.google = google;
 
   return {
     business_id: businessId,
@@ -365,6 +378,7 @@ function buildPayload(
     // adapters set p.is_active = options.default_active, so they are unaffected.
     is_active: p.is_active,
     weight_grams: p.weight_grams,
+    shipping_class: shippingClassId,
     page_sections: page_sections as unknown as never,
     tags: p.tags as unknown as never,
     source,
@@ -376,6 +390,21 @@ function buildPayload(
 async function loadSlugs(admin: Admin, businessId: string): Promise<Set<string>> {
   const { data } = await admin.from("products").select("slug").eq("business_id", businessId).not("slug", "is", null);
   return new Set((data ?? []).map((r) => r.slug as string));
+}
+
+/** Map each store shipping class NAME (lowercased) to its stored id, for CSV resolution. */
+async function loadShippingClasses(admin: Admin, businessId: string): Promise<Map<string, string>> {
+  const { data } = await admin
+    .from("store_settings")
+    .select("shipping_classes")
+    .eq("business_id", businessId)
+    .maybeSingle();
+  const map = new Map<string, string>();
+  for (const c of parseShippingClasses(data?.shipping_classes ?? [])) {
+    const key = c.name.trim().toLowerCase();
+    if (key) map.set(key, c.id);
+  }
+  return map;
 }
 
 function dedupeSlug(base: string | null, slugSet: Set<string>): string | null {

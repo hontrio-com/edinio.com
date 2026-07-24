@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { parseShippingClasses } from "@/lib/shipping/rules";
 
 // Complete product catalogue export → CSV.
 // Column headers intentionally match the import auto-mapper synonyms (see
@@ -90,6 +91,18 @@ export async function GET() {
     .single();
   if (!biz) return NextResponse.json({ error: "Magazin negasit" }, { status: 404 });
 
+  // Shipping classes live as JSON on store_settings; map id -> name so the export
+  // is human-readable and re-imports by name (see the committer's reverse lookup).
+  const { data: settings } = await supabase
+    .from("store_settings")
+    .select("shipping_classes")
+    .eq("business_id", biz.id)
+    .maybeSingle();
+  const shipClassName = new Map<string, string>();
+  for (const c of parseShippingClasses(settings?.shipping_classes ?? [])) {
+    shipClassName.set(c.id, c.name);
+  }
+
   // Categories → resolve full hierarchical path (Parinte > Copil) for round-trip.
   // Windowed: cataloagele importate pot depasi cap-ul de 1000 de randuri PostgREST.
   const catRows: Cat[] = [];
@@ -127,7 +140,7 @@ export async function GET() {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("products")
-      .select("name, price, compare_at_price, description, sku, category, tags, images, stock_quantity, track_inventory, weight_grams, is_active, is_featured, slug, external_id, page_sections")
+      .select("name, price, compare_at_price, description, sku, category, tags, images, stock_quantity, track_inventory, weight_grams, is_active, is_featured, slug, external_id, shipping_class, page_sections")
       .eq("business_id", biz.id)
       .eq("is_bundle", false)
       .order("sort_order", { ascending: true })
@@ -146,14 +159,15 @@ export async function GET() {
     specifications?: { label?: string; value?: string }[];
     quantity_tiers?: { enabled?: boolean; mode?: string; tier2_price?: number; tier2_percent?: number; tier2_badge?: string; tier3_price?: number; tier3_percent?: number; tier3_badge?: string };
     seo?: { title?: string; description?: string };
+    google?: { gtin?: string; brand?: string };
   };
   const ssOut: Record<string, string> = { in_stock: "in stoc", out_of_stock: "epuizat", preorder: "precomanda" };
 
   // Full column set — keep in sync with the import template (src/lib/import/templates.ts).
   const header = [
-    "Nume", "Pret", "Pret vechi", "Descriere scurta", "Descriere", "SKU", "Categorie",
+    "Nume", "Pret", "Pret vechi", "Descriere scurta", "Descriere", "SKU", "EAN", "Brand", "Categorie",
     "Etichete", "Imagini", "Stoc", "Prag stoc redus", "Status stoc", "Greutate",
-    "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Publicat", "Recomandat",
+    "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Clasa transport", "Publicat", "Recomandat",
     "Specificatii", "Upsell - mod", "Upsell 2 buc - valoare", "Upsell 2 buc - eticheta",
     "Upsell 3 buc - valoare", "Upsell 3 buc - eticheta", "Slug", "ID extern",
     "Titlu SEO", "Descriere SEO", "Optiuni variante", "Variante",
@@ -185,6 +199,8 @@ export async function GET() {
       csvCell(ps.short_description ?? ""),
       csvCell(p.description as string | null),
       csvCell(p.sku as string | null),
+      csvCell(ps.google?.gtin ?? ""),
+      csvCell(ps.google?.brand ?? ""),
       csvCell(categoryPath(p.category as string | null)),
       csvCell(tags.join(", ")),
       csvCell(images.join(" | ")),
@@ -195,6 +211,7 @@ export async function GET() {
       dim.length ? num(dim.length) : "",
       dim.width ? num(dim.width) : "",
       dim.height ? num(dim.height) : "",
+      csvCell(p.shipping_class ? (shipClassName.get(p.shipping_class as string) ?? "") : ""),
       p.is_active ? "Da" : "Nu",
       p.is_featured ? "Da" : "Nu",
       csvCell(specs),

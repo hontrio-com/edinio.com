@@ -122,5 +122,8 @@ function buildProduct(
       cell(row, m.upsell_qty2), cell(row, m.upsell_qty2_badge),
       cell(row, m.upsell_qty3), cell(row, m.upsell_qty3_badge),
     ),
+    gtin: cleanText(cell(row, m.gtin)) || null,
+    brand: cleanText(cell(row, m.brand)) || null,
+    shipping_class: cleanText(cell(row, m.shipping_class)) || null,
   };
 }

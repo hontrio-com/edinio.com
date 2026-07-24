@@ -21,9 +21,9 @@ function toCsv(rows: string[][]): string {
 // Full generic column set — keep in sync with OUR_FIELDS / FIELD_SYNONYMS and the
 // export route (src/app/api/products/export/route.ts) for round-trip imports.
 const GENERIC_HEADERS = [
-  "Nume", "Pret", "Pret vechi", "Descriere scurta", "Descriere", "SKU", "Categorie",
+  "Nume", "Pret", "Pret vechi", "Descriere scurta", "Descriere", "SKU", "EAN", "Brand", "Categorie",
   "Etichete", "Imagini", "Stoc", "Prag stoc redus", "Status stoc", "Greutate",
-  "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Publicat", "Recomandat",
+  "Lungime (cm)", "Latime (cm)", "Inaltime (cm)", "Clasa transport", "Publicat", "Recomandat",
   "Specificatii", "Upsell - mod", "Upsell 2 buc - valoare", "Upsell 2 buc - eticheta",
   "Upsell 3 buc - valoare", "Upsell 3 buc - eticheta", "Slug", "ID extern",
   "Titlu SEO", "Descriere SEO", "Optiuni variante", "Variante",
@@ -36,17 +36,19 @@ export const IMPORT_TEMPLATES: Record<"generic" | "shopify" | "woo", ImportTempl
       GENERIC_HEADERS,
       [
         "Tricou bumbac", "79.99", "99.99", "Tricou comod din bumbac",
-        "Tricou din bumbac 100%, comod si racoros.", "TRICOU-001", "Imbracaminte > Tricouri",
+        "Tricou din bumbac 100%, comod si racoros.", "TRICOU-001", "5941234567890", "Brandul Meu",
+        "Imbracaminte > Tricouri",
         "bumbac,vara", "https://exemplu.ro/tricou-1.jpg | https://exemplu.ro/tricou-2.jpg",
-        "50", "5", "in stoc", "200 g", "70", "50", "1", "Da", "Da",
+        "50", "5", "in stoc", "200 g", "70", "50", "1", "Voluminoase", "Da", "Da",
         "Material: 100% bumbac | Model: Unisex", "procent", "10", "Popular", "15", "Cea mai buna oferta",
         "tricou-bumbac", "TRICOU-001", "Tricou bumbac comod", "Tricou din bumbac 100%, comod.",
         "Marime: S, M, L",
-        "S | pret=79.99 | sku=TRICOU-S | stoc=20 | activ=da\nM | pret=79.99 | sku=TRICOU-M | stoc=15 | activ=da\nL | pret=84.99 | sku=TRICOU-L | stoc=10 | activ=da",
+        "S | pret=79.99 | sku=TRICOU-S | stoc=20 | activ=da | imagine=https://exemplu.ro/tricou-1.jpg\nM | pret=79.99 | sku=TRICOU-M | stoc=15 | activ=da\nL | pret=84.99 | sku=TRICOU-L | stoc=10 | activ=da",
       ],
       [
-        "Cana ceramica", "29.99", "", "", "Cana de 350 ml.", "CANA-002", "Accesorii",
-        "cadou", "https://exemplu.ro/cana.jpg", "100", "", "in stoc", "300 g", "", "", "",
+        "Cana ceramica", "29.99", "", "", "Cana de 350 ml.", "CANA-002", "", "",
+        "Accesorii",
+        "cadou", "https://exemplu.ro/cana.jpg", "100", "", "in stoc", "300 g", "", "", "", "",
         "Da", "Nu", "Capacitate: 350 ml | Material: Ceramica", "suma", "27", "2+ bucati", "", "",
         "cana-ceramica", "CANA-002", "", "", "", "",
       ],

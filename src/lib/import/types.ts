@@ -92,6 +92,9 @@ export interface StagedProduct {
   dimensions?: StagedDimensions | null;
   specifications?: StagedSpec[];
   quantity_tiers?: StagedQuantityTiers | null;
+  gtin?: string | null; // EAN / barcode; stored in page_sections.google.gtin
+  brand?: string | null; // stored in page_sections.google.brand
+  shipping_class?: string | null; // class NAME as typed in the CSV; resolved to an id at commit
 }
 
 // ── Fields the generic mapper can target ────────────────────────────────────
@@ -101,11 +104,14 @@ export type OurField =
   | "compare_at_price"
   | "description"
   | "sku"
+  | "gtin"
+  | "brand"
   | "category"
   | "tags"
   | "images"
   | "stock_quantity"
   | "weight"
+  | "shipping_class"
   | "is_active"
   | "is_featured"
   | "external_id"
@@ -140,11 +146,14 @@ export const OUR_FIELDS: FieldDef[] = [
   { key: "description", label: "Descriere", required: false },
   { key: "compare_at_price", label: "Pret vechi (taiat)", required: false },
   { key: "sku", label: "Cod produs (SKU)", required: false },
+  { key: "gtin", label: "Cod EAN / Cod de bare", required: false, hint: "GTIN / EAN / UPC (ex: 5941234567890)" },
+  { key: "brand", label: "Brand / Marca", required: false },
   { key: "category", label: "Categorie", required: false, hint: "Acceptam si cale ierarhica: Parinte > Copil" },
   { key: "tags", label: "Etichete", required: false, hint: "Separate prin virgula" },
   { key: "images", label: "Imagini (linkuri)", required: false, hint: "Mai multe linkuri separate prin virgula, | sau spatiu" },
   { key: "stock_quantity", label: "Stoc", required: false },
   { key: "weight", label: "Greutate", required: false, hint: "kg sau grame" },
+  { key: "shipping_class", label: "Clasa de transport", required: false, hint: "Numele clasei definite in Setari > Livrare" },
   { key: "is_active", label: "Activ / Publicat", required: false },
   { key: "is_featured", label: "Recomandat", required: false },
   { key: "external_id", label: "ID extern (re-sincronizare)", required: false },
@@ -164,7 +173,7 @@ export const OUR_FIELDS: FieldDef[] = [
   { key: "upsell_qty3", label: "Upsell 3 buc - valoare", required: false },
   { key: "upsell_qty3_badge", label: "Upsell 3 buc - eticheta", required: false },
   { key: "variant_options", label: "Optiuni variante", required: false, hint: "Ex: Marime: S, M, L | Culoare: Rosu, Negru" },
-  { key: "variants", label: "Variante (combinatii)", required: false, hint: "Cate o combinatie pe rand: Titlu | pret=.. | sku=.. | stoc=.. | activ=da" },
+  { key: "variants", label: "Variante (combinatii)", required: false, hint: "Cate o combinatie pe rand: Titlu | pret=.. | pret_vechi=.. | sku=.. | stoc=.. | activ=da | imagine=URL" },
 ];
 
 // Maps an OurField key to the source column header the user picked.

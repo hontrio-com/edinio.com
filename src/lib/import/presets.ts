@@ -34,12 +34,17 @@ const FIELD_SYNONYMS: Record<OurField, string[]> = {
   price: ["regular price", "price", "pret", "pret regular", "amount", "variant price"],
   compare_at_price: ["sale price", "compare at price", "compare_at_price", "pret vechi", "pret redus", "old price", "msrp"],
   description: ["description", "descriere", "body (html)", "body", "content", "long description"],
-  sku: ["sku", "cod", "cod produs", "barcode", "ean", "product code", "variant sku"],
+  // gtin/brand vin INAINTEA lui sku: altfel un antet "EAN" / "Cod de bare" ar fi
+  // capturat de match-ul larg "cod" al SKU-ului inainte sa ajunga la gtin.
+  gtin: ["ean", "gtin", "barcode", "cod de bare", "cod bare", "cod ean", "upc", "ean13"],
+  brand: ["brand", "marca", "vendor", "producator", "manufacturer", "fabricant"],
+  sku: ["sku", "cod", "cod produs", "product code", "variant sku"],
   category: ["categories", "category", "categorie", "categorii", "product category", "type", "tip"],
   tags: ["tags", "etichete", "tag", "keywords"],
   images: ["images", "image", "imagini", "imagine", "image src", "poze", "photo", "image url", "picture"],
   stock_quantity: ["stock", "stoc", "quantity", "cantitate", "qty", "inventory", "variant inventory qty", "stock quantity"],
   weight: ["weight (kg)", "weight", "greutate", "variant grams", "grams", "masa"],
+  shipping_class: ["clasa de transport", "clasa transport", "shipping class", "shipping_class", "clasa livrare"],
   is_active: ["published", "publicat", "active", "activ", "status", "visible", "vizibil", "in stock?"],
   is_featured: ["is featured?", "featured", "recomandat", "is_featured", "promovat"],
   external_id: ["id", "external id", "handle", "product id", "id produs"],

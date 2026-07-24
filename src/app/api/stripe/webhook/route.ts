@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createSmartbillInvoice } from "@/lib/smartbill";
-import { PLAN_PRICES } from "@/lib/plans";
 import type Stripe from "stripe";
 
 function capitalize(s: string) {
@@ -93,9 +92,16 @@ async function emitSubscriptionInvoice(
   const clientName = bizData?.business_name || profileData?.full_name || userEmail || "Client";
 
   // Suma reala incasata de Stripe (bani → lei). Acopera lunar, anual (lunar×9) si
-  // eventualele proratari/discounturi.
+  // eventualele proratari/discounturi. FARA fallback pe pretul de lista: factura
+  // fiscala reflecta DOAR bani incasati efectiv — o factura Stripe de 0 lei
+  // (inchidere/proratare la anulare) nu emite nimic (incident FC 0489, 24.07:
+  // 249 lei facturati fiscal fara nicio incasare).
   const amountPaid = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 0;
-  const planPrice = amountPaid > 0 ? amountPaid / 100 : (PLAN_PRICES[plan] ?? 0);
+  if (amountPaid <= 0) {
+    console.log("[webhook] factura Stripe fara incasare (0 lei) — nu emit Smartbill:", stripeInvoiceId);
+    return;
+  }
+  const planPrice = amountPaid / 100;
 
   let sbSeries: string | null = null;
   let sbNumber: string | null = null;
@@ -152,23 +158,38 @@ async function emitSubscriptionInvoice(
   }
 }
 
-async function resolveInvoiceSubMeta(invoice: Stripe.Invoice): Promise<Record<string, string>> {
+// Metadata + starea abonamentului din spatele unei facturi. Metadata (user_id,
+// plan, interval) vine din subscription_details (ambele forme de billing) sau,
+// in lipsa, de pe abonament. Statusul e citit MEREU de pe abonament: facturile
+// pot apartine unui abonament deja ANULAT — factura de inchidere/proratare pe
+// care Stripe o genereaza la anulare si o finalizeaza automat ~1h mai tarziu,
+// tipic 0 lei — iar handlerele decid cu el daca evenimentul e o plata reala.
+type InvoiceSubInfo = {
+  meta: Record<string, string>;
+  subStatus: Stripe.Subscription.Status | null;
+};
+
+async function resolveInvoiceSub(invoice: Stripe.Invoice): Promise<InvoiceSubInfo> {
   const inv = invoice as InvoiceCompat;
   const direct = inv.parent?.subscription_details?.metadata ?? inv.subscription_details?.metadata ?? null;
-  if (direct?.user_id) return direct as Record<string, string>;
-
-  // Fallback: citeste metadata direct de pe abonament.
   const subRef = inv.parent?.subscription_details?.subscription ?? inv.subscription ?? null;
-  const subId = typeof subRef === "string" ? subRef : subRef?.id;
+  const subId = typeof subRef === "string" ? subRef : subRef?.id ?? null;
+
+  let sub: Stripe.Subscription | null = null;
   if (subId) {
     try {
-      const sub = await stripe.subscriptions.retrieve(subId);
-      if (sub.metadata?.user_id) return sub.metadata as Record<string, string>;
+      sub = await stripe.subscriptions.retrieve(subId);
     } catch (err) {
-      console.error("[webhook] subscription retrieve fallback failed:", err);
+      console.error("[webhook] subscription retrieve failed:", err);
     }
   }
-  return (direct ?? {}) as Record<string, string>;
+
+  const meta = (direct?.user_id
+    ? direct
+    : sub?.metadata?.user_id
+      ? sub.metadata
+      : (direct ?? {})) as Record<string, string>;
+  return { meta, subStatus: sub?.status ?? null };
 }
 
 // Rezolva userul Edinio pentru un abonament: intai din metadata.user_id (setat la
@@ -463,7 +484,7 @@ export async function POST(req: NextRequest) {
   if (event.type === "invoice.payment_succeeded") {
     const invoice = event.data.object as Stripe.Invoice;
 
-    const subMeta = await resolveInvoiceSubMeta(invoice);
+    const { meta: subMeta, subStatus } = await resolveInvoiceSub(invoice);
     const userId = subMeta.user_id;
     const plan = subMeta.plan;
     const interval = subMeta.interval;
@@ -471,6 +492,22 @@ export async function POST(req: NextRequest) {
     if (!userId || !plan) return NextResponse.json({ received: true });
 
     const stripeInvoiceId = invoice.id;
+    const amountPaid = typeof invoice.amount_paid === "number" ? invoice.amount_paid : 0;
+
+    // Facturile de 0 lei ale unui abonament care NU e viu sunt facturi de
+    // inchidere/proratare la anulare, nu plati. Fara acest guard, un asemenea
+    // eveniment intarziat (Stripe le finalizeaza automat ~1h dupa anulare)
+    // calca planul NOU al clientului cu cel vechi si emitea factura fiscala
+    // pentru bani neincasati — incidentul din 24.07: upgrade-ul Ultra al unui
+    // client a fost suprascris inapoi pe Premium la 17:38 + FC 0489 fantoma.
+    // 0 lei pe abonament VIU (ex. reinnoire acoperita integral din creditul de
+    // proratare) ramane valid: prelungeste planul, dar nu emite Smartbill.
+    const subIsLive = subStatus === "active" || subStatus === "trialing" || subStatus === "past_due";
+    if (amountPaid <= 0 && !subIsLive) {
+      console.log(`[webhook] invoice.payment_succeeded ignorat (0 lei, abonament ${subStatus ?? "necunoscut"}):`, stripeInvoiceId);
+      return NextResponse.json({ received: true });
+    }
+
     const periodEnd = invoicePeriodEnd(invoice);
     const expiresAt = periodEnd ? new Date(periodEnd * 1000) : computeExpiry(interval);
 
@@ -527,7 +564,12 @@ export async function POST(req: NextRequest) {
     // sa returnam 200 rapid la Stripe fara risc de timeout/retry din cauza apelului
     // lent Smartbill. Starea critica (plan/expirare/suspendare) e deja salvata
     // sincron mai sus, deci un esec Smartbill nu afecteaza accesul userului.
-    after(() => emitSubscriptionInvoice(admin, invoice, { userId, plan, interval, stripeInvoiceId }));
+    // DOAR pentru incasari reale — 0 lei (acoperit din credit) nu se factureaza.
+    if (amountPaid > 0) {
+      after(() => emitSubscriptionInvoice(admin, invoice, { userId, plan, interval, stripeInvoiceId }));
+    } else {
+      console.log("[webhook] plata 0 lei (credit de proratare) — fara factura Smartbill:", stripeInvoiceId);
+    }
 
     console.log("[webhook] invoice.payment_succeeded processed (Smartbill deferred):", { userId, plan });
   }
@@ -537,9 +579,17 @@ export async function POST(req: NextRequest) {
   if (event.type === "invoice.payment_failed") {
     const invoice = event.data.object as Stripe.Invoice;
 
-    const subMeta = await resolveInvoiceSubMeta(invoice);
+    const { meta: subMeta, subStatus } = await resolveInvoiceSub(invoice);
     const userId = subMeta.user_id;
     const plan = subMeta.plan;
+
+    // Esecul unei facturi ramase de la un abonament deja ANULAT nu e dunning:
+    // clientul poate avea intre timp un abonament nou, activ — nu-i aprindem
+    // bannerul de plata restanta pentru un abonament mort.
+    if (subStatus === "canceled") {
+      console.log("[webhook] invoice.payment_failed ignorat (abonament anulat):", invoice.id);
+      return NextResponse.json({ received: true });
+    }
 
     if (userId && plan) {
       // Marcheaza starea REALA de plata restanta (dunning Stripe). Acesta e semnalul

@@ -274,6 +274,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     ? Number(storeSettings.free_shipping_threshold) : null;
   const minOrderAmount = storeSettings?.min_order_amount
     ? Number(storeSettings.min_order_amount) : null;
+  // VAT note shown under the price (only for VAT-registered stores).
+  const vatEnabled = storeSettings?.vat_enabled ?? false;
+  const pricesIncludeVat = storeSettings?.prices_include_vat ?? true;
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
   const pageSections = (product.page_sections as PageSections) ?? {};
@@ -583,6 +586,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
             <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: `${color}1a`, color }}>Personalizabil</span>
           )}
         </div>
+        {vatEnabled && (
+          <p className="text-xs text-muted-foreground">
+            {pricesIncludeVat ? "Prețul include TVA" : "Preț fără TVA (TVA se adaugă la finalizare)"}
+          </p>
+        )}
 
         {/* Bundle contents — shown prominently in the buy box */}
         {product.is_bundle && bundleComponents.length > 0 && (

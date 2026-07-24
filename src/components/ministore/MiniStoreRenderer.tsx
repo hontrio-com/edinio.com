@@ -10,6 +10,7 @@ import {
 import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format";
 import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
+import { computeVat, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getAttribution } from "@/lib/storefront/attribution";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
@@ -232,13 +233,6 @@ function CartProvider({ children, slug }: { children: React.ReactNode; slug: str
   );
 }
 
-interface VatConfig {
-  vat_enabled: boolean;
-  vat_rate: number;
-  prices_include_vat: boolean;
-  show_vat_breakdown: boolean;
-}
-
 function CartCheckoutModal({
   open, onClose, color, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode, productWeights,
 }: {
@@ -289,14 +283,9 @@ function CartCheckoutModal({
   const isFreeShippingDiscount = appliedDiscount?.type === "free_shipping";
   const shipping = (isFreeShippingDiscount || (freeShippingThreshold && goodsTotal >= freeShippingThreshold)) ? 0 : baseShippingCost;
 
-  // VAT calculation
+  // VAT (shared helper — identical formula on server + OrderModal).
   const vatBase = goodsTotal + extrasTotal;
-  const vatAmount = vatConfig.vat_enabled
-    ? vatConfig.prices_include_vat
-      ? Math.round((vatBase - vatBase / (1 + vatConfig.vat_rate / 100)) * 100) / 100
-      : Math.round(vatBase * (vatConfig.vat_rate / 100) * 100) / 100
-    : 0;
-  const vatAddOn = vatConfig.vat_enabled && !vatConfig.prices_include_vat ? vatAmount : 0;
+  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Shown live as the customer switches payment method.
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);

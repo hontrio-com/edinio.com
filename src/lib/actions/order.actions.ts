@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { computeVat } from "@/lib/utils/vat";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -183,6 +184,8 @@ export async function placeOrder(data: {
   discount_id?: string;
   discount_code?: string;
   discount_amount?: number;
+  vat_amount?: number;
+  vat_rate?: number;
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
@@ -228,7 +231,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config")
+      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, vat_enabled, vat_rate, prices_include_vat")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -329,7 +332,15 @@ export async function placeOrder(data: {
   let shipping = Math.max(0, round2(data.shipping_cost));
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping));
+  // VAT: recomputed server-side (mirrors placeCartOrder + the storefront) so single-
+  // product / One-Product-Store orders collect VAT too. Base is the PRE-discount
+  // goods+extras; only VAT-exclusive pricing adds VAT on top of the total.
+  const vatEnabled = cfgRow?.vat_enabled ?? false;
+  const vatRate = Number(cfgRow?.vat_rate ?? 19);
+  const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
+  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
+
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping + vatAddOn));
 
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -398,6 +409,8 @@ export async function placeOrder(data: {
     card_discount_amount: cardDiscount,
     cod_discount_amount: codDiscount,
     total,
+    vat_amount: vatAmount,
+    vat_rate: vatEnabled ? vatRate : 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
     payment_method: data.payment_method ?? "cash_on_delivery",
     payment_status: "unpaid",
@@ -1125,14 +1138,8 @@ export async function placeCartOrder(data: {
   const vatEnabled = cfgRow?.vat_enabled ?? false;
   const vatRate = Number(cfgRow?.vat_rate ?? 19);
   const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
-  const vatBase = subtotal + extrasTotal;
-  const vatAmount = vatEnabled
-    ? pricesIncludeVat
-      ? round2(vatBase - vatBase / (1 + vatRate / 100))
-      : round2(vatBase * (vatRate / 100))
-    : 0;
-  // Only VAT-exclusive pricing adds VAT on top of the total (matches the storefront grand total).
-  const vatAddOn = vatEnabled && !pricesIncludeVat ? vatAmount : 0;
+  // Shared helper — identical formula on placeOrder + both storefront modals.
+  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
 
   // Card-payment discount: only for online card methods, on the goods value
   // (subtotal + extras, after promo), never on shipping/VAT. Baked into total.

@@ -11,6 +11,7 @@ import {
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
+import { computeVat, type VatConfig } from "@/lib/utils/vat";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
@@ -116,6 +117,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
+  const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
   // Discount code is OFF by default (hidden unless the merchant enabled it in the editor).
@@ -217,8 +219,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
   // Ramburs discount (mirrors the server): only when the customer picks cash on delivery.
   const codDiscountAmount = computeCodDiscount(codDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
+  // VAT (shared helper — identical formula on server + CartCheckoutModal). Base is
+  // the PRE-discount goods+extras so the add-on matches the server grand total.
+  const vatBase = subtotal + extrasTotal;
+  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
   // Round to 2 decimals (cents): float math would otherwise show e.g. 179.35999999999999.
-  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount) * 100) / 100);
+  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount + vatAddOn) * 100) / 100);
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
@@ -308,6 +314,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       setIntlEnabled(data.international_shipping === true);
       setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true || data.klaviyo_newsletter === true);
       setDpdUseWeight(data.dpd_use_weight === true);
+      setVatConfig({
+        vat_enabled: data.vat_enabled,
+        vat_rate: data.vat_rate,
+        prices_include_vat: data.prices_include_vat,
+        show_vat_breakdown: data.show_vat_breakdown,
+      });
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
@@ -464,6 +476,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         discount_id: appliedDiscount?.id,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
+        vat_amount: vatAmount,
+        vat_rate: vatConfig.vat_enabled ? vatConfig.vat_rate : 0,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
         customization: customizationPayload,
@@ -1158,6 +1172,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     {shipping === 0 ? "Gratuit" : `${shipping} lei`}
                   </span>
                 </div>
+                {vatConfig.vat_enabled && vatConfig.show_vat_breakdown && vatAmount > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>TVA ({vatConfig.vat_rate}%){vatConfig.prices_include_vat ? " inclus" : ""}</span>
+                    <span className="font-medium text-foreground">{vatAmount.toFixed(2)} lei</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-base border-t border-border pt-2">
                   <span>Total</span>
                   <span style={{ color }}>{total.toFixed(2).replace(".00", "")} lei</span>

@@ -243,19 +243,27 @@ interface CatalogData {
  * both derive from this single scan instead of querying the catalog twice.
  */
 async function fetchCatalog(supabase: SupabaseServerClient, businessId: string): Promise<CatalogData> {
+  // Windowed reads: plain selects truncate silently at the 1000-row PostgREST
+  // cap, and a PARTIAL scan would mark in-use images as unused (delete bait).
   const [products, pages, biz, settings, categories] = await Promise.all([
-    supabase.from("products").select("id, name, images, page_sections").eq("business_id", businessId),
-    supabase.from("custom_pages").select("id, title, blocks, seo").eq("business_id", businessId),
+    fetchAllRows("media.catalog.products", (from, to) =>
+      supabase.from("products").select("id, name, images, page_sections").eq("business_id", businessId).order("id").range(from, to)
+    ),
+    fetchAllRows("media.catalog.pages", (from, to) =>
+      supabase.from("custom_pages").select("id, title, blocks, seo").eq("business_id", businessId).order("id").range(from, to)
+    ),
     supabase.from("businesses").select("logo_url, cover_url, gallery").eq("id", businessId).maybeSingle(),
     supabase.from("store_settings").select("*").eq("business_id", businessId).maybeSingle(),
-    supabase.from("categories").select("id, name, image_url").eq("business_id", businessId),
+    fetchAllRows("media.catalog.categories", (from, to) =>
+      supabase.from("categories").select("id, name, image_url").eq("business_id", businessId).order("id").range(from, to)
+    ),
   ]);
   return {
-    products: products.data ?? [],
-    pages: pages.data ?? [],
+    products,
+    pages,
     biz: biz.data ?? null,
     settings: (settings.data as Record<string, unknown> | null) ?? null,
-    categories: categories.data ?? [],
+    categories,
   };
 }
 

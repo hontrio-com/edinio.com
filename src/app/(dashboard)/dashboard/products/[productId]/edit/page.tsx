@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { ProductForm } from "@/components/dashboard/ProductForm";
 import { parseShippingClasses } from "@/lib/shipping/rules";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 interface Props {
   params: Promise<{ productId: string }>;
@@ -33,9 +34,13 @@ export default async function EditProductPage({ params, searchParams }: Props) {
   const gmcConnected = !!gmcConfig?.connected && !!gmcConfig?.account_id;
   const shippingClasses = parseShippingClasses(settings?.shipping_classes);
 
-  const [{ data: product }, { data: categories }] = await Promise.all([
+  // Categories windowed past the 1000-row PostgREST cap (big imported taxonomies).
+  const [{ data: product }, categories] = await Promise.all([
     supabase.from("products").select("*").eq("id", productId).eq("business_id", business.id).single(),
-    supabase.from("categories").select("id, name, parent_id").eq("business_id", business.id).order("sort_order").order("name"),
+    fetchAllRows("dashboard.product-edit.categories", (from, to) =>
+      supabase.from("categories").select("id, name, parent_id").eq("business_id", business.id)
+        .order("sort_order").order("name").order("id").range(from, to)
+    ),
   ]);
 
   if (!product) notFound();
@@ -44,7 +49,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
     <ProductForm
       businessId={business.id}
       product={product}
-      categories={categories ?? []}
+      categories={categories}
       backHref={backHref}
       business={business.slug ? { slug: business.slug, is_published: !!business.is_published } : undefined}
       olxConnected={olxConnected}

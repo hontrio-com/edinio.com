@@ -7,6 +7,7 @@ import { uploadToR2, deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 import { getProductLimit } from "@/lib/plan-limits";
 import { logError } from "@/lib/error-logger";
 import { parseCsv } from "@/lib/import/csv";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { detectFormat, autoMapColumns } from "@/lib/import/presets";
 import { toStagedProducts } from "@/lib/import/adapters";
 import { stageProducts, validateStaged, processImport } from "@/lib/import/committer";
@@ -167,13 +168,17 @@ export async function previewMapping(
     return { error: "Nu am putut reinterpreta fisierul" };
   }
 
-  const [{ data: cats }, { count }, { data: profile }] = await Promise.all([
-    supabase.from("categories").select("name").eq("business_id", businessId),
+  const [cats, { count }, { data: profile }] = await Promise.all([
+    // Windowed past the 1000-row PostgREST cap so "categorii noi" counts stay
+    // correct for stores with big imported taxonomies.
+    fetchAllRows("import.validate.categories", (from, to) =>
+      supabase.from("categories").select("id, name").eq("business_id", businessId).order("id").range(from, to)
+    ),
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("users_profile").select("plan").eq("id", user.id).single(),
   ]);
 
-  const existingCategories = new Set((cats ?? []).map((c) => c.name.toLowerCase()));
+  const existingCategories = new Set(cats.map((c) => c.name.toLowerCase()));
   const summary = validateStaged(products, {
     existingCategories,
     currentCount: count ?? 0,

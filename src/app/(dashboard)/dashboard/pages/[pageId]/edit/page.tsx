@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { PageBuilder } from "@/components/pages/PageBuilder";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
@@ -26,10 +27,14 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
   const isAdmin = profile?.role === "admin";
 
-  const [{ data: productsRaw }, { data: cats }, { data: formsRaw }] = await Promise.all([
+  // Categories windowed past the 1000-row PostgREST cap (big imported taxonomies).
+  const [{ data: productsRaw }, cats, { data: formsRaw }] = await Promise.all([
     supabase.from("products").select("id, name, slug, price, compare_at_price, images, category, is_featured")
       .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order").limit(60),
-    supabase.from("categories").select("name").eq("business_id", business.id).order("sort_order"),
+    fetchAllRows("dashboard.page-edit.categories", (from, to) =>
+      supabase.from("categories").select("id, name").eq("business_id", business.id)
+        .order("sort_order").order("id").range(from, to)
+    ),
     supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
       .eq("business_id", business.id).order("created_at"),
   ]);
@@ -64,7 +69,7 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
         social: (business.social ?? {}) as Record<string, string>,
       }}
       products={products}
-      categories={(cats ?? []).map((c) => c.name)}
+      categories={cats.map((c) => c.name)}
       forms={forms}
       isAdmin={isAdmin}
     />

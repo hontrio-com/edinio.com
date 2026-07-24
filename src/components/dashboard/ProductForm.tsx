@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { MediaPicker } from "@/components/media/MediaPicker";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { publishOlxProduct } from "@/lib/actions/olx.actions";
 import { createCategory } from "@/lib/actions/category.actions";
+import { flattenCategoryForest } from "@/lib/categories/tree";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -531,6 +532,22 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   const [newCatParentId, setNewCatParentId] = useState<string | null>(null);
   const [isCreatingCat, startCatTransition] = useTransition();
 
+  // Full hierarchy in display order, ANY depth — the old two-level rendering
+  // hid the deeper categories that imports create ("A > B > C" paths).
+  const flatCategories = useMemo(() => flattenCategoryForest(localCategories), [localCategories]);
+  const categoryGroups = useMemo(() => {
+    const groups: { root: CategoryOption; descendants: { node: CategoryOption; depth: number }[] }[] = [];
+    for (const f of flatCategories) {
+      if (f.depth === 0) {
+        groups.push({ root: f.node, descendants: [] });
+      } else {
+        const last = groups[groups.length - 1];
+        if (last) last.descendants.push({ node: f.node, depth: f.depth });
+      }
+    }
+    return groups;
+  }, [flatCategories]);
+
   function set<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: val }));
   }
@@ -868,19 +885,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                     <label className="block text-sm font-medium text-foreground mb-1.5">Categorie</label>
                     <select value={form.category} onChange={(e) => set("category", e.target.value)} className={inputCls}>
                       <option value="">Fara categorie</option>
-                      {localCategories.filter(c => !c.parent_id).map(parent => {
-                        const children = localCategories.filter(c => c.parent_id === parent.id);
-                        return children.length > 0 ? (
-                          <optgroup key={parent.id} label={parent.name}>
-                            <option value={parent.name}>{parent.name} (toate)</option>
-                            {children.map(child => (
-                              <option key={child.id} value={child.name}>{`  ↳ ${child.name}`}</option>
+                      {categoryGroups.map(({ root, descendants }) =>
+                        descendants.length > 0 ? (
+                          <optgroup key={root.id} label={root.name}>
+                            <option value={root.name}>{root.name} (toate)</option>
+                            {descendants.map(({ node, depth }) => (
+                              <option key={node.id} value={node.name}>{`${"\u00A0\u00A0".repeat(depth)}↳ ${node.name}`}</option>
                             ))}
                           </optgroup>
                         ) : (
-                          <option key={parent.id} value={parent.name}>{parent.name}</option>
-                        );
-                      })}
+                          <option key={root.id} value={root.name}>{root.name}</option>
+                        )
+                      )}
                     </select>
                     {!showAddCategory ? (
                       <button type="button" onClick={() => setShowAddCategory(true)}
@@ -895,8 +911,10 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                         <select value={newCatParentId ?? ""} onChange={e => setNewCatParentId(e.target.value || null)}
                           className={smallInputCls}>
                           <option value="">Categorie principala</option>
-                          {localCategories.filter(c => !c.parent_id).map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                          {flatCategories.map(({ node, depth }) => (
+                            <option key={node.id} value={node.id}>
+                              {`${"\u00A0\u00A0".repeat(depth)}${depth > 0 ? "↳ " : ""}${node.name}`}
+                            </option>
                           ))}
                         </select>
                         <div className="flex gap-2">

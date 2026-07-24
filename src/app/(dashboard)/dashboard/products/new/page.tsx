@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { ProductForm } from "@/components/dashboard/ProductForm";
 import { parseShippingClasses } from "@/lib/shipping/rules";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 export default async function NewProductPage() {
   const supabase = await createClient();
@@ -19,17 +20,23 @@ export default async function NewProductPage() {
   const gmcConnected = !!gmcConfig?.connected && !!gmcConfig?.account_id;
   const shippingClasses = parseShippingClasses(settings?.shipping_classes);
 
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name, parent_id")
-    .eq("business_id", business.id)
-    .order("sort_order")
-    .order("name");
+  // Windowed past the 1000-row PostgREST cap so big imported taxonomies
+  // stay complete in the category dropdown.
+  const categories = await fetchAllRows("dashboard.product-new.categories", (from, to) =>
+    supabase
+      .from("categories")
+      .select("id, name, parent_id")
+      .eq("business_id", business.id)
+      .order("sort_order")
+      .order("name")
+      .order("id")
+      .range(from, to)
+  );
 
   return (
     <ProductForm
       businessId={business.id}
-      categories={categories ?? []}
+      categories={categories}
       gmcConnected={gmcConnected}
       shippingClasses={shippingClasses}
     />

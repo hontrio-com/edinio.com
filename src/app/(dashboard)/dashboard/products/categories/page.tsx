@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { CategoriesClient } from "@/components/dashboard/CategoriesClient";
 
 export default async function CategoriesPage() {
@@ -18,12 +19,18 @@ export default async function CategoriesPage() {
 
   if (!business) redirect("/dashboard");
 
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, business_id, parent_id, name, sort_order, image_url, created_at, updated_at")
-    .eq("business_id", business.id)
-    .order("sort_order")
-    .order("created_at");
+  // Windowed read: a plain select silently truncates at the 1000-row
+  // PostgREST cap and would hide categories from the management UI.
+  const categories = await fetchAllRows("dashboard.categories", (from, to) =>
+    supabase
+      .from("categories")
+      .select("id, business_id, parent_id, name, sort_order, image_url, created_at, updated_at")
+      .eq("business_id", business.id)
+      .order("sort_order")
+      .order("created_at")
+      .order("id")
+      .range(from, to)
+  );
 
-  return <CategoriesClient initialCategories={categories ?? []} />;
+  return <CategoriesClient initialCategories={categories} />;
 }

@@ -315,6 +315,30 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     return variantsData.combinations.find(c => c.title === selectedComboTitle && c.enabled) ?? null;
   }, [variantsData, selectedComboTitle]);
 
+  // Variant image: the exact combo image when everything is selected, otherwise the
+  // image of the first enabled combination that matches the partial selection (e.g.
+  // only the colour chosen, size not yet). Lets the gallery preview the colour before
+  // the size is picked. Only the image reacts to a partial choice — price/SKU/stock
+  // still need the full combination.
+  const variantImage = useMemo(() => {
+    if (!variantsData) return null;
+    if (selectedCombo?.image) return selectedCombo.image;
+    const chosen = variantsData.options
+      .map(o => selectedOptions[o.name])
+      .filter(Boolean) as string[];
+    if (chosen.length === 0) return null;
+    // Only preview when the partial selection pins down ONE image. Choosing the
+    // colour (which carries the image) is unambiguous; choosing only the size still
+    // spans several colour images, so we keep the base gallery in that case.
+    const imgs = new Set<string>();
+    for (const c of variantsData.combinations) {
+      if (!c.enabled || !c.image) continue;
+      const parts = c.title.split(" / ");
+      if (chosen.every(s => parts.includes(s))) imgs.add(c.image);
+    }
+    return imgs.size === 1 ? [...imgs][0] : null;
+  }, [variantsData, selectedCombo, selectedOptions]);
+
   // Title reflects the selected variation(s) live (e.g. "Saltea - 80*180").
   const displayName = useMemo(() => {
     if (!variantsData) return product.name;
@@ -335,13 +359,13 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     });
   }
 
-  // Display images — prepend variant image if available
+  // Display images — prepend the (full or partial) variant image if available
   const displayImages = useMemo(() => {
-    if (selectedCombo?.image) {
-      return [selectedCombo.image, ...images.filter(img => img !== selectedCombo.image)];
+    if (variantImage) {
+      return [variantImage, ...images.filter(img => img !== variantImage)];
     }
     return images;
-  }, [selectedCombo?.image, images]);
+  }, [variantImage, images]);
 
   const slides = displayImages.length > 0 ? displayImages : [];
 
@@ -441,6 +465,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [zoomPos] = useState<{x: number; y: number} | null>(null);
   const touchStartX = useRef<number>(0);
+  const thumbStripRef = useRef<HTMLDivElement>(null);
 
   const deliveryDates = useMemo(() => {
     if (!deliveryEstimate?.enabled) return null;
@@ -454,7 +479,13 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   }, [deliveryEstimate]);
 
   // Reset slide when variant image changes
-  useEffect(() => { setActiveSlide(0); }, [selectedCombo?.image]);
+  useEffect(() => { setActiveSlide(0); }, [variantImage]);
+
+  // Keep the active thumbnail in view when navigating a large (scrollable) gallery.
+  useEffect(() => {
+    const active = thumbStripRef.current?.children[activeSlide] as HTMLElement | undefined;
+    active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [activeSlide]);
 
   const goTo = useCallback((idx: number) => {
     setActiveSlide((idx + Math.max(slides.length, 1)) % Math.max(slides.length, 1));
@@ -521,15 +552,20 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
               className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
               <ChevronRight size={16} className="text-foreground" />
             </button>
-            <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
-              {slides.map((_, i) => (
-                <button key={i} type="button" aria-label={`Imaginea ${i + 1}`} onClick={() => goTo(i)}
-                  className="rounded-full transition-all duration-300"
-                  style={i === activeSlide
-                    ? { width: 24, height: 8, backgroundColor: color }
-                    : { width: 8, height: 8, backgroundColor: "rgba(255,255,255,0.6)" }} />
-              ))}
-            </div>
+            {/* Dot indicators: mobile only (desktop uses the thumbnail strip) and only
+                for small galleries — 33 dots would be an unusable cramped row. The
+                "1 / N" counter above covers navigation for larger sets. */}
+            {mobile && slides.length <= 8 && (
+              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
+                {slides.map((_, i) => (
+                  <button key={i} type="button" aria-label={`Imaginea ${i + 1}`} onClick={() => goTo(i)}
+                    className="rounded-full transition-all duration-300"
+                    style={i === activeSlide
+                      ? { width: 24, height: 8, backgroundColor: color }
+                      : { width: 8, height: 8, backgroundColor: "rgba(255,255,255,0.6)" }} />
+                ))}
+              </div>
+            )}
             <div className="absolute top-3 left-3 bg-black/30 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10">
               {activeSlide + 1} / {slides.length}
             </div>
@@ -791,12 +827,12 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
             <Gallery mobile={false} />
             {slides.length > 1 && (
-              <div className="flex gap-2 mt-3">
+              <div ref={thumbStripRef} className="flex gap-2 mt-3 overflow-x-auto pb-1">
                 {slides.map((src, i) => (
                   <button key={i} type="button" aria-label={`Selecteaza imaginea ${i + 1}`} onClick={() => goTo(i)}
-                    className="relative flex-1 rounded-lg overflow-hidden transition-all"
-                    style={{ aspectRatio: "1/1", border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
-                    <Image src={src} alt={imgAlt(src, i)} fill sizes="120px" className="object-contain p-1" />
+                    className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden transition-all bg-muted/40"
+                    style={{ border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
+                    <Image src={src} alt={imgAlt(src, i)} fill sizes="64px" className="object-contain p-1" />
                   </button>
                 ))}
               </div>

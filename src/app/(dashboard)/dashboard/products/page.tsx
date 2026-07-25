@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { ProductsClient } from "@/components/dashboard/ProductsClient";
 import { getProductLimit } from "@/lib/plan-limits";
 
@@ -16,7 +17,7 @@ export default async function ProductsPage({
   const [{ data: bizRow }, { search: searchQuery, page: pageParam }, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id, products(id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id), categories(id, name, parent_id, sort_order), store_settings(olx_config)")
+      .select("id, store_settings(olx_config)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -27,16 +28,38 @@ export default async function ProductsPage({
 
   if (!bizRow) redirect("/dashboard");
 
-  const products = Array.isArray(bizRow.products)
-    ? [...bizRow.products].filter((p) => !p.is_bundle).sort((a, b) => {
-        if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      })
-    : [];
+  // Windowed reads: embedded selects (businesses -> products(...)) cap silently
+  // at 1000 rows (PostgREST), so a bigger catalog looked truncated to exactly
+  // 1000 in the list and the merchant read it as a plan limit.
+  const [productsRaw, categoriesRaw] = await Promise.all([
+    fetchAllRows("dashboard.products.list", (from, to) =>
+      supabase
+        .from("products")
+        .select("id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id")
+        .eq("business_id", bizRow.id)
+        .order("id")
+        .range(from, to)
+    ),
+    fetchAllRows("dashboard.products.categories", (from, to) =>
+      supabase
+        .from("categories")
+        .select("id, name, parent_id, sort_order")
+        .eq("business_id", bizRow.id)
+        .order("sort_order")
+        .order("id")
+        .range(from, to)
+    ),
+  ]);
 
-  const categories = Array.isArray(bizRow.categories)
-    ? [...bizRow.categories].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
-    : [];
+  const products = productsRaw
+    .filter((p) => !p.is_bundle)
+    .sort((a, b) => {
+      if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+  const categories = [...categoriesRaw]
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
 
   const plan = profile?.plan ?? "free";
   const productLimit = getProductLimit(plan);

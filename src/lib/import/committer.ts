@@ -196,7 +196,9 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
         .eq("id", existingId)
         .eq("business_id", businessId);
       if (error) {
-        await failRow(admin, rowId, "Eroare la actualizare");
+        // Pastreaza cauza reala (trunchiata) — un mesaj generic a ascuns o ora
+        // de depanare cand toate randurile picau pe unicitatea slug-ului.
+        await failRow(admin, rowId, `Eroare la actualizare: ${(error.message ?? "necunoscuta").slice(0, 120)}`);
         deltas.failed++;
         continue;
       }
@@ -213,7 +215,10 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       .single();
 
     if (error || !inserted) {
-      await failRow(admin, rowId, "Eroare la salvare");
+      const cause = error?.code === "23505"
+        ? "Produs duplicat (slug deja existent)"
+        : `Eroare la salvare: ${(error?.message ?? "necunoscuta").slice(0, 120)}`;
+      await failRow(admin, rowId, cause);
       deltas.failed++;
       continue;
     }
@@ -410,8 +415,14 @@ function buildPayload(
 }
 
 async function loadSlugs(admin: Admin, businessId: string): Promise<Set<string>> {
-  const { data } = await admin.from("products").select("slug").eq("business_id", businessId).not("slug", "is", null);
-  return new Set((data ?? []).map((r) => r.slug as string));
+  // Windowed past the 1000-row PostgREST cap: cu set incomplet, dedupeSlug
+  // returna slug-uri deja existente in DB si TOATE insert-urile picau pe
+  // constrangerea de unicitate (incident 25.07: job cu 100/100 esuate la un
+  // catalog de peste 1000 de produse).
+  const data = await fetchAllRows("import.commit.slugs", (from, to) =>
+    admin.from("products").select("id, slug").eq("business_id", businessId).not("slug", "is", null).order("id").range(from, to)
+  );
+  return new Set(data.map((r) => r.slug as string));
 }
 
 /** Map each store shipping class NAME (lowercased) to its stored id, for CSV resolution. */

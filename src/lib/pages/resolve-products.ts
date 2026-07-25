@@ -6,8 +6,30 @@ import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 
 type DB = SupabaseClient<Database>;
 
-const COLS = "id, name, slug, price, compare_at_price, images, category, is_featured, page_sections";
+const COLS = "id, name, slug, price, compare_at_price, images, category, is_featured, page_sections, is_bundle, track_inventory, stock_quantity";
 const MAX = 24;
+
+/**
+ * Setarea de vizibilitate a catalogului (editor > Pagina magazin): ascunde
+ * produsele fara imagini si/sau fara stoc din listele publice. Pachetele
+ * (is_bundle) nu sunt evaluate la stoc aici — componentele lor nu sunt
+ * incarcate in acest context, deci raman vizibile (conservator); storefront-ul
+ * principal le trateaza complet, cu stoc derivat din componente.
+ */
+export interface ProductVisibility {
+  hideNoImage?: boolean;
+  hideOutOfStock?: boolean;
+}
+
+function isVisible(p: { images: unknown; is_bundle: boolean | null; track_inventory: boolean | null; stock_quantity: number | null }, v: ProductVisibility): boolean {
+  if (v.hideNoImage) {
+    const imgs = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
+    if (imgs.length === 0) return false;
+  }
+  // Aceeasi semantica precisa ca badge-ul „Stoc epuizat" din storefront.
+  if (v.hideOutOfStock && !p.is_bundle && p.track_inventory && p.stock_quantity === 0) return false;
+  return true;
+}
 
 function toPageProduct(p: Record<string, unknown>): PageProduct {
   return {
@@ -27,7 +49,7 @@ function toPageProduct(p: Record<string, unknown>): PageProduct {
  * Resolve the products a single products-block should show, with a hard cap so a
  * store with thousands/tens-of-thousands of products never loads them all.
  */
-export async function resolveBlockProducts(supabase: DB, businessId: string, block: ProductsBlock): Promise<PageProduct[]> {
+export async function resolveBlockProducts(supabase: DB, businessId: string, block: ProductsBlock, visibility: ProductVisibility = {}): Promise<PageProduct[]> {
   const limit = Math.min(Math.max(block.limit ?? 8, 1), MAX);
 
   let q = supabase.from("products").select(COLS).eq("business_id", businessId).eq("is_active", true);
@@ -40,7 +62,7 @@ export async function resolveBlockProducts(supabase: DB, businessId: string, blo
   }
 
   const { data } = await q.order("is_featured", { ascending: false }).order("sort_order").limit(MAX);
-  let list = (data ?? []).map(toPageProduct);
+  let list = (data ?? []).filter((p) => isVisible(p, visibility)).map(toPageProduct);
 
   if (block.mode === "selected" && block.productIds) {
     const order = new Map(block.productIds.map((id, i) => [id, i]));
@@ -50,10 +72,10 @@ export async function resolveBlockProducts(supabase: DB, businessId: string, blo
 }
 
 /** Resolve products for every products-block on a page (one bounded query each). */
-export async function resolveAllProductsBlocks(supabase: DB, businessId: string, blocks: Block[]): Promise<Record<string, PageProduct[]>> {
+export async function resolveAllProductsBlocks(supabase: DB, businessId: string, blocks: Block[], visibility: ProductVisibility = {}): Promise<Record<string, PageProduct[]>> {
   const map: Record<string, PageProduct[]> = {};
   // flatten so products blocks nested inside columns are resolved too.
   const productBlocks = flattenBlocks(blocks).filter((b): b is ProductsBlock => b.type === "products");
-  await Promise.all(productBlocks.map(async (b) => { map[b.id] = await resolveBlockProducts(supabase, businessId, b); }));
+  await Promise.all(productBlocks.map(async (b) => { map[b.id] = await resolveBlockProducts(supabase, businessId, b, visibility); }));
   return map;
 }

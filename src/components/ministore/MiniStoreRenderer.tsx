@@ -93,6 +93,8 @@ interface PageContent {
   hero_banners?: string[];
   hero_banner_links?: string[];
   show_category_badges?: boolean;
+  hide_products_without_images?: boolean;
+  hide_out_of_stock_products?: boolean;
   product_sections?: ProductSection[];
   menu?: MenuItem[];
 }
@@ -1501,7 +1503,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     for (const p of products) if (p.weight_grams) m[p.id] = p.weight_grams;
     return m;
   }, [products]);
-  function isProductOutOfStock(p: Product): boolean {
+  const isProductOutOfStock = useCallback((p: Product): boolean => {
     if (p.is_bundle) {
       const cfg = readBundleConfig(p.page_sections);
       if (!cfg || cfg.items.length === 0) return false;
@@ -1511,7 +1513,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       });
     }
     return !!(p.track_inventory && p.stock_quantity === 0);
-  }
+  }, [productById]);
 
   // Product filters (price range, variant options, on-sale, in-stock)
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1637,13 +1639,34 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const heroImageOnly = heroBanners.length > 0 && pageContent.hero_show_content !== true;
   const showCategoryBadges = pageContent.show_category_badges !== false; // category chip on product cards
 
+  // Vizibilitate catalog (opt-in din editor): ascunde produsele fara imagini
+  // si/sau fara stoc din TOATE suprafetele vizitatorului (grila + paginare,
+  // Recomandate, sectiuni custom, cautare, fatete, pastile de categorii).
+  // `products` COMPLET ramane sursa pentru derivarea stocului la pachete,
+  // componentele bundle si greutatile de transport — o componenta ascunsa
+  // individual nu strica pachetul care o contine. PDP prin link direct ramane
+  // accesibil (deci si One Product Store e neafectat).
+  const hideNoImage = pageContent.hide_products_without_images === true;
+  const hideNoStock = pageContent.hide_out_of_stock_products === true;
+  const visibleProducts = useMemo(() => {
+    if (!hideNoImage && !hideNoStock) return products;
+    return products.filter((p) => {
+      if (hideNoImage) {
+        const imgs = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
+        if (imgs.length === 0) return false;
+      }
+      if (hideNoStock && isProductOutOfStock(p)) return false;
+      return true;
+    });
+  }, [products, hideNoImage, hideNoStock, isProductOutOfStock]);
+
   // Category hierarchy — built from the categories table (parent_id) + product
   // assignments. Only categories whose subtree contains products are shown.
   const catTree = useMemo(() => {
     type Item = { key: string; id: string | null; name: string; image: string | null; hasChildren: boolean };
     const list = categories ?? [];
     const productCatNames = new Set<string>();
-    products.forEach(p => { if (p.category) productCatNames.add(p.category); });
+    visibleProducts.forEach(p => { if (p.category) productCatNames.add(p.category); });
 
     const byId = new Map(list.map(c => [c.id, c]));
     const childrenOf = new Map<string, CategoryNode[]>();
@@ -1685,7 +1708,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
     const hasAnyImage = topItems.some(i => i.image) || Object.values(childItemsById).some(arr => arr.some(i => i.image));
     return { topItems, childItemsById, subtreeByName, byId, hasAnyImage };
-  }, [categories, products]);
+  }, [categories, visibleProducts]);
 
   const [drillParentId, setDrillParentId] = useState<string | null>(null);
   const drillParent = drillParentId ? catTree.byId.get(drillParentId) ?? null : null;
@@ -1709,16 +1732,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   }
 
   // Featured products
-  const featuredProducts = useMemo(() => products.filter(p => p.is_featured), [products]);
+  const featuredProducts = useMemo(() => visibleProducts.filter(p => p.is_featured), [visibleProducts]);
 
   // Custom product sections — curated rows shown above the main catalog. Resolved
   // from the already-loaded product list (no extra queries); empty ones are dropped.
   const productSections = useMemo(() => {
     return parseProductSections(pageContent.product_sections)
       .filter(s => s.enabled)
-      .map(section => ({ section, items: resolveSectionProducts(section, products, catTree.subtreeByName) }))
+      .map(section => ({ section, items: resolveSectionProducts(section, visibleProducts, catTree.subtreeByName) }))
       .filter(x => x.items.length > 0);
-  }, [pageContent.product_sections, products, catTree.subtreeByName]);
+  }, [pageContent.product_sections, visibleProducts, catTree.subtreeByName]);
 
   function viewAllCategory(category: string) {
     setCategoryFilter(category);
@@ -1733,7 +1756,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     const opts = new Map<string, Set<string>>();
     let min = Infinity;
     let max = 0;
-    for (const p of products) {
+    for (const p of visibleProducts) {
       const price = Number(p.price);
       if (Number.isFinite(price)) {
         if (price < min) min = price;
@@ -1753,19 +1776,19 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       .map(([name, set]) => ({ name, values: [...set].sort((a, b) => a.localeCompare(b, "ro", { numeric: true })) }))
       .filter((o) => o.values.length > 0);
     return { options, priceMin: min === Infinity ? 0 : Math.floor(min), priceMax: Math.ceil(max) };
-  }, [products]);
+  }, [visibleProducts]);
 
   // Search engine — diacritics-insensitive + typo-tolerant, ranked by
   // relevance (see @/lib/storefront/product-search). Deferred so results
   // recompute off the urgent keystroke render.
   const deferredSearch = useDeferredValue(search);
-  const searchIdx = useMemo(() => buildProductSearchIndex(products.map((p) => {
+  const searchIdx = useMemo(() => buildProductSearchIndex(visibleProducts.map((p) => {
     const ps = p.page_sections as { variants?: { enabled?: boolean; options?: { name: string; values: string[] }[] } } | null;
     const optionValues = ps?.variants?.enabled
       ? (ps.variants.options ?? []).flatMap((o) => (Array.isArray(o?.values) ? o.values.map(String) : []))
       : undefined;
     return { id: p.id, name: p.name, category: p.category, description: p.description, optionValues };
-  })), [products]);
+  })), [visibleProducts]);
   // null = empty query (no search filtering); otherwise product id → relevance.
   const searchMatches = useMemo(
     () => queryProductSearchIndex(searchIdx, deferredSearch),
@@ -1778,7 +1801,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     const pMin = priceMin.trim() ? parseFloat(priceMin) : null;
     const pMax = priceMax.trim() ? parseFloat(priceMax) : null;
     const activeOpts = Object.entries(selectedOptions).filter(([, v]) => v.length > 0);
-    const list = products.filter(p => {
+    const list = visibleProducts.filter(p => {
       const matchesSearch = !searchMatches || searchMatches.has(p.id);
       const matchesCategory = categoryFilter === "toate"
         || (catTree.subtreeByName[categoryFilter] ?? [categoryFilter]).includes(p.category ?? "");
@@ -1813,7 +1836,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       case "newest": default: list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
     }
     return list;
-  }, [products, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
+  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
 
   // Shared filter fields — reused by the desktop inline panel and the mobile sheet.
   const filterFields = (

@@ -54,6 +54,8 @@ interface PageContent {
   show_social_proof?: boolean;
   show_quality_badge?: boolean;
   show_category_badges?: boolean;
+  hide_products_without_images?: boolean;
+  hide_out_of_stock_products?: boolean;
   product_sections?: ProductSection[];
   hide_edinio_badge?: boolean;
   store_bg_color?: string;
@@ -414,6 +416,8 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     show_social_proof: rawPageContent.show_social_proof ?? false,
     show_quality_badge: rawPageContent.show_quality_badge ?? false,
     show_category_badges: rawPageContent.show_category_badges ?? true,
+    hide_products_without_images: rawPageContent.hide_products_without_images ?? false,
+    hide_out_of_stock_products: rawPageContent.hide_out_of_stock_products ?? false,
     product_sections: rawPageContent.product_sections ?? [],
     hide_edinio_badge: rawPageContent.hide_edinio_badge ?? false,
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
@@ -1084,6 +1088,36 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               onClick={() => setPageContent(p => ({ ...p, show_category_badges: !(p.show_category_badges !== false) }))}
               className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_category_badges !== false ? "bg-primary" : "bg-muted-foreground/30")}>
               <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_category_badges !== false ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Vizibilitate catalog: produse fara imagini */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Ascunde produsele fara imagini</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Produsele fara nicio imagine nu mai apar in magazin. Raman accesibile prin link direct.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, hide_products_without_images: !p.hide_products_without_images }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.hide_products_without_images ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.hide_products_without_images ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Vizibilitate catalog: produse fara stoc */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Ascunde produsele fara stoc</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Produsele cu stoc epuizat nu mai apar in magazin. Raman accesibile prin link direct.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, hide_out_of_stock_products: !p.hide_out_of_stock_products }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.hide_out_of_stock_products ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.hide_out_of_stock_products ? "translate-x-4" : "translate-x-0")} />
             </button>
           </div>
 

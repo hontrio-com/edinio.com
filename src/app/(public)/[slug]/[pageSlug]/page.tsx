@@ -108,7 +108,10 @@ export default async function CustomPage({ params }: Props) {
     success_message: f.success_message,
   }));
 
-  const pageContent = (storeSettings?.page_content ?? {}) as { menu?: MenuItem[]; logo_size?: number; footer_logo_size?: number };
+  const pageContent = (storeSettings?.page_content ?? {}) as {
+    menu?: MenuItem[]; logo_size?: number; footer_logo_size?: number;
+    hide_products_without_images?: boolean; hide_out_of_stock_products?: boolean;
+  };
   const menu = pageContent.menu ?? [];
   const logoSize = pageContent.logo_size ?? 36;
   const footerLogoSize = pageContent.footer_logo_size ?? 36;
@@ -121,7 +124,11 @@ export default async function CustomPage({ params }: Props) {
 
   const blocks = prepareBlocksForPublic((page.blocks as unknown as Block[]) ?? []);
   // Resolve each products-block server-side with a hard cap (scales to huge catalogs).
-  const productsByBlock = await resolveAllProductsBlocks(supabase, business.id, blocks);
+  // Respecta setarea de vizibilitate a catalogului (ascunde fara imagini / fara stoc).
+  const productsByBlock = await resolveAllProductsBlocks(supabase, business.id, blocks, {
+    hideNoImage: pageContent.hide_products_without_images === true,
+    hideOutOfStock: pageContent.hide_out_of_stock_products === true,
+  });
   const color = business.primary_color ?? "#1AB554";
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);

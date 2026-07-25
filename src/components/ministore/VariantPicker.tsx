@@ -9,12 +9,19 @@ import { isValueAvailable, type VariantsData } from "@/lib/storefront/variants";
  * (same model as the product page). Reused by the product page and the
  * quick-add sheets so the picking UX is identical everywhere.
  */
-export function VariantPicker({ variants, selected, onSelect, color, compact = false }: {
+export function VariantPicker({ variants, selected, onSelect, color, compact = false, assumeAvailable = false }: {
   variants: VariantsData;
   selected: Record<string, string>;
   onSelect: (optionName: string, value: string) => void;
   color: string;
   compact?: boolean;
+  /**
+   * Trateaza toate valorile ca disponibile — folosit de quick-add cat timp
+   * combinatiile inca se incarca (altfel totul ar aparea taiat si blocat
+   * pentru o fractiune de secunda). Dupa incarcare, disponibilitatea reala
+   * se aplica normal.
+   */
+  assumeAvailable?: boolean;
 }) {
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
@@ -29,7 +36,7 @@ export function VariantPicker({ variants, selected, onSelect, color, compact = f
           <div className="flex flex-wrap gap-2">
             {option.values.map((val) => {
               const isSelected = selected[option.name] === val;
-              const available = isValueAvailable(variants, selected, option.name, val);
+              const available = assumeAvailable || isValueAvailable(variants, selected, option.name, val);
               return (
                 <button
                   key={val}

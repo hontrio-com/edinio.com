@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ShoppingCart, X, Package } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
+import { createClient } from "@/lib/supabase/client";
 import {
   parseVariants, comboTitle, findCombo, comboUnitPrice, comboCompareAtPrice,
 } from "@/lib/storefront/variants";
@@ -37,14 +38,24 @@ interface QuickAddProduct {
  * responsible for actually adding it to the cart (storefront context or
  * localStorage on custom pages).
  */
-export function VariantQuickAdd({ product, color, open, onClose, onAdd }: {
+export function VariantQuickAdd({ product, color, open, onClose, onAdd, deferCombinations = false }: {
   product: QuickAddProduct | null;
   color: string;
   open: boolean;
   onClose: () => void;
   onAdd: (line: QuickAddLine) => void;
+  /**
+   * Catalogul de pe homepage e slimuit: variantele vin FARA combinatii (doar
+   * optiunile), ca payload-ul sa nu creasca liniar cu matricile de variante.
+   * Cu flag-ul pornit, sheet-ul isi aduce singur page_sections complet la
+   * deschidere (RLS: vizitatorii vad doar produse active din magazine
+   * publicate; ownerul isi vede produsele lui in preview).
+   */
+  deferCombinations?: boolean;
 }) {
   const [selected, setSelected] = useState<Record<string, string>>({});
+  // page_sections complet, adus la cerere cand combinatiile sunt amanate.
+  const [loadedPs, setLoadedPs] = useState<unknown>(null);
 
   // Reset the selection when a different product opens the sheet (or it reopens).
   // Adjusting state during render off a "previous value" is the React-recommended
@@ -54,6 +65,7 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd }: {
   if (openId !== prevOpenId) {
     setPrevOpenId(openId);
     setSelected({});
+    setLoadedPs(null);
   }
 
   useEffect(() => {
@@ -64,7 +76,28 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd }: {
     return () => { document.removeEventListener("keydown", handler); document.body.style.overflow = ""; };
   }, [open, onClose]);
 
-  const variants = useMemo(() => (product ? parseVariants(product.page_sections) : null), [product]);
+  // Combinatiile, la cerere: un singur produs per deschidere (~o interogare
+  // mica), in loc sa care tot catalogul matricile fiecarui produs.
+  const productId = product?.id ?? null;
+  useEffect(() => {
+    if (!open || !productId || !deferCombinations || loadedPs !== null) return;
+    let cancelled = false;
+    createClient()
+      .from("products")
+      .select("page_sections")
+      .eq("id", productId)
+      .maybeSingle()
+      .then(
+        ({ data }) => { if (!cancelled) setLoadedPs(data?.page_sections ?? {}); },
+        () => { if (!cancelled && product) setLoadedPs(product.page_sections); },
+      );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, productId, deferCombinations, loadedPs]);
+
+  const combosLoading = deferCombinations && open && loadedPs === null;
+  const effectivePs = deferCombinations && loadedPs !== null ? loadedPs : product?.page_sections;
+  const variants = useMemo(() => (product ? parseVariants(effectivePs) : null), [product, effectivePs]);
 
   const title = useMemo(
     () => (variants ? comboTitle(variants.options, selected) : null),
@@ -80,9 +113,10 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd }: {
   const hasDiscount = displayCompare != null && displayCompare > displayPrice;
   const image = combo?.image || product.images[0] || null;
   // A full selection was made but it maps to no enabled combination (merchant
-  // disabled that exact mix) — block the add and tell the customer.
-  const titleFormedButUnavailable = !!title && !combo;
-  const canAdd = !!title && !!combo;
+  // disabled that exact mix) — block the add and tell the customer. Cat timp
+  // combinatiile inca se incarca, nu afisam mesajul (ar fi un fals negativ).
+  const titleFormedButUnavailable = !!title && !combo && !combosLoading;
+  const canAdd = !!title && !!combo && !combosLoading;
 
   function handleAdd() {
     if (!product || !title || !combo) return;
@@ -142,6 +176,7 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd }: {
             selected={selected}
             onSelect={(name, value) => setSelected((prev) => ({ ...prev, [name]: value }))}
             color={color}
+            assumeAvailable={combosLoading}
           />
 
           {titleFormedButUnavailable && (
@@ -156,7 +191,7 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd }: {
             style={{ backgroundColor: color, boxShadow: `0 2px 12px ${color}55` }}
           >
             <ShoppingCart className="h-4 w-4" />
-            {canAdd ? "Adauga in cos" : "Selecteaza optiunile"}
+            {combosLoading && title ? "Se incarca..." : canAdd ? "Adauga in cos" : "Selecteaza optiunile"}
           </button>
         </div>
       </div>

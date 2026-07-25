@@ -9,6 +9,7 @@ import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
@@ -165,7 +166,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
 
   // Catalogul complet, in ferestre .range(): un query simplu se trunchiaza
   // silentios la 1000 de randuri (cap PostgREST) si ar ascunde produse.
-  const [products, { data: storeSettings }, categoriesData] = await Promise.all([
+  const [productsRaw, { data: storeSettings }, categoriesData] = await Promise.all([
     fetchAllRows("storefront.home.products", (from, to) =>
       supabase
         .from("products")
@@ -192,6 +193,12 @@ export default async function SlugPage({ params, searchParams }: Props) {
         .range(from, to)
     ),
   ]);
+
+  // Slimuire payload: cardurile/cautarea/cosul folosesc doar o fractiune din
+  // fiecare rand — restul (combinatii de variante, imagini 2+, descrieri
+  // intregi, alte sectiuni din page_sections) umfla pagina de ~9x la
+  // cataloagele mari. Detalii in lib/storefront/catalog-slim.ts.
+  const products = productsRaw.map(slimCatalogProduct);
 
   // Detect custom domain access
   const headersList = await headers();

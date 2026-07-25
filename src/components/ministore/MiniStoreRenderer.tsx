@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format";
 import { cdnImage } from "@/lib/cdn-image";
-import { getProductPriceRange } from "@/lib/utils/product-price";
+import { getProductPriceRange, type PriceRange } from "@/lib/utils/product-price";
 import { computeVat, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getAttribution } from "@/lib/storefront/attribution";
@@ -42,7 +42,11 @@ type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Pick<
   Database["public"]["Tables"]["products"]["Row"],
   "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "is_bundle" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id" | "page_sections" | "weight_grams"
->;
+> & {
+  // Precalculat server-side (catalog-slim): payload-ul catalogului NU mai
+  // contine combinatiile de variante, deci intervalul nu se poate deriva aici.
+  price_range?: PriceRange;
+};
 type StoreSettings = Pick<
   Database["public"]["Tables"]["store_settings"]["Row"],
   "id" | "business_id" | "page_content" | "store_policies" | "default_shipping_cost" | "free_shipping_threshold" | "min_order_amount"
@@ -1120,7 +1124,9 @@ function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeD
   const imageUrl = images[0] ? String(images[0]) : null;
   const isNew = newBadgeDays > 0 && (Date.now() - new Date(product.created_at).getTime()) < newBadgeDays * 86400000;
   // Produs variabil cu preturi diferite -> afiseaza interval ("De la X – Y") sau doar minimul.
-  const priceRange = getProductPriceRange(Number(product.price), product.page_sections);
+  // Precalculat server-side cand payload-ul e slimuit; fallback pe derivarea
+  // locala pentru apelanti care trimit page_sections complet.
+  const priceRange = product.price_range ?? getProductPriceRange(Number(product.price), product.page_sections);
   const showPriceRange = priceRange.hasRange && !priceLowestOnly;
   const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > Number(product.price);
   const discountPct = hasDiscount
@@ -2869,6 +2875,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         color={color}
         onClose={() => setQuickAddProduct(null)}
         onAdd={handleQuickAdd}
+        deferCombinations
       />
 
       {/* Gallery lightbox */}

@@ -5,6 +5,7 @@ import { CompanyIdentity } from "@/components/ministore/CompanyIdentity";
 import { NetopiaBadge } from "@/components/ministore/NetopiaBadge";
 import { EdinioCredit } from "@/components/ministore/EdinioCredit";
 import { POLICY_LINKS } from "@/lib/storefront/policy-links";
+import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /**
@@ -22,12 +23,30 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
  * ar uita o cerinta legala, iar comerciantul ar afla din amenda.
  */
 export function FooterLegal() {
-  const { business, basePath } = useStoreChrome();
+  const { business, basePath, menu } = useStoreChrome();
+  // Paginile proprii ale magazinului. Erau in footerul paginilor custom, dar nu
+  // si in cel al paginii de magazin; acum apar peste tot, ca navigarea din
+  // subsol sa fie aceeasi indiferent unde te afli.
+  const pagini = menu.filter((m) => m.type === "page" || m.type === "link");
 
   return (
     <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
       {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
       <CompanyIdentity business={business} />
+
+      {pagini.length > 0 && (
+        <div className="flex-1">
+          <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Pagini</p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+            {pagini.map((it) => (
+              <a key={it.id} href={menuItemHref(it, basePath)}
+                className="text-[13px] text-white/50 hover:text-white transition-colors">
+                {it.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1">
         <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Loader2, Settings2, SlidersHorizontal, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
-import { PageIcon } from "@/components/pages/icon-registry";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
 import { updateSection } from "@/lib/storefront/design/edit";
 import { sectionMeta } from "@/lib/storefront/design/registry";
@@ -20,7 +19,7 @@ const GRUPURI = [
   { scope: "commerce", label: "Cos si comanda" },
 ] as const;
 
-type Intrare = { kind: SectionKind; label: string; icon: string; instante: SectionInstance[] };
+type Intrare = { kind: SectionKind; label: string; instante: SectionInstance[] };
 
 /**
  * Catalogul de design-uri, pe sectiuni.
@@ -106,7 +105,7 @@ export function SectionDesignBrowser({
       if (!meta?.inCatalog) continue;
       const existent = dupaKind.get(s.kind);
       if (existent) existent.instante.push(s);
-      else dupaKind.set(s.kind, { kind: s.kind, label: meta.label, icon: meta.icon, instante: [s] });
+      else dupaKind.set(s.kind, { kind: s.kind, label: meta.label, instante: [s] });
     }
     return dupaKind;
   }, [design]);
@@ -182,7 +181,6 @@ export function SectionDesignBrowser({
                       <button key={i.kind} type="button"
                         onClick={() => { setKindActiv(i.kind); setInstantaActiva(0); setSetariDeschise(false); }}
                         className={`shrink-0 h-11 px-3.5 lg:px-3 lg:w-full rounded-xl flex items-center gap-2 text-sm transition-colors whitespace-nowrap border lg:border-0 ${activ ? "bg-primary/10 text-primary font-semibold border-primary/30" : "text-foreground border-border hover:bg-muted"}`}>
-                        <PageIcon name={i.icon} className="h-4 w-4 shrink-0" />
                         <span className="truncate">{i.label}</span>
                         <span className={`text-[11px] tabular-nums lg:ml-auto ${activ ? "text-primary" : "text-muted-foreground"}`}>
                           {nrVariante}

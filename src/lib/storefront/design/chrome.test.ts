@@ -46,18 +46,11 @@ test("varianta necunoscuta nu gazduieste banda", () => {
 test("catalogul de design-uri contine exact zonele pentru care facem variante", () => {
   // Un ecran plin de sectiuni cu o singura varianta ar da impresia unei alegeri
   // care nu exista, asa ca lista e explicita, nu derivata din numarul de variante.
+  // Pagina de produs intra aici cand ii construim design-urile: pana atunci ar fi
+  // o intrare cu un singur card si cu previzualizare goala.
   const inCatalog = Object.entries(SECTION_REGISTRY)
     .filter(([, m]) => m?.inCatalog)
     .map(([k]) => k)
     .sort();
-  assert.deepEqual(inCatalog, [
-    "footer",
-    "header",
-    "hero",
-    "pdp_buybox",
-    "pdp_details",
-    "pdp_gallery",
-    "pdp_related",
-    "product_row",
-  ]);
+  assert.deepEqual(inCatalog, ["footer", "header", "hero", "product_row"]);
 });

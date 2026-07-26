@@ -37,6 +37,8 @@ export function SectionList({
   onToggle,
   onDuplicate,
   onRemove,
+  primaMutabila,
+  ultimaMutabila,
 }: {
   sections: SectionInstance[];
   selectedId: string | null;
@@ -45,6 +47,13 @@ export function SectionList({
   onToggle: (id: string) => void;
   onDuplicate: (id: string) => void;
   onRemove: (id: string) => void;
+  /**
+   * Intervalul de randuri care se pot reordona. Bara de anunt, header-ul si
+   * footerul au locul lor fix; fara marginile astea, sagetile lor pareau active
+   * si nu faceau nimic, iar tragerea lor se pierdea in gol.
+   */
+  primaMutabila: number;
+  ultimaMutabila: number;
 }) {
   const sensors = useSensors(
     // Un prag mic de miscare: fara el, orice click pe rand ar porni o tragere.
@@ -57,7 +66,8 @@ export function SectionList({
     if (!over || active.id === over.id) return;
     const from = sections.findIndex((s) => s.id === active.id);
     const to = sections.findIndex((s) => s.id === over.id);
-    if (from >= 0 && to >= 0) onMove(from, to);
+    const inInterval = (i: number) => i >= primaMutabila && i <= ultimaMutabila;
+    if (inInterval(from) && inInterval(to)) onMove(from, to);
   }
 
   return (
@@ -69,7 +79,8 @@ export function SectionList({
               key={s.id}
               section={s}
               index={i}
-              total={sections.length}
+              primaMutabila={primaMutabila}
+              ultimaMutabila={ultimaMutabila}
               selected={s.id === selectedId}
               onSelect={() => onSelect(s.id)}
               onMove={onMove}
@@ -87,7 +98,8 @@ export function SectionList({
 function SectionRow({
   section,
   index,
-  total,
+  primaMutabila,
+  ultimaMutabila,
   selected,
   onSelect,
   onMove,
@@ -97,7 +109,8 @@ function SectionRow({
 }: {
   section: SectionInstance;
   index: number;
-  total: number;
+  primaMutabila: number;
+  ultimaMutabila: number;
   selected: boolean;
   onSelect: () => void;
   onMove: (from: number, to: number) => void;
@@ -105,7 +118,8 @@ function SectionRow({
   onDuplicate: () => void;
   onRemove: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id });
+  const mutabila = index >= primaMutabila && index <= ultimaMutabila;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id, disabled: !mutabila });
   const meta = sectionMeta(section.kind);
   const varianta = variantMeta(section.kind, section.variant);
 
@@ -147,11 +161,11 @@ function SectionRow({
         <div className="flex items-center shrink-0">
           {/* Alternativa la tragere: functioneaza si la tastatura, si pe mobil. */}
           <div className="hidden sm:flex flex-col">
-            <button type="button" onClick={() => onMove(index, index - 1)} disabled={index === 0}
+            <button type="button" onClick={() => onMove(index, index - 1)} disabled={!mutabila || index === primaMutabila}
               aria-label="Muta mai sus" className={`${actiune} h-5 w-7`}>
               <ChevronUp className="h-3.5 w-3.5" />
             </button>
-            <button type="button" onClick={() => onMove(index, index + 1)} disabled={index === total - 1}
+            <button type="button" onClick={() => onMove(index, index + 1)} disabled={!mutabila || index === ultimaMutabila}
               aria-label="Muta mai jos" className={`${actiune} h-5 w-7`}>
               <ChevronDown className="h-3.5 w-3.5" />
             </button>

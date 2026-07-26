@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, LayoutGrid, Loader2, Monitor, Plus, Smartphone, Tablet, Undo2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Check, LayoutGrid, Loader2, Monitor, Plus, Smartphone, Tablet, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageIcon } from "@/components/pages/icon-registry";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
@@ -197,8 +198,12 @@ export function StoreDesignEditor({
       {/* Panoul de sectiuni */}
       <div className={`w-full lg:w-[380px] shrink-0 flex flex-col border-r border-border bg-surface ${vedereMobil === "preview" ? "hidden lg:flex" : "flex"}`}>
         <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h1 className="font-semibold text-foreground truncate">Design magazin</h1>
+          <Link href="/dashboard/editor/sectiuni" aria-label="Inapoi la Design sectiuni"
+            className="shrink-0 w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="font-semibold text-foreground truncate">Ordinea sectiunilor</h1>
             <p className="text-xs text-muted-foreground">
               {salvez ? "Se salveaza..." : areModificari ? "Modificari nepublicate" : "Totul e publicat"}
             </p>
@@ -223,6 +228,8 @@ export function StoreDesignEditor({
             onToggle={(id) => aplica(toggleSection(design, id))}
             onDuplicate={(id) => aplica(duplicateSection(design, id))}
             onRemove={(id) => aplica(removeSection(design, id))}
+            primaMutabila={(design.chrome.announcement ? 1 : 0) + 1}
+            ultimaMutabila={(design.chrome.announcement ? 1 : 0) + design.home.length}
           />
 
           {sectiuneSelectata && numarVariante(sectiuneSelectata) > 1 && (

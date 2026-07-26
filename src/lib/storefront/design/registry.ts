@@ -489,8 +489,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: false,
-    inCatalog: true,
-    variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
+        variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
   },
   pdp_buybox: {
     label: "Zona de cumparare",
@@ -498,8 +497,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: false,
-    inCatalog: true,
-    variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
+        variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
   },
   pdp_details: {
     label: "Detalii produs",
@@ -507,8 +505,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: true,
-    inCatalog: true,
-    variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
+        variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
   },
   pdp_related: {
     label: "Produse similare",
@@ -516,8 +513,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: true,
-    inCatalog: true,
-    variants: { carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [] } },
+        variants: { carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [] } },
   },
 
   // --- Comert -------------------------------------------------------------

@@ -40,6 +40,13 @@ export function FooterDark() {
                 {nume[0]?.toUpperCase()}
               </div>
             )}
+            {/* Numele si localitatea erau doar in footerul paginii de produs.
+                Acum apar peste tot: un logo singur, fara nume, nu spune cine e
+                magazinul. */}
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-white truncate">{nume}</p>
+              {business.store_city && <p className="text-[11px] text-white/40">{business.store_city}</p>}
+            </div>
           </div>
           {areSocial && (
             <div className="flex items-center gap-1.5 shrink-0">

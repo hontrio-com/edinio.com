@@ -348,9 +348,12 @@ function PanouSetari({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onInchide} aria-hidden />
+      {/* Foaie de jos pe telefon, sertar lipit in dreapta de la sm in sus.
+          `sm:left-auto` anuleaza doar marginea din stanga a lui `inset-x-0`;
+          inaltimea o da `sm:inset-y-0`, deci panoul tine tot ecranul. */}
       <div className="fixed z-50 bg-surface shadow-2xl flex flex-col
         inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl
-        sm:inset-y-0 sm:left-auto sm:right-0 sm:bottom-auto sm:max-h-none sm:w-[360px] sm:rounded-t-none sm:border-l sm:border-border">
+        sm:inset-y-0 sm:left-auto sm:w-[380px] sm:max-h-none sm:rounded-t-none sm:border-l sm:border-border">
         <div className="flex items-center gap-2 px-4 h-14 border-b border-border shrink-0">
           <h3 className="text-sm font-semibold text-foreground truncate">{titlu}</h3>
           <button type="button" onClick={onInchide} aria-label="Inchide setarile"

@@ -50,7 +50,13 @@ export function CatalogToolbar() {
           </div>
         )}
 
-        <div className={`relative shrink-0 ${headerHasSearch ? "flex-1 md:flex-none md:w-auto" : "w-full md:w-auto"}`}>
+        {/* Sirul de clase e scris intreg pe fiecare ramura, nu compus dintr-o
+            parte fixa si una variabila: asa cazul obisnuit da exact marcajul de
+            dinainte, iar comparatia cu productia nu semnaleaza o simpla
+            reordonare de clase drept diferenta. */}
+        <div className={headerHasSearch
+          ? "relative flex-1 md:flex-none md:w-auto shrink-0"
+          : "relative w-full md:w-auto shrink-0"}>
           <ArrowUpDown className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <select aria-label="Sorteaza produsele" value={effectiveSort}
             onChange={(e) => {

@@ -46,8 +46,8 @@ const PANA_LA = {
  * patrat cu chenar deschis ar fi o pata luminoasa in mijlocul barii.
  */
 const STIL_BUTON = {
-  incadrat: "w-9 h-9 rounded-xl border border-border bg-surface hover:bg-muted",
-  simplu: "w-8 h-8 text-current hover:opacity-70",
+  incadrat: "w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center hover:bg-muted transition-colors shrink-0",
+  simplu: "w-8 h-8 flex items-center justify-center text-current hover:opacity-70 transition-opacity shrink-0",
 } as const;
 
 export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName, panaLa = "md", stil = "incadrat" }: {
@@ -74,7 +74,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
   return (
     <>
       <button type="button" aria-label="Deschide meniul" onClick={() => setOpen(true)}
-        className={`${bp.buton} ${STIL_BUTON[stil]} flex items-center justify-center transition-colors shrink-0`}>
+        className={`${bp.buton} ${STIL_BUTON[stil]}`}>
         <Menu className={stil === "simplu" ? "h-6 w-6" : "h-4.5 w-4.5 text-foreground"} size={stil === "simplu" ? 24 : 18} />
       </button>
 

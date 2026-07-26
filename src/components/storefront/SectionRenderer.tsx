@@ -54,6 +54,10 @@ const HeaderEditorial = dynamic(
   () => import("./sections/chrome/HeaderEditorial").then((m) => m.HeaderEditorial),
   { ssr: true },
 );
+const HeaderCentered = dynamic(
+  () => import("./sections/chrome/HeaderCentered").then((m) => m.HeaderCentered),
+  { ssr: true },
+);
 
 /**
  * Variantele de header, dupa id-ul din registry.
@@ -70,6 +74,7 @@ const HEADERE: Record<string, VariantaSectiune> = {
   market: HeaderMarket as VariantaSectiune,
   wedge: HeaderWedge as VariantaSectiune,
   editorial: HeaderEditorial as VariantaSectiune,
+  centered: HeaderCentered as VariantaSectiune,
 };
 
 /**

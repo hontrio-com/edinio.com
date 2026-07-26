@@ -139,6 +139,18 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [],
       },
+      centered: {
+        label: "Simetric, cu logo centrat",
+        tags: ["editorial", "clasic"],
+        layout: "full",
+        // Randul cu contact, logo si iconite, plus randul de meniu.
+        previewHeight: 148,
+        fields: [
+          { key: "showContact", type: "toggle", label: "Arata contactul langa logo" },
+          { key: "showSearch", type: "toggle", label: "Arata cautarea" },
+        ],
+        defaults: { showContact: true, showSearch: true },
+      },
       editorial: {
         label: "Editorial, cu banda de anunt dedesubt",
         tags: ["editorial", "minimal"],

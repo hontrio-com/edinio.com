@@ -4,11 +4,10 @@ import { useState, useEffect, useTransition, useMemo, useRef, useCallback, useDe
 import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
-  MapPin, Mail, Globe, ChevronRight, ChevronLeft, ChevronDown, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
+  MapPin, Mail, ChevronRight, ChevronLeft, ChevronDown, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
   Truck, Check, Filter, ArrowUpDown, Tag, BadgePercent,
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
-import { cdnImage } from "@/lib/cdn-image";
 import { computeVat, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getAttribution } from "@/lib/storefront/attribution";
@@ -21,9 +20,6 @@ import { parseProductSections, resolveSectionProducts } from "@/lib/store-sectio
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
-import { NetopiaBadge } from "./NetopiaBadge";
-import { CompanyIdentity } from "./CompanyIdentity";
-import { EdinioCredit } from "./EdinioCredit";
 import type { Database } from "@/types/database.types";
 import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
@@ -48,6 +44,7 @@ import { AnnouncementMarquee } from "@/components/storefront/sections/chrome/Ann
 import { HeaderClassic } from "@/components/storefront/sections/chrome/HeaderClassic";
 import { UspStripIcons } from "@/components/storefront/sections/chrome/UspStripIcons";
 import { HeroClassic } from "@/components/storefront/sections/hero/HeroClassic";
+import { FooterDark } from "@/components/storefront/sections/chrome/FooterDark";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import type {
@@ -964,15 +961,6 @@ function CartDrawer({
     </>
   );
 }
-
-const POLICY_LINKS = [
-  { slug: "termeni", label: "Termeni si conditii" },
-  { slug: "livrare", label: "Politica de livrare" },
-  { slug: "retur", label: "Politica de retur" },
-  { slug: "confidentialitate", label: "Politica de confidentialitate" },
-  { slug: "gdpr", label: "GDPR" },
-  { slug: "anulare", label: "Politica de anulare" },
-] as const;
 
 
 interface Props {
@@ -1955,117 +1943,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         <ContactClassic />
       </main>
 
-      {/* Footer */}
-      <footer className="bg-[#0A0A0A] text-white">
-        <div className="max-w-6xl mx-auto px-5 pt-10 pb-6 sm:pt-12">
-          {/* Top row: brand + social */}
-          <div className="flex items-center justify-between gap-4 pb-8">
-            <div className="flex items-center gap-3 min-w-0">
-              {business.logo_url ? (
-                /* Free logo at the merchant-set footer size — matches the header (no box/crop). */
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
-                  style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
-                  className="w-auto object-contain shrink-0" />
-              ) : (
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
-                  style={{ backgroundColor: color }}>
-                  {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
-                </div>
-              )}
-            </div>
-            {(social.instagram || social.facebook || social.tiktok || social.website) && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                {social.instagram && (
-                  <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                    </svg>
-                  </a>
-                )}
-                {social.facebook && (
-                  <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
-                    </svg>
-                  </a>
-                )}
-                {social.tiktok && (
-                  <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
-                    </svg>
-                  </a>
-                )}
-                {social.website && (
-                  <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <Globe className="h-3.5 w-3.5" />
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-surface/[0.06]" />
-
-          {/* Middle: policies + consumer protection side by side on desktop, stacked on mobile */}
-          <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
-            {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
-            <CompanyIdentity business={business} />
-            {/* Policies */}
-            <div className="flex-1">
-              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
-              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-                {/* Funcția de retragere din contract — obligatorie conform OUG 18/2026 */}
-                <a href={`${basePath}/retur`}
-                  className="text-[13px] text-white/70 hover:text-white transition-colors font-medium">
-                  Retrage-te din contract
-                </a>
-                {POLICY_LINKS.map(({ slug: pSlug, label }) => (
-                  <a key={pSlug} href={`${basePath}/politici/${pSlug}`}
-                    className="text-[13px] text-white/50 hover:text-white transition-colors">
-                    {label}
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* SAL / SOL */}
-            <div className="shrink-0">
-              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Protectia consumatorilor</p>
-              <div className="flex items-center gap-3">
-                <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
-                  className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
-                  <Image src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
-                </a>
-                <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
-                  className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
-                  <Image src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
-                </a>
-              </div>
-            </div>
-
-            {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
-            <NetopiaBadge businessId={business.id} />
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-surface/[0.06]" />
-
-          {/* Bottom: copyright */}
-          <div className="pt-5 flex items-center justify-between gap-3">
-            <p className="text-[11px] text-white/25">
-              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
-            </p>
-            <EdinioCredit businessId={business.id} color={color} className="text-[11px] text-white/25" />
-          </div>
-        </div>
-      </footer>
+      <FooterDark />
 
       {/* Floating buttons */}
       <div className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}`}>

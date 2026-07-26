@@ -6,14 +6,16 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
-import { StoreHeader } from "@/components/ministore/StoreHeader";
-import { StoreFooter } from "@/components/ministore/StoreFooter";
+import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData } from "@/lib/storefront/chrome-value";
+import { resolveDesign } from "@/lib/storefront/design/parse";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { BlockRenderer } from "@/components/pages/BlockRenderer";
 import { prepareBlocksForPublic } from "@/lib/pages/prepare-blocks";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
 import { resolveAllProductsBlocks } from "@/lib/pages/resolve-products";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
-import type { MenuItem } from "@/lib/pages/menu";
 import type { PublicForm, FormField } from "@/lib/pages/forms.types";
 
 interface Props {
@@ -96,7 +98,7 @@ export default async function CustomPage({ params }: Props) {
 
   // store_settings (menu + logo size) and forms via service role — not anon-readable.
   const [{ data: storeSettings }, { data: formsRaw }] = await Promise.all([
-    createAdminClient().from("store_settings").select("page_content").eq("business_id", business.id).single(),
+    createAdminClient().from("store_settings").select("page_content, storefront_design").eq("business_id", business.id).single(),
     createAdminClient().from("forms").select("id, name, fields, submit_label, success_message").eq("business_id", business.id),
   ]);
 
@@ -108,13 +110,9 @@ export default async function CustomPage({ params }: Props) {
     success_message: f.success_message,
   }));
 
-  const pageContent = (storeSettings?.page_content ?? {}) as {
-    menu?: MenuItem[]; logo_size?: number; footer_logo_size?: number;
-    hide_products_without_images?: boolean; hide_out_of_stock_products?: boolean;
-  };
-  const menu = pageContent.menu ?? [];
-  const logoSize = pageContent.logo_size ?? 36;
-  const footerLogoSize = pageContent.footer_logo_size ?? 36;
+  // Meniul si marimile de logo se citesc acum in buildChromeData, dintr-un
+  // singur loc pentru toate paginile publice.
+  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
 
   // Custom domain detection (links honour basePath).
   const headersList = await headers();
@@ -133,34 +131,39 @@ export default async function CustomPage({ params }: Props) {
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
 
+  // Acelasi design ca pagina de magazin: bara de anunt, header si footer vin din
+  // aceeasi configuratie, ca alegerea comerciantului sa nu se opreasca la
+  // pagina principala.
+  const resolved = resolveDesign(storeSettings?.storefront_design, {
+    primaryColor: color,
+    pageContent: pageContent as Record<string, unknown>,
+    features: (business.features as Record<string, unknown>) ?? {},
+    coverUrl: business.cover_url,
+    tagline: business.tagline,
+  });
+  const chrome = buildChromeData({
+    business,
+    pageContent: pageContent as StorePageContent,
+    basePath,
+    currentPageSlug: page.slug,
+  });
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <StorefrontThemeScope style={resolved.style}>
       {pageCss ? <style dangerouslySetInnerHTML={{ __html: pageCss }} /> : null}
-      <StoreHeader
-        business={{ slug: business.slug, business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, primary_color: color, phone: business.phone }}
-        menu={menu}
-        basePath={basePath}
-        currentSlug={page.slug}
-        logoSize={logoSize}
-      />
-      {!page.is_published && isOwner && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs text-center py-2 px-4">
-          Aceasta pagina este in modul ciorna (draft) si o vezi doar tu. Publica-o din panou pentru a o face vizibila.
-        </div>
-      )}
-      <main id={`edinio-page-${page.id}`} className="flex-1">
-        <BlockRenderer
-          blocks={blocks}
-          ctx={{ color, basePath, storeSlug: business.slug, social, products: [], productsByBlock, forms, businessId: business.id, pageId: page.id }}
-        />
-      </main>
-      <StoreFooter
-        business={{ business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, primary_color: color, social, cui: business.cui, reg_com: business.reg_com, address: business.address, city: business.city, county: business.county, store_address: business.store_address, store_city: business.store_city, store_county: business.store_county }}
-        menu={menu}
-        basePath={basePath}
-        businessId={business.id}
-        footerLogoSize={footerLogoSize}
-      />
-    </div>
+      <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
+        {!page.is_published && isOwner && (
+          <div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs text-center py-2 px-4">
+            Aceasta pagina este in modul ciorna (draft) si o vezi doar tu. Publica-o din panou pentru a o face vizibila.
+          </div>
+        )}
+        <main id={`edinio-page-${page.id}`} className="flex-1">
+          <BlockRenderer
+            blocks={blocks}
+            ctx={{ color, basePath, storeSlug: business.slug, social, products: [], productsByBlock, forms, businessId: business.id, pageId: page.id }}
+          />
+        </main>
+      </StorePageShell>
+    </StorefrontThemeScope>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /**
  * Sectiunea „De ce sa alegi produsele noastre", varianta classic.
  * Continutul vine din `page_content.store_benefits_section`.
  */
 export function BenefitsClassic() {
-  const { pageContent, color } = useStorefront();
+  const { pageContent, color } = useStoreChrome();
   const benefits = pageContent.store_benefits_section;
   if (!benefits?.enabled || benefits.items.length === 0) return null;
 

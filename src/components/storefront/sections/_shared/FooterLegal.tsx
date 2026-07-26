@@ -5,7 +5,7 @@ import { CompanyIdentity } from "@/components/ministore/CompanyIdentity";
 import { NetopiaBadge } from "@/components/ministore/NetopiaBadge";
 import { EdinioCredit } from "@/components/ministore/EdinioCredit";
 import { POLICY_LINKS } from "@/lib/storefront/policy-links";
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /**
  * Blocul legal obligatoriu din footer. NU e optional si nu are setare de ascundere.
@@ -22,7 +22,7 @@ import { useStorefront } from "@/components/storefront/StorefrontProvider";
  * ar uita o cerinta legala, iar comerciantul ar afla din amenda.
  */
 export function FooterLegal() {
-  const { business, basePath } = useStorefront();
+  const { business, basePath } = useStoreChrome();
 
   return (
     <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
@@ -72,7 +72,7 @@ export function FooterLegal() {
  * decizie luata inauntrul lui `EdinioCredit` — nu e o setare de design.
  */
 export function FooterCredit() {
-  const { business, color } = useStorefront();
+  const { business, color } = useStoreChrome();
 
   return (
     <div className="pt-5 flex items-center justify-between gap-3">

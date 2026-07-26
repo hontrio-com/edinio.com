@@ -1442,6 +1442,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
     addToCart: handleAddToCart,
     addedId,
+    cartMode: "drawer",
     openCart: () => setCartOpen(true),
     openCheckout: () => setCheckoutOpen(true),
 

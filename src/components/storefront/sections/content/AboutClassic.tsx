@@ -1,10 +1,10 @@
 "use client";
 
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /** Sectiunea „Despre noi", varianta classic. Textul vine din `businesses.description`. */
 export function AboutClassic() {
-  const { business, features } = useStorefront();
+  const { business, features } = useStoreChrome();
   if (features.show_about === false || !business.description) return null;
 
   return (

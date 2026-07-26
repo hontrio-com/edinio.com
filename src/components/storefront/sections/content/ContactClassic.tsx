@@ -1,14 +1,14 @@
 "use client";
 
 import { Mail, MapPin, Phone } from "lucide-react";
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /**
  * Sectiunea de contact, varianta classic: telefon, email si adresa magazinului,
  * fiecare afisat doar daca e completat in setari.
  */
 export function ContactClassic() {
-  const { business, features, color } = useStorefront();
+  const { business, features, color } = useStoreChrome();
   const areDate = !!(business.phone || business.email || business.store_address);
   if (features.show_contact === false || !areDate) return null;
 

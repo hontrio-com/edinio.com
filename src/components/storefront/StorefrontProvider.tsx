@@ -13,20 +13,23 @@ import type {
 import type { Database } from "@/types/database.types";
 
 /**
- * Starea paginii de magazin, pusa la dispozitia sectiunilor.
+ * Starea magazinului, pusa la dispozitia sectiunilor, in doua straturi.
  *
- * Toata logica de catalog (cautare, sortare, filtre, categorii, paginare,
- * adaugare in cos) traia in closure-ul unei singure componente de ~1500 de
- * linii. Ca sa poata exista mai multe variante de design pentru fiecare
- * sectiune, sectiunile trebuie sa fie componente separate — iar atunci au
- * nevoie de starea asta fara sa primeasca treizeci de props fiecare.
+ * `StoreChrome` e identitatea magazinului: nume, logo, culori, meniu, setari.
+ * Atat ii trebuie unui header, unui footer sau unei sectiuni de continut, si
+ * exista pe ORICE pagina publica — inclusiv pagina de produs si paginile custom,
+ * care n-au catalog. Fara separarea asta, header-ul si footer-ul n-ar putea
+ * trai decat pe pagina principala, iar designul ales de comerciant s-ar opri la
+ * primul click pe un produs.
  *
- * Contextul e construit de pagina de magazin, nu de un provider separat: asa
- * decompunerea se face bucata cu bucata, fara sa mutam intr-un pas toata starea
- * dintr-un loc in altul.
+ * `Storefront` adauga peste el starea de catalog — cautare, sortare, filtre,
+ * categorii, paginare — si exista doar pe pagina de magazin.
  */
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
+
+/** Ce face butonul de cos, dupa pagina pe care ne aflam. */
+export type CartMode = "drawer" | "link" | "hidden";
 
 /** Un element din navigarea pe categorii (pastile si cercuri cu imagini). */
 export interface CategoryItem {
@@ -44,8 +47,7 @@ export interface CatalogFacets {
   priceMax: number;
 }
 
-export interface StorefrontContextValue {
-  // --- Magazinul -----------------------------------------------------------
+export interface StoreChromeValue {
   business: Business;
   basePath: string;
   /** Culoarea principala. Variantele noi folosesc `var(--st-primary)`. */
@@ -57,9 +59,21 @@ export interface StorefrontContextValue {
   menu: MenuItem[];
   /** Header-ul se aseaza sub bara de anunt cand aceasta exista. */
   hasAnnouncementBar: boolean;
-  /** Catalogul isi pune titlu propriu doar cand pagina n-are hero si nici Recomandate. */
-  hasHero: boolean;
 
+  /**
+   * Pe pagina de magazin cosul se deschide ca sertar; pe celelalte pagini
+   * publice e un link inapoi la magazin, iar in modul „un singur produs" nu
+   * exista deloc.
+   */
+  cartMode: CartMode;
+  openCart: () => void;
+  /** Slug-ul paginii curente, pentru starea activa din meniu. */
+  currentPageSlug?: string | null;
+  /** Galeria foto poate aparea pe orice pagina, deci lightbox-ul sta aici. */
+  openLightbox: (url: string) => void;
+}
+
+export interface StorefrontContextValue extends StoreChromeValue {
   // --- Catalog -------------------------------------------------------------
   /** Lista COMPLETA. Ramane sursa pentru stocul derivat al pachetelor. */
   products: StorefrontProduct[];
@@ -121,25 +135,46 @@ export interface StorefrontContextValue {
   addToCart: (product: StorefrontProduct) => void;
   /** Produsul care tocmai a intrat in cos, pentru starea „Adaugat!" a cardului. */
   addedId: string | null;
-  openCart: () => void;
   openCheckout: () => void;
 
   // --- Prezentare ----------------------------------------------------------
+  /** Catalogul isi pune titlu propriu doar cand pagina n-are hero si nici Recomandate. */
+  hasHero: boolean;
   newBadgeDays: number;
   showCategoryBadges: boolean;
   priceLowestOnly: boolean;
   freeShippingThreshold: number | null;
-  openLightbox: (url: string) => void;
 }
 
-const StorefrontContext = createContext<StorefrontContextValue | null>(null);
+const ChromeContext = createContext<StoreChromeValue | null>(null);
+const CatalogContext = createContext<StorefrontContextValue | null>(null);
 
+/** Identitatea magazinului. Disponibila pe orice pagina publica. */
+export function useStoreChrome(): StoreChromeValue {
+  const ctx = useContext(ChromeContext);
+  if (!ctx) throw new Error("useStoreChrome must be inside StoreChromeProvider");
+  return ctx;
+}
+
+/** Starea de catalog. Disponibila doar pe pagina de magazin. */
 export function useStorefront(): StorefrontContextValue {
-  const ctx = useContext(StorefrontContext);
+  const ctx = useContext(CatalogContext);
   if (!ctx) throw new Error("useStorefront must be inside StorefrontProvider");
   return ctx;
 }
 
+/** Doar identitatea magazinului: pagina de produs, pagini custom, politici. */
+export function StoreChromeProvider({
+  value,
+  children,
+}: {
+  value: StoreChromeValue;
+  children: ReactNode;
+}) {
+  return <ChromeContext.Provider value={value}>{children}</ChromeContext.Provider>;
+}
+
+/** Identitate + catalog: pagina de magazin. */
 export function StorefrontProvider({
   value,
   children,
@@ -147,5 +182,9 @@ export function StorefrontProvider({
   value: StorefrontContextValue;
   children: ReactNode;
 }) {
-  return <StorefrontContext.Provider value={value}>{children}</StorefrontContext.Provider>;
+  return (
+    <ChromeContext.Provider value={value}>
+      <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>
+    </ChromeContext.Provider>
+  );
 }

@@ -1,14 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /**
  * Galeria foto a magazinului, varianta classic. Imaginile vin din
  * `businesses.gallery`; click deschide lightbox-ul paginii.
  */
 export function GalleryClassic() {
-  const { gallery, features, openLightbox } = useStorefront();
+  const { gallery, features, openLightbox } = useStoreChrome();
   if (features.show_gallery === false || gallery.length === 0) return null;
 
   return (

@@ -2,7 +2,7 @@
 
 import type { ElementType } from "react";
 import { Phone, RotateCcw, ShieldCheck, Truck } from "lucide-react";
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /** Iconitele disponibile pentru insignele de incredere, alese din editor. */
 const TRUST_ICONS: Record<string, ElementType> = {
@@ -18,7 +18,7 @@ const TRUST_ICONS: Record<string, ElementType> = {
  * `page_content.store_trust_badges` si e optional.
  */
 export function UspStripIcons() {
-  const { pageContent, color } = useStorefront();
+  const { pageContent, color } = useStoreChrome();
   const pornita = pageContent.show_trust_strip_on_store === true;
   const badges = pageContent.store_trust_badges;
   if (!pornita || !badges || badges.length === 0) return null;

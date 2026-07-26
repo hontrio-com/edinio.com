@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ShoppingCart } from "lucide-react";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { HeroBanners } from "./HeroBanners";
 
 /**
@@ -18,7 +18,7 @@ import { HeroBanners } from "./HeroBanners";
  * unul vizibil. Cand nu il afiseaza, se pune unul ascuns, inaintea sectiunii.
  */
 export function HeroClassic() {
-  const { business, basePath, color, pageContent } = useStorefront();
+  const { business, basePath, color, pageContent } = useStoreChrome();
 
   const nume = business.store_name ?? business.business_name;
   const { banners, links } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);

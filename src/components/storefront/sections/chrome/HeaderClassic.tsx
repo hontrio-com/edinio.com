@@ -5,7 +5,7 @@ import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
 
 /**
  * Header-ul magazinului, varianta classic: hamburger + logo la stanga, meniu la
@@ -14,22 +14,29 @@ import { useStorefront } from "@/components/storefront/StorefrontProvider";
  * Se lipeste sub bara de anunt cand aceasta exista (`top-9`), altfel sus de tot.
  * Logo-ul se afiseaza liber, la orice raport, cu inaltimea aleasa de comerciant
  * si fara chenar sau decupare.
+ *
+ * Acelasi header pe TOATE paginile publice, cu doua diferente impuse de context:
+ * pe pagina de magazin cosul deschide sertarul si logo-ul duce sus, iar pe
+ * celelalte pagini cosul e un link inapoi la magazin si logo-ul la fel. Fara
+ * asta, designul ales de comerciant s-ar opri la primul click pe un produs.
  */
 export function HeaderClassic() {
-  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, openCart } =
-    useStorefront();
+  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, cartMode, openCart, currentPageSlug } =
+    useStoreChrome();
   const { count } = useCart();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
   const showCall = features.floating_call === true && !!business.phone;
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
+  // Pe pagina de magazin ancora goala duce in capul paginii fara navigare.
+  const acasa = cartMode === "drawer" ? "#" : `${basePath}/`;
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
-        <StoreNavHamburger items={menu} basePath={basePath} color={color} logoUrl={business.logo_url} storeName={nume} />
-        <a href="#" className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
+        <StoreNavHamburger items={menu} basePath={basePath} color={color} logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} />
+        <a href={acasa} className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
           {business.logo_url ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={cdnImage(business.logo_url, 320)} alt={nume}
@@ -43,7 +50,7 @@ export function HeaderClassic() {
           )}
         </a>
 
-        <StoreNavLinks items={menu} basePath={basePath} color={color} className="flex-1 justify-center" />
+        <StoreNavLinks items={menu} basePath={basePath} color={color} className="flex-1 justify-center" currentSlug={currentPageSlug} />
 
         <div className="flex items-center gap-2 ml-auto">
           {showCall && (
@@ -68,23 +75,60 @@ export function HeaderClassic() {
               </svg>
             </a>
           )}
-          <button type="button" aria-label="Deschide cosul de cumparaturi" onClick={openCart}
-            className="relative flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-surface hover:bg-muted transition-colors">
-            <ShoppingCart className="h-4 w-4 text-foreground" />
-            {count > 0 ? (
-              <span className="text-sm font-semibold text-foreground tabular-nums">{count}</span>
-            ) : (
-              <span className="hidden sm:inline text-sm text-muted-foreground">Cos</span>
-            )}
-            {count > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full text-white text-[10px] font-bold flex items-center justify-center"
-                style={{ backgroundColor: color }}>
-                {count > 9 ? "9+" : count}
-              </span>
-            )}
-          </button>
+          <CosClassic mode={cartMode} count={count} color={color} basePath={basePath} onOpen={openCart} />
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * Controlul de cos. Acelasi aspect peste tot; difera doar ce face:
+ * sertar pe pagina de magazin, link inapoi la magazin in rest, nimic in modul
+ * „un singur produs", unde nu exista catalog.
+ */
+function CosClassic({
+  mode,
+  count,
+  color,
+  basePath,
+  onOpen,
+}: {
+  mode: CartMode;
+  count: number;
+  color: string;
+  basePath: string;
+  onOpen: () => void;
+}) {
+  if (mode === "hidden") return null;
+
+  const cls = "relative flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-surface hover:bg-muted transition-colors";
+  const continut = (
+    <>
+      <ShoppingCart className="h-4 w-4 text-foreground" />
+      {count > 0 ? (
+        <span className="text-sm font-semibold text-foreground tabular-nums">{count}</span>
+      ) : (
+        <span className="hidden sm:inline text-sm text-muted-foreground">
+          {mode === "drawer" ? "Cos" : "Magazin"}
+        </span>
+      )}
+      {count > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 w-[18px] h-[18px] rounded-full text-white text-[10px] font-bold flex items-center justify-center"
+          style={{ backgroundColor: color }}>
+          {count > 9 ? "9+" : count}
+        </span>
+      )}
+    </>
+  );
+
+  return mode === "drawer" ? (
+    <button type="button" aria-label="Deschide cosul de cumparaturi" onClick={onOpen} className={cls}>
+      {continut}
+    </button>
+  ) : (
+    <a href={`${basePath}/`} aria-label="Mergi la magazin" className={cls}>
+      {continut}
+    </a>
   );
 }

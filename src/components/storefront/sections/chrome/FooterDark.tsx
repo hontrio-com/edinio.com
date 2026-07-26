@@ -2,7 +2,7 @@
 
 import { Globe } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { FooterCredit, FooterLegal } from "@/components/storefront/sections/_shared/FooterLegal";
 
 /**
@@ -13,7 +13,7 @@ import { FooterCredit, FooterLegal } from "@/components/storefront/sections/_sha
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
 export function FooterDark() {
-  const { business, color, social, pageContent } = useStorefront();
+  const { business, color, social, pageContent } = useStoreChrome();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.footer_logo_size ?? 36;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /** Trepte de viteza, de la cea mai lenta la cea mai rapida (secunde pe ciclu). */
 const SPEEDS = [80, 50, 30, 18, 10];
@@ -13,7 +13,7 @@ const SPEEDS = [80, 50, 30, 18, 10];
  * cand exista — vezi `hasAnnouncementBar` din context.
  */
 export function AnnouncementMarquee() {
-  const { pageContent, color } = useStorefront();
+  const { pageContent, color } = useStoreChrome();
   const bar = pageContent.announcement_bar;
   const pornita = pageContent.show_announcement_on_store !== false && bar?.enabled === true;
   if (!pornita || !bar) return null;

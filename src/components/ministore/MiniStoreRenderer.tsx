@@ -1459,6 +1459,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     priceLowestOnly,
     freeShippingThreshold,
     openLightbox: setLightboxUrl,
+    isPreview: preview,
   };
 
   return (

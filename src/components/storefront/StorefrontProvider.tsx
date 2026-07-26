@@ -77,6 +77,12 @@ export interface StoreChromeValue {
   currentPageSlug?: string | null;
   /** Galeria foto poate aparea pe orice pagina, deci lightbox-ul sta aici. */
   openLightbox: (url: string) => void;
+  /**
+   * Pagina e deschisa in iframe-ul editorului. Doar atunci sectiunile primesc
+   * marcajul `data-st-section`: pe magazinul public ar fi zeci de elemente in
+   * plus, degeaba, si un wrapper poate rupe selectorii CSS pe copil direct.
+   */
+  isPreview?: boolean;
 }
 
 export interface StorefrontContextValue extends StoreChromeValue {

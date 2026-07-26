@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 import { groupSections } from "@/lib/storefront/design/group-sections";
 import { SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
+import { useStoreChrome } from "./StorefrontProvider";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { AnnouncementMarquee } from "./sections/chrome/AnnouncementMarquee";
 import { FooterDark } from "./sections/chrome/FooterDark";
@@ -73,6 +74,25 @@ function SectionOne({ section }: { section: SectionInstance }) {
 }
 
 /**
+ * In editor, fiecare sectiune primeste `data-st-section` cu id-ul ei: asa
+ * preview-ul stie pe ce s-a dat click si unde sa deruleze.
+ *
+ * Pe magazinul public marcajul lipseste complet. Ar fi insemnat zeci de
+ * elemente in plus fara niciun folos pentru vizitator, iar un wrapper — chiar
+ * si cu `display: contents` — ramane vizibil pentru selectori de tip copil
+ * direct sau `:nth-child`, deci ar putea rupe o varianta de design.
+ */
+function Marcata({ section }: { section: SectionInstance }) {
+  const { isPreview } = useStoreChrome();
+  if (!isPreview) return <SectionOne section={section} />;
+  return (
+    <div {...{ [SECTION_ATTR]: section.id }} className="contents">
+      <SectionOne section={section} />
+    </div>
+  );
+}
+
+/**
  * Sectiunile pe latime completa se randeaza direct, iar seriile consecutive de
  * sectiuni cu container se grupeaza sub un singur wrapper.
  *
@@ -85,19 +105,6 @@ function SectionOne({ section }: { section: SectionInstance }) {
  * Prima serie e `<main>`, marcajul semantic al paginii, si isi pastreaza
  * spatierea verticala; eventualele serii de dupa sunt simple containere.
  */
-/**
- * Fiecare sectiune primeste `data-st-section` cu id-ul ei. Atributul nu costa
- * nimic pe magazinul public si e ce permite preview-ului din editor sa raspunda
- * la click pe o sectiune si sa o aduca in dreptul ochilor.
- */
-function Marcata({ section }: { section: SectionInstance }) {
-  return (
-    <div {...{ [SECTION_ATTR]: section.id }} className="contents">
-      <SectionOne section={section} />
-    </div>
-  );
-}
-
 export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
   return (
     <>

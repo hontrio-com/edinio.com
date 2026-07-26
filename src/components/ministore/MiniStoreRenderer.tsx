@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, createContext, useContext, useEffect, useTransition, useMemo, useRef, useCallback, useDeferredValue, type ReactNode } from "react";
+import { useState, useEffect, useTransition, useMemo, useRef, useCallback, useDeferredValue } from "react";
 import Image from "next/image";
 import {
   ShoppingCart, X, Plus, Minus, Phone, Search,
   MapPin, Mail, Globe, ChevronRight, ChevronLeft, ChevronDown, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
   Truck, ShieldCheck, RotateCcw, Check, Filter, ArrowUpDown, Tag, BadgePercent,
 } from "lucide-react";
-import { formatPrice, formatPriceRange, whatsappLink } from "@/lib/utils/format";
+import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { cdnImage } from "@/lib/cdn-image";
-import { getProductPriceRange, type PriceRange } from "@/lib/utils/product-price";
 import { computeVat, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getAttribution } from "@/lib/storefront/attribution";
@@ -17,7 +16,6 @@ import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart, getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
-import { getCartSessionId } from "@/lib/cart-session";
 import { readBundleConfig } from "@/lib/bundles";
 import { parseProductSections, resolveSectionProducts, type ProductSection } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
@@ -28,7 +26,6 @@ import { NetopiaBadge } from "./NetopiaBadge";
 import { CompanyIdentity } from "./CompanyIdentity";
 import { EdinioCredit } from "./EdinioCredit";
 import type { MenuItem } from "@/lib/pages/menu";
-import { resolveHref } from "@/lib/pages/href";
 import type { Database } from "@/types/database.types";
 import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
@@ -39,16 +36,17 @@ import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
+import { CartProvider, lineKey, useCart } from "@/components/storefront/cart/CartProvider";
+import { ProductCard } from "@/components/storefront/product/ProductCard";
+import { HeroBanners } from "@/components/storefront/sections/hero/HeroBanners";
+import { CategoryScroller } from "@/components/storefront/sections/catalog/CategoryScroller";
+import { ShippingProgressBanner } from "@/components/storefront/sections/shipping/ShippingProgressBanner";
+import type { StorefrontProduct } from "@/lib/storefront/product.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
-type Product = Pick<
-  Database["public"]["Tables"]["products"]["Row"],
-  "id" | "name" | "slug" | "description" | "price" | "compare_at_price" | "images" | "category" | "is_featured" | "is_active" | "is_bundle" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id" | "page_sections" | "weight_grams"
-> & {
-  // Precalculat server-side (catalog-slim): payload-ul catalogului NU mai
-  // contine combinatiile de variante, deci intervalul nu se poate deriva aici.
-  price_range?: PriceRange;
-};
+// Forma produsului a fost mutata in lib/storefront/product.types.ts, ca sa poata
+// fi importata si de sectiunile extrase din acest fisier.
+type Product = StorefrontProduct;
 type StoreSettings = Pick<
   Database["public"]["Tables"]["store_settings"]["Row"],
   "id" | "business_id" | "page_content" | "store_policies" | "default_shipping_cost" | "free_shipping_threshold" | "min_order_amount"
@@ -119,40 +117,6 @@ interface StorePolicies {
   cancellation?: string | PolicyValue;
 }
 
-interface CartItem {
-  productId: string;
-  slug?: string;
-  name: string;
-  price: number;
-  imageUrl: string | null;
-  quantity: number;
-  /** Chosen variant combination ("S / Rosu") — absent for simple products. */
-  variantTitle?: string;
-  variantSku?: string;
-}
-
-/**
- * A cart line is identified by product + chosen variant, so two variants of the
- * same product (e.g. size S and size L) are distinct lines instead of merging.
- * Simple products fall back to the product id, matching pre-variant carts stored
- * in localStorage.
- */
-function lineKey(item: Pick<CartItem, "productId" | "variantTitle">): string {
-  return item.variantTitle ? `${item.productId}::${item.variantTitle}` : item.productId;
-}
-
-interface CartContextValue {
-  items: CartItem[];
-  addItem: (item: Omit<CartItem, "quantity">) => void;
-  removeItem: (key: string) => void;
-  updateQty: (key: string, qty: number) => void;
-  total: number;
-  count: number;
-  clear: () => void;
-  restoreCart: (items: CartItem[]) => void;
-  sessionId: string;
-}
-
 const JUDETE = [
   "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
   "Braila","Brasov","Buzau","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj",
@@ -180,66 +144,6 @@ const TRUST_ICONS: Record<string, React.ElementType> = {
   "rotate-ccw": RotateCcw,
   phone: Phone,
 };
-
-const CartContext = createContext<CartContextValue | null>(null);
-
-function useCart() {
-  const ctx = useContext(CartContext);
-  if (!ctx) throw new Error("useCart must be inside CartProvider");
-  return ctx;
-}
-
-function CartProvider({ children, slug }: { children: React.ReactNode; slug: string }) {
-  const STORAGE_KEY = `cart_${slug}`;
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [sessionId, setSessionId] = useState("");
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setItems(JSON.parse(stored));
-    } catch {}
-    setSessionId(getCartSessionId(slug));
-  }, [STORAGE_KEY, slug]);
-
-  function save(next: CartItem[]) {
-    setItems(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }
-
-  function addItem(item: Omit<CartItem, "quantity">) {
-    setItems((prev) => {
-      const key = lineKey(item);
-      const exists = prev.find((i) => lineKey(i) === key);
-      const next = exists
-        ? prev.map((i) => lineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i)
-        : [...prev, { ...item, quantity: 1 }];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function removeItem(key: string) {
-    save(items.filter((i) => lineKey(i) !== key));
-  }
-
-  function updateQty(key: string, qty: number) {
-    if (qty <= 0) { removeItem(key); return; }
-    save(items.map((i) => lineKey(i) === key ? { ...i, quantity: qty } : i));
-  }
-
-  function clear() { save([]); }
-  function restoreCart(next: CartItem[]) { save(next); }
-
-  const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const count = items.reduce((s, i) => s + i.quantity, 0);
-
-  return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, total, count, clear, restoreCart, sessionId }}>
-      {children}
-    </CartContext.Provider>
-  );
-}
 
 function CartCheckoutModal({
   open, onClose, color, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode, productWeights,
@@ -1119,138 +1023,6 @@ function CartDrawer({
   );
 }
 
-function ProductCard({ product, color, basePath, onAddToCart, isAdded, newBadgeDays, outOfStock, showCategoryBadge = true, priority = false, priceLowestOnly = false }: {
-  product: Product; color: string; basePath: string; onAddToCart: () => void; isAdded: boolean; newBadgeDays: number; outOfStock?: boolean; showCategoryBadge?: boolean; priority?: boolean; priceLowestOnly?: boolean;
-}) {
-  const images = Array.isArray(product.images) ? product.images : [];
-  const imageUrl = images[0] ? String(images[0]) : null;
-  const isNew = newBadgeDays > 0 && (Date.now() - new Date(product.created_at).getTime()) < newBadgeDays * 86400000;
-  // Produs variabil cu preturi diferite -> afiseaza interval ("De la X – Y") sau doar minimul.
-  // Precalculat server-side cand payload-ul e slimuit; fallback pe derivarea
-  // locala pentru apelanti care trimit page_sections complet.
-  const priceRange = product.price_range ?? getProductPriceRange(Number(product.price), product.page_sections);
-  const showPriceRange = priceRange.hasRange && !priceLowestOnly;
-  const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > Number(product.price);
-  const discountPct = hasDiscount
-    ? Math.round((1 - Number(product.price) / Number(product.compare_at_price)) * 100)
-    : 0;
-  const isOutOfStock = outOfStock ?? (product.track_inventory && product.stock_quantity === 0);
-  // Variable product: the card opens the option picker instead of adding directly.
-  const isVariable = parseVariants(product.page_sections) !== null;
-
-  const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
-
-  return (
-    <div className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
-      <a href={`${basePath}/product/${product.slug}`} className="block" onClick={fireSelect}>
-        <div className="relative aspect-square bg-muted/40 overflow-hidden">
-          {imageUrl ? (
-            <Image
-              src={imageUrl}
-              alt={product.name}
-              fill
-              priority={priority}
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className="object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Package className="h-10 w-10 text-muted-foreground/40" />
-            </div>
-          )}
-
-          {/* Top badges */}
-          <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
-            {product.is_bundle && (
-              <span className="bg-foreground text-background text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm inline-flex items-center gap-1">
-                <Layers className="h-3 w-3" /> Pachet
-              </span>
-            )}
-            {hasDiscount && (
-              <span className="bg-red-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
-                -{discountPct}%
-              </span>
-            )}
-            {product.is_featured && !hasDiscount && (
-              <span className="text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm"
-                style={{ backgroundColor: color }}>
-                Popular
-              </span>
-            )}
-            {isNew && !hasDiscount && !product.is_featured && (
-              <span className="text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm" style={{ backgroundColor: color }}>
-                Nou
-              </span>
-            )}
-          </div>
-
-          {/* Category chip bottom */}
-          {showCategoryBadge && product.category && (
-            <div className="absolute bottom-2 left-2">
-              <span className="bg-black/55 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-0.5 rounded-full">
-                {product.category}
-              </span>
-            </div>
-          )}
-
-          {isOutOfStock && (
-            <div className="absolute inset-0 bg-surface/75 backdrop-blur-[2px] flex items-center justify-center">
-              <span className="text-xs font-semibold text-muted-foreground bg-surface border border-border px-3 py-1.5 rounded-full shadow-sm">
-                Stoc epuizat
-              </span>
-            </div>
-          )}
-        </div>
-      </a>
-
-      <div className="p-3 sm:p-4 flex flex-col flex-1">
-        <a href={`${basePath}/product/${product.slug}`} className="flex-1" onClick={fireSelect}>
-          <h3 className="font-semibold text-foreground text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
-            {product.name}
-          </h3>
-          <div className="flex items-baseline gap-2 mb-3">
-            <span className="font-bold text-lg" style={{ color }}>
-              {showPriceRange
-                ? formatPriceRange(priceRange.min, priceRange.max)
-                : formatPrice(priceRange.min)}
-            </span>
-            {hasDiscount && (
-              <span className="text-sm text-muted-foreground line-through">{formatPrice(Number(product.compare_at_price))}</span>
-            )}
-          </div>
-        </a>
-        <button
-          type="button"
-          onClick={onAddToCart}
-          disabled={isOutOfStock}
-          className="w-full py-2.5 text-sm font-bold text-white rounded-xl transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
-          style={{
-            backgroundColor: color,
-            boxShadow: isAdded ? `0 0 0 3px ${color}33` : `0 2px 8px ${color}40`,
-          }}
-        >
-          {isAdded ? (
-            <>
-              <Check className="h-4 w-4" strokeWidth={3} />
-              Adaugat!
-            </>
-          ) : isVariable ? (
-            <>
-              <ShoppingCart className="h-4 w-4" />
-              Alege optiunile
-            </>
-          ) : (
-            <>
-              <ShoppingCart className="h-4 w-4" />
-              Adauga in cos
-            </>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 const POLICY_LINKS = [
   { slug: "termeni", label: "Termeni si conditii" },
   { slug: "livrare", label: "Politica de livrare" },
@@ -1277,207 +1049,6 @@ interface Props {
    */
   design: StoreDesign;
   designStyle: ResolvedStyle;
-}
-
-// Hero banners. One banner keeps the molded look (complete image, any ratio).
-// Two to five render as a swipeable carousel with dots, auto-advance and arrows.
-function HeroBanners({ banners, links, alt, basePath }: { banners: string[]; links?: (string | undefined)[]; alt: string; basePath: string }) {
-  if (banners.length === 0) return null;
-  if (banners.length === 1) {
-    const href = links?.[0] ? resolveHref(links[0], basePath) : null;
-    const img = (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={cdnImage(banners[0], 1600)} alt={alt} fetchPriority="high"
-        className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl" />
-    );
-    return (
-      <section className="relative overflow-hidden md:pt-6">
-        <div className="mx-auto md:max-w-6xl md:px-4">
-          {href ? <a href={href} className="block">{img}</a> : img}
-        </div>
-      </section>
-    );
-  }
-  return <BannerCarousel banners={banners} links={links} alt={alt} basePath={basePath} />;
-}
-
-function BannerCarousel({ banners, links, alt, basePath }: { banners: string[]; links?: (string | undefined)[]; alt: string; basePath: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
-  const paused = useRef(false);
-  const [index, setIndex] = useState(0);
-  const count = banners.length;
-
-  const onScroll = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    setIndex(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
-  }, []);
-
-  const goTo = useCallback((i: number) => {
-    const el = ref.current;
-    if (!el) return;
-    const target = ((i % count) + count) % count;
-    el.scrollTo({ left: el.clientWidth * target, behavior: "smooth" });
-  }, [count]);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (paused.current) return;
-      const el = ref.current;
-      if (!el) return;
-      const cur = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
-      el.scrollTo({ left: el.clientWidth * ((cur + 1) % count), behavior: "smooth" });
-    }, 5000);
-    return () => clearInterval(id);
-  }, [count]);
-
-  const arrow =
-    "hidden md:flex absolute top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full items-center justify-center bg-black/35 text-white hover:bg-black/55 transition-colors";
-
-  return (
-    <section
-      className="relative overflow-hidden md:pt-6"
-      onPointerEnter={() => { paused.current = true; }}
-      onPointerLeave={() => { paused.current = false; }}
-    >
-      <div className="mx-auto md:max-w-6xl md:px-4">
-        <div className="relative md:rounded-2xl md:overflow-hidden">
-          <div
-            ref={ref}
-            onScroll={onScroll}
-            className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide select-none md:cursor-grab"
-            onPointerDown={(e) => {
-              if (e.pointerType !== "mouse") return;
-              const el = ref.current;
-              if (!el) return;
-              drag.current = { down: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
-            }}
-            onPointerMove={(e) => {
-              if (e.pointerType !== "mouse" || !drag.current.down) return;
-              const el = ref.current;
-              if (!el) return;
-              const dx = e.clientX - drag.current.startX;
-              if (Math.abs(dx) > 4) drag.current.moved = true;
-              el.scrollLeft = drag.current.startLeft - dx;
-            }}
-            onPointerUp={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
-            onPointerLeave={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
-          >
-            {banners.map((src, i) => {
-              const href = links?.[i] ? resolveHref(links[i], basePath) : null;
-              const img = (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={cdnImage(src, 1600)} alt={alt} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
-              );
-              return (
-                <div key={i} className="shrink-0 w-full snap-center aspect-[16/9] bg-muted">
-                  {href ? (
-                    <a href={href} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
-                  ) : img}
-                </div>
-              );
-            })}
-          </div>
-
-          <button type="button" aria-label="Banner anterior" onClick={() => goTo(index - 1)} className={`${arrow} left-2`}>
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <button type="button" aria-label="Banner urmator" onClick={() => goTo(index + 1)} className={`${arrow} right-2`}>
-            <ChevronRight className="h-5 w-5" />
-          </button>
-
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex gap-1.5">
-            {banners.map((_, i) => (
-              <button key={i} type="button" aria-label={`Mergi la banner ${i + 1}`} onClick={() => goTo(i)}
-                className={`h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-surface" : "w-1.5 bg-surface/60 hover:bg-surface/80"}`} />
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// Horizontal category strip with desktop affordances: mouse drag-to-scroll
-// (gated to pointerType="mouse" so mobile keeps native touch scroll) + prev/next
-// arrows shown on md+ when there's more to scroll.
-function CategoryScroller({ children, className }: { children: ReactNode; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
-
-  const update = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    setCanLeft(el.scrollLeft > 4);
-    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
-  }, []);
-
-  useEffect(() => {
-    update();
-    const el = ref.current;
-    if (!el) return;
-    el.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
-    return () => {
-      el.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, [update]);
-
-  // Arrows are shown only when the strip overflows; both slots stay present while
-  // it does (the inactive one just fades) so scrolling never shifts the layout.
-  const hasOverflow = canLeft || canRight;
-  const arrowBtn =
-    "hidden md:flex shrink-0 w-8 h-8 rounded-full items-center justify-center border border-border bg-surface transition-opacity";
-
-  return (
-    <div className={className}>
-      <div className="flex items-center md:gap-1.5">
-        {hasOverflow && (
-          <button type="button" aria-label="Categorii anterioare" disabled={!canLeft}
-            onClick={() => ref.current?.scrollBy({ left: -240, behavior: "smooth" })}
-            className={`${arrowBtn} ${canLeft ? "opacity-100 hover:bg-muted" : "opacity-30 pointer-events-none"}`}>
-            <ChevronLeft className="h-4 w-4 text-foreground" />
-          </button>
-        )}
-        <div
-          ref={ref}
-          className="flex-1 min-w-0 overflow-x-auto scrollbar-hide select-none -mx-4 px-4 md:mx-0 md:px-0 md:cursor-grab"
-          onPointerDown={(e) => {
-            if (e.pointerType !== "mouse") return;
-            const el = ref.current;
-            if (!el) return;
-            drag.current = { down: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
-          }}
-          onPointerMove={(e) => {
-            if (e.pointerType !== "mouse" || !drag.current.down) return;
-            const el = ref.current;
-            if (!el) return;
-            const dx = e.clientX - drag.current.startX;
-            if (Math.abs(dx) > 4) drag.current.moved = true;
-            el.scrollLeft = drag.current.startLeft - dx;
-          }}
-          onPointerUp={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
-          onPointerLeave={(e) => { if (e.pointerType === "mouse") drag.current.down = false; }}
-          onClickCapture={(e) => {
-            if (drag.current.moved) { e.preventDefault(); e.stopPropagation(); drag.current.moved = false; }
-          }}
-        >
-          {children}
-        </div>
-        {hasOverflow && (
-          <button type="button" aria-label="Categorii urmatoare" disabled={!canRight}
-            onClick={() => ref.current?.scrollBy({ left: 240, behavior: "smooth" })}
-            className={`${arrowBtn} ${canRight ? "opacity-100 hover:bg-muted" : "opacity-30 pointer-events-none"}`}>
-            <ChevronRight className="h-4 w-4 text-foreground" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, designStyle }: Props) {
@@ -2903,41 +2474,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         </div>
       )}
     </StorefrontThemeScope>
-  );
-}
-
-function ShippingProgressBanner({ color, threshold }: { color: string; threshold: number }) {
-  const { total } = useCart();
-  const isFree = total >= threshold;
-  const pct = Math.min(100, Math.round((total / threshold) * 100));
-
-  return (
-    <div className="mb-6 p-3.5 rounded-2xl border border-border bg-surface">
-      {isFree ? (
-        <div className="flex items-center gap-2" style={{ color }}>
-          <Check className="h-4 w-4 flex-shrink-0" strokeWidth={3} />
-          <span className="text-sm font-semibold">Felicitari! Ai obtinut livrare gratuita.</span>
-        </div>
-      ) : (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-muted-foreground">
-              {total > 0
-                ? <>Mai adauga <strong className="text-foreground">{formatPrice(threshold - total)}</strong> pentru livrare gratuita</>
-                : <>Livrare gratuita la comenzi peste <strong className="text-foreground">{formatPrice(threshold)}</strong></>
-              }
-            </span>
-            <Truck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          </div>
-          <div className="h-1.5 bg-border rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${pct}%`, backgroundColor: color }}
-            />
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 

@@ -17,18 +17,26 @@ export function ProductRowClassic({
   items,
   layout = "grid",
   onViewAll,
+  headerGap = "gap-2",
 }: {
   title: string;
   items: StorefrontProduct[];
   layout?: "grid" | "carousel";
   onViewAll?: () => void;
+  /**
+   * Spatierea din antet difera intre cele doua randuri de azi, din motive
+   * istorice: „Recomandate" foloseste gap-2, randurile curate gap-3, indiferent
+   * daca au sau nu buton. Se primeste ca prop pentru a pastra randarea exacta;
+   * se unifica atunci cand desenam variantele de rand.
+   */
+  headerGap?: "gap-2" | "gap-3";
 }) {
   const { color } = useStorefront();
   if (items.length === 0) return null;
 
   return (
     <section className="mb-12">
-      <div className={onViewAll ? "flex items-center gap-3 mb-4" : "flex items-center gap-2 mb-4"}>
+      <div className={`flex items-center ${headerGap} mb-4`}>
         <h2 className="text-lg font-bold text-foreground">{title}</h2>
         <div className="h-px flex-1 bg-border" />
         {onViewAll && (
@@ -92,6 +100,7 @@ export function CustomProductRows() {
           title={section.title || "Produse"}
           items={items}
           layout={section.layout === "carousel" ? "carousel" : "grid"}
+          headerGap="gap-3"
           onViewAll={
             section.mode === "category" && section.category
               ? () => viewAllCategory(section.category!)

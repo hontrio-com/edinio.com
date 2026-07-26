@@ -20,6 +20,7 @@ import { sectionMeta } from "@/lib/storefront/design/registry";
 import type { DesignContext, SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { SectionList } from "./SectionList";
 import { DesignGallery } from "./DesignGallery";
+import { SectionSettings } from "./SectionSettings";
 
 type Dispozitiv = "mobil" | "tableta" | "desktop";
 
@@ -230,6 +231,13 @@ export function StoreDesignEditor({
               <LayoutGrid className="h-4 w-4 text-muted-foreground" />
               Schimba designul ({numarVariante(sectiuneSelectata)} variante)
             </button>
+          )}
+
+          {sectiuneSelectata && (
+            <SectionSettings
+              section={sectiuneSelectata}
+              onChange={(settings) => aplica(updateSection(design, sectiuneSelectata.id, { settings }))}
+            />
           )}
 
           {deAdaugat.length > 0 && (

@@ -21,6 +21,12 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
  * altcuiva.
  *
  * Nu expune nimic in plus: randeaza exact ce vede oricine pe magazinul public.
+ *
+ * Ruta sta DELIBERAT in afara lui `[slug]`, nu sub el. Layout-ul magazinului
+ * injecteaza pixelii de marketing si bannerul de cookies: bannerul acoperea
+ * miniaturile, iar pixelii ar fi trimis cate un pageview in Facebook, TikTok si
+ * Google Analytics ale comerciantului la fiecare card din galerie — statistici
+ * si audiente de reclame stricate de propriul editor.
  */
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 

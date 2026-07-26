@@ -20,7 +20,7 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
 
-interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string }>; }
+interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string; sale?: string }>; }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -102,7 +102,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SlugPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { page: pageParam, preview: previewParam, q: qParam, cat: catParam } = await searchParams;
+  const { page: pageParam, preview: previewParam, q: qParam, cat: catParam, sale: saleParam } = await searchParams;
   const initialPage = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
   const isPreview = previewParam === "1";
   const supabase = await createClient();
@@ -337,6 +337,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         initialPage={initialPage}
         initialSearch={(qParam ?? "").slice(0, 100)}
         initialCategory={initialCategory}
+        initialOnSale={saleParam === "1"}
         preview={isPreview}
         design={resolved.design}
         designStyle={resolved.style}

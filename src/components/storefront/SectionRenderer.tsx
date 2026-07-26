@@ -38,11 +38,23 @@ const HeaderNav = dynamic(
   () => import("./sections/chrome/HeaderNav").then((m) => m.HeaderNav),
   { ssr: true },
 );
+const HeaderPills = dynamic(
+  () => import("./sections/chrome/HeaderPills").then((m) => m.HeaderPills),
+  { ssr: true },
+);
 
-/** Variantele de header, dupa id-ul din registry. */
-const HEADERE: Record<string, ComponentType> = {
-  search: HeaderSearch,
-  nav: HeaderNav,
+/**
+ * Variantele de header, dupa id-ul din registry.
+ *
+ * Toate primesc `settings`, chiar daca deocamdata doar unele le folosesc: asa o
+ * varianta care capata setari mai tarziu nu cere modificari aici.
+ */
+type VariantaSectiune = ComponentType<{ settings: Record<string, unknown> }>;
+
+const HEADERE: Record<string, VariantaSectiune> = {
+  search: HeaderSearch as VariantaSectiune,
+  nav: HeaderNav as VariantaSectiune,
+  pills: HeaderPills as VariantaSectiune,
 };
 
 /**
@@ -58,7 +70,7 @@ function SectionOne({ section }: { section: SectionInstance }) {
       return <AnnouncementMarquee />;
     case "header": {
       const Varianta = HEADERE[section.variant];
-      return Varianta ? <Varianta /> : <HeaderClassic />;
+      return Varianta ? <Varianta settings={section.settings} /> : <HeaderClassic />;
     }
     case "footer":
       return <FooterDark />;

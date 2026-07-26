@@ -129,7 +129,7 @@ function CardVarianta({
         style={{ height: scara ? inaltime * scara : inaltime / 3 }}>
         {vizibil && scara > 0 && (
           <iframe
-            src={`/${slug}/sectiune?kind=${encodeURIComponent(kind)}&variant=${encodeURIComponent(variantId)}`}
+            src={`/preview-sectiune/${slug}?kind=${encodeURIComponent(kind)}&variant=${encodeURIComponent(variantId)}`}
             title={`Previzualizare ${label}`}
             tabIndex={-1}
             scrolling="no"

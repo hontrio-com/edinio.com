@@ -133,6 +133,35 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [],
       },
+      pills: {
+        label: "Pastile si cerculete",
+        tags: ["bold", "compact"],
+        layout: "full",
+        // Banda pe fundalul paginii, cu pastila de categorii, cautare rotunjita
+        // cu buton colorat, buton conturat de actiune si iconite in cerculete.
+        previewHeight: 116,
+        needsCategories: true,
+        replacesCatalogSearch: true,
+        fields: [
+          { key: "showAction", type: "toggle", label: "Arata butonul de actiune" },
+          {
+            key: "actionLabel",
+            type: "text",
+            label: "Text buton",
+            placeholder: "Reduceri",
+            maxLength: 24,
+            showIf: { key: "showAction", equals: true },
+          },
+          {
+            key: "actionHref",
+            type: "link",
+            label: "Link buton",
+            help: "Gol = produsele cu reducere din magazin",
+            showIf: { key: "showAction", equals: true },
+          },
+        ],
+        defaults: { showAction: true, actionLabel: "Reduceri" },
+      },
       nav: {
         label: "Meniu inline, cos evidentiat",
         tags: ["minimal", "editorial"],

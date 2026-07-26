@@ -963,6 +963,8 @@ interface Props {
   /** Cautare si categorie venite din adresa (?q=, ?cat=), folosite de header-ul cu cautare. */
   initialSearch?: string;
   initialCategory?: string;
+  /** ?sale=1 — porneste catalogul filtrat pe reduceri (butonul din header). */
+  initialOnSale?: boolean;
   /**
    * Configuratia de design (sectiuni + variante) si stilul rezolvat, calculate
    * server-side. Cat timp exista o singura varianta per sectiune — cea „classic",
@@ -978,7 +980,7 @@ interface Props {
   preview?: boolean;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", design: designProp, designStyle: designStyleProp, preview = false }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   const basePath = basePathProp ?? `/${business.slug}`;
@@ -1036,7 +1038,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
-  const [onSaleOnly, setOnSaleOnly] = useState(false);
+  const [onSaleOnly, setOnSaleOnly] = useState(initialOnSale);
   const [inStockOnly, setInStockOnly] = useState(false);
 
   function toggleOption(name: string, value: string) {

@@ -133,6 +133,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [],
       },
+      nav: {
+        label: "Meniu inline, cos evidentiat",
+        tags: ["minimal", "editorial"],
+        layout: "full",
+        // Meniul sta langa logo, cautarea deschide un panou in loc sa ocupe
+        // spatiu permanent, iar cosul e o pastila inchisa cu totalul in ea.
+        previewHeight: 72,
+        needsCategories: true,
+        fields: [],
+      },
     },
   },
   footer: {

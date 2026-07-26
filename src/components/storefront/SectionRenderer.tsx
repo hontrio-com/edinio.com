@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, type ComponentType } from "react";
 import dynamic from "next/dynamic";
 import { groupSections } from "@/lib/storefront/design/group-sections";
 import { SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
@@ -34,6 +34,16 @@ const HeaderSearch = dynamic(
   () => import("./sections/chrome/HeaderSearch").then((m) => m.HeaderSearch),
   { ssr: true },
 );
+const HeaderNav = dynamic(
+  () => import("./sections/chrome/HeaderNav").then((m) => m.HeaderNav),
+  { ssr: true },
+);
+
+/** Variantele de header, dupa id-ul din registry. */
+const HEADERE: Record<string, ComponentType> = {
+  search: HeaderSearch,
+  nav: HeaderNav,
+};
 
 /**
  * Randeaza sectiunile paginii de magazin in ordinea din configuratie.
@@ -46,8 +56,10 @@ function SectionOne({ section }: { section: SectionInstance }) {
   switch (section.kind) {
     case "announcement":
       return <AnnouncementMarquee />;
-    case "header":
-      return section.variant === "search" ? <HeaderSearch /> : <HeaderClassic />;
+    case "header": {
+      const Varianta = HEADERE[section.variant];
+      return Varianta ? <Varianta /> : <HeaderClassic />;
+    }
     case "footer":
       return <FooterDark />;
     case "hero":

@@ -37,20 +37,21 @@ export default async function DesignEditorPage() {
   };
 
   // Ciorna, daca exista; altfel designul publicat. Un comerciant care revine in
-  // editor trebuie sa gaseasca exact unde a ramas.
-  const areCiorna = !!settings?.storefront_design_draft;
-  const design = parseStoreDesign(
-    areCiorna ? settings?.storefront_design_draft : settings?.storefront_design,
-    ctx,
-  );
+  // editor trebuie sa gaseasca exact unde a ramas. Publicatul se trimite separat,
+  // ca editorul sa stie ce vad clientii acum si sa poata spune daca exista
+  // modificari nepublicate.
+  const publicat = parseStoreDesign(settings?.storefront_design, ctx);
+  const design = settings?.storefront_design_draft
+    ? parseStoreDesign(settings.storefront_design_draft, ctx)
+    : publicat;
 
   return (
     <StoreDesignEditor
       businessId={business.id}
       slug={business.slug}
       designInitial={design}
+      designPublicat={publicat}
       ctx={ctx}
-      areCiorna={areCiorna}
     />
   );
 }

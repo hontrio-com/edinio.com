@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, LayoutGrid, Loader2, Monitor, Plus, Smartphone, Tablet, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageIcon } from "@/components/pages/icon-registry";
@@ -44,27 +44,43 @@ export function StoreDesignEditor({
   businessId,
   slug,
   designInitial,
+  designPublicat,
   ctx,
-  areCiorna,
 }: {
   businessId: string;
   slug: string;
+  /** Ciorna daca exista, altfel designul publicat: de unde reia comerciantul. */
   designInitial: StoreDesign;
+  /** Ce vad clientii acum. Diferenta fata de el inseamna modificari nepublicate. */
+  designPublicat: StoreDesign;
   ctx: DesignContext;
-  areCiorna: boolean;
 }) {
   const [design, setDesign] = useState<StoreDesign>(designInitial);
-  const [publicat, setPublicat] = useState<StoreDesign>(designInitial);
+  const [publicat, setPublicat] = useState<StoreDesign>(designPublicat);
   const [selectat, setSelectat] = useState<string | null>(null);
   const [dispozitiv, setDispozitiv] = useState<Dispozitiv>("desktop");
   const [vedereMobil, setVedereMobil] = useState<"panou" | "preview">("panou");
-  const [stare, setStare] = useState<"curat" | "salvez" | "ciorna">(areCiorna ? "ciorna" : "curat");
+  const [salvez, setSalvez] = useState(false);
   const [publica, setPublica] = useState(false);
   const [paletaDeschisa, setPaletaDeschisa] = useState(false);
   const [galerie, setGalerie] = useState<string | null>(null);
 
   const iframe = useRef<HTMLIFrameElement>(null);
   const gataDePreview = useRef(false);
+  /** Ultima ciorna ajunsa efectiv in baza. Ref, nu stare: nu trebuie sa re-randeze. */
+  const salvat = useRef<StoreDesign>(designInitial);
+
+  /**
+   * Exista modificari nepublicate?
+   *
+   * Comparatie pe continut, nu pe identitate de obiect: fiecare editare produce
+   * un obiect nou, deci `!==` ar raspunde mereu „da", iar la incarcarea unei
+   * cioarne identice cu publicatul ar raspunde gresit „da" si aici.
+   */
+  const areModificari = useMemo(
+    () => JSON.stringify(design) !== JSON.stringify(publicat),
+    [design, publicat],
+  );
 
   // Trimite designul curent in preview. Se apeleaza la fiecare schimbare si cand
   // iframe-ul anunta ca s-a montat.
@@ -94,26 +110,36 @@ export function StoreDesignEditor({
     return () => window.removeEventListener("message", onMessage);
   }, [design, trimite]);
 
-  // Salvarea cioarnei e amanata: reordonarea prin tragere produce zeci de
-  // schimbari pe secunda, iar fiecare ar fi fost o scriere in baza.
+  /**
+   * Salvarea cioarnei, amanata: reordonarea prin tragere produce zeci de
+   * schimbari pe secunda, iar fiecare ar fi insemnat o scriere in baza.
+   *
+   * Efectul depinde DOAR de `design`. Orice stare pe care o scrie el (indicatorul
+   * de salvare) trebuie tinuta in afara dependentelor, altfel se re-declanseaza
+   * singur si salveaza la nesfarsit.
+   */
   useEffect(() => {
-    if (design === publicat && stare === "curat") return;
+    if (design === salvat.current) return;
     const id = setTimeout(async () => {
-      setStare("salvez");
+      setSalvez(true);
       const res = await saveDesignDraft(businessId, design);
-      setStare("error" in res ? "ciorna" : "ciorna");
-      if ("error" in res) toast.error(res.error);
+      setSalvez(false);
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      salvat.current = design;
     }, 1200);
     return () => clearTimeout(id);
-  }, [design, publicat, stare, businessId]);
+  }, [design, businessId]);
 
   // Iesirea din pagina cu modificari nepublicate merita un avertisment.
   useEffect(() => {
-    if (stare !== "ciorna") return;
+    if (!areModificari) return;
     const handler = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [stare]);
+  }, [areModificari]);
 
   const aplica = useCallback(
     (next: StoreDesign) => {
@@ -140,7 +166,7 @@ export function StoreDesignEditor({
       return;
     }
     setPublicat(design);
-    setStare("curat");
+    salvat.current = design;
     toast.success("Designul e live in magazin");
   }
 
@@ -151,7 +177,7 @@ export function StoreDesignEditor({
       return;
     }
     aplica(publicat);
-    setStare("curat");
+    salvat.current = publicat;
     toast.success("Modificarile au fost anulate");
   }
 
@@ -164,7 +190,6 @@ export function StoreDesignEditor({
   const sectiuneSelectata = toateSectiunile.find((s) => s.id === selectat) ?? null;
   const sectiuneGalerie = toateSectiunile.find((s) => s.id === galerie) ?? null;
   const deAdaugat = addableKinds(design);
-  const areModificari = stare === "ciorna" || stare === "salvez";
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -174,7 +199,7 @@ export function StoreDesignEditor({
           <div className="min-w-0">
             <h1 className="font-semibold text-foreground truncate">Design magazin</h1>
             <p className="text-xs text-muted-foreground">
-              {stare === "salvez" ? "Se salveaza..." : areModificari ? "Modificari nepublicate" : "Totul e publicat"}
+              {salvez ? "Se salveaza..." : areModificari ? "Modificari nepublicate" : "Totul e publicat"}
             </p>
           </div>
           <button type="button" onClick={() => setVedereMobil("preview")}

@@ -294,6 +294,14 @@ export default async function SlugPage({ params, searchParams }: Props) {
     },
   );
 
+  // `?cat=` poate veni cu numele categoriei (din header) sau cu id-ul ei
+  // (linkurile de meniu de tip categorie trimit `target`, care e un id). Filtrul
+  // catalogului lucreaza pe nume, deci id-urile se traduc aici; altfel linkul ar
+  // duce la un catalog gol.
+  const catRaw = (catParam ?? "").slice(0, 100);
+  const initialCategory =
+    (catRaw && categoriesData.find((c) => c.id === catRaw)?.name) || catRaw || "toate";
+
   const displayName = business.store_name ?? business.business_name;
   const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
   const storeJsonLd = {
@@ -328,7 +336,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         categories={categoriesData}
         initialPage={initialPage}
         initialSearch={(qParam ?? "").slice(0, 100)}
-        initialCategory={(catParam ?? "toate").slice(0, 100)}
+        initialCategory={initialCategory}
         preview={isPreview}
         design={resolved.design}
         designStyle={resolved.style}

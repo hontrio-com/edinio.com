@@ -42,6 +42,10 @@ const HeaderPills = dynamic(
   () => import("./sections/chrome/HeaderPills").then((m) => m.HeaderPills),
   { ssr: true },
 );
+const HeaderMarket = dynamic(
+  () => import("./sections/chrome/HeaderMarket").then((m) => m.HeaderMarket),
+  { ssr: true },
+);
 
 /**
  * Variantele de header, dupa id-ul din registry.
@@ -55,6 +59,7 @@ const HEADERE: Record<string, VariantaSectiune> = {
   search: HeaderSearch as VariantaSectiune,
   nav: HeaderNav as VariantaSectiune,
   pills: HeaderPills as VariantaSectiune,
+  market: HeaderMarket as VariantaSectiune,
 };
 
 /**

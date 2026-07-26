@@ -51,7 +51,7 @@ export function HeaderSearch() {
         {/* Randul principal */}
         <div className="h-16 flex items-center gap-3 lg:gap-6">
           <div className="lg:hidden">
-            <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} />
+            <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
           </div>
 
           <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>

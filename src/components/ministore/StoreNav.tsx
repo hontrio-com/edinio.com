@@ -30,10 +30,22 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
 }
 
 /** Mobile hamburger button + slide-in panel (hidden on desktop). */
-export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName }: {
+/**
+ * Pana la ce latime se arata hamburgerul. Variantele de header care isi tin
+ * meniul pe desktop (`lg`) trebuie sa il ceara explicit, altfel intre 768 si
+ * 1024 pixeli meniul de sus e deja ascuns iar hamburgerul inca nu a aparut, si
+ * tableta ramane fara nicio navigare.
+ */
+const PANA_LA = {
+  md: { buton: "md:hidden", panou: "md:hidden" },
+  lg: { buton: "lg:hidden", panou: "lg:hidden" },
+} as const;
+
+export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName, panaLa = "md" }: {
   items: MenuItem[]; basePath: string; color: string; currentSlug?: string | null;
-  logoUrl?: string | null; storeName: string;
+  logoUrl?: string | null; storeName: string; panaLa?: keyof typeof PANA_LA;
 }) {
+  const bp = PANA_LA[panaLa];
   const [open, setOpen] = useState(false);
   // Portal the panel to <body> so it escapes the sticky header's stacking context
   // (otherwise the announcement bar / cart bar / cart drawer paint over it).
@@ -52,14 +64,14 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
   return (
     <>
       <button type="button" aria-label="Deschide meniul" onClick={() => setOpen(true)}
-        className="md:hidden w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center hover:bg-muted transition-colors shrink-0">
+        className={`${bp.buton} w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center hover:bg-muted transition-colors shrink-0`}>
         <Menu className="h-4.5 w-4.5 text-foreground" size={18} />
       </button>
 
       {mounted && open && createPortal(
         <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] md:hidden" onClick={() => setOpen(false)} />
-          <div className="fixed inset-y-0 left-0 w-72 max-w-[82vw] bg-background z-[70] md:hidden flex flex-col shadow-2xl">
+          <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] ${bp.panou}`} onClick={() => setOpen(false)} />
+          <div className={`fixed inset-y-0 left-0 w-72 max-w-[82vw] bg-background z-[70] ${bp.panou} flex flex-col shadow-2xl`}>
             <div className="flex items-center justify-between px-4 h-16 border-b border-border">
               <div className="flex items-center gap-2 min-w-0">
                 {logoUrl ? (

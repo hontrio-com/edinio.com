@@ -133,6 +133,29 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [],
       },
+      market: {
+        label: "Magazin mare, trei randuri",
+        tags: ["bold"],
+        layout: "full",
+        // Bara de servicii, randul principal cu cautare lata si bara de
+        // categorii + meniu + telefon.
+        previewHeight: 168,
+        needsCategories: true,
+        replacesCatalogSearch: true,
+        fields: [
+          { key: "showTopBar", type: "toggle", label: "Arata bara de sus" },
+          {
+            key: "topText",
+            type: "text",
+            label: "Mesaj in bara de sus",
+            placeholder: "Livrare gratuita peste 300 lei",
+            maxLength: 90,
+            showIf: { key: "showTopBar", equals: true },
+          },
+          { key: "showHotline", type: "toggle", label: "Arata telefonul in bara de categorii" },
+        ],
+        defaults: { showTopBar: true, showHotline: true },
+      },
       pills: {
         label: "Pastile si cerculete",
         tags: ["bold", "compact"],

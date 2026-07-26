@@ -121,6 +121,26 @@ function tokenize(html) {
     .filter(Boolean);
 }
 
+/**
+ * Ce exista intr-o parte si nu in cealalta, indiferent de pozitie.
+ *
+ * Comparatia pozitionala se desincronizeaza cand un bloc intreg se adauga sau se
+ * muta si atunci raporteaza zeci de diferente care sunt de fapt aceleasi taguri,
+ * decalate. Multimea spune exact ce s-a pierdut si ce s-a adaugat.
+ */
+function multisetDiff(a, b) {
+  const numara = (arr) => arr.reduce((m, t) => m.set(t, (m.get(t) || 0) + 1), new Map());
+  const A = numara(a);
+  const B = numara(b);
+  const doar = (X, Y) => [...X].flatMap(([t, n]) => (n - (Y.get(t) || 0) > 0 ? [{ t, n: n - (Y.get(t) || 0) }] : []));
+  return { pierdut: doar(A, B), adaugat: doar(B, A) };
+}
+
+/** Ordinea tagurilor, ignorand atributele: prinde mutarile pe care multimea nu le vede. */
+function tagOrder(tokens) {
+  return tokens.map((t) => (t.match(/^<\/?([a-z0-9-]+)/i) ?? [, "?"])[1]).join(",");
+}
+
 /** Prima divergenta si contextul din jur. */
 function diff(a, b, maxDiffs) {
   const out = [];
@@ -203,24 +223,29 @@ for (const slug of slugs) {
 
   const a = tokenize(bodyMarkup(prod.body));
   const b = tokenize(dezprefixeaza(bodyMarkup(prev.body)));
-  const corp = diff(a, b, 200);
-  const cap = diff(metaTags(prod.body), metaTags(prev.body), 50);
+  const { pierdut, adaugat } = multisetDiff(a, b);
+  const cap = diff(metaTags(prod.body), metaTags(prev.body), 50).filter((d) => !permis(d));
 
-  const reale = [...corp, ...cap].filter((d) => !permis(d));
-  const permise = corp.length + cap.length - reale.length;
+  const filtreaza = (lista) => lista.filter(({ t }) => !permiseAcum.some((p) => t.includes(p)));
+  const pierdutReal = filtreaza(pierdut);
+  const adaugatReal = filtreaza(adaugat);
 
-  const stare = reale.length === 0 ? "IDENTIC" : `${reale.length} DIFERENTE`;
+  // Numar egal de taguri si aceleasi taguri, dar ordine diferita.
+  const reordonat =
+    pierdutReal.length === 0 && adaugatReal.length === 0 && tagOrder(a) !== tagOrder(b);
+
+  const total = pierdutReal.length + adaugatReal.length + cap.length + (reordonat ? 1 : 0);
   const nota = domeniuPropriu ? `, domeniu propriu ${new URL(prod.url).host}` : "";
-  console.log(`\n${slug}: ${stare}  (${a.length} taguri productie, ${b.length} preview, ${permise} permise${nota})`);
+  console.log(
+    `\n${slug}: ${total === 0 ? "IDENTIC" : `${total} DIFERENTE`}  (${a.length} taguri productie, ${b.length} preview${nota})`,
+  );
 
-  if (reale.length) {
+  if (total) {
     esecuri++;
-    for (const d of reale.slice(0, 8)) {
-      console.log(`  @${d.pozitie}`);
-      console.log(`    productie: ${d.productie || "(lipseste)"}`);
-      console.log(`    preview  : ${d.preview || "(lipseste)"}`);
-    }
-    if (reale.length > 8) console.log(`  ... si inca ${reale.length - 8}`);
+    if (reordonat) console.log("  ordinea tagurilor difera, desi continutul e acelasi");
+    for (const { t, n } of pierdutReal.slice(0, 6)) console.log(`  PIERDUT x${n}: ${t.slice(0, 170)}`);
+    for (const { t, n } of adaugatReal.slice(0, 6)) console.log(`  ADAUGAT x${n}: ${t.slice(0, 170)}`);
+    for (const d of cap.slice(0, 3)) console.log(`  META: ${(d.productie || "(lipseste)").slice(0, 120)} -> ${(d.preview || "(lipseste)").slice(0, 120)}`);
   }
 }
 

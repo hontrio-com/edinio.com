@@ -1,9 +1,7 @@
 "use client";
 
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
-
-/** Trepte de viteza, de la cea mai lenta la cea mai rapida (secunde pe ciclu). */
-const SPEEDS = [80, 50, 30, 18, 10];
+import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shared/Marquee";
 
 /**
  * Bara de anunt cu text derulant, varianta classic.
@@ -18,19 +16,12 @@ export function AnnouncementMarquee() {
   const pornita = pageContent.show_announcement_on_store !== false && bar?.enabled === true;
   if (!pornita || !bar) return null;
 
-  const durata = SPEEDS[(bar.speed ?? 3) - 1] ?? SPEEDS[2];
-
   return (
     <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
       style={{ background: bar.bg_color || color }}>
-      <div className="flex whitespace-nowrap">
-        {Array.from({ length: 8 }, (_, i) => (
-          <span key={i} className="inline-block text-xs font-medium tracking-wide text-white"
-            style={{ animation: `marquee ${durata}s linear infinite` }}>
-            {bar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-          </span>
-        ))}
-      </div>
+      <Marquee durata={marqueeDuration(bar.speed)} className="inline-block text-xs font-medium tracking-wide text-white">
+        {bar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      </Marquee>
     </div>
   );
 }

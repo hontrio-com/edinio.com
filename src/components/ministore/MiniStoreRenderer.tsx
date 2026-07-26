@@ -36,6 +36,7 @@ import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
+import { headerHostsAnnouncement, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { useDesignPreview } from "@/components/storefront/useDesignPreview";
 import type {
   StoreCategoryNode,
@@ -1403,7 +1404,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     social,
     gallery,
     menu,
-    hasAnnouncementBar: showAnnouncementOnStore,
+    hasAnnouncementBar: showAnnouncementOnStore && !headerHostsAnnouncement(design),
     hasHero,
 
     products,
@@ -1472,7 +1473,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   return (
     <StorefrontProvider value={storefront}>
     <StorefrontThemeScope style={designStyle} className="min-h-screen">
-      <ChromeSection section={design.chrome.announcement} />
+      <ChromeSection section={standaloneAnnouncement(design)} />
       <ChromeSection section={design.chrome.header} />
 
       <SectionRenderer sections={design.home} />

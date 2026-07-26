@@ -78,6 +78,12 @@ export interface VariantMeta {
    * se ascunde. Fara asta, pagina de magazin ar avea doua casete una sub alta.
    */
   replacesCatalogSearch?: boolean;
+  /**
+   * Varianta isi randeaza singura banda de anunt, in interiorul ei. Bara de
+   * anunt separata nu se mai afiseaza; fara asta, mesajul ar aparea de doua ori,
+   * o data deasupra header-ului si o data inauntru.
+   */
+  hostsAnnouncement?: boolean;
   fields: Field[];
   defaults?: Record<string, unknown>;
 }
@@ -132,6 +138,18 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         needsCategories: true,
         replacesCatalogSearch: true,
         fields: [],
+      },
+      editorial: {
+        label: "Editorial, cu banda de anunt dedesubt",
+        tags: ["editorial", "minimal"],
+        layout: "full",
+        // Bara de contact, randul cu logo si meniu, banda de anunt.
+        previewHeight: 144,
+        hostsAnnouncement: true,
+        fields: [
+          { key: "showTopBar", type: "toggle", label: "Arata bara de contact" },
+        ],
+        defaults: { showTopBar: true },
       },
       wedge: {
         label: "Banda inchisa cu pana colorata",

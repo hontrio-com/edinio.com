@@ -50,6 +50,10 @@ const HeaderWedge = dynamic(
   () => import("./sections/chrome/HeaderWedge").then((m) => m.HeaderWedge),
   { ssr: true },
 );
+const HeaderEditorial = dynamic(
+  () => import("./sections/chrome/HeaderEditorial").then((m) => m.HeaderEditorial),
+  { ssr: true },
+);
 
 /**
  * Variantele de header, dupa id-ul din registry.
@@ -65,6 +69,7 @@ const HEADERE: Record<string, VariantaSectiune> = {
   pills: HeaderPills as VariantaSectiune,
   market: HeaderMarket as VariantaSectiune,
   wedge: HeaderWedge as VariantaSectiune,
+  editorial: HeaderEditorial as VariantaSectiune,
 };
 
 /**

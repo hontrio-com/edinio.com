@@ -1,9 +1,9 @@
 "use client";
 
-import { Globe } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { FooterCredit, FooterLegal } from "@/components/storefront/sections/_shared/FooterLegal";
+import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
 
 /**
  * Footerul „placa neagra", varianta classic: logo si retele sociale sus, blocul
@@ -20,7 +20,7 @@ export function FooterDark() {
   // Pagina de produs are o bara de cumparare lipita jos pe mobil, care ar taia
   // ultimele randuri din subsol.
   const spatiuJos = hasStickyBottomBar ? "pb-24 lg:pb-6" : "pb-6";
-  const areSocial = !!(social.instagram || social.facebook || social.tiktok || social.website);
+  const areSocial = areSocialLinks(social);
   const socialCls =
     "w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors";
 
@@ -50,32 +50,7 @@ export function FooterDark() {
           </div>
           {areSocial && (
             <div className="flex items-center gap-1.5 shrink-0">
-              {social.instagram && (
-                <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={socialCls}>
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                  </svg>
-                </a>
-              )}
-              {social.facebook && (
-                <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className={socialCls}>
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
-                  </svg>
-                </a>
-              )}
-              {social.tiktok && (
-                <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok" className={socialCls}>
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
-                  </svg>
-                </a>
-              )}
-              {social.website && (
-                <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website" className={socialCls}>
-                  <Globe className="h-3.5 w-3.5" />
-                </a>
-              )}
+              <SocialLinks social={social} className={socialCls} />
             </div>
           )}
         </div>

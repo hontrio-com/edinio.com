@@ -5,6 +5,7 @@ import { CartProvider } from "@/components/storefront/cart/CartProvider";
 import { ChromeSection } from "@/components/storefront/SectionRenderer";
 import { StoreChromeProvider } from "@/components/storefront/StorefrontProvider";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
+import { headerHostsAnnouncement, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import type { StoreDesign } from "@/lib/storefront/design/types";
 
 /**
@@ -35,15 +36,22 @@ export function StorePageShell({
   // trebuie sa existe si aici, nu doar pe pagina de magazin.
   const [lightbox, setLightbox] = useState<string | null>(null);
   const value = useMemo(
-    () => ({ ...chrome, openCart: () => {}, openLightbox: setLightbox }),
-    [chrome],
+    () => ({
+      ...chrome,
+      // Cateva variante de header poarta banda de anunt in interior; atunci
+      // deasupra lor nu mai e nimic de ocolit.
+      hasAnnouncementBar: chrome.hasAnnouncementBar && !headerHostsAnnouncement(design),
+      openCart: () => {},
+      openLightbox: setLightbox,
+    }),
+    [chrome, design],
   );
 
   return (
     <CartProvider slug={chrome.business.slug}>
       <StoreChromeProvider value={value}>
         <div className={className}>
-          <ChromeSection section={design.chrome.announcement} />
+          <ChromeSection section={standaloneAnnouncement(design)} />
           <ChromeSection section={design.chrome.header} />
           {children}
           <ChromeSection section={design.chrome.footer} />

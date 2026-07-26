@@ -296,7 +296,9 @@ function BaraPublicare({
   onRenunta: () => void;
 }) {
   return (
-    <div className="fixed inset-x-0 bottom-16 lg:bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur-md">
+    // Pe desktop bara incepe dupa meniul lateral, care e si el fixat: pe toata
+    // latimea ecranului ar trece peste el.
+    <div className="fixed right-0 left-0 lg:left-[var(--sidebar-width)] bottom-16 lg:bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground truncate">Modificarile nu sunt inca in magazin</p>

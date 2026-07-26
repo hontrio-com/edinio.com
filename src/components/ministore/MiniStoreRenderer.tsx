@@ -17,7 +17,7 @@ import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart, getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { readBundleConfig } from "@/lib/bundles";
-import { parseProductSections, resolveSectionProducts, type ProductSection } from "@/lib/store-sections";
+import { parseProductSections, resolveSectionProducts } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
@@ -25,7 +25,6 @@ import { StoreNavLinks, StoreNavHamburger } from "./StoreNav";
 import { NetopiaBadge } from "./NetopiaBadge";
 import { CompanyIdentity } from "./CompanyIdentity";
 import { EdinioCredit } from "./EdinioCredit";
-import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
 import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
@@ -41,7 +40,20 @@ import { ProductCard } from "@/components/storefront/product/ProductCard";
 import { HeroBanners } from "@/components/storefront/sections/hero/HeroBanners";
 import { CategoryScroller } from "@/components/storefront/sections/catalog/CategoryScroller";
 import { ShippingProgressBanner } from "@/components/storefront/sections/shipping/ShippingProgressBanner";
+import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
+import { BenefitsClassic } from "@/components/storefront/sections/content/BenefitsClassic";
+import { ReviewsClassic } from "@/components/storefront/sections/content/ReviewsClassic";
+import { GalleryClassic } from "@/components/storefront/sections/content/GalleryClassic";
+import { AboutClassic } from "@/components/storefront/sections/content/AboutClassic";
+import { ContactClassic } from "@/components/storefront/sections/content/ContactClassic";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
+import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
+import type {
+  StoreCategoryNode,
+  StoreFeatures,
+  StorePageContent,
+  StoreSocial,
+} from "@/lib/storefront/store-content.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 // Forma produsului a fost mutata in lib/storefront/product.types.ts, ca sa poata
@@ -51,71 +63,6 @@ type StoreSettings = Pick<
   Database["public"]["Tables"]["store_settings"]["Row"],
   "id" | "business_id" | "page_content" | "store_policies" | "default_shipping_cost" | "free_shipping_threshold" | "min_order_amount"
 >;
-
-interface Social {
-  facebook?: string;
-  instagram?: string;
-  tiktok?: string;
-  youtube?: string;
-  website?: string;
-}
-
-interface Features {
-  show_gallery?: boolean;
-  show_about?: boolean;
-  show_contact?: boolean;
-  floating_whatsapp?: boolean;
-  floating_call?: boolean;
-}
-
-interface PageContent {
-  announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number };
-  trust_badges_enabled?: boolean;
-  trust_badges?: Array<{ icon: string; title: string; desc: string }>;
-  show_trust_strip_on_store?: boolean;
-  store_trust_badges?: Array<{ icon: string; title: string; desc: string }>;
-  show_featured_section?: boolean;
-  featured_section_title?: string;
-  show_shipping_progress?: boolean;
-  store_benefits_section?: { enabled: boolean; title: string; items: Array<{ title: string; desc: string }> };
-  reviews_section?: { enabled: boolean; title: string; items: Array<{ name: string; rating: number; text: string; date: string; image?: string }> };
-  checkout_config?: {
-    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
-    extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
-    hidden_fields?: string[];
-    email_field?: { enabled: boolean; required: boolean };
-  };
-  show_announcement_on_store?: boolean;
-  sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };
-  sticky_cart_bar?: { enabled: boolean };
-  new_badge?: { enabled: boolean; days: number };
-  price_range_display?: { enabled: boolean };
-  store_bg_color?: string;
-  logo_size?: number;
-  footer_logo_size?: number;
-  hero_show_content?: boolean;
-  hero_banners?: string[];
-  hero_banner_links?: string[];
-  show_category_badges?: boolean;
-  hide_products_without_images?: boolean;
-  hide_out_of_stock_products?: boolean;
-  product_sections?: ProductSection[];
-  menu?: MenuItem[];
-}
-
-interface PolicyValue {
-  content?: string;
-  enabled?: boolean;
-}
-
-interface StorePolicies {
-  terms?: string | PolicyValue;
-  delivery?: string | PolicyValue;
-  return?: string | PolicyValue;
-  privacy?: string | PolicyValue;
-  gdpr?: string | PolicyValue;
-  cancellation?: string | PolicyValue;
-}
 
 const JUDETE = [
   "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
@@ -155,8 +102,8 @@ function CartCheckoutModal({
   productWeights?: Record<string, number>;
 }) {
   const { items, total, clear, sessionId } = useCart();
-  const [checkoutConfig, setCheckoutConfig] = useState<PageContent["checkout_config"]>(
-    { email_field: emailFieldConfig } as PageContent["checkout_config"]
+  const [checkoutConfig, setCheckoutConfig] = useState<StorePageContent["checkout_config"]>(
+    { email_field: emailFieldConfig } as StorePageContent["checkout_config"]
   );
   const [newsletterOffer, setNewsletterOffer] = useState(false);
   const [newsletterOptIn, setNewsletterOptIn] = useState(false);
@@ -301,7 +248,7 @@ function CartCheckoutModal({
     getPublicStoreConfig(businessId).then((data) => {
       if (!data) return;
       if (data.page_content) {
-        const pc = data.page_content as { checkout_config?: PageContent["checkout_config"] };
+        const pc = data.page_content as { checkout_config?: StorePageContent["checkout_config"] };
         setCheckoutConfig(prev => ({ ...prev, ...pc.checkout_config }));
       }
       setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true || data.klaviyo_newsletter === true);
@@ -1032,14 +979,13 @@ const POLICY_LINKS = [
   { slug: "anulare", label: "Politica de anulare" },
 ] as const;
 
-type CategoryNode = { id: string; name: string; parent_id: string | null; image_url: string | null; sort_order: number };
 
 interface Props {
   business: Business;
   products: Product[];
   storeSettings: StoreSettings | null;
   basePath?: string;
-  categories?: CategoryNode[];
+  categories?: StoreCategoryNode[];
   initialPage?: number;
   /**
    * Configuratia de design (sectiuni + variante) si stilul rezolvat, calculate
@@ -1166,22 +1112,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     ? Number(storeSettings.min_order_amount)
     : null;
 
-  const pageContent = (storeSettings?.page_content as PageContent) ?? {};
+  const pageContent = (storeSettings?.page_content as StorePageContent) ?? {};
   const menu = pageContent.menu ?? [];
-  const storePolicies = (storeSettings?.store_policies as StorePolicies) ?? {};
-  const social = (business.social as Social) ?? {};
+  const social = (business.social as StoreSocial) ?? {};
   const gallery = Array.isArray(business.gallery) ? (business.gallery as string[]) : [];
-  const features = (business.features as Features) ?? {};
+  const features = (business.features as StoreFeatures) ?? {};
 
-  const showGallery = features.show_gallery !== false && gallery.length > 0;
-  const showAbout = features.show_about !== false && !!business.description;
-  const showContact = features.show_contact !== false && !!(business.phone || business.email || business.store_address);
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const showCall = features.floating_call === true && !!business.phone;
 
   const showTrustStrip = pageContent.show_trust_strip_on_store === true && (pageContent.store_trust_badges?.length ?? 0) > 0;
-  const storeBenefits = pageContent.store_benefits_section;
-  const reviewsSection = pageContent.reviews_section;
   const showFeaturedSection = pageContent.show_featured_section === true;
   const featuredTitle = pageContent.featured_section_title || "Recomandate";
   const showShippingProgress = pageContent.show_shipping_progress === true && freeShippingThreshold !== null;
@@ -1208,18 +1148,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Banner source: up to 5 hero_banners (page_content), else the legacy single
   // cover_url. Each banner can carry an optional click link (hero_banner_links,
   // aligned by index); banners + links are filtered together to stay aligned.
-  const { heroBanners, heroBannerLinks } = (() => {
-    const raw = pageContent.hero_banners;
-    const linksRaw = pageContent.hero_banner_links;
-    const pairs = (Array.isArray(raw) ? raw : [])
-      .map((url, i) => ({ url, link: Array.isArray(linksRaw) ? linksRaw[i] : undefined }))
-      .filter((p): p is { url: string; link: string | undefined } => typeof p.url === "string" && !!p.url)
-      .slice(0, 5);
-    if (pairs.length === 0 && business.cover_url) {
-      return { heroBanners: [business.cover_url], heroBannerLinks: [undefined as string | undefined] };
-    }
-    return { heroBanners: pairs.map((p) => p.url), heroBannerLinks: pairs.map((p) => p.link) };
-  })();
+  const { banners: heroBanners, links: heroBannerLinks } = resolveHeroBanners(
+    pageContent as Record<string, unknown>,
+    business.cover_url,
+  );
   const hasHero = heroBanners.length > 0 || !!business.tagline;
   // By default a banner shows on its own (molded, no overlay); the merchant can
   // opt in to overlaying logo/name/tagline/button.
@@ -1256,7 +1188,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     visibleProducts.forEach(p => { if (p.category) productCatNames.add(p.category); });
 
     const byId = new Map(list.map(c => [c.id, c]));
-    const childrenOf = new Map<string, CategoryNode[]>();
+    const childrenOf = new Map<string, StoreCategoryNode[]>();
     for (const c of list) {
       if (c.parent_id) {
         const arr = childrenOf.get(c.parent_id) ?? [];
@@ -1266,13 +1198,13 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     }
     for (const arr of childrenOf.values()) arr.sort((a, b) => a.sort_order - b.sort_order);
 
-    const subtreeNames = (c: CategoryNode): string[] => {
+    const subtreeNames = (c: StoreCategoryNode): string[] => {
       const out = [c.name];
       for (const ch of childrenOf.get(c.id) ?? []) out.push(...subtreeNames(ch));
       return out;
     };
-    const hasProducts = (c: CategoryNode): boolean => subtreeNames(c).some(n => productCatNames.has(n));
-    const toItem = (c: CategoryNode): Item => ({
+    const hasProducts = (c: StoreCategoryNode): boolean => subtreeNames(c).some(n => productCatNames.has(n));
+    const toItem = (c: StoreCategoryNode): Item => ({
       key: c.id, id: c.id, name: c.name, image: c.image_url,
       hasChildren: (childrenOf.get(c.id) ?? []).some(hasProducts),
     });
@@ -1533,14 +1465,85 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     trackAndFlash(line.productId, line.name, line.price);
   }
 
-  // Has any policy text
-  const hasPolicies = Object.values(storePolicies).some(v => {
-    if (!v) return false;
-    if (typeof v === "string") return v.trim().length > 0;
-    return typeof v === "object" && !!v.content && v.enabled !== false;
-  });
+  /**
+   * Starea paginii, pusa la dispozitia sectiunilor.
+   *
+   * Nu e memoizata deliberat: azi tot ce e mai jos traieste in aceeasi
+   * componenta, deci orice schimbare de stare rerandeaza oricum totul.
+   * Memoizarea devine utila abia dupa ce sectiunile sunt componente separate,
+   * si atunci se face pe bucati, nu pe obiectul intreg.
+   */
+  const storefront: StorefrontContextValue = {
+    business,
+    basePath,
+    color,
+    pageContent,
+    features,
+    social,
+    gallery,
+    menu,
+
+    products,
+    visibleProducts,
+    filteredProducts,
+    paginatedProducts,
+    featuredProducts,
+    productSections,
+    isProductOutOfStock,
+
+    search,
+    setSearch,
+    sort,
+    setSort,
+    setSortTouched,
+    effectiveSort,
+    hasSearchMatches: searchMatches !== null,
+
+    filtersOpen,
+    setFiltersOpen,
+    activeFilterCount,
+    resetFilters,
+    facets,
+    priceMin,
+    setPriceMin,
+    priceMax,
+    setPriceMax,
+    selectedOptions,
+    toggleOption,
+    onSaleOnly,
+    setOnSaleOnly,
+    inStockOnly,
+    setInStockOnly,
+
+    categories: categories ?? [],
+    categoryFilter,
+    currentCategoryItems: currentItems,
+    drillParentName: drillParent?.name ?? null,
+    hasCategories,
+    hasAnyCategoryImage,
+    selectCategoryItem,
+    resetCategory,
+    goBackCategory,
+    viewAllCategory,
+
+    currentPage,
+    totalPages,
+    goToPage,
+
+    addToCart: handleAddToCart,
+    addedId,
+    openCart: () => setCartOpen(true),
+    openCheckout: () => setCheckoutOpen(true),
+
+    newBadgeDays,
+    showCategoryBadges,
+    priceLowestOnly,
+    freeShippingThreshold,
+    openLightbox: setLightboxUrl,
+  };
 
   return (
+    <StorefrontProvider value={storefront}>
     <StorefrontThemeScope style={designStyle} className="min-h-screen">
       {/* Announcement bar */}
       {showAnnouncementOnStore && announcementBar && (
@@ -2095,162 +2098,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           )}
         </section>
 
-        {/* Store benefits */}
-        {storeBenefits?.enabled && storeBenefits.items.length > 0 && (
-          <section className="mb-16">
-            <h2 className="text-xl font-semibold text-foreground mb-6">{storeBenefits.title}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {storeBenefits.items.map((item, i) => (
-                <div key={i} className="flex gap-4 p-5 bg-surface border border-border rounded-2xl">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm text-white"
-                    style={{ backgroundColor: color }}>
-                    {i + 1}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground text-sm mb-1">{item.title}</p>
-                    <p className="text-muted-foreground text-xs leading-relaxed">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Reviews */}
-        {reviewsSection?.enabled && reviewsSection.items.length > 0 && (
-          <section className="mb-16">
-            <div className="flex items-center gap-2 mb-6">
-              <h2 className="text-xl font-semibold text-foreground">{reviewsSection.title}</h2>
-              <div className="h-px flex-1 bg-border" />
-              <div className="flex items-center gap-1">
-                {[1,2,3,4,5].map(s => (
-                  <svg key={s} viewBox="0 0 20 20" className="h-4 w-4" fill="#FBBF24">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-                <span className="text-xs font-semibold text-foreground ml-1">
-                  {(reviewsSection.items.reduce((s, r) => s + r.rating, 0) / reviewsSection.items.length).toFixed(1)}
-                </span>
-                <span className="text-xs text-muted-foreground">({reviewsSection.items.length})</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {reviewsSection.items.map((review, i) => (
-                <div key={i} className="bg-surface border border-border rounded-2xl p-5 flex flex-col gap-3">
-                  <div className="flex items-center gap-1">
-                    {[1,2,3,4,5].map(s => (
-                      <svg key={s} viewBox="0 0 20 20" className="h-3.5 w-3.5"
-                        fill={s <= review.rating ? "#FBBF24" : "none"}
-                        stroke={s <= review.rating ? "#FBBF24" : "#D1D5DB"} strokeWidth="1.5">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    ))}
-                  </div>
-                  {review.text && (
-                    <p className="text-sm text-foreground leading-relaxed flex-1">
-                      &ldquo;{review.text}&rdquo;
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2.5 pt-1 border-t border-border">
-                    {review.image ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={review.image} alt={review.name || "Client"}
-                        className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-border" />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                        style={{ backgroundColor: color }}>
-                        {review.name?.[0]?.toUpperCase() ?? "?"}
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">{review.name || "Anonim"}</p>
-                      {review.date && (
-                        <p className="text-[10px] text-muted-foreground">
-                          {new Date(review.date).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" })}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Gallery */}
-        {showGallery && (
-          <section className="mb-16">
-            <h2 className="text-xl font-semibold text-foreground mb-6">Galerie foto</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {gallery.map((url, i) => (
-                <button key={i} type="button" onClick={() => setLightboxUrl(url)}
-                  aria-label={`Deschide imaginea ${i + 1} din galerie`}
-                  className="relative aspect-square rounded-2xl overflow-hidden bg-muted border border-border hover:scale-[1.02] hover:shadow-md transition-all duration-200">
-                  <Image src={url} alt={`Galerie ${i + 1}`} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" className="object-cover" />
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* About */}
-        {showAbout && (
-          <section className="mb-16">
-            <h2 className="text-xl font-semibold text-foreground mb-4">Despre noi</h2>
-            <div className="bg-surface border border-border rounded-2xl p-6 sm:p-8">
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-line">{business.description}</p>
-            </div>
-          </section>
-        )}
-
-        {/* Contact */}
-        {showContact && (
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-foreground mb-4">Contact</h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {business.phone && (
-                <a href={`tel:${business.phone}`}
-                  className="flex items-center gap-3 p-4 bg-surface border border-border rounded-2xl hover:border-primary/30 hover:bg-primary/5 transition-all">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${color}20`, color }}>
-                    <Phone className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Telefon</p>
-                    <p className="text-sm font-semibold text-foreground">{business.phone}</p>
-                  </div>
-                </a>
-              )}
-              {business.email && (
-                <a href={`mailto:${business.email}`}
-                  className="flex items-center gap-3 p-4 bg-surface border border-border rounded-2xl hover:border-primary/30 hover:bg-primary/5 transition-all">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${color}20`, color }}>
-                    <Mail className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Email</p>
-                    <p className="text-sm font-semibold text-foreground truncate">{business.email}</p>
-                  </div>
-                </a>
-              )}
-              {business.store_address && (
-                <div className="flex items-center gap-3 p-4 bg-surface border border-border rounded-2xl">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `${color}20`, color }}>
-                    <MapPin className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Adresa</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {business.store_address}{business.store_city ? `, ${business.store_city}` : ""}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
+        <BenefitsClassic />
+        <ReviewsClassic />
+        <GalleryClassic />
+        <AboutClassic />
+        <ContactClassic />
       </main>
 
       {/* Footer */}
@@ -2474,6 +2326,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         </div>
       )}
     </StorefrontThemeScope>
+    </StorefrontProvider>
   );
 }
 

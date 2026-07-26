@@ -31,7 +31,6 @@ import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, lineKey, useCart } from "@/components/storefront/cart/CartProvider";
-import { ProductCard } from "@/components/storefront/product/ProductCard";
 import { CategoryScroller } from "@/components/storefront/sections/catalog/CategoryScroller";
 import { ShippingProgressBanner } from "@/components/storefront/sections/shipping/ShippingProgressBanner";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
@@ -45,6 +44,8 @@ import { HeaderClassic } from "@/components/storefront/sections/chrome/HeaderCla
 import { UspStripIcons } from "@/components/storefront/sections/chrome/UspStripIcons";
 import { HeroClassic } from "@/components/storefront/sections/hero/HeroClassic";
 import { FooterDark } from "@/components/storefront/sections/chrome/FooterDark";
+import { CustomProductRows, FeaturedRowClassic } from "@/components/storefront/sections/products/ProductRowClassic";
+import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import type {
@@ -1105,8 +1106,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const showCall = features.floating_call === true && !!business.phone;
 
   const showFeaturedSection = pageContent.show_featured_section === true;
-  const featuredTitle = pageContent.featured_section_title || "Recomandate";
-  const showShippingProgress = pageContent.show_shipping_progress === true && freeShippingThreshold !== null;
 
   const showAnnouncementOnStore = pageContent.show_announcement_on_store !== false && pageContent.announcement_bar?.enabled === true;
 
@@ -1762,90 +1761,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           </CategoryScroller>
         )}
 
-        {/* Shipping progress bar */}
-        {showShippingProgress && freeShippingThreshold && (
-          <ShippingProgressBanner color={color} threshold={freeShippingThreshold} />
-        )}
-
-        {/* Featured section */}
-        {showFeaturedSection && featuredProducts.length > 0 && (
-          <section className="mb-12">
-            <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-lg font-bold text-foreground">{featuredTitle}</h2>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {featuredProducts.map(product => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  color={color}
-                  basePath={basePath}
-                  onAddToCart={() => handleAddToCart(product)}
-                  isAdded={addedId === product.id}
-                  newBadgeDays={newBadgeDays}
-                  outOfStock={isProductOutOfStock(product)}
-                  showCategoryBadge={showCategoryBadges}
-                  priceLowestOnly={priceLowestOnly}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Custom product sections (curated rows above the main catalog) */}
-        {productSections.map(({ section, items }) => (
-          <section key={section.id} className="mb-12">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-lg font-bold text-foreground">{section.title || "Produse"}</h2>
-              <div className="h-px flex-1 bg-border" />
-              {section.mode === "category" && section.category && (
-                <button type="button" onClick={() => viewAllCategory(section.category!)}
-                  className="flex items-center gap-1 text-xs font-semibold whitespace-nowrap transition-opacity hover:opacity-70"
-                  style={{ color }}>
-                  Vezi toate
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            {section.layout === "carousel" ? (
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-hide">
-                {items.map(product => (
-                  <div key={product.id} className="snap-start shrink-0 w-[44%] sm:w-[30%] lg:w-[23%]">
-                    <ProductCard
-                      product={product}
-                      color={color}
-                      basePath={basePath}
-                      onAddToCart={() => handleAddToCart(product)}
-                      isAdded={addedId === product.id}
-                      newBadgeDays={newBadgeDays}
-                      outOfStock={isProductOutOfStock(product)}
-                      showCategoryBadge={showCategoryBadges}
-                      priceLowestOnly={priceLowestOnly}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                {items.map(product => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    color={color}
-                    basePath={basePath}
-                    onAddToCart={() => handleAddToCart(product)}
-                    isAdded={addedId === product.id}
-                    newBadgeDays={newBadgeDays}
-                    outOfStock={isProductOutOfStock(product)}
-                    showCategoryBadge={showCategoryBadges}
-                    priceLowestOnly={priceLowestOnly}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-        ))}
+        <ShippingProgressBanner />
+        <FeaturedRowClassic />
+        <CustomProductRows />
 
         {/* Products */}
         <section id="produse" className="mb-16">
@@ -1876,19 +1794,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {paginatedProducts.map((product, i) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    color={color}
-                    basePath={basePath}
-                    onAddToCart={() => handleAddToCart(product)}
-                    isAdded={addedId === product.id}
-                    newBadgeDays={newBadgeDays}
-                    outOfStock={isProductOutOfStock(product)}
-                    showCategoryBadge={showCategoryBadges}
-                    priority={i < 4}
-                    priceLowestOnly={priceLowestOnly}
-                  />
+                  <StoreProductCard key={product.id} product={product} priority={i < 4} />
                 ))}
               </div>
               {totalPages > 1 && (

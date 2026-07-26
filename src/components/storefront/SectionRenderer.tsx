@@ -2,6 +2,7 @@
 
 import { Fragment } from "react";
 import { groupSections } from "@/lib/storefront/design/group-sections";
+import { SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { AnnouncementMarquee } from "./sections/chrome/AnnouncementMarquee";
 import { FooterDark } from "./sections/chrome/FooterDark";
@@ -84,21 +85,34 @@ function SectionOne({ section }: { section: SectionInstance }) {
  * Prima serie e `<main>`, marcajul semantic al paginii, si isi pastreaza
  * spatierea verticala; eventualele serii de dupa sunt simple containere.
  */
+/**
+ * Fiecare sectiune primeste `data-st-section` cu id-ul ei. Atributul nu costa
+ * nimic pe magazinul public si e ce permite preview-ului din editor sa raspunda
+ * la click pe o sectiune si sa o aduca in dreptul ochilor.
+ */
+function Marcata({ section }: { section: SectionInstance }) {
+  return (
+    <div {...{ [SECTION_ATTR]: section.id }} className="contents">
+      <SectionOne section={section} />
+    </div>
+  );
+}
+
 export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
   return (
     <>
       {groupSections(sections).map((bloc) =>
         bloc.tip === "full" ? (
           <Fragment key={bloc.section.id}>
-            <SectionOne section={bloc.section} />
+            <Marcata section={bloc.section} />
           </Fragment>
         ) : bloc.esteMain ? (
           <main key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 py-10">
-            {bloc.sections.map((s) => <SectionOne key={s.id} section={s} />)}
+            {bloc.sections.map((s) => <Marcata key={s.id} section={s} />)}
           </main>
         ) : (
           <div key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 pb-10">
-            {bloc.sections.map((s) => <SectionOne key={s.id} section={s} />)}
+            {bloc.sections.map((s) => <Marcata key={s.id} section={s} />)}
           </div>
         ),
       )}
@@ -109,5 +123,5 @@ export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
 /** Sectiunile fixe de sus si de jos: bara de anunt, header, footer. */
 export function ChromeSection({ section }: { section: SectionInstance | null }) {
   if (!section || !section.enabled) return null;
-  return <SectionOne section={section} />;
+  return <Marcata section={section} />;
 }

@@ -327,6 +327,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         basePath={basePath}
         categories={categoriesData}
         initialPage={initialPage}
+        preview={isPreview}
         design={resolved.design}
         designStyle={resolved.style}
       />

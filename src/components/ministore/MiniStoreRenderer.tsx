@@ -35,6 +35,7 @@ import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
+import { useDesignPreview } from "@/components/storefront/useDesignPreview";
 import type {
   StoreCategoryNode,
   StoreFeatures,
@@ -966,9 +967,16 @@ interface Props {
    */
   design: StoreDesign;
   designStyle: ResolvedStyle;
+  /**
+   * Pagina e deschisa in iframe-ul editorului. Atunci designul poate fi
+   * suprascris live prin postMessage, fara salvare si fara reincarcare.
+   */
+  preview?: boolean;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, design, designStyle }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, design: designProp, designStyle: designStyleProp, preview = false }: Props) {
+  // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
+  const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);

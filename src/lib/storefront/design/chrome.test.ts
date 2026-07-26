@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { headerHostsAnnouncement, standaloneAnnouncement } from "./chrome";
 import { buildClassicDesign } from "./defaults";
+import { SECTION_REGISTRY } from "./registry";
 import type { StoreDesign } from "./types";
 
 function design(variant: string, enabled = true): StoreDesign {
@@ -40,4 +41,23 @@ test("varianta necunoscuta nu gazduieste banda", () => {
   const d = design("varianta-inexistenta");
   assert.equal(headerHostsAnnouncement(d), false);
   assert.equal(standaloneAnnouncement(d)?.id, "announcement");
+});
+
+test("catalogul de design-uri contine exact zonele pentru care facem variante", () => {
+  // Un ecran plin de sectiuni cu o singura varianta ar da impresia unei alegeri
+  // care nu exista, asa ca lista e explicita, nu derivata din numarul de variante.
+  const inCatalog = Object.entries(SECTION_REGISTRY)
+    .filter(([, m]) => m?.inCatalog)
+    .map(([k]) => k)
+    .sort();
+  assert.deepEqual(inCatalog, [
+    "footer",
+    "header",
+    "hero",
+    "pdp_buybox",
+    "pdp_details",
+    "pdp_gallery",
+    "pdp_related",
+    "product_row",
+  ]);
 });

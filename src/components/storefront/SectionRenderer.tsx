@@ -50,6 +50,14 @@ const HeaderWedge = dynamic(
   () => import("./sections/chrome/HeaderWedge").then((m) => m.HeaderWedge),
   { ssr: true },
 );
+const HeroBannersOnly = dynamic(
+  () => import("./sections/hero/HeroBannersOnly").then((m) => m.HeroBannersOnly),
+  { ssr: true },
+);
+const HeroOverlay = dynamic(
+  () => import("./sections/hero/HeroOverlay").then((m) => m.HeroOverlay),
+  { ssr: true },
+);
 const HeaderEditorial = dynamic(
   () => import("./sections/chrome/HeaderEditorial").then((m) => m.HeaderEditorial),
   { ssr: true },
@@ -77,6 +85,12 @@ const HEADERE: Record<string, VariantaSectiune> = {
   centered: HeaderCentered as VariantaSectiune,
 };
 
+/** Variantele de hero, dupa id-ul din registry. */
+const HEROURI: Record<string, ComponentType> = {
+  banners: HeroBannersOnly,
+  overlay: HeroOverlay,
+};
+
 /**
  * Randeaza sectiunile paginii de magazin in ordinea din configuratie.
  *
@@ -94,8 +108,10 @@ function SectionOne({ section }: { section: SectionInstance }) {
     }
     case "footer":
       return <FooterDark />;
-    case "hero":
-      return <HeroClassic />;
+    case "hero": {
+      const Varianta = HEROURI[section.variant];
+      return Varianta ? <Varianta /> : <HeroClassic />;
+    }
     case "usp_strip":
       return <UspStripIcons />;
     case "catalog_toolbar":

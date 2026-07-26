@@ -109,6 +109,14 @@ export interface SectionMeta {
   singleton: boolean;
   /** Poate fi stearsa din lista de sectiuni. */
   removable: boolean;
+  /**
+   * Apare in „Design sectiuni".
+   *
+   * Doar sectiunile pentru care construim mai multe design-uri. Un ecran plin de
+   * sectiuni cu o singura varianta ar da impresia unei alegeri care nu exista;
+   * restul raman reglabile din editorul magazinului, ca pana acum.
+   */
+  inCatalog?: boolean;
   variants: Record<string, VariantMeta>;
 }
 
@@ -201,6 +209,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "chrome",
     singleton: true,
     removable: false,
+    inCatalog: true,
     variants: {
       classic: { label: "Simplu", tags: ["clasic"], layout: "full", previewHeight: 70, fields: [] },
       search: {
@@ -332,6 +341,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "chrome",
     singleton: true,
     removable: false,
+    inCatalog: true,
     variants: {
       dark: { label: "Fundal inchis", tags: ["clasic", "indraznet"], layout: "full", previewHeight: 460, fields: [] },
     },
@@ -344,14 +354,17 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "home",
     singleton: true,
     removable: true,
+    inCatalog: true,
     variants: {
-      banners: { label: "Bannere", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 420, fields: [] },
+      banners: { label: "Doar imagini", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 420, fields: [] },
       overlay: {
         label: "Imagine cu text peste",
+        // Titlul magazinului e vizibil in aceasta varianta, deci ea e H1-ul
+        // paginii si nu se mai adauga unul ascuns.
+        providesH1: true,
         tags: ["clasic", "cu imagine", "indraznet"],
         layout: "full",
         previewHeight: 420,
-        providesH1: true,
         fields: [],
       },
     },
@@ -402,6 +415,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "home",
     singleton: false,
     removable: true,
+    inCatalog: true,
     variants: {
       grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: PRODUCT_ROW_FIELDS },
       carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: PRODUCT_ROW_FIELDS },
@@ -475,6 +489,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: false,
+    inCatalog: true,
     variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
   },
   pdp_buybox: {
@@ -483,6 +498,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: false,
+    inCatalog: true,
     variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
   },
   pdp_details: {
@@ -491,6 +507,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: true,
+    inCatalog: true,
     variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
   },
   pdp_related: {
@@ -499,6 +516,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "product",
     singleton: true,
     removable: true,
+    inCatalog: true,
     variants: { carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [] } },
   },
 

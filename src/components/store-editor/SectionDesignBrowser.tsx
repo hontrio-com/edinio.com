@@ -88,15 +88,22 @@ export function SectionDesignBrowser({
   // instante (randurile de produse), deci fiecare intrare le pastreaza pe toate.
   const intrari = useMemo(() => {
     const toate = [
-      ...(design.chrome.announcement ? [design.chrome.announcement] : []),
       design.chrome.header,
       ...design.home,
       design.chrome.footer,
+      design.product.gallery,
+      design.product.buybox,
+      ...design.product.sections,
+      design.commerce.productCard,
+      design.commerce.cartDrawer,
+      design.commerce.checkout,
     ];
     const dupaKind = new Map<SectionKind, Intrare>();
     for (const s of toate) {
       const meta = sectionMeta(s.kind);
-      if (!meta) continue;
+      // Doar sectiunile pentru care exista un catalog de design-uri; restul se
+      // regleaza mai departe din editorul magazinului.
+      if (!meta?.inCatalog) continue;
       const existent = dupaKind.get(s.kind);
       if (existent) existent.instante.push(s);
       else dupaKind.set(s.kind, { kind: s.kind, label: meta.label, icon: meta.icon, instante: [s] });

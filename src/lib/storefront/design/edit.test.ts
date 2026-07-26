@@ -111,3 +111,19 @@ test("o sectiune inexistenta lasa designul neschimbat", () => {
   assert.equal(removeSection(d, "nu-exista"), d);
   assert.equal(duplicateSection(d, "nu-exista"), d);
 });
+
+test("setarile paginii de produs se pot schimba, nu doar cele ale paginii principale", () => {
+  // Catalogul de design-uri arata si sectiunile paginii de produs; daca
+  // `findSection` nu le-ar cauta, alegerea s-ar pierde in tacere.
+  const d = design();
+  const dupa = updateSection(d, d.product.buybox.id, { variant: "test" });
+  assert.equal(dupa.product.buybox.variant, "test");
+  assert.equal(dupa.product.gallery.variant, d.product.gallery.variant);
+});
+
+test("sectiunile paginii de produs nu se pot sterge", () => {
+  // Fac parte din structura paginii, nu din aranjamentul paginii principale.
+  const d = design();
+  assert.equal(removeSection(d, d.product.gallery.id), d);
+  assert.equal(removeSection(d, d.commerce.checkout.id), d);
+});

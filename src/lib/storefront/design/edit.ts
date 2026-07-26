@@ -21,12 +21,28 @@ export function moveSection(design: StoreDesign, from: number, to: number): Stor
   return next;
 }
 
-/** Cauta o sectiune oriunde ar fi: in pagina principala sau in partea fixa. */
+/**
+ * Cauta o sectiune oriunde ar fi in design.
+ *
+ * Cauta si in pagina de produs si in zona de comert, nu doar in pagina
+ * principala si in partea fixa: catalogul de design-uri le arata pe toate, iar o
+ * cautare partiala ar fi insemnat ca alegerea unui design de pagina de produs se
+ * pierde in tacere, fara nicio eroare.
+ */
 function findSection(design: StoreDesign, id: string): SectionInstance | undefined {
   if (design.chrome.announcement?.id === id) return design.chrome.announcement;
   if (design.chrome.header.id === id) return design.chrome.header;
   if (design.chrome.footer.id === id) return design.chrome.footer;
-  return design.home.find((s) => s.id === id);
+  const dinHome = design.home.find((s) => s.id === id);
+  if (dinHome) return dinHome;
+
+  if (design.product.gallery.id === id) return design.product.gallery;
+  if (design.product.buybox.id === id) return design.product.buybox;
+  const dinProdus = design.product.sections.find((s) => s.id === id);
+  if (dinProdus) return dinProdus;
+
+  return [design.commerce.productCard, design.commerce.cartDrawer, design.commerce.checkout]
+    .find((s) => s.id === id);
 }
 
 /** Aplica o modificare unei sectiuni, oriunde s-ar afla. */
@@ -55,6 +71,9 @@ export function toggleSection(design: StoreDesign, id: string): StoreDesign {
 export function removeSection(design: StoreDesign, id: string): StoreDesign {
   const tinta = findSection(design, id);
   if (!tinta || sectionMeta(tinta.kind)?.removable === false) return design;
+  // Se pot scoate doar sectiunile paginii principale si bara de anunt. Cele ale
+  // paginii de produs si ale cosului fac parte din structura, nu din aranjament.
+  if (design.chrome.announcement?.id !== id && !design.home.some((s) => s.id === id)) return design;
   const next = clone(design);
   if (next.chrome.announcement?.id === id) {
     next.chrome.announcement = null;

@@ -2,9 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
+import { PREVIEW_HEIGHT_MESSAGE } from "@/components/storefront/PreviewHeightReporter";
 
-/** Latimea la care se randeaza miniatura inainte de micsorare: un desktop obisnuit. */
-export const LATIME_RANDARE = 1280;
+/**
+ * Latimea la care se randeaza miniatura inainte de micsorare.
+ *
+ * Pe un card ingust nu micsoram desktopul si mai tare — la 350 de pixeli, un
+ * desktop de 1280 ajunge la un sfert si nu se mai citeste nimic. Randam direct
+ * varianta de telefon, aproape la marime reala: cine alege designul de pe
+ * telefon vede exact ce vor vedea clientii lui de pe telefon.
+ */
+export const LATIME_DESKTOP = 1280;
+export const LATIME_MOBIL = 390;
+const PRAG_MOBIL = 560;
 export const INALTIME_IMPLICITA = 320;
 
 /**
@@ -38,15 +48,27 @@ export function VariantCard({
   onPick: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const [scara, setScara] = useState(0);
+  const rama = useRef<HTMLIFrameElement>(null);
+  const [latimeCard, setLatimeCard] = useState(0);
   const [vizibil, setVizibil] = useState(false);
+  /**
+   * Inaltimea masurata, impreuna cu latimea la care s-a masurat. Cele doua merg
+   * in aceeasi stare pentru ca inaltimea unei benzi randate la 390 de pixeli nu
+   * spune nimic despre aceeasi banda randata la 1280 — tinute separat, ar fi
+   * trebuit uitata una la schimbarea celeilalte, adica un efect care scrie
+   * starea pe care tot el o citeste.
+   */
+  const [masurat, setMasurat] = useState<{ latime: number; inaltime: number } | null>(null);
 
-  // Scara se calculeaza din latimea reala a cardului, ca miniatura sa umple
-  // exact spatiul disponibil indiferent de ecran.
+  const latimeDupa = (l: number) => (l > 0 && l < PRAG_MOBIL ? LATIME_MOBIL : LATIME_DESKTOP);
+  const latimeRandare = latimeDupa(latimeCard);
+  const scara = latimeCard > 0 ? latimeCard / latimeRandare : 0;
+  const inaltimeRandare = masurat?.latime === latimeRandare ? masurat.inaltime : inaltime;
+
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setScara(el.clientWidth / LATIME_RANDARE));
+    const ro = new ResizeObserver(() => setLatimeCard(el.clientWidth));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -62,18 +84,34 @@ export function VariantCard({
     return () => io.disconnect();
   }, []);
 
+  // Miniatura isi anunta singura inaltimea. Numarul din registry ramane doar ca
+  // estimare pana se incarca, altfel cardul ar sari cand apare continutul.
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== window.location.origin || e.source !== rama.current?.contentWindow) return;
+      const h = (e.data as Record<string, unknown>)?.[PREVIEW_HEIGHT_MESSAGE];
+      // Latimea se citeste din DOM in momentul mesajului, nu din starea de la
+      // montare: intre timp cardul poate fi trecut de la telefon la desktop.
+      const l = latimeDupa(box.current?.clientWidth ?? 0);
+      if (typeof h === "number" && h > 0) setMasurat({ latime: l, inaltime: h });
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
   return (
     <div className={`rounded-2xl border overflow-hidden bg-surface transition-shadow ${activ ? "border-primary ring-1 ring-primary/20" : "border-border hover:shadow-md"}`}>
       <div ref={box} className="relative bg-muted/30 overflow-hidden"
-        style={{ height: scara ? inaltime * scara : inaltime / 3 }}>
+        style={{ height: scara ? inaltimeRandare * scara : inaltime / 3 }}>
         {vizibil && scara > 0 && (
           <iframe
+            ref={rama}
             src={`/preview-sectiune/${slug}?kind=${encodeURIComponent(kind)}&variant=${encodeURIComponent(variantId)}`}
             title={`Previzualizare ${label}`}
             tabIndex={-1}
             scrolling="no"
             className="absolute top-0 left-0 origin-top-left border-0 pointer-events-none"
-            style={{ width: LATIME_RANDARE, height: inaltime, transform: `scale(${scara})` }}
+            style={{ width: latimeRandare, height: inaltimeRandare, transform: `scale(${scara})` }}
           />
         )}
       </div>

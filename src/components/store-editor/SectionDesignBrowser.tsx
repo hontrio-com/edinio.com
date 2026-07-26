@@ -30,8 +30,8 @@ type Intrare = { kind: SectionKind; label: string; icon: string; instante: Secti
  * live — sunt doua intrebari diferite, iar amestecul lor intr-un singur ecran
  * facea alegerea designului sa para o operatie de montaj.
  *
- * Modificarile intra in aceeasi ciorna ca in editor, deci se pot incerca aici si
- * publica de oriunde.
+ * Design-urile stau unul sub altul, pe toata latimea: un header e o banda lata
+ * si joasa, iar pe doua coloane ajungea prea mic ca sa se vada ce alegi.
  */
 export function SectionDesignBrowser({
   businessId,
@@ -109,13 +109,16 @@ export function SectionDesignBrowser({
   const meta = sectiune ? sectionMeta(sectiune.kind) : undefined;
   const variante = Object.entries(meta?.variants ?? {});
   const variantaActiva = sectiune ? meta?.variants[sectiune.variant] : undefined;
+  const areSetari = (variantaActiva?.fields.length ?? 0) > 0;
 
   const aplica = useCallback((next: StoreDesign) => setDesign(next), []);
 
-  function alegeVarianta(variant: string) {
+  function alegeVarianta(variant: string, label: string) {
     if (!sectiune) return;
     aplica(updateSection(design, sectiune.id, { variant }));
-    toast.success("Design aplicat in ciorna");
+    toast.success(`Design ales: ${label}`, {
+      description: "Apasa Publica in magazin ca sa il vada si clientii.",
+    });
   }
 
   async function onPublica() {
@@ -143,44 +146,20 @@ export function SectionDesignBrowser({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-foreground">Design sectiuni</h1>
-          <p className="text-sm text-muted-foreground">
-            Alege cum arata fiecare parte a magazinului si regleaza-i setarile.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
-            {salvez ? (
-              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Se salveaza...</>
-            ) : areModificari ? (
-              "Modificari nepublicate"
-            ) : (
-              <><Check className="h-3.5 w-3.5" /> Publicat</>
-            )}
-          </span>
-          {areModificari && (
-            <button type="button" onClick={onRenunta}
-              className="h-10 px-3 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5">
-              <Undo2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Renunta</span>
-            </button>
-          )}
-          <button type="button" onClick={onPublica} disabled={!areModificari || publica}
-            className="h-10 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-40 transition-opacity inline-flex items-center gap-2">
-            {publica && <Loader2 className="h-4 w-4 animate-spin" />}
-            Publica
-          </button>
-        </div>
+    // Spatiu jos cat bara de publicare plus bara de navigare de pe telefon,
+    // altfel ultimul card ramane sub ele.
+    <div className={`max-w-6xl mx-auto px-4 sm:px-6 py-5 ${areModificari ? "pb-44 lg:pb-28" : "pb-24 lg:pb-8"}`}>
+      <div className="mb-5">
+        <h1 className="text-xl font-bold text-foreground">Design sectiuni</h1>
+        <p className="text-sm text-muted-foreground">
+          Alege cum arata fiecare parte a magazinului si regleaza-i setarile.
+        </p>
       </div>
 
-      <div className="grid lg:grid-cols-[240px_1fr] gap-6">
-        {/* Bara de sectiuni: coloana pe desktop, sir derulabil pe telefon. */}
-        <nav className="lg:sticky lg:top-6 lg:self-start">
-          <ul className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
+      {/* Sectiunile: sir derulabil pe telefon, coloana pe desktop. */}
+      <div className="lg:grid lg:grid-cols-[220px_1fr] lg:gap-6">
+        <nav className="lg:sticky lg:top-6 lg:self-start -mx-4 px-4 lg:mx-0 lg:px-0 mb-4 lg:mb-0">
+          <ul className="flex lg:flex-col gap-1.5 lg:gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {GRUPURI.map((g) => {
               const dinGrup = [...intrari.values()].filter((i) => sectionMeta(i.kind)?.scope === g.scope);
               if (dinGrup.length === 0) return null;
@@ -195,10 +174,10 @@ export function SectionDesignBrowser({
                     return (
                       <button key={i.kind} type="button"
                         onClick={() => { setKindActiv(i.kind); setInstantaActiva(0); setSetariDeschise(false); }}
-                        className={`w-full shrink-0 h-11 px-3 rounded-xl flex items-center gap-2.5 text-sm transition-colors whitespace-nowrap ${activ ? "bg-primary/10 text-primary font-semibold" : "text-foreground hover:bg-muted"}`}>
+                        className={`shrink-0 h-11 px-3.5 lg:px-3 lg:w-full rounded-xl flex items-center gap-2 text-sm transition-colors whitespace-nowrap border lg:border-0 ${activ ? "bg-primary/10 text-primary font-semibold border-primary/30" : "text-foreground border-border hover:bg-muted"}`}>
                         <PageIcon name={i.icon} className="h-4 w-4 shrink-0" />
                         <span className="truncate">{i.label}</span>
-                        <span className={`ml-auto text-[11px] tabular-nums ${activ ? "text-primary" : "text-muted-foreground"}`}>
+                        <span className={`text-[11px] tabular-nums lg:ml-auto ${activ ? "text-primary" : "text-muted-foreground"}`}>
                           {nrVariante}
                         </span>
                       </button>
@@ -219,70 +198,53 @@ export function SectionDesignBrowser({
         <div className="min-w-0">
           {sectiune && meta ? (
             <>
-              <div className="flex flex-wrap items-center gap-3 mb-4">
-                <div className="min-w-0">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="min-w-0 flex-1">
                   <h2 className="font-semibold text-foreground">{meta.label}</h2>
                   <p className="text-xs text-muted-foreground">
-                    Design activ: {variantaActiva?.label ?? sectiune.variant} - {variante.length}{" "}
-                    {variante.length === 1 ? "varianta disponibila" : "variante disponibile"}
+                    Acum: {variantaActiva?.label ?? sectiune.variant}
+                    {variante.length > 1 && ` - ${variante.length} variante`}
                   </p>
                 </div>
 
-                {/* Un tip cu mai multe instante (randurile de produse) are nevoie
-                    de un selector: setarile sunt ale instantei, nu ale tipului. */}
-                {intrare && intrare.instante.length > 1 && (
-                  <div className="flex items-center gap-1">
-                    {intrare.instante.map((s, i) => (
-                      <button key={s.id} type="button" onClick={() => setInstantaActiva(i)}
-                        className={`h-9 px-3 rounded-lg text-xs font-medium transition-colors ${i === instantaActiva ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
-                        {String(s.settings.title || `${meta.label} ${i + 1}`)}
-                      </button>
-                    ))}
-                  </div>
+                {areSetari && (
+                  <button type="button" onClick={() => setSetariDeschise(true)}
+                    className="shrink-0 h-10 px-3.5 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted transition-colors inline-flex items-center gap-2">
+                    <Settings2 className="h-4 w-4" />
+                    Setari
+                  </button>
                 )}
-
-                <button type="button" onClick={() => setSetariDeschise((v) => !v)}
-                  disabled={(variantaActiva?.fields.length ?? 0) === 0}
-                  className="ml-auto h-10 px-4 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent transition-colors inline-flex items-center gap-2">
-                  <Settings2 className="h-4 w-4" />
-                  Setari
-                </button>
               </div>
 
-              <div className={`grid gap-5 ${setariDeschise ? "xl:grid-cols-[1fr_300px]" : "xl:grid-cols-2"}`}>
-                <div className={`grid gap-5 ${setariDeschise ? "" : "xl:col-span-2 xl:grid-cols-2"}`}>
-                  {variante.map(([id, v]) => (
-                    <VariantCard
-                      key={id}
-                      slug={slug}
-                      kind={sectiune.kind}
-                      variantId={id}
-                      label={v.label}
-                      tags={v.tags}
-                      inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
-                      activ={id === sectiune.variant}
-                      onPick={() => alegeVarianta(id)}
-                    />
+              {/* Mai multe instante ale aceluiasi tip (randurile de produse):
+                  setarile sunt ale instantei, nu ale tipului. */}
+              {intrare && intrare.instante.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {intrare.instante.map((s, i) => (
+                    <button key={s.id} type="button" onClick={() => setInstantaActiva(i)}
+                      className={`shrink-0 h-9 px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${i === instantaActiva ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+                      {String(s.settings.title || `${meta.label} ${i + 1}`)}
+                    </button>
                   ))}
                 </div>
+              )}
 
-                {setariDeschise && (
-                  <aside className="xl:sticky xl:top-6 xl:self-start rounded-2xl border border-border bg-surface p-4">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Setari {meta.label.toLowerCase()}
-                      </h3>
-                      <button type="button" onClick={() => setSetariDeschise(false)} aria-label="Inchide setarile"
-                        className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <SectionSettings
-                      section={sectiune}
-                      onChange={(settings) => aplica(updateSection(design, sectiune.id, { settings }))}
-                    />
-                  </aside>
-                )}
+              {/* O singura coloana: un header e o banda lata, iar pe doua coloane
+                  miniatura ajunge prea mica pentru a alege ceva. */}
+              <div className="grid gap-5">
+                {variante.map(([id, v]) => (
+                  <VariantCard
+                    key={id}
+                    slug={slug}
+                    kind={sectiune.kind}
+                    variantId={id}
+                    label={v.label}
+                    tags={v.tags}
+                    inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
+                    activ={id === sectiune.variant}
+                    onPick={() => alegeVarianta(id, v.label)}
+                  />
+                ))}
               </div>
             </>
           ) : (
@@ -290,6 +252,107 @@ export function SectionDesignBrowser({
           )}
         </div>
       </div>
+
+      {setariDeschise && sectiune && meta && (
+        <PanouSetari
+          titlu={`Setari ${meta.label.toLowerCase()}`}
+          section={sectiune}
+          onChange={(settings) => aplica(updateSection(design, sectiune.id, { settings }))}
+          onInchide={() => setSetariDeschise(false)}
+        />
+      )}
+
+      {areModificari && (
+        <BaraPublicare salvez={salvez} publica={publica} onPublica={onPublica} onRenunta={onRenunta} />
+      )}
     </div>
+  );
+}
+
+/**
+ * Bara de publicare, lipita jos cat timp exista modificari nepublicate.
+ *
+ * Un buton „Publica" asezat sus, langa titlu, trecea neobservat: comerciantul
+ * alegea un design, vedea cardul marcat „Activ" si pleca convins ca l-a pus in
+ * magazin. Bara spune raspicat ca inca nu e acolo si tine actiunea sub degete,
+ * inclusiv pe telefon.
+ */
+function BaraPublicare({
+  salvez,
+  publica,
+  onPublica,
+  onRenunta,
+}: {
+  salvez: boolean;
+  publica: boolean;
+  onPublica: () => void;
+  onRenunta: () => void;
+}) {
+  return (
+    <div className="fixed inset-x-0 bottom-16 lg:bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur-md">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground truncate">Modificarile nu sunt inca in magazin</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {salvez ? "Se salveaza ciorna..." : "Clientii vad in continuare designul vechi."}
+          </p>
+        </div>
+        <button type="button" onClick={onRenunta}
+          className="shrink-0 h-11 px-3 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5">
+          <Undo2 className="h-4 w-4" />
+          <span className="hidden sm:inline">Renunta</span>
+        </button>
+        <button type="button" onClick={onPublica} disabled={publica}
+          className="shrink-0 h-11 px-4 sm:px-5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-opacity inline-flex items-center gap-2">
+          {publica ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          Publica<span className="hidden sm:inline"> in magazin</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Setarile sectiunii: panou lateral pe desktop, foaie de jos pe telefon.
+ *
+ * Pe ecran ingust o coloana alaturata ar fi lasat si design-urile si setarile
+ * prea inguste, asa ca setarile urca peste, cum se asteapta oricine de la o
+ * aplicatie de telefon.
+ */
+function PanouSetari({
+  titlu,
+  section,
+  onChange,
+  onInchide,
+}: {
+  titlu: string;
+  section: SectionInstance;
+  onChange: (settings: Record<string, unknown>) => void;
+  onInchide: () => void;
+}) {
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onInchide(); };
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [onInchide]);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onInchide} aria-hidden />
+      <div className="fixed z-50 bg-surface shadow-2xl flex flex-col
+        inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl
+        sm:inset-y-0 sm:left-auto sm:right-0 sm:bottom-auto sm:max-h-none sm:w-[360px] sm:rounded-t-none sm:border-l sm:border-border">
+        <div className="flex items-center gap-2 px-4 h-14 border-b border-border shrink-0">
+          <h3 className="text-sm font-semibold text-foreground truncate">{titlu}</h3>
+          <button type="button" onClick={onInchide} aria-label="Inchide setarile"
+            className="ml-auto w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 pb-6">
+          <SectionSettings section={section} onChange={onChange} cuTitlu={false} />
+        </div>
+      </div>
+    </>
   );
 }

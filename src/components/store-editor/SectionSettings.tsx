@@ -18,9 +18,12 @@ import type { SectionInstance } from "@/lib/storefront/design/types";
 export function SectionSettings({
   section,
   onChange,
+  /** In panoul dedicat, titlul e deja in capul lui. */
+  cuTitlu = true,
 }: {
   section: SectionInstance;
   onChange: (settings: Record<string, unknown>) => void;
+  cuTitlu?: boolean;
 }) {
   const fields = variantMeta(section.kind, section.variant)?.fields ?? [];
   if (fields.length === 0) return null;
@@ -34,8 +37,8 @@ export function SectionSettings({
     !f.showIf || section.settings[f.showIf.key] === f.showIf.equals;
 
   return (
-    <div className="mt-4 pt-3 border-t border-border space-y-3">
-      <p className="text-xs font-semibold text-foreground">Setari</p>
+    <div className={cuTitlu ? "mt-4 pt-3 border-t border-border space-y-3" : "pt-4 space-y-4"}>
+      {cuTitlu && <p className="text-xs font-semibold text-foreground">Setari</p>}
       {fields.filter(vizibil).map((f) => (
         <Control key={f.key} field={f} value={valoare(f)} onChange={(v) => seteaza(f.key, v)} />
       ))}

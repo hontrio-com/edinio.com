@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PreviewHeightReporter } from "@/components/storefront/PreviewHeightReporter";
 import { SectionPreviewFrame } from "@/components/storefront/SectionPreviewFrame";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData } from "@/lib/storefront/chrome-value";
@@ -88,10 +89,19 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
     <StorefrontThemeScope style={resolved.style}>
       <SectionPreviewFrame
         chrome={chrome}
-        section={{ id: `preview_${kind}`, kind, variant: variantParam, enabled: true, settings: {} }}
+        section={{
+          id: `preview_${kind}`,
+          kind,
+          variant: variantParam,
+          enabled: true,
+          // Cu setarile implicite ale variantei, ca miniatura sa arate exact ce
+          // primeste comerciantul daca o alege.
+          settings: { ...(variantMeta(kind, variantParam)?.defaults ?? {}) },
+        }}
         products={(products ?? []).map(slimCatalogProduct)}
         categories={categories ?? []}
       />
+      <PreviewHeightReporter />
     </StorefrontThemeScope>
   );
 }

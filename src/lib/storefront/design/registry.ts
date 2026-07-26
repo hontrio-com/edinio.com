@@ -61,7 +61,7 @@ export interface ActionState {
   on: boolean;
 }
 
-export type VariantTag = "clasic" | "minimal" | "bold" | "cu imagine" | "compact" | "editorial";
+export type VariantTag = "clasic" | "simplu" | "indraznet" | "cu imagine" | "compact" | "elegant";
 
 export interface VariantMeta {
   label: string;
@@ -202,10 +202,10 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: false,
     variants: {
-      classic: { label: "Clasic", tags: ["clasic"], layout: "full", previewHeight: 70, fields: [] },
+      classic: { label: "Simplu", tags: ["clasic"], layout: "full", previewHeight: 70, fields: [] },
       search: {
-        label: "Cu bara de cautare",
-        tags: ["bold"],
+        label: "Cu bara mare de cautare",
+        tags: ["indraznet"],
         layout: "full",
         // Cauta in catalog direct din header, cu selector de categorie. Pe pagina
         // de magazin filtreaza pe loc; de pe alte pagini duce acolo cu `?q=`.
@@ -216,8 +216,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: HEADER_DEFAULTS,
       },
       centered: {
-        label: "Simetric, cu logo centrat",
-        tags: ["editorial", "clasic"],
+        label: "Logo la mijloc",
+        tags: ["elegant", "clasic"],
         layout: "full",
         // Randul cu contact, logo si iconite, plus randul de meniu.
         previewHeight: 148,
@@ -228,8 +228,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { ...HEADER_DEFAULTS, showContact: true },
       },
       editorial: {
-        label: "Editorial, cu banda de anunt dedesubt",
-        tags: ["editorial", "minimal"],
+        label: "Elegant, cu mesaj derulant",
+        tags: ["elegant", "simplu"],
         layout: "full",
         // Bara de contact, randul cu logo si meniu, banda de anunt.
         previewHeight: 144,
@@ -241,8 +241,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { ...HEADER_DEFAULTS, showTopBar: true },
       },
       wedge: {
-        label: "Banda inchisa cu pana colorata",
-        tags: ["bold", "minimal"],
+        label: "Fundal inchis, colt colorat",
+        tags: ["indraznet", "simplu"],
         layout: "full",
         previewHeight: 88,
         fields: [
@@ -260,8 +260,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { ...HEADER_DEFAULTS, menuAlign: "centru" },
       },
       market: {
-        label: "Magazin mare, trei randuri",
-        tags: ["bold"],
+        label: "Magazin mare, cu categorii",
+        tags: ["indraznet"],
         layout: "full",
         // Bara de servicii, randul principal cu cautare lata si bara de
         // categorii + meniu + telefon.
@@ -284,8 +284,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
       },
       pills: {
-        label: "Pastile si cerculete",
-        tags: ["bold", "compact"],
+        label: "Rotunjit, cu butoane colorate",
+        tags: ["indraznet", "compact"],
         layout: "full",
         // Banda pe fundalul paginii, cu pastila de categorii, cautare rotunjita
         // cu buton colorat, buton conturat de actiune si iconite in cerculete.
@@ -314,8 +314,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { ...HEADER_DEFAULTS, showAction: true, actionLabel: "Reduceri" },
       },
       nav: {
-        label: "Meniu inline, cos evidentiat",
-        tags: ["minimal", "editorial"],
+        label: "Meniu langa logo",
+        tags: ["simplu", "elegant"],
         layout: "full",
         // Meniul sta langa logo, cautarea deschide un panou in loc sa ocupe
         // spatiu permanent, iar cosul e o pastila inchisa cu totalul in ea.
@@ -333,7 +333,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: false,
     variants: {
-      dark: { label: "Placa neagra", tags: ["clasic", "bold"], layout: "full", previewHeight: 460, fields: [] },
+      dark: { label: "Fundal inchis", tags: ["clasic", "indraznet"], layout: "full", previewHeight: 460, fields: [] },
     },
   },
 
@@ -347,8 +347,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     variants: {
       banners: { label: "Bannere", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 420, fields: [] },
       overlay: {
-        label: "Overlay cu gradient",
-        tags: ["clasic", "cu imagine", "bold"],
+        label: "Imagine cu text peste",
+        tags: ["clasic", "cu imagine", "indraznet"],
         layout: "full",
         previewHeight: 420,
         providesH1: true,
@@ -373,7 +373,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      classic: { label: "Bara completa", tags: ["clasic"], layout: "contained", fields: [] },
+      classic: { label: "Cautare, sortare si filtre", tags: ["clasic"], layout: "contained", fields: [] },
     },
   },
   category_nav: {
@@ -383,7 +383,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      classic: { label: "Pastile si cercuri", tags: ["clasic"], layout: "contained", fields: [] },
+      classic: { label: "Butoane rotunde", tags: ["clasic"], layout: "contained", fields: [] },
     },
   },
   shipping_progress: {
@@ -393,7 +393,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      banner: { label: "Banner", tags: ["clasic", "compact"], layout: "contained", fields: [] },
+      banner: { label: "Bara de progres", tags: ["clasic", "compact"], layout: "contained", fields: [] },
     },
   },
   product_row: {

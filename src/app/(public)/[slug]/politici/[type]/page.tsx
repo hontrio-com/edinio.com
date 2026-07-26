@@ -5,7 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
-import { ArrowLeft } from "lucide-react";
+import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData } from "@/lib/storefront/chrome-value";
+import { resolveDesign } from "@/lib/storefront/design/parse";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
 
 const POLICY_META: Record<string, { label: string; key: string }> = {
   termeni:          { label: "Termeni si conditii",           key: "terms" },
@@ -44,7 +48,7 @@ export default async function PolicyPage({ params }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, business_name, store_name, primary_color, logo_url, address, city, county, phone, email, cui, custom_domain")
+    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
     .eq("slug", slug)
     .single();
 
@@ -52,7 +56,7 @@ export default async function PolicyPage({ params }: Props) {
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("store_policies")
+    .select("store_policies, page_content, storefront_design")
     .eq("business_id", business.id)
     .single();
 
@@ -92,58 +96,41 @@ export default async function PolicyPage({ params }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
+  // Header-ul si footerul magazinului, ca pe orice alta pagina publica. Pana
+  // acum pagina avea doar un link „Inapoi la magazin" si nu afisa insignele
+  // ANPC, desi tocmai aici sunt cele mai cautate. Logo-ul si drepturile de autor
+  // din continut au disparut: le are acum chrome-ul.
+  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const resolved = resolveDesign(storeSettings?.storefront_design, {
+    primaryColor: color,
+    pageContent: pageContent as Record<string, unknown>,
+    features: (business.features as Record<string, unknown>) ?? {},
+    coverUrl: business.cover_url,
+    tagline: business.tagline,
+  });
+  const chrome = buildChromeData({ business: business as never, pageContent, basePath });
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
-          <a
-            href={`${basePath}/`}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Inapoi la magazin
-          </a>
-        </div>
-      </header>
+    <StorefrontThemeScope style={resolved.style}>
+      <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
+        <main className="max-w-3xl w-full mx-auto px-4 py-10 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">{meta.label}</h1>
+          <div className="w-12 h-1 rounded-full mb-8" style={{ backgroundColor: color }} />
 
-      <main className="max-w-3xl mx-auto px-4 py-10">
-        {/* Business branding — free logo, like the storefront header (no frame, no name) */}
-        <div className="flex items-center mb-8">
-          {business.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={business.logo_url} alt={business.store_name ?? business.business_name}
-              style={{ height: 40, maxWidth: 40 * 4.2 }} className="w-auto object-contain" />
-          ) : (
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
-              style={{ backgroundColor: color }}>
-              {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
+          {!showContent ? (
+            <div className="text-center py-20 border border-dashed border-border rounded-2xl">
+              <p className="text-muted-foreground text-sm">
+                Aceasta politica nu este disponibila momentan.
+              </p>
             </div>
+          ) : (
+            <div
+              className="policy-content text-sm text-foreground"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
+            />
           )}
-        </div>
-
-        <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">{meta.label}</h1>
-        <div className="w-12 h-1 rounded-full mb-8" style={{ backgroundColor: color }} />
-
-        {!showContent ? (
-          <div className="text-center py-20 border border-dashed border-border rounded-2xl">
-            <p className="text-muted-foreground text-sm">
-              Aceasta politica nu este disponibila momentan.
-            </p>
-          </div>
-        ) : (
-          <div
-            className="policy-content text-sm text-foreground"
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
-          />
-        )}
-
-        <div className="mt-12 pt-6 border-t border-border text-center">
-          <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}. Toate drepturile rezervate.
-          </p>
-        </div>
-      </main>
-    </div>
+        </main>
+      </StorePageShell>
+    </StorefrontThemeScope>
   );
 }

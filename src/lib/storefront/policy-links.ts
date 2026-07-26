@@ -1,10 +1,10 @@
 /**
  * Paginile de politici pe care storefrontul le expune la `/{slug}/politici/{tip}`.
  *
- * Etichetele sunt cele folosite de pagina de magazin. `StoreFooter` (paginile
- * custom) are inca propria copie, cu formulari usor diferite („Confidentialitate"
- * fata de „Politica de confidentialitate"); cele doua se unifica la unificarea
- * footerelor, unde alegerea schimba text vizibil si trebuie facuta explicit.
+ * Etichetele erau declarate de doua ori, cu formulari usor diferite
+ * („Confidentialitate" fata de „Politica de confidentialitate"). Au ramas cele
+ * lungi, mai explicite, si sunt acum singurele — footerul e unul singur pe toate
+ * paginile publice.
  */
 export const POLICY_LINKS = [
   { slug: "termeni", label: "Termeni si conditii" },

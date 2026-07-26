@@ -28,6 +28,24 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const PROD = "https://www.edinio.com";
 
+/** `data-dpl-id` e id-ul deployment-ului Vercel: difera prin definitie. */
+const DEFAULT_ALLOW = ["data-dpl-id"];
+
+/**
+ * Valori generate aleator la fiecare randare, care nu pot coincide niciodata.
+ * Se inlocuiesc cu un tipar fix in AMBELE documente, inainte de comparare —
+ * altfel ar aparea ca diferenta la fiecare rulare.
+ *
+ * Deocamdata doar contorul de social proof al paginii de produs
+ * (`ProductPage`: `18 + Math.floor(Math.random() * 10)`).
+ */
+function neutralizeazaAleator(html) {
+  return html.replace(
+    /(<span class="text-foreground font-bold">)\d+(<\/span>\s*persoane se uita acum)/g,
+    "$1N$2",
+  );
+}
+
 function bypassSecret() {
   try {
     const line = readFileSync(path.join(ROOT, ".env.local"), "utf8")
@@ -67,7 +85,8 @@ function normalize(html) {
  * poate da doua forme la doua cereri consecutive. Le scoatem, altfel comparatia
  * raporteaza zgomot in loc de regresii.
  */
-function bodyMarkup(html) {
+function bodyMarkup(raw) {
+  const html = neutralizeazaAleator(raw);
   const body = html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
   return normalize(body ? body[1] : html)
     .replace(/<div hidden="?"?>[\s\S]*?<\/div>/gi, "")
@@ -139,7 +158,7 @@ function diff(a, b, maxDiffs) {
 
 const args = process.argv.slice(2);
 const previewBase = args[0];
-const allow = args.filter((a) => a.startsWith("--allow=")).map((a) => a.slice(8));
+const allow = [...DEFAULT_ALLOW, ...args.filter((a) => a.startsWith("--allow=")).map((a) => a.slice(8))];
 const slugs = args.slice(1).filter((a) => !a.startsWith("--"));
 
 if (!previewBase || slugs.length === 0) {
@@ -166,10 +185,24 @@ for (const slug of slugs) {
     continue;
   }
 
-  const permis = (d) => allow.some((t) => d.productie.includes(t) || d.preview.includes(t));
+  /**
+   * Magazinele cu domeniu propriu se vad in productie la radacina domeniului
+   * (`basePath` gol), iar pe preview la `/{slug}` — deci fiecare link intern
+   * difera prin prefix. Il scoatem, altfel fiecare `<a>` din pagina apare ca
+   * diferenta. La fel, adresa canonica ramane a domeniului propriu in productie
+   * si devine cea de pe edinio.com pe preview: e corect asa, deci o permitem.
+   */
+  const domeniuPropriu = new URL(prod.url).host !== new URL(PROD).host;
+  const dezprefixeaza = (html) =>
+    domeniuPropriu
+      ? html.replaceAll(`="/${slug}/`, '="/').replaceAll(`="/${slug}"`, '="/')
+      : html;
+
+  const permiseAcum = domeniuPropriu ? [...allow, "og:url", "canonical", "og:image"] : allow;
+  const permis = (d) => permiseAcum.some((t) => d.productie.includes(t) || d.preview.includes(t));
 
   const a = tokenize(bodyMarkup(prod.body));
-  const b = tokenize(bodyMarkup(prev.body));
+  const b = tokenize(dezprefixeaza(bodyMarkup(prev.body)));
   const corp = diff(a, b, 200);
   const cap = diff(metaTags(prod.body), metaTags(prev.body), 50);
 
@@ -177,7 +210,8 @@ for (const slug of slugs) {
   const permise = corp.length + cap.length - reale.length;
 
   const stare = reale.length === 0 ? "IDENTIC" : `${reale.length} DIFERENTE`;
-  console.log(`\n${slug}: ${stare}  (${a.length} taguri productie, ${b.length} preview, ${permise} permise)`);
+  const nota = domeniuPropriu ? `, domeniu propriu ${new URL(prod.url).host}` : "";
+  console.log(`\n${slug}: ${stare}  (${a.length} taguri productie, ${b.length} preview, ${permise} permise${nota})`);
 
   if (reale.length) {
     esecuri++;

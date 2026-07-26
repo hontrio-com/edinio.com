@@ -11,11 +11,12 @@ import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-da
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { isNonProductionHost } from "@/lib/storefront/host";
+import { resolveDesign } from "@/lib/storefront/design/parse";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
 
-interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string }>; }
+interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string }>; }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -97,8 +98,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SlugPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, preview: previewParam } = await searchParams;
   const initialPage = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  const isPreview = previewParam === "1";
   const supabase = await createClient();
 
   const [{ data: business }, { data: { user } }] = await Promise.all([
@@ -181,7 +183,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ),
     createAdminClient()
       .from("store_settings")
-      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
+      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, storefront_design_draft")
       .eq("business_id", business.id)
       .single(),
     fetchAllRows("storefront.home.categories", (from, to) =>
@@ -254,6 +256,20 @@ export default async function SlugPage({ params, searchParams }: Props) {
     }
   }
 
+  // Designul magazinului. Ciorna se randeaza DOAR pentru proprietar si doar in
+  // preview: pana la Publica, vizitatorii vad neaparat versiunea publicata.
+  const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
+  const resolved = resolveDesign(
+    useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design,
+    {
+      primaryColor: business.primary_color ?? "#1AB554",
+      pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
+      features: (business.features as Record<string, unknown>) ?? {},
+      coverUrl: business.cover_url,
+      tagline: business.tagline,
+    },
+  );
+
   const displayName = business.store_name ?? business.business_name;
   const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
   const storeJsonLd = {
@@ -287,6 +303,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
         basePath={basePath}
         categories={categoriesData}
         initialPage={initialPage}
+        design={resolved.design}
+        designStyle={resolved.style}
       />
     </>
   );

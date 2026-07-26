@@ -37,6 +37,8 @@ import { VariantQuickAdd, type QuickAddLine } from "./VariantQuickAdd";
 import { parseVariants } from "@/lib/storefront/variants";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type Product = Pick<
@@ -1267,6 +1269,14 @@ interface Props {
   basePath?: string;
   categories?: CategoryNode[];
   initialPage?: number;
+  /**
+   * Configuratia de design (sectiuni + variante) si stilul rezolvat, calculate
+   * server-side. Cat timp exista o singura varianta per sectiune — cea „classic",
+   * identica cu ce era hardcodat aici — `design` inca nu decide randarea; doar
+   * `designStyle` are efect, prin variabilele CSS de pe StorefrontThemeScope.
+   */
+  design: StoreDesign;
+  designStyle: ResolvedStyle;
 }
 
 // Hero banners. One banner keeps the molded look (complete image, any ratio).
@@ -1470,7 +1480,7 @@ function CategoryScroller({ children, className }: { children: ReactNode; classN
   );
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1 }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, designStyle }: Props) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -1960,7 +1970,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   });
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: pageContent.store_bg_color || "var(--color-background)" }}>
+    <StorefrontThemeScope style={designStyle} className="min-h-screen">
       {/* Announcement bar */}
       {showAnnouncementOnStore && announcementBar && (
         <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
@@ -2892,7 +2902,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             onClick={(e) => e.stopPropagation()} />
         </div>
       )}
-    </div>
+    </StorefrontThemeScope>
   );
 }
 

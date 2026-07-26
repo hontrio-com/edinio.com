@@ -12,6 +12,10 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData } from "@/lib/storefront/chrome-value";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
@@ -235,22 +239,42 @@ export default async function SlugPage({ params, searchParams }: Props) {
       const opsDe = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
       const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 1, max: opsDe.max_days ?? 3 } : { min: 1, max: 3 };
       const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max });
+      // Modul „un singur produs": nu exista catalog in spate, deci butonul de
+      // cos din header n-are unde sa duca.
+      const opsResolved = resolveDesign(storeSettings?.storefront_design, {
+        primaryColor: business.primary_color ?? "#1AB554",
+        pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
+        features: (business.features as Record<string, unknown>) ?? {},
+        coverUrl: business.cover_url,
+        tagline: business.tagline,
+      });
+      const opsChrome = buildChromeData({
+        business,
+        pageContent: (storeSettings?.page_content ?? {}) as StorePageContent,
+        basePath,
+        cartMode: "hidden",
+        hasStickyBottomBar: true,
+      });
       return (
         <>
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(opsJsonLd) }}
           />
-          <ProductPage
-            business={business}
-            product={product}
-            storeSettings={storeSettings as never}
-            basePath={basePath}
-            hasCardPayment={hasCardPayment}
-            bundleComponents={bundleComponents}
-            altMap={altMap}
-            isHome
-          />
+          <StorefrontThemeScope style={opsResolved.style}>
+            <StorePageShell chrome={opsChrome} design={opsResolved.design} className="min-h-screen">
+              <ProductPage
+                business={business}
+                product={product}
+                storeSettings={storeSettings as never}
+                basePath={basePath}
+                hasCardPayment={hasCardPayment}
+                bundleComponents={bundleComponents}
+                altMap={altMap}
+                isHome
+              />
+            </StorePageShell>
+          </StorefrontThemeScope>
         </>
       );
     }

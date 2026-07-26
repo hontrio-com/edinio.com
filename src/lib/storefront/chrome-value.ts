@@ -31,12 +31,14 @@ export function buildChromeData({
   basePath,
   cartMode = "link",
   currentPageSlug = null,
+  hasStickyBottomBar = false,
 }: {
   business: Business;
   pageContent: StorePageContent;
   basePath: string;
   cartMode?: CartMode;
   currentPageSlug?: string | null;
+  hasStickyBottomBar?: boolean;
 }): StoreChromeData {
   return {
     business,
@@ -51,5 +53,6 @@ export function buildChromeData({
       pageContent.show_announcement_on_store !== false && pageContent.announcement_bar?.enabled === true,
     cartMode,
     currentPageSlug,
+    hasStickyBottomBar,
   };
 }

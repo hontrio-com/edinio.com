@@ -5,18 +5,13 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
-  ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Globe, Star, Eye,
+  ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Star, Eye,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
-import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { OrderModal } from "./OrderModal";
 import type { QuantityTier } from "./OrderModal";
-import { NetopiaBadge } from "./NetopiaBadge";
-import { CompanyIdentity } from "./CompanyIdentity";
-import { EdinioCredit } from "./EdinioCredit";
-import { StoreHeader } from "./StoreHeader";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
 import { ProductOffers } from "./ProductOffers";
@@ -224,16 +219,6 @@ function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayme
   );
 }
 
-interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; website?: string; }
-
-const POLICY_LINKS = [
-  { slug: "termeni", label: "Termeni si conditii" },
-  { slug: "livrare", label: "Politica de livrare" },
-  { slug: "retur", label: "Politica de retur" },
-  { slug: "confidentialitate", label: "Politica de confidentialitate" },
-  { slug: "gdpr", label: "GDPR" },
-  { slug: "anulare", label: "Politica de anulare" },
-] as const;
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
@@ -267,7 +252,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
 
   const color = business.primary_color ?? "#1AB554";
-  const social = (business.social as Social) ?? {};
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   const freeShippingThreshold = storeSettings?.free_shipping_threshold
@@ -287,7 +271,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const hasLongDesc = !!product.description && product.description !== "<p></p>";
   const topBlurb = hasShortDesc ? shortDesc : (hasLongDesc ? product.description : null);
 
-  const announcementBar = pageContent.announcement_bar;
   const trustBadgesEnabled = pageContent.trust_badges_enabled !== false;
   const benefitsSection = pageContent.benefits_section;
   const howItWorksSection = pageContent.how_it_works_section;
@@ -773,33 +756,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Announcement bar */}
-      {announcementBar?.enabled && (
-        <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
-          style={{ background: announcementBar.bg_color || color }}>
-          <div className="flex whitespace-nowrap">
-            {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className="inline-block text-xs font-medium tracking-wide text-white"
-                style={{ animation: `marquee ${[80, 50, 30, 18, 10][(announcementBar.speed ?? 3) - 1]}s linear infinite` }}>
-                {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Full store header (logo + menu + phone + cart) — same as the homepage.
-          One Product Store: no catalog/cart behind this page — hide the cart link. */}
-      <StoreHeader
-        business={{ slug: business.slug, business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, primary_color: color, phone: business.phone }}
-        menu={pageContent.menu ?? []}
-        basePath={basePath}
-        logoSize={pageContent.logo_size ?? 36}
-        topClass={announcementBar?.enabled ? "top-9" : "top-0"}
-        showCart={!isHome}
-      />
-
+    <>
       {/* Breadcrumb back to catalog (restores the catalog page the visitor left from) */}
       {!isHome && (
         <div className="bg-surface/80 border-b border-border">
@@ -1027,119 +984,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         </section>
       )}
 
-      {/* Footer */}
-      <footer className="bg-[#0A0A0A] text-white">
-        <div className="max-w-6xl mx-auto px-5 pt-10 pb-24 sm:pt-12 lg:pb-6">
-          {/* Top row: brand + social */}
-          <div className="flex items-center justify-between gap-4 pb-8">
-            <div className="flex items-center gap-3 min-w-0">
-              {business.logo_url ? (
-                /* Free logo: full image at any ratio, merchant-set height, no box/crop. */
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
-                  style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
-                  className="w-auto object-contain shrink-0" />
-              ) : (
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
-                  style={{ backgroundColor: color }}>
-                  {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="font-semibold text-sm text-white truncate">{business.store_name ?? business.business_name}</p>
-                {business.store_city && <p className="text-[11px] text-white/40">{business.store_city}</p>}
-              </div>
-            </div>
-            {(social.instagram || social.facebook || social.tiktok || social.website) && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                {social.instagram && (
-                  <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                    </svg>
-                  </a>
-                )}
-                {social.facebook && (
-                  <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
-                    </svg>
-                  </a>
-                )}
-                {social.tiktok && (
-                  <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
-                    </svg>
-                  </a>
-                )}
-                {social.website && (
-                  <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <Globe className="h-3.5 w-3.5" />
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-surface/[0.06]" />
-
-          {/* Middle: policies + consumer protection */}
-          <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
-            {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
-            <CompanyIdentity business={business} />
-            <div className="flex-1">
-              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
-              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-                {/* Funcția de retragere din contract — obligatorie conform OUG 18/2026 */}
-                <a href={`${basePath}/retur`}
-                  className="text-[13px] text-white/70 hover:text-white transition-colors font-medium">
-                  Retrage-te din contract
-                </a>
-                {POLICY_LINKS.map(({ slug: pSlug, label }) => (
-                  <a key={pSlug} href={`${basePath}/politici/${pSlug}`}
-                    className="text-[13px] text-white/50 hover:text-white transition-colors">
-                    {label}
-                  </a>
-                ))}
-              </div>
-            </div>
-            <div className="shrink-0">
-              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Protectia consumatorilor</p>
-              <div className="flex items-center gap-3">
-                <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
-                  className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
-                  <Image src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
-                </a>
-                <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
-                  className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
-                  <Image src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
-                </a>
-              </div>
-            </div>
-
-            {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
-            <NetopiaBadge businessId={business.id} />
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-surface/[0.06]" />
-
-          {/* Bottom: copyright */}
-          <div className="pt-5 flex items-center justify-between gap-3">
-            <p className="text-[11px] text-white/25">
-              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
-            </p>
-            <EdinioCredit businessId={business.id} color={color} className="text-[11px] text-white/25" />
-          </div>
-        </div>
-      </footer>
-
       {/* Sticky bottom bar (mobile) */}
       {!modalOpen && (
         <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-surface border-t border-border shadow-2xl px-4 py-3"
@@ -1192,6 +1036,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         onCartConsumed={() => { try { localStorage.removeItem(`cart_${business.slug}`); } catch {} }}
         fbtOffer={fbtOffer}
       />
-    </div>
+    </>
   );
 }

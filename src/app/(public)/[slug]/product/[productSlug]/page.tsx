@@ -11,6 +11,11 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { ProductPage } from "@/components/ministore/ProductPage";
 import { resolveProductOffers } from "@/lib/offers/offers";
+import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData } from "@/lib/storefront/chrome-value";
+import { resolveDesign } from "@/lib/storefront/design/parse";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
 
 interface Props {
   params: Promise<{ slug: string; productSlug: string }>;
@@ -121,7 +126,7 @@ export default async function ProductDetailPage({ params }: Props) {
   // store_settings is no longer anon-readable — fetch the public-safe columns via service role.
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design")
     .eq("business_id", business.id)
     .single();
 
@@ -159,6 +164,23 @@ export default async function ProductDetailPage({ params }: Props) {
   const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max });
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
 
+  // Acelasi header si footer ca pe pagina de magazin, din aceeasi configuratie.
+  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const resolved = resolveDesign(storeSettings?.storefront_design, {
+    primaryColor: business.primary_color ?? "#1AB554",
+    pageContent: pageContent as Record<string, unknown>,
+    features: (business.features as Record<string, unknown>) ?? {},
+    coverUrl: business.cover_url,
+    tagline: business.tagline,
+  });
+  const chrome = buildChromeData({
+    business: business as never,
+    pageContent,
+    basePath,
+    // Bara de cumparare lipita jos acopera subsolul pe mobil.
+    hasStickyBottomBar: true,
+  });
+
   return (
     <>
       <script
@@ -169,16 +191,20 @@ export default async function ProductDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <ProductPage
-        business={business as never}
-        product={product}
-        storeSettings={storeSettings as never}
-        basePath={basePath}
-        hasCardPayment={hasCardPayment}
-        bundleComponents={bundleComponents}
-        altMap={altMap}
-        productOffers={productOffers}
-      />
+      <StorefrontThemeScope style={resolved.style}>
+        <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen">
+          <ProductPage
+            business={business as never}
+            product={product}
+            storeSettings={storeSettings as never}
+            basePath={basePath}
+            hasCardPayment={hasCardPayment}
+            bundleComponents={bundleComponents}
+            altMap={altMap}
+            productOffers={productOffers}
+          />
+        </StorePageShell>
+      </StorefrontThemeScope>
     </>
   );
 }

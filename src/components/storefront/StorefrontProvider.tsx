@@ -59,6 +59,12 @@ export interface StoreChromeValue {
   menu: MenuItem[];
   /** Header-ul se aseaza sub bara de anunt cand aceasta exista. */
   hasAnnouncementBar: boolean;
+  /**
+   * Pagina are o bara lipita jos care acopera subsolul pe mobil (pagina de
+   * produs). Orice varianta de footer trebuie sa lase loc pentru ea, altfel
+   * bara taie ultimele randuri.
+   */
+  hasStickyBottomBar?: boolean;
 
   /**
    * Pe pagina de magazin cosul se deschide ca sertar; pe celelalte pagini

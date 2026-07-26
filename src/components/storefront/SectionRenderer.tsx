@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import dynamic from "next/dynamic";
 import { groupSections } from "@/lib/storefront/design/group-sections";
 import { SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
 import { useStoreChrome } from "./StorefrontProvider";
@@ -22,22 +23,31 @@ import { GalleryClassic } from "./sections/content/GalleryClassic";
 import { ReviewsClassic } from "./sections/content/ReviewsClassic";
 
 /**
+ * Variantele care nu sunt „classic" se incarca la cerere.
+ *
+ * Un magazin foloseste cate o varianta per sectiune, iar catalogul creste spre
+ * cateva zeci. Importate static, toate ar ajunge in bundle-ul fiecarui magazin;
+ * asa, fiecare descarca doar ce a ales. Variantele classic raman statice: le
+ * foloseste covarsitor majoritatea, si nu merita un chunk separat.
+ */
+const HeaderSearch = dynamic(
+  () => import("./sections/chrome/HeaderSearch").then((m) => m.HeaderSearch),
+  { ssr: true },
+);
+
+/**
  * Randeaza sectiunile paginii de magazin in ordinea din configuratie.
  *
- * Dispecerul e pe `kind`, nu pe `kind:variant`: azi fiecare tip are exact o
- * implementare. Alegerea variantei intra aici cand un tip primeste a doua —
- * registry-ul poarta deja metadatele de care are nevoie editorul.
- *
- * Importurile sunt statice cat timp exista doar variantele „classic". Cand incep
- * sa apara variantele noi, tot ce nu e classic trece pe import dinamic, ca un
- * magazin sa descarce doar ce foloseste.
+ * Dispecerul alege dupa tip si, unde exista mai multe, dupa varianta. O varianta
+ * necunoscuta (scoasa din catalog intre timp) cade pe „classic" — parserul o
+ * curata oricum la urmatoarea salvare.
  */
 function SectionOne({ section }: { section: SectionInstance }) {
   switch (section.kind) {
     case "announcement":
       return <AnnouncementMarquee />;
     case "header":
-      return <HeaderClassic />;
+      return section.variant === "search" ? <HeaderSearch /> : <HeaderClassic />;
     case "footer":
       return <FooterDark />;
     case "hero":

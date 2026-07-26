@@ -7,7 +7,7 @@ import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
-import { buildChromeData } from "@/lib/storefront/chrome-value";
+import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 
@@ -108,7 +108,9 @@ export default async function PolicyPage({ params }: Props) {
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
-  const chrome = buildChromeData({ business: business as never, pageContent, basePath });
+  const searchCategories = await loadSearchCategories(business.id, resolved.design.chrome.header.variant);
+  const chrome = buildChromeData({
+    searchCategories, business: business as never, pageContent, basePath });
 
   return (
     <StorefrontThemeScope style={resolved.style}>

@@ -25,28 +25,32 @@ export function CatalogToolbar() {
     activeFilterCount,
     resetFilters,
     filteredProducts,
+    headerHasSearch,
   } = useStorefront();
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="search"
-            placeholder="Cauta produse..."
-            value={search}
-            onChange={(e) => {
-              const v = e.target.value;
-              // O cautare noua porneste inapoi pe ordonarea dupa relevanta.
-              if (search === "" && v !== "") setSortTouched(false);
-              setSearch(v);
-            }}
-            className="w-full pl-10 pr-4 py-3 text-sm border border-border rounded-2xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-          />
-        </div>
+        {/* Cand header-ul are deja o caseta de cautare, aici ar fi a doua. */}
+        {!headerHasSearch && (
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="search"
+              placeholder="Cauta produse..."
+              value={search}
+              onChange={(e) => {
+                const v = e.target.value;
+                // O cautare noua porneste inapoi pe ordonarea dupa relevanta.
+                if (search === "" && v !== "") setSortTouched(false);
+                setSearch(v);
+              }}
+              className="w-full pl-10 pr-4 py-3 text-sm border border-border rounded-2xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+            />
+          </div>
+        )}
 
-        <div className="relative w-full md:w-auto shrink-0">
+        <div className={`relative shrink-0 ${headerHasSearch ? "flex-1 md:flex-none md:w-auto" : "w-full md:w-auto"}`}>
           <ArrowUpDown className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <select aria-label="Sorteaza produsele" value={effectiveSort}
             onChange={(e) => {

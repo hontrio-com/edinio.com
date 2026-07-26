@@ -13,11 +13,13 @@ import {
   moveSection,
   removeSection,
   toggleSection,
+  updateSection,
 } from "@/lib/storefront/design/edit";
 import { PREVIEW_MESSAGE, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
 import { sectionMeta } from "@/lib/storefront/design/registry";
 import type { DesignContext, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { SectionList } from "./SectionList";
+import { VariantPicker } from "./VariantPicker";
 
 type Dispozitiv = "mobil" | "tableta" | "desktop";
 
@@ -149,6 +151,13 @@ export function StoreDesignEditor({
     toast.success("Modificarile au fost anulate");
   }
 
+  const toateSectiunile = [
+    ...(design.chrome.announcement ? [design.chrome.announcement] : []),
+    design.chrome.header,
+    ...design.home,
+    design.chrome.footer,
+  ];
+  const sectiuneSelectata = toateSectiunile.find((s) => s.id === selectat) ?? null;
   const deAdaugat = addableKinds(design);
   const areModificari = stare === "ciorna" || stare === "salvez";
 
@@ -171,12 +180,7 @@ export function StoreDesignEditor({
 
         <div className="flex-1 overflow-y-auto p-3">
           <SectionList
-            sections={[
-              ...(design.chrome.announcement ? [design.chrome.announcement] : []),
-              design.chrome.header,
-              ...design.home,
-              design.chrome.footer,
-            ]}
+            sections={toateSectiunile}
             selectedId={selectat}
             onSelect={selecteaza}
             onMove={(from, to) => {
@@ -189,6 +193,15 @@ export function StoreDesignEditor({
             onDuplicate={(id) => aplica(duplicateSection(design, id))}
             onRemove={(id) => aplica(removeSection(design, id))}
           />
+
+          {sectiuneSelectata && (
+            <div className="mt-4">
+              <VariantPicker
+                section={sectiuneSelectata}
+                onPick={(variant) => aplica(updateSection(design, sectiuneSelectata.id, { variant }))}
+              />
+            </div>
+          )}
 
           {deAdaugat.length > 0 && (
             <div className="mt-3">

@@ -32,6 +32,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
+import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
@@ -959,6 +960,9 @@ interface Props {
   basePath?: string;
   categories?: StoreCategoryNode[];
   initialPage?: number;
+  /** Cautare si categorie venite din adresa (?q=, ?cat=), folosite de header-ul cu cautare. */
+  initialSearch?: string;
+  initialCategory?: string;
   /**
    * Configuratia de design (sectiuni + variante) si stilul rezolvat, calculate
    * server-side. Cat timp exista o singura varianta per sectiune — cea „classic",
@@ -974,15 +978,15 @@ interface Props {
   preview?: boolean;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, design: designProp, designStyle: designStyleProp, preview = false }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", design: designProp, designStyle: designStyleProp, preview = false }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [recoverDiscountCode, setRecoverDiscountCode] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("toate");
+  const [search, setSearch] = useState(initialSearch);
+  const [categoryFilter, setCategoryFilter] = useState(initialCategory);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
   // Variable product whose option picker is open (grid quick-add).
@@ -1415,6 +1419,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     setSortTouched,
     effectiveSort,
     hasSearchMatches: searchMatches !== null,
+    headerHasSearch: variantMeta("header", design.chrome.header.variant)?.replacesCatalogSearch === true,
 
     filtersOpen,
     setFiltersOpen,

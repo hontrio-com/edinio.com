@@ -1,3 +1,5 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+import { variantMeta } from "@/lib/storefront/design/registry";
 import type { CartMode, StoreChromeValue } from "@/components/storefront/StorefrontProvider";
 import type {
   StoreFeatures,
@@ -32,6 +34,7 @@ export function buildChromeData({
   cartMode = "link",
   currentPageSlug = null,
   hasStickyBottomBar = false,
+  searchCategories,
 }: {
   business: Business;
   pageContent: StorePageContent;
@@ -39,6 +42,7 @@ export function buildChromeData({
   cartMode?: CartMode;
   currentPageSlug?: string | null;
   hasStickyBottomBar?: boolean;
+  searchCategories?: string[];
 }): StoreChromeData {
   return {
     business,
@@ -54,5 +58,26 @@ export function buildChromeData({
     cartMode,
     currentPageSlug,
     hasStickyBottomBar,
+    searchCategories,
   };
+}
+
+/**
+ * Categoriile de nivel intai, dar numai daca varianta de header aleasa le
+ * foloseste. Un header fara selector de categorie n-are de ce sa produca o
+ * interogare in plus pe fiecare pagina de produs.
+ */
+export async function loadSearchCategories(
+  businessId: string,
+  headerVariant: string,
+): Promise<string[] | undefined> {
+  if (variantMeta("header", headerVariant)?.needsCategories !== true) return undefined;
+  const { data } = await createAdminClient()
+    .from("categories")
+    .select("name")
+    .eq("business_id", businessId)
+    .is("parent_id", null)
+    .order("sort_order")
+    .limit(50);
+  return (data ?? []).map((c) => c.name);
 }

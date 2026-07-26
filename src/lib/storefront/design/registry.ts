@@ -61,6 +61,17 @@ export interface VariantMeta {
   layout: "contained" | "full";
   /** Varianta afiseaza deja un H1 vizibil (conteaza doar la hero). */
   providesH1?: boolean;
+  /**
+   * Varianta are nevoie de lista categoriilor de nivel intai. Paginile fara
+   * catalog o incarca doar cand asa ceva e ales — altfel ar fi o interogare in
+   * plus pe fiecare pagina de produs, degeaba.
+   */
+  needsCategories?: boolean;
+  /**
+   * Varianta contine deja o caseta de cautare, deci cea din sectiunea de catalog
+   * se ascunde. Fara asta, pagina de magazin ar avea doua casete una sub alta.
+   */
+  replacesCatalogSearch?: boolean;
   fields: Field[];
   defaults?: Record<string, unknown>;
 }
@@ -105,6 +116,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: false,
     variants: {
       classic: { label: "Clasic", tags: ["clasic"], layout: "full", fields: [] },
+      search: {
+        label: "Cu bara de cautare",
+        tags: ["bold"],
+        layout: "full",
+        // Cauta in catalog direct din header, cu selector de categorie. Pe pagina
+        // de magazin filtreaza pe loc; de pe alte pagini duce acolo cu `?q=`.
+        needsCategories: true,
+        replacesCatalogSearch: true,
+        fields: [],
+      },
     },
   },
   footer: {

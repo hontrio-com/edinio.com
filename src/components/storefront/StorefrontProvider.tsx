@@ -75,6 +75,12 @@ export interface StoreChromeValue {
   openCart: () => void;
   /** Slug-ul paginii curente, pentru starea activa din meniu. */
   currentPageSlug?: string | null;
+  /**
+   * Categoriile de nivel intai, pentru variantele de header care au un selector
+   * de categorie langa cautare. Se incarca doar cand varianta aleasa are nevoie
+   * de ele — nu punem o interogare in plus pe fiecare pagina degeaba.
+   */
+  searchCategories?: string[];
   /** Galeria foto poate aparea pe orice pagina, deci lightbox-ul sta aici. */
   openLightbox: (url: string) => void;
   /**
@@ -106,6 +112,8 @@ export interface StorefrontContextValue extends StoreChromeValue {
   /** „relevance" cat timp exista o cautare si nu s-a ales explicit alta sortare. */
   effectiveSort: string;
   hasSearchMatches: boolean;
+  /** Varianta de header aleasa are deja o caseta de cautare. */
+  headerHasSearch: boolean;
 
   // --- Filtre --------------------------------------------------------------
   filtersOpen: boolean;
@@ -173,6 +181,17 @@ export function useStorefront(): StorefrontContextValue {
   const ctx = useContext(CatalogContext);
   if (!ctx) throw new Error("useStorefront must be inside StorefrontProvider");
   return ctx;
+}
+
+/**
+ * Starea de catalog daca exista, altfel `null`.
+ *
+ * Pentru componente care apar pe toate paginile dar se comporta diferit acolo
+ * unde exista catalog — de exemplu un header cu cautare, care filtreaza pe loc
+ * pe pagina de magazin si navigheaza catre ea de oriunde altundeva.
+ */
+export function useStorefrontOptional(): StorefrontContextValue | null {
+  return useContext(CatalogContext);
 }
 
 /** Doar identitatea magazinului: pagina de produs, pagini custom, politici. */

@@ -8,7 +8,7 @@ import { storeBaseUrl } from "@/lib/seo";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
-import { buildChromeData } from "@/lib/storefront/chrome-value";
+import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { BlockRenderer } from "@/components/pages/BlockRenderer";
@@ -141,7 +141,9 @@ export default async function CustomPage({ params }: Props) {
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
+  const searchCategories = await loadSearchCategories(business.id, resolved.design.chrome.header.variant);
   const chrome = buildChromeData({
+    searchCategories,
     business,
     pageContent: pageContent as StorePageContent,
     basePath,

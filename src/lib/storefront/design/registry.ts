@@ -146,6 +146,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       icons: { label: "Iconite", tags: ["clasic", "compact"], layout: "full", fields: [] },
     },
   },
+  catalog_toolbar: {
+    label: "Cautare si filtre",
+    icon: "Search",
+    scope: "home",
+    singleton: true,
+    removable: true,
+    variants: {
+      classic: { label: "Bara completa", tags: ["clasic"], layout: "contained", fields: [] },
+    },
+  },
   category_nav: {
     label: "Categorii",
     icon: "LayoutGrid",

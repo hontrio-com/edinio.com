@@ -143,6 +143,9 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
 
   home.push(section("usp", "usp_strip", "icons", bool(pc.show_trust_strip_on_store)));
 
+  // Bara de cautare/sortare/filtre e prima in zona cu container, exact ca azi.
+  home.push(section("toolbar", "catalog_toolbar", "classic"));
+
   // Pastilele de categorii si cercurile cu imagini sunt, in layout-ul de azi,
   // doua zone lipite una de alta — o singura sectiune cu varianta „classic".
   home.push(section("categories", "category_nav", "classic"));

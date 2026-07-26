@@ -85,29 +85,30 @@ export function FeaturedRowClassic() {
 }
 
 /**
- * Randurile curate de comerciant din editor. Fiecare isi aduce singur produsele
- * din lista deja incarcata; cele goale sunt deja eliminate din context.
- * Randurile pe categorie primesc un link „Vezi toate" catre catalogul filtrat.
+ * Un rand curat de comerciant din editor, identificat prin id-ul lui.
+ *
+ * Fiecare rand e o sectiune de sine statatoare, ca sa poata fi mutata
+ * independent in lista de sectiuni. Produsele vin din lista deja incarcata;
+ * randurile fara produse sunt deja eliminate din context, deci lipsa lui aici
+ * inseamna „nimic de afisat".
  */
-export function CustomProductRows() {
+export function CustomProductRow({ sectionId }: { sectionId: string }) {
   const { productSections, viewAllCategory } = useStorefront();
+  const rand = productSections.find((x) => x.section.id === sectionId);
+  if (!rand) return null;
 
+  const { section, items } = rand;
   return (
-    <>
-      {productSections.map(({ section, items }) => (
-        <ProductRowClassic
-          key={section.id}
-          title={section.title || "Produse"}
-          items={items}
-          layout={section.layout === "carousel" ? "carousel" : "grid"}
-          headerGap="gap-3"
-          onViewAll={
-            section.mode === "category" && section.category
-              ? () => viewAllCategory(section.category!)
-              : undefined
-          }
-        />
-      ))}
-    </>
+    <ProductRowClassic
+      title={section.title || "Produse"}
+      items={items}
+      layout={section.layout === "carousel" ? "carousel" : "grid"}
+      headerGap="gap-3"
+      onViewAll={
+        section.mode === "category" && section.category
+          ? () => viewAllCategory(section.category!)
+          : undefined
+      }
+    />
   );
 }

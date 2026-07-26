@@ -201,8 +201,8 @@ for (const { nume, ctx } of FIXTURES) {
     assert.deepEqual(
       h.filter((s) => s.kind !== "product_row" || s.id === "featured").map((s) => s.kind),
       [
-        "hero", "usp_strip", "category_nav", "shipping_progress", "product_row",
-        "product_grid", "benefits", "reviews", "gallery", "about", "contact",
+        "hero", "usp_strip", "catalog_toolbar", "category_nav", "shipping_progress",
+        "product_row", "product_grid", "benefits", "reviews", "gallery", "about", "contact",
       ],
       "ordinea sectiunilor",
     );

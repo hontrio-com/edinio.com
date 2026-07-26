@@ -35,6 +35,7 @@ export const CHROME_KINDS = ["announcement", "header", "footer"] as const;
 export const HOME_KINDS = [
   "hero",
   "usp_strip",
+  "catalog_toolbar",
   "category_nav",
   "shipping_progress",
   "product_row",

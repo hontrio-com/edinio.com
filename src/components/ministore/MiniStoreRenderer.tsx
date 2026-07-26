@@ -31,24 +31,10 @@ import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, lineKey, useCart } from "@/components/storefront/cart/CartProvider";
-import { ShippingProgressBanner } from "@/components/storefront/sections/shipping/ShippingProgressBanner";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { BenefitsClassic } from "@/components/storefront/sections/content/BenefitsClassic";
-import { ReviewsClassic } from "@/components/storefront/sections/content/ReviewsClassic";
-import { GalleryClassic } from "@/components/storefront/sections/content/GalleryClassic";
-import { AboutClassic } from "@/components/storefront/sections/content/AboutClassic";
-import { ContactClassic } from "@/components/storefront/sections/content/ContactClassic";
-import { AnnouncementMarquee } from "@/components/storefront/sections/chrome/AnnouncementMarquee";
-import { HeaderClassic } from "@/components/storefront/sections/chrome/HeaderClassic";
-import { UspStripIcons } from "@/components/storefront/sections/chrome/UspStripIcons";
-import { HeroClassic } from "@/components/storefront/sections/hero/HeroClassic";
-import { FooterDark } from "@/components/storefront/sections/chrome/FooterDark";
-import { CustomProductRows, FeaturedRowClassic } from "@/components/storefront/sections/products/ProductRowClassic";
-import { CategoryNavClassic } from "@/components/storefront/sections/catalog/CategoryNavClassic";
-import { CatalogToolbar } from "@/components/storefront/sections/catalog/CatalogToolbar";
-import { ProductGridClassic } from "@/components/storefront/sections/catalog/ProductGridClassic";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
+import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
 import type {
   StoreCategoryNode,
   StoreFeatures,
@@ -982,7 +968,7 @@ interface Props {
   designStyle: ResolvedStyle;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, designStyle }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, design, designStyle }: Props) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -1469,30 +1455,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   return (
     <StorefrontProvider value={storefront}>
     <StorefrontThemeScope style={designStyle} className="min-h-screen">
-      <AnnouncementMarquee />
-      <HeaderClassic />
-      <HeroClassic />
-      <UspStripIcons />
+      <ChromeSection section={design.chrome.announcement} />
+      <ChromeSection section={design.chrome.header} />
 
-      <main className="max-w-6xl mx-auto px-4 py-10">
-        <CatalogToolbar />
+      <SectionRenderer sections={design.home} />
 
-        <CategoryNavClassic />
-
-        <ShippingProgressBanner />
-        <FeaturedRowClassic />
-        <CustomProductRows />
-
-        <ProductGridClassic />
-
-        <BenefitsClassic />
-        <ReviewsClassic />
-        <GalleryClassic />
-        <AboutClassic />
-        <ContactClassic />
-      </main>
-
-      <FooterDark />
+      <ChromeSection section={design.chrome.footer} />
 
       {/* Floating buttons */}
       <div className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}`}>

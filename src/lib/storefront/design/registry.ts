@@ -47,7 +47,19 @@ export type Field =
   | (FieldBase & { type: "icon" })
   | (FieldBase & { type: "products" })
   | (FieldBase & { type: "category" })
-  | (FieldBase & { type: "repeater"; itemLabel: string; fields: Field[]; max?: number });
+  | (FieldBase & { type: "repeater"; itemLabel: string; fields: Field[]; max?: number })
+  /**
+   * Lista de actiuni care se pot reordona si stinge una cate una — iconitele din
+   * header, de exemplu. Valoarea salvata e `{ key, on }[]`, deci o actiune
+   * stinsa isi pastreaza locul si revine acolo cand e reaprinsa.
+   */
+  | (FieldBase & { type: "actions"; options: { value: string; label: string }[] });
+
+/** O intrare din valoarea unui camp `actions`. */
+export interface ActionState {
+  key: string;
+  on: boolean;
+}
 
 export type VariantTag = "clasic" | "minimal" | "bold" | "cu imagine" | "compact" | "editorial";
 
@@ -108,6 +120,69 @@ const PRODUCT_ROW_FIELDS: Field[] = [
   { key: "title", type: "text", label: "Titlu", placeholder: "Recomandate", maxLength: 80 },
 ];
 
+/**
+ * Iconitele de actiune dintr-un header, in ordinea implicita.
+ *
+ * Lista e comuna tuturor variantelor, ca setarea sa insemne acelasi lucru
+ * oriunde: cine muta cosul inaintea telefonului gaseste aceeasi optiune si dupa
+ * ce schimba designul header-ului.
+ */
+export const HEADER_ACTIONS = [
+  { value: "cautare", label: "Cautare" },
+  { value: "telefon", label: "Telefon" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "cos", label: "Cos" },
+];
+
+export type HeaderAction = "cautare" | "telefon" | "whatsapp" | "cos";
+
+/**
+ * Setarile pe care le au toate variantele de header.
+ *
+ * Fontul nu e o familie libera, ci alegerea intre cele doua deja incarcate de
+ * magazin (titluri sau text). O a treia familie doar pentru meniu ar insemna un
+ * fisier de font in plus descarcat de fiecare vizitator, pentru cateva cuvinte.
+ */
+const HEADER_FIELDS: Field[] = [
+  {
+    key: "actions",
+    type: "actions",
+    label: "Iconite",
+    help: "Ordinea si care se vad. Cele fara date completate lipsesc oricum.",
+    options: HEADER_ACTIONS,
+  },
+  {
+    key: "menuFont",
+    type: "select",
+    label: "Fontul meniului",
+    options: [
+      { value: "body", label: "Ca textul magazinului" },
+      { value: "heading", label: "Ca titlurile" },
+    ],
+  },
+  {
+    key: "menuCase",
+    type: "select",
+    label: "Scrierea meniului",
+    options: [
+      { value: "normal", label: "Normala" },
+      { value: "majuscule", label: "Majuscule spatiate" },
+    ],
+  },
+];
+
+/**
+ * Variantele cu bara de cautare permanenta n-au si o lupa printre iconite, deci
+ * nici optiunea de a o ordona.
+ */
+const HEADER_FIELDS_BARA: Field[] = HEADER_FIELDS.map((f) =>
+  f.key === "actions" && f.type === "actions"
+    ? { ...f, options: HEADER_ACTIONS.filter((o) => o.value !== "cautare") }
+    : f,
+);
+
+const HEADER_DEFAULTS = { menuFont: "body", menuCase: "normal" };
+
 export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   // --- Chrome -------------------------------------------------------------
   announcement: {
@@ -137,7 +212,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 120,
         needsCategories: true,
         replacesCatalogSearch: true,
-        fields: [],
+        fields: HEADER_FIELDS_BARA,
+        defaults: HEADER_DEFAULTS,
       },
       centered: {
         label: "Simetric, cu logo centrat",
@@ -146,10 +222,10 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // Randul cu contact, logo si iconite, plus randul de meniu.
         previewHeight: 148,
         fields: [
+          ...HEADER_FIELDS,
           { key: "showContact", type: "toggle", label: "Arata contactul langa logo" },
-          { key: "showSearch", type: "toggle", label: "Arata cautarea" },
         ],
-        defaults: { showContact: true, showSearch: true },
+        defaults: { ...HEADER_DEFAULTS, showContact: true },
       },
       editorial: {
         label: "Editorial, cu banda de anunt dedesubt",
@@ -159,9 +235,10 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 144,
         hostsAnnouncement: true,
         fields: [
+          ...HEADER_FIELDS,
           { key: "showTopBar", type: "toggle", label: "Arata bara de contact" },
         ],
-        defaults: { showTopBar: true },
+        defaults: { ...HEADER_DEFAULTS, showTopBar: true },
       },
       wedge: {
         label: "Banda inchisa cu pana colorata",
@@ -169,7 +246,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         layout: "full",
         previewHeight: 88,
         fields: [
-          { key: "showSearch", type: "toggle", label: "Arata cautarea" },
+          ...HEADER_FIELDS,
           {
             key: "menuAlign",
             type: "select",
@@ -180,7 +257,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
             ],
           },
         ],
-        defaults: { showSearch: true, menuAlign: "centru" },
+        defaults: { ...HEADER_DEFAULTS, menuAlign: "centru" },
       },
       market: {
         label: "Magazin mare, trei randuri",
@@ -192,6 +269,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         needsCategories: true,
         replacesCatalogSearch: true,
         fields: [
+          ...HEADER_FIELDS_BARA,
           { key: "showTopBar", type: "toggle", label: "Arata bara de sus" },
           {
             key: "topText",
@@ -203,7 +281,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           },
           { key: "showHotline", type: "toggle", label: "Arata telefonul in bara de categorii" },
         ],
-        defaults: { showTopBar: true, showHotline: true },
+        defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
       },
       pills: {
         label: "Pastile si cerculete",
@@ -215,6 +293,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         needsCategories: true,
         replacesCatalogSearch: true,
         fields: [
+          ...HEADER_FIELDS_BARA,
           { key: "showAction", type: "toggle", label: "Arata butonul de actiune" },
           {
             key: "actionLabel",
@@ -232,7 +311,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
             showIf: { key: "showAction", equals: true },
           },
         ],
-        defaults: { showAction: true, actionLabel: "Reduceri" },
+        defaults: { ...HEADER_DEFAULTS, showAction: true, actionLabel: "Reduceri" },
       },
       nav: {
         label: "Meniu inline, cos evidentiat",
@@ -242,7 +321,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // spatiu permanent, iar cosul e o pastila inchisa cu totalul in ea.
         previewHeight: 72,
         needsCategories: true,
-        fields: [],
+        fields: HEADER_FIELDS,
+        defaults: HEADER_DEFAULTS,
       },
     },
   },

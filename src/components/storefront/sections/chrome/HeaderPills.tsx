@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, LayoutGrid, Phone, Search, ShoppingCart } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -10,6 +10,7 @@ import { resolveHref } from "@/lib/pages/href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 
 const STROKE = 1.7;
 
@@ -29,7 +30,6 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
     basePath,
     menu,
     pageContent,
-    features,
     hasAnnouncementBar,
     cartMode,
     openCart,
@@ -41,9 +41,9 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const showCall = features.floating_call === true && !!business.phone;
-  const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const acasa = catalog ? "#" : `${basePath}/`;
+
+  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, ["telefon", "whatsapp", "cos"]);
 
   const categorii = catalog
     ? catalog.currentCategoryItems.map((c) => ({ name: c.name, image: c.image }))
@@ -70,8 +70,8 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
               const activ = it.type === "page" && it.target === currentPageSlug;
               return (
                 <a key={it.id} href={menuItemHref(it, basePath)}
-                  className="text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors whitespace-nowrap"
-                  style={activ ? { color: "var(--st-primary)", fontWeight: 600 } : undefined}>
+                  className={`text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors whitespace-nowrap ${meniuCls}`}
+                  style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", fontWeight: 600 } : {}) }}>
                   {it.label}
                 </a>
               );
@@ -110,19 +110,23 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
           )}
 
           <div className="flex items-center gap-1.5 shrink-0 ml-auto lg:ml-0">
-            {showCall && (
-              <a href={`tel:${business.phone}`} aria-label="Suna" className={CERC}>
-                <Phone className="h-[18px] w-[18px]" strokeWidth={STROKE} />
-              </a>
-            )}
-            {showWhatsApp && (
-              <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className={CERC}>
-                <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                </svg>
-              </a>
-            )}
-            <CercCos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />
+            {actiuni.map((a) => (
+              <Fragment key={a}>
+                {a === "telefon" && (
+                  <a href={`tel:${business.phone}`} aria-label="Suna" className={CERC}>
+                    <Phone className="h-[18px] w-[18px]" strokeWidth={STROKE} />
+                  </a>
+                )}
+                {a === "whatsapp" && (
+                  <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className={CERC}>
+                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                    </svg>
+                  </a>
+                )}
+                {a === "cos" && <CercCos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />}
+              </Fragment>
+            ))}
           </div>
         </div>
 

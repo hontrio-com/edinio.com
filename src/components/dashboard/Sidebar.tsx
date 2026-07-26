@@ -18,6 +18,7 @@ const NAV_ITEMS = [
     href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul",
     children: [
       { href: "/dashboard/editor", label: "Design magazin" },
+      { href: "/dashboard/editor/sectiuni", label: "Design sectiuni" },
       { href: "/dashboard/editor/media", label: "Biblioteca Media" },
     ],
   },

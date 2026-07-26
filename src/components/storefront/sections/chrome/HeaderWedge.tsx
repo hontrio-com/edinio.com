@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Phone, Search, ShoppingBag, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
@@ -8,6 +8,7 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 
 const STROKE = 1.7;
 
@@ -27,7 +28,6 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
     basePath,
     menu,
     pageContent,
-    features,
     hasAnnouncementBar,
     cartMode,
     openCart,
@@ -38,11 +38,9 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const showCall = features.floating_call === true && !!business.phone;
-  const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const cuCautare = settings.showSearch !== false;
+  const { actiuni, are, meniuCls, meniuStyle } = useHeaderSettings(settings, ["cautare", "telefon", "whatsapp", "cos"]);
   const meniuStanga = settings.menuAlign === "stanga";
 
   const [cautareDeschisa, setCautareDeschisa] = useState(false);
@@ -61,7 +59,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
           <div className="h-14 lg:h-[88px] flex items-center gap-3 lg:gap-8">
             <div className="lg:hidden flex items-center gap-1 shrink-0">
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
-              {cuCautare && (
+              {are("cautare") && (
                 <button type="button" onClick={() => setCautareDeschisa((v) => !v)} aria-label="Cauta produse"
                   className="w-8 h-8 flex items-center justify-center hover:opacity-70 transition-opacity">
                   <Search className="h-[19px] w-[19px]" strokeWidth={STROKE} />
@@ -85,7 +83,8 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
                 const activ = it.type === "page" && it.target === currentPageSlug;
                 return (
                   <a key={it.id} href={menuItemHref(it, basePath)}
-                    className={`text-[15px] whitespace-nowrap transition-opacity hover:opacity-100 ${activ ? "font-bold opacity-100" : "font-medium opacity-55"}`}>
+                    className={`text-[15px] whitespace-nowrap transition-opacity hover:opacity-100 ${meniuCls} ${activ ? "font-bold opacity-100" : "font-medium opacity-55"}`}
+                    style={meniuStyle}>
                     {it.label}
                   </a>
                 );
@@ -94,32 +93,36 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
 
             {/* Iconitele stau pe pana, deci se coloreaza dupa ea, nu dupa banda. */}
             <div className="flex items-center gap-3 lg:gap-5 shrink-0 ml-auto" style={{ color: "var(--st-primary-contrast)" }}>
-              {cuCautare && (
-                <button type="button" onClick={() => setCautareDeschisa((v) => !v)} aria-label="Cauta produse"
-                  className="hidden lg:flex items-center justify-center hover:opacity-70 transition-opacity">
-                  <Search className="h-[21px] w-[21px]" strokeWidth={STROKE} />
-                </button>
-              )}
-              {showCall && (
-                <a href={`tel:${business.phone}`} aria-label="Suna" className="hidden lg:flex items-center justify-center hover:opacity-70 transition-opacity">
-                  <Phone className="h-[21px] w-[21px]" strokeWidth={STROKE} />
-                </a>
-              )}
-              {showWhatsApp && (
-                <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="Scrie pe WhatsApp"
-                  className="hidden lg:flex items-center justify-center hover:opacity-70 transition-opacity">
-                  <svg viewBox="0 0 24 24" className="h-[21px] w-[21px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                  </svg>
-                </a>
-              )}
-              <Cos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />
+              {actiuni.map((a) => (
+                <Fragment key={a}>
+                  {a === "cautare" && (
+                    <button type="button" onClick={() => setCautareDeschisa((v) => !v)} aria-label="Cauta produse"
+                      className="hidden lg:flex items-center justify-center hover:opacity-70 transition-opacity">
+                      <Search className="h-[21px] w-[21px]" strokeWidth={STROKE} />
+                    </button>
+                  )}
+                  {a === "telefon" && (
+                    <a href={`tel:${business.phone}`} aria-label="Suna" className="hidden lg:flex items-center justify-center hover:opacity-70 transition-opacity">
+                      <Phone className="h-[21px] w-[21px]" strokeWidth={STROKE} />
+                    </a>
+                  )}
+                  {a === "whatsapp" && (
+                    <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="Scrie pe WhatsApp"
+                      className="hidden lg:flex items-center justify-center hover:opacity-70 transition-opacity">
+                      <svg viewBox="0 0 24 24" className="h-[21px] w-[21px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                      </svg>
+                    </a>
+                  )}
+                  {a === "cos" && <Cos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />}
+                </Fragment>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {cuCautare && cautareDeschisa && (
+      {are("cautare") && cautareDeschisa && (
         <PanouCautare basePath={basePath} onInchide={() => setCautareDeschisa(false)} />
       )}
     </header>

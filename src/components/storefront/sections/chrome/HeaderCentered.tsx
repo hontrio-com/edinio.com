@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Mail, Phone, Search, ShoppingBag, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
@@ -8,6 +8,7 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 
 const STROKE = 1.5;
 
@@ -27,7 +28,6 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
     basePath,
     menu,
     pageContent,
-    features,
     hasAnnouncementBar,
     cartMode,
     openCart,
@@ -38,11 +38,10 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const acasa = catalog ? "#" : `${basePath}/`;
 
+  const { actiuni, are, meniuCls, meniuStyle } = useHeaderSettings(settings, ["cautare", "whatsapp", "cos"]);
   const cuContact = settings.showContact !== false;
-  const cuCautare = settings.showSearch !== false;
   const [cauta, setCauta] = useState(false);
 
   return (
@@ -54,7 +53,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
           <div className="flex items-center gap-6 min-w-0">
             <div className="lg:hidden flex items-center gap-1">
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
-              {cuCautare && (
+              {are("cautare") && (
                 <button type="button" onClick={() => setCauta(true)} aria-label="Cauta produse"
                   className="w-8 h-8 flex items-center justify-center text-[var(--st-text)] hover:opacity-60 transition-opacity">
                   <Search className="h-[19px] w-[19px]" strokeWidth={STROKE} />
@@ -84,21 +83,25 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
           </a>
 
           <div className="flex items-center justify-end gap-4 lg:gap-5 text-[var(--st-text)]">
-            {cuCautare && (
-              <button type="button" onClick={() => setCauta(true)} aria-label="Cauta produse"
-                className="hidden lg:flex items-center justify-center hover:opacity-60 transition-opacity">
-                <Search className="h-[22px] w-[22px]" strokeWidth={STROKE} />
-              </button>
-            )}
-            {showWhatsApp && (
-              <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="Scrie pe WhatsApp"
-                className="hidden lg:flex items-center justify-center hover:opacity-60 transition-opacity">
-                <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                </svg>
-              </a>
-            )}
-            <Cos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />
+            {actiuni.map((a) => (
+              <Fragment key={a}>
+                {a === "cautare" && (
+                  <button type="button" onClick={() => setCauta(true)} aria-label="Cauta produse"
+                    className="hidden lg:flex items-center justify-center hover:opacity-60 transition-opacity">
+                    <Search className="h-[22px] w-[22px]" strokeWidth={STROKE} />
+                  </button>
+                )}
+                {a === "whatsapp" && (
+                  <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="Scrie pe WhatsApp"
+                    className="hidden lg:flex items-center justify-center hover:opacity-60 transition-opacity">
+                    <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                    </svg>
+                  </a>
+                )}
+                {a === "cos" && <Cos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />}
+              </Fragment>
+            ))}
           </div>
         </div>
       </div>
@@ -110,8 +113,8 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
               const activ = it.type === "page" && it.target === currentPageSlug;
               return (
                 <a key={it.id} href={menuItemHref(it, basePath)}
-                  className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap"
-                  style={activ ? { color: "var(--st-primary)" } : undefined}>
+                  className={`text-[13px] font-semibold text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`}
+                  style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)" } : {}) }}>
                   {it.label}
                 </a>
               );

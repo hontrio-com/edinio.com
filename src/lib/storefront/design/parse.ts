@@ -131,6 +131,24 @@ function sanitizeField(field: Field, value: unknown): unknown {
       return Array.isArray(value)
         ? value.filter((x): x is string => typeof x === "string" && x.length <= 64).slice(0, MAX_PRODUCT_IDS)
         : undefined;
+    case "actions": {
+      if (!Array.isArray(value)) return undefined;
+      const permise = new Map(field.options.map((o) => [o.value, o.value]));
+      const vazute = new Set<string>();
+      const out: { key: string; on: boolean }[] = [];
+      for (const item of value) {
+        const key = permise.get(obj(item).key as string);
+        if (!key || vazute.has(key)) continue;
+        vazute.add(key);
+        out.push({ key, on: obj(item).on !== false });
+      }
+      // Actiunile lipsa se adauga aprinse la coada: lista salvata trebuie sa
+      // ramana completa, altfel una noua n-ar mai putea fi pornita niciodata.
+      for (const o of field.options) {
+        if (!vazute.has(o.value)) out.push({ key: o.value, on: true });
+      }
+      return out;
+    }
     case "repeater": {
       if (!Array.isArray(value)) return undefined;
       const items = value

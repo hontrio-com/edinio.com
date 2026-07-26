@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, Search, ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -9,6 +9,7 @@ import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -24,13 +25,12 @@ const STROKE = 1.6;
  * magazin, panoul arata sugestii din catalogul deja incarcat si filtreaza la
  * confirmare; de pe alte pagini duce la magazin cu termenul in adresa.
  */
-export function HeaderNav() {
+export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
   const {
     business,
     basePath,
     menu,
     pageContent,
-    features,
     hasAnnouncementBar,
     cartMode,
     openCart,
@@ -43,9 +43,9 @@ export function HeaderNav() {
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const showCall = features.floating_call === true && !!business.phone;
-  const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const acasa = catalog ? "#" : `${basePath}/`;
+
+  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, ["cautare", "telefon", "whatsapp", "cos"]);
 
   const categorii = catalog
     ? catalog.currentCategoryItems.map((c) => ({ name: c.name, image: c.image }))
@@ -79,6 +79,8 @@ export function HeaderNav() {
               basePath={basePath}
               currentPageSlug={currentPageSlug}
               categorii={categorii}
+              meniuCls={meniuCls}
+              meniuStyle={meniuStyle}
             />
 
             <div className="flex items-center gap-1 shrink-0 ml-auto">
@@ -92,26 +94,26 @@ export function HeaderNav() {
                 <Search className="h-[18px] w-[18px]" strokeWidth={STROKE} />
               </button>
 
-              {(showCall || showWhatsApp) && (
-                <span className="hidden sm:block w-px h-5 bg-[var(--st-border)] mx-1.5" aria-hidden="true" />
-              )}
+              {actiuni.map((a) => (
+                <Fragment key={a}>
+                  {a === "telefon" && (
+                    <a href={`tel:${business.phone}`} aria-label="Suna" className={`hidden sm:flex ${iconBtn}`}>
+                      <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+                      </svg>
+                    </a>
+                  )}
+                  {a === "whatsapp" && (
+                    <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className={`hidden sm:flex ${iconBtn}`}>
+                      <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                      </svg>
+                    </a>
+                  )}
 
-              {showCall && (
-                <a href={`tel:${business.phone}`} aria-label="Suna" className={`hidden sm:flex ${iconBtn}`}>
-                  <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
-                  </svg>
-                </a>
-              )}
-              {showWhatsApp && (
-                <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className={`hidden sm:flex ${iconBtn}`}>
-                  <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                  </svg>
-                </a>
-              )}
-
-              <PastilaCos mode={cartMode} count={count} total={total} basePath={basePath} onOpen={openCart} />
+                  {a === "cos" && <PastilaCos mode={cartMode} count={count} total={total} basePath={basePath} onOpen={openCart} />}
+                </Fragment>
+              ))}
             </div>
           </div>
         </div>
@@ -136,11 +138,15 @@ function MeniuInline({
   basePath,
   currentPageSlug,
   categorii,
+  meniuCls,
+  meniuStyle,
 }: {
   menu: MenuItem[];
   basePath: string;
   currentPageSlug?: string | null;
   categorii: { name: string; image: string | null }[];
+  meniuCls: string;
+  meniuStyle: { fontFamily: string };
 }) {
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
@@ -156,10 +162,10 @@ function MeniuInline({
   }, [deschis]);
 
   const link =
-    "text-[15px] font-medium text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap";
+    `text-[15px] font-medium text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`;
 
   return (
-    <nav className="hidden lg:flex items-center gap-7 min-w-0" aria-label="Navigare principala">
+    <nav className="hidden lg:flex items-center gap-7 min-w-0" aria-label="Navigare principala" style={meniuStyle}>
       {categorii.length > 0 && (
         <div ref={zona} className="relative">
           <button type="button" onClick={() => setDeschis((v) => !v)} aria-expanded={deschis}

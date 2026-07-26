@@ -144,10 +144,13 @@ export function AdminUserDetail({ profile, authUser, businesses, invoices, ticke
     setDeleting(true);
     try {
       const res = await fetch(`/api/admin/users/${profile.id}/delete`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Eroare la stergere");
+      }
       toast.success("Utilizator sters");
       router.push("/admin/utilizatori");
-    } catch { toast.error("Eroare la stergere"); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Eroare la stergere"); }
     finally { setDeleting(false); }
   }
 

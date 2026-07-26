@@ -3,9 +3,9 @@
 import { useState, useEffect, useTransition, useMemo, useRef, useCallback, useDeferredValue } from "react";
 import Image from "next/image";
 import {
-  ShoppingCart, X, Plus, Minus, Phone, Search,
-  MapPin, Mail, ChevronRight, ChevronLeft, ChevronDown, Layers, Package, User, Home, Loader2, Banknote, CreditCard,
-  Truck, Check, Filter, ArrowUpDown, Tag, BadgePercent,
+  ShoppingCart, X, Plus, Minus, Phone,
+  MapPin, Mail, ChevronRight, Package, User, Home, Loader2, Banknote, CreditCard,
+  Truck, Check, Tag, BadgePercent,
 } from "lucide-react";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { computeVat, type VatConfig } from "@/lib/utils/vat";
@@ -31,7 +31,6 @@ import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, lineKey, useCart } from "@/components/storefront/cart/CartProvider";
-import { CategoryScroller } from "@/components/storefront/sections/catalog/CategoryScroller";
 import { ShippingProgressBanner } from "@/components/storefront/sections/shipping/ShippingProgressBanner";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { BenefitsClassic } from "@/components/storefront/sections/content/BenefitsClassic";
@@ -45,7 +44,9 @@ import { UspStripIcons } from "@/components/storefront/sections/chrome/UspStripI
 import { HeroClassic } from "@/components/storefront/sections/hero/HeroClassic";
 import { FooterDark } from "@/components/storefront/sections/chrome/FooterDark";
 import { CustomProductRows, FeaturedRowClassic } from "@/components/storefront/sections/products/ProductRowClassic";
-import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
+import { CategoryNavClassic } from "@/components/storefront/sections/catalog/CategoryNavClassic";
+import { CatalogToolbar } from "@/components/storefront/sections/catalog/CatalogToolbar";
+import { ProductGridClassic } from "@/components/storefront/sections/catalog/ProductGridClassic";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import type {
@@ -1105,8 +1106,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const showCall = features.floating_call === true && !!business.phone;
 
-  const showFeaturedSection = pageContent.show_featured_section === true;
-
   const showAnnouncementOnStore = pageContent.show_announcement_on_store !== false && pageContent.announcement_bar?.enabled === true;
 
   const showStickyCartBar = pageContent.sticky_cart_bar?.enabled !== false;
@@ -1123,7 +1122,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // While a search is active and no sort was explicitly chosen, results order
   // by relevance — surfaced as a visible "Relevanta" option in the dropdown.
   const [sortTouched, setSortTouched] = useState(false);
-  const showSort = true;
 
   // Titlul grilei principale depinde de existenta hero-ului: cand pagina nu are
   // hero si nici sectiunea Recomandate, catalogul isi pune propriul titlu.
@@ -1331,57 +1329,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     return list;
   }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
 
-  // Shared filter fields — reused by the desktop inline panel and the mobile sheet.
-  const filterFields = (
-    <>
-      <div>
-        <p className="text-xs font-semibold text-foreground mb-2">Pret (lei)</p>
-        <div className="flex items-center gap-2">
-          <input type="number" inputMode="numeric" min={0} placeholder={`De la ${facets.priceMin}`}
-            value={priceMin} onChange={(e) => setPriceMin(e.target.value)}
-            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
-          <span className="text-muted-foreground">-</span>
-          <input type="number" inputMode="numeric" min={0} placeholder={`Pana la ${facets.priceMax}`}
-            value={priceMax} onChange={(e) => setPriceMax(e.target.value)}
-            className="w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20" />
-        </div>
-      </div>
-
-      {facets.options.map((opt) => (
-        <div key={opt.name}>
-          <p className="text-xs font-semibold text-foreground mb-2">{opt.name}</p>
-          <div className="flex flex-wrap gap-2">
-            {opt.values.map((v) => {
-              const active = (selectedOptions[opt.name] ?? []).includes(v);
-              return (
-                <button key={v} type="button" onClick={() => toggleOption(opt.name, v)}
-                  className="px-3 py-1.5 rounded-full text-sm border transition-colors"
-                  style={active
-                    ? { backgroundColor: color, color: "white", borderColor: color }
-                    : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
-                  {v}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        <button type="button" onClick={() => setOnSaleOnly((v) => !v)}
-          className="px-3 py-1.5 rounded-full text-sm border transition-colors"
-          style={onSaleOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
-          Doar reduceri
-        </button>
-        <button type="button" onClick={() => setInStockOnly((v) => !v)}
-          className="px-3 py-1.5 rounded-full text-sm border transition-colors"
-          style={inStockOnly ? { backgroundColor: color, color: "white", borderColor: color } : { backgroundColor: "transparent", color: "var(--color-foreground)", borderColor: "var(--color-border)" }}>
-          Doar in stoc
-        </button>
-      </div>
-    </>
-  );
-
   const PRODUCTS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
   const paginatedProducts = filteredProducts.slice(
@@ -1457,6 +1404,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     gallery,
     menu,
     hasAnnouncementBar: showAnnouncementOnStore,
+    hasHero,
 
     products,
     visibleProducts,
@@ -1493,6 +1441,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     categories: categories ?? [],
     categoryFilter,
     currentCategoryItems: currentItems,
+    isDrilled: drillParentId !== null,
     drillParentName: drillParent?.name ?? null,
     hasCategories,
     hasAnyCategoryImage,
@@ -1526,321 +1475,15 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       <UspStripIcons />
 
       <main className="max-w-6xl mx-auto px-4 py-10">
-        {/* Search + Sort + Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-5">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="search"
-              placeholder="Cauta produse..."
-              value={search}
-              onChange={(e) => {
-                const v = e.target.value;
-                // A fresh search starts back on relevance ordering.
-                if (search === "" && v !== "") setSortTouched(false);
-                setSearch(v);
-              }}
-              className="w-full pl-10 pr-4 py-3 text-sm border border-border rounded-2xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-            />
-          </div>
-          {showSort && (
-            <div className="relative w-full md:w-auto shrink-0">
-              <ArrowUpDown className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <select aria-label="Sorteaza produsele" value={effectiveSort}
-                onChange={e => {
-                  const v = e.target.value;
-                  if (v === "relevance") setSortTouched(false);
-                  else { setSort(v); setSortTouched(true); }
-                }}
-                style={{ WebkitAppearance: "none", MozAppearance: "none" }}
-                className="h-[46px] w-full md:w-auto appearance-none cursor-pointer pl-10 pr-9 text-sm border border-border rounded-2xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
-                {searchMatches != null && <option value="relevance">Relevanta</option>}
-                <option value="newest">Cele mai noi</option>
-                <option value="price_asc">Pret crescator</option>
-                <option value="price_desc">Pret descrescator</option>
-                <option value="popular">Populare</option>
-                <option value="name_asc">Alfabetic A-Z</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((o) => !o)}
-            className="h-[46px] px-4 w-full md:w-auto justify-center inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"
-            style={filtersOpen || activeFilterCount > 0 ? { borderColor: color, color } : { color: "var(--color-foreground)" }}
-          >
-            <Filter className="h-4 w-4" />
-            Filtre
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: color }}>
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-        </div>
+        <CatalogToolbar />
 
-        {/* Filters — desktop: inline panel */}
-        {filtersOpen && (
-          <div className="hidden md:block mb-6 rounded-2xl border border-border bg-surface p-4 space-y-4">
-            {filterFields}
-            {activeFilterCount > 0 && (
-              <button type="button" onClick={resetFilters}
-                className="text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2">
-                Reseteaza filtrele
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Filters — mobile: bottom sheet */}
-        {filtersOpen && (
-          <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
-            <div className="relative bg-surface rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <p className="text-base font-semibold text-foreground">
-                  Filtre{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-                </p>
-                <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Inchide"
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                {filterFields}
-              </div>
-              <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
-                <button type="button" onClick={resetFilters}
-                  className="px-4 py-2.5 text-sm font-medium border border-border rounded-xl text-foreground hover:bg-muted transition-colors">
-                  Reseteaza
-                </button>
-                <button type="button" onClick={() => setFiltersOpen(false)}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-opacity hover:opacity-90"
-                  style={{ backgroundColor: color }}>
-                  Vezi {filteredProducts.length} {filteredProducts.length === 1 ? "produs" : "produse"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Category filters — pills (no category images), hierarchy-aware.
-            Single horizontally-scrollable row (carousel) so a long list of
-            categories doesn't sprawl into many wrapped rows. */}
-        {hasCategories && !hasAnyCategoryImage && (
-          <CategoryScroller className="mb-6">
-            <div className="flex items-center gap-2 pb-1 w-max mx-auto">
-              {drillParentId ? (
-                <button
-                  type="button"
-                  onClick={goBackCategory}
-                  className="flex-shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
-                  style={{ backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
-                >
-                  <ChevronLeft size={14} /> {drillParent?.name ?? "Inapoi"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={resetCategory}
-                  className="flex-shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
-                  style={categoryFilter === "toate"
-                    ? { backgroundColor: color, color: "white" }
-                    : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
-                >
-                  Toate
-                </button>
-              )}
-              {currentItems.map(item => {
-                const active = categoryFilter === item.name;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => selectCategoryItem(item)}
-                    className="flex-shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all inline-flex items-center gap-1"
-                    style={active
-                      ? { backgroundColor: color, color: "white" }
-                      : { backgroundColor: "transparent", color: "var(--color-muted-foreground)", border: "1px solid var(--color-border)" }}
-                  >
-                    {item.name}{item.hasChildren && <ChevronRight size={13} className="opacity-70" />}
-                  </button>
-                );
-              })}
-            </div>
-          </CategoryScroller>
-        )}
-
-        {/* Category image carousel — circles, hierarchy-aware (drill into subcategories) */}
-        {hasCategories && hasAnyCategoryImage && (
-          <CategoryScroller className="mb-6">
-            <div className="flex gap-4 pb-1 w-max mx-auto">
-              {/* Leading control: Toate (top level) or Inapoi (drilled into a category) */}
-              {drillParentId ? (
-                <button
-                  type="button"
-                  onClick={goBackCategory}
-                  className="flex flex-col items-center gap-2 flex-shrink-0 group"
-                >
-                  <div
-                    className="w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all border-2"
-                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-muted)" }}
-                  >
-                    <ChevronLeft className="w-6 h-6" style={{ color: "var(--color-muted-foreground)" }} />
-                  </div>
-                  <span className="text-xs font-medium text-center leading-tight w-[84px] break-words min-h-[30px]"
-                    style={{ color: "var(--color-muted-foreground)" }}>
-                    {drillParent?.name ?? "Inapoi"}
-                  </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={resetCategory}
-                  className="flex flex-col items-center gap-2 flex-shrink-0 group"
-                >
-                  <div
-                    className="w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all border-2"
-                    style={{
-                      borderColor: categoryFilter === "toate" ? color : "var(--color-border)",
-                      backgroundColor: categoryFilter === "toate" ? `${color}15` : "var(--color-muted)",
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6" style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
-                      <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
-                      <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
-                    </svg>
-                  </div>
-                  <span className="text-xs font-medium text-center leading-tight w-[84px] break-words min-h-[30px]"
-                    style={{ color: categoryFilter === "toate" ? color : "var(--color-muted-foreground)" }}>
-                    Toate
-                  </span>
-                </button>
-              )}
-              {currentItems.map(item => {
-                const active = categoryFilter === item.name;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => selectCategoryItem(item)}
-                    className="flex flex-col items-center gap-2 flex-shrink-0 group"
-                  >
-                    <div
-                      className="relative w-[72px] h-[72px] rounded-full overflow-hidden transition-all border-2"
-                      style={{
-                        borderColor: active ? color : "var(--color-border)",
-                        boxShadow: active ? `0 0 0 2px ${color}40` : "none",
-                      }}
-                    >
-                      {item.image ? (
-                        <Image src={item.image} alt={item.name} fill sizes="72px" className="object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center"
-                          style={{ backgroundColor: active ? `${color}15` : "var(--color-muted)" }}>
-                          <span className="text-lg font-bold" style={{ color: active ? color : "var(--color-muted-foreground)" }}>
-                            {item.name[0]?.toUpperCase()}
-                          </span>
-                        </div>
-                      )}
-                      {item.hasChildren && (
-                        <span className="absolute bottom-0.5 right-0.5 rounded-full bg-surface/95 p-0.5 shadow-sm flex items-center justify-center" style={{ color }}>
-                          <Layers className="w-3 h-3" />
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs font-medium text-center leading-tight w-[84px] break-words min-h-[30px]"
-                      style={{ color: active ? color : "var(--color-muted-foreground)" }}>
-                      {item.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </CategoryScroller>
-        )}
+        <CategoryNavClassic />
 
         <ShippingProgressBanner />
         <FeaturedRowClassic />
         <CustomProductRows />
 
-        {/* Products */}
-        <section id="produse" className="mb-16">
-          {!hasHero && !showFeaturedSection && (
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-foreground">Produse</h2>
-            </div>
-          )}
-          {showFeaturedSection && featuredProducts.length > 0 && filteredProducts.length > 0 && (
-            <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-base font-bold text-foreground">Toate produsele</h2>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-          )}
-          {filteredProducts.length === 0 ? (
-            <div className="text-center py-20 border border-dashed border-border rounded-2xl">
-              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-                <ShoppingCart className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <p className="font-medium text-foreground mb-1">
-                {search || categoryFilter !== "toate" ? "Niciun produs gasit" : "Niciun produs disponibil"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {search || categoryFilter !== "toate" ? "Incearca alta cautare sau categorie." : "Reveniti curand pentru produse noi."}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                {paginatedProducts.map((product, i) => (
-                  <StoreProductCard key={product.id} product={product} priority={i < 4} />
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-8">
-                  <button
-                    onClick={() => { goToPage(Math.max(1, currentPage - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    disabled={currentPage === 1}
-                    className="px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors"
-                  >
-                    Inapoi
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                    .reduce<(number | "dots")[]>((acc, p, i, arr) => {
-                      if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push("dots");
-                      acc.push(p);
-                      return acc;
-                    }, [])
-                    .map((p, i) =>
-                      p === "dots" ? (
-                        <span key={`dots-${i}`} className="px-1 text-muted-foreground">...</span>
-                      ) : (
-                        <button
-                          key={p}
-                          onClick={() => { goToPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                          className="min-w-[36px] h-9 text-sm rounded-lg border transition-colors"
-                          style={currentPage === p
-                            ? { backgroundColor: color, borderColor: color, color: "#fff" }
-                            : { borderColor: "var(--color-border)" }}
-                        >
-                          {p}
-                        </button>
-                      )
-                    )}
-                  <button
-                    onClick={() => { goToPage(Math.min(totalPages, currentPage + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors"
-                  >
-                    Inainte
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+        <ProductGridClassic />
 
         <BenefitsClassic />
         <ReviewsClassic />

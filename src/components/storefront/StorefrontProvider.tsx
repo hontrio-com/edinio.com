@@ -57,6 +57,8 @@ export interface StorefrontContextValue {
   menu: MenuItem[];
   /** Header-ul se aseaza sub bara de anunt cand aceasta exista. */
   hasAnnouncementBar: boolean;
+  /** Catalogul isi pune titlu propriu doar cand pagina n-are hero si nici Recomandate. */
+  hasHero: boolean;
 
   // --- Catalog -------------------------------------------------------------
   /** Lista COMPLETA. Ramane sursa pentru stocul derivat al pachetelor. */
@@ -100,6 +102,8 @@ export interface StorefrontContextValue {
   categories: StoreCategoryNode[];
   categoryFilter: string;
   currentCategoryItems: CategoryItem[];
+  /** Suntem intr-o subcategorie: controlul din fata devine „Inapoi", nu „Toate". */
+  isDrilled: boolean;
   drillParentName: string | null;
   hasCategories: boolean;
   hasAnyCategoryImage: boolean;

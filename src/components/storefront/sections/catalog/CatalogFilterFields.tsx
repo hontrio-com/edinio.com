@@ -1,0 +1,80 @@
+"use client";
+
+import { useStorefront } from "@/components/storefront/StorefrontProvider";
+
+/**
+ * Campurile de filtrare a catalogului: interval de pret, optiunile de varianta
+ * din produse, reduceri si stoc.
+ *
+ * Aceleasi campuri apar in panoul de pe desktop si in foaia de jos de pe mobil,
+ * deci traiesc intr-o singura componenta.
+ */
+export function CatalogFilterFields() {
+  const {
+    color,
+    facets,
+    priceMin,
+    setPriceMin,
+    priceMax,
+    setPriceMax,
+    selectedOptions,
+    toggleOption,
+    onSaleOnly,
+    setOnSaleOnly,
+    inStockOnly,
+    setInStockOnly,
+  } = useStorefront();
+
+  const inputCls =
+    "w-28 px-3 py-2 text-sm border border-border rounded-xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20";
+  const pastila = "px-3 py-1.5 rounded-full text-sm border transition-colors";
+  const inactiv = {
+    backgroundColor: "transparent",
+    color: "var(--color-foreground)",
+    borderColor: "var(--color-border)",
+  };
+  const activ = { backgroundColor: color, color: "white", borderColor: color };
+
+  return (
+    <>
+      <div>
+        <p className="text-xs font-semibold text-foreground mb-2">Pret (lei)</p>
+        <div className="flex items-center gap-2">
+          <input type="number" inputMode="numeric" min={0} placeholder={`De la ${facets.priceMin}`}
+            value={priceMin} onChange={(e) => setPriceMin(e.target.value)} className={inputCls} />
+          <span className="text-muted-foreground">-</span>
+          <input type="number" inputMode="numeric" min={0} placeholder={`Pana la ${facets.priceMax}`}
+            value={priceMax} onChange={(e) => setPriceMax(e.target.value)} className={inputCls} />
+        </div>
+      </div>
+
+      {facets.options.map((opt) => (
+        <div key={opt.name}>
+          <p className="text-xs font-semibold text-foreground mb-2">{opt.name}</p>
+          <div className="flex flex-wrap gap-2">
+            {opt.values.map((v) => {
+              const selectat = (selectedOptions[opt.name] ?? []).includes(v);
+              return (
+                <button key={v} type="button" onClick={() => toggleOption(opt.name, v)}
+                  className={pastila} style={selectat ? activ : inactiv}>
+                  {v}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <button type="button" onClick={() => setOnSaleOnly(!onSaleOnly)}
+          className={pastila} style={onSaleOnly ? activ : inactiv}>
+          Doar reduceri
+        </button>
+        <button type="button" onClick={() => setInStockOnly(!inStockOnly)}
+          className={pastila} style={inStockOnly ? activ : inactiv}>
+          Doar in stoc
+        </button>
+      </div>
+    </>
+  );
+}

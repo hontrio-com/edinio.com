@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Loader2, Monitor, Plus, Smartphone, Tablet, Undo2 } from "lucide-react";
+import { Check, LayoutGrid, Loader2, Monitor, Plus, Smartphone, Tablet, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageIcon } from "@/components/pages/icon-registry";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
@@ -17,11 +17,14 @@ import {
 } from "@/lib/storefront/design/edit";
 import { PREVIEW_MESSAGE, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
 import { sectionMeta } from "@/lib/storefront/design/registry";
-import type { DesignContext, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
+import type { DesignContext, SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { SectionList } from "./SectionList";
-import { VariantPicker } from "./VariantPicker";
+import { DesignGallery } from "./DesignGallery";
 
 type Dispozitiv = "mobil" | "tableta" | "desktop";
+
+/** Cate design-uri are sectiunea. Sub doua, galeria n-are ce arata. */
+const numarVariante = (s: SectionInstance) => Object.keys(sectionMeta(s.kind)?.variants ?? {}).length;
 
 const LATIMI: Record<Dispozitiv, string> = { mobil: "390px", tableta: "768px", desktop: "100%" };
 
@@ -58,6 +61,7 @@ export function StoreDesignEditor({
   const [stare, setStare] = useState<"curat" | "salvez" | "ciorna">(areCiorna ? "ciorna" : "curat");
   const [publica, setPublica] = useState(false);
   const [paletaDeschisa, setPaletaDeschisa] = useState(false);
+  const [galerie, setGalerie] = useState<string | null>(null);
 
   const iframe = useRef<HTMLIFrameElement>(null);
   const gataDePreview = useRef(false);
@@ -158,6 +162,7 @@ export function StoreDesignEditor({
     design.chrome.footer,
   ];
   const sectiuneSelectata = toateSectiunile.find((s) => s.id === selectat) ?? null;
+  const sectiuneGalerie = toateSectiunile.find((s) => s.id === galerie) ?? null;
   const deAdaugat = addableKinds(design);
   const areModificari = stare === "ciorna" || stare === "salvez";
 
@@ -194,13 +199,12 @@ export function StoreDesignEditor({
             onRemove={(id) => aplica(removeSection(design, id))}
           />
 
-          {sectiuneSelectata && (
-            <div className="mt-4">
-              <VariantPicker
-                section={sectiuneSelectata}
-                onPick={(variant) => aplica(updateSection(design, sectiuneSelectata.id, { variant }))}
-              />
-            </div>
+          {sectiuneSelectata && numarVariante(sectiuneSelectata) > 1 && (
+            <button type="button" onClick={() => setGalerie(sectiuneSelectata.id)}
+              className="mt-3 w-full h-11 rounded-xl border border-border bg-surface text-sm font-medium text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center gap-2">
+              <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+              Schimba designul ({numarVariante(sectiuneSelectata)} variante)
+            </button>
           )}
 
           {deAdaugat.length > 0 && (
@@ -240,8 +244,19 @@ export function StoreDesignEditor({
         </div>
       </div>
 
-      {/* Preview */}
-      <div className={`flex-1 flex-col bg-muted/30 ${vedereMobil === "preview" ? "flex" : "hidden lg:flex"}`}>
+      {/* Preview, cu galeria de design-uri deschizandu-se peste el */}
+      <div className={`relative flex-1 flex-col bg-muted/30 ${vedereMobil === "preview" || galerie ? "flex" : "hidden lg:flex"}`}>
+        {sectiuneGalerie && (
+          <DesignGallery
+            section={sectiuneGalerie}
+            slug={slug}
+            onPick={(variant) => {
+              aplica(updateSection(design, sectiuneGalerie.id, { variant }));
+              setGalerie(null);
+            }}
+            onClose={() => setGalerie(null)}
+          />
+        )}
         <div className="px-4 py-2.5 border-b border-border bg-surface flex items-center gap-2">
           <button type="button" onClick={() => setVedereMobil("panou")}
             className="lg:hidden h-9 px-3 rounded-lg border border-border text-sm hover:bg-muted transition-colors">

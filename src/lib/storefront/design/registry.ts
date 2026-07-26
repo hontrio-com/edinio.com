@@ -59,6 +59,12 @@ export interface VariantMeta {
    * `full` se intinde pe toata latimea si isi gestioneaza singura spatierea.
    */
   layout: "contained" | "full";
+  /**
+   * Inaltimea naturala a sectiunii, in px la latime de desktop. Miniatura din
+   * galerie foloseste valoarea ca sa aiba proportia corecta: un header e o
+   * banda joasa, un hero e aproape un ecran.
+   */
+  previewHeight?: number;
   /** Varianta afiseaza deja un H1 vizibil (conteaza doar la hero). */
   providesH1?: boolean;
   /**
@@ -105,7 +111,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      marquee: { label: "Text derulant", tags: ["clasic"], layout: "full", fields: [] },
+      marquee: { label: "Text derulant", tags: ["clasic"], layout: "full", previewHeight: 40, fields: [] },
     },
   },
   header: {
@@ -115,13 +121,14 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: false,
     variants: {
-      classic: { label: "Clasic", tags: ["clasic"], layout: "full", fields: [] },
+      classic: { label: "Clasic", tags: ["clasic"], layout: "full", previewHeight: 70, fields: [] },
       search: {
         label: "Cu bara de cautare",
         tags: ["bold"],
         layout: "full",
         // Cauta in catalog direct din header, cu selector de categorie. Pe pagina
         // de magazin filtreaza pe loc; de pe alte pagini duce acolo cu `?q=`.
+        previewHeight: 120,
         needsCategories: true,
         replacesCatalogSearch: true,
         fields: [],
@@ -135,7 +142,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: false,
     variants: {
-      dark: { label: "Placa neagra", tags: ["clasic", "bold"], layout: "full", fields: [] },
+      dark: { label: "Placa neagra", tags: ["clasic", "bold"], layout: "full", previewHeight: 460, fields: [] },
     },
   },
 
@@ -147,11 +154,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      banners: { label: "Bannere", tags: ["clasic", "cu imagine"], layout: "full", fields: [] },
+      banners: { label: "Bannere", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 420, fields: [] },
       overlay: {
         label: "Overlay cu gradient",
         tags: ["clasic", "cu imagine", "bold"],
         layout: "full",
+        previewHeight: 420,
         providesH1: true,
         fields: [],
       },

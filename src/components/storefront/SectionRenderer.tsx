@@ -142,3 +142,14 @@ export function ChromeSection({ section }: { section: SectionInstance | null }) 
   if (!section || !section.enabled) return null;
   return <Marcata section={section} />;
 }
+
+/**
+ * O singura sectiune, fara marcaje si fara grupare in containere.
+ *
+ * Folosita de miniaturile din galeria de design-uri: fiecare card randeaza
+ * varianta reala, cu logo-ul, culorile si produsele magazinului, ca sa se vada
+ * cum ar arata acolo, nu la un magazin demonstrativ.
+ */
+export function PreviewSection({ section }: { section: SectionInstance }) {
+  return <SectionOne section={section} />;
+}

@@ -10,6 +10,7 @@ import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
+import { isNonProductionHost } from "@/lib/storefront/host";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
@@ -206,8 +207,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  // Fire-and-forget analytics (skip for owner)
-  if (!isOwner) {
+  // Fire-and-forget analytics (skip for owner). Sarita si pe preview/localhost:
+  // acele medii scriu in baza de PRODUCTIE, deci fiecare vizita de test ar
+  // aparea in statisticile comerciantului. Detalii in lib/storefront/host.ts.
+  if (!isOwner && !isNonProductionHost(host)) {
     const ua = headersList.get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     supabase.from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});

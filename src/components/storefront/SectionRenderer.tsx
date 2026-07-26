@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
-import { variantMeta } from "@/lib/storefront/design/registry";
+import { Fragment } from "react";
+import { groupSections } from "@/lib/storefront/design/group-sections";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { AnnouncementMarquee } from "./sections/chrome/AnnouncementMarquee";
 import { FooterDark } from "./sections/chrome/FooterDark";
@@ -71,11 +71,6 @@ function SectionOne({ section }: { section: SectionInstance }) {
   }
 }
 
-/** `full` se intinde pe toata latimea; `contained` primeste containerul paginii. */
-function layoutOf(section: SectionInstance): "contained" | "full" {
-  return variantMeta(section.kind, section.variant)?.layout ?? "contained";
-}
-
 /**
  * Sectiunile pe latime completa se randeaza direct, iar seriile consecutive de
  * sectiuni cu container se grupeaza sub un singur wrapper.
@@ -90,43 +85,25 @@ function layoutOf(section: SectionInstance): "contained" | "full" {
  * spatierea verticala; eventualele serii de dupa sunt simple containere.
  */
 export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
-  const active = sections.filter((s) => s.enabled);
-  const out: ReactNode[] = [];
-  let serie: SectionInstance[] = [];
-  let mainFolosit = false;
-
-  const inchideSerie = () => {
-    if (serie.length === 0) return;
-    const continut = serie.map((s) => <SectionOne key={s.id} section={s} />);
-    const cheie = `grup-${serie[0].id}`;
-    if (!mainFolosit) {
-      mainFolosit = true;
-      out.push(
-        <main key={cheie} className="max-w-6xl mx-auto px-4 py-10">
-          {continut}
-        </main>,
-      );
-    } else {
-      out.push(
-        <div key={cheie} className="max-w-6xl mx-auto px-4 pb-10">
-          {continut}
-        </div>,
-      );
-    }
-    serie = [];
-  };
-
-  for (const s of active) {
-    if (layoutOf(s) === "contained") {
-      serie.push(s);
-      continue;
-    }
-    inchideSerie();
-    out.push(<Fragment key={s.id}><SectionOne section={s} /></Fragment>);
-  }
-  inchideSerie();
-
-  return <>{out}</>;
+  return (
+    <>
+      {groupSections(sections).map((bloc) =>
+        bloc.tip === "full" ? (
+          <Fragment key={bloc.section.id}>
+            <SectionOne section={bloc.section} />
+          </Fragment>
+        ) : bloc.esteMain ? (
+          <main key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 py-10">
+            {bloc.sections.map((s) => <SectionOne key={s.id} section={s} />)}
+          </main>
+        ) : (
+          <div key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 pb-10">
+            {bloc.sections.map((s) => <SectionOne key={s.id} section={s} />)}
+          </div>
+        ),
+      )}
+    </>
+  );
 }
 
 /** Sectiunile fixe de sus si de jos: bara de anunt, header, footer. */

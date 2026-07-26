@@ -46,6 +46,10 @@ const HeaderMarket = dynamic(
   () => import("./sections/chrome/HeaderMarket").then((m) => m.HeaderMarket),
   { ssr: true },
 );
+const HeaderWedge = dynamic(
+  () => import("./sections/chrome/HeaderWedge").then((m) => m.HeaderWedge),
+  { ssr: true },
+);
 
 /**
  * Variantele de header, dupa id-ul din registry.
@@ -60,6 +64,7 @@ const HEADERE: Record<string, VariantaSectiune> = {
   nav: HeaderNav as VariantaSectiune,
   pills: HeaderPills as VariantaSectiune,
   market: HeaderMarket as VariantaSectiune,
+  wedge: HeaderWedge as VariantaSectiune,
 };
 
 /**

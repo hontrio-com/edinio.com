@@ -41,9 +41,19 @@ const PANA_LA = {
   lg: { buton: "lg:hidden", panou: "lg:hidden" },
 } as const;
 
-export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName, panaLa = "md" }: {
+/**
+ * Cum arata butonul. „simplu" e pentru header-ele pe fundal inchis, unde un
+ * patrat cu chenar deschis ar fi o pata luminoasa in mijlocul barii.
+ */
+const STIL_BUTON = {
+  incadrat: "w-9 h-9 rounded-xl border border-border bg-surface hover:bg-muted",
+  simplu: "w-8 h-8 text-current hover:opacity-70",
+} as const;
+
+export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName, panaLa = "md", stil = "incadrat" }: {
   items: MenuItem[]; basePath: string; color: string; currentSlug?: string | null;
   logoUrl?: string | null; storeName: string; panaLa?: keyof typeof PANA_LA;
+  stil?: keyof typeof STIL_BUTON;
 }) {
   const bp = PANA_LA[panaLa];
   const [open, setOpen] = useState(false);
@@ -64,8 +74,8 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
   return (
     <>
       <button type="button" aria-label="Deschide meniul" onClick={() => setOpen(true)}
-        className={`${bp.buton} w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center hover:bg-muted transition-colors shrink-0`}>
-        <Menu className="h-4.5 w-4.5 text-foreground" size={18} />
+        className={`${bp.buton} ${STIL_BUTON[stil]} flex items-center justify-center transition-colors shrink-0`}>
+        <Menu className={stil === "simplu" ? "h-6 w-6" : "h-4.5 w-4.5 text-foreground"} size={stil === "simplu" ? 24 : 18} />
       </button>
 
       {mounted && open && createPortal(

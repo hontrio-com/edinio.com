@@ -133,6 +133,25 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [],
       },
+      wedge: {
+        label: "Banda inchisa cu pana colorata",
+        tags: ["bold", "minimal"],
+        layout: "full",
+        previewHeight: 88,
+        fields: [
+          { key: "showSearch", type: "toggle", label: "Arata cautarea" },
+          {
+            key: "menuAlign",
+            type: "select",
+            label: "Pozitia meniului",
+            options: [
+              { value: "centru", label: "La mijloc" },
+              { value: "stanga", label: "Langa logo" },
+            ],
+          },
+        ],
+        defaults: { showSearch: true, menuAlign: "centru" },
+      },
       market: {
         label: "Magazin mare, trei randuri",
         tags: ["bold"],

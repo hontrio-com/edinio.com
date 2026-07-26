@@ -55,6 +55,8 @@ export interface StorefrontContextValue {
   social: StoreSocial;
   gallery: string[];
   menu: MenuItem[];
+  /** Header-ul se aseaza sub bara de anunt cand aceasta exista. */
+  hasAnnouncementBar: boolean;
 
   // --- Catalog -------------------------------------------------------------
   /** Lista COMPLETA. Ramane sursa pentru stocul derivat al pachetelor. */

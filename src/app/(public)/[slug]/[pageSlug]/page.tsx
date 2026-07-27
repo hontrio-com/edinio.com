@@ -147,6 +147,7 @@ export default async function CustomPage({ params }: Props) {
     business,
     pageContent: pageContent as StorePageContent,
     basePath,
+    design: resolved.design,
     currentPageSlug: page.slug,
   });
 

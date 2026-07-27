@@ -7,10 +7,11 @@ import { whatsappLink } from "@/lib/utils/format";
 import { menuItemHref } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shared/Marquee";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
+import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 
 const STROKE = 1.5;
 
@@ -34,7 +35,6 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
     pageContent,
     social,
     cartMode,
-    openCart,
     currentPageSlug,
   } = useStoreChrome();
   const { count } = useCart();
@@ -127,7 +127,7 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
                       </svg>
                     </a>
                   )}
-                  {a === "cos" && <Cos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />}
+                  {a === "cos" && <Cos mode={cartMode} count={count} />}
                 </Fragment>
               ))}
             </div>
@@ -225,13 +225,9 @@ function CampCautare({ basePath, onInchide }: { basePath: string; onInchide: () 
 function Cos({
   mode,
   count,
-  basePath,
-  onOpen,
 }: {
-  mode: "drawer" | "link" | "hidden";
+  mode: CartMode;
   count: number;
-  basePath: string;
-  onOpen: () => void;
 }) {
   if (mode === "hidden") return null;
 
@@ -248,13 +244,9 @@ function Cos({
   );
 
   const cls = "relative flex items-center justify-center hover:opacity-60 transition-opacity";
-  return mode === "drawer" ? (
-    <button type="button" onClick={onOpen} aria-label="Deschide cosul de cumparaturi" className={cls}>
+  return (
+    <CartControl className={cls}>
       {continut}
-    </button>
-  ) : (
-    <a href={`${basePath}/`} aria-label="Mergi la magazin" className={cls}>
-      {continut}
-    </a>
+    </CartControl>
   );
 }

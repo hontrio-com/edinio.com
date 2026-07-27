@@ -4,6 +4,7 @@ import { Check, Truck } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { computeCartPricing } from "@/lib/storefront/cart/pricing";
 
 /**
  * Bara de progres catre pragul de livrare gratuita, varianta classic.
@@ -16,8 +17,10 @@ export function ShippingProgressBanner() {
   const pornita = pageContent.show_shipping_progress === true && freeShippingThreshold !== null;
   if (!pornita || !freeShippingThreshold) return null;
 
-  const isFree = total >= freeShippingThreshold;
-  const pct = Math.min(100, Math.round((total / freeShippingThreshold) * 100));
+  // Aceeasi aritmetica pe care o folosesc sertarul si paginile de cos.
+  const { shippingIsFree: isFree, freeShippingPct: pct } = computeCartPricing({
+    total, shippingCost: 0, freeShippingThreshold, minOrderAmount: null,
+  });
 
   return (
     <div className="mb-6 p-3.5 rounded-2xl border border-border bg-surface">

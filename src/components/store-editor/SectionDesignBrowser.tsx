@@ -231,6 +231,14 @@ export function SectionDesignBrowser({
                     Acum: {variantaActiva?.label ?? sectiune.variant}
                     {variante.length > 1 && ` - ${variante.length} variante`}
                   </p>
+                  {/* La cos si la comanda, alegerea nu schimba doar aspectul, ci
+                      si drumul clientului prin magazin. Merita spus raspicat,
+                      inainte de a fi publicata. */}
+                  {variantaActiva?.surface === "page" && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Clientii ajung pe o pagina separata, cu adresa proprie. O gasesti si in Pagini.
+                    </p>
+                  )}
                 </div>
 
                 {/* Aproape tot traficul unui magazin vine de pe telefon, deci

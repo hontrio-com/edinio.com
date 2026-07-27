@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { PagesListClient } from "@/components/pages/PagesListClient";
 import type { MenuItem } from "@/lib/pages/menu";
+import { cartOnPage, checkoutOnPage } from "@/lib/storefront/design/commerce";
+import { parseStoreDesign } from "@/lib/storefront/design/parse";
 
 export default async function PagesPage() {
   const supabase = await createClient();
@@ -25,10 +27,30 @@ export default async function PagesPage() {
       .eq("business_id", business.id)
       .order("sort_order")
       .order("created_at"),
-    supabase.from("store_settings").select("page_content").eq("business_id", business.id).single(),
+    supabase
+      .from("store_settings")
+      .select("page_content, storefront_design")
+      .eq("business_id", business.id)
+      .single(),
   ]);
 
   const menu = ((ss?.page_content as { menu?: MenuItem[] } | null)?.menu) ?? [];
 
-  return <PagesListClient business={business} pages={pages ?? []} initialMenu={menu} />;
+  // Cosul si finalizarea comenzii apar in lista ca pagini de sistem, dar numai
+  // designul publicat spune daca sunt pagini adevarate sau panouri peste magazin.
+  const design = parseStoreDesign(ss?.storefront_design, {
+    primaryColor: "#1AB554",
+    pageContent: (ss?.page_content as Record<string, unknown>) ?? {},
+    features: {},
+  });
+
+  return (
+    <PagesListClient
+      business={business}
+      pages={pages ?? []}
+      initialMenu={menu}
+      cosPePagina={cartOnPage(design)}
+      comandaPePagina={checkoutOnPage(design)}
+    />
+  );
 }

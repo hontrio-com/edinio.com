@@ -9,8 +9,9 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
+import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 
 const STROKE = 1.7;
 
@@ -32,7 +33,6 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
     pageContent,
     hasAnnouncementBar,
     cartMode,
-    openCart,
     currentPageSlug,
     searchCategories,
   } = useStoreChrome();
@@ -124,7 +124,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
                     </svg>
                   </a>
                 )}
-                {a === "cos" && <CercCos mode={cartMode} count={count} basePath={basePath} onOpen={openCart} />}
+                {a === "cos" && <CercCos mode={cartMode} count={count} />}
               </Fragment>
             ))}
           </div>
@@ -250,13 +250,9 @@ function CautareRotunjita({ basePath, compact = false }: { basePath: string; com
 function CercCos({
   mode,
   count,
-  basePath,
-  onOpen,
 }: {
-  mode: "drawer" | "link" | "hidden";
+  mode: CartMode;
   count: number;
-  basePath: string;
-  onOpen: () => void;
 }) {
   if (mode === "hidden") return null;
 
@@ -275,13 +271,9 @@ function CercCos({
   const cls = "relative w-10 h-10 rounded-full flex items-center justify-center transition-opacity hover:opacity-85";
   const stil = { backgroundColor: "var(--st-text)", color: "var(--st-surface)" };
 
-  return mode === "drawer" ? (
-    <button type="button" onClick={onOpen} aria-label="Deschide cosul de cumparaturi" className={cls} style={stil}>
+  return (
+    <CartControl className={cls} style={stil}>
       {continut}
-    </button>
-  ) : (
-    <a href={`${basePath}/`} aria-label="Mergi la magazin" className={cls} style={stil}>
-      {continut}
-    </a>
+    </CartControl>
   );
 }

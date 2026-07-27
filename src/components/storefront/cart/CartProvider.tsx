@@ -43,6 +43,16 @@ export interface CartContextValue {
   clear: () => void;
   restoreCart: (items: CartItem[]) => void;
   sessionId: string;
+  /**
+   * Cosul a fost citit din localStorage.
+   *
+   * Pana atunci e gol si pe server, si la prima randare din browser — ceea ce e
+   * corect pentru hidratare, dar inseamna ca „gol" nu inseamna inca „gol".
+   * Paginile de cos si de comanda au nevoie de distinctia asta: fara ea, ar
+   * arata „cosul e gol" pret de un cadru la fiecare incarcare si ar valida
+   * codurile de reducere pe o comanda de zero lei.
+   */
+  hydrated: boolean;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -57,6 +67,7 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
   const STORAGE_KEY = `cart_${slug}`;
   const [items, setItems] = useState<CartItem[]>([]);
   const [sessionId, setSessionId] = useState("");
+  const [hydrated, setHydrated] = useState(false);
 
   // Cosul se citeste din localStorage DUPA montare, nu la initializarea starii:
   // pe server nu exista localStorage, iar o stare initiala diferita intre server
@@ -69,6 +80,7 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
       if (stored) setItems(JSON.parse(stored));
     } catch {}
     setSessionId(getCartSessionId(slug));
+    setHydrated(true);
   }, [STORAGE_KEY, slug]);
 
   function save(next: CartItem[]) {
@@ -113,7 +125,7 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, total, count, clear, restoreCart, sessionId }}
+      value={{ items, addItem, removeItem, updateQty, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -157,6 +169,8 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
         clear: () => setItems([]),
         restoreCart: setItems,
         sessionId: "",
+        // Cosul demonstrativ e gata din prima randare: nu vine de nicaieri.
+        hydrated: true,
       }}
     >
       {children}

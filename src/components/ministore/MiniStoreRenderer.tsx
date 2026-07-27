@@ -14,6 +14,7 @@ import { parseVariants } from "@/lib/storefront/variants";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
+import { cartHref, cartOnPage, checkoutHref, checkoutOnPage } from "@/lib/storefront/design/commerce";
 import { CartDrawerClassic } from "@/components/storefront/sections/cart/CartDrawerClassic";
 import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
@@ -80,7 +81,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // afara bundle-ului magazinelor care nu l-au ales.
   const CosVarianta = VARIANTE_COS[design.commerce.cartDrawer.variant] ?? CartDrawerClassic;
   const ComandaVarianta = VARIANTE_COMANDA[design.commerce.checkout.variant] ?? CheckoutClassic;
+
+  // Cand comerciantul si-a ales cosul sau finalizarea ca pagini de sine
+  // statatoare, panourile nu se mai monteaza deloc si butoanele navigheaza.
+  // Alegerea e exclusiva prin design: doua drumuri catre acelasi lucru ar
+  // insemna doua fluxuri de urmarit si un client care nu stie unde a ajuns.
+  const cosPePagina = cartOnPage(design);
+  const comandaPePagina = checkoutOnPage(design);
   const basePath = basePathProp ?? `/${business.slug}`;
+  const mergiLaCos = useCallback(() => { window.location.href = cartHref(basePath); }, [basePath]);
+  const mergiLaComanda = useCallback(() => { window.location.href = checkoutHref(basePath); }, [basePath]);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [recoverDiscountCode, setRecoverDiscountCode] = useState<string | null>(null);
@@ -174,6 +184,15 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       if (cancelled || items.length === 0) return;
       restoreCart(items.map((i) => ({ productId: i.product_id, name: i.name, price: i.price, imageUrl: i.image_url ?? null, quantity: i.quantity })));
       if (code) setRecoverDiscountCode(code);
+      // Magazinele cu finalizarea pe pagina n-au ce modal sa deschida: linkul
+      // din emailul de recuperare trebuie sa ajunga tot la formular, deci
+      // navigheaza, ducand codul de reducere mai departe in adresa.
+      if (comandaPePagina) {
+        window.location.href = code
+          ? `${checkoutHref(basePath)}?code=${encodeURIComponent(code)}`
+          : checkoutHref(basePath);
+        return;
+      }
       setCheckoutOpen(true);
     });
     // Clean the URL so a refresh doesn't re-trigger recovery.
@@ -555,9 +574,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
     addToCart: handleAddToCart,
     addedId,
-    cartMode: "drawer",
-    openCart: () => setCartOpen(true),
-    openCheckout: () => setCheckoutOpen(true),
+    cartMode: cosPePagina ? "page" : "drawer",
+    cartHref: cosPePagina ? cartHref(basePath) : undefined,
+    openCart: cosPePagina ? mergiLaCos : () => setCartOpen(true),
+    openCheckout: comandaPePagina ? mergiLaComanda : () => setCheckoutOpen(true),
 
     newBadgeDays,
     showCategoryBadges,
@@ -609,7 +629,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       {showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen && (
         <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-surface border-t border-border shadow-2xl px-4 py-3"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
-          <button type="button" onClick={() => setCartOpen(true)}
+          <button type="button" onClick={cosPePagina ? mergiLaCos : () => setCartOpen(true)}
             className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl text-white font-bold text-sm active:scale-[0.98] transition-transform"
             style={{ backgroundColor: color }}>
             <div className="flex items-center gap-2">
@@ -622,36 +642,46 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       )}
 
       {/* Cart drawer */}
-      <CosVarianta
-        open={cartOpen}
-        onClose={() => setCartOpen(false)}
-        color={color}
-        basePath={basePath}
-        businessId={business.id}
-        onCheckout={() => {
-          setCartOpen(false); setCheckoutOpen(true);
-          fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: cartItemsForTracking.map((i) => i.productId) });
-          ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: cartItemsForTracking.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: i.price, quantity: i.quantity })) });
-          gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
-        }}
-        shippingCost={shippingCost}
-        freeShippingThreshold={freeShippingThreshold}
-        minOrderAmount={minOrderAmount}
-      />
+      {!cosPePagina && (
+        <CosVarianta
+          open={cartOpen}
+          onClose={() => setCartOpen(false)}
+          color={color}
+          basePath={basePath}
+          businessId={business.id}
+          onCheckout={() => {
+            setCartOpen(false);
+            // Cand finalizarea e pe pagina, sertarul duce acolo in loc sa
+            // deschida modalul, iar evenimentele de palnie le trimite PAGINA la
+            // incarcare, nu clicul de aici: altfel ar lipsi pentru cine intra
+            // direct pe adresa si s-ar dubla pentru cine vine din sertar.
+            if (comandaPePagina) { mergiLaComanda(); return; }
+            setCheckoutOpen(true);
+            fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: cartItemsForTracking.map((i) => i.productId) });
+            ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: cartItemsForTracking.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: i.price, quantity: i.quantity })) });
+            gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
+          }}
+          shippingCost={shippingCost}
+          freeShippingThreshold={freeShippingThreshold}
+          minOrderAmount={minOrderAmount}
+        />
+      )}
 
       {/* Checkout modal */}
-      <ComandaVarianta
-        open={checkoutOpen}
-        onClose={() => setCheckoutOpen(false)}
-        color={color}
-        basePath={basePath}
-        businessId={business.id}
-        shippingCost={shippingCost}
-        freeShippingThreshold={freeShippingThreshold}
-        emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
-        initialDiscountCode={recoverDiscountCode}
-        productWeights={productWeights}
-      />
+      {!comandaPePagina && (
+        <ComandaVarianta
+          open={checkoutOpen}
+          onClose={() => setCheckoutOpen(false)}
+          color={color}
+          basePath={basePath}
+          businessId={business.id}
+          shippingCost={shippingCost}
+          freeShippingThreshold={freeShippingThreshold}
+          emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
+          initialDiscountCode={recoverDiscountCode}
+          productWeights={productWeights}
+        />
+      )}
 
       {/* Variant picker (opened by "Alege optiunile" on a variable product card) */}
       <VariantQuickAdd

@@ -28,8 +28,15 @@ import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 
-/** Ce face butonul de cos, dupa pagina pe care ne aflam. */
-export type CartMode = "drawer" | "link" | "hidden";
+/**
+ * Ce face butonul de cos, dupa pagina pe care ne aflam si dupa designul ales.
+ *
+ * `page` inseamna ca magazinul si-a ales cosul ca pagina de sine statatoare:
+ * atunci butonul navigheaza, nu deschide nimic, si o face la fel de pe orice
+ * pagina publica. Valoarea se decide intr-un singur loc,
+ * `lib/storefront/design/commerce.ts`.
+ */
+export type CartMode = "drawer" | "page" | "link" | "hidden";
 
 /** Un element din navigarea pe categorii (pastile si cercuri cu imagini). */
 export interface CategoryItem {
@@ -69,9 +76,11 @@ export interface StoreChromeValue {
   /**
    * Pe pagina de magazin cosul se deschide ca sertar; pe celelalte pagini
    * publice e un link inapoi la magazin, iar in modul „un singur produs" nu
-   * exista deloc.
+   * exista deloc. Cand magazinul si-a ales cosul ca pagina, e `page` peste tot.
    */
   cartMode: CartMode;
+  /** Unde duce butonul de cos in modul `page`. Absent in celelalte moduri. */
+  cartHref?: string;
   openCart: () => void;
   /** Slug-ul paginii curente, pentru starea activa din meniu. */
   currentPageSlug?: string | null;

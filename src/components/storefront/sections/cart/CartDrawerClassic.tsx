@@ -7,6 +7,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { gtagEvent } from "@/lib/marketing";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
+import { computeCartPricing } from "@/lib/storefront/cart/pricing";
 
 /**
  * Sertarul de cos, varianta classic.
@@ -34,12 +35,11 @@ export function CartDrawerClassic({
   inline?: boolean;
 }) {
   const { items, addItem, removeItem, updateQty, total, count } = useCart();
-  const shipping = freeShippingThreshold && total >= freeShippingThreshold ? 0 : shippingCost;
-  const grandTotal = total + shipping;
-  const belowMinOrder = minOrderAmount !== null && total < minOrderAmount;
-  const progressPct = freeShippingThreshold && total < freeShippingThreshold
-    ? Math.round((total / freeShippingThreshold) * 100)
-    : 100;
+  // Aritmetica e comuna cu paginile de cos si cu bara de progres de pe pagina de
+  // magazin: aceleasi numere, oriunde le-ar vedea clientul.
+  const { shipping, grandTotal, belowMinOrder, freeShippingPct: progressPct } = computeCartPricing({
+    total, shippingCost, freeShippingThreshold, minOrderAmount,
+  });
 
   // GA4 view_cart when the drawer opens with items.
   useEffect(() => {

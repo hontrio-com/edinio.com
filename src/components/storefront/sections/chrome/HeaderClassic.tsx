@@ -5,7 +5,8 @@ import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { CartControl, useCartTarget } from "@/components/storefront/sections/_shared/CartControl";
 
 /**
  * Header-ul magazinului, varianta classic: hamburger + logo la stanga, meniu la
@@ -21,7 +22,7 @@ import { useStoreChrome, type CartMode } from "@/components/storefront/Storefron
  * asta, designul ales de comerciant s-ar opri la primul click pe un produs.
  */
 export function HeaderClassic() {
-  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, cartMode, openCart, currentPageSlug } =
+  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, currentPageSlug } =
     useStoreChrome();
   const { count } = useCart();
 
@@ -30,7 +31,11 @@ export function HeaderClassic() {
   const showCall = features.floating_call === true && !!business.phone;
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   // Pe pagina de magazin ancora goala duce in capul paginii fara navigare.
-  const acasa = cartMode === "drawer" ? "#" : `${basePath}/`;
+  // Semnul ca suntem acolo e existenta catalogului, nu modul cosului: cu cosul
+  // pe pagina, `cartMode` e „page" si pe pagina de magazin, iar un link adevarat
+  // ar reincarca pagina si ar sterge filtrele din adresa.
+  const peMagazin = useStorefrontOptional() !== null;
+  const acasa = peMagazin ? "#" : `${basePath}/`;
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>
@@ -75,7 +80,7 @@ export function HeaderClassic() {
               </svg>
             </a>
           )}
-          <CosClassic mode={cartMode} count={count} color={color} basePath={basePath} onOpen={openCart} />
+          <CosClassic count={count} color={color} />
         </div>
       </div>
     </header>
@@ -83,24 +88,13 @@ export function HeaderClassic() {
 }
 
 /**
- * Controlul de cos. Acelasi aspect peste tot; difera doar ce face:
- * sertar pe pagina de magazin, link inapoi la magazin in rest, nimic in modul
- * „un singur produs", unde nu exista catalog.
+ * Controlul de cos. Acelasi aspect peste tot; difera doar ce face — sertar,
+ * pagina de cos, link inapoi la magazin sau nimic. Decizia vine din
+ * `CartControl`, ca sa fie aceeasi in toate variantele de header.
  */
-function CosClassic({
-  mode,
-  count,
-  color,
-  basePath,
-  onOpen,
-}: {
-  mode: CartMode;
-  count: number;
-  color: string;
-  basePath: string;
-  onOpen: () => void;
-}) {
-  if (mode === "hidden") return null;
+function CosClassic({ count, color }: { count: number; color: string }) {
+  const tinta = useCartTarget();
+  if (tinta.fel === "ascuns") return null;
 
   const cls = "relative flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-surface hover:bg-muted transition-colors";
   const continut = (
@@ -110,7 +104,7 @@ function CosClassic({
         <span className="text-sm font-semibold text-foreground tabular-nums">{count}</span>
       ) : (
         <span className="hidden sm:inline text-sm text-muted-foreground">
-          {mode === "drawer" ? "Cos" : "Magazin"}
+          {tinta.textFaraProduse}
         </span>
       )}
       {count > 0 && (
@@ -122,13 +116,9 @@ function CosClassic({
     </>
   );
 
-  return mode === "drawer" ? (
-    <button type="button" aria-label="Deschide cosul de cumparaturi" onClick={onOpen} className={cls}>
+  return (
+    <CartControl className={cls}>
       {continut}
-    </button>
-  ) : (
-    <a href={`${basePath}/`} aria-label="Mergi la magazin" className={cls}>
-      {continut}
-    </a>
+    </CartControl>
   );
 }

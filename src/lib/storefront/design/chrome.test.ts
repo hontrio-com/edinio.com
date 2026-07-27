@@ -85,12 +85,27 @@ test("fiecare design din catalog isi declara inaltimea miniaturii", () => {
   }
 });
 
-test("cosul si formularul de comanda se previzualizeaza la latime de telefon", () => {
-  // Sunt panouri inguste: pe panza de desktop ar fi o fasie intr-un camp gol.
+test("panourile se previzualizeaza la latime de telefon, paginile nu", () => {
+  // Sertarul si modalul sunt panouri inguste: pe panza de desktop ar fi o fasie
+  // intr-un camp gol. Paginile, dimpotriva, trebuie vazute la latimea la care
+  // sunt folosite, deci le lasam comutatorul telefon/calculator.
   for (const kind of ["cart_drawer", "checkout"] as const) {
     const variante = Object.values(SECTION_REGISTRY[kind]?.variants ?? {});
     assert.ok(variante.length > 0);
-    for (const v of variante) assert.equal(v.previewWidth, 390);
+    for (const v of variante) {
+      assert.equal(v.previewWidth, v.surface === "page" ? undefined : 390);
+    }
+  }
+});
+
+test("varianta implicita a cosului si a comenzii ramane panoul", () => {
+  // Parserul cade pe PRIMA varianta declarata cand cea salvata nu se recunoaste.
+  // Daca acolo ar ajunge o varianta de tip pagina, orice magazin cu o
+  // configuratie incompleta si-ar schimba fluxul de cumparare in tacere.
+  for (const kind of ["cart_drawer", "checkout"] as const) {
+    const prima = Object.keys(SECTION_REGISTRY[kind]?.variants ?? {})[0];
+    assert.equal(prima, "classic");
+    assert.notEqual(SECTION_REGISTRY[kind]?.variants.classic.surface, "page");
   }
 });
 

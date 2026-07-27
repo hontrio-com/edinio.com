@@ -5,11 +5,14 @@ import { CartDemoProvider, CartProvider } from "@/components/storefront/cart/Car
 import { PreviewSection } from "@/components/storefront/SectionRenderer";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { CartDrawerClassic } from "@/components/storefront/sections/cart/CartDrawerClassic";
+import { CartPageSection } from "@/components/storefront/sections/cart/CartPageSection";
 import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
+import { CheckoutPageSection } from "@/components/storefront/sections/checkout/CheckoutPageSection";
 import { CHECKOUT_DEMO } from "@/components/storefront/sections/checkout/checkout-preview";
 import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
 import { DEMO_PRAG_TRANSPORT_GRATUIT, DEMO_TRANSPORT, demoCartItems } from "@/lib/storefront/design/demo-content";
+import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import type { StoreCategoryNode as CategoryRow } from "@/lib/storefront/store-content.types";
@@ -146,38 +149,58 @@ export function SectionPreviewFrame({
   // server. `CartProvider`-ul real nu se monteaza deloc pe ramurile astea, ca
   // miniatura sa nu poata atinge cosul comerciantului.
   if (section.kind === "cart_drawer") {
+    // Variantele de tip pagina se randeaza ca pagini, nu ca panouri: acelasi
+    // `surface` din registry care decide si comportamentul in magazin.
+    const caPagina = variantMeta("cart_drawer", section.variant)?.surface === "page";
     return (
       <CartDemoProvider items={demoCartItems()}>
-        <CartDrawerClassic
-          inline
-          open
-          onClose={() => {}}
-          onCheckout={() => {}}
-          color={chrome.color}
-          basePath={chrome.basePath}
-          businessId={chrome.business.id}
-          shippingCost={DEMO_TRANSPORT}
-          freeShippingThreshold={DEMO_PRAG_TRANSPORT_GRATUIT}
-          minOrderAmount={null}
-        />
+        {caPagina ? (
+          <CartPageSection
+            variant={section.variant}
+            settings={section.settings}
+            preview
+            onCheckout={() => {}}
+            color={chrome.color}
+            basePath={chrome.basePath}
+            businessId={chrome.business.id}
+            shippingCost={DEMO_TRANSPORT}
+            freeShippingThreshold={DEMO_PRAG_TRANSPORT_GRATUIT}
+            minOrderAmount={null}
+          />
+        ) : (
+          <CartDrawerClassic
+            inline
+            open
+            onClose={() => {}}
+            onCheckout={() => {}}
+            color={chrome.color}
+            basePath={chrome.basePath}
+            businessId={chrome.business.id}
+            shippingCost={DEMO_TRANSPORT}
+            freeShippingThreshold={DEMO_PRAG_TRANSPORT_GRATUIT}
+            minOrderAmount={null}
+          />
+        )}
       </CartDemoProvider>
     );
   }
 
   if (section.kind === "checkout") {
+    const caPagina = variantMeta("checkout", section.variant)?.surface === "page";
+    const comune = {
+      open: true as const,
+      preview: CHECKOUT_DEMO,
+      onClose: () => {},
+      color: chrome.color,
+      basePath: chrome.basePath,
+      businessId: chrome.business.id,
+      shippingCost: CHECKOUT_DEMO.courierOptions[0]?.price ?? DEMO_TRANSPORT,
+      freeShippingThreshold: DEMO_PRAG_TRANSPORT_GRATUIT,
+      emailFieldConfig: { enabled: true, required: false },
+    };
     return (
       <CartDemoProvider items={demoCartItems()}>
-        <CheckoutClassic
-          open
-          preview={CHECKOUT_DEMO}
-          onClose={() => {}}
-          color={chrome.color}
-          basePath={chrome.basePath}
-          businessId={chrome.business.id}
-          shippingCost={CHECKOUT_DEMO.courierOptions[0]?.price ?? DEMO_TRANSPORT}
-          freeShippingThreshold={DEMO_PRAG_TRANSPORT_GRATUIT}
-          emailFieldConfig={{ enabled: true, required: false }}
-        />
+        {caPagina ? <CheckoutPageSection variant={section.variant} {...comune} /> : <CheckoutClassic {...comune} />}
       </CartDemoProvider>
     );
   }

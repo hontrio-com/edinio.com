@@ -6,8 +6,9 @@ import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
+import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 
 /**
  * Header cu bara de cautare, varianta „search".
@@ -28,7 +29,6 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
     pageContent,
     hasAnnouncementBar,
     cartMode,
-    openCart,
     currentPageSlug,
     searchCategories,
   } = useStoreChrome();
@@ -92,7 +92,7 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
                   </a>
                 )}
 
-                {a === "cos" && <Cos mode={cartMode} count={count} total={total} basePath={basePath} onOpen={openCart} />}
+                {a === "cos" && <Cos mode={cartMode} count={count} total={total} />}
               </Fragment>
             ))}
           </div>
@@ -222,14 +222,10 @@ function Cos({
   mode,
   count,
   total,
-  basePath,
-  onOpen,
 }: {
-  mode: "drawer" | "link" | "hidden";
+  mode: CartMode;
   count: number;
   total: number;
-  basePath: string;
-  onOpen: () => void;
 }) {
   if (mode === "hidden") return null;
 
@@ -249,13 +245,9 @@ function Cos({
   );
 
   const cls = "flex items-center gap-3 pl-1 pr-1 sm:pr-2 h-10 hover:opacity-80 transition-opacity";
-  return mode === "drawer" ? (
-    <button type="button" onClick={onOpen} aria-label="Deschide cosul de cumparaturi" className={cls}>
+  return (
+    <CartControl className={cls}>
       {continut}
-    </button>
-  ) : (
-    <a href={`${basePath}/`} aria-label="Mergi la magazin" className={cls}>
-      {continut}
-    </a>
+    </CartControl>
   );
 }

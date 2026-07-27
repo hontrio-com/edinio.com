@@ -80,9 +80,19 @@ export interface VariantMeta {
   /**
    * Latimea la care se randeaza miniatura, cand cea aleasa din comutatorul
    * telefon/calculator n-are sens pentru sectiunea asta. Panourile inguste —
-   * cosul si formularul de comanda — sunt singurele care o folosesc azi.
+   * sertarul de cos si modalul de comanda — sunt singurele care o folosesc azi.
    */
   previewWidth?: number;
+  /**
+   * Unde traieste varianta: un panou peste magazin (sertar, modal) sau o pagina
+   * de sine statatoare, cu adresa proprie.
+   *
+   * Nu e o subtilitate de aspect, ci de comportament: la `page`, butonul de cos
+   * navigheaza in loc sa deschida ceva, si asta trebuie sa se stie si in header,
+   * si in rute, si in invelisul paginilor fara catalog. Implicit `panel`, ca
+   * variantele existente sa insemne exact ce inseamnau.
+   */
+  surface?: "panel" | "page";
   /** Varianta afiseaza deja un H1 vizibil (conteaza doar la hero). */
   providesH1?: boolean;
   /**
@@ -208,6 +218,31 @@ const HEADER_DEFAULTS = { menuFont: "body", menuCase: "normal" };
  * ajustare.
  */
 export const MIN_CATEGORII_HERO_SIDEBAR = 6;
+
+/**
+ * Setarile comune modelelor de pagina de cos.
+ *
+ * Doar ce tine de pagina in sine. Ce se intampla la comanda — campuri
+ * personalizate, optiuni suplimentare, cod de reducere — ramane in
+ * `page_content.checkout_config`, unde era, ca sa nu ajunga aceeasi decizie in
+ * doua locuri.
+ */
+const CART_PAGE_FIELDS: Field[] = [
+  {
+    key: "showProgress",
+    type: "toggle",
+    label: "Arata progresul catre livrarea gratuita",
+    help: "Se vede doar daca ai setat un prag de livrare gratuita.",
+  },
+  {
+    key: "showRecommendations",
+    type: "toggle",
+    label: "Arata produse recomandate",
+    help: "Sub lista de produse, ca in sertarul de cos.",
+  },
+];
+
+const CART_PAGE_DEFAULTS = { showProgress: true, showRecommendations: true };
 
 export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   // --- Chrome -------------------------------------------------------------
@@ -579,10 +614,14 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: false,
     inCatalog: true,
+    // ATENTIE: `classic` trebuie sa ramana PRIMA cheie. Parserul cade pe prima
+    // varianta declarata cand cea salvata nu se recunoaste, iar o varianta de
+    // tip pagina pusa aici ar muta pe pagina, in tacere, orice magazin cu o
+    // configuratie incompleta.
     variants: {
       classic: {
-        label: "Clasic",
-        tags: ["clasic"],
+        label: "Sertar lateral",
+        tags: ["clasic", "compact"],
         layout: "full",
         previewHeight: 620,
         // Sertarul e un panou ingust (max-w-sm): randat pe panza de desktop ar
@@ -590,6 +629,33 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // exact cum il vad clientii care cumpara de pe telefon.
         previewWidth: 390,
         fields: [],
+      },
+      page_split: {
+        label: "Pagina pe doua coloane",
+        tags: ["clasic"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        fields: CART_PAGE_FIELDS,
+        defaults: CART_PAGE_DEFAULTS,
+      },
+      page_wide: {
+        label: "Pagina pe toata latimea",
+        tags: ["simplu", "elegant"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        fields: CART_PAGE_FIELDS,
+        defaults: CART_PAGE_DEFAULTS,
+      },
+      page_compact: {
+        label: "Pagina compacta, cu bara de comanda mereu vizibila",
+        tags: ["compact", "indraznet"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 820,
+        fields: CART_PAGE_FIELDS,
+        defaults: CART_PAGE_DEFAULTS,
       },
     },
   },
@@ -600,15 +666,24 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: false,
     inCatalog: true,
+    // La fel ca la cos: `classic` ramane prima cheie declarata.
     variants: {
       classic: {
-        label: "Clasic",
-        tags: ["clasic"],
+        label: "Formular in fereastra",
+        tags: ["clasic", "compact"],
         layout: "full",
         // Cat inaltimea data panoului in miniatura: formularul intreg trece de
         // 1800 px si ar face din fiecare card un perete.
         previewHeight: 900,
         previewWidth: 390,
+        fields: [],
+      },
+      page_two_col: {
+        label: "Pagina separata, cu rezumat lateral",
+        tags: ["clasic", "elegant"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 1000,
         fields: [],
       },
     },

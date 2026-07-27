@@ -11,9 +11,11 @@ import { slugify } from "@/lib/utils/slugify";
  */
 export const RESERVED_PAGE_SLUGS = new Set<string>([
   // existing public store sub-routes
-  "product", "politici", "confirm",
-  // cart / checkout (future-proofing)
-  "cos", "cart", "checkout",
+  "product", "politici", "confirm", "retur",
+  // cos si finalizarea comenzii: rute proprii pentru magazinele care le aleg ca
+  // pagini. Sinonimele stau langa ele ca sa nu apara o pagina custom „comanda"
+  // pe care comerciantul o crede legata de checkout.
+  "cos", "cart", "checkout", "finalizare", "comanda",
   // platform / framework
   "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
   // app sections that live at the root path

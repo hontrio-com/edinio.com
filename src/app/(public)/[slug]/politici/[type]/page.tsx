@@ -110,7 +110,7 @@ export default async function PolicyPage({ params }: Props) {
   });
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({
-    searchCategories, business: business as never, pageContent, basePath });
+    searchCategories, business: business as never, pageContent, basePath, design: resolved.design });
 
   return (
     <StorefrontThemeScope style={resolved.style}>

@@ -179,6 +179,7 @@ export default async function ProductDetailPage({ params }: Props) {
     business: business as never,
     pageContent,
     basePath,
+    design: resolved.design,
     // Bara de cumparare lipita jos acopera subsolul pe mobil.
     hasStickyBottomBar: true,
   });

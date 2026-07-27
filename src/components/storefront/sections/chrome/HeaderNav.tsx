@@ -8,8 +8,9 @@ import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
+import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -33,7 +34,6 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
     pageContent,
     hasAnnouncementBar,
     cartMode,
-    openCart,
     currentPageSlug,
     searchCategories,
   } = useStoreChrome();
@@ -111,7 +111,7 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
                     </a>
                   )}
 
-                  {a === "cos" && <PastilaCos mode={cartMode} count={count} total={total} basePath={basePath} onOpen={openCart} />}
+                  {a === "cos" && <PastilaCos mode={cartMode} count={count} total={total} />}
                 </Fragment>
               ))}
             </div>
@@ -315,14 +315,10 @@ function PastilaCos({
   mode,
   count,
   total,
-  basePath,
-  onOpen,
 }: {
-  mode: "drawer" | "link" | "hidden";
+  mode: CartMode;
   count: number;
   total: number;
-  basePath: string;
-  onOpen: () => void;
 }) {
   if (mode === "hidden") return null;
 
@@ -342,13 +338,9 @@ function PastilaCos({
   const cls = "relative inline-flex items-center gap-2 h-10 pl-3.5 pr-4 rounded-full transition-opacity hover:opacity-85 ml-1";
   const stil = { backgroundColor: "var(--st-text)", color: "var(--st-surface)" };
 
-  return mode === "drawer" ? (
-    <button type="button" onClick={onOpen} aria-label="Deschide cosul de cumparaturi" className={cls} style={stil}>
+  return (
+    <CartControl className={cls} style={stil}>
       {continut}
-    </button>
-  ) : (
-    <a href={`${basePath}/`} aria-label="Mergi la magazin" className={cls} style={stil}>
-      {continut}
-    </a>
+    </CartControl>
   );
 }

@@ -80,7 +80,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
                 style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                className="w-auto object-contain" />
+                className="w-auto max-w-full object-contain" />
             ) : (
               <span className="text-xl lg:text-3xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
             )}

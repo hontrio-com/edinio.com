@@ -93,12 +93,12 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
 
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
         <div className="h-16 lg:h-[84px] flex items-center gap-4 lg:gap-8">
-          <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity" aria-label={nume}>
+          <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity" aria-label={nume}>
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
                 style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                className="w-auto object-contain" />
+                className="w-auto max-w-full object-contain" />
             ) : (
               <span className="text-2xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
             )}

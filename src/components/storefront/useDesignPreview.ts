@@ -44,10 +44,17 @@ export function useDesignPreview(
     }
 
     // Click pe o sectiune in preview -> selectie in lista din editor.
+    //
+    // Clicul se OPRESTE aici: previzualizarea e o imagine a magazinului, nu
+    // magazinul. Lasat sa treaca, un link din header ducea iframe-ul pe alta
+    // pagina, iar legatura cu editorul se rupea definitiv — previzualizarea
+    // ramanea inghetata pana la reincarcarea ecranului.
     function onClick(event: MouseEvent) {
       const target = (event.target as HTMLElement | null)?.closest(`[${SECTION_ATTR}]`);
       const id = target?.getAttribute(SECTION_ATTR);
       if (!id) return;
+      event.preventDefault();
+      event.stopPropagation();
       window.parent.postMessage({ [PREVIEW_MESSAGE]: "select", sectionId: id }, window.location.origin);
     }
 

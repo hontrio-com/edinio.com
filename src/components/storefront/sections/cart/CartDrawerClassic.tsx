@@ -35,6 +35,44 @@ export function CartDrawerClassic({
   inline?: boolean;
 }) {
   const { items, addItem, removeItem, updateQty, total, count } = useCart();
+
+  /**
+   * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
+   *
+   * Fara asta, tabulatorul iesea din sertar in pagina de dedesubt: cititorul de
+   * ecran anunta „dialog", iar tastatura plimba utilizatorul prin produsele din
+   * spate, pe care nu le vede nimeni. Se aplica doar la sertarul adevarat, nu si
+   * la randarea din miniatura, care nu e dialog.
+   */
+  const panou = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open || inline) return;
+    const el = panou.current;
+    if (!el) return;
+    const focusabile = () => [...el.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((n) => n.offsetParent !== null);
+
+    focusabile()[0]?.focus();
+
+    function laTab(e: KeyboardEvent) {
+      if (e.key !== "Tab") return;
+      const lista = focusabile();
+      if (lista.length === 0) return;
+      const primul = lista[0];
+      const ultimul = lista[lista.length - 1];
+      const activ = document.activeElement;
+      if (e.shiftKey && (activ === primul || !el!.contains(activ))) {
+        e.preventDefault();
+        ultimul.focus();
+      } else if (!e.shiftKey && activ === ultimul) {
+        e.preventDefault();
+        primul.focus();
+      }
+    }
+    document.addEventListener("keydown", laTab);
+    return () => document.removeEventListener("keydown", laTab);
+  }, [open, inline]);
   const butonInchide = useRef<HTMLButtonElement>(null);
   // Aritmetica e comuna cu paginile de cos si cu bara de progres de pe pagina de
   // magazin: aceleasi numere, oriunde le-ar vedea clientul. Inclusiv pragul si
@@ -91,6 +129,7 @@ export function CartDrawerClassic({
       <div className={inline
         ? "relative mx-auto h-[620px] w-full max-w-sm bg-background flex flex-col shadow-2xl"
         : "fixed inset-y-0 right-0 w-full max-w-sm bg-background z-50 flex flex-col shadow-2xl"}
+        ref={panou}
         role={inline ? undefined : "dialog"}
         aria-modal={inline ? undefined : true}
         aria-label={inline ? undefined : "Cosul tau"}>

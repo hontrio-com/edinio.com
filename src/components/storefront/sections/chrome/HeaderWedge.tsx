@@ -68,12 +68,12 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               )}
             </div>
 
-            <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
+            <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
                   style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                  className="w-auto object-contain" />
+                  className="w-auto max-w-full object-contain" />
               ) : (
                 <span className="text-xl lg:text-2xl font-black italic tracking-tight truncate">{nume}</span>
               )}

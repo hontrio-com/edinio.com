@@ -22,8 +22,36 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
  * simplu: cu zece variante de design, e doar o chestiune de timp pana cand una
  * ar uita o cerinta legala, iar comerciantul ar afla din amenda.
  */
-export function FooterLegal() {
+/**
+ * Culorile blocului, dupa fundalul footerului care il compune.
+ *
+ * Sirurile sunt scrise intregi, nu compuse: varianta inchisa trebuie sa dea
+ * exact marcajul de dinainte, ca footerele existente sa ramana neschimbate.
+ */
+const TON = {
+  inchis: {
+    titlu: "text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3",
+    link: "text-[13px] text-white/50 hover:text-white transition-colors",
+    linkTare: "text-[13px] text-white/70 hover:text-white transition-colors font-medium",
+    copyright: "text-[11px] text-white/25",
+  },
+  deschis: {
+    titlu: "text-[10px] font-semibold text-[var(--st-muted)] uppercase tracking-widest mb-3",
+    link: "text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors",
+    linkTare: "text-[13px] text-[var(--st-text)] hover:opacity-70 transition-opacity font-medium",
+    copyright: "text-[11px] text-[var(--st-muted)]",
+  },
+} as const;
+
+export type TonFooter = keyof typeof TON;
+
+export function FooterLegal({ ton = "inchis", cuPagini = true }: {
+  ton?: TonFooter;
+  /** Stins cand varianta isi arata deja paginile in coloanele ei. */
+  cuPagini?: boolean;
+} = {}) {
   const { business, basePath, menu } = useStoreChrome();
+  const t = TON[ton];
   // Paginile proprii ale magazinului. Erau in footerul paginilor custom, dar nu
   // si in cel al paginii de magazin; acum apar peste tot, ca navigarea din
   // subsol sa fie aceeasi indiferent unde te afli.
@@ -32,15 +60,15 @@ export function FooterLegal() {
   return (
     <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
       {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
-      <CompanyIdentity business={business} />
+      <CompanyIdentity business={business} ton={ton} />
 
-      {pagini.length > 0 && (
+      {cuPagini && pagini.length > 0 && (
         <div className="flex-1">
-          <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Pagini</p>
+          <p className={t.titlu}>Pagini</p>
           <div className="flex flex-wrap gap-x-5 gap-y-1.5">
             {pagini.map((it) => (
               <a key={it.id} href={menuItemHref(it, basePath)}
-                className="text-[13px] text-white/50 hover:text-white transition-colors">
+                className={t.link}>
                 {it.label}
               </a>
             ))}
@@ -49,16 +77,16 @@ export function FooterLegal() {
       )}
 
       <div className="flex-1">
-        <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
+        <p className={t.titlu}>Informatii legale</p>
         <div className="flex flex-wrap gap-x-5 gap-y-1.5">
           {/* Functia de retragere din contract — obligatorie conform OUG 18/2026 */}
           <a href={`${basePath}/retur`}
-            className="text-[13px] text-white/70 hover:text-white transition-colors font-medium">
+            className={t.linkTare}>
             Retrage-te din contract
           </a>
           {POLICY_LINKS.map(({ slug, label }) => (
             <a key={slug} href={`${basePath}/politici/${slug}`}
-              className="text-[13px] text-white/50 hover:text-white transition-colors">
+              className={t.link}>
               {label}
             </a>
           ))}
@@ -66,7 +94,7 @@ export function FooterLegal() {
       </div>
 
       <div className="shrink-0">
-        <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Protectia consumatorilor</p>
+        <p className={t.titlu}>Protectia consumatorilor</p>
         <div className="flex items-center gap-3">
           <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
             className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
@@ -90,15 +118,16 @@ export function FooterLegal() {
  * Creditul se poate ascunde doar pe planurile platite (`hide_edinio_badge`),
  * decizie luata inauntrul lui `EdinioCredit` — nu e o setare de design.
  */
-export function FooterCredit() {
+export function FooterCredit({ ton = "inchis" }: { ton?: TonFooter } = {}) {
   const { business, color } = useStoreChrome();
+  const t = TON[ton];
 
   return (
     <div className="pt-5 flex items-center justify-between gap-3">
-      <p className="text-[11px] text-white/25">
+      <p className={t.copyright}>
         &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
       </p>
-      <EdinioCredit businessId={business.id} color={color} className="text-[11px] text-white/25" />
+      <EdinioCredit businessId={business.id} color={color} className={t.copyright} />
     </div>
   );
 }

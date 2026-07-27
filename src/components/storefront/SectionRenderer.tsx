@@ -54,6 +54,14 @@ const HeroBannersOnly = dynamic(
   () => import("./sections/hero/HeroBannersOnly").then((m) => m.HeroBannersOnly),
   { ssr: true },
 );
+const FooterColumns = dynamic(
+  () => import("./sections/chrome/FooterColumns").then((m) => m.FooterColumns),
+  { ssr: true },
+);
+const FooterCentered = dynamic(
+  () => import("./sections/chrome/FooterCentered").then((m) => m.FooterCentered),
+  { ssr: true },
+);
 const HeroCategories = dynamic(
   () => import("./sections/hero/HeroCategories").then((m) => m.HeroCategories),
   { ssr: true },
@@ -89,6 +97,12 @@ const HEADERE: Record<string, VariantaSectiune> = {
   centered: HeaderCentered as VariantaSectiune,
 };
 
+/** Variantele de footer, dupa id-ul din registry. */
+const FOOTERE: Record<string, ComponentType> = {
+  columns: FooterColumns,
+  centered: FooterCentered,
+};
+
 /** Variantele de hero, dupa id-ul din registry. */
 const HEROURI: Record<string, VariantaSectiune> = {
   banners: HeroBannersOnly as VariantaSectiune,
@@ -111,8 +125,10 @@ function SectionOne({ section }: { section: SectionInstance }) {
       const Varianta = HEADERE[section.variant];
       return Varianta ? <Varianta settings={section.settings} /> : <HeaderClassic />;
     }
-    case "footer":
-      return <FooterDark />;
+    case "footer": {
+      const Varianta = FOOTERE[section.variant];
+      return Varianta ? <Varianta /> : <FooterDark />;
+    }
     case "hero": {
       const Varianta = HEROURI[section.variant];
       return Varianta ? <Varianta settings={section.settings} /> : <HeroClassic />;

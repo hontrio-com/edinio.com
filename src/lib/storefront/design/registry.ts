@@ -360,6 +360,20 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     inCatalog: true,
     variants: {
       dark: { label: "Fundal inchis", tags: ["clasic", "indraznet"], layout: "full", previewHeight: 460, fields: [] },
+      columns: {
+        label: "Deschis, pe coloane",
+        tags: ["simplu", "cu imagine"],
+        layout: "full",
+        previewHeight: 560,
+        fields: [],
+      },
+      centered: {
+        label: "Centrat, aerisit",
+        tags: ["elegant", "simplu"],
+        layout: "full",
+        previewHeight: 620,
+        fields: [],
+      },
     },
   },
 

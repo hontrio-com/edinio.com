@@ -25,7 +25,11 @@ function joinAddress(parts: (string | null)[]): string {
   return parts.map((p) => p?.trim()).filter(Boolean).join(", ");
 }
 
-export function CompanyIdentity({ business }: { business: CompanyIdentityBusiness }) {
+export function CompanyIdentity({ business, ton = "inchis" }: {
+  business: CompanyIdentityBusiness;
+  /** Fundalul footerului care il compune: „inchis" (implicit) sau „deschis". */
+  ton?: "inchis" | "deschis";
+}) {
   const cui = business.cui?.trim();
   // Only registered entities (with a fiscal code) show the legal block.
   if (!cui) return null;
@@ -37,9 +41,13 @@ export function CompanyIdentity({ business }: { business: CompanyIdentityBusines
 
   return (
     <div className="flex-1 min-w-0">
-      <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Date de identificare</p>
-      <div className="space-y-1 text-[12px] leading-relaxed text-white/50">
-        <p className="text-white/70 font-medium">{business.business_name}</p>
+      <p className={ton === "deschis"
+        ? "text-[10px] font-semibold text-[var(--st-muted)] uppercase tracking-widest mb-3"
+        : "text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3"}>Date de identificare</p>
+      <div className={ton === "deschis"
+        ? "space-y-1 text-[12px] leading-relaxed text-[var(--st-muted)]"
+        : "space-y-1 text-[12px] leading-relaxed text-white/50"}>
+        <p className={ton === "deschis" ? "text-[var(--st-text)] font-medium" : "text-white/70 font-medium"}>{business.business_name}</p>
         <p>CUI: {cui}</p>
         {business.reg_com?.trim() && <p>Nr. Reg. Com.: {business.reg_com.trim()}</p>}
         {sediu && <p>Sediu social: {sediu}</p>}

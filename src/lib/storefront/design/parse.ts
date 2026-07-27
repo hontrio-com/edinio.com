@@ -203,10 +203,19 @@ function parseSection(raw: unknown, seenIds: Set<string>): SectionInstance | nul
   while (seenIds.has(id)) id = newSectionId();
   seenIds.add(id);
 
-  const vmeta = variantMeta(k, variant);
+  /*
+   * Reglajele se curata fata de campurile TUTUROR variantelor sectiunii, nu
+   * doar ale celei curente.
+   *
+   * Altfel, plimbarea prin galerie stergea definitiv ce nu apartinea variantei
+   * de moment: comerciantul scria un text la un header, incerca alt design, se
+   * intorcea, si textul nu mai era. Filtrarea per-varianta ramane la randare,
+   * unde fiecare componenta isi citeste doar ce intelege.
+   */
+  const toateCampurile = Object.values(sectionMeta(k)?.variants ?? {}).flatMap((v) => v.fields);
   const settings = {
     ...sanitizeInternalSettings(k, obj(r.settings)),
-    ...sanitizeSettings(vmeta?.fields ?? [], obj(r.settings)),
+    ...sanitizeSettings(toateCampurile, obj(r.settings)),
   };
 
   return { id, kind: k, variant, enabled: r.enabled !== false, settings };
@@ -333,6 +342,22 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
       seenIds.add(fromClassic.id);
       home.push(fromClassic);
     }
+  }
+
+  /*
+   * Sectiunile DERIVATE isi iau starea pornit/oprit din editorul magazinului, nu
+   * din designul salvat.
+   *
+   * Continutul lor traieste in `page_content` si acolo are si comutatorul:
+   * beneficiile, recenziile, galeria, banda de incredere, randurile de produse.
+   * Odata ce designul e salvat, starea venea din jsonb si comutatoarele vechi
+   * mergeau intr-o singura directie — stingeau, dar nu mai porneau nimic, si
+   * comerciantul apasa fara niciun efect. Sectiunile ADAUGATE din editorul de
+   * design nu au corespondent in continut, deci raman cu starea lor.
+   */
+  for (const s of home) {
+    const derivata = classic.home.find((c) => c.id === s.id && c.kind === s.kind);
+    if (derivata) s.enabled = derivata.enabled;
   }
 
   const announcementRaw = chromeRaw.announcement;

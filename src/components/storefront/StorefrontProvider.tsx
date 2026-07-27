@@ -67,6 +67,15 @@ export interface StoreChromeValue {
   /** Header-ul se aseaza sub bara de anunt cand aceasta exista. */
   hasAnnouncementBar: boolean;
   /**
+   * Sectiunea de anunt e pornita in design.
+   *
+   * Header-ul care isi poarta banda in interior o citeste de aici: fara ea,
+   * stingerea sau stergerea sectiunii din editor n-avea niciun efect asupra
+   * benzii dinauntru, ci doar asupra barei separate, oricum absente la acel
+   * header.
+   */
+  announcementOn?: boolean;
+  /**
    * Pagina are o bara lipita jos care acopera subsolul pe mobil (pagina de
    * produs). Orice varianta de footer trebuie sa lase loc pentru ea, altfel
    * bara taie ultimele randuri.

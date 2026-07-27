@@ -1,6 +1,6 @@
 "use client";
 
-import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
 import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shared/Marquee";
 
 /**
@@ -12,9 +12,14 @@ import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shar
  */
 export function AnnouncementMarquee() {
   const { pageContent, color } = useStoreChrome();
+  // Contextul de catalog exista DOAR pe pagina magazinului.
+  const peMagazin = useStorefrontOptional() !== null;
   const bar = pageContent.announcement_bar;
-  const pornita = pageContent.show_announcement_on_store !== false && bar?.enabled === true;
-  if (!pornita || !bar) return null;
+  // „Arata pe pagina magazinului" e o regula de PAGINA: in productie, pagina de
+  // produs arata bara doar pe `enabled`, ignorand flagul. Bagat in sectiunea de
+  // chrome — comuna tuturor paginilor — stingea bara si acolo unde apărea.
+  const ascunsaPeMagazin = peMagazin && pageContent.show_announcement_on_store === false;
+  if (ascunsaPeMagazin || bar?.enabled !== true) return null;
 
   return (
     <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"

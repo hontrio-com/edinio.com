@@ -157,9 +157,16 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
  * loc de banda plina de culoare.
  */
 function BandaAnunt() {
-  const { pageContent } = useStoreChrome();
+  const { pageContent, announcementOn } = useStoreChrome();
+  const peMagazin = useStorefrontOptional() !== null;
   const bar = pageContent.announcement_bar;
-  if (pageContent.show_announcement_on_store === false || bar?.enabled !== true) return null;
+  // `announcementOn` e sectiunea din editorul de design: stinsa sau stearsa,
+  // banda dinauntrul header-ului trebuie sa dispara si ea. Fara asta, singurul
+  // efect al comutatorului era asupra barei separate, pe care varianta asta
+  // n-o randeaza oricum.
+  if (announcementOn === false) return null;
+  if (peMagazin && pageContent.show_announcement_on_store === false) return null;
+  if (bar?.enabled !== true) return null;
 
   return (
     <div className="h-10 overflow-hidden flex items-center bg-[var(--st-bg)] border-y border-[var(--st-border)]">

@@ -129,8 +129,14 @@ export default async function ProductDetailPage({ params }: Props) {
   if (!business || !product || product.business_id !== business.id || !product.is_active) notFound();
 
   // SEO: redirect /product/{uuid} → /product/{slug} (301)
+  //
+  // Prefixul se calculeaza AICI, nu mai jos: pe domeniu propriu adresele n-au
+  // slug-ul magazinului in ele, deci un redirect catre `/{slug}/product/...`
+  // ducea in 404 pe chiar magazinele cu domeniul lor.
   if (UUID_RE.test(productSlug) && product.slug) {
-    redirect(`/${slug}/product/${product.slug}`);
+    const gazda = (await headers()).get("host")?.split(":")[0] ?? "";
+    const peDomeniuPropriu = !!business.custom_domain && gazda === business.custom_domain;
+    redirect(peDomeniuPropriu ? `/product/${product.slug}` : `/${slug}/product/${product.slug}`);
   }
 
   // store_settings is no longer anon-readable — fetch the public-safe columns via service role.

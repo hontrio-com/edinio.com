@@ -81,6 +81,14 @@ export function StoreDesignEditor({
   const gataDePreview = useRef(false);
   /** Ultima ciorna ajunsa efectiv in baza. Ref, nu stare: nu trebuie sa re-randeze. */
   const salvat = useRef<StoreDesign>(designInitial);
+  /**
+   * Fiecare Publica sau Renunta incepe o „epoca" noua.
+   *
+   * O autosalvare pornita inainte de ele ajungea in baza DUPA, si reinvia ciorna
+   * exact cand tocmai fusese golita: bara „modificari nepublicate" reaparea din
+   * senin, iar Renunta parea ca n-a facut nimic.
+   */
+  const epoca = useRef(0);
 
   /**
    * Exista modificari nepublicate?
@@ -132,10 +140,14 @@ export function StoreDesignEditor({
    */
   useEffect(() => {
     if (design === salvat.current) return;
+    const gen = epoca.current;
+    const baza = salvat.current;
     const id = setTimeout(async () => {
+      if (gen !== epoca.current) return;
       setSalvez(true);
-      const res = await saveDesignDraft(businessId, design);
+      const res = await saveDesignDraft(businessId, design, baza);
       setSalvez(false);
+      if (gen !== epoca.current) return;
       if ("error" in res) {
         toast.error(res.error);
         return;
@@ -170,6 +182,7 @@ export function StoreDesignEditor({
   }
 
   async function onPublica() {
+    epoca.current += 1;
     setPublica(true);
     const res = await publishDesign(businessId, design);
     setPublica(false);
@@ -183,6 +196,7 @@ export function StoreDesignEditor({
   }
 
   async function onRenunta() {
+    epoca.current += 1;
     const res = await discardDesignDraft(businessId);
     if ("error" in res) {
       toast.error(res.error);

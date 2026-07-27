@@ -686,7 +686,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   return (
     <>
       {/* Breadcrumb back to catalog (restores the catalog page the visitor left from) */}
-      {!isHome && (
+      {!isHome && setari.showBreadcrumb !== false && (
         <div className="bg-surface/80 border-b border-border">
           <div className="max-w-6xl mx-auto px-4 md:px-6 h-11 flex items-center gap-3">
             <a href={basePath || "/"} aria-label="Inapoi la magazin"

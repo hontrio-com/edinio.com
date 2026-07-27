@@ -150,3 +150,25 @@ export function enabledComboPriceMap(pageSections: unknown, basePrice: number): 
   }
   return map;
 }
+
+/**
+ * Stocul declarat al fiecarei combinatii active, cand chiar e declarat.
+ *
+ * Campul exista de la inceput in date, dar nu-l citea nimeni: un produs cu stoc
+ * total 40 lasa sa se comande marimea S si cand marimea S avea 0 bucati, iar
+ * comerciantul afla din comanda pe care n-o putea onora. Combinatiile fara
+ * numar completat lipsesc din harta — pentru ele ramane stocul produsului.
+ */
+export function comboStockMap(pageSections: unknown): Map<string, number> {
+  const variants = parseVariants(pageSections);
+  const map = new Map<string, number>();
+  if (!variants) return map;
+  for (const c of variants.combinations) {
+    if (!c?.enabled || !c.title) continue;
+    const brut = String(c.stock_quantity ?? "").trim();
+    if (brut === "") continue;
+    const n = Number(brut);
+    if (Number.isFinite(n) && n >= 0) map.set(c.title, Math.floor(n));
+  }
+  return map;
+}

@@ -550,6 +550,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // sectiuni, `page_content` ramane pe „enabled" si header-ul ar fi ramas lipit
     // la `top-9` peste o fasie goala.
     hasAnnouncementBar: showAnnouncementOnStore && standaloneAnnouncement(design)?.enabled === true,
+    announcementOn: design.chrome.announcement?.enabled === true,
     hasHero,
 
     products,

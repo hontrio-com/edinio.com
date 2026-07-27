@@ -93,12 +93,38 @@ async function writeSettings(businessId: string, patch: Record<string, unknown>,
 }
 
 /** Salveaza ciorna. Nu atinge ce vad vizitatorii. */
-export async function saveDesignDraft(businessId: string, raw: unknown): Promise<ActionResult> {
+/**
+ * Salveaza ciorna.
+ *
+ * `baza` e ciorna de la care a pornit fila care scrie. Cand in baza e altceva,
+ * altcineva a salvat intre timp — doua file sau doua ecrane deschise pe acelasi
+ * magazin se suprascriau tacut, iar ultimul care apasa castiga tot. Fara `baza`,
+ * scrierea trece neconditionat, ca pana acum.
+ */
+export async function saveDesignDraft(businessId: string, raw: unknown, baza?: unknown): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
 
   const design = parseStoreDesign(raw, owned.ctx);
   if (tooLarge(design)) return { error: "Configuratia de design e prea mare." };
+
+  if (baza !== undefined) {
+    const supabase = await createClient();
+    const { data: rand } = await supabase
+      .from("store_settings")
+      .select("storefront_design_draft")
+      .eq("business_id", owned.businessId)
+      .single();
+    // Compararea se face pe forma PARSATA, ca doua reprezentari echivalente ale
+    // aceleiasi cioarne sa nu para un conflict.
+    const inBaza = rand?.storefront_design_draft
+      ? JSON.stringify(parseStoreDesign(rand.storefront_design_draft, owned.ctx))
+      : null;
+    const asteptat = baza === null ? null : JSON.stringify(parseStoreDesign(baza, owned.ctx));
+    if (inBaza !== asteptat) {
+      return { error: "Designul a fost modificat in alta fila. Reincarca pagina ca sa nu pierzi acele modificari." };
+    }
+  }
 
   const result = await writeSettings(
     owned.businessId,

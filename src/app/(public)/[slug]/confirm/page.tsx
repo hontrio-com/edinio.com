@@ -56,6 +56,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let customerName: string | null = null;
   let customerEmail: string | null = null;
   let customerPhone: string | null = null;
+  let totalComanda: number | null = null;
 
   if (orderId) {
     const adminClient = createAdminClient();
@@ -77,6 +78,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       customerName = order.customer_name ?? null;
       customerEmail = order.customer_email ?? null;
       customerPhone = order.customer_phone ?? null;
+      totalComanda = order.total != null ? Number(order.total) : null;
     }
   }
 
@@ -85,8 +87,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const purchaseItems = orderItems.map((i) => ({ item_id: i.product_id, item_name: i.name, price: i.price, quantity: i.quantity }));
 
   const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  // Totalul SALVAT al comenzii, nu unul recalculat din linii: recalcularea nu
+  // stie de TVA-ul adaugat, deci magazinele cu preturi fara TVA aratau
+  // clientului mai putin decat s-a comandat si decat scrie pe factura. Suma din
+  // adresa ramane ultima rezerva, pentru linkurile vechi.
   const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount - codDiscountAmount;
-  const displayTotal = computedTotal || Number(total) || 0;
+  const displayTotal = totalComanda ?? (computedTotal || Number(total) || 0);
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")

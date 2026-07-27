@@ -188,8 +188,11 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
   home.push(section("about", "about", "classic", notFalse(features.show_about)));
   home.push(section("contact", "contact", "classic", notFalse(features.show_contact)));
 
+  // Sectiunea poarta comutatorul REAL al barei. „Arata pe pagina magazinului"
+  // ramane o regula de PAGINA, aplicata la randare: bagata aici, ar fi stins
+  // bara si pe paginile de produs, unde in productie apare doar pe `enabled`.
   const announcement = pc.announcement_bar as { enabled?: boolean } | undefined;
-  const announcementOn = notFalse(pc.show_announcement_on_store) && bool(announcement?.enabled);
+  const announcementOn = bool(announcement?.enabled);
 
   return {
     version: DESIGN_VERSION,

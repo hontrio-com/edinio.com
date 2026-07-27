@@ -327,11 +327,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // comanda intreaga la trimitere.
   const needsVariant = !!variantsData && !selectedCombo;
 
-  // Specifications — auto-append dimensions if present
-  const dimensions = pageSections.dimensions;
-  const specRows = pageSections.specifications ?? [];
+  // Specifications — auto-append dimensions if present.
+  //
+  // Citirile din `pageSections` stau INAUNTRUL memoizarii: scoase afara, ele
+  // produceau un vector nou la fiecare randare, deci dependenta se schimba mereu
+  // si compilatorul renunta sa optimizeze componenta intreaga.
   const specifications = useMemo(() => {
-    const rows = [...specRows];
+    const dimensions = pageSections.dimensions;
+    const rows = [...(pageSections.specifications ?? [])];
     if (dimensions) {
       if (dimensions.length > 0) rows.push({ label: "Lungime", value: `${dimensions.length} cm` });
       if (dimensions.width > 0) rows.push({ label: "Latime", value: `${dimensions.width} cm` });
@@ -339,7 +342,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
     }
     if (product.weight_grams) rows.push({ label: "Greutate", value: `${product.weight_grams} g` });
     return rows;
-  }, [specRows, dimensions, product.weight_grams]);
+  }, [pageSections.specifications, pageSections.dimensions, product.weight_grams]);
 
   // Build quantity tiers — percent mode when variants enabled
   const tierConfig = pageSections.quantity_tiers;

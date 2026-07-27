@@ -112,7 +112,17 @@ export async function saveDesignDraft(businessId: string, raw: unknown): Promise
 }
 
 /** Muta ciorna in designul publicat. Din acest moment o vad toti vizitatorii. */
-export async function publishDesign(businessId: string): Promise<ActionResult> {
+/**
+ * Publica designul.
+ *
+ * `deEcran` e ciorna asa cum o vede comerciantul in acest moment. Autosave-ul
+ * are o intarziere de o secunda, deci cine apasa Publica imediat dupa o
+ * schimbare trimitea in magazin ciorna VECHE din baza, in timp ce ecranul ii
+ * spunea ca totul e publicat. Valoarea primita trece prin acelasi parser total
+ * ca oricare alta, deci nu poate strica designul; fara ea se cade pe ciorna din
+ * baza, ca pana acum.
+ */
+export async function publishDesign(businessId: string, deEcran?: unknown): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
 
@@ -123,9 +133,10 @@ export async function publishDesign(businessId: string): Promise<ActionResult> {
     .eq("business_id", owned.businessId)
     .single();
 
-  if (!row?.storefront_design_draft) return { error: "Nu exista modificari de publicat." };
+  const sursa = deEcran ?? row?.storefront_design_draft;
+  if (!sursa) return { error: "Nu exista modificari de publicat." };
 
-  const design = parseStoreDesign(row.storefront_design_draft, owned.ctx);
+  const design = parseStoreDesign(sursa, owned.ctx);
   if (tooLarge(design)) return { error: "Configuratia de design e prea mare." };
 
   const result = await writeSettings(

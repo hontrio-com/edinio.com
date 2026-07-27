@@ -124,9 +124,16 @@ export async function getShippingOptions(
   const cartCategories = new Set<string>();
   let cartQuantity = 0;
   const cartProductIds: string[] = [];
-  // Only load cart data when the store actually has rules — otherwise this function
-  // stays byte-identical to before (no extra query, weight = intl override || 1kg).
-  if (rules.length > 0 && destination.cart && destination.cart.length > 0) {
+  // Produsele cosului se incarca fie cand exista reguli de transport, fie cand
+  // cotatia are nevoie de greutatea reala (DPD pe kilograme). Inainte, greutatea
+  // venea dintr-o harta cu TOT catalogul, trimisa in pagina de cos si de
+  // finalizare la fiecare afisare — pana la zeci de mii de randuri si sute de
+  // kilobytes in HTML, pentru un cos de doua linii. O singura interogare pe
+  // id-urile din cos da acelasi numar.
+  const cerGreutatea = settings?.dpd_config
+    ? (settings.dpd_config as { use_product_weight?: boolean } | null)?.use_product_weight === true
+    : false;
+  if ((rules.length > 0 || cerGreutatea) && destination.cart && destination.cart.length > 0) {
     cartProductIds.push(...new Set(destination.cart.map((c) => c.productId)));
     const { data: cartProducts } = await supabase
       .from("products")

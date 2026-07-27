@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -47,42 +46,26 @@ export default async function CosPage({ params }: Props) {
   const { slug } = await params;
 
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
-    .eq("slug", slug)
-    .single();
+  const [{ data: business }, { data: { user } }] = await Promise.all([
+    supabase
+      .from("businesses")
+      .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, suspended_until, custom_domain, social, gallery, features")
+      .eq("slug", slug)
+      .single(),
+    supabase.auth.getUser(),
+  ]);
   if (!business) notFound();
 
+  const isOwner = user?.id === business.user_id;
+
   const admin = createAdminClient();
-  const [{ data: storeSettings }, produseCuGreutate] = await Promise.all([
+  const [{ data: storeSettings }] = await Promise.all([
     admin
       .from("store_settings")
       .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
       .eq("business_id", business.id)
       .single(),
-    // Greutatile produselor, pentru cotatia internationala DPD pe kilograme, la
-    // fel ca pe /checkout: cine are cosul pe pagina si comanda in fereastra
-    // deschide formularul de AICI, iar fara greutati acelasi cos ar primi alt
-    // tarif decat comandat de pe pagina de magazin. Doar produsele care AU
-    // greutate: la un magazin fara livrare internationala lista iese goala.
-    // In ferestre .range(), ca pe /checkout: un query simplu se taie silentios
-    // la 1000 de randuri (cap PostgREST), iar produsele ramase pe dinafara ar
-    // intra in cotatie cu greutate zero — exact divergenta pe care o repara.
-    fetchAllRows("storefront.cos.weights", (from, to) =>
-      admin
-        .from("products")
-        .select("id, weight_grams")
-        .eq("business_id", business.id)
-        .eq("is_active", true)
-        .not("weight_grams", "is", null)
-        .order("id")
-        .range(from, to)
-    ),
   ]);
-
-  const productWeights: Record<string, number> = {};
-  for (const p of produseCuGreutate ?? []) if (p.weight_grams) productWeights[p.id] = p.weight_grams;
 
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
   const resolved = resolveDesign(storeSettings?.storefront_design, {
@@ -101,6 +84,26 @@ export default async function CosPage({ params }: Props) {
   // Magazinul e pe sertar: aici n-are ce cauta nimeni. Redirect, nu 404 — un
   // link vechi catre cos trebuie sa duca la magazin, nu intr-o pagina de eroare.
   if (!cartOnPage(resolved.design)) redirect(radacinaMagazin(basePath));
+
+  // Magazin suspendat sau abonament expirat. Pagina de magazin arata deja
+  // „suspendat", dar de AICI se putea comanda mai departe, cu cosul din
+  // localStorage: cand cosul e pagina iar comanda ramane in fereastra,
+  // formularul se monteaza chiar aici. Aceeasi verificare ca pe ruta frate de
+  // finalizare; proprietarul trece, ca sa isi poata vedea magazinul.
+  if (!isOwner) {
+    let suspendat = business.suspended_until ? new Date(business.suspended_until) < new Date() : false;
+    if (!suspendat) {
+      const { data: ownerProfile } = await admin
+        .from("users_profile")
+        .select("plan, plan_expires_at")
+        .eq("id", business.user_id)
+        .single();
+      if ((ownerProfile?.plan === "free" || ownerProfile?.plan === "trial") && ownerProfile?.plan_expires_at) {
+        suspendat = new Date(ownerProfile.plan_expires_at) < new Date();
+      }
+    }
+    if (suspendat) redirect(radacinaMagazin(basePath));
+  }
 
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({
@@ -131,7 +134,6 @@ export default async function CosPage({ params }: Props) {
             minOrderAmount={storeSettings?.min_order_amount ? Number(storeSettings.min_order_amount) : null}
             comandaPePagina={checkoutOnPage(resolved.design)}
             emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
-            productWeights={productWeights}
           />
         </main>
       </StorePageShell>

@@ -106,7 +106,12 @@ test("singleton-urile si id-urile duplicate se curata", () => {
     ctx,
   );
   assert.equal(d.home.filter((s) => s.kind === "hero").length, 1, "hero e singleton");
-  assert.equal(d.home.filter((s) => s.kind === "product_row").length, 2, "randurile se pot repeta");
+  // Doua din configuratia salvata, plus cele derivate din `page_content`:
+  // randurile EXISTA acolo, iar un rand adaugat dupa salvarea designului trebuie
+  // sa apara in magazin, nu sa se piarda tacut.
+  const randuri = d.home.filter((s) => s.kind === "product_row");
+  assert.ok(randuri.length >= 2, "randurile se pot repeta");
+  assert.equal(new Set(randuri.map((s) => s.id)).size, randuri.length, "fara id-uri duplicate");
   const ids = d.home.map((s) => s.id);
   assert.equal(new Set(ids).size, ids.length, "id-urile raman unice");
 });
@@ -191,6 +196,7 @@ test("cheile de legatura ale unui rand de produse trec, desi nu sunt campuri", (
 test("numarul de sectiuni e plafonat", () => {
   const home = Array.from({ length: 200 }, (_, i) => ({ id: `r${i}`, kind: "product_row", variant: "grid" }));
   const d = parseStoreDesign({ version: 1, chrome: {}, home }, ctx);
+  // Plafonul se aplica SI dupa readucerea randurilor din continut.
   assert.ok(d.home.length <= 41, `plafonat, are ${d.home.length}`);
 });
 

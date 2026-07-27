@@ -1,5 +1,5 @@
 import { newSectionId, section } from "./defaults";
-import { firstVariant, SECTION_REGISTRY, sectionMeta } from "./registry";
+import { firstVariant, SECTION_REGISTRY, sectionMeta, variantMeta } from "./registry";
 import type { SectionInstance, SectionKind, StoreDesign } from "./types";
 
 /**
@@ -52,6 +52,25 @@ export function updateSection(
   const tinta = findSection(next, id);
   if (!tinta) return design;
   Object.assign(tinta, patch);
+
+  /*
+   * La schimbarea variantei, reglajele pornesc de la valorile implicite ALE EI.
+   *
+   * Fara asta, sectiunea pastra reglajele variantei vechi, iar campurile noi
+   * ramaneau nedefinite: comutatorul aparea STINS in editor, in timp ce
+   * componenta il citeste ca „diferit de false", adica aprins in magazin. Un
+   * comutator care minte e mai rau decat unul care lipseste. Valorile pe care
+   * varianta noua le declara si comerciantul le avea deja setate se pastreaza.
+   */
+  if (patch.variant !== undefined && patch.settings === undefined) {
+    const implicite = variantMeta(tinta.kind, tinta.variant)?.defaults ?? {};
+    const vechi = tinta.settings ?? {};
+    const rezultat: Record<string, unknown> = { ...implicite };
+    for (const cheie of Object.keys(implicite)) {
+      if (cheie in vechi) rezultat[cheie] = vechi[cheie];
+    }
+    tinta.settings = rezultat;
+  }
   return next;
 }
 
@@ -68,6 +87,9 @@ export function toggleSection(design: StoreDesign, id: string): StoreDesign {
 export function removeSection(design: StoreDesign, id: string): StoreDesign {
   const tinta = findSection(design, id);
   if (!tinta || sectionMeta(tinta.kind)?.removable === false) return design;
+  // Sterse de aici, ar reaparea la prima citire — parserul le readuce din
+  // continut — si stergerea ar parea ca nu face nimic.
+  if (CONTINUT_DIN_PAGE_CONTENT.includes(tinta.kind)) return design;
   // Se pot scoate doar sectiunile paginii principale si bara de anunt. Cele ale
   // paginii de produs si ale cosului fac parte din structura, nu din aranjament.
   if (design.chrome.announcement?.id !== id && !design.home.some((s) => s.id === id)) return design;

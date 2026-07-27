@@ -1014,13 +1014,12 @@ export function ProductPageDetailed({
             initialQuantity={cantitate}
             customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
             cartItems={cartItems}
-            onCartConsumed={() => {
+            onCartConsumed={(liniiComandate) => {
               // Doar liniile purtate in comanda ies din cos. Produsul curent nu
               // e printre ele (se comanda separat, cu cantitatea din formular),
               // deci linia lui, daca exista, ramane vizibila in loc sa dispara.
               if (!cos) return;
-              const ramas = cosDupaComanda(cos.items, cartItems);
-              cos.restoreCart(ramas);
+              cos.restoreCart(cosDupaComanda(cos.items, liniiComandate));
             }}
             fbtOffer={fbtOffer}
           />

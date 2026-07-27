@@ -205,6 +205,19 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ),
   ]);
 
+  /*
+   * Ciorna de design nu are voie sa iasa din functia asta.
+   *
+   * `storeSettings` ajunge INTREG ca prop la componente de client, iar React
+   * serializeaza props-urile in HTML: coloana de ciorna — pana la 200 KB de
+   * design nepublicat — ajungea in pagina fiecarui vizitator anonim, desi
+   * migratia promitea exact contrariul. Tipul propului n-o contine, dar un tip
+   * nu curata nimic la executie.
+   */
+  const setariDeTrimis = storeSettings
+    ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
+    : storeSettings;
+
   // Slimuire payload: cardurile/cautarea/cosul folosesc doar o fractiune din
   // fiecare rand — restul (combinatii de variante, imagini 2+, descrieri
   // intregi, alte sectiuni din page_sections) umfla pagina de ~9x la
@@ -289,7 +302,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
                 setari={opsResolved.design.product.page.settings}
                 business={business}
                 product={product}
-                storeSettings={storeSettings as never}
+                storeSettings={setariDeTrimis as never}
                 basePath={basePath}
                 hasCardPayment={hasCardPayment}
                 bundleComponents={bundleComponents}
@@ -307,6 +320,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // Designul magazinului. Ciorna se randeaza DOAR pentru proprietar si doar in
   // preview: pana la Publica, vizitatorii vad neaparat versiunea publicata.
   const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
+
   const resolved = resolveDesign(
     useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design,
     {
@@ -355,7 +369,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       <MiniStoreRenderer
         business={business}
         products={products}
-        storeSettings={storeSettings}
+        storeSettings={setariDeTrimis}
         basePath={basePath}
         categories={categoriesData}
         initialPage={initialPage}

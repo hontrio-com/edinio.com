@@ -171,7 +171,7 @@ export function StoreDesignEditor({
 
   async function onPublica() {
     setPublica(true);
-    const res = await publishDesign(businessId);
+    const res = await publishDesign(businessId, design);
     setPublica(false);
     if ("error" in res) {
       toast.error(res.error);

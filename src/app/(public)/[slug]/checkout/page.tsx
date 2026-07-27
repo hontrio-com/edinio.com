@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -49,34 +48,13 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const isOwner = user?.id === business.user_id;
 
   const admin = createAdminClient();
-  const [{ data: storeSettings }, produseCuGreutate] = await Promise.all([
+  const [{ data: storeSettings }] = await Promise.all([
     admin
       .from("store_settings")
       .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold")
       .eq("business_id", business.id)
       .single(),
-    // Greutatile produselor, pentru cotatia internationala DPD pe kilograme.
-    // Doar cele care AU greutate: la un magazin fara livrare internationala
-    // lista iese goala si interogarea nu costa nimic. Fara ele, acelasi cos ar
-    // primi alt tarif pe pagina decat in fereastra.
-    //
-    // In ferestre .range(), ca si catalogul paginii de magazin: un query simplu
-    // se taie silentios la 1000 de randuri (cap PostgREST), iar produsele
-    // ramase pe dinafara ar intra in cotatie cu greutate zero.
-    fetchAllRows("storefront.checkout.weights", (from, to) =>
-      admin
-        .from("products")
-        .select("id, weight_grams")
-        .eq("business_id", business.id)
-        .eq("is_active", true)
-        .not("weight_grams", "is", null)
-        .order("id")
-        .range(from, to)
-    ),
   ]);
-
-  const productWeights: Record<string, number> = {};
-  for (const p of produseCuGreutate) if (p.weight_grams) productWeights[p.id] = p.weight_grams;
 
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
   const resolved = resolveDesign(storeSettings?.storefront_design, {
@@ -134,7 +112,6 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
             freeShippingThreshold={storeSettings?.free_shipping_threshold ? Number(storeSettings.free_shipping_threshold) : null}
             emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
             initialDiscountCode={code ?? null}
-            productWeights={productWeights}
           />
         </main>
       </StorePageShell>

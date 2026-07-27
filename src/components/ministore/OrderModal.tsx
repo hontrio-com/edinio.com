@@ -193,8 +193,15 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [showDiscountField, setShowDiscountField] = useState(false);
 
   // Derive effective qty and raw subtotal (before discount)
-  const effectiveQty = hasTiers ? tiers![selectedTierIdx].qty : quantity;
-  const productSubtotal = hasTiers ? tiers![selectedTierIdx].price : product.price * quantity;
+  //
+  // Treptele se aplica doar cand cantitatea ceruta CHIAR e o treapta. Paginile
+  // de produs cu selector de bucati pot cere orice numar, iar lista de trepte
+  // contine mereu si intrarea de o bucata: fara verificarea asta, cine alegea 7
+  // bucati pe pagina ajungea in formular cu una singura, fara niciun semn.
+  const treaptaPotrivita = hasTiers ? tiers!.findIndex((t) => t.qty === quantity) : -1;
+  const peTrepte = treaptaPotrivita >= 0;
+  const effectiveQty = peTrepte ? tiers![treaptaPotrivita].qty : quantity;
+  const productSubtotal = peTrepte ? tiers![treaptaPotrivita].price : product.price * quantity;
   // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
@@ -647,7 +654,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     const baseTotal = product.price * tier.qty;
                     const savings = baseTotal - tier.price;
                     return (
-                      <button key={i} type="button" onClick={() => setSelectedTierIdx(i)}
+                      <button key={i} type="button" onClick={() => setQuantity(tiers![i].qty)}
                         className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border-2 transition-all text-left"
                         style={{ borderColor: selected ? color : "var(--color-border)", background: selected ? `${color}12` : "var(--color-surface)" }}
                       >

@@ -299,6 +299,31 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
   const commerceRaw = obj(r.commerce);
 
   const home = parseSectionList(r.home, seenIds, MAX_HOME_SECTIONS);
+
+  /*
+   * Randurile de produse traiesc in continuare in `page_content`, unde le pune
+   * editorul vechi. Odata ce magazinul are un design salvat, lista de sectiuni
+   * vine INTREAGA de acolo, deci un rand adaugat dupa aceea nu mai aparea
+   * niciodata: comerciantul il vedea in editorul lui si nu si-l gasea in
+   * magazin, fara niciun mesaj.
+   *
+   * Randurile custom isi pastreaza id-ul din `page_content`, deci potrivirea se
+   * face pe el. Cele noi intra inaintea catalogului, unde le pune si designul
+   * clasic. Ordinea aleasa de comerciant in editorul de design ramane neatinsa
+   * pentru randurile pe care le are deja.
+   */
+  const randuriNoi = classic.home.filter(
+    (s) => s.kind === "product_row" && !seenIds.has(s.id),
+  );
+  if (randuriNoi.length > 0) {
+    const laCatalog = home.findIndex((s) => s.kind === "product_grid");
+    const pozitie = laCatalog >= 0 ? laCatalog : home.length;
+    for (const s of randuriNoi) seenIds.add(s.id);
+    home.splice(pozitie, 0, ...randuriNoi);
+    // Plafonul ramane plafon: readucerea randurilor nu are voie sa il sara.
+    if (home.length > MAX_HOME_SECTIONS) home.length = MAX_HOME_SECTIONS;
+  }
+
   // Sectiunile fara care magazinul n-ar mai fi un magazin se readauga la final
   // daca lipsesc — o configuratie stricata nu are voie sa ascunda catalogul.
   for (const kind of REQUIRED_HOME) {

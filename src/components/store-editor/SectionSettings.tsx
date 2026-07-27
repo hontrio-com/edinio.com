@@ -28,13 +28,20 @@ export function SectionSettings({
   const fields = variantMeta(section.kind, section.variant)?.fields ?? [];
   if (fields.length === 0) return null;
 
-  const valoare = (f: Field) => section.settings[f.key];
+  // Ce nu e salvat inca vine din valorile implicite ale variantei: designurile
+  // salvate inainte de a exista un camp n-au cheia lui, iar un comutator care
+  // citeste „nedefinit" s-ar desena stins desi magazinul il are aprins.
+  const implicite = variantMeta(section.kind, section.variant)?.defaults ?? {};
+  const citeste = (cheie: string) =>
+    cheie in section.settings ? section.settings[cheie] : implicite[cheie];
+
+  const valoare = (f: Field) => citeste(f.key);
   const seteaza = (key: string, v: unknown) => onChange({ ...section.settings, [key]: v });
 
   // Un camp cu `showIf` apare doar cand campul de care depinde are valoarea
   // ceruta — ex. textul butonului dispare cand butonul e stins.
   const vizibil = (f: Field) =>
-    !f.showIf || section.settings[f.showIf.key] === f.showIf.equals;
+    !f.showIf || citeste(f.showIf.key) === f.showIf.equals;
 
   return (
     <div className={cuTitlu ? "mt-4 pt-3 border-t border-border space-y-3" : "pt-4 space-y-4"}>

@@ -2,6 +2,7 @@
 
 import { ShoppingCart } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
 
 /**
@@ -113,7 +114,9 @@ function Paginare({
     }, []);
 
   const nav = "px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors";
-  const href = (p: number) => (p <= 1 ? `${basePath}/` : `${basePath}/?page=${p}`);
+  // Fara slash inaintea interogarii: `/magazin/?page=2` ia un 308 la fiecare
+  // apasare, iar Search Console numara fiecare pagina ca redirectionare.
+  const href = (p: number) => (p <= 1 ? radacinaMagazin(basePath) : `${radacinaMagazin(basePath)}?page=${p}`);
 
   return (
     <div className="flex items-center justify-center gap-2 mt-8">

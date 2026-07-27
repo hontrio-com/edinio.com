@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Loader2, Monitor, Settings2, SlidersHorizontal, Smartphone, Undo2, X } from "lucide-react";
+import { Check, Loader2, Monitor, Settings2, SlidersHorizontal, Smartphone, Sparkles, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
 import { updateSection } from "@/lib/storefront/design/edit";
@@ -150,7 +150,7 @@ export function SectionDesignBrowser({
 
   async function onPublica() {
     setPublica(true);
-    const res = await publishDesign(businessId);
+    const res = await publishDesign(businessId, design);
     setPublica(false);
     if ("error" in res) {
       toast.error(res.error);
@@ -177,10 +177,38 @@ export function SectionDesignBrowser({
     // altfel ultimul card ramane sub ele.
     <div className={`max-w-6xl mx-auto px-4 sm:px-6 py-5 ${areModificari ? "pb-44 lg:pb-28" : "pb-24 lg:pb-8"}`}>
       <div className="mb-5">
-        <h1 className="text-xl font-bold text-foreground">Design sectiuni</h1>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h1 className="text-xl font-bold text-foreground">Design sectiuni</h1>
+          <span className="shrink-0 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold uppercase tracking-wider">
+            Beta
+          </span>
+        </div>
         <p className="text-sm text-muted-foreground">
           Alege cum arata fiecare parte a magazinului si regleaza-i setarile.
         </p>
+      </div>
+
+      {/*
+        Anunt de beta. Sectiunea e functionala si publicabila, dar primeste
+        design-uri noi in continuare: comerciantul trebuie sa stie ca ce vede azi
+        nu e lista finala, si pe unde reclama daca ceva arata gresit in magazinul
+        lui. Nu se poate inchide — un anunt care dispare la prima vizita nu mai e
+        acolo cand chiar apare problema.
+      */}
+      <div role="status"
+        className="mb-5 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 flex items-start gap-3">
+        <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
+        <div className="min-w-0 text-sm">
+          <p className="font-semibold text-foreground">Sectiune in lucru</p>
+          <p className="text-muted-foreground leading-relaxed">
+            Lucram in continuare la imbunatatiri si adaugam design-uri noi.
+            Daca intalnesti o problema in magazinul tau,{" "}
+            <Link href="/dashboard/suport" className="font-medium text-primary underline underline-offset-2 hover:opacity-80">
+              scrie-ne la suport
+            </Link>{" "}
+            si o rezolvam.
+          </p>
+        </div>
       </div>
 
       {/* Sectiunile: sir derulabil pe telefon, coloana pe desktop. */}

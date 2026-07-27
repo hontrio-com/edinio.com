@@ -18,7 +18,7 @@ const NAV_ITEMS = [
     href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul",
     children: [
       { href: "/dashboard/editor", label: "Design magazin" },
-      { href: "/dashboard/editor/sectiuni", label: "Design sectiuni" },
+      { href: "/dashboard/editor/sectiuni", label: "Design sectiuni", beta: true },
       { href: "/dashboard/editor/media", label: "Biblioteca Media" },
     ],
   },
@@ -171,7 +171,13 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
                             : "text-muted-foreground hover:text-foreground hover:bg-accent"
                         )}
                       >
-                        {child.label}
+                        <span className="min-w-0 truncate">{child.label}</span>
+                        {/* Ecran nou, in lucru: se vede si din meniu, nu doar dupa ce intri. */}
+                        {"beta" in child && child.beta && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-bold uppercase tracking-wider">
+                            Beta
+                          </span>
+                        )}
                       </Link>
                     ))}
                   </div>

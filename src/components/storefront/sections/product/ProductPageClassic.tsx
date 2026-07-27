@@ -11,7 +11,8 @@ import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import {
-  parseVariants, comboTitle, findCombo, isValueAvailable, VARIANT_TITLE_SEP,
+  parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
+  VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
@@ -295,12 +296,16 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
   const slides = displayImages.length > 0 ? displayImages : [];
 
-  // Price — use variant price if set
+  // Pretul combinatiei trece prin ACELASI helper ca grila, cealalta varianta de
+  // pagina si repretuirea de pe server. Formula proprie de aici trata sirul „0"
+  // ca pret real, deci pagina scria 0 lei si serverul incasa pretul de baza:
+  // clientul platea altceva decat i s-a aratat.
   const basePrice = Number(product.price);
-  const displayPrice = selectedCombo?.price ? Number(selectedCombo.price) : basePrice;
-  const displayComparePrice = selectedCombo?.compare_at_price
-    ? Number(selectedCombo.compare_at_price)
-    : product.compare_at_price ? Number(product.compare_at_price) : null;
+  const displayPrice = comboUnitPrice(selectedCombo, basePrice);
+  const displayComparePrice = comboCompareAtPrice(
+    selectedCombo,
+    product.compare_at_price ? Number(product.compare_at_price) : null,
+  );
 
   // Inainte de a alege o varianta, afiseaza intervalul de pret (sau doar minimul daca e setat din editor).
   const priceRange = getProductPriceRange(basePrice, pageSections);
@@ -317,7 +322,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const isOutOfStock = stockStatus === "out_of_stock"
     || (product.track_inventory && product.stock_quantity !== null && product.stock_quantity === 0);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
-  const needsVariant = !!variantsData && !selectedComboTitle;
+  // Combinatia trebuie sa EXISTE si sa fie activa, nu doar sa aiba titlul
+  // complet: altfel linia intra in cos cu pretul de baza, iar serverul respinge
+  // comanda intreaga la trimitere.
+  const needsVariant = !!variantsData && !selectedCombo;
 
   // Specifications — auto-append dimensions if present
   const dimensions = pageSections.dimensions;

@@ -2,7 +2,7 @@
 
 import { Fragment, type ComponentType } from "react";
 import dynamic from "next/dynamic";
-import { groupSections } from "@/lib/storefront/design/group-sections";
+import { groupSections, sectionLayout } from "@/lib/storefront/design/group-sections";
 import { SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
 import { useStoreChrome } from "./StorefrontProvider";
 import type { SectionInstance } from "@/lib/storefront/design/types";
@@ -225,12 +225,18 @@ export function ChromeSection({ section }: { section: SectionInstance | null }) 
 }
 
 /**
- * O singura sectiune, fara marcaje si fara grupare in containere.
+ * O singura sectiune, pentru miniaturile din galeria de design-uri.
  *
- * Folosita de miniaturile din galeria de design-uri: fiecare card randeaza
- * varianta reala, cu logo-ul, culorile si produsele magazinului, ca sa se vada
- * cum ar arata acolo, nu la un magazin demonstrativ.
+ * Sectiunile care in magazin primesc container si spatiu vertical de la
+ * invelisul paginii il primesc si aici, cu aceleasi masuri. Fara el, un rand de
+ * produse pornea lipit de marginea din stanga si cu titlul retezat sus — adica
+ * miniatura nu mai arata designul, ci un design fara jumatate din asezarea lui.
  */
 export function PreviewSection({ section }: { section: SectionInstance }) {
-  return <SectionOne section={section} />;
+  if (sectionLayout(section) === "full") return <SectionOne section={section} />;
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-10">
+      <SectionOne section={section} />
+    </div>
+  );
 }

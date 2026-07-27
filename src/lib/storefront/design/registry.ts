@@ -467,8 +467,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: true,
     inCatalog: true,
     variants: {
-      grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: PRODUCT_ROW_FIELDS },
-      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: PRODUCT_ROW_FIELDS },
+      grid: { label: "Grila", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: PRODUCT_ROW_FIELDS },
+      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: PRODUCT_ROW_FIELDS },
     },
   },
   product_grid: {

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { storeBaseUrl } from "@/lib/seo";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -30,12 +31,33 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!meta) return {};
   const supabase = await createClient();
   const { data: business } = await supabase
-    .from("businesses").select("business_name, store_name").eq("slug", slug).single();
+    .from("businesses").select("slug, business_name, store_name, custom_domain, cover_url").eq("slug", slug).single();
   if (!business) return {};
+  const numeMagazin = business.store_name ?? business.business_name;
+  const titlu = `${meta.label} | ${numeMagazin}`;
+  const url = `${storeBaseUrl(business)}/politici/${type}`;
+  const imagine = business.cover_url ?? undefined;
+  // openGraph si twitter se declara aici, nu se lasa mostenite: pagina e legata
+  // din subsolul fiecarui magazin, iar fara ele previzualizarea linkului trimis
+  // pe WhatsApp sau Facebook arata cardul de marketing al Edinio, nu magazinul.
   return {
     // `absolute` strips the root layout's "%s | Edinio" template.
-    title: { absolute: `${meta.label} | ${business.store_name ?? business.business_name}` },
+    title: { absolute: titlu },
     robots: { index: false },
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      locale: "ro_RO",
+      siteName: numeMagazin,
+      title: titlu,
+      url,
+      ...(imagine ? { images: [{ url: imagine }] } : {}),
+    },
+    twitter: {
+      card: imagine ? "summary_large_image" : "summary",
+      title: titlu,
+      ...(imagine ? { images: [imagine] } : {}),
+    },
   };
 }
 

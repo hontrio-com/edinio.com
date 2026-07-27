@@ -1,9 +1,26 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import { CategoryScroller } from "./CategoryScroller";
+
+/** Ctrl/Cmd/Shift-click pe o categorie deschide adresa in fila noua. */
+function altaFila(e: MouseEvent): boolean {
+  return e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
+}
+
+/**
+ * Categoriile sunt ancore, nu butoane: filtrarea se face pe loc, fara navigare,
+ * deci fara ele pagina de magazin n-ar avea niciun link crawlabil catre vreo
+ * categorie (in headere linkurile apar abia dupa deschiderea dropdown-ului, iar
+ * footerul „centered" nu arata categorii deloc). Serverul stie deja sa citeasca
+ * `?cat=`, adresele functioneaza; lipsea doar cine sa le scrie.
+ */
+function hrefCategorie(basePath: string, nume: string): string {
+  return `${basePath}/?cat=${encodeURIComponent(nume)}`;
+}
 
 /**
  * Navigarea pe categorii, varianta classic.
@@ -23,7 +40,7 @@ export function CategoryNavClassic() {
 }
 
 function PastileText() {
-  const { color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
+  const { basePath, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
     useStorefront();
 
   const inactiv = {
@@ -43,6 +60,7 @@ function PastileText() {
           </button>
         ) : (
           <button type="button" onClick={resetCategory} className={pastila}
+            aria-current={categoryFilter === "toate" ? "true" : undefined}
             style={categoryFilter === "toate" ? { backgroundColor: color, color: "white" } : inactiv}>
             Toate
           </button>
@@ -50,11 +68,19 @@ function PastileText() {
         {currentCategoryItems.map((item) => {
           const activ = categoryFilter === item.name;
           return (
-            <button key={item.key} type="button" onClick={() => selectCategoryItem(item)}
+            // `aria-current` fiindca altfel starea „aceasta e categoria aleasa"
+            // se vede exclusiv din culoarea de fundal.
+            <a key={item.key} href={hrefCategorie(basePath, item.name)}
+              onClick={(e) => {
+                if (altaFila(e)) return;
+                e.preventDefault();
+                selectCategoryItem(item);
+              }}
+              aria-current={activ ? "true" : undefined}
               className={`${pastila} inline-flex items-center gap-1`}
               style={activ ? { backgroundColor: color, color: "white" } : inactiv}>
               {item.name}{item.hasChildren && <ChevronRight size={13} className="opacity-70" />}
-            </button>
+            </a>
           );
         })}
       </div>
@@ -63,7 +89,7 @@ function PastileText() {
 }
 
 function CerculeteCuImagini() {
-  const { color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
+  const { basePath, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
     useStorefront();
 
   const buton = "flex flex-col items-center gap-2 flex-shrink-0 group";
@@ -85,7 +111,8 @@ function CerculeteCuImagini() {
             </span>
           </button>
         ) : (
-          <button type="button" onClick={resetCategory} className={buton}>
+          <button type="button" onClick={resetCategory} className={buton}
+            aria-current={toateActiv ? "true" : undefined}>
             <div className="w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all border-2"
               style={{
                 borderColor: toateActiv ? color : "var(--color-border)",
@@ -105,7 +132,14 @@ function CerculeteCuImagini() {
         {currentCategoryItems.map((item) => {
           const activ = categoryFilter === item.name;
           return (
-            <button key={item.key} type="button" onClick={() => selectCategoryItem(item)} className={buton}>
+            <a key={item.key} href={hrefCategorie(basePath, item.name)}
+              onClick={(e) => {
+                if (altaFila(e)) return;
+                e.preventDefault();
+                selectCategoryItem(item);
+              }}
+              aria-current={activ ? "true" : undefined}
+              className={buton}>
               <div className="relative w-[72px] h-[72px] rounded-full overflow-hidden transition-all border-2"
                 style={{
                   borderColor: activ ? color : "var(--color-border)",
@@ -130,7 +164,7 @@ function CerculeteCuImagini() {
               <span className={eticheta} style={{ color: activ ? color : "var(--color-muted-foreground)" }}>
                 {item.name}
               </span>
-            </button>
+            </a>
           );
         })}
       </div>

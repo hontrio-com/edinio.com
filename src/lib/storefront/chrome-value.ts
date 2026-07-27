@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { cartHref, cartOnPage } from "@/lib/storefront/design/commerce";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { CartMode, StoreChromeValue } from "@/components/storefront/StorefrontProvider";
@@ -70,8 +71,15 @@ export function buildChromeData({
     social: (business.social as StoreSocial) ?? {},
     gallery: Array.isArray(business.gallery) ? (business.gallery as string[]) : [],
     menu: pageContent.menu ?? [],
+    // Offsetul de sub bara de anunt trebuie sa vina din sectiunea care CHIAR se
+    // randeaza: stinsa sau stearsa din editor, `page_content` ramane pe „enabled"
+    // si header-ul lipit la `top-9` ar lasa o fasie goala in capul ecranului.
+    // Unde designul nu e dat, calculul ramane cel de dinainte si il completeaza
+    // invelisul de pagina, care il are mereu.
     hasAnnouncementBar:
-      pageContent.show_announcement_on_store !== false && pageContent.announcement_bar?.enabled === true,
+      pageContent.show_announcement_on_store !== false
+      && pageContent.announcement_bar?.enabled === true
+      && (!design || standaloneAnnouncement(design)?.enabled === true),
     cartMode: cosPePagina ? "page" : cartMode,
     cartHref: cosPePagina ? cartHref(basePath) : undefined,
     currentPageSlug,

@@ -7,10 +7,10 @@ import { SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
 import { useStoreChrome } from "./StorefrontProvider";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { AnnouncementMarquee } from "./sections/chrome/AnnouncementMarquee";
+import { FooterColumnsLight } from "./sections/chrome/FooterColumnsLight";
 import { FooterDark } from "./sections/chrome/FooterDark";
 import { HeaderClassic } from "./sections/chrome/HeaderClassic";
 import { UspStripIcons } from "./sections/chrome/UspStripIcons";
-import { HeroClassic } from "./sections/hero/HeroClassic";
 import { CatalogToolbar } from "./sections/catalog/CatalogToolbar";
 import { CategoryNavClassic } from "./sections/catalog/CategoryNavClassic";
 import { ProductGridClassic } from "./sections/catalog/ProductGridClassic";
@@ -54,10 +54,6 @@ const HeroBannersOnly = dynamic(
   () => import("./sections/hero/HeroBannersOnly").then((m) => m.HeroBannersOnly),
   { ssr: true },
 );
-const FooterColumns = dynamic(
-  () => import("./sections/chrome/FooterColumnsLight").then((m) => m.FooterColumnsLight),
-  { ssr: true },
-);
 const FooterCentered = dynamic(
   () => import("./sections/chrome/FooterCentered").then((m) => m.FooterCentered),
   { ssr: true },
@@ -97,9 +93,16 @@ const HEADERE: Record<string, VariantaSectiune> = {
   centered: HeaderCentered as VariantaSectiune,
 };
 
-/** Variantele de footer, dupa id-ul din registry. */
+/**
+ * Variantele de footer, dupa id-ul din registry.
+ *
+ * `columns` e importat static desi nu e „classic": e acelasi modul `FooterColumns`
+ * pe care il randeaza si `dark`, deci e oricum in bundle-ul principal, iar un
+ * chunk separat pentru invelisul de opt linii ar fi doar o cerere de retea in
+ * plus. Impartirea ramane pentru `centered`, care chiar e cod separat.
+ */
 const FOOTERE: Record<string, ComponentType> = {
-  columns: FooterColumns,
+  columns: FooterColumnsLight,
   centered: FooterCentered,
 };
 
@@ -113,9 +116,10 @@ const HEROURI: Record<string, VariantaSectiune> = {
 /**
  * Randeaza sectiunile paginii de magazin in ordinea din configuratie.
  *
- * Dispecerul alege dupa tip si, unde exista mai multe, dupa varianta. O varianta
- * necunoscuta (scoasa din catalog intre timp) cade pe „classic" — parserul o
- * curata oricum la urmatoarea salvare.
+ * Dispecerul alege dupa tip si, unde exista mai multe, dupa varianta. Header-ul
+ * si footer-ul nu-si trec varianta implicita prin lista, deci ramura fara
+ * potrivire e chiar „classic", respectiv „dark"; hero-ul nu are asa ceva, toate
+ * variantele lui sunt in lista.
  */
 function SectionOne({ section }: { section: SectionInstance }) {
   switch (section.kind) {
@@ -130,8 +134,12 @@ function SectionOne({ section }: { section: SectionInstance }) {
       return Varianta ? <Varianta /> : <FooterDark />;
     }
     case "hero": {
+      // Fara refugiu propriu: parserul normalizeaza deja varianta la una din
+      // registry, deci ramura n-ar fi accesibila, iar un import static al ei ar
+      // trage caruselul in bundle-ul fiecarui magazin, inclusiv al celor pe
+      // overlay.
       const Varianta = HEROURI[section.variant];
-      return Varianta ? <Varianta settings={section.settings} /> : <HeroClassic />;
+      return Varianta ? <Varianta settings={section.settings} /> : null;
     }
     case "usp_strip":
       return <UspStripIcons />;
@@ -196,8 +204,10 @@ function Marcata({ section }: { section: SectionInstance }) {
  * latimea). Asa, layout-ul classic da exact acelasi marcaj ca inainte, iar o
  * ordine oarecare aleasa de comerciant ramane valida.
  *
- * Prima serie e `<main>`, marcajul semantic al paginii, si isi pastreaza
- * spatierea verticala; eventualele serii de dupa sunt simple containere.
+ * Prima serie e `<main>`, marcajul semantic al paginii; eventualele serii de dupa
+ * sunt simple containere, cu aceeasi spatiere. Serie fara spatiu sus ar insemna
+ * ca orice sectiune mutata dupa una pe toata latimea se lipeste de marginea ei
+ * de jos — adica exact ce produce reordonarea din editor.
  */
 export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
   return (
@@ -212,7 +222,7 @@ export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
             {bloc.sections.map((s) => <Marcata key={s.id} section={s} />)}
           </main>
         ) : (
-          <div key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 pb-10">
+          <div key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 py-10">
             {bloc.sections.map((s) => <Marcata key={s.id} section={s} />)}
           </div>
         ),

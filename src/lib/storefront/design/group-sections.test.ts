@@ -41,12 +41,15 @@ test("layout-ul classic da un singur main, dupa sectiunile pe latime completa", 
 });
 
 test("o sectiune pe latime completa mutata la mijloc taie containerul in doua", () => {
+  // `main` merge pe seria cu catalogul, nu pe prima: cine sare la reperul
+  // principal trebuie sa ajunga la produse, nu la bara de filtre ramasa singura
+  // deasupra hero-ului. La ordinea implicita cele doua serii coincid oricum.
   const forma1 = forma([
     section("a", "catalog_toolbar", "classic"),
     section("b", "hero", "banners"),
     section("c", "product_grid", "classic"),
   ]);
-  assert.deepEqual(forma1, ["main:catalog_toolbar", "full:hero", "div:product_grid"]);
+  assert.deepEqual(forma1, ["div:catalog_toolbar", "full:hero", "main:product_grid"]);
 });
 
 test("main-ul e mereu primul container, chiar daca pagina incepe cu hero", () => {

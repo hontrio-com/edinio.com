@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { menuItemHref, isExternalLink, type MenuItem } from "@/lib/pages/menu";
@@ -11,8 +11,18 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
   items: MenuItem[]; basePath: string; color: string; currentSlug?: string | null; className?: string;
 }) {
   if (items.length === 0) return null;
+  // `overflow-x-auto` duce dimensiunea minima automata la zero — cu `visible`, un
+  // meniu de opt intrari `whitespace-nowrap` nu se poate stramta sub suma lor si
+  // latfeste header-ul, adica pagina intreaga capata derulare orizontala fix la
+  // pragul unde meniul tocmai a devenit vizibil.
+  //
+  // Centrarea se face cu margini automate pe grupul de linkuri, nu cu
+  // `justify-center` pe containerul care deruleaza: un flex centrat cu depasire
+  // isi taie continutul la marginea de START, iar acolo nu se poate derula —
+  // primele intrari din meniu ar deveni de neatins.
   return (
-    <nav className={`hidden md:flex items-center gap-0.5 ${className ?? ""}`}>
+    <nav className={`hidden md:flex items-center min-w-0 overflow-x-auto ${className ?? ""}`}>
+      <span className="flex items-center gap-0.5 mx-auto">
       {items.map((it) => {
         const href = menuItemHref(it, basePath);
         const ext = isExternalLink(it);
@@ -25,6 +35,7 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
           </a>
         );
       })}
+      </span>
     </nav>
   );
 }
@@ -44,10 +55,14 @@ const PANA_LA = {
 /**
  * Cum arata butonul. „simplu" e pentru header-ele pe fundal inchis, unde un
  * patrat cu chenar deschis ar fi o pata luminoasa in mijlocul barii.
+ *
+ * La „simplu", marimea vizibila ramane cea de 32px, dar suprafata de atins urca
+ * la 44px prin padding anulat de marginea negativa: butonul n-are fundal, deci
+ * cresterea nu se vede, iar pe telefon el e singura navigare a paginii.
  */
 const STIL_BUTON = {
   incadrat: "w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center hover:bg-muted transition-colors shrink-0",
-  simplu: "w-8 h-8 flex items-center justify-center text-current hover:opacity-70 transition-opacity shrink-0",
+  simplu: "w-11 h-11 -m-1.5 flex items-center justify-center text-current hover:opacity-70 transition-opacity shrink-0",
 } as const;
 
 export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName, panaLa = "md", stil = "incadrat" }: {
@@ -57,11 +72,19 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
 }) {
   const bp = PANA_LA[panaLa];
   const [open, setOpen] = useState(false);
-  // Portal the panel to <body> so it escapes the sticky header's stacking context
-  // (otherwise the announcement bar / cart bar / cart drawer paint over it).
-  const [mounted, setMounted] = useState(false);
+  const idPanou = useId();
+  const declansator = useRef<HTMLButtonElement>(null);
+  const panou = useRef<HTMLDivElement>(null);
+  const inchidere = useRef<HTMLButtonElement>(null);
+  // Portal the panel out of the sticky header's stacking context (otherwise the
+  // announcement bar / cart bar / cart drawer paint over it). Tinta e radacina
+  // temei magazinului, nu <body>: variantele noi trimit `color` ca
+  // `var(--st-primary)`, iar in afara temei variabila n-are ce rezolva si
+  // patratul cu initiala magazinului ramane fara fundal.
+  const [tinta, setTinta] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
+    const id = requestAnimationFrame(() =>
+      setTinta(document.querySelector<HTMLElement>("[data-store-theme]") ?? document.body));
     return () => cancelAnimationFrame(id);
   }, []);
   useEffect(() => {
@@ -69,19 +92,59 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  // Panoul e singura navigare de pe telefon, pentru toate variantele de header:
+  // se inchide cu Escape, tine focusul inauntru cat e deschis si il da inapoi
+  // hamburgerului la inchidere. Fara asta, utilizatorul de tastatura tabuleaza
+  // prin pagina de dedesubt, pe care overlay-ul o ascunde.
+  useEffect(() => {
+    if (!open) return;
+    const buton = declansator.current;
+    inchidere.current?.focus();
+    const laTasta = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab" || !panou.current) return;
+      const focusabile = panou.current.querySelectorAll<HTMLElement>("a[href], button");
+      if (focusabile.length === 0) return;
+      const primul = focusabile[0];
+      const ultimul = focusabile[focusabile.length - 1];
+      if (e.shiftKey && document.activeElement === primul) {
+        e.preventDefault();
+        ultimul.focus();
+      } else if (!e.shiftKey && document.activeElement === ultimul) {
+        e.preventDefault();
+        primul.focus();
+      }
+    };
+    document.addEventListener("keydown", laTasta);
+    return () => {
+      document.removeEventListener("keydown", laTasta);
+      buton?.focus();
+    };
+  }, [open]);
+
   if (items.length === 0) return null;
+
+  // `${color}10` (alfa pe hex) e valid doar pentru culoarea reala trimisa de
+  // header-ul classic; variantele noi trimit `var(--st-primary)`, unde
+  // concatenarea ar da o valoare pe care browserul o ignora.
+  const fundalActiv = color.startsWith("#") ? `${color}10` : `color-mix(in srgb, ${color} 6%, transparent)`;
 
   return (
     <>
-      <button type="button" aria-label="Deschide meniul" onClick={() => setOpen(true)}
+      <button ref={declansator} type="button" aria-label="Deschide meniul" aria-expanded={open}
+        aria-controls={idPanou} onClick={() => setOpen(true)}
         className={`${bp.buton} ${STIL_BUTON[stil]}`}>
         <Menu className={stil === "simplu" ? "h-6 w-6" : "h-4.5 w-4.5 text-foreground"} size={stil === "simplu" ? 24 : 18} />
       </button>
 
-      {mounted && open && createPortal(
+      {tinta && open && createPortal(
         <>
-          <div className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] ${bp.panou}`} onClick={() => setOpen(false)} />
-          <div className={`fixed inset-y-0 left-0 w-72 max-w-[82vw] bg-background z-[70] ${bp.panou} flex flex-col shadow-2xl`}>
+          <div aria-hidden="true" className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] ${bp.panou}`} onClick={() => setOpen(false)} />
+          <div ref={panou} id={idPanou} role="dialog" aria-modal="true" aria-label="Meniu"
+            className={`fixed inset-y-0 left-0 w-72 max-w-[82vw] bg-background z-[70] ${bp.panou} flex flex-col shadow-2xl`}>
             <div className="flex items-center justify-between px-4 h-16 border-b border-border">
               <div className="flex items-center gap-2 min-w-0">
                 {logoUrl ? (
@@ -93,7 +156,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                   </div>
                 )}
               </div>
-              <button type="button" aria-label="Inchide meniul" onClick={() => setOpen(false)}
+              <button ref={inchidere} type="button" aria-label="Inchide meniul" onClick={() => setOpen(false)}
                 className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                 <X className="h-4 w-4" />
               </button>
@@ -107,7 +170,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                   <a key={it.id} href={href} {...(ext ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                     onClick={() => setOpen(false)}
                     className="block px-3 py-3 rounded-xl text-base font-medium text-foreground hover:bg-muted transition-colors"
-                    style={active ? { color, backgroundColor: `${color}10` } : undefined}>
+                    style={active ? { color, backgroundColor: fundalActiv } : undefined}>
                     {it.label}
                   </a>
                 );
@@ -115,7 +178,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
             </nav>
           </div>
         </>,
-        document.body,
+        tinta,
       )}
     </>
   );

@@ -19,7 +19,11 @@ export function GalleryClassic() {
           <button key={i} type="button" onClick={() => openLightbox(url)}
             aria-label={`Deschide imaginea ${i + 1} din galerie`}
             className="relative aspect-square rounded-2xl overflow-hidden bg-muted border border-border hover:scale-[1.02] hover:shadow-md transition-all duration-200">
-            <Image src={url} alt={`Galerie ${i + 1}`} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" className="object-cover" />
+            {/* Ultima treapta in pixeli, nu in `vw`: grila sta intr-un container
+                de `max-w-6xl`, deci de la 1024 in sus celula nu mai creste peste
+                ~280 px. Cu `25vw`, pe un ecran de 2560 browserul cerea candidatul
+                de 640w pentru o poza afisata la 280. */}
+            <Image src={url} alt={`Galerie ${i + 1}`} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px" className="object-cover" />
           </button>
         ))}
       </div>

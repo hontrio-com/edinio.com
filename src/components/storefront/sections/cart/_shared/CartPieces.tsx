@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import Image from "next/image";
 import { Check, Minus, Package, Plus, ShoppingCart, Truck, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
@@ -21,13 +22,22 @@ import type { CartPricing } from "@/lib/storefront/cart/pricing";
  * in care o diferenta ar insemna doua totaluri pentru acelasi cos.
  */
 
-/** Butoanele de cantitate, cu stergere la scaderea sub unu. */
+/**
+ * Butoanele de cantitate, cu stergere la scaderea sub unu.
+ *
+ * Etichetele poarta numele produsului: intr-un cos cu douazeci de linii, un
+ * cititor de ecran anunta altfel douazeci de butoane „Scade cantitatea"
+ * identice, si nu se poate sti la care linie e cursorul fara sa se reia randul.
+ */
 export function StepperCantitate({
   cantitate,
+  nume,
   onSchimba,
   marime = "normal",
 }: {
   cantitate: number;
+  /** Numele produsului, pentru etichetele butoanelor. */
+  nume: string;
   onSchimba: (n: number) => void;
   marime?: "normal" | "mic";
 }) {
@@ -39,11 +49,13 @@ export function StepperCantitate({
 
   return (
     <div className="flex items-center gap-2">
-      <button type="button" aria-label="Scade cantitatea" onClick={() => onSchimba(cantitate - 1)} className={buton}>
+      <button type="button" aria-label={`Scade cantitatea pentru ${nume}`} onClick={() => onSchimba(cantitate - 1)} className={buton}>
         <Minus className={iconita} />
       </button>
-      <span className="text-sm font-semibold w-6 text-center tabular-nums">{cantitate}</span>
-      <button type="button" aria-label="Creste cantitatea" onClick={() => onSchimba(cantitate + 1)} className={buton}>
+      {/* Cantitatea se schimba fara reincarcare si fara mutarea focalizarii:
+          fara regiune live, apasarea butonului nu anunta nimic. */}
+      <span aria-live="polite" aria-atomic="true" className="text-sm font-semibold w-6 text-center tabular-nums">{cantitate}</span>
+      <button type="button" aria-label={`Creste cantitatea pentru ${nume}`} onClick={() => onSchimba(cantitate + 1)} className={buton}>
         <Plus className={iconita} />
       </button>
     </div>
@@ -73,13 +85,27 @@ export function CartLine({
   dens?: "rand" | "compact";
 }) {
   const key = lineKey(item);
+  const rand = useRef<HTMLDivElement>(null);
   const href = item.slug ? `${basePath}/product/${item.slug}` : null;
   const latime = dens === "compact" ? "w-16 h-16" : "w-20 h-20 sm:w-24 sm:h-24";
+  // `sizes` urmeaza latimile de mai sus, altfel browserul cere pentru caseta de
+  // 64 px a modelului compact o imagine de 96 px — cu 50% mai lata decat trebuie,
+  // pe fiecare linie de cos.
+  const marimi = dens === "compact" ? "64px" : "(min-width: 640px) 96px, 80px";
+
+  // Randul dispare cu tot cu butonul apasat — si la „Sterge", si cand cantitatea
+  // scade sub unu. Fara mutarea asta, focalizarea cade pe <body>: cine sterge de
+  // la tastatura se trezeste la inceputul paginii, fara sa afle ce s-a intamplat.
+  // Butonul vecin, odata focalizat, isi anunta si numele produsului ramas.
+  function mutaFocalizarea() {
+    const vecin = rand.current?.nextElementSibling ?? rand.current?.previousElementSibling;
+    vecin?.querySelector<HTMLElement>("[data-sterge-linie]")?.focus();
+  }
 
   const poza = (
     <span className={`relative ${latime} shrink-0 rounded-xl overflow-hidden bg-muted border border-border block`}>
       {item.imageUrl ? (
-        <Image src={item.imageUrl} alt={item.name} fill sizes="96px" className="object-cover" />
+        <Image src={item.imageUrl} alt={item.name} fill sizes={marimi} className="object-cover" />
       ) : (
         <span className="w-full h-full flex items-center justify-center">
           <Package className="h-5 w-5 text-muted-foreground" />
@@ -89,7 +115,7 @@ export function CartLine({
   );
 
   return (
-    <div className="flex items-start gap-3 sm:gap-4 py-4">
+    <div ref={rand} className="flex items-start gap-3 sm:gap-4 py-4">
       {href ? <a href={href}>{poza}</a> : poza}
 
       <div className="flex-1 min-w-0">
@@ -105,14 +131,20 @@ export function CartLine({
         )}
         <p className="text-xs text-muted-foreground mt-1">{formatPrice(item.price)} bucata</p>
 
-        <div className="flex items-center gap-3 mt-3">
+        {/* Zona de atins a butonului „Sterge" e adusa la inaltimea stepperului
+            si departata de „+": text de 12 px inseamna vreo 16 px de atins, iar
+            o atingere ratata cadea pe „+" si crestea cantitatea in loc sa stearga
+            linia — greseala cea mai scumpa cu putinta intr-un cos. */}
+        <div className="flex items-center gap-4 mt-3">
           <StepperCantitate
             cantitate={item.quantity}
+            nume={item.name}
             marime={dens === "compact" ? "mic" : "normal"}
-            onSchimba={(n) => onQty(key, n)}
+            onSchimba={(n) => { if (n <= 0) mutaFocalizarea(); onQty(key, n); }}
           />
-          <button type="button" onClick={() => { stergeCuEveniment(item); onRemove(key); }}
-            className="text-xs text-muted-foreground hover:text-destructive transition-colors inline-flex items-center gap-1">
+          <button type="button" aria-label={`Sterge ${item.name} din cos`} data-sterge-linie=""
+            onClick={() => { mutaFocalizarea(); stergeCuEveniment(item); onRemove(key); }}
+            className="h-9 -ml-2 px-2 rounded-lg text-xs text-muted-foreground hover:text-destructive transition-colors inline-flex items-center gap-1">
             <X className="h-3.5 w-3.5" />
             Sterge
           </button>
@@ -139,13 +171,11 @@ function stergeCuEveniment(item: CartItem) {
 export function ProgresTransport({
   pricing,
   color,
-  areaPrag,
 }: {
   pricing: CartPricing;
   color: string;
-  areaPrag: boolean;
 }) {
-  if (!areaPrag) return null;
+  if (!pricing.areaPrag) return null;
 
   return (
     <div className="p-3.5 rounded-2xl border border-border bg-surface">
@@ -190,7 +220,9 @@ export function RezumatCos({
 }) {
   return (
     <div className="space-y-4">
-      <div className="space-y-2 text-sm">
+      {/* Totalurile se schimba la fiecare apasare pe „+", fara reincarcare si
+          fara mutarea focalizarii: fara regiune live, nimic nu se anunta. */}
+      <div aria-live="polite" aria-atomic="true" className="space-y-2 text-sm">
         <div className="flex justify-between text-muted-foreground">
           <span>Subtotal</span>
           <span className="font-medium text-foreground tabular-nums">{formatPrice(total)}</span>
@@ -220,6 +252,45 @@ export function RezumatCos({
         style={{ backgroundColor: color }}>
         {etichetaButon}
       </button>
+    </div>
+  );
+}
+
+/**
+ * Ce se vede pana cand cosul e citit din localStorage.
+ *
+ * Cealalta jumatate a distinctiei pe care o face `hydrated`: fara ea, prima
+ * imagine a paginii e cosul GOL cu totalurile lui — „Subtotal 0 lei", transportul
+ * intreg, iar la magazinele cu comanda minima mesajul „Mai adauga 150 lei" si
+ * butonul inactiv. Cifre false, aratate la fiecare incarcare, pe pagina pe care
+ * se face conversia. Marcajul e identic pe server si la prima randare din
+ * browser, deci nu apare nepotrivire de hidratare.
+ */
+export function ScheletCos({ randuri = 3, latime = "max-w-4xl" }: { randuri?: number; latime?: string }) {
+  return (
+    <div className={`${latime} mx-auto px-4 sm:px-6 py-8 lg:py-12`}>
+      <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-6 lg:mb-8">Cosul tau</h1>
+      <div aria-hidden="true" className="animate-pulse">
+        <div className="divide-y divide-border border-y border-border">
+          {Array.from({ length: randuri }).map((_, i) => (
+            <div key={i} className="flex items-start gap-3 sm:gap-4 py-4">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-xl bg-muted" />
+              <div className="flex-1 min-w-0">
+                <div className="h-4 w-3/5 rounded bg-muted" />
+                <div className="h-3 w-1/4 rounded bg-muted mt-2" />
+                <div className="h-9 w-28 rounded-lg bg-muted mt-3" />
+              </div>
+              <div className="h-4 w-16 rounded bg-muted shrink-0" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 rounded-2xl border border-border bg-surface p-5">
+          <div className="h-3 w-28 rounded bg-muted" />
+          <div className="h-3 w-full rounded bg-muted mt-4" />
+          <div className="h-3 w-2/3 rounded bg-muted mt-2" />
+          <div className="h-12 w-full rounded-xl bg-muted mt-5" />
+        </div>
+      </div>
     </div>
   );
 }

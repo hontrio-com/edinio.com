@@ -52,7 +52,11 @@ export function CheckoutPageTwoCol(props: CheckoutOrderInput) {
           {/* Pe telefon rezumatul e primul; pe desktop trece in coloana lipita. */}
           <div className="lg:hidden mb-6">{rezumat}</div>
 
-          <div className="min-w-0 rounded-2xl border border-border bg-surface overflow-hidden">
+          {/* Fara `overflow-hidden`: lista de lockere se deschide pozitionata
+              absolut sub buton si e mai inalta decat ce ramane din card, deci
+              partea de jos era taiata si nu se putea derula. Nimic din formular
+              nu picteaza pana la margine, deci rotunjirea n-are ce taia. */}
+          <div className="min-w-0 rounded-2xl border border-border bg-surface">
             <CheckoutForm
               motor={motor}
               color={color}
@@ -63,7 +67,11 @@ export function CheckoutPageTwoCol(props: CheckoutOrderInput) {
             />
           </div>
 
-          <aside className="hidden lg:block lg:sticky lg:top-24">{rezumat}</aside>
+          {/* Decalajul urmareste inaltimea antetului lipit: fix, varful
+              rezumatului statea sub header-ele mai inalte de 96 px (bara de sus
+              a variantei „market", bara de anunt). Cat timp `--st-header-offset` nu e
+              publicata de invelis, rezerva ramane cea dinainte, 96 px. */}
+          <aside className="hidden lg:block lg:sticky" style={{ top: "calc(var(--st-header-offset, 100px) + 1rem)" }}>{rezumat}</aside>
         </div>
       )}
 

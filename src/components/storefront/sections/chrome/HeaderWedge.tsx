@@ -10,6 +10,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 
 const STROKE = 1.7;
 
@@ -40,7 +41,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
   const logoSize = pageContent.logo_size ?? 36;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const { actiuni, are, meniuCls, meniuStyle } = useHeaderSettings(settings, ["cautare", "telefon", "whatsapp", "cos"]);
+  const { actiuni, are, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.wedge);
   const meniuStanga = settings.menuAlign === "stanga";
 
   const [cautareDeschisa, setCautareDeschisa] = useState(false);
@@ -78,12 +79,15 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               )}
             </a>
 
+            {/* Intrarile se scurteaza cand nu incap, in loc sa iasa din nav: textul
+                meniului are culoarea benzii inchise si peste pana ar deveni
+                ilizibil, iar ultimele intrari ar trece si peste iconite. */}
             <nav className={`hidden lg:flex items-center gap-8 min-w-0 ${meniuStanga ? "" : "mx-auto"}`}>
               {menu.map((it) => {
                 const activ = it.type === "page" && it.target === currentPageSlug;
                 return (
                   <a key={it.id} href={menuItemHref(it, basePath)}
-                    className={`text-[15px] whitespace-nowrap transition-opacity hover:opacity-100 ${meniuCls} ${activ ? "font-bold opacity-100" : "font-medium opacity-55"}`}
+                    className={`text-[15px] truncate transition-opacity hover:opacity-100 ${meniuCls} ${activ ? "font-bold opacity-100" : "font-medium opacity-55"}`}
                     style={meniuStyle}>
                     {it.label}
                   </a>
@@ -91,8 +95,11 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               })}
             </nav>
 
-            {/* Iconitele stau pe pana, deci se coloreaza dupa ea, nu dupa banda. */}
-            <div className="flex items-center gap-3 lg:gap-5 shrink-0 ml-auto" style={{ color: "var(--st-primary-contrast)" }}>
+            {/* Iconitele stau pe pana, deci se coloreaza dupa ea, nu dupa banda.
+                Latimea rezervata la lg tine meniul dincoace de pana: pana intra
+                pana la 20rem din marginea ecranului, iar meniul se opreste unde
+                incepe zona iconitelor. */}
+            <div className="flex items-center justify-end gap-3 lg:gap-5 shrink-0 ml-auto lg:min-w-[18rem]" style={{ color: "var(--st-primary-contrast)" }}>
               {actiuni.map((a) => (
                 <Fragment key={a}>
                   {a === "cautare" && (

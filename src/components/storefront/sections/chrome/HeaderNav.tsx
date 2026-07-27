@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, Search, ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
+import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
@@ -11,6 +12,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -45,11 +47,15 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
   const logoSize = pageContent.logo_size ?? 36;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, ["cautare", "telefon", "whatsapp", "cos"]);
+  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.nav);
 
+  // Categoriile de nivel intai, nu cele ale categoriei in care a intrat
+  // vizitatorul: panoul „Produse" din header nu are cale de intoarcere, deci o
+  // lista care se schimba la fiecare drill l-ar lasa blocat in subarbore. Pe
+  // paginile fara catalog `searchCategories` sunt oricum radacinile.
   const categorii = catalog
-    ? catalog.currentCategoryItems.map((c) => ({ name: c.name, image: c.image }))
-    : (searchCategories ?? []).map((name) => ({ name, image: null }));
+    ? catalog.rootCategoryItems.map((c) => ({ key: c.key, name: c.name, image: c.image }))
+    : (searchCategories ?? []).map((name, i) => ({ key: `cat-${i}`, name, image: null }));
 
   const iconBtn =
     "w-10 h-10 rounded-full flex items-center justify-center text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors";
@@ -60,19 +66,23 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
         <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
           <div className="h-16 lg:h-[72px] flex items-center gap-3">
             <div className="lg:hidden">
-              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} />
+              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
             </div>
 
-            <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0 lg:mr-6" aria-label={nume}>
-              {business.logo_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
+            {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`
+                `truncate` n-are de unde taia si un nume lung latfeste randul. */}
+            {business.logo_url ? (
+              <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0 lg:mr-6" aria-label={nume}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
                   style={{ height: logoSize, maxWidth: logoSize * 5 }}
                   className="w-auto object-contain" />
-              ) : (
+              </a>
+            ) : (
+              <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0 lg:mr-6" aria-label={nume}>
                 <span className="text-xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
-              )}
-            </a>
+              </a>
+            )}
 
             <MeniuInline
               menu={menu}
@@ -84,18 +94,22 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
             />
 
             <div className="flex items-center gap-1 shrink-0 ml-auto">
-              <button type="button" onClick={() => setCautareDeschisa(true)}
-                className="hidden sm:inline-flex items-center gap-2 h-10 px-2.5 rounded-full text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors"
-                aria-label="Cauta produse">
-                <Search className="h-[18px] w-[18px]" strokeWidth={STROKE} />
-                <span className="text-sm font-medium">Cauta</span>
-              </button>
-              <button type="button" onClick={() => setCautareDeschisa(true)} className={`sm:hidden ${iconBtn}`} aria-label="Cauta produse">
-                <Search className="h-[18px] w-[18px]" strokeWidth={STROKE} />
-              </button>
-
               {actiuni.map((a) => (
                 <Fragment key={a}>
+                  {a === "cautare" && (
+                    <>
+                      <button type="button" onClick={() => setCautareDeschisa(true)}
+                        className="hidden sm:inline-flex items-center gap-2 h-10 px-2.5 rounded-full text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors"
+                        aria-label="Cauta produse" aria-expanded={cautareDeschisa}>
+                        <Search className="h-[18px] w-[18px]" strokeWidth={STROKE} />
+                        <span className="text-sm font-medium">Cauta</span>
+                      </button>
+                      <button type="button" onClick={() => setCautareDeschisa(true)} className={`sm:hidden ${iconBtn}`}
+                        aria-label="Cauta produse" aria-expanded={cautareDeschisa}>
+                        <Search className="h-[18px] w-[18px]" strokeWidth={STROKE} />
+                      </button>
+                    </>
+                  )}
                   {a === "telefon" && (
                     <a href={`tel:${business.phone}`} aria-label="Suna" className={`hidden sm:flex ${iconBtn}`}>
                       <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
@@ -144,7 +158,7 @@ function MeniuInline({
   menu: MenuItem[];
   basePath: string;
   currentPageSlug?: string | null;
-  categorii: { name: string; image: string | null }[];
+  categorii: { key: string; name: string; image: string | null }[];
   meniuCls: string;
   meniuStyle: { fontFamily: string };
 }) {
@@ -180,7 +194,7 @@ function MeniuInline({
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                 {categorii.slice(0, 12).map((c) => (
-                  <a key={c.name} href={`${basePath}/?cat=${encodeURIComponent(c.name)}`}
+                  <a key={c.key} href={`${basePath}/?cat=${encodeURIComponent(c.name)}`}
                     className="flex items-center gap-2.5 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
                     {c.image ? (
                       <span className="relative w-9 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
@@ -231,21 +245,61 @@ function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => 
   const catalog = useStorefrontOptional();
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const panou = useRef<HTMLDivElement>(null);
+  // Panoul traieste doar cat e deschis, iar parintele ii da un `onClose` nou la
+  // fiecare randare; tinut intr-un ref, efectul de mai jos ramane pe montare.
+  const inchide = useRef(onClose);
+  useEffect(() => { inchide.current = onClose; }, [onClose]);
 
+  // Panoul se declara `aria-modal`, deci trebuie sa si fie: pagina de dedesubt
+  // nu se deruleaza, Tab ramane inauntru, iar la inchidere focusul se intoarce
+  // pe butonul care l-a deschis.
   useEffect(() => {
+    const inainte = document.activeElement as HTMLElement | null;
     input.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        inchide.current();
+        return;
+      }
+      if (e.key !== "Tab" || !panou.current) return;
+      const focusabile = panou.current.querySelectorAll<HTMLElement>("a[href], button, input");
+      if (focusabile.length === 0) return;
+      const primul = focusabile[0];
+      const ultimul = focusabile[focusabile.length - 1];
+      if (e.shiftKey && document.activeElement === primul) {
+        e.preventDefault();
+        ultimul.focus();
+      } else if (!e.shiftKey && document.activeElement === ultimul) {
+        e.preventDefault();
+        primul.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+      inainte?.focus();
+    };
+  }, []);
 
-  const sugestii = (() => {
-    if (!catalog || text.trim().length < 2) return [];
-    const q = text.trim().toLowerCase();
-    return catalog.visibleProducts
-      .filter((p) => p.name.toLowerCase().includes(q))
+  // Sugestiile trec prin acelasi motor ca bara de cautare a catalogului: altfel
+  // „rosu" nu gaseste nimic aici, dar da rezultate la confirmare.
+  const produse = catalog?.visibleProducts;
+  const index = useMemo(
+    () => buildProductSearchIndex((produse ?? []).map((p) => ({ id: p.id, name: p.name, category: p.category }))),
+    [produse],
+  );
+  const sugestii = useMemo(() => {
+    if (!produse || text.trim().length < 2) return [];
+    const scoruri = queryProductSearchIndex(index, text);
+    if (!scoruri) return [];
+    return produse
+      .filter((p) => scoruri.has(p.id))
+      .sort((a, b) => (scoruri.get(b.id) ?? 0) - (scoruri.get(a.id) ?? 0))
       .slice(0, 6);
-  })();
+  }, [produse, index, text]);
 
   function confirma(e: React.FormEvent) {
     e.preventDefault();
@@ -261,8 +315,8 @@ function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Cauta produse">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+    <div ref={panou} className="fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Cauta produse">
+      <div aria-hidden="true" className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-[var(--st-surface)] shadow-xl">
         <div className="mx-auto px-4 py-5" style={{ maxWidth: "var(--st-container)" }}>
           <div className="flex items-center gap-3">
@@ -285,7 +339,10 @@ function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => 
                 const img = Array.isArray(p.images) && p.images[0] ? String(p.images[0]) : null;
                 return (
                   <li key={p.id}>
-                    <a href={`${basePath}/product/${p.slug}`}
+                    {/* `slug` e nullable: produsele importate fara el ar da o
+                        adresa care se termina in „null". Ruta citeste dupa id
+                        cand argumentul e un UUID, deci refugiul duce la produs. */}
+                    <a href={`${basePath}/product/${p.slug ?? p.id}`}
                       className="flex items-center gap-3 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
                       <span className="relative w-11 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
                         {img && <Image src={img} alt="" fill sizes="44px" className="object-contain p-1" />}
@@ -325,7 +382,8 @@ function PastilaCos({
   const continut = (
     <>
       <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={STROKE} />
-      <span className="text-sm font-bold tabular-nums">{formatPrice(total)}</span>
+      {/* Pe telefon randul are deja hamburger, logo si lupa: totalul l-ar impinge peste latime. */}
+      <span className="hidden sm:inline text-sm font-bold tabular-nums">{formatPrice(total)}</span>
       {count > 0 && (
         <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ring-2 ring-[var(--st-surface)]"
           style={{ backgroundColor: "var(--st-accent)", color: "var(--st-accent-contrast)" }}>

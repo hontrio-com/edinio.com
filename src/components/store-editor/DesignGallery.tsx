@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Monitor, Smartphone, X } from "lucide-react";
-import { sectionMeta } from "@/lib/storefront/design/registry";
+import { sectionMeta, type VariantMeta } from "@/lib/storefront/design/registry";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { INALTIME_IMPLICITA, VariantCard } from "./VariantCard";
 
@@ -23,11 +23,20 @@ export function DesignGallery({
   slug,
   onPick,
   onClose,
+  motivIndisponibil,
 }: {
   section: SectionInstance;
   slug: string;
   onPick: (variant: string) => void;
   onClose: () => void;
+  /**
+   * De ce nu poate fi ales un design, daca e cazul (`requires` din registry).
+   *
+   * Vine de la parinte, ca regula sa fie una singura si aici, si in „Design
+   * sectiuni": o varianta stinsa intr-un ecran si libera in celalalt inseamna un
+   * design publicat care in magazin cade inapoi pe altul, fara nicio explicatie.
+   */
+  motivIndisponibil?: (variant: VariantMeta) => string | null;
 }) {
   const meta = sectionMeta(section.kind);
   const variante = Object.entries(meta?.variants ?? {});
@@ -82,6 +91,7 @@ export function DesignGallery({
               latimeFixa={v.previewWidth}
               activ={id === section.variant}
               peMobil={peMobil}
+              motivIndisponibil={motivIndisponibil?.(v) ?? null}
               onPick={() => onPick(id)}
             />
           ))}

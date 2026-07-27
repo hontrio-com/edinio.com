@@ -14,7 +14,7 @@ import { isNonProductionHost } from "@/lib/storefront/host";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
-import { buildChromeData } from "@/lib/storefront/chrome-value";
+import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
@@ -66,7 +66,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         title: { absolute: opsTitle },
         description: opsDescription,
         ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
-        openGraph: { title: opsTitle, description: opsDescription, url, images: opsImages },
+        // `type` si `locale` se scriu explicit: obiectul asta inlocuieste in
+        // intregime openGraph-ul din layout-ul radacina, deci ce nu e aici nu se
+        // emite deloc, iar og:type e obligatoriu in protocol.
+        openGraph: { type: "website", locale: "ro_RO", siteName: displayName, title: opsTitle, description: opsDescription, url, images: opsImages },
         twitter: {
           card: opsImages.length ? "summary_large_image" : "summary",
           title: opsTitle,
@@ -89,7 +92,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     // Advanced opt-in: hide the homepage from search. "follow" stays on so
     // crawlers still reach the (indexable) product pages it links to.
     ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
-    openGraph: { title, description, url, images },
+    openGraph: { type: "website", locale: "ro_RO", siteName: displayName, title, description, url, images },
     twitter: {
       card: images.length ? "summary_large_image" : "summary",
       title,
@@ -248,12 +251,20 @@ export default async function SlugPage({ params, searchParams }: Props) {
         coverUrl: business.cover_url,
         tagline: business.tagline,
       });
+      // Categoriile pentru header/footer se aduc ca pe orice alta ruta fara
+      // catalog: fara ele, subsolul paginii principale ramanea fara coloana de
+      // categorii, desi paginile de produs ale ACELUIASI magazin o aveau plina.
+      // `cartMode: "hidden"` ramane deasupra designului (chrome-value.ts:62), deci
+      // cosul nu reapare.
+      const opsSearchCategories = await loadSearchCategories(business.id, opsResolved.design);
       const opsChrome = buildChromeData({
         business,
         pageContent: (storeSettings?.page_content ?? {}) as StorePageContent,
         basePath,
+        design: opsResolved.design,
         cartMode: "hidden",
         hasStickyBottomBar: true,
+        searchCategories: opsSearchCategories,
       });
       return (
         <>

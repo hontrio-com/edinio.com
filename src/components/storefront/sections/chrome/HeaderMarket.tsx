@@ -11,6 +11,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 
 const STROKE = 1.6;
 
@@ -44,15 +45,26 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
   const logoSize = pageContent.logo_size ?? 36;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, ["whatsapp", "cos"]);
+  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.market);
 
+  // Radacinile, nu categoria curenta: panoul din header nu are cale de
+  // intoarcere, deci o lista care se schimba la fiecare intrare in subarbore ar
+  // lasa vizitatorul blocat acolo, fara sa mai poata ajunge la restul.
   const categorii = catalog
-    ? catalog.currentCategoryItems.map((c) => ({ name: c.name, image: c.image }))
+    ? catalog.rootCategoryItems.map((c) => ({ name: c.name, image: c.image }))
     : (searchCategories ?? []).map((name) => ({ name, image: null }));
 
   const baraSus = settings.showTopBar !== false;
   const textSus = typeof settings.topText === "string" ? settings.topText.trim() : "";
   const telefonJos = settings.showHotline !== false && !!business.phone;
+
+  // Pe ecrane inguste mesajul ia locul emailului: e singurul text pe care il
+  // scrie comerciantul in bara de sus, iar ascuns sub `lg` nu l-ar vedea tocmai
+  // clientul de pe telefon. Emailul are oricum pagina de contact.
+  const emailCls = textSus
+    ? "hidden lg:block hover:text-[var(--st-text)] transition-colors truncate max-w-[14rem]"
+    : "hover:text-[var(--st-text)] transition-colors truncate max-w-[14rem]";
+  const despartitorCls = textSus ? "hidden lg:block text-[var(--st-border)]" : "text-[var(--st-border)]";
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)]/95 backdrop-blur-md border-b border-[var(--st-border)]`}>
@@ -60,14 +72,14 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
         <div className="border-b border-[var(--st-border)] bg-[var(--st-bg)]">
           <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
             <div className="h-9 flex items-center justify-center lg:justify-between gap-4 text-xs text-[var(--st-muted)]">
-              {textSus && <span className="hidden lg:block truncate">{textSus}</span>}
-              <div className="flex items-center gap-3 lg:gap-4 ml-auto lg:ml-0">
+              {textSus && <span className="truncate">{textSus}</span>}
+              <div className="flex items-center gap-3 lg:gap-4 shrink-0 ml-auto lg:ml-0">
                 {business.email && (
-                  <a href={`mailto:${business.email}`} className="hover:text-[var(--st-text)] transition-colors truncate max-w-[14rem]">
+                  <a href={`mailto:${business.email}`} className={emailCls}>
                     {business.email}
                   </a>
                 )}
-                {business.email && <span aria-hidden className="text-[var(--st-border)]">|</span>}
+                {business.email && <span aria-hidden className={despartitorCls}>|</span>}
                 <a href={`${basePath}/retur`} className="inline-flex items-center gap-1.5 hover:text-[var(--st-text)] transition-colors whitespace-nowrap">
                   <Undo2 className="h-3.5 w-3.5" strokeWidth={STROKE} />
                   Retur produs
@@ -119,19 +131,28 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
           <div className="h-12 flex items-center gap-7">
             {categorii.length > 0 && <ToateCategoriile categorii={categorii} basePath={basePath} />}
 
-            {menu.map((it) => {
-              const activ = it.type === "page" && it.target === currentPageSlug;
-              return (
-                <a key={it.id} href={menuItemHref(it, basePath)}
-                  className={`text-sm font-medium text-[var(--st-text)] hover:opacity-70 transition-opacity whitespace-nowrap ${meniuCls}`}
-                  style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)" } : {}) }}>
-                  {it.label}
-                </a>
-              );
-            })}
+            {/* Meniul se deruleaza in interiorul barii: cu multe pagini ar impinge
+                altfel toata pagina pe orizontala. Panoul de categorii ramane in
+                afara zonei derulabile, altfel l-ar taia la 48 px inaltime. */}
+            {menu.length > 0 && (
+              <div className="flex items-center gap-7 min-w-0 overflow-x-auto scrollbar-hide">
+                {menu.map((it) => {
+                  const activ = it.type === "page" && it.target === currentPageSlug;
+                  return (
+                    // Pagina curenta nu se marcheaza doar prin culoare: subliniere
+                    // pentru cine nu o distinge, `aria-current` pentru cititoare.
+                    <a key={it.id} href={menuItemHref(it, basePath)} aria-current={activ ? "page" : undefined}
+                      className={`text-sm font-medium text-[var(--st-text)] hover:opacity-70 transition-opacity whitespace-nowrap ${meniuCls}`}
+                      style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
+                      {it.label}
+                    </a>
+                  );
+                })}
+              </div>
+            )}
 
             {telefonJos && (
-              <a href={`tel:${business.phone}`} className="ml-auto inline-flex items-center gap-2 text-sm text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
+              <a href={`tel:${business.phone}`} className="ml-auto shrink-0 inline-flex items-center gap-2 text-sm whitespace-nowrap text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
                 <Phone className="h-4 w-4" strokeWidth={STROKE} />
                 Telefon: <strong className="font-bold text-[var(--st-text)]">{business.phone}</strong>
               </a>
@@ -205,8 +226,11 @@ function BaraCautare({
   }
 
   return (
+    // Chenarul e permanent colorat, deci focusul are nevoie de un semn propriu:
+    // campul stinge conturul implicit al browserului si fara inelul asta
+    // navigarea cu tastatura n-ar avea niciun reper aici.
     <form role="search" onSubmit={trimite}
-      className={`flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] overflow-hidden ${compact ? "h-11" : "h-12"}`}
+      className={`flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--st-primary)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
       style={{ borderColor: "var(--st-primary)" }}>
       {categorii.length > 0 && (
         <div className="relative hidden sm:block shrink-0"

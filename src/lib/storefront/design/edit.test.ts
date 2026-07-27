@@ -90,11 +90,13 @@ test("un singleton deja prezent nu se adauga a doua oara", () => {
   assert.ok(!addableKinds(d).includes("hero"));
 });
 
-test("randurile de produse raman mereu adaugabile", () => {
+test("randul de produse nu se poate adauga din editorul de design", () => {
+  // Continutul lui traieste in `page_content.product_sections`, nu in design.
+  // Unul adaugat de aici ar primi un id fara pereche acolo, deci n-ar randa
+  // niciodata nimic si n-ar avea nici macar un camp de configurat. Randurile se
+  // fac din editorul magazinului si intra singure in lista, derivate.
   const d = design();
-  assert.ok(addableKinds(d).includes("product_row"));
-  const dupa = addSection(d, "product_row");
-  assert.equal(dupa.home.filter((s) => s.kind === "product_row").length, 2);
+  assert.ok(!addableKinds(d).includes("product_row"));
 });
 
 test("schimbarea variantei nu atinge restul sectiunii", () => {

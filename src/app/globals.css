@@ -326,6 +326,9 @@
 .fx-glow { animation: edinio-fx-glow 1.8s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .fx-pulse, .fx-bounce, .fx-heartbeat, .fx-shake, .fx-glow { animation: none; }
+  /* Banda de anunt isi ia durata dintr-o setare, deci animatia sta inline si
+     doar o regula importanta o poate opri. Textul ramane vizibil, doar nu curge. */
+  .marquee-banda { animation: none !important; }
 }
 
 

@@ -32,44 +32,61 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
   const toate = catalog?.rootCategoryItems ?? [];
   const categorii = toate.slice(0, maxim);
   const areBara = toate.length >= MIN_CATEGORII_HERO_SIDEBAR;
+  const areBanner = banners.length > 0;
 
-  if (banners.length === 0 && !areBara) return null;
-
+  // H1-ul se emite inaintea oricarei conditii, ca in HeroBannersOnly: un magazin
+  // fara bannere care scade si sub pragul de categorii si-ar pierde altfel
+  // singurul titlu al paginii principale, in tacere.
   return (
-    <section className="pt-4 md:pt-6">
+    <>
       <h1 className="sr-only">
         {nume}
         {business.tagline ? ` - ${business.tagline}` : ""}
       </h1>
 
-      <div className="mx-auto max-w-6xl px-0 md:px-4">
-        <div className={areBara ? "lg:grid lg:grid-cols-[236px_1fr] lg:gap-4" : ""}>
-          {areBara && (
-            // Inaltimea o da bannerul, cu raportul lui neatins, iar randurile se
-            // impart ce a mai ramas. Invers — inaltimea din numarul de randuri —
-            // bannerul ar fi fost taiat cu atat mai mult cu cat magazinul are mai
-            // putine categorii, adica exact acolo unde arata deja mai sarac.
-            <nav aria-label="Categorii" className="hidden lg:flex flex-col rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] overflow-hidden py-1.5">
-              {categorii.map((c) => (
-                <Rand key={c.key} nume={c.name} imagine={c.image} basePath={basePath}
-                  onAlege={catalog ? () => catalog.selectCategoryItem(c) : undefined} />
-              ))}
-            </nav>
-          )}
+      {(areBanner || areBara) && (
+        <section className="pt-4 md:pt-6">
+          <div className="mx-auto max-w-6xl px-0 md:px-4">
+            <div className={areBara ? "lg:grid lg:grid-cols-[236px_1fr] lg:gap-4" : ""}>
+              {areBara && (
+                // Inaltimea o da bannerul, cu raportul lui neatins, iar randurile se
+                // impart ce a mai ramas. Invers — inaltimea din numarul de randuri —
+                // bannerul ar fi fost taiat cu atat mai mult cu cat magazinul are mai
+                // putine categorii, adica exact acolo unde arata deja mai sarac.
+                //
+                // De aceea, cat timp exista un banner, bara sta absolut intr-o
+                // celula fara inaltime proprie: altfel, de la ~11 randuri in sus
+                // (campul permite 14), ea ar fi dictat inaltimea grilei si ar fi
+                // lasat un gol sub banner, cu punctele caruselului plutind
+                // dedesubt. Fara banner nu are de la cine sa isi ia inaltimea,
+                // deci ramane in flux.
+                <div className={areBanner ? "relative hidden lg:block" : "hidden lg:block"}>
+                  <nav aria-label="Categorii" className={areBanner
+                    ? "absolute inset-0 flex flex-col rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] overflow-y-auto py-1.5"
+                    : "flex flex-col rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] overflow-hidden py-1.5"}>
+                    {categorii.map((c) => (
+                      <Rand key={c.key} nume={c.name} imagine={c.image} basePath={basePath}
+                        onAlege={catalog ? () => catalog.selectCategoryItem(c) : undefined} />
+                    ))}
+                  </nav>
+                </div>
+              )}
 
-          {banners.length > 0 && (
-            <BannerSlider
-              banners={banners}
-              links={links}
-              alt={nume}
-              basePath={basePath}
-              wrapperClass="relative md:rounded-2xl md:overflow-hidden"
-              slideClass="shrink-0 w-full snap-center bg-muted aspect-[16/9]"
-            />
-          )}
-        </div>
-      </div>
-    </section>
+              {areBanner && (
+                <BannerSlider
+                  banners={banners}
+                  links={links}
+                  alt={nume}
+                  basePath={basePath}
+                  wrapperClass="relative md:rounded-2xl md:overflow-hidden"
+                  slideClass="shrink-0 w-full snap-center bg-muted aspect-[16/9]"
+                />
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+    </>
   );
 }
 

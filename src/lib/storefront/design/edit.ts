@@ -91,11 +91,25 @@ export function duplicateSection(design: StoreDesign, id: string): StoreDesign {
   return next;
 }
 
+/**
+ * Sectiuni al caror continut traieste in `page_content`, nu in design.
+ *
+ * Un rand de produse adaugat din editorul de design ar primi un id fara pereche
+ * in `page_content.product_sections`, deci `CustomProductRow` n-ar gasi nimic si
+ * randul n-ar aparea niciodata in magazin; nici de configurat n-ar fi ce, randul
+ * n-are inca design-uri proprii. Randurile se fac din editorul magazinului si
+ * intra singure in lista, derivate.
+ */
+const CONTINUT_DIN_PAGE_CONTENT: SectionKind[] = ["product_row"];
+
 /** Adauga o sectiune la finalul paginii, inaintea catalogului daca acesta exista. */
 export function addSection(design: StoreDesign, kind: SectionKind): StoreDesign {
   const meta = sectionMeta(kind);
   const variant = firstVariant(kind);
   if (!meta || !variant) return design;
+  // Aceeasi regula ca in `addableKinds`: altfel se poate ajunge, prin cod, la
+  // starea pe care lista de mai sus o declara imposibila.
+  if (CONTINUT_DIN_PAGE_CONTENT.includes(kind)) return design;
   // Un singleton deja prezent nu se mai adauga a doua oara.
   if (meta.singleton && design.home.some((s) => s.kind === kind)) return design;
 
@@ -115,6 +129,7 @@ export function addableKinds(design: StoreDesign): SectionKind[] {
   return (Object.keys(SECTION_REGISTRY) as SectionKind[]).filter((kind) => {
     const meta = SECTION_REGISTRY[kind];
     if (!meta || meta.scope !== "home") return false;
+    if (CONTINUT_DIN_PAGE_CONTENT.includes(kind)) return false;
     if (!meta.singleton) return true;
     return !design.home.some((s) => s.kind === kind);
   });

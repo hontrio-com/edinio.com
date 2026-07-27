@@ -4,8 +4,9 @@ import { useMemo, useState, type ReactNode } from "react";
 import { CartProvider } from "@/components/storefront/cart/CartProvider";
 import { ChromeSection } from "@/components/storefront/SectionRenderer";
 import { StoreChromeProvider } from "@/components/storefront/StorefrontProvider";
+import { cdnImage } from "@/lib/cdn-image";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
-import { headerHostsAnnouncement, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
+import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import type { StoreDesign } from "@/lib/storefront/design/types";
 
 /**
@@ -38,9 +39,10 @@ export function StorePageShell({
   const value = useMemo(
     () => ({
       ...chrome,
-      // Cateva variante de header poarta banda de anunt in interior; atunci
-      // deasupra lor nu mai e nimic de ocolit.
-      hasAnnouncementBar: chrome.hasAnnouncementBar && !headerHostsAnnouncement(design),
+      // Aceeasi sursa ca bara randata mai jos: sectiunea stinsa sau stearsa din
+      // editor, ori banda purtata in interiorul header-ului, nu lasa nimic de
+      // ocolit deasupra lui.
+      hasAnnouncementBar: chrome.hasAnnouncementBar && standaloneAnnouncement(design)?.enabled === true,
       openCart: () => {},
       openLightbox: setLightbox,
     }),
@@ -60,7 +62,7 @@ export function StorePageShell({
           <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
             onClick={() => setLightbox(null)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lightbox} alt="Imagine galerie marita"
+            <img src={cdnImage(lightbox, 2560)} alt="Imagine galerie marita"
               className="max-w-full max-h-full object-contain rounded-xl"
               onClick={(e) => e.stopPropagation()} />
           </div>

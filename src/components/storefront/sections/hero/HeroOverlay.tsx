@@ -16,14 +16,14 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
  * nu se mai adauga unul ascuns.
  */
 export function HeroOverlay() {
-  const { business, color, pageContent } = useStoreChrome();
+  const { business, pageContent } = useStoreChrome();
 
   const nume = business.store_name ?? business.business_name;
   const { banners } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
 
   return (
     <section className="relative overflow-hidden">
-      <div className="absolute inset-0" style={{ backgroundColor: color }} />
+      <div className="absolute inset-0" style={{ backgroundColor: "var(--st-primary)" }} />
       {banners[0] && (
         <Image src={banners[0]} alt="" fill className="object-cover" sizes="100vw" priority />
       )}
@@ -39,7 +39,13 @@ export function HeroOverlay() {
         )}
         <a href="#produse"
           className="inline-flex items-center gap-2 px-8 py-3.5 text-sm font-bold rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-[0.98]"
-          style={{ backgroundColor: color, color: "white", boxShadow: `0 4px 20px ${color}88` }}>
+          style={{
+            backgroundColor: "var(--st-primary)",
+            color: "var(--st-primary-contrast)",
+            // `${color}88` presupunea notatie hex si s-ar fi rupt la orice alta
+            // notatie de culoare acceptata de parser.
+            boxShadow: "0 4px 20px color-mix(in srgb, var(--st-primary) 53%, transparent)",
+          }}>
           <ShoppingCart className="h-4 w-4" />
           Cumpara acum
         </a>

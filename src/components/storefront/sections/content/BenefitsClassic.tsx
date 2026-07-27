@@ -13,7 +13,7 @@ export function BenefitsClassic() {
 
   return (
     <section className="mb-16">
-      <h2 className="text-xl font-semibold text-foreground mb-6">{benefits.title}</h2>
+      <h2 className="text-xl font-semibold text-foreground mb-6">{benefits.title || "De ce sa alegi produsele noastre"}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {benefits.items.map((item, i) => (
           <div key={i} className="flex gap-4 p-5 bg-surface border border-border rounded-2xl">

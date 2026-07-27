@@ -25,15 +25,22 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 /**
  * Culorile blocului, dupa fundalul footerului care il compune.
  *
- * Sirurile sunt scrise intregi, nu compuse: varianta inchisa trebuie sa dea
- * exact marcajul de dinainte, ca footerele existente sa ramana neschimbate.
+ * Sirurile sunt scrise intregi, nu compuse: varianta inchisa da acelasi marcaj
+ * ca inainte, cu doua exceptii asumate — titlurile de coloana si randul de
+ * copyright, amandoua urcate de la un contrast sub pragul AA. Aceleasi doua
+ * valori sunt duplicate in `CompanyIdentity` si `NetopiaBadge`, care compun
+ * acelasi rand; se schimba impreuna, altfel footerul arata cu jumatate din
+ * titluri stinse.
  */
 const TON = {
   inchis: {
-    titlu: "text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3",
+    // Alb 30% pe #0A0A0A da 2,6:1, sub pragul AA de 4,5:1 la 10px; 50% da 5,3:1.
+    titlu: "text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-3",
     link: "text-[13px] text-white/50 hover:text-white transition-colors",
     linkTare: "text-[13px] text-white/70 hover:text-white transition-colors font-medium",
-    copyright: "text-[11px] text-white/25",
+    // Alb 25% pe #0A0A0A da 2,1:1, sub pragul AA de 4,5:1 cerut la 11px; 50% il
+    // urca la 5,3:1 si il aliniaza cu linkurile din acelasi bloc.
+    copyright: "text-[11px] text-white/50",
   },
   deschis: {
     titlu: "text-[10px] font-semibold text-[var(--st-muted)] uppercase tracking-widest mb-3",
@@ -58,12 +65,16 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
   const pagini = menu.filter((m) => m.type === "page" || m.type === "link");
 
   return (
-    <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
+    // `flex-wrap` scoate insignele pe randul urmator cand nu mai incap, in loc
+    // sa lase randul sa depaseasca; `min-w-0` pe coloanele de linkuri le lasa sa
+    // se stranga odata cu identitatea firmei, altfel ele stau la min-content si
+    // datele firmei sunt singurele strivite.
+    <div className="py-6 sm:py-8 flex flex-wrap flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
       {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
       <CompanyIdentity business={business} ton={ton} />
 
       {cuPagini && pagini.length > 0 && (
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <p className={t.titlu}>Pagini</p>
           <div className="flex flex-wrap gap-x-5 gap-y-1.5">
             {pagini.map((it) => (
@@ -76,7 +87,7 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
         </div>
       )}
 
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <p className={t.titlu}>Informatii legale</p>
         <div className="flex flex-wrap gap-x-5 gap-y-1.5">
           {/* Functia de retragere din contract — obligatorie conform OUG 18/2026 */}
@@ -108,7 +119,7 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
       </div>
 
       {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
-      <NetopiaBadge businessId={business.id} />
+      <NetopiaBadge businessId={business.id} ton={ton} />
     </div>
   );
 }

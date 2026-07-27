@@ -1,5 +1,7 @@
 "use client";
 
+import { cdnImage } from "@/lib/cdn-image";
+import { formatDate } from "@/lib/utils/format";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 const STAR_PATH =
@@ -14,21 +16,28 @@ export function ReviewsClassic() {
   const reviews = pageContent.reviews_section;
   if (!reviews?.enabled || reviews.items.length === 0) return null;
 
-  const medie = (reviews.items.reduce((s, r) => s + r.rating, 0) / reviews.items.length).toFixed(1);
+  const numar = reviews.items.length;
+  const medie = (reviews.items.reduce((s, r) => s + r.rating, 0) / numar).toFixed(1);
+  // Stelele din antet urmau media doar in cifra de langa ele: la 3,1 se vedeau
+  // cinci stele pline, adica un scor umflat afisat clientilor.
+  const steleMedie = Math.round(Number(medie));
 
   return (
     <section className="mb-16">
       <div className="flex items-center gap-2 mb-6">
-        <h2 className="text-xl font-semibold text-foreground">{reviews.title}</h2>
+        <h2 className="text-xl font-semibold text-foreground">{reviews.title || "Ce spun clientii nostri"}</h2>
         <div className="h-px flex-1 bg-border" />
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1" role="img"
+          aria-label={`Media ${medie} din 5, ${numar} ${numar === 1 ? "recenzie" : "recenzii"}`}>
           {[1, 2, 3, 4, 5].map((s) => (
-            <svg key={s} viewBox="0 0 20 20" className="h-4 w-4" fill="#FBBF24">
+            <svg key={s} viewBox="0 0 20 20" className="h-4 w-4"
+              fill={s <= steleMedie ? "#FBBF24" : "none"}
+              stroke={s <= steleMedie ? "#FBBF24" : "#D1D5DB"} strokeWidth="1.5">
               <path d={STAR_PATH} />
             </svg>
           ))}
           <span className="text-xs font-semibold text-foreground ml-1">{medie}</span>
-          <span className="text-xs text-muted-foreground">({reviews.items.length})</span>
+          <span className="text-xs text-muted-foreground">({numar})</span>
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -50,8 +59,11 @@ export function ReviewsClassic() {
             )}
             <div className="flex items-center gap-2.5 pt-1 border-t border-border">
               {review.image ? (
+                /* Cercul are 32 px, poza incarcata de comerciant are adesea cativa
+                   MB: fara CDN, sase recenzii aduceau zeci de MB degeaba. */
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={review.image} alt={review.name || "Client"}
+                <img src={cdnImage(review.image, 64)} alt={review.name || "Client"}
+                  width={32} height={32} loading="lazy"
                   className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-border" />
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
@@ -61,10 +73,8 @@ export function ReviewsClassic() {
               )}
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-foreground truncate">{review.name || "Anonim"}</p>
-                {review.date && (
-                  <p className="text-[10px] text-muted-foreground">
-                    {new Date(review.date).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" })}
-                  </p>
+                {review.date && !Number.isNaN(new Date(review.date).getTime()) && (
+                  <p className="text-[10px] text-muted-foreground">{formatDate(review.date)}</p>
                 )}
               </div>
             </div>

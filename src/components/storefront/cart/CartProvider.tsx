@@ -83,25 +83,49 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
     setHydrated(true);
   }, [STORAGE_KEY, slug]);
 
-  function save(next: CartItem[]) {
-    setItems(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }
+  // Alta fila a aceluiasi magazin poate scrie in cos (o pagina custom cu „In cos"
+  // scrie direct in `cart_<slug>`). Fara ascultatorul asta, fila de fata ramane cu
+  // vectorul ei vechi si prima apasare pe „+" il scrie peste cel din localStorage:
+  // produsul adaugat in cealalta fila dispare, fara niciun semn. Evenimentul
+  // `storage` nu se declanseaza in fila care a scris, deci nu se poate face bucla.
+  useEffect(() => {
+    function laStorage(e: StorageEvent) {
+      if (e.key !== STORAGE_KEY) return;
+      try {
+        setItems(e.newValue ? (JSON.parse(e.newValue) as CartItem[]) : []);
+      } catch {}
+    }
+    window.addEventListener("storage", laStorage);
+    return () => window.removeEventListener("storage", laStorage);
+  }, [STORAGE_KEY]);
 
-  function addItem(item: Omit<CartItem, "quantity">) {
+  /**
+   * Orice scriere pleaca din forma functionala, niciodata din `items` prins in
+   * inchiderea randarii curente: doua apasari pe „+" mai rapide decat un ciclu de
+   * randare ar porni amandoua de la acelasi vector, iar a doua ar suprascrie-o pe
+   * prima — cantitatea creste cu 1 in loc de 2, si valoarea gresita ajunge si in
+   * localStorage.
+   */
+  function save(schimba: (prev: CartItem[]) => CartItem[]) {
     setItems((prev) => {
-      const key = lineKey(item);
-      const exists = prev.find((i) => lineKey(i) === key);
-      const next = exists
-        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i))
-        : [...prev, { ...item, quantity: 1 }];
+      const next = schimba(prev);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
   }
 
+  function addItem(item: Omit<CartItem, "quantity">) {
+    save((prev) => {
+      const key = lineKey(item);
+      const exists = prev.find((i) => lineKey(i) === key);
+      return exists
+        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i))
+        : [...prev, { ...item, quantity: 1 }];
+    });
+  }
+
   function removeItem(key: string) {
-    save(items.filter((i) => lineKey(i) !== key));
+    save((prev) => prev.filter((i) => lineKey(i) !== key));
   }
 
   function updateQty(key: string, qty: number) {
@@ -109,15 +133,15 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
       removeItem(key);
       return;
     }
-    save(items.map((i) => (lineKey(i) === key ? { ...i, quantity: qty } : i)));
+    save((prev) => prev.map((i) => (lineKey(i) === key ? { ...i, quantity: qty } : i)));
   }
 
   function clear() {
-    save([]);
+    save(() => []);
   }
 
   function restoreCart(next: CartItem[]) {
-    save(next);
+    save(() => next);
   }
 
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);

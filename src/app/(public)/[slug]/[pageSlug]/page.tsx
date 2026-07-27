@@ -49,8 +49,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     keywords: seo.keywords?.trim() || undefined,
     alternates: { canonical: url },
     robots: seo.noindex ? { index: false, follow: false } : undefined,
-    openGraph: { title, description: seo.description ?? undefined, url, type: "website", ...(ogImage ? { images: [{ url: ogImage }] } : {}) },
-    ...(ogImage ? { twitter: { card: "summary_large_image" as const, title, description: seo.description ?? undefined, images: [ogImage] } } : {}),
+    // `locale` si `siteName` se scriu explicit: obiectul asta inlocuieste in
+    // intregime openGraph-ul radacinii, deci ce nu e aici nu se emite deloc, iar
+    // og:site_name mostenit ar fi spus „Edinio" pe pagina magazinului.
+    openGraph: { title, description: seo.description ?? undefined, url, type: "website", locale: "ro_RO", siteName: business.store_name ?? business.business_name, ...(ogImage ? { images: [{ url: ogImage }] } : {}) },
+    // Cardul de Twitter se emite mereu, imaginea doar cand exista: nedeclarat,
+    // blocul se mostenea din layout-ul radacina si previzualizarea arata Edinio,
+    // desi og:title si og:url de mai sus erau deja ale magazinului.
+    twitter: {
+      card: ogImage ? "summary_large_image" : "summary",
+      title,
+      description: seo.description ?? undefined,
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
   };
 }
 

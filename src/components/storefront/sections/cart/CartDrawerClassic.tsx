@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { Check, ChevronRight, Minus, Package, Plus, ShoppingCart, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
@@ -35,9 +35,16 @@ export function CartDrawerClassic({
   inline?: boolean;
 }) {
   const { items, addItem, removeItem, updateQty, total, count } = useCart();
+  const butonInchide = useRef<HTMLButtonElement>(null);
   // Aritmetica e comuna cu paginile de cos si cu bara de progres de pe pagina de
-  // magazin: aceleasi numere, oriunde le-ar vedea clientul.
-  const { shipping, grandTotal, belowMinOrder, freeShippingPct: progressPct } = computeCartPricing({
+  // magazin: aceleasi numere, oriunde le-ar vedea clientul. Inclusiv pragul si
+  // cat mai lipseste — refacute aici pe suma bruta, dadeau „Mai adauga 0,00 lei"
+  // peste un transport care se taxa, la orice cos cu zecimale (10 x 19,99 fac
+  // 199.89999999999998, adica sub un prag de 199,90 desi se afiseaza egal).
+  const {
+    shipping, grandTotal, belowMinOrder, freeShippingPct: progressPct,
+    areaPrag, shippingIsFree, freeShippingRemaining, minOrderRemaining,
+  } = computeCartPricing({
     total, shippingCost, freeShippingThreshold, minOrderAmount,
   });
 
@@ -48,6 +55,29 @@ export function CartDrawerClassic({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // Escape si blocarea derularii sunt purtari de MODAL: sertarul acopera pagina
+  // cu un strat opac, deci ce e dedesubt nu mai trebuie nici derulat, nici lasat
+  // fara iesire de la tastatura. In miniatura sertarul sta in fluxul paginii,
+  // fara strat si fara nimic dedesubt de blocat.
+  useEffect(() => {
+    if (inline || !open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", handler); document.body.style.overflow = ""; };
+  }, [inline, open, onClose]);
+
+  // Focalizarea intra in sertar la deschidere si se intoarce de unde a plecat la
+  // inchidere. Efectul depinde DOAR de deschidere: `onClose` vine ca functie noua
+  // la fiecare randare, iar re-rularea ar smulge focalizarea inapoi pe butonul de
+  // inchidere la fiecare apasare pe „+".
+  useEffect(() => {
+    if (inline || !open) return;
+    const inainte = document.activeElement as HTMLElement | null;
+    butonInchide.current?.focus();
+    return () => { inainte?.focus?.(); };
+  }, [inline, open]);
+
   if (!open) return null;
 
   return (
@@ -56,15 +86,21 @@ export function CartDrawerClassic({
       {/* Sirul de clase e scris intreg pe fiecare ramura, nu compus din parte
           fixa si parte variabila: reordonarea claselor ar aparea ca diferenta la
           compararea marcajului cu productia, desi CSS-ul e acelasi. */}
+      {/* Rolul de dialog se declara doar pe ramura fixa: in miniatura panoul e
+          continut obisnuit de pagina, nu o suprapunere. */}
       <div className={inline
         ? "relative mx-auto h-[620px] w-full max-w-sm bg-background flex flex-col shadow-2xl"
-        : "fixed inset-y-0 right-0 w-full max-w-sm bg-background z-50 flex flex-col shadow-2xl"}>
+        : "fixed inset-y-0 right-0 w-full max-w-sm bg-background z-50 flex flex-col shadow-2xl"}
+        role={inline ? undefined : "dialog"}
+        aria-modal={inline ? undefined : true}
+        aria-label={inline ? undefined : "Cosul tau"}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
             <h2 className="font-semibold text-foreground">Cosul tau</h2>
             <p className="text-xs text-muted-foreground">{count} {count === 1 ? "produs" : "produse"}</p>
           </div>
           <button
+            ref={butonInchide}
             aria-label="Inchide cosul"
             onClick={onClose}
             className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
@@ -73,16 +109,16 @@ export function CartDrawerClassic({
           </button>
         </div>
 
-        {freeShippingThreshold && (
+        {areaPrag && (
           <div className="px-5 py-3 bg-muted/40 border-b border-border">
-            {total >= freeShippingThreshold ? (
+            {shippingIsFree ? (
               <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color }}>
                 <Check className="h-3.5 w-3.5" /> Ai obtinut livrare gratuita!
               </p>
             ) : (
               <div>
                 <p className="text-xs text-muted-foreground mb-1.5">
-                  Mai adauga <strong className="text-foreground">{formatPrice(freeShippingThreshold - total)}</strong> pentru livrare gratuita
+                  Mai adauga <strong className="text-foreground">{formatPrice(freeShippingRemaining)}</strong> pentru livrare gratuita
                 </p>
                 <div className="h-1.5 bg-border rounded-full overflow-hidden">
                   <div
@@ -133,20 +169,31 @@ export function CartDrawerClassic({
                       <p className="text-sm font-medium text-foreground leading-snug truncate">{item.name}</p>
                     )}
                     {item.variantTitle && <p className="text-xs text-muted-foreground leading-snug truncate">{item.variantTitle}</p>}
-                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(item.price)}</p>
+                    {/* Peste o bucata, un singur numar scris in accent se
+                        citeste ca total de linie si face subtotalul de jos sa
+                        para gresit — paginile de cos arata acolo chiar totalul
+                        liniei. La o singura bucata cele doua coincid, deci randul
+                        ramane cum era. */}
+                    {item.quantity > 1 && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(item.price)} bucata</p>
+                    )}
+                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(item.price * item.quantity)}</p>
+                    {/* Etichetele poarta numele produsului: altfel un cititor de
+                        ecran anunta cate un „Scade cantitatea" identic pentru
+                        fiecare linie, fara sa se poata sti la care e cursorul. */}
                     <div className="flex items-center gap-2 mt-2">
-                      <button type="button" aria-label="Scade cantitatea" onClick={() => updateQty(key, item.quantity - 1)}
+                      <button type="button" aria-label={`Scade cantitatea pentru ${item.name}`} onClick={() => updateQty(key, item.quantity - 1)}
                         className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                         <Minus className="h-3 w-3" />
                       </button>
-                      <span className="text-sm font-semibold w-5 text-center tabular-nums">{item.quantity}</span>
-                      <button type="button" aria-label="Creste cantitatea" onClick={() => updateQty(key, item.quantity + 1)}
+                      <span aria-live="polite" aria-atomic="true" className="text-sm font-semibold w-5 text-center tabular-nums">{item.quantity}</span>
+                      <button type="button" aria-label={`Creste cantitatea pentru ${item.name}`} onClick={() => updateQty(key, item.quantity + 1)}
                         className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                         <Plus className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
-                  <button type="button" aria-label="Sterge produsul" onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: item.price * item.quantity, items: [{ item_id: item.productId, item_name: item.name, price: item.price, quantity: item.quantity }] }); removeItem(key); }}
+                  <button type="button" aria-label={`Sterge ${item.name} din cos`} onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: item.price * item.quantity, items: [{ item_id: item.productId, item_name: item.name, price: item.price, quantity: item.quantity }] }); removeItem(key); }}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors mt-0.5 rounded-md hover:bg-muted">
                     <X className="h-4 w-4" />
                   </button>
@@ -185,7 +232,7 @@ export function CartDrawerClassic({
             </div>
             {belowMinOrder && (
               <p className="text-xs text-center text-muted-foreground">
-                Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderAmount! - total)}</strong> pentru a finaliza.
+                Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderRemaining)}</strong> pentru a finaliza.
               </p>
             )}
             <button type="button" onClick={onCheckout} disabled={belowMinOrder}

@@ -14,17 +14,40 @@ import type { ResolvedStyle } from "./types";
  * identic cu ce era inainte de sistemul de design.
  */
 
-/** Alb sau aproape-negru, dupa luminanta culorii. Doar pentru culori hex. */
-function contrastOn(color: string): string {
-  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
-  if (!m) return "#FFFFFF";
-  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+/** Cele doua culori de text pe care le poate primi un fundal colorat. */
+const TEXT_INCHIS = "#111827";
+const TEXT_DESCHIS = "#FFFFFF";
+
+/** Luminanta relativa WCAG a unei culori hex de 6 cifre, fara diez. */
+function luminanta(hex: string): number {
   const channel = (i: number) => {
     const v = parseInt(hex.slice(i * 2, i * 2 + 2), 16) / 255;
     return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
   };
-  const luminance = 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2);
-  return luminance > 0.5 ? "#111827" : "#FFFFFF";
+  return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2);
+}
+
+const LUM_INCHIS = luminanta("111827");
+const LUM_DESCHIS = 1;
+
+/** Raportul de contrast WCAG dintre doua luminante relative. */
+function contrast(a: number, b: number): number {
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/**
+ * Textul cu contrastul mai bun pe un fundal colorat. Doar pentru culori hex.
+ *
+ * Se compara cele doua rapoarte, nu luminanta cu un prag fix: cu pragul de 0.5
+ * verdele implicit al platformei (#1AB554) primea alb — 2,7:1, sub minimul AA de
+ * 4,5:1 — desi pe inchis da 6,6:1.
+ */
+function contrastOn(color: string): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return TEXT_DESCHIS;
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+  const lum = luminanta(hex);
+  return contrast(lum, LUM_INCHIS) >= contrast(lum, LUM_DESCHIS) ? TEXT_INCHIS : TEXT_DESCHIS;
 }
 
 const CARD_SHADOW = {

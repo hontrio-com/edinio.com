@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ChevronDown, Mail, MapPin, Phone } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
@@ -140,15 +140,20 @@ function Coloana({ titlu, children, separator, marunt }: {
   marunt: string;
 }) {
   const [deschisa, setDeschisa] = useState(false);
+  const idLista = useId();
 
   return (
     <div className={`min-w-0 border-t md:border-0 pt-3 md:pt-0 ${separator}`}>
-      <button type="button" onClick={() => setDeschisa((v) => !v)} aria-expanded={deschisa}
-        className="w-full flex items-center justify-between gap-2 md:pointer-events-none">
+      {/* Pe desktop lista e mereu deschisa (`md:flex` mai jos), deci butonul
+          dispare cu totul in loc sa fie doar inert: altfel ar ramane in ordinea
+          de tabulare si ar anunta „restrans" peste o lista vizibila. */}
+      <button type="button" onClick={() => setDeschisa((v) => !v)} aria-expanded={deschisa} aria-controls={idLista}
+        className="w-full flex items-center justify-between gap-2 md:hidden">
         <span className={`text-[11px] font-semibold uppercase tracking-widest ${marunt}`}>{titlu}</span>
-        <ChevronDown className={`h-4 w-4 md:hidden transition-transform ${marunt} ${deschisa ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-4 w-4 transition-transform ${marunt} ${deschisa ? "rotate-180" : ""}`} />
       </button>
-      <div className={`flex-col gap-2 pt-3 ${deschisa ? "flex" : "hidden"} md:flex`}>
+      <p className={`hidden md:block text-[11px] font-semibold uppercase tracking-widest ${marunt}`}>{titlu}</p>
+      <div id={idLista} className={`flex-col gap-2 pt-3 ${deschisa ? "flex" : "hidden"} md:flex`}>
         {children}
       </div>
     </div>

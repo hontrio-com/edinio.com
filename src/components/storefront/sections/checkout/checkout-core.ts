@@ -80,6 +80,12 @@ export function useCheckoutOrder({
   const [hasCouriers, setHasCouriers] = useState(!!preview);
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
+  // Comanda minima a comerciantului (Setari > Livrare). Vine din aceeasi
+  // configuratie publica citita mai jos, deci nu costa niciun apel in plus.
+  // Fara ea, pe pagina de finalizare — adresa publica, in care se intra si
+  // direct din linkul de recuperare a cosului — clientul afla de prag abia de
+  // la server, dupa ce a completat tot formularul.
+  const [minOrderAmount, setMinOrderAmount] = useState<number | null>(null);
   const [appliedDiscount, setAppliedDiscount] = useState<ValidatedDiscount | null>(null);
   const [discountInput, setDiscountInput] = useState("");
   const [discountError, setDiscountError] = useState("");
@@ -93,6 +99,10 @@ export function useCheckoutOrder({
   const acceptedBumpOffers = bumps.filter((o) => acceptedBumps.has(o.id) && o.pricing && o.products[0]);
   const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
   const goodsTotal = Math.round((total + bumpSubtotal) * 100) / 100;
+  // Pragul se masoara pe aceeasi valoare ca la server (`subtotal`, cu bump-urile
+  // acceptate incluse), ca butonul sa nu ramana blocat pe o comanda pe care
+  // serverul ar accepta-o.
+  const belowMinOrder = minOrderAmount !== null && goodsTotal < minOrderAmount;
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
   const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, goodsTotal) : 0;
@@ -164,6 +174,9 @@ export function useCheckoutOrder({
       if (!result.valid) {
         setAppliedDiscount(null);
         setDiscountError(result.error);
+        // Banner-ul reducerii tocmai a disparut si, cu campul pliat, mesajul
+        // n-ar avea unde sa apara: totalul ar creste fara nicio explicatie.
+        setShowDiscountField(true);
       } else {
         setAppliedDiscount(result.discount);
         setDiscountError("");
@@ -232,6 +245,7 @@ export function useCheckoutOrder({
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
       setCodDiscountConfig(data.cod_discount);
+      setMinOrderAmount(data.min_order_amount);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
@@ -272,7 +286,14 @@ export function useCheckoutOrder({
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
   }, [preview, open, sessionId, businessId, form.name, form.phone, form.email, items]);
 
-  function validate() {
+  /**
+   * Verifica formularul si intoarce cheia PRIMULUI camp gresit, sau null cand e
+   * totul in regula. Cheia, nu doar un boolean: pe pagina formularul trece de o
+   * inaltime de ecran, iar butonul e la capat, deci fara o mutare de focus
+   * clientul apasa si nu vede nimic intamplandu-se.
+   * Cheile sunt in ordinea campurilor, iar `Object.keys` o pastreaza.
+   */
+  function validate(): string | null {
     const e: Record<string, string> = {};
     if (form.name.trim().length < 3) e.name = "Minim 3 caractere";
     const phoneDigits = form.phone.replace(/[\s\-().]/g, "");
@@ -300,12 +321,24 @@ export function useCheckoutOrder({
       }
     }
     setErrors(e);
-    return Object.keys(e).length === 0;
+    return Object.keys(e)[0] ?? null;
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    const formular = e.currentTarget as HTMLFormElement;
+    const primulGresit = validate();
+    if (primulGresit) {
+      // Campurile poarta `name` egal cu cheia erorii. Selectorul de curier nu e
+      // un camp, deci pentru el nu se muta nimic — mesajul lui e anuntat de
+      // `role="alert"`.
+      const camp = formular.elements.namedItem(primulGresit);
+      if (camp instanceof HTMLElement) {
+        camp.scrollIntoView({ block: "center", behavior: "smooth" });
+        camp.focus({ preventScroll: true });
+      }
+      return;
+    }
     startTransition(async () => {
       const allItems = [
         ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, variant_title: i.variantTitle })),
@@ -350,6 +383,18 @@ export function useCheckoutOrder({
         colete_service_name: courierSelection?.coleteServiceName,
         source: getAttribution() ?? undefined,
       };
+      // Cheia de reluare e payload-ul INTREG, metoda de plata inclusa.
+      //
+      // Scoaterea metodei ar rezolva cazul „am incercat cu cardul, a esuat, trec
+      // pe ramburs": s-ar refolosi aceeasi comanda in loc sa se creeze a doua.
+      // Dar comanda deja inserata ramane in baza cu metoda veche, cu reducerea de
+      // card aplicata si cu alt total decat cel afisat clientului — adica exact
+      // datele dupa care comerciantul incaseaza. Intre o comanda in plus si o
+      // comanda cu bani gresiti, prima se vede si se anuleaza; a doua nu.
+      //
+      // Reparatia adevarata e o cheie de idempotenta generata la deschiderea
+      // formularului si trimisa lui `placeCartOrder`, care sa actualizeze comanda
+      // in loc sa insereze alta. Cere o schimbare pe server, deci nu se face aici.
       const payloadKey = JSON.stringify(payload);
       let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;
       if (!orderId) {
@@ -385,7 +430,11 @@ export function useCheckoutOrder({
 
       clear();
       onClose();
-      window.location.href = `${basePath}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${grandTotal}`;
+      // Doar `orderId`: numele si totalul sunt oricum citite din comanda pe
+      // pagina de confirmare, iar acolo se incarca pixelii de marketing, care
+      // trimit adresa completa a paginii. Numele clientului n-are ce cauta in
+      // `page_location`-ul GA4, in istoricul browserului si in Referer.
+      window.location.href = `${basePath}/confirm?orderId=${orderId}`;
     });
   }
 
@@ -395,6 +444,7 @@ export function useCheckoutOrder({
     acceptedBumps,
     appliedDiscount,
     availablePaymentMethods,
+    belowMinOrder,
     bumps,
     cardDiscountAmount,
     codDiscountAmount,
@@ -422,6 +472,7 @@ export function useCheckoutOrder({
     isPending,
     isValidatingDiscount,
     items,
+    minOrderAmount,
     newsletterOffer,
     newsletterOptIn,
     paymentMethod,

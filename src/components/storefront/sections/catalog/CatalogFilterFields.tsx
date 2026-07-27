@@ -55,7 +55,11 @@ export function CatalogFilterFields() {
             {opt.values.map((v) => {
               const selectat = (selectedOptions[opt.name] ?? []).includes(v);
               return (
+                // Pastilele sunt comutatoare a caror stare se vedea exclusiv din
+                // culoarea de fundal: `aria-pressed` o spune si celor care nu o
+                // vad, fara nicio schimbare vizuala.
                 <button key={v} type="button" onClick={() => toggleOption(opt.name, v)}
+                  aria-pressed={selectat}
                   className={pastila} style={selectat ? activ : inactiv}>
                   {v}
                 </button>
@@ -67,10 +71,12 @@ export function CatalogFilterFields() {
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <button type="button" onClick={() => setOnSaleOnly(!onSaleOnly)}
+          aria-pressed={onSaleOnly}
           className={pastila} style={onSaleOnly ? activ : inactiv}>
           Doar reduceri
         </button>
         <button type="button" onClick={() => setInStockOnly(!inStockOnly)}
+          aria-pressed={inStockOnly}
           className={pastila} style={inStockOnly ? activ : inactiv}>
           Doar in stoc
         </button>

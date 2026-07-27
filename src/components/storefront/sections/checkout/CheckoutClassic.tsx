@@ -37,7 +37,16 @@ export function CheckoutClassic(props: CheckoutOrderInput) {
         className={preview
           ? "relative mx-auto w-full md:max-w-md h-[900px] overflow-hidden bg-surface"
           : "fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-[60] w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-surface"}
-        style={{ borderRadius: "21px 21px 0 0", boxShadow: "rgba(0,0,0,0.5) 0px 4px 24px", border: `3px solid ${color}` }}
+        style={{
+          borderRadius: "21px 21px 0 0",
+          boxShadow: "rgba(0,0,0,0.5) 0px 4px 24px",
+          border: `3px solid ${color}`,
+          // Panoul e lipit de marginea de jos a ecranului: pe telefoanele cu
+          // bara de gesturi, butonul de comanda si textul de sub el cadeau sub
+          // indicatorul de acasa, unde atingerea merge la sistem, nu la buton.
+          // Aceeasi rezerva ca pe bara de cos lipita.
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         <div className="md:hidden flex justify-center pt-3">
           <div className="w-10 h-1 rounded-full bg-border" />

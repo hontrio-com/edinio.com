@@ -2,9 +2,9 @@
 
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
-import { useCart } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing } from "@/lib/storefront/cart/pricing";
-import { CartLine, CosGol, ProgresTransport, RezumatCos } from "./_shared/CartPieces";
+import { CartLine, CosGol, ProgresTransport, RezumatCos, ScheletCos } from "./_shared/CartPieces";
 import type { CartPageProps } from "./cart-page.types";
 
 /**
@@ -29,33 +29,38 @@ export function CartPageWide({
   settings,
   preview = false,
 }: CartPageProps) {
-  const { items, addItem, updateQty, removeItem, total, hydrated } = useCart();
+  const { items, addItem, updateQty, removeItem, total, count, hydrated } = useCart();
   const pricing = computeCartPricing({ total, shippingCost, freeShippingThreshold, minOrderAmount });
   const areRecomandari = settings.showRecommendations !== false && !preview;
   const arePrag = settings.showProgress !== false;
 
-  // Cosul vine din localStorage dupa montare: pana atunci „gol" inca nu inseamna
-  // gol, iar un ecran de cos gol aratat o clipa la fiecare incarcare sperie degeaba.
-  if (hydrated && items.length === 0) return <CosGol basePath={basePath} color={color} />;
+  // Cosul vine din localStorage dupa montare: pana atunci nu se stie nici ce e in
+  // el, nici daca e gol. Un ecran de cos gol aratat o clipa sperie degeaba, iar
+  // lista si totalurile randate cu cosul inca necitit arata cifre false.
+  if (!hydrated) return <ScheletCos latime="max-w-3xl" />;
+  if (items.length === 0) return <CosGol basePath={basePath} color={color} />;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 lg:py-12">
       <div className="flex items-baseline justify-between gap-3 mb-6">
         <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Cosul tau</h1>
+        {/* BUCATI, nu linii: insigna din header si celelalte modele de cos
+            numara tot bucati, iar doua numere diferite pentru acelasi cos se vad
+            simultan pe acelasi ecran. */}
         <span className="text-sm text-muted-foreground">
-          {items.length} {items.length === 1 ? "produs" : "produse"}
+          {count} {count === 1 ? "produs" : "produse"}
         </span>
       </div>
 
       {arePrag && (
         <div className="mb-6">
-          <ProgresTransport pricing={pricing} color={color} areaPrag={freeShippingThreshold !== null} />
+          <ProgresTransport pricing={pricing} color={color} />
         </div>
       )}
 
       <div className="divide-y divide-border border-y border-border">
         {items.map((item) => (
-          <CartLine key={`${item.productId}${item.variantTitle ?? ""}`} item={item} color={color}
+          <CartLine key={lineKey(item)} item={item} color={color}
             basePath={basePath} onQty={updateQty} onRemove={removeItem} />
         ))}
       </div>

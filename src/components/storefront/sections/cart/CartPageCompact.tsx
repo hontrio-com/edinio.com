@@ -3,9 +3,9 @@
 import { ArrowLeft } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
-import { useCart } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing } from "@/lib/storefront/cart/pricing";
-import { CartLine, CosGol, ProgresTransport } from "./_shared/CartPieces";
+import { CartLine, CosGol, ProgresTransport, ScheletCos } from "./_shared/CartPieces";
 import type { CartPageProps } from "./cart-page.types";
 
 /**
@@ -37,9 +37,11 @@ export function CartPageCompact({
   const areRecomandari = settings.showRecommendations !== false && !preview;
   const arePrag = settings.showProgress !== false;
 
-  // Cosul vine din localStorage dupa montare: pana atunci „gol" inca nu inseamna
-  // gol, iar un ecran de cos gol aratat o clipa la fiecare incarcare sperie degeaba.
-  if (hydrated && items.length === 0) return <CosGol basePath={basePath} color={color} />;
+  // Cosul vine din localStorage dupa montare. Pana atunci nu se arata nici lista,
+  // nici totalurile: cifrele de zero lei si mesajul de comanda minima, aratate o
+  // clipa la fiecare incarcare, sperie degeaba.
+  if (!hydrated) return <ScheletCos latime="max-w-4xl" />;
+  if (items.length === 0) return <CosGol basePath={basePath} color={color} />;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 lg:py-10">
@@ -52,13 +54,13 @@ export function CartPageCompact({
 
       {arePrag && (
         <div className="mb-5">
-          <ProgresTransport pricing={pricing} color={color} areaPrag={freeShippingThreshold !== null} />
+          <ProgresTransport pricing={pricing} color={color} />
         </div>
       )}
 
       <div className="divide-y divide-border border-t border-border">
         {items.map((item) => (
-          <CartLine key={`${item.productId}${item.variantTitle ?? ""}`} item={item} color={color}
+          <CartLine key={lineKey(item)} item={item} color={color}
             basePath={basePath} onQty={updateQty} onRemove={removeItem} dens="compact" />
         ))}
       </div>

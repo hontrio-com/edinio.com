@@ -55,7 +55,7 @@ export function HeaderClassic() {
           )}
         </a>
 
-        <StoreNavLinks items={menu} basePath={basePath} color={color} className="flex-1 justify-center" currentSlug={currentPageSlug} />
+        <StoreNavLinks items={menu} basePath={basePath} color={color} className="flex-1" currentSlug={currentPageSlug} />
 
         <div className="flex items-center gap-2 ml-auto">
           {showCall && (

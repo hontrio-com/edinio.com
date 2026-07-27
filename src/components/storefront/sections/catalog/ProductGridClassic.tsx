@@ -17,6 +17,7 @@ import { StoreProductCard } from "@/components/storefront/sections/products/Stor
  */
 export function ProductGridClassic() {
   const {
+    basePath,
     color,
     search,
     categoryFilter,
@@ -71,23 +72,36 @@ export function ProductGridClassic() {
               <StoreProductCard key={product.id} product={product} priority={i < 4} />
             ))}
           </div>
-          {totalPages > 1 && <Paginare current={currentPage} total={totalPages} color={color} onGo={mergiLa} />}
+          {totalPages > 1 && (
+            <Paginare current={currentPage} total={totalPages} color={color} basePath={basePath} onGo={mergiLa} />
+          )}
         </>
       )}
     </section>
   );
 }
 
-/** Prima si ultima pagina raman mereu vizibile; restul se condenseaza in „...". */
+/**
+ * Prima si ultima pagina raman mereu vizibile; restul se condenseaza in „...".
+ *
+ * Numerele sunt ancore reale, nu butoane: paginarea schimba doar starea locala
+ * si adresa (history.replaceState), deci fara ele paginile 2..N ale catalogului
+ * n-ar avea niciun link crawlabil catre ele — la 1181 de produse, 58 de pagini
+ * pe care nimeni nu le poate atinge din pagina principala. Serverul stie deja sa
+ * citeasca `?page=`, adresele functioneaza; lipsea doar cine sa le scrie.
+ * Fiecare pagina leaga prima, ultima si vecinele, deci lantul e complet.
+ */
 function Paginare({
   current,
   total,
   color,
+  basePath,
   onGo,
 }: {
   current: number;
   total: number;
   color: string;
+  basePath: string;
   onGo: (n: number) => void;
 }) {
   const pagini = Array.from({ length: total }, (_, i) => i + 1)
@@ -99,6 +113,7 @@ function Paginare({
     }, []);
 
   const nav = "px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors";
+  const href = (p: number) => (p <= 1 ? `${basePath}/` : `${basePath}/?page=${p}`);
 
   return (
     <div className="flex items-center justify-center gap-2 mt-8">
@@ -109,13 +124,21 @@ function Paginare({
         p === "dots" ? (
           <span key={`dots-${i}`} className="px-1 text-muted-foreground">...</span>
         ) : (
-          <button key={p} onClick={() => onGo(p)}
-            className="min-w-[36px] h-9 text-sm rounded-lg border transition-colors"
+          // Ctrl/Cmd/Shift-click deschide adresa in fila noua; restul ramane
+          // schimbare de pagina pe loc, fara navigare.
+          <a key={p} href={href(p)}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              onGo(p);
+            }}
+            aria-current={current === p ? "page" : undefined}
+            className="inline-flex items-center justify-center min-w-[36px] h-9 text-sm rounded-lg border transition-colors"
             style={current === p
               ? { backgroundColor: color, borderColor: color, color: "#fff" }
               : { borderColor: "var(--color-border)" }}>
             {p}
-          </button>
+          </a>
         ),
       )}
       <button onClick={() => onGo(Math.min(total, current + 1))} disabled={current === total} className={nav}>

@@ -9,6 +9,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 
 /**
  * Header cu bara de cautare, varianta „search".
@@ -39,10 +40,13 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
   const logoSize = pageContent.logo_size ?? 36;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, ["telefon", "whatsapp", "cos"]);
+  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.search);
 
+  // Radacinile, nu categoria curenta: selectorul de langa cautare nu are cale de
+  // intoarcere, deci o lista care se schimba la fiecare drill lasa vizitatorul
+  // blocat in subarbore. Pe paginile fara catalog sunt oricum radacinile.
   const categorii = catalog
-    ? catalog.currentCategoryItems.map((c) => c.name)
+    ? catalog.rootCategoryItems.map((c) => c.name)
     : (searchCategories ?? []);
 
   return (
@@ -54,16 +58,20 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
             <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
           </div>
 
-          <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
-            {business.logo_url ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
+          {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`
+              `truncate` n-are de unde taia si un nume lung latfeste randul. */}
+          {business.logo_url ? (
+            <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
                 style={{ height: logoSize, maxWidth: logoSize * 5 }}
                 className="w-auto object-contain" />
-            ) : (
+            </a>
+          ) : (
+            <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
               <span className="text-lg font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
-            )}
-          </a>
+            </a>
+          )}
 
           {/* Cautarea, pe randul principal doar de la lg in sus. */}
           <div className="hidden lg:block flex-1 min-w-0">
@@ -187,16 +195,19 @@ function SearchBar({
           onBlur={() => { inchide.current = window.setTimeout(() => setDeschis(false), 120); }}
           onFocus={() => { if (inchide.current) window.clearTimeout(inchide.current); }}>
           <button type="button" onClick={() => setDeschis((v) => !v)}
-            aria-expanded={deschis} aria-haspopup="listbox"
+            aria-expanded={deschis}
             className="h-full px-3.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors whitespace-nowrap">
             <span className="max-w-[10rem] truncate">{eticheta}</span>
             <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${deschis ? "rotate-180" : ""}`} />
           </button>
           {deschis && (
-            <ul role="listbox"
+            /* Lista ramane una obisnuita, nu `listbox`: fara `role="option"` si
+               fara navigare cu sagetile, rolul ar promite un tipar pe care nu-l
+               implementeaza si cititorul de ecran ar anunta o lista goala. */
+            <ul aria-label="Categorii"
               className="absolute right-0 top-full mt-1 z-50 min-w-[14rem] max-h-72 overflow-y-auto rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-lg py-1">
-              {["toate", ...categorii].map((c) => (
-                <li key={c}>
+              {["toate", ...categorii].map((c, i) => (
+                <li key={`${i}-${c}`}>
                   <button type="button" onClick={() => alegeCategorie(c)}
                     className="w-full text-left px-3.5 py-2 text-sm text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors"
                     style={c === categorie ? { color: "var(--st-primary)", fontWeight: 600 } : undefined}>
@@ -233,10 +244,12 @@ function Cos({
     <>
       <span className="relative">
         <ShoppingBag className="h-5 w-5 text-[var(--st-text)]" />
-        <span className="absolute -top-1.5 -right-2 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
-          style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
-          {count > 9 ? "9+" : count}
-        </span>
+        {count > 0 && (
+          <span className="absolute -top-1.5 -right-2 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
+            style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
+            {count > 9 ? "9+" : count}
+          </span>
+        )}
       </span>
       <span className="hidden sm:inline text-sm font-semibold text-[var(--st-text)] tabular-nums">
         {formatPrice(total)}

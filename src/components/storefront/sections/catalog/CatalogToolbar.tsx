@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ArrowUpDown, ChevronDown, Filter, Search, X } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import { CatalogFilterFields } from "./CatalogFilterFields";
@@ -24,7 +25,6 @@ export function CatalogToolbar() {
     setFiltersOpen,
     activeFilterCount,
     resetFilters,
-    filteredProducts,
     headerHasSearch,
   } = useStorefront();
 
@@ -103,36 +103,90 @@ export function CatalogToolbar() {
       )}
 
       {/* Mobil: foaie de jos */}
-      {filtersOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setFiltersOpen(false)} />
-          <div className="relative bg-surface rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-base font-semibold text-foreground">
-                Filtre{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-              </p>
-              <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Inchide"
-                className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-              <CatalogFilterFields />
-            </div>
-            <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
-              <button type="button" onClick={resetFilters}
-                className="px-4 py-2.5 text-sm font-medium border border-border rounded-xl text-foreground hover:bg-muted transition-colors">
-                Reseteaza
-              </button>
-              <button type="button" onClick={() => setFiltersOpen(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-opacity hover:opacity-90"
-                style={{ backgroundColor: color }}>
-                Vezi {filteredProducts.length} {filteredProducts.length === 1 ? "produs" : "produse"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {filtersOpen && <FoaieFiltre onClose={() => setFiltersOpen(false)} />}
     </>
+  );
+}
+
+/**
+ * Foaia de filtre de pe mobil.
+ *
+ * Se declara `aria-modal`, deci trebuie sa si fie: Escape inchide, Tab ramane
+ * inauntru, iar la inchidere focusul se intoarce pe butonul care a deschis-o.
+ * Fara asta, cu foaia deschisa Tab plimba focusul prin catalogul acoperit.
+ *
+ * Acelasi `filtersOpen` deschide si panoul inline de pe desktop, care nu e
+ * modal si unde foaia e doar ascunsa din CSS: de aceea derularea paginii se
+ * blocheaza numai cand foaia chiar se vede.
+ */
+function FoaieFiltre({ onClose }: { onClose: () => void }) {
+  const { color, activeFilterCount, resetFilters, filteredProducts } = useStorefront();
+  const panou = useRef<HTMLDivElement>(null);
+  // Parintele da un `onClose` nou la fiecare randare; tinut intr-un ref, efectul
+  // de mai jos ramane pe montare.
+  const inchide = useRef(onClose);
+  useEffect(() => { inchide.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const inainte = document.activeElement as HTMLElement | null;
+    panou.current?.focus();
+    const peMobil = window.matchMedia("(max-width: 767px)").matches;
+    if (peMobil) document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        inchide.current();
+        return;
+      }
+      if (e.key !== "Tab" || !panou.current) return;
+      const focusabile = panou.current.querySelectorAll<HTMLElement>("a[href], button, input");
+      if (focusabile.length === 0) return;
+      const primul = focusabile[0];
+      const ultimul = focusabile[focusabile.length - 1];
+      if (e.shiftKey && document.activeElement === primul) {
+        e.preventDefault();
+        ultimul.focus();
+      } else if (!e.shiftKey && document.activeElement === ultimul) {
+        e.preventDefault();
+        primul.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (peMobil) document.body.style.overflow = "";
+      inainte?.focus();
+    };
+  }, []);
+
+  return (
+    <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+      <div aria-hidden="true" className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div ref={panou} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="catalog-filtre-titlu"
+        className="relative bg-surface rounded-t-2xl max-h-[85vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <p id="catalog-filtre-titlu" className="text-base font-semibold text-foreground">
+            Filtre{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+          </p>
+          <button type="button" onClick={onClose} aria-label="Inchide"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          <CatalogFilterFields />
+        </div>
+        <div className="flex items-center gap-2 px-4 py-3 border-t border-border">
+          <button type="button" onClick={resetFilters}
+            className="px-4 py-2.5 text-sm font-medium border border-border rounded-xl text-foreground hover:bg-muted transition-colors">
+            Reseteaza
+          </button>
+          <button type="button" onClick={onClose}
+            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-opacity hover:opacity-90"
+            style={{ backgroundColor: color }}>
+            Vezi {filteredProducts.length} {filteredProducts.length === 1 ? "produs" : "produse"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

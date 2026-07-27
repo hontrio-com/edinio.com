@@ -12,6 +12,7 @@ import { useHeaderSettings } from "@/components/storefront/sections/_shared/head
 import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shared/Marquee";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 
 const STROKE = 1.5;
 
@@ -44,7 +45,7 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
   const logoSize = pageContent.logo_size ?? 36;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, ["cautare", "whatsapp", "cos"]);
+  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.editorial);
 
   const baraSus = settings.showTopBar !== false && !!(business.phone || business.email || areSocialLinks(social));
   const [cauta, setCauta] = useState(false);
@@ -82,16 +83,20 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
             </div>
 
-            <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
-              {business.logo_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
+            {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`
+                `truncate` n-are de unde taia si un nume lung latfeste randul. */}
+            {business.logo_url ? (
+              <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
                   style={{ height: logoSize, maxWidth: logoSize * 5 }}
                   className="w-auto object-contain" />
-              ) : (
+              </a>
+            ) : (
+              <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
                 <span className="text-2xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
-              )}
-            </a>
+              </a>
+            )}
 
             {cauta ? (
               <CampCautare basePath={basePath} onInchide={() => setCauta(false)} />
@@ -113,15 +118,19 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
             <div className="flex items-center gap-4 shrink-0 ml-auto text-[var(--st-text)]">
               {actiuni.map((a) => (
                 <Fragment key={a}>
+                  {/* Vizibil la orice latime: spre deosebire de „centrat" si
+                      „pana colorata", varianta asta n-are un al doilea buton de
+                      cautare langa hamburger, deci ascuns pe telefon ar insemna
+                      un magazin fara nicio cale de a cauta. */}
                   {a === "cautare" && !cauta && (
-                    <button type="button" onClick={() => setCauta(true)} aria-label="Cauta produse"
-                      className="flex items-center justify-center hover:opacity-60 transition-opacity">
+                    <button type="button" onClick={() => setCauta(true)} aria-label="Cauta produse" aria-expanded={cauta}
+                      className="flex items-center justify-center -m-2 p-2 hover:opacity-60 transition-opacity">
                       <Search className="h-[22px] w-[22px]" strokeWidth={STROKE} />
                     </button>
                   )}
                   {a === "whatsapp" && (
                     <a href={whatsappLink(business.whatsapp!)} target="_blank" rel="noopener noreferrer" aria-label="Scrie pe WhatsApp"
-                      className="hidden sm:flex items-center justify-center hover:opacity-60 transition-opacity">
+                      className="hidden sm:flex items-center justify-center -m-2 p-2 hover:opacity-60 transition-opacity">
                       <svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
                       </svg>
@@ -232,7 +241,9 @@ function Cos({
   if (mode === "hidden") return null;
 
   const continut = (
-    <>
+    // Insigna se agata de iconita, nu de buton: cu suprafata de atins pe buton,
+    // ancorarea la el ar duce-o cu 8px in afara iconitei.
+    <span className="relative flex items-center justify-center">
       <ShoppingCart className="h-[22px] w-[22px]" strokeWidth={STROKE} />
       {count > 0 && (
         <span className="absolute -top-1.5 -right-2 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
@@ -240,10 +251,12 @@ function Cos({
           {count > 9 ? "9+" : count}
         </span>
       )}
-    </>
+    </span>
   );
 
-  const cls = "relative flex items-center justify-center hover:opacity-60 transition-opacity";
+  // Iconita ramane de 22px, dar suprafata de atins ajunge la 38px: marginea
+  // negativa anuleaza padding-ul, deci randul arata neschimbat.
+  const cls = "flex items-center justify-center -m-2 p-2 hover:opacity-60 transition-opacity";
   return (
     <CartControl className={cls}>
       {continut}

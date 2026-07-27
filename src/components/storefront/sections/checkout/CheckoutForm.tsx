@@ -1,10 +1,12 @@
 "use client";
 
+import { useId } from "react";
 import {
   X, Phone,
   MapPin, Mail, ChevronRight, Package, User, Home, Loader2, Banknote, CreditCard,
   Truck, Tag, BadgePercent,
 } from "lucide-react";
+import { formatPrice } from "@/lib/utils/format";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { CourierSelector } from "@/components/ministore/CourierSelector";
 import { OrderBump } from "@/components/ministore/OrderBump";
@@ -19,6 +21,10 @@ import { CheckoutCartLines, CheckoutTotals } from "./CheckoutSummary";
  * singura data si doar asezat in doua feluri. `suprafata` scoate din curgerea
  * lui rezumatul cosului si caseta de totaluri, pe care pagina le arata separat,
  * in coloana din dreapta; altfel ar aparea de doua ori.
+ *
+ * Fiecare camp are `id` legat de eticheta lui, `name` egal cu cheia erorii (dupa
+ * el isi gaseste motorul primul camp gresit) si `autoComplete`: pe telefon, unde
+ * se dau majoritatea comenzilor, fara el nu se completeaza nimic automat.
  */
 const JUDETE = [
   "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
@@ -60,6 +66,7 @@ export function CheckoutForm({
     acceptedBumps,
     appliedDiscount,
     availablePaymentMethods,
+    belowMinOrder,
     bumps,
     customFields,
     customValues,
@@ -83,6 +90,7 @@ export function CheckoutForm({
     isPending,
     isValidatingDiscount,
     items,
+    minOrderAmount,
     newsletterOffer,
     newsletterOptIn,
     paymentMethod,
@@ -103,6 +111,9 @@ export function CheckoutForm({
     totalWeightKg,
   } = motor;
   const inFormular = suprafata === "modal";
+  // Prefix propriu: acelasi formular poate fi randat de doua ori pe pagina
+  // (miniatura din catalogul de design-uri), iar id-urile trebuie sa ramana unice.
+  const uid = useId();
 
   return (
         <form onSubmit={preview ? (e) => e.preventDefault() : handleSubmit} className="px-5 pt-4 pb-6 space-y-4">
@@ -110,22 +121,22 @@ export function CheckoutForm({
               dreapta; aici ar aparea a doua oara, cu aceleasi numere. */}
           {inFormular && <CheckoutCartLines motor={motor} color={color} />}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1">Nume complet <span className="text-red-500">*</span></label>
+            <label htmlFor={`${uid}-name`} className="block text-sm font-semibold text-foreground mb-1">Nume complet <span className="text-red-500">*</span></label>
             <FieldWrap icon={User} error={!!errors.name}>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Prenume Nume" className={fieldCls} />
+              <input id={`${uid}-name`} name="name" autoComplete="name" aria-invalid={errors.name ? true : undefined} aria-describedby={errors.name ? `${uid}-name-err` : undefined} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Prenume Nume" className={fieldCls} />
             </FieldWrap>
-            {errors.name && <p className="text-xs text-red-500 mt-0.5">{errors.name}</p>}
+            {errors.name && <p id={`${uid}-name-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.name}</p>}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1">Numar de telefon <span className="text-red-500">*</span></label>
+            <label htmlFor={`${uid}-phone`} className="block text-sm font-semibold text-foreground mb-1">Numar de telefon <span className="text-red-500">*</span></label>
             <FieldWrap icon={Phone} error={!!errors.phone}>
-              <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07XXXXXXXX" type="tel" className={fieldCls} />
+              <input id={`${uid}-phone`} name="phone" autoComplete="tel" aria-invalid={errors.phone ? true : undefined} aria-describedby={errors.phone ? `${uid}-phone-err` : undefined} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07XXXXXXXX" type="tel" className={fieldCls} />
             </FieldWrap>
-            {errors.phone && <p className="text-xs text-red-500 mt-0.5">{errors.phone}</p>}
+            {errors.phone && <p id={`${uid}-phone-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.phone}</p>}
           </div>
           {(emailField.enabled || isIntl) && (
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1">
+              <label htmlFor={`${uid}-email`} className="block text-sm font-semibold text-foreground mb-1">
                 Email{" "}
                 {(emailField.required || isIntl)
                   ? <span className="text-red-500">*</span>
@@ -133,9 +144,9 @@ export function CheckoutForm({
                 }
               </label>
               <FieldWrap icon={Mail} error={!!errors.email}>
-                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="adresa@email.ro" type="email" className={fieldCls} />
+                <input id={`${uid}-email`} name="email" autoComplete="email" aria-invalid={errors.email ? true : undefined} aria-describedby={errors.email ? `${uid}-email-err` : undefined} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="adresa@email.ro" type="email" className={fieldCls} />
               </FieldWrap>
-              {errors.email && <p className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
+              {errors.email && <p id={`${uid}-email-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.email}</p>}
               {newsletterOffer && (
                 <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
                   <input type="checkbox" checked={newsletterOptIn} onChange={e => setNewsletterOptIn(e.target.checked)}
@@ -147,9 +158,9 @@ export function CheckoutForm({
           )}
           {intlEnabled && (
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1">Tara <span className="text-red-500">*</span></label>
+              <label htmlFor={`${uid}-country`} className="block text-sm font-semibold text-foreground mb-1">Tara <span className="text-red-500">*</span></label>
               <FieldWrap icon={MapPin}>
-                <select aria-label="Tara" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className={`${fieldCls} bg-surface`}>
+                <select id={`${uid}-country`} name="country" autoComplete="country" aria-label="Tara" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} className={`${fieldCls} bg-surface`}>
                   <option value="RO">Romania</option>
                   {EU_COUNTRIES.map(c => <option key={c.iso2} value={c.iso2}>{c.name}</option>)}
                 </select>
@@ -158,37 +169,37 @@ export function CheckoutForm({
           )}
           {isIntl ? (
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1">Cod postal <span className="text-red-500">*</span></label>
+              <label htmlFor={`${uid}-postCode`} className="block text-sm font-semibold text-foreground mb-1">Cod postal <span className="text-red-500">*</span></label>
               <FieldWrap icon={MapPin} error={!!errors.postCode}>
-                <input value={form.postCode} onChange={e => setForm(f => ({ ...f, postCode: e.target.value }))} placeholder="Cod postal" className={fieldCls} />
+                <input id={`${uid}-postCode`} name="postCode" autoComplete="postal-code" inputMode="numeric" aria-invalid={errors.postCode ? true : undefined} aria-describedby={errors.postCode ? `${uid}-postCode-err` : undefined} value={form.postCode} onChange={e => setForm(f => ({ ...f, postCode: e.target.value }))} placeholder="Cod postal" className={fieldCls} />
               </FieldWrap>
-              {errors.postCode && <p className="text-xs text-red-500 mt-0.5">{errors.postCode}</p>}
+              {errors.postCode && <p id={`${uid}-postCode-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.postCode}</p>}
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1">Judet <span className="text-red-500">*</span></label>
+              <label htmlFor={`${uid}-county`} className="block text-sm font-semibold text-foreground mb-1">Judet <span className="text-red-500">*</span></label>
               <FieldWrap icon={MapPin} error={!!errors.county}>
-                <select aria-label="Judet" value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-surface`}>
+                <select id={`${uid}-county`} name="county" autoComplete="address-level1" aria-label="Judet" aria-invalid={errors.county ? true : undefined} aria-describedby={errors.county ? `${uid}-county-err` : undefined} value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-surface`}>
                   <option value="">Selecteaza judetul</option>
                   {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
                 </select>
               </FieldWrap>
-              {errors.county && <p className="text-xs text-red-500 mt-0.5">{errors.county}</p>}
+              {errors.county && <p id={`${uid}-county-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.county}</p>}
             </div>
           )}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1">Oras <span className="text-red-500">*</span></label>
+            <label htmlFor={`${uid}-city`} className="block text-sm font-semibold text-foreground mb-1">Oras <span className="text-red-500">*</span></label>
             <FieldWrap icon={MapPin} error={!!errors.city}>
-              <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Oras / Localitate" className={fieldCls} />
+              <input id={`${uid}-city`} name="city" autoComplete="address-level2" aria-invalid={errors.city ? true : undefined} aria-describedby={errors.city ? `${uid}-city-err` : undefined} value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Oras / Localitate" className={fieldCls} />
             </FieldWrap>
-            {errors.city && <p className="text-xs text-red-500 mt-0.5">{errors.city}</p>}
+            {errors.city && <p id={`${uid}-city-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.city}</p>}
           </div>
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1">Adresa <span className="text-red-500">*</span></label>
+            <label htmlFor={`${uid}-address`} className="block text-sm font-semibold text-foreground mb-1">Adresa <span className="text-red-500">*</span></label>
             <FieldWrap icon={Home} error={!!errors.address}>
-              <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Strada, nr., bloc, ap." className={fieldCls} />
+              <input id={`${uid}-address`} name="address" autoComplete="street-address" aria-invalid={errors.address ? true : undefined} aria-describedby={errors.address ? `${uid}-address-err` : undefined} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="Strada, nr., bloc, ap." className={fieldCls} />
             </FieldWrap>
-            {errors.address && <p className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
+            {errors.address && <p id={`${uid}-address-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
           </div>
           {/* Courier selection */}
           {hasCouriers && (
@@ -207,29 +218,35 @@ export function CheckoutForm({
               optiuniDemo={preview?.courierOptions}
             />
           )}
-          {errors.courier && <p className="text-xs text-red-500 mt-0.5">{errors.courier}</p>}
+          {errors.courier && <p role="alert" className="text-xs text-red-500 mt-0.5">{errors.courier}</p>}
           {/* Custom fields */}
           {customFields.map(field => (
             <div key={field.id}>
-              <label className="block text-sm font-semibold text-foreground mb-1">
+              <label htmlFor={`${uid}-${field.id}`} className="block text-sm font-semibold text-foreground mb-1">
                 {field.label || "Camp"} {field.required && <span className="text-red-500">*</span>}
               </label>
               {field.type === "text" && (
                 <FieldWrap icon={Package} error={!!errors[field.id]}>
-                  <input value={customValues[field.id] ?? ""} placeholder={field.placeholder ?? ""}
+                  <input id={`${uid}-${field.id}`} name={field.id} value={customValues[field.id] ?? ""} placeholder={field.placeholder ?? ""}
+                    aria-invalid={errors[field.id] ? true : undefined}
+                    aria-describedby={errors[field.id] ? `${uid}-${field.id}-err` : undefined}
                     onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
                     className={fieldCls} />
                 </FieldWrap>
               )}
               {field.type === "textarea" && (
-                <textarea value={customValues[field.id] ?? ""} rows={3}
+                <textarea id={`${uid}-${field.id}`} name={field.id} value={customValues[field.id] ?? ""} rows={3}
                   placeholder={field.placeholder ?? ""}
+                  aria-invalid={errors[field.id] ? true : undefined}
+                  aria-describedby={errors[field.id] ? `${uid}-${field.id}-err` : undefined}
                   onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
                   className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40 resize-none" />
               )}
               {field.type === "select" && (
                 <FieldWrap icon={Package} error={!!errors[field.id]}>
-                  <select aria-label={field.label} value={customValues[field.id] ?? ""}
+                  <select id={`${uid}-${field.id}`} name={field.id} aria-label={field.label} value={customValues[field.id] ?? ""}
+                    aria-invalid={errors[field.id] ? true : undefined}
+                    aria-describedby={errors[field.id] ? `${uid}-${field.id}-err` : undefined}
                     onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.value }))}
                     className={`${fieldCls} bg-surface`}>
                     <option value="">Selecteaza...</option>
@@ -241,13 +258,15 @@ export function CheckoutForm({
               )}
               {field.type === "checkbox" && (
                 <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" checked={customValues[field.id] === "da"}
+                  <input id={`${uid}-${field.id}`} name={field.id} type="checkbox" checked={customValues[field.id] === "da"}
+                    aria-invalid={errors[field.id] ? true : undefined}
+                    aria-describedby={errors[field.id] ? `${uid}-${field.id}-err` : undefined}
                     onChange={e => setCustomValues(v => ({ ...v, [field.id]: e.target.checked ? "da" : "nu" }))}
                     className="w-4 h-4 rounded" style={{ accentColor: color }} />
                   <span className="text-sm text-foreground">{field.placeholder || field.label}</span>
                 </label>
               )}
-              {errors[field.id] && <p className="text-xs text-red-500 mt-0.5">{errors[field.id]}</p>}
+              {errors[field.id] && <p id={`${uid}-${field.id}-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors[field.id]}</p>}
             </div>
           ))}
 
@@ -284,7 +303,7 @@ export function CheckoutForm({
                           )}
                         </div>
                       </div>
-                      <span className="text-sm font-bold flex-shrink-0" style={{ color }}>+{extra.price} lei</span>
+                      <span className="text-sm font-bold flex-shrink-0" style={{ color }}>+{formatPrice(extra.price)}</span>
                     </div>
                   </button>
                 );
@@ -307,7 +326,7 @@ export function CheckoutForm({
                   <p className="text-sm font-bold font-mono" style={{ color }}>{appliedDiscount.code}</p>
                   <p className="text-xs text-muted-foreground">
                     {appliedDiscount.type === "percent" && `${appliedDiscount.value}% reducere`}
-                    {appliedDiscount.type === "fixed" && `${appliedDiscount.value} lei reducere`}
+                    {appliedDiscount.type === "fixed" && `${formatPrice(appliedDiscount.value)} reducere`}
                     {appliedDiscount.type === "free_shipping" && "Transport gratuit aplicat"}
                   </p>
                 </div>
@@ -376,18 +395,26 @@ export function CheckoutForm({
             </div>
           )}
 
-          {errors._ && <p className="text-sm text-red-500 text-center">{errors._}</p>}
+          {/* Pragul comerciantului, cu cat mai lipseste, in aceiasi termeni ca
+              in sertar. Fara el, clientul completa tot formularul si afla de
+              prag abia de la server, dupa apasarea butonului. */}
+          {belowMinOrder && (
+            <p className="text-xs text-center text-muted-foreground">
+              Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderAmount! - goodsTotal)}</strong> pentru a finaliza.
+            </p>
+          )}
+          {errors._ && <p role="alert" className="text-sm text-red-500 text-center">{errors._}</p>}
           <button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || belowMinOrder}
             className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >
             {isPending
               ? <><Loader2 className="h-[18px] w-[18px] animate-spin" />Se proceseaza...</>
               : paymentMethod === "cash_on_delivery"
-                ? <><Banknote className="h-5 w-5" />Plata la livrare - {grandTotal} lei</>
-                : <><CreditCard className="h-5 w-5" />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {grandTotal} lei</>
+                ? <><Banknote className="h-5 w-5" />Plata la livrare - {formatPrice(grandTotal)}</>
+                : <><CreditCard className="h-5 w-5" />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(grandTotal)}</>
             }
           </button>
           <p className="text-center text-xs text-muted-foreground">

@@ -5,13 +5,19 @@ import { headers } from "next/headers";
 import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
-import { EdinioCredit } from "@/components/ministore/EdinioCredit";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
+import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
+import { resolveDesign } from "@/lib/storefront/design/parse";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { Metadata } from "next";
 
 // Order confirmation is personal + transient — keep it out of search.
-export const metadata: Metadata = { robots: { index: false } };
+// `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
+// cardul de marketing al Edinio din layout-ul radacina.
+export const metadata: Metadata = { robots: { index: false }, openGraph: null, twitter: null };
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -24,7 +30,10 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
 
   const supabase = await createClient();
   const { data: business } = await supabase
-    .from("businesses").select("id, business_name, primary_color, logo_url, phone, slug, custom_domain").eq("slug", slug).single();
+    .from("businesses")
+    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
+    .eq("slug", slug)
+    .single();
   if (!business) notFound();
 
   const color = business.primary_color ?? "#1AB554";
@@ -81,188 +90,213 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("marketing_config")
+    .select("marketing_config, page_content, storefront_design")
     .eq("business_id", business.id)
     .single();
   const marketingConfig = (storeSettings?.marketing_config as MarketingConfig | null) ?? null;
 
+  // Acelasi header, footer si culori ca pe restul magazinului. Era singura pagina
+  // publica fara invelis, deci clientul care tocmai platise nu avea pe ecran nici
+  // datele de identificare ale vanzatorului, nici insignele ANPC, nici politicile.
+  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const resolved = resolveDesign(storeSettings?.storefront_design, {
+    primaryColor: color,
+    pageContent: pageContent as Record<string, unknown>,
+    features: (business.features as Record<string, unknown>) ?? {},
+    coverUrl: business.cover_url,
+    tagline: business.tagline,
+  });
+  const searchCategories = await loadSearchCategories(business.id, resolved.design);
+  const chrome = buildChromeData({
+    searchCategories, business: business as never, pageContent, basePath, design: resolved.design });
+
   // Payment failure screen (used by iPay declines, where the reason is shown to the customer).
   if (status === "esuat") {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <div className="px-8 py-10 text-center">
-              <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 bg-red-50">
-                <XCircle className="h-10 w-10 text-red-500" />
+      <StorefrontThemeScope style={resolved.style}>
+        <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
+          <main className="flex-1 w-full flex flex-col items-center justify-center px-4 py-12">
+            <div className="w-full max-w-md">
+              <div className="bg-[var(--st-surface)] rounded-2xl shadow-lg border border-[var(--st-border)] overflow-hidden">
+                <div className="px-8 py-10 text-center">
+                  <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 bg-red-50">
+                    <XCircle className="h-10 w-10 text-red-500" />
+                  </div>
+                  <h1 className="text-2xl font-black text-[var(--st-text)] mb-2 tracking-tight">Plata nu a reusit</h1>
+                  <p className="text-[var(--st-muted)] text-sm leading-relaxed">
+                    {motiv || "Tranzactia a fost refuzata. Te rugam incearca din nou sau foloseste alt card."}
+                  </p>
+                  {orderNumber && <p className="text-xs text-[var(--st-muted)] font-medium mt-3">{orderNumber}</p>}
+                </div>
               </div>
-              <h1 className="text-2xl font-black text-gray-900 mb-2 tracking-tight">Plata nu a reusit</h1>
-              <p className="text-gray-500 text-sm leading-relaxed">
-                {motiv || "Tranzactia a fost refuzata. Te rugam incearca din nou sau foloseste alt card."}
-              </p>
-              {orderNumber && <p className="text-xs text-gray-400 font-medium mt-3">{orderNumber}</p>}
+              <a href={`${basePath}/`}
+                className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
+                style={{ backgroundColor: color }}>
+                <ArrowLeft className="h-4 w-4" />
+                Inapoi la magazin
+              </a>
             </div>
-          </div>
-          <a href={`${basePath}/`}
-            className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
-            style={{ backgroundColor: color }}>
-            <ArrowLeft className="h-4 w-4" />
-            Inapoi la magazin
-          </a>
-          <EdinioCredit businessId={business.id} color={color} className="text-center text-xs text-gray-400 mt-4" />
-        </div>
-      </div>
+          </main>
+        </StorePageShell>
+      </StorefrontThemeScope>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center px-4 py-12">
-      <ConfettiEffect color={color} />
-      {orderId && (
-        <FbPurchaseEvent
-          orderId={orderId}
-          total={displayTotal}
-          numItems={numItems}
-          items={purchaseItems}
-          googleTagId={marketingConfig?.google_tag_id}
-          googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
-          fbPixelId={marketingConfig?.facebook_pixel_id}
-          ttPixelId={marketingConfig?.tiktok_pixel_id}
-          customer={{ name: customerName, email: customerEmail, phone: customerPhone }}
-        />
-      )}
+    <StorefrontThemeScope style={resolved.style}>
+      <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
+        <main className="flex-1 w-full flex flex-col items-center justify-center px-4 py-12">
+          <ConfettiEffect color={color} />
+          {orderId && (
+            <FbPurchaseEvent
+              orderId={orderId}
+              total={displayTotal}
+              numItems={numItems}
+              items={purchaseItems}
+              googleTagId={marketingConfig?.google_tag_id}
+              googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
+              fbPixelId={marketingConfig?.facebook_pixel_id}
+              ttPixelId={marketingConfig?.tiktok_pixel_id}
+              customer={{ name: customerName, email: customerEmail, phone: customerPhone }}
+            />
+          )}
 
-      <div className="w-full max-w-md">
-        {/* Success card */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="px-8 py-10 text-center">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"
-              style={{ backgroundColor: `${color}20` }}>
-              <CheckCircle className="h-10 w-10" style={{ color }} />
-            </div>
-
-            <h1 className="text-2xl font-black text-gray-900 mb-2 tracking-tight">
-              Comanda plasata!
-            </h1>
-            {orderNumber && (
-              <p className="text-xs text-gray-400 font-medium mb-2">{orderNumber}</p>
-            )}
-            <p className="text-gray-500 text-sm leading-relaxed">
-              Multumim{name ? `, ${name}` : ""}! Comanda ta va fi pregatita si trimisa la curier cat mai rapid posibil.
-            </p>
-          </div>
-
-          {/* Order summary */}
-          {orderItems.length > 0 && (
-            <div className="px-8 pb-6">
-              <div className="rounded-xl border border-gray-100 overflow-hidden">
-                <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sumar comanda</p>
+          <div className="w-full max-w-md">
+            {/* Success card */}
+            <div className="bg-[var(--st-surface)] rounded-2xl shadow-lg border border-[var(--st-border)] overflow-hidden">
+              <div className="px-8 py-10 text-center">
+                <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"
+                  style={{ backgroundColor: `${color}20` }}>
+                  <CheckCircle className="h-10 w-10" style={{ color }} />
                 </div>
-                <div className="divide-y divide-gray-50">
-                  {orderItems.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between px-4 py-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                        {item.quantity > 1 && (
-                          <p className="text-xs text-gray-400">{item.quantity} x {formatPrice(item.price)}</p>
-                        )}
+
+                <h1 className="text-2xl font-black text-[var(--st-text)] mb-2 tracking-tight">
+                  Comanda plasata!
+                </h1>
+                {orderNumber && (
+                  <p className="text-xs text-[var(--st-muted)] font-medium mb-2">{orderNumber}</p>
+                )}
+                {/* Numele vine din comanda, nu din adresa: e sursa sigura si nu
+                    cere ca fiecare din cele opt cai catre pagina asta sa il puna
+                    in URL. `?name=` ramane refugiu pentru linkurile vechi. */}
+                <p className="text-[var(--st-muted)] text-sm leading-relaxed">
+                  Multumim{customerName || name ? `, ${customerName ?? name}` : ""}! Comanda ta va fi pregatita si trimisa la curier cat mai rapid posibil.
+                </p>
+              </div>
+
+              {/* Order summary */}
+              {orderItems.length > 0 && (
+                <div className="px-8 pb-6">
+                  <div className="rounded-xl border border-[var(--st-border)] overflow-hidden">
+                    <div className="px-4 py-3 bg-[var(--st-bg)] border-b border-[var(--st-border)]">
+                      <p className="text-xs font-semibold text-[var(--st-muted)] uppercase tracking-wide">Sumar comanda</p>
+                    </div>
+                    <div className="divide-y divide-[var(--st-border)]">
+                      {orderItems.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-[var(--st-text)] truncate">{item.name}</p>
+                            {item.quantity > 1 && (
+                              <p className="text-xs text-[var(--st-muted)]">{item.quantity} x {formatPrice(item.price)}</p>
+                            )}
+                          </div>
+                          <p className="text-sm font-semibold text-[var(--st-text)] ml-4 shrink-0">
+                            {formatPrice(item.price * item.quantity)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-[var(--st-border)] px-4 py-3 space-y-2">
+                      {shippingCost > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-[var(--st-muted)]">Transport</span>
+                          <span className="font-medium text-[var(--st-text)]">{formatPrice(shippingCost)}</span>
+                        </div>
+                      )}
+                      {shippingCost === 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-[var(--st-muted)]">Transport</span>
+                          <span className="font-medium text-green-600">Gratuit</span>
+                        </div>
+                      )}
+                      {discountAmount > 0 && discountCode && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-[var(--st-muted)]">Reducere ({discountCode})</span>
+                          <span className="font-medium text-green-600">- {formatPrice(discountAmount)}</span>
+                        </div>
+                      )}
+                      {cardDiscountAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-[var(--st-muted)]">Reducere plata cu cardul</span>
+                          <span className="font-medium text-green-600">- {formatPrice(cardDiscountAmount)}</span>
+                        </div>
+                      )}
+                      {codDiscountAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-[var(--st-muted)]">Reducere plata ramburs</span>
+                          <span className="font-medium text-green-600">- {formatPrice(codDiscountAmount)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between pt-2 border-t border-[var(--st-border)]">
+                        <span className="text-sm font-semibold text-[var(--st-text)]">Total de plata</span>
+                        <span className="font-black text-lg" style={{ color }}>{formatPrice(displayTotal)}</span>
                       </div>
-                      <p className="text-sm font-semibold text-gray-900 ml-4 shrink-0">
-                        {formatPrice(item.price * item.quantity)}
-                      </p>
                     </div>
-                  ))}
-                </div>
-                <div className="border-t border-gray-100 px-4 py-3 space-y-2">
-                  {shippingCost > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Transport</span>
-                      <span className="font-medium text-gray-700">{formatPrice(shippingCost)}</span>
-                    </div>
-                  )}
-                  {shippingCost === 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Transport</span>
-                      <span className="font-medium text-green-600">Gratuit</span>
-                    </div>
-                  )}
-                  {discountAmount > 0 && discountCode && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Reducere ({discountCode})</span>
-                      <span className="font-medium text-green-600">- {formatPrice(discountAmount)}</span>
-                    </div>
-                  )}
-                  {cardDiscountAmount > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Reducere plata cu cardul</span>
-                      <span className="font-medium text-green-600">- {formatPrice(cardDiscountAmount)}</span>
-                    </div>
-                  )}
-                  {codDiscountAmount > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Reducere plata ramburs</span>
-                      <span className="font-medium text-green-600">- {formatPrice(codDiscountAmount)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                    <span className="text-sm font-semibold text-gray-900">Total de plata</span>
-                    <span className="font-black text-lg" style={{ color }}>{formatPrice(displayTotal)}</span>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          {/* Fallback total (no order details fetched) */}
-          {orderItems.length === 0 && (total) && (
-            <div className="px-8 pb-6">
-              <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 font-medium">Total de plata la livrare</span>
-                  <span className="font-black text-lg" style={{ color }}>{formatPrice(Number(total))}</span>
+              {/* Fallback total (no order details fetched) */}
+              {orderItems.length === 0 && (total) && (
+                <div className="px-8 pb-6">
+                  <div className="p-4 rounded-xl bg-[var(--st-bg)] border border-[var(--st-border)]">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-[var(--st-muted)] font-medium">Total de plata la livrare</span>
+                      <span className="font-black text-lg" style={{ color }}>{formatPrice(Number(total))}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          <div className="border-t border-gray-100 px-8 py-6 space-y-3">
-            <div className="flex items-start gap-3">
-              <Package className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-gray-900">Livrare 24-48h</p>
-                <p className="text-xs text-gray-500">Curierul te va contacta la adresa furnizata</p>
+              <div className="border-t border-[var(--st-border)] px-8 py-6 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Package className="h-5 w-5 text-[var(--st-muted)] shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--st-text)]">Livrare 24-48h</p>
+                    <p className="text-xs text-[var(--st-muted)]">Curierul te va contacta la adresa furnizata</p>
+                  </div>
+                </div>
+                {business.phone && (
+                  <div className="flex items-start gap-3">
+                    <Phone className="h-5 w-5 text-[var(--st-muted)] shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--st-text)]">Suport clienti</p>
+                      <a href={`tel:${business.phone}`} className="text-xs font-medium hover:underline" style={{ color }}>
+                        {business.phone}
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-            {business.phone && (
-              <div className="flex items-start gap-3">
-                <Phone className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Suport clienti</p>
-                  <a href={`tel:${business.phone}`} className="text-xs font-medium hover:underline" style={{ color }}>
-                    {business.phone}
-                  </a>
-                </div>
-              </div>
-            )}
+
+            <a href={`${basePath}/`}
+              className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
+              style={{ backgroundColor: color }}>
+              <ArrowLeft className="h-4 w-4" />
+              Inapoi la magazin
+            </a>
+
+            {/* Linkul de retragere ramane si aici, nu doar in subsol: pe pagina asta
+                poate duce numarul comenzii mai departe, ca formularul sa vina completat. */}
+            <p className="text-center text-xs text-[var(--st-muted)] mt-4">
+              Te-ai razgandit? Ai dreptul sa te{" "}
+              <a href={`${basePath}/retur${orderNumber ? `?order=${encodeURIComponent(orderNumber)}` : ""}`} className="underline hover:opacity-70">retragi din contract</a>{" "}
+              in 14 zile de la primire.
+            </p>
           </div>
-        </div>
-
-        <a href={`${basePath}/`}
-          className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
-          style={{ backgroundColor: color }}>
-          <ArrowLeft className="h-4 w-4" />
-          Inapoi la magazin
-        </a>
-
-        <p className="text-center text-xs text-gray-400 mt-4">
-          Te-ai razgandit? Ai dreptul sa te{" "}
-          <a href={`${basePath}/retur${orderNumber ? `?order=${encodeURIComponent(orderNumber)}` : ""}`} className="underline hover:text-gray-600">retragi din contract</a>{" "}
-          in 14 zile de la primire.
-        </p>
-
-        <EdinioCredit businessId={business.id} color={color} className="text-center text-xs text-gray-400 mt-4" />
-      </div>
-    </div>
+        </main>
+      </StorePageShell>
+    </StorefrontThemeScope>
   );
 }

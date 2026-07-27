@@ -27,12 +27,10 @@ export function sectionLayout(section: SectionInstance): "contained" | "full" {
 export function groupSections(sections: SectionInstance[]): SectionBlock[] {
   const out: SectionBlock[] = [];
   let serie: SectionInstance[] = [];
-  let mainFolosit = false;
 
   const inchide = () => {
     if (serie.length === 0) return;
-    out.push({ tip: "grup", sections: serie, esteMain: !mainFolosit });
-    mainFolosit = true;
+    out.push({ tip: "grup", sections: serie, esteMain: false });
     serie = [];
   };
 
@@ -46,6 +44,15 @@ export function groupSections(sections: SectionInstance[]): SectionBlock[] {
     out.push({ tip: "full", section: s });
   }
   inchide();
+
+  // <main> merge pe seria care tine catalogul, nu pur si simplu pe prima: cu
+  // hero-ul mutat sub bara de filtre, prima serie ar fi doar filtrele, iar
+  // produsele — continutul principal al paginii — ar cadea in afara reperului,
+  // deci cine sare la main ar ateriza pe filtre. Fara catalog in pagina, prima
+  // serie ramane main-ul. La ordinea implicita cele doua coincid.
+  const grupuri = out.filter((b): b is Extract<SectionBlock, { tip: "grup" }> => b.tip === "grup");
+  const main = grupuri.find((g) => g.sections.some((s) => s.kind === "product_grid")) ?? grupuri[0];
+  if (main) main.esteMain = true;
 
   return out;
 }

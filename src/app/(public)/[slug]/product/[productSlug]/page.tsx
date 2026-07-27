@@ -21,40 +21,48 @@ interface Props {
   params: Promise<{ slug: string; productSlug: string }>;
 }
 
-// React cache() deduplicates this call between generateMetadata and the page
-// — a single DB round trip serves both, per request.
 // UUID v4 pattern to detect legacy product links
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const getProductCached = cache(async (productSlug: string) => {
-  const supabase = await createClient();
-  const col = UUID_RE.test(productSlug) ? "id" : "slug";
-  const { data } = await supabase
-    .from("products")
-    .select("id, name, description, page_sections, price, images, slug")
-    .eq(col, productSlug)
-    .single();
-  return data;
-});
-
-// Store custom domain (canonical URL) + display mode (One Product Store), cached
-// per request. store_settings is not anon-readable, so this reads via the service
-// role to see page_content (where the OPS flag lives).
+// Store id + custom domain (canonical URL) + display mode (One Product Store),
+// cached per request. store_settings is not anon-readable, so this reads via the
+// service role to see page_content (where the OPS flag lives).
 const getBusinessMetaCached = cache(async (slug: string) => {
   const { data } = await createAdminClient()
     .from("businesses")
-    .select("custom_domain, store_settings(page_content)")
+    .select("id, custom_domain, store_settings(page_content)")
     .eq("slug", slug)
     .single();
   return {
+    businessId: data?.id ?? null,
     customDomain: data?.custom_domain ?? null,
     storeMode: parseStoreModeFromSettings((data as { store_settings?: unknown } | null)?.store_settings),
   };
 });
 
+// React cache() deduplicates this call between generateMetadata and the page
+// — a single DB round trip serves both, per request. De aceea aduce randul
+// intreg: pagina are nevoie de toate coloanele, nu doar de cele pentru meta.
+const getProductCached = cache(async (slug: string, productSlug: string) => {
+  const { businessId } = await getBusinessMetaCached(slug);
+  if (!businessId) return null;
+  const supabase = await createClient();
+  const col = UUID_RE.test(productSlug) ? "id" : "slug";
+  // Slug-ul de produs e unic doar in cadrul magazinului (indexul e pe
+  // business_id + slug). Fara filtrul pe magazin, doua magazine cu acelasi slug
+  // ar face `.single()` sa intoarca eroare si ar scoate 404 pe amandoua paginile.
+  const { data } = await supabase
+    .from("products")
+    .select("*")
+    .eq(col, productSlug)
+    .eq("business_id", businessId)
+    .single();
+  return data;
+});
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { productSlug, slug } = await params;
-  const product = await getProductCached(productSlug);
+  const product = await getProductCached(slug, productSlug);
   if (!product) return {};
   const ps = product.page_sections as { seo?: { title?: string; description?: string }; short_description?: string } | null;
   const seo = ps?.seo;
@@ -107,13 +115,15 @@ export default async function ProductDetailPage({ params }: Props) {
   const supabase = await createClient();
 
   // business + product in parallel (publication gated by RLS on both tables).
-  const [{ data: business }, { data: product }] = await Promise.all([
+  // Produsul vine din aceeasi functie cache()-uita ca generateMetadata, deci o
+  // singura interogare pe products serveste ambele.
+  const [{ data: business }, product] = await Promise.all([
     supabase
       .from("businesses")
       .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
       .eq("slug", slug)
       .single(),
-    supabase.from("products").select("*").eq(UUID_RE.test(productSlug) ? "id" : "slug", productSlug).single(),
+    getProductCached(slug, productSlug),
   ]);
 
   if (!business || !product || product.business_id !== business.id || !product.is_active) notFound();

@@ -76,18 +76,26 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
     tagline: business.tagline,
   });
 
-  const chrome = buildChromeData({
-    // Logo-ul si sloganul raman ale magazinului cand exista; se imprumuta doar
-    // cand lipsesc, ca header-ul sa nu apara gol in miniatura.
-    business: {
-      ...business,
-      logo_url: business.logo_url || DEMO_LOGO,
-      tagline: business.tagline || "Produse alese cu grija, livrate rapid",
-    },
-    pageContent,
-    basePath: `/${business.slug}`,
-    searchCategories: DEMO_CATEGORIES.map((c) => c.name),
-  });
+  const chrome = {
+    ...buildChromeData({
+      // Logo-ul si sloganul raman ale magazinului cand exista; se imprumuta doar
+      // cand lipsesc, ca header-ul sa nu apara gol in miniatura.
+      business: {
+        ...business,
+        logo_url: business.logo_url || DEMO_LOGO,
+        tagline: business.tagline || "Produse alese cu grija, livrate rapid",
+      },
+      pageContent,
+      basePath: `/${business.slug}`,
+      searchCategories: DEMO_CATEGORIES.map((c) => c.name),
+    }),
+    // Miniatura randeaza o singura sectiune, deci deasupra header-ului nu exista
+    // nicio bara de anunt de ocolit, oricat de aprinsa ar fi ea in magazin.
+    // Altfel header-urile isi calculau `top-9` fata de ceva ce aici nu se
+    // randeaza. Se stinge aici, nu in `pageContent`: miniatura barei de anunt
+    // insasi se randeaza din acel continut si trebuie sa ramana intreaga.
+    hasAnnouncementBar: false,
+  };
 
   return (
     <StorefrontThemeScope style={resolved.style}>

@@ -5,8 +5,8 @@ import type { SectionKind } from "./types";
  *
  * Registry-ul e DATE PURE: nicio componenta React, niciun import de client.
  * Parserul (server), editorul (client) si randarea il citesc pe toate trei, iar
- * maparea catre componente traieste separat, in
- * `src/components/storefront/section-components.ts`, ca sa nu tarasca tot
+ * maparea catre componente traieste separat, in dispecerul din
+ * `src/components/storefront/SectionRenderer.tsx`, ca sa nu tarasca tot
  * catalogul de variante in fiecare bundle care are nevoie doar de etichete.
  *
  * Costul unei variante noi: un fisier de componenta + o intrare aici. Doar
@@ -93,7 +93,13 @@ export interface VariantMeta {
    * variantele existente sa insemne exact ce inseamnau.
    */
   surface?: "panel" | "page";
-  /** Varianta afiseaza deja un H1 vizibil (conteaza doar la hero). */
+  /**
+   * Varianta emite ea insasi H1-ul paginii — vizibil, ca la hero-ul cu text
+   * peste imagine, sau doar pentru cititoarele de ecran, ca la celelalte.
+   *
+   * Pagina de magazin il citeste ca sa stie daca mai trebuie sa puna unul de
+   * rezerva: hero-ul e singurul emitent de azi si se poate si stinge, si sterge.
+   */
   providesH1?: boolean;
   /**
    * Varianta are nevoie de lista categoriilor de nivel intai. Paginile fara
@@ -163,49 +169,63 @@ export const HEADER_ACTIONS = [
 export type HeaderAction = "cautare" | "telefon" | "whatsapp" | "cos";
 
 /**
+ * Ce iconite stie sa afiseze fiecare varianta de header.
+ *
+ * Lista ajunge in doua locuri: optiunile campului „Iconite" de mai jos si
+ * `useHeaderSettings`, care filtreaza la randare. Scrise separat s-au despartit —
+ * trei variante ofereau in editor un „Telefon" pe care nu il randau, deci un
+ * comutator care nu facea nimic. Cele care il arata in alta parte (bara de
+ * contact, bara de sus) il au din alt camp, nu de aici.
+ */
+export const HEADER_VARIANT_ACTIONS: Record<string, HeaderAction[]> = {
+  search: ["telefon", "whatsapp", "cos"],
+  centered: ["cautare", "whatsapp", "cos"],
+  editorial: ["cautare", "whatsapp", "cos"],
+  wedge: ["cautare", "telefon", "whatsapp", "cos"],
+  market: ["whatsapp", "cos"],
+  pills: ["telefon", "whatsapp", "cos"],
+  nav: ["cautare", "telefon", "whatsapp", "cos"],
+};
+
+/**
  * Setarile pe care le au toate variantele de header.
  *
  * Fontul nu e o familie libera, ci alegerea intre cele doua deja incarcate de
  * magazin (titluri sau text). O a treia familie doar pentru meniu ar insemna un
  * fisier de font in plus descarcat de fiecare vizitator, pentru cateva cuvinte.
  */
-const HEADER_FIELDS: Field[] = [
-  {
-    key: "actions",
-    type: "actions",
-    label: "Iconite",
-    help: "Ordinea si care se vad. Cele fara date completate lipsesc oricum.",
-    options: HEADER_ACTIONS,
-  },
-  {
-    key: "menuFont",
-    type: "select",
-    label: "Fontul meniului",
-    options: [
-      { value: "body", label: "Ca textul magazinului" },
-      { value: "heading", label: "Ca titlurile" },
-    ],
-  },
-  {
-    key: "menuCase",
-    type: "select",
-    label: "Scrierea meniului",
-    options: [
-      { value: "normal", label: "Normala" },
-      { value: "majuscule", label: "Majuscule spatiate" },
-    ],
-  },
-];
-
-/**
- * Variantele cu bara de cautare permanenta n-au si o lupa printre iconite, deci
- * nici optiunea de a o ordona.
- */
-const HEADER_FIELDS_BARA: Field[] = HEADER_FIELDS.map((f) =>
-  f.key === "actions" && f.type === "actions"
-    ? { ...f, options: HEADER_ACTIONS.filter((o) => o.value !== "cautare") }
-    : f,
-);
+function headerFields(suportate: readonly HeaderAction[]): Field[] {
+  return [
+    {
+      key: "actions",
+      type: "actions",
+      label: "Iconite",
+      help: "Ordinea si care se vad. Cele fara date completate lipsesc oricum.",
+      // Ordinea implicita ramane cea din HEADER_ACTIONS, comuna tuturor
+      // variantelor: cine muta cosul inaintea telefonului gaseste aceeasi
+      // optiune si dupa ce schimba designul header-ului.
+      options: HEADER_ACTIONS.filter((o) => (suportate as readonly string[]).includes(o.value)),
+    },
+    {
+      key: "menuFont",
+      type: "select",
+      label: "Fontul meniului",
+      options: [
+        { value: "body", label: "Ca textul magazinului" },
+        { value: "heading", label: "Ca titlurile" },
+      ],
+    },
+    {
+      key: "menuCase",
+      type: "select",
+      label: "Scrierea meniului",
+      options: [
+        { value: "normal", label: "Normala" },
+        { value: "majuscule", label: "Majuscule spatiate" },
+      ],
+    },
+  ];
+}
 
 const HEADER_DEFAULTS = { menuFont: "body", menuCase: "normal" };
 
@@ -274,7 +294,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 120,
         needsCategories: true,
         replacesCatalogSearch: true,
-        fields: HEADER_FIELDS_BARA,
+        fields: headerFields(HEADER_VARIANT_ACTIONS.search),
         defaults: HEADER_DEFAULTS,
       },
       centered: {
@@ -284,7 +304,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // Randul cu contact, logo si iconite, plus randul de meniu.
         previewHeight: 148,
         fields: [
-          ...HEADER_FIELDS,
+          ...headerFields(HEADER_VARIANT_ACTIONS.centered),
           { key: "showContact", type: "toggle", label: "Arata contactul langa logo" },
         ],
         defaults: { ...HEADER_DEFAULTS, showContact: true },
@@ -297,7 +317,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 144,
         hostsAnnouncement: true,
         fields: [
-          ...HEADER_FIELDS,
+          ...headerFields(HEADER_VARIANT_ACTIONS.editorial),
           { key: "showTopBar", type: "toggle", label: "Arata bara de contact" },
         ],
         defaults: { ...HEADER_DEFAULTS, showTopBar: true },
@@ -308,7 +328,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         layout: "full",
         previewHeight: 88,
         fields: [
-          ...HEADER_FIELDS,
+          ...headerFields(HEADER_VARIANT_ACTIONS.wedge),
           {
             key: "menuAlign",
             type: "select",
@@ -331,7 +351,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         needsCategories: true,
         replacesCatalogSearch: true,
         fields: [
-          ...HEADER_FIELDS_BARA,
+          ...headerFields(HEADER_VARIANT_ACTIONS.market),
           { key: "showTopBar", type: "toggle", label: "Arata bara de sus" },
           {
             key: "topText",
@@ -355,7 +375,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         needsCategories: true,
         replacesCatalogSearch: true,
         fields: [
-          ...HEADER_FIELDS_BARA,
+          ...headerFields(HEADER_VARIANT_ACTIONS.pills),
           { key: "showAction", type: "toggle", label: "Arata butonul de actiune" },
           {
             key: "actionLabel",
@@ -383,7 +403,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // spatiu permanent, iar cosul e o pastila inchisa cu totalul in ea.
         previewHeight: 72,
         needsCategories: true,
-        fields: HEADER_FIELDS,
+        fields: headerFields(HEADER_VARIANT_ACTIONS.nav),
         defaults: HEADER_DEFAULTS,
       },
     },
@@ -424,12 +444,15 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: true,
     inCatalog: true,
     variants: {
-      banners: { label: "Doar imagini", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 655, fields: [] },
+      // Toate trei emit H1-ul paginii: `banners` si `categories` unul ascuns,
+      // `overlay` numele magazinului scris peste imagine.
+      banners: { label: "Doar imagini", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 655, providesH1: true, fields: [] },
       categories: {
         label: "Categorii la stanga, bannere la dreapta",
         tags: ["cu imagine", "compact"],
         layout: "full",
         previewHeight: 515,
+        providesH1: true,
         // Cu doua-trei categorii bara ar fi un ciot langa o imagine mare.
         requires: { minCategories: MIN_CATEGORII_HERO_SIDEBAR },
         fields: [
@@ -446,8 +469,6 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       },
       overlay: {
         label: "Imagine cu text peste",
-        // Titlul magazinului e vizibil in aceasta varianta, deci ea e H1-ul
-        // paginii si nu se mai adauga unul ascuns.
         providesH1: true,
         tags: ["clasic", "cu imagine", "indraznet"],
         layout: "full",
@@ -640,7 +661,10 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: CART_PAGE_DEFAULTS,
       },
       page_wide: {
-        label: "Pagina pe toata latimea",
+        // Cheia e veche, eticheta spune ce face: o singura coloana centrata, cea
+        // mai ingusta dintre cele trei pagini de cos. „Pe toata latimea" trimitea
+        // comerciantul exact in partea cealalta.
+        label: "Pagina centrata, o coloana",
         tags: ["simplu", "elegant"],
         layout: "full",
         surface: "page",

@@ -95,15 +95,19 @@ export function FooterCentered() {
           )}
 
           {/* Subsolul unei pagini lungi e cel mai departe de meniu; scurtatura
-              inapoi sus costa un rand si scuteste o derulare intreaga. */}
-          <a href="#" className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
+              inapoi sus costa un rand si scuteste o derulare intreaga.
+              Buton, nu ancora: nu e o destinatie, iar un `href="#"` ar lasa un
+              al doilea URL pentru aceeasi pagina si ar sari brusc sus. */}
+          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium cursor-pointer text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
             <ArrowUp className="h-3.5 w-3.5" />
             Inapoi sus
-          </a>
+          </button>
         </div>
 
         <div className="mt-10 border-t border-[var(--st-border)]">
-          <FooterLegal ton="deschis" />
+          {/* Paginile apar deja in navigatia de mai sus. */}
+          <FooterLegal ton="deschis" cuPagini={false} />
           <div className="border-t border-[var(--st-border)]">
             <FooterCredit ton="deschis" />
           </div>

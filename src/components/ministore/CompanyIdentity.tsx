@@ -43,7 +43,7 @@ export function CompanyIdentity({ business, ton = "inchis" }: {
     <div className="flex-1 min-w-0">
       <p className={ton === "deschis"
         ? "text-[10px] font-semibold text-[var(--st-muted)] uppercase tracking-widest mb-3"
-        : "text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3"}>Date de identificare</p>
+        : "text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-3"}>Date de identificare</p>
       <div className={ton === "deschis"
         ? "space-y-1 text-[12px] leading-relaxed text-[var(--st-muted)]"
         : "space-y-1 text-[12px] leading-relaxed text-white/50"}>

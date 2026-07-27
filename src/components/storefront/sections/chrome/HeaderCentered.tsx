@@ -10,6 +10,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 
 const STROKE = 1.5;
 
@@ -40,7 +41,10 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
   const logoSize = pageContent.logo_size ?? 36;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const { actiuni, are, meniuCls, meniuStyle } = useHeaderSettings(settings, ["cautare", "whatsapp", "cos"]);
+  // Fara „telefon": aici numarul se arata prin „Arata contactul langa logo", nu
+  // ca iconita. Lista trebuie sa ramana cea din `HEADER_VARIANT_ACTIONS.centered`,
+  // altfel editorul si randarea se despart din nou.
+  const { actiuni, are, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.centered);
   const cuContact = settings.showContact !== false;
   const [cauta, setCauta] = useState(false);
 
@@ -112,9 +116,11 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
             {menu.map((it) => {
               const activ = it.type === "page" && it.target === currentPageSlug;
               return (
-                <a key={it.id} href={menuItemHref(it, basePath)}
+                // Pagina curenta nu se marcheaza doar prin culoare: subliniere
+                // pentru cine nu o distinge, `aria-current` pentru cititoare.
+                <a key={it.id} href={menuItemHref(it, basePath)} aria-current={activ ? "page" : undefined}
                   className={`text-[13px] font-semibold text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`}
-                  style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)" } : {}) }}>
+                  style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
                   {it.label}
                 </a>
               );

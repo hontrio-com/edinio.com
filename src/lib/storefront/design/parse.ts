@@ -232,7 +232,14 @@ function parseSectionList(raw: unknown, seenIds: Set<string>, max: number): Sect
 /** O sectiune obligatorie, luata din configuratia salvata sau din designul classic. */
 function pickOne(raw: unknown, fallback: SectionInstance, seenIds: Set<string>): SectionInstance {
   const parsed = parseSection(raw, seenIds);
-  if (parsed && parsed.kind === fallback.kind) return parsed;
+  if (parsed && parsed.kind === fallback.kind) {
+    // Header-ul si footerul nu se pot stinge. Editorul nu mai ofera butonul, dar
+    // o configuratie salvata inainte de asta, sau scrisa direct in jsonb, ar
+    // ramane fara footer — adica fara datele firmei, fara retragerea din contract
+    // (OUG 18/2026), fara cele sase politici si fara ANPC, pe toate paginile.
+    const meta = sectionMeta(parsed.kind);
+    return meta?.scope === "chrome" && meta.removable === false ? { ...parsed, enabled: true } : parsed;
+  }
   seenIds.add(fallback.id);
   return fallback;
 }

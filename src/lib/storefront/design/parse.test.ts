@@ -205,9 +205,20 @@ test("implicitele reproduc aspectul de dinaintea sistemului de design", () => {
   assert.equal(vars["--st-radius"], "12px");
   assert.equal(vars["--st-container"], "72rem");
   assert.equal(vars["--st-space"], "2.5rem");
-  assert.equal(vars["--st-primary-contrast"], "#FFFFFF");
   assert.equal(vars["--st-card-border"], "1px solid var(--st-border)");
   assert.equal(vars["--st-text-base"], "1rem");
+});
+
+test("textul de pe fundal colorat e cel cu contrastul mai mare", () => {
+  // Verdele platformei da 2,7:1 cu alb si 6,6:1 cu inchis. Alegerea se face
+  // comparand cele doua rapoarte, nu taind luminanta la un prag fix: pragul
+  // returna alb, adica exact varianta care nu trece pragul AA.
+  assert.equal(styleToCssVars(resolveStyle({}, ctx))["--st-primary-contrast"], "#111827");
+  // Un albastru inchis ramane cu text alb.
+  assert.equal(
+    styleToCssVars(resolveStyle({ colors: { primary: "#1E3A8A" } }, ctx))["--st-primary-contrast"],
+    "#FFFFFF",
+  );
 });
 
 test("store_bg_color din page_content devine fundalul magazinului", () => {
@@ -268,4 +279,34 @@ test("cosul si finalizarea comenzii isi pastreaza designul salvat", () => {
   // Varianta necunoscuta cade pe prima declarata, nu lasa magazinul fara cos.
   assert.equal(d.commerce.cartDrawer.variant, "classic");
   assert.equal(d.commerce.checkout.variant, "classic");
+});
+
+test("header-ul si footerul nu pot ramane stinse dintr-o configuratie salvata", () => {
+  // Footerul poarta blocul legal: datele firmei, retragerea din contract,
+  // politicile si ANPC. O ciorna salvata inainte ca editorul sa scoata butonul
+  // de ascundere, sau scrisa direct in jsonb, nu are voie sa il ascunda.
+  const d = parseStoreDesign(
+    {
+      version: 1,
+      chrome: {
+        header: { id: "header", kind: "header", variant: "classic", enabled: false, settings: {} },
+        footer: { id: "footer", kind: "footer", variant: "dark", enabled: false, settings: {} },
+      },
+      home: [],
+    },
+    ctx,
+  );
+  assert.equal(d.chrome.header.enabled, true);
+  assert.equal(d.chrome.footer.enabled, true);
+
+  // Bara de anunt ramane stingibila: ascunderea ei e o alegere legitima.
+  const cuAnunt = parseStoreDesign(
+    {
+      version: 1,
+      chrome: { announcement: { id: "a", kind: "announcement", variant: "marquee", enabled: false, settings: {} } },
+      home: [],
+    },
+    ctx,
+  );
+  assert.equal(cuAnunt.chrome.announcement?.enabled, false);
 });

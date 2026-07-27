@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from "react";
+import dynamic from "next/dynamic";
 import { ShoppingCart, X } from "lucide-react";
+import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
 import { readBundleConfig } from "@/lib/bundles";
@@ -15,14 +17,12 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
 import { cartHref, cartOnPage, checkoutHref, checkoutOnPage } from "@/lib/storefront/design/commerce";
-import { CartDrawerClassic } from "@/components/storefront/sections/cart/CartDrawerClassic";
-import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
-import { headerHostsAnnouncement, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
+import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { useDesignPreview } from "@/components/storefront/useDesignPreview";
 import type {
   StoreCategoryNode,
@@ -40,7 +40,21 @@ type StoreSettings = Pick<
   "id" | "business_id" | "page_content" | "store_policies" | "default_shipping_cost" | "free_shipping_threshold" | "min_order_amount"
 >;
 
-/** Variantele de cos si de formular de comanda, dupa id-ul din registry. */
+/**
+ * Variantele de cos si de formular de comanda, dupa id-ul din registry.
+ *
+ * Incarcate la cerere, inclusiv „classic": montarea lor e conditionata de design
+ * (`{!cosPePagina && ...}`), deci magazinul care si-a ales cosul sau finalizarea
+ * ca pagini nu le randeaza niciodata si n-are de ce sa le descarce.
+ */
+const CartDrawerClassic = dynamic(
+  () => import("@/components/storefront/sections/cart/CartDrawerClassic").then((m) => m.CartDrawerClassic),
+  { ssr: true },
+);
+const CheckoutClassic = dynamic(
+  () => import("@/components/storefront/sections/checkout/CheckoutClassic").then((m) => m.CheckoutClassic),
+  { ssr: true },
+);
 const VARIANTE_COS: Record<string, typeof CartDrawerClassic> = { classic: CartDrawerClassic };
 const VARIANTE_COMANDA: Record<string, typeof CheckoutClassic> = { classic: CheckoutClassic };
 
@@ -76,9 +90,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
   // `SectionRenderer`: sunt panouri conduse de starea de aici, cu zece props.
-  // Dispecerul lor sta la locul de montare. Variantele viitoare intra in cele
-  // doua liste, incarcate cu `next/dynamic` — tot ce nu e „classic" ramane in
-  // afara bundle-ului magazinelor care nu l-au ales.
+  // Dispecerul lor sta la locul de montare; variantele viitoare intra in cele
+  // doua liste de sus, incarcate la fel, la cerere.
   const CosVarianta = VARIANTE_COS[design.commerce.cartDrawer.variant] ?? CartDrawerClassic;
   const ComandaVarianta = VARIANTE_COMANDA[design.commerce.checkout.variant] ?? CheckoutClassic;
 
@@ -241,9 +254,24 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Titlul grilei principale depinde de existenta hero-ului: cand pagina nu are
   // hero si nici sectiunea Recomandate, catalogul isi pune propriul titlu.
+  //
+  // Conteaza si sectiunea, nu doar continutul: hero-ul se poate stinge sau sterge
+  // din editor, iar dupa aceea catalogul ar fi ramas fara antet asteptand un hero
+  // care nu se mai randeaza. Pe designul derivat cele doua conditii coincid, deci
+  // magazinele care n-au atins editorul raman identice.
+  const heroActiv = design.home.some((s) => s.kind === "hero" && s.enabled);
   const hasHero =
-    resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url).banners.length > 0
-    || !!business.tagline;
+    heroActiv
+    && (resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url).banners.length > 0
+      || !!business.tagline);
+
+  // H1-ul paginii de magazin traieste in hero, singura sectiune care il emite si
+  // in acelasi timp se poate stinge si sterge. Cand nicio sectiune activa nu il
+  // declara, il punem noi, ascuns: o pagina fara niciun titlu de nivel unu isi
+  // pierde titlul in rezultatele cautarii.
+  const areTitluDePagina = design.home.some(
+    (s) => s.enabled && variantMeta(s.kind, s.variant)?.providesH1 === true,
+  );
   const showCategoryBadges = pageContent.show_category_badges !== false; // category chip on product cards
 
   // Vizibilitate catalog (opt-in din editor): ascunde produsele fara imagini
@@ -519,7 +547,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     social,
     gallery,
     menu,
-    hasAnnouncementBar: showAnnouncementOnStore && !headerHostsAnnouncement(design),
+    // Acelasi calcul ca bara randata mai jos: stinsa sau stearsa din editorul de
+    // sectiuni, `page_content` ramane pe „enabled" si header-ul ar fi ramas lipit
+    // la `top-9` peste o fasie goala.
+    hasAnnouncementBar: showAnnouncementOnStore && standaloneAnnouncement(design)?.enabled === true,
     hasHero,
 
     products,
@@ -593,6 +624,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       <ChromeSection section={standaloneAnnouncement(design)} />
       <ChromeSection section={design.chrome.header} />
 
+      {!areTitluDePagina && (
+        <h1 className="sr-only">
+          {business.store_name ?? business.business_name}
+          {business.tagline ? ` - ${business.tagline}` : ""}
+        </h1>
+      )}
       <SectionRenderer sections={design.home} />
 
       <ChromeSection section={design.chrome.footer} />
@@ -710,7 +747,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             <X className="h-5 w-5" />
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="Imagine galerie marita"
+          <img src={cdnImage(lightboxUrl, 2560)} alt="Imagine galerie marita"
             className="max-w-full max-h-full object-contain rounded-xl"
             onClick={(e) => e.stopPropagation()} />
         </div>

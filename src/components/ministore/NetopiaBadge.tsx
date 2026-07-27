@@ -10,7 +10,11 @@ import { getNetopiaBadge } from "@/lib/actions/netopia.actions";
  * (Netopia-domain iframe only) by `getNetopiaBadge`, so rendering it via
  * dangerouslySetInnerHTML here is safe. Renders nothing when no badge is set.
  */
-export function NetopiaBadge({ businessId }: { businessId: string }) {
+export function NetopiaBadge({ businessId, ton = "inchis" }: {
+  businessId: string;
+  /** Fundalul footerului care il compune: „inchis" (implicit) sau „deschis". */
+  ton?: "inchis" | "deschis";
+}) {
   const [html, setHtml] = useState("");
 
   useEffect(() => {
@@ -27,7 +31,9 @@ export function NetopiaBadge({ businessId }: { businessId: string }) {
 
   return (
     <div className="shrink-0">
-      <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Plata securizata</p>
+      <p className={ton === "deschis"
+        ? "text-[10px] font-semibold text-[var(--st-muted)] uppercase tracking-widest mb-3"
+        : "text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-3"}>Plata securizata</p>
       <div
         className="[&_iframe]:max-w-full [&_img]:max-w-full"
         dangerouslySetInnerHTML={{ __html: html }}

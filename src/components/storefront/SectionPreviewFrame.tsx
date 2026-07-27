@@ -1,15 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import dynamic from "next/dynamic";
 import { CartDemoProvider, CartProvider } from "@/components/storefront/cart/CartProvider";
 import { PreviewSection } from "@/components/storefront/SectionRenderer";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
-import { CartDrawerClassic } from "@/components/storefront/sections/cart/CartDrawerClassic";
-import { CartPageSection } from "@/components/storefront/sections/cart/CartPageSection";
-import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
-import { CheckoutPageSection } from "@/components/storefront/sections/checkout/CheckoutPageSection";
 import { CHECKOUT_DEMO } from "@/components/storefront/sections/checkout/checkout-preview";
-import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
+import type { ProductPageSection as ProductPageSectionTip } from "@/components/storefront/sections/product/ProductPageSection";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
 import { DEMO_PRAG_TRANSPORT_GRATUIT, DEMO_TRANSPORT, demoCartItems } from "@/lib/storefront/design/demo-content";
 import { variantMeta } from "@/lib/storefront/design/registry";
@@ -17,10 +14,39 @@ import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import type { StoreCategoryNode as CategoryRow } from "@/lib/storefront/store-content.types";
 
+/**
+ * Suprafetele grele de comert si pagina de produs, incarcate la cerere.
+ *
+ * Miniatura randeaza o singura sectiune si stie din `section.kind` care dintre
+ * ele o priveste. Importate static, pagina de produs cu galeria ei, sertarul de
+ * cos si formularul de comanda ar fi parcurse in fiecare dintre cele sase-opt
+ * documente pe care le deschide galeria deodata, si pentru miniatura unui header.
+ */
+const CartDrawerClassic = dynamic(
+  () => import("@/components/storefront/sections/cart/CartDrawerClassic").then((m) => m.CartDrawerClassic),
+  { ssr: true },
+);
+const CartPageSection = dynamic(
+  () => import("@/components/storefront/sections/cart/CartPageSection").then((m) => m.CartPageSection),
+  { ssr: true },
+);
+const CheckoutClassic = dynamic(
+  () => import("@/components/storefront/sections/checkout/CheckoutClassic").then((m) => m.CheckoutClassic),
+  { ssr: true },
+);
+const CheckoutPageSection = dynamic(
+  () => import("@/components/storefront/sections/checkout/CheckoutPageSection").then((m) => m.CheckoutPageSection),
+  { ssr: true },
+);
+const ProductPageSection = dynamic(
+  () => import("@/components/storefront/sections/product/ProductPageSection").then((m) => m.ProductPageSection),
+  { ssr: true },
+);
+
 /** Produsul demonstrativ al paginii de produs, construit pe server si trimis intreg. */
 export interface DemoProductPage {
-  product: Parameters<typeof ProductPageSection>[0]["product"];
-  storeSettings: Parameters<typeof ProductPageSection>[0]["storeSettings"];
+  product: Parameters<typeof ProductPageSectionTip>[0]["product"];
+  storeSettings: Parameters<typeof ProductPageSectionTip>[0]["storeSettings"];
 }
 
 /**

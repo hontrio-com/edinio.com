@@ -12,6 +12,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 
 const STROKE = 1.7;
 
@@ -43,10 +44,13 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
   const logoSize = pageContent.logo_size ?? 36;
   const acasa = catalog ? "#" : `${basePath}/`;
 
-  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, ["telefon", "whatsapp", "cos"]);
+  const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.pills);
 
+  // Radacinile, nu categoria curenta: panoul din header nu are cale de
+  // intoarcere, deci o lista care se schimba la fiecare intrare in subarbore ar
+  // lasa vizitatorul blocat acolo, fara sa mai poata ajunge la restul.
   const categorii = catalog
-    ? catalog.currentCategoryItems.map((c) => ({ name: c.name, image: c.image }))
+    ? catalog.rootCategoryItems.map((c) => ({ name: c.name, image: c.image }))
     : (searchCategories ?? []).map((name) => ({ name, image: null }));
 
   // Butonul de actiune: implicit duce la produsele cu reducere, dar comerciantul
@@ -103,7 +107,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
 
           {actiuneVizibila && (
             <a href={actiuneLink}
-              className="hidden xl:inline-flex items-center h-10 px-5 rounded-full border-[1.5px] text-sm font-semibold whitespace-nowrap transition-colors hover:bg-[var(--st-primary-soft)]"
+              className="hidden lg:inline-flex items-center h-10 px-5 rounded-full border-[1.5px] text-sm font-semibold whitespace-nowrap transition-colors hover:bg-[var(--st-primary-soft)]"
               style={{ borderColor: "var(--st-primary)", color: "var(--st-primary)" }}>
               {actiuneText}
             </a>
@@ -227,8 +231,10 @@ function CautareRotunjita({ basePath, compact = false }: { basePath: string; com
   }
 
   return (
+    // Campul stinge conturul implicit al browserului, deci pastila primeste ea
+    // semnul de focus: fara el, navigarea cu tastatura n-ar avea niciun reper.
     <form role="search" onSubmit={trimite}
-      className={`flex items-center gap-1 rounded-full bg-[var(--st-surface)] pl-5 pr-1 ${compact ? "h-11" : "h-12"}`}>
+      className={`flex items-center gap-1 rounded-full bg-[var(--st-surface)] pl-5 pr-1 focus-within:ring-2 focus-within:ring-[var(--st-primary)] ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"
         value={valoare}

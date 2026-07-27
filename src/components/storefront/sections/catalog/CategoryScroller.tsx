@@ -35,6 +35,18 @@ export function CategoryScroller({ children, className }: { children: ReactNode;
     };
   }, [update]);
 
+  // Banda isi schimba latimea si fara scroll si fara resize: la intrarea intr-o
+  // subcategorie cu doua intrari, sagetile ar fi ramas afisate si inactive pana
+  // la primul scroll. Observatorul sta pe continut, nu pe containerul derulabil,
+  // fiindca al doilea isi pastreaza latimea.
+  useEffect(() => {
+    const continut = ref.current?.firstElementChild;
+    if (!continut) return;
+    const obs = new ResizeObserver(() => update());
+    obs.observe(continut);
+    return () => obs.disconnect();
+  }, [update]);
+
   // Sagetile apar doar cand banda depaseste latimea; cat timp o depaseste, ambele
   // sloturi raman prezente (cea inactiva doar se estompeaza), ca derularea sa nu
   // mute layout-ul.

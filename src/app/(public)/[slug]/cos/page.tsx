@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -22,10 +23,23 @@ import { CartPageClient } from "@/components/storefront/sections/cart/CartPageCl
  * Nu se indexeaza: continutul e al fiecarui vizitator in parte si se schimba la
  * fiecare adaugare in cos.
  */
-export const metadata: Metadata = { title: "Cosul tau", robots: { index: false, follow: false } };
 
 interface Props {
   params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const { data: business } = await supabase
+    .from("businesses").select("business_name, store_name").eq("slug", slug).single();
+  if (!business) return {};
+  return {
+    // `absolute` scoate template-ul „%s | Edinio" al radacinii: pe domeniul
+    // comerciantului, fila din browser n-are ce cauta cu numele platformei.
+    title: { absolute: `Cosul tau | ${business.store_name ?? business.business_name}` },
+    robots: { index: false, follow: false },
+  };
 }
 
 export default async function CosPage({ params }: Props) {
@@ -39,11 +53,35 @@ export default async function CosPage({ params }: Props) {
     .single();
   if (!business) notFound();
 
-  const { data: storeSettings } = await createAdminClient()
-    .from("store_settings")
-    .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
-    .eq("business_id", business.id)
-    .single();
+  const admin = createAdminClient();
+  const [{ data: storeSettings }, produseCuGreutate] = await Promise.all([
+    admin
+      .from("store_settings")
+      .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
+      .eq("business_id", business.id)
+      .single(),
+    // Greutatile produselor, pentru cotatia internationala DPD pe kilograme, la
+    // fel ca pe /checkout: cine are cosul pe pagina si comanda in fereastra
+    // deschide formularul de AICI, iar fara greutati acelasi cos ar primi alt
+    // tarif decat comandat de pe pagina de magazin. Doar produsele care AU
+    // greutate: la un magazin fara livrare internationala lista iese goala.
+    // In ferestre .range(), ca pe /checkout: un query simplu se taie silentios
+    // la 1000 de randuri (cap PostgREST), iar produsele ramase pe dinafara ar
+    // intra in cotatie cu greutate zero — exact divergenta pe care o repara.
+    fetchAllRows("storefront.cos.weights", (from, to) =>
+      admin
+        .from("products")
+        .select("id, weight_grams")
+        .eq("business_id", business.id)
+        .eq("is_active", true)
+        .not("weight_grams", "is", null)
+        .order("id")
+        .range(from, to)
+    ),
+  ]);
+
+  const productWeights: Record<string, number> = {};
+  for (const p of produseCuGreutate ?? []) if (p.weight_grams) productWeights[p.id] = p.weight_grams;
 
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
   const resolved = resolveDesign(storeSettings?.storefront_design, {
@@ -70,6 +108,11 @@ export default async function CosPage({ params }: Props) {
     pageContent,
     basePath,
     design: resolved.design,
+    // Doar modelul pe doua coloane are bara FIXATA de marginea de jos pe telefon;
+    // cel compact isi lipeste bara in fluxul propriu si o elibereaza inainte de
+    // footer, iar cel lat n-are bara deloc. Fara steag, bara sta peste ultimul
+    // rand al footerului — copyright, credit si insignele ANPC/Netopia.
+    hasStickyBottomBar: resolved.design.commerce.cartDrawer.variant === "page_split",
   });
 
   return (
@@ -87,6 +130,7 @@ export default async function CosPage({ params }: Props) {
             minOrderAmount={storeSettings?.min_order_amount ? Number(storeSettings.min_order_amount) : null}
             comandaPePagina={checkoutOnPage(resolved.design)}
             emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
+            productWeights={productWeights}
           />
         </main>
       </StorePageShell>

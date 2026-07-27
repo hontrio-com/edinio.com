@@ -122,6 +122,15 @@ function SectionRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id, disabled: !mutabila });
   const meta = sectionMeta(section.kind);
   const varianta = variantMeta(section.kind, section.variant);
+  /**
+   * Header-ul si footerul nu se pot stinge.
+   *
+   * Footerul poarta blocul legal (datele de identificare ale firmei, retragerea
+   * din contract ceruta de OUG 18/2026, cele sase politici, insignele ANPC si
+   * Netopia), iar header-ul, navigatia si cosul. Stinse dintr-un click, ar lipsi
+   * de pe toate paginile publice deodata, fara ca nimic sa avertizeze.
+   */
+  const poateFiStinsa = !(meta?.scope === "chrome" && meta.removable === false);
 
   const actiune =
     "w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:pointer-events-none";
@@ -171,10 +180,12 @@ function SectionRow({
             </button>
           </div>
 
-          <button type="button" onClick={onToggle} className={actiune}
-            aria-label={section.enabled ? "Ascunde sectiunea" : "Arata sectiunea"}>
-            {section.enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-          </button>
+          {poateFiStinsa && (
+            <button type="button" onClick={onToggle} className={actiune}
+              aria-label={section.enabled ? "Ascunde sectiunea" : "Arata sectiunea"}>
+              {section.enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            </button>
+          )}
 
           {meta?.singleton === false && (
             <button type="button" onClick={onDuplicate} className={actiune} aria-label="Duplica sectiunea">

@@ -31,6 +31,14 @@ export interface ProductCardProps {
   priceLowestOnly?: boolean;
 }
 
+/**
+ * Ultima treapta e in pixeli, nu in vw: grila si caruselul stau intr-un
+ * container `max-w-6xl`, deci cardul nu trece de circa 268 px oricat de lat ar
+ * fi ecranul. Cu `25vw`, un monitor de 2560 px cerea candidatul de 640w pentru
+ * fiecare dintre cele 20 de carduri ale paginii.
+ */
+const SIZES_IMAGINE = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px";
+
 export function ProductCard({
   product,
   color,
@@ -64,10 +72,14 @@ export function ProductCard({
   const isVariable = parseVariants(product.page_sections) !== null;
 
   const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
+  // Slug-ul poate lipsi (coloana e nullable, iar importurile o lasa goala). Ruta
+  // de produs rezolva si UUID-uri, deci pe id-ul produsului linkul ramane valid
+  // in loc sa duca la /product/null.
+  const productHref = `${basePath}/product/${product.slug ?? product.id}`;
 
   return (
     <div className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">
-      <a href={`${basePath}/product/${product.slug}`} className="block" onClick={fireSelect}>
+      <a href={productHref} className="block" onClick={fireSelect}>
         <div className="relative aspect-square bg-muted/40 overflow-hidden">
           {imageUrl ? (
             <Image
@@ -75,7 +87,7 @@ export function ProductCard({
               alt={product.name}
               fill
               priority={priority}
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              sizes={SIZES_IMAGINE}
               className="object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
             />
           ) : (
@@ -129,7 +141,7 @@ export function ProductCard({
       </a>
 
       <div className="p-3 sm:p-4 flex flex-col flex-1">
-        <a href={`${basePath}/product/${product.slug}`} className="flex-1" onClick={fireSelect}>
+        <a href={productHref} className="flex-1" onClick={fireSelect}>
           <h3 className="font-semibold text-foreground text-sm leading-snug mb-1.5 line-clamp-2 hover:opacity-70 transition-opacity">
             {product.name}
           </h3>

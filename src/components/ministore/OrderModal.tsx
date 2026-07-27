@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition } from "react";
+import { useState, useEffect, useId, useRef, useTransition } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -8,6 +8,7 @@ import {
   Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package, Mail,
   Upload, Palette, Lock,
 } from "lucide-react";
+import { formatPrice } from "@/lib/utils/format";
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
@@ -136,6 +137,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // processor errored) — reused so the retry doesn't place a duplicate order
   // and re-send merchant/customer notifications.
   const placedRef = useRef<{ payloadKey: string; orderId: string } | null>(null);
+  // Panoul e un dialog modal: fara marcaj de dialog si fara captarea focusului,
+  // un utilizator de tastatura sau de cititor de ecran continua sa tabuleze prin
+  // pagina de dedesubt, fara sa afle ca s-a deschis un formular de comanda.
+  const titluId = useId();
+  const panouRef = useRef<HTMLDivElement>(null);
   const [hasCouriers, setHasCouriers] = useState(false);
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
@@ -302,6 +308,17 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     };
   }, [open, onClose]);
 
+  // Focusul intra in panou la deschidere si se intoarce pe butonul declansator la
+  // inchidere. Efect separat, cu `open` singura dependenta: efectul de resetare
+  // depinde si de `onClose`, care vine ca functie noua la fiecare randare a
+  // paginii, iar o re-rulare ar fura focusul din formular.
+  useEffect(() => {
+    if (!open) return;
+    const declansator = document.activeElement as HTMLElement | null;
+    panouRef.current?.focus();
+    return () => { declansator?.focus?.(); };
+  }, [open]);
+
   // Fetch checkout config fresh when modal opens — via a secret-free server action.
   useEffect(() => {
     if (!open) return;
@@ -380,6 +397,27 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setAppliedDiscount(null);
     setDiscountInput("");
     setDiscountError("");
+  }
+
+  /** Capcana de focus: cat timp panoul e deschis, Tab nu are voie sa iasa din el. */
+  function laTabInPanou(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Tab" || !panouRef.current) return;
+    const focusabile = Array.from(
+      panouRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0);
+    if (focusabile.length === 0) return;
+    const primul = focusabile[0];
+    const ultimul = focusabile[focusabile.length - 1];
+    const activ = document.activeElement;
+    if (e.shiftKey && (activ === primul || activ === panouRef.current)) {
+      e.preventDefault();
+      ultimul.focus();
+    } else if (!e.shiftKey && activ === ultimul) {
+      e.preventDefault();
+      primul.focus();
+    }
   }
 
   function toggleBump(offer: ResolvedOffer, checked: boolean) {
@@ -551,6 +589,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
           />
           <motion.div
+            ref={panouRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titluId}
+            tabIndex={-1}
+            onKeyDown={laTabInPanou}
             initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 60 }}
             transition={{ type: "spring", stiffness: 380, damping: 32 }}
             className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-surface"
@@ -564,7 +608,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border">
               <div className="flex-1 text-center">
-                <h2 className="text-lg font-bold text-foreground tracking-tight">Finalizeaza comanda</h2>
+                <h2 id={titluId} className="text-lg font-bold text-foreground tracking-tight">Finalizeaza comanda</h2>
               </div>
               <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-muted transition-colors shrink-0">
                 <X size={17} className="text-muted-foreground" />
@@ -602,16 +646,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                               {tier.badge}
                             </span>
                           ) : (
-                            <span className="text-xs text-muted-foreground">{unitPrice.toFixed(0)} lei / buc</span>
+                            <span className="text-xs text-muted-foreground">{formatPrice(unitPrice)} / buc</span>
                           )}
                           {savings > 0 && (
-                            <p className="text-[10px] font-semibold mt-0.5" style={{ color }}>Economisesti {savings.toFixed(0)} lei</p>
+                            <p className="text-[10px] font-semibold mt-0.5" style={{ color }}>Economisesti {formatPrice(savings)}</p>
                           )}
                         </div>
                         <div className="text-right flex-shrink-0 mr-1">
-                          <p className="font-bold text-base text-foreground">{tier.price} lei</p>
+                          <p className="font-bold text-base text-foreground">{formatPrice(tier.price)}</p>
                           {savings > 0 && (
-                            <p className="text-xs text-muted-foreground line-through">{baseTotal} lei</p>
+                            <p className="text-xs text-muted-foreground line-through">{formatPrice(baseTotal)}</p>
                           )}
                         </div>
                         <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
@@ -633,7 +677,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-foreground truncate">{product.name}</p>
-                    <p className="text-sm font-bold mt-0.5" style={{ color }}>{product.price} lei</p>
+                    <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(product.price)}</p>
                   </div>
                   {/* In fluxul FBT cantitatea e fixa la 1 buc (setul afisat pe card); steperul apare doar in comanda simpla. */}
                   {fbtOffer ? (
@@ -673,7 +717,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-foreground truncate">{ci.name}</p>
                         {ci.variantTitle && <p className="text-xs text-muted-foreground truncate">{ci.variantTitle}</p>}
-                        <p className="text-sm font-bold mt-0.5" style={{ color }}>{ci.price} lei</p>
+                        <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(ci.price)}</p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button type="button" aria-label="Scade cantitatea" onClick={() => setCartQty(key, ci.quantity - 1)}
@@ -1040,7 +1084,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                               )}
                             </div>
                           </div>
-                          <span className="text-sm font-bold flex-shrink-0" style={{ color }}>+{extra.price} lei</span>
+                          <span className="text-sm font-bold flex-shrink-0" style={{ color }}>+{formatPrice(extra.price)}</span>
                         </div>
                       </button>
                     );
@@ -1063,7 +1107,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       <p className="text-sm font-bold font-mono" style={{ color }}>{appliedDiscount.code}</p>
                       <p className="text-xs text-muted-foreground">
                         {appliedDiscount.type === "percent" && `${appliedDiscount.value}% reducere`}
-                        {appliedDiscount.type === "fixed" && `${appliedDiscount.value} lei reducere`}
+                        {appliedDiscount.type === "fixed" && `${formatPrice(appliedDiscount.value)} reducere`}
                         {appliedDiscount.type === "free_shipping" && "Transport gratuit aplicat"}
                       </p>
                     </div>
@@ -1116,71 +1160,71 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               <div className="rounded-xl p-3 space-y-1.5 text-sm bg-muted/40 border border-border">
                 <div className="flex justify-between text-muted-foreground">
                   <span>Produs ({effectiveQty} buc)</span>
-                  <span className="font-medium text-foreground">{productSubtotal} lei</span>
+                  <span className="font-medium text-foreground">{formatPrice(productSubtotal)}</span>
                 </div>
                 {cart.map((ci) => (
                   <div key={ci.productId} className="flex justify-between text-muted-foreground">
                     <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
-                    <span className="font-medium text-foreground whitespace-nowrap">{Math.round(ci.price * ci.quantity * 100) / 100} lei</span>
+                    <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Math.round(ci.price * ci.quantity * 100) / 100)}</span>
                   </div>
                 ))}
                 {acceptedBumpOffers.map((o) => (
                   <div key={o.id} className="flex justify-between" style={{ color }}>
                     <span className="truncate pr-2">+ {o.products[0]!.name}</span>
-                    <span className="font-medium whitespace-nowrap">{o.pricing!.price} lei</span>
+                    <span className="font-medium whitespace-nowrap">{formatPrice(o.pricing!.price)}</span>
                   </div>
                 ))}
                 {fbtOffer?.items.map((i) => (
                   <div key={i.product_id} className="flex justify-between" style={{ color }}>
                     <span className="truncate pr-2">+ {i.name}</span>
-                    <span className="font-medium whitespace-nowrap">{Math.round(i.price * i.quantity * 100) / 100} lei</span>
+                    <span className="font-medium whitespace-nowrap">{formatPrice(Math.round(i.price * i.quantity * 100) / 100)}</span>
                   </div>
                 ))}
                 {extrasTotal > 0 && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>Optiuni extra</span>
-                    <span className="font-medium text-foreground">+{extrasTotal} lei</span>
+                    <span className="font-medium text-foreground">+{formatPrice(extrasTotal)}</span>
                   </div>
                 )}
                 {appliedDiscount && discountAmount > 0 && (
                   <div className="flex justify-between" style={{ color }}>
                     <span>Discount ({appliedDiscount.code})</span>
-                    <span className="font-semibold">-{discountAmount.toFixed(2)} lei</span>
+                    <span className="font-semibold">-{formatPrice(discountAmount)}</span>
                   </div>
                 )}
                 {cardDiscountAmount > 0 && (
                   <div className="flex justify-between" style={{ color }}>
                     <span>Reducere plata cu cardul</span>
-                    <span className="font-semibold">-{cardDiscountAmount.toFixed(2)} lei</span>
+                    <span className="font-semibold">-{formatPrice(cardDiscountAmount)}</span>
                   </div>
                 )}
                 {codDiscountAmount > 0 && (
                   <div className="flex justify-between" style={{ color }}>
                     <span>Reducere plata ramburs</span>
-                    <span className="font-semibold">-{codDiscountAmount.toFixed(2)} lei</span>
+                    <span className="font-semibold">-{formatPrice(codDiscountAmount)}</span>
                   </div>
                 )}
                 {appliedDiscount?.type === "free_shipping" && (
                   <div className="flex justify-between" style={{ color }}>
                     <span>Transport gratuit ({appliedDiscount.code})</span>
-                    <span className="font-semibold">-{shippingCost} lei</span>
+                    <span className="font-semibold">-{formatPrice(shippingCost)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-muted-foreground">
                   <span>Transport</span>
                   <span className={shipping === 0 ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 ? { color } : undefined}>
-                    {shipping === 0 ? "Gratuit" : `${shipping} lei`}
+                    {shipping === 0 ? "Gratuit" : formatPrice(shipping)}
                   </span>
                 </div>
                 {vatConfig.vat_enabled && vatConfig.show_vat_breakdown && vatAmount > 0 && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>TVA ({vatConfig.vat_rate}%){vatConfig.prices_include_vat ? " inclus" : ""}</span>
-                    <span className="font-medium text-foreground">{vatAmount.toFixed(2)} lei</span>
+                    <span className="font-medium text-foreground">{formatPrice(vatAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-base border-t border-border pt-2">
                   <span>Total</span>
-                  <span style={{ color }}>{total.toFixed(2).replace(".00", "")} lei</span>
+                  <span style={{ color }}>{formatPrice(total)}</span>
                 </div>
               </div>
 
@@ -1207,7 +1251,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {belowMinOrder && (
                 <p className="text-sm text-center text-muted-foreground">
-                  Comanda minima este <strong className="text-foreground">{minOrderAmount} lei</strong>. Mai adauga <strong className="text-foreground">{(minOrderAmount! - subtotal).toFixed(2).replace(".00", "")} lei</strong> pentru a comanda.
+                  Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderAmount! - subtotal)}</strong> pentru a comanda.
                 </p>
               )}
 
@@ -1218,10 +1262,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 {isPending
                   ? <><Loader2 size={18} className="animate-spin" />Se proceseaza...</>
                   : belowMinOrder
-                    ? <>Comanda minima {minOrderAmount} lei</>
+                    ? <>Comanda minima {formatPrice(minOrderAmount!)}</>
                     : paymentMethod === "cash_on_delivery"
-                      ? <><Banknote size={20} />Plata la livrare - {total.toFixed(2).replace(".00", "")} lei</>
-                      : <><CreditCard size={20} />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {total.toFixed(2).replace(".00", "")} lei</>
+                      ? <><Banknote size={20} />Plata la livrare - {formatPrice(total)}</>
+                      : <><CreditCard size={20} />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(total)}</>
                 }
               </button>
 

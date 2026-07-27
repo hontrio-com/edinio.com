@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,6 +10,9 @@ import {
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
+import {
+  parseVariants, comboTitle, findCombo, isValueAvailable, VARIANT_TITLE_SEP,
+} from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import type { MenuItem } from "@/lib/pages/menu";
@@ -101,6 +104,36 @@ interface PageSections {
     enabled: boolean;
     fields: CustomizationFieldDef[];
   };
+}
+
+/* ─── Helpers ─────────────────────────────────────────────────────────────── */
+
+const MQ_MISCARE_REDUSA = "(prefers-reduced-motion: reduce)";
+function abonareMiscareRedusa(la: () => void) {
+  const mq = window.matchMedia(MQ_MISCARE_REDUSA);
+  mq.addEventListener("change", la);
+  return () => mq.removeEventListener("change", la);
+}
+function citesteMiscareRedusa() { return window.matchMedia(MQ_MISCARE_REDUSA).matches; }
+
+/** Hash stabil, ca numarul de vizitatori sa iasa acelasi pe server si in browser. */
+function hashSir(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+/**
+ * Cosul e detinut de `CartProvider` (contorul din antet citeste de acolo), dar
+ * pagina de produs scrie direct in `cart_<slug>`. Evenimentul „storage" nu se
+ * declanseaza in fila care a scris, deci il emitem noi: fara el antetul ramane pe
+ * cifra veche dupa o adaugare din „Merge bine cu", iar cosul sters dupa comanda
+ * ramane plin in memoria providerului.
+ */
+function anuntaCosSchimbat(cheie: string, valoare: string | null) {
+  try {
+    window.dispatchEvent(new StorageEvent("storage", { key: cheie, newValue: valoare }));
+  } catch {}
 }
 
 /* ─── Default content ─────────────────────────────────────────────────────── */
@@ -219,6 +252,109 @@ function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayme
   );
 }
 
+/* ─── Gallery ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Latimea reala a coloanei de galerie pe desktop: (72rem container - 4rem gap) / 2.
+ *
+ * Acelasi `sizes` pe copia de telefon si pe cea de desktop, desi arata diferit:
+ * amandoua marcheaza prima imagine cu `priority`, iar preincarcarea din <head> nu
+ * stie de `display:none`. Cu `sizes` diferiti browserul alegea doi candidati si
+ * descarca de doua ori aceeasi fotografie; identici, alege acelasi fisier o data.
+ */
+const GALLERY_SIZES = "(min-width: 1024px) 544px, 100vw";
+
+function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount, discountPct, onTouchStart, onTouchEnd }: {
+  slides: string[];
+  activeSlide: number;
+  goTo: (idx: number) => void;
+  mobile: boolean;
+  color: string;
+  imgAlt: (src: string, i: number) => string;
+  hasDiscount: boolean;
+  discountPct: number;
+  onTouchStart: (e: React.TouchEvent) => void;
+  onTouchEnd: (e: React.TouchEvent) => void;
+}) {
+  return (
+    <div className="relative w-full overflow-hidden rounded-2xl bg-muted/40 shadow-lg"
+      style={{ aspectRatio: "1/1" }}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {slides.length === 0 ? (
+        <div className="w-full h-full flex items-center justify-center">
+          <Package className="h-20 w-20 text-muted-foreground/40" />
+        </div>
+      ) : mobile ? (
+        <div className="flex h-full transition-transform duration-500 ease-in-out"
+          style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
+          {slides.map((src, i) => (
+            <div key={i} className="relative w-full h-full flex-shrink-0">
+              <Image src={src} alt={imgAlt(src, i)} fill sizes={GALLERY_SIZES}
+                className="object-contain p-2" priority={i === 0} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        // Pe desktop diapozitivele stau suprapuse in acelasi cadru vizibil, deci
+        // browserul le socoteste pe toate „in ecran" si le-ar descarca deodata
+        // (`opacity: 0` nu opreste nici descarcarea, nici decodarea). Montam doar
+        // diapozitivul activ si vecinii imediati: trecerea are nevoie de cel vechi
+        // si de cel nou in acelasi timp, restul se aduc abia cand ajungi la ele.
+        slides.map((src, i) => (
+          <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
+            style={{ opacity: i === activeSlide ? 1 : 0 }}>
+            {/* Doar prima fotografie e prioritara; restul se incarca lenes.
+                Toate raman insa MONTATE: demontarea celor departate ar taia
+                tranzitia de opacitate la salturile de mai mult de o pozitie
+                (miniatura departata, sau sageata care se intoarce la prima) si
+                ar lasa un patrat gol pana soseste imaginea. */}
+            <Image src={src} alt={imgAlt(src, i)} fill sizes={GALLERY_SIZES}
+              className="object-contain p-2" priority={i === 0} loading={i === 0 ? undefined : "lazy"} />
+          </div>
+        ))
+      )}
+
+      {slides.length > 1 && (
+        <>
+          <button type="button" aria-label="Imaginea anterioara" onClick={e => { e.stopPropagation(); goTo(activeSlide - 1); }}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
+            <ChevronLeft size={16} className="text-foreground" />
+          </button>
+          <button type="button" aria-label="Imaginea urmatoare" onClick={e => { e.stopPropagation(); goTo(activeSlide + 1); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
+            <ChevronRight size={16} className="text-foreground" />
+          </button>
+          {/* Dot indicators: mobile only (desktop uses the thumbnail strip) and only
+              for small galleries — 33 dots would be an unusable cramped row. The
+              "1 / N" counter above covers navigation for larger sets. */}
+          {mobile && slides.length <= 8 && (
+            <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
+              {slides.map((_, i) => (
+                // Bulina inactiva pe un token de text, nu pe alb: fundalul galeriei
+                // e aproape alb, deci albul 60% ieseau la circa 1:1 (WCAG 1.4.11
+                // cere 3:1) si clientul nu vedea cate imagini mai sunt.
+                <button key={i} type="button" aria-label={`Imaginea ${i + 1}`} onClick={() => goTo(i)}
+                  className="rounded-full transition-all duration-300"
+                  style={i === activeSlide
+                    ? { width: 24, height: 8, backgroundColor: color }
+                    : { width: 8, height: 8, backgroundColor: "var(--color-muted-foreground)" }} />
+              ))}
+            </div>
+          )}
+          <div className="absolute top-3 left-3 bg-black/30 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10">
+            {activeSlide + 1} / {slides.length}
+          </div>
+        </>
+      )}
+
+      {hasDiscount && (
+        <div className="absolute top-3 right-3 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10" style={{ backgroundColor: color }}>
+          -{discountPct}%
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
@@ -288,18 +424,26 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const benefitsSection = pageContent.benefits_section;
   const howItWorksSection = pageContent.how_it_works_section;
   const faqSection = pageContent.faq_section;
+  // WCAG 2.2.2: cinci din cele sase efecte de buton se repeta la nesfarsit si nu
+  // au buton de oprire, deci se sting cand vizitatorul cere miscare redusa —
+  // exact ce fac deja clasele .fx-* pentru paginile custom (globals.css).
+  const reduceMotion = useSyncExternalStore(abonareMiscareRedusa, citesteMiscareRedusa, () => false);
   // In miniatura, cinci din cele sase efecte de buton sunt animatii care se
   // repeta la nesfarsit; zece iframe-uri deodata ar arde procesorul degeaba.
-  const buttonEffect = demo ? "none" : (pageContent.button_effect ?? "none");
-  const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
+  const buttonEffect = demo || reduceMotion ? "none" : (pageContent.button_effect ?? "none");
   const deliveryEstimate = pageContent.delivery_estimate;
   const showQualityBadge = pageContent.show_quality_badge === true; // "Calitate verificata" badge — off unless enabled (ANPC/Omnibus: merchant opt-in)
-  // Numar fix in miniatura: altfel cardul ar arata alt numar la fiecare randare.
-  const viewerCount = useRef(demo ? 23 : 18 + Math.floor(Math.random() * 10)).current;
+  // Numar stabil, derivat din id-ul produsului: cu Math.random() serverul si
+  // browserul scriau numere diferite in acelasi HTML (nepotrivire de hidratare).
+  // Fix in miniatura, ca fiecare card din galerie sa arate acelasi numar.
+  const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
   const showSocialProof = pageContent.show_social_proof === true; // fake live-viewers counter — off unless enabled
 
-  // Variants
-  const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
+  // Variante — sursa unica din lib/storefront/variants.ts. Un produs cu
+  // `variants.enabled` dar fara nicio optiune NU e variabil: altfel butonul de
+  // comanda ramanea stins cu „Selecteaza optiunile" si nimic de selectat, desi
+  // acelasi produs se adauga normal in cos din cardul de catalog.
+  const variantsData = useMemo(() => parseVariants(product.page_sections), [product.page_sections]);
   // In miniatura prima combinatie e deja aleasa. Altfel butonul principal ar
   // aparea stins, cu „Selecteaza optiunile", in fiecare design de pagina de
   // produs — adica tocmai elementul dupa care se alege designul ar lipsi.
@@ -309,17 +453,15 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       : {},
   );
 
-  const selectedComboTitle = useMemo(() => {
-    if (!variantsData) return null;
-    const parts = variantsData.options.map(o => selectedOptions[o.name] ?? "");
-    if (parts.some(p => !p)) return null;
-    return parts.join(" / ");
-  }, [variantsData, selectedOptions]);
+  const selectedComboTitle = useMemo(
+    () => (variantsData ? comboTitle(variantsData.options, selectedOptions) : null),
+    [variantsData, selectedOptions],
+  );
 
-  const selectedCombo = useMemo(() => {
-    if (!variantsData || !selectedComboTitle) return null;
-    return variantsData.combinations.find(c => c.title === selectedComboTitle && c.enabled) ?? null;
-  }, [variantsData, selectedComboTitle]);
+  const selectedCombo = useMemo(
+    () => (variantsData ? findCombo(variantsData, selectedComboTitle) : null),
+    [variantsData, selectedComboTitle],
+  );
 
   // Variant image: the exact combo image when everything is selected, otherwise the
   // image of the first enabled combination that matches the partial selection (e.g.
@@ -342,7 +484,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       const imgs = new Set<string>();
       for (const c of variantsData.combinations) {
         if (!c.enabled || !c.image) continue;
-        const parts = c.title.split(" / ");
+        const parts = c.title.split(VARIANT_TITLE_SEP);
         if (chosen.every(s => parts.includes(s))) imgs.add(c.image);
       }
       if (imgs.size !== 1) return null;
@@ -361,19 +503,6 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
     const selected = variantsData.options.map(o => selectedOptions[o.name]).filter(Boolean);
     return selected.length > 0 ? `${product.name} - ${selected.join(" / ")}` : product.name;
   }, [variantsData, selectedOptions, product.name]);
-
-  // Check if a variant value leads to any available combination
-  function isValueAvailable(optionName: string, value: string): boolean {
-    if (!variantsData) return true;
-    const otherSels = Object.entries(selectedOptions)
-      .filter(([k, v]) => k !== optionName && v)
-      .map(([, v]) => v);
-    return variantsData.combinations.some(c => {
-      if (!c.enabled) return false;
-      const parts = c.title.split(" / ");
-      return parts.includes(value) && otherSels.every(s => parts.includes(s));
-    });
-  }
 
   // Display images — prepend the (full or partial) variant image if available
   const displayImages = useMemo(() => {
@@ -472,7 +601,9 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       const i = list.findIndex((x) => x?.productId === p.id);
       if (i >= 0) list[i].quantity = (list[i].quantity || 1) + 1;
       else list.push({ productId: p.id, slug: p.slug, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 });
-      localStorage.setItem(`cart_${business.slug}`, JSON.stringify(list));
+      const serializat = JSON.stringify(list);
+      localStorage.setItem(`cart_${business.slug}`, serializat);
+      anuntaCosSchimbat(`cart_${business.slug}`, serializat);
     } catch {}
     setCartItems((prev) => {
       const i = prev.findIndex((x) => x.productId === p.id);
@@ -482,19 +613,24 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   }, [business.slug, demo]);
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [zoomPos] = useState<{x: number; y: number} | null>(null);
   const touchStartX = useRef<number>(0);
   const thumbStripRef = useRef<HTMLDivElement>(null);
 
   const deliveryDates = useMemo(() => {
     if (!deliveryEstimate?.enabled) return null;
-    const now = new Date();
-    const minDate = new Date(now);
-    minDate.setDate(minDate.getDate() + (deliveryEstimate.min_days ?? 2));
-    const maxDate = new Date(now);
-    maxDate.setDate(maxDate.getDate() + (deliveryEstimate.max_days ?? 4));
-    const fmt = (d: Date) => d.toLocaleDateString("ro-RO", { day: "numeric", month: "long" });
-    return { min: fmt(minDate), max: fmt(maxDate) };
+    const acum = new Date().getTime();
+    const ZI = 24 * 60 * 60 * 1000;
+    // Zilele se adauga pe instant si data se formateaza ancorata in fusul
+    // Romaniei: serverul ruleaza in UTC, browserul in fusul vizitatorului, iar
+    // fara ancora cele doua randari dau zile diferite in jurul miezului noptii
+    // (nepotrivire de hidratare + estimare care se schimba sub ochii clientului).
+    const fmt = (ms: number) => new Date(ms).toLocaleDateString("ro-RO", {
+      timeZone: "Europe/Bucharest", day: "numeric", month: "long",
+    });
+    return {
+      min: fmt(acum + (deliveryEstimate.min_days ?? 2) * ZI),
+      max: fmt(acum + (deliveryEstimate.max_days ?? 4) * ZI),
+    };
   }, [deliveryEstimate]);
 
   // Reset slide when variant image changes
@@ -532,77 +668,22 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
     if (Math.abs(dx) > 40) goTo(activeSlide + (dx > 0 ? 1 : -1));
   };
 
-  function Gallery({ mobile }: { mobile: boolean }) {
+  // Zona de cumparare, randata O SINGURA DATA. Pana acum existau doua copii, una
+  // pentru telefon si una pentru desktop, ascunse una pe alta din CSS: in acelasi
+  // document ajungeau doi <h1> identici, doua descrieri si doua seturi de butoane.
+  // Marimile se comuta acum din clase responsive.
+  //
+  // Se apeleaza ca functie, nu ca element JSX: o componenta declarata in corpul
+  // randarii primeste alt tip la fiecare randare, iar React demonteaza si
+  // remonteaza tot subarborele la orice alegere de varianta (imaginile se
+  // re-decodeaza, focusul de pe butonul apasat dispare, tranzitiile nu apuca sa
+  // ruleze).
+  function zonaDeCumparare() {
     return (
-      <div className="relative w-full overflow-hidden rounded-2xl bg-muted/40 shadow-lg"
-        style={{ aspectRatio: "1/1" }}
-        onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        {slides.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center">
-            <Package className="h-20 w-20 text-muted-foreground/40" />
-          </div>
-        ) : mobile ? (
-          <div className="flex h-full transition-transform duration-500 ease-in-out"
-            style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
-            {slides.map((src, i) => (
-              <div key={i} className="relative w-full h-full flex-shrink-0">
-                <Image src={src} alt={imgAlt(src, i)} fill sizes="100vw"
-                  className="object-contain p-2" priority={i === 0} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          slides.map((src, i) => (
-            <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
-              style={{ opacity: i === activeSlide ? 1 : 0 }}>
-              <Image src={src} alt={imgAlt(src, i)} fill sizes="50vw"
-                className="object-contain p-2" priority={i === 0} />
-            </div>
-          ))
-        )}
-
-        {slides.length > 1 && (
-          <>
-            <button type="button" aria-label="Imaginea anterioara" onClick={e => { e.stopPropagation(); goTo(activeSlide - 1); }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
-              <ChevronLeft size={16} className="text-foreground" />
-            </button>
-            <button type="button" aria-label="Imaginea urmatoare" onClick={e => { e.stopPropagation(); goTo(activeSlide + 1); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
-              <ChevronRight size={16} className="text-foreground" />
-            </button>
-            {/* Dot indicators: mobile only (desktop uses the thumbnail strip) and only
-                for small galleries — 33 dots would be an unusable cramped row. The
-                "1 / N" counter above covers navigation for larger sets. */}
-            {mobile && slides.length <= 8 && (
-              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
-                {slides.map((_, i) => (
-                  <button key={i} type="button" aria-label={`Imaginea ${i + 1}`} onClick={() => goTo(i)}
-                    className="rounded-full transition-all duration-300"
-                    style={i === activeSlide
-                      ? { width: 24, height: 8, backgroundColor: color }
-                      : { width: 8, height: 8, backgroundColor: "rgba(255,255,255,0.6)" }} />
-                ))}
-              </div>
-            )}
-            <div className="absolute top-3 left-3 bg-black/30 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10">
-              {activeSlide + 1} / {slides.length}
-            </div>
-          </>
-        )}
-
-        {hasDiscount && (
-          <div className="absolute top-3 right-3 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10" style={{ backgroundColor: color }}>
-            -{discountPct}%
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function Content({ mobile }: { mobile: boolean }) {
-    return (
-      <div className={`flex flex-col ${mobile ? "gap-3" : "gap-4"}`}>
+      // `min-w-0`: pe telefon divul e element de grila, iar dimensiunea minima
+      // automata l-ar lasa sa se dilate la latimea unui tabel sau a unei imagini
+      // din descrierea scurta, largind si coloana galeriei.
+      <div className="flex flex-col gap-3 lg:gap-4 min-w-0">
         {/* Quality badge */}
         {showQualityBadge && (
           <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 w-fit" style={{ backgroundColor: `${color}1a` }}>
@@ -612,13 +693,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         )}
 
         {/* Title */}
-        <h1 className={`tracking-tight font-bold text-foreground leading-tight ${mobile ? "text-2xl" : "text-3xl lg:text-4xl"}`}>
+        <h1 className="tracking-tight font-bold text-foreground leading-tight text-2xl lg:text-4xl">
           {displayName}
         </h1>
 
         {topBlurb && (
           <div
-            className={`policy-content text-muted-foreground leading-relaxed ${mobile ? "text-sm" : "text-base"}`}
+            className="policy-content text-muted-foreground leading-relaxed text-sm lg:text-base"
             // Sanitized server-side (see product route) before reaching the client.
             dangerouslySetInnerHTML={{ __html: topBlurb }}
           />
@@ -626,7 +707,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
         {/* Price */}
         <div className="flex items-center gap-3 flex-wrap">
-          <span className={`tracking-tight font-bold text-foreground ${mobile ? "text-3xl" : "text-4xl"}`}>
+          <span className="tracking-tight font-bold text-foreground text-3xl lg:text-4xl">
             {showPriceRange
               ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
               : formatPrice(displayPrice)}
@@ -712,7 +793,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                 <div className="flex flex-wrap gap-2">
                   {option.values.map(val => {
                     const isSelected = selectedOptions[option.name] === val;
-                    const available = isValueAvailable(option.name, val);
+                    const available = isValueAvailable(variantsData, selectedOptions, option.name, val);
                     return (
                       <button key={val} type="button"
                         onClick={() => setSelectedOptions(prev => ({
@@ -749,7 +830,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         )}
         {!isOutOfStock && !isPreorder && product.track_inventory && product.stock_quantity !== null && product.stock_quantity > 0 && product.stock_quantity <= 10 && (
           <motion.div className="flex items-center gap-2"
-            animate={demo ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+            animate={demo || reduceMotion ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
             <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
             <span className="text-sm font-semibold text-red-600">
               Doar {product.stock_quantity} {product.stock_quantity === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
@@ -776,7 +857,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           </div>
         )}
 
-        {!mobile && showSocialProof && <SocialProof count={viewerCount} color={color} />}
+        {/* Doar pe desktop, ca pana acum. `flex-col` pe invelis, nu `block`:
+            pastilata e `inline-flex`, deci intr-un bloc s-ar stramta la latimea
+            textului in loc sa umple coloana, cum face azi. */}
+        {showSocialProof && (
+          <div className="hidden lg:flex lg:flex-col">
+            <SocialProof count={viewerCount} color={color} />
+          </div>
+        )}
       </div>
     );
   }
@@ -804,35 +892,41 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         </div>
       )}
 
-      {/* MOBILE hero */}
-      <div className="lg:hidden">
-        <div className="px-4 pt-3 pb-2">
-          <Gallery mobile />
-        </div>
-        <div className="px-4 pt-4 pb-8">
-          <Content mobile />
-        </div>
-      </div>
-
-      {/* DESKTOP hero */}
-      <div className="hidden lg:block px-6 pt-8 pb-16">
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-start">
-          <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-            <Gallery mobile={false} />
-            {slides.length > 1 && (
-              <div ref={thumbStripRef} className="flex gap-2 mt-3 overflow-x-auto pb-1">
-                {slides.map((src, i) => (
-                  <button key={i} type="button" aria-label={`Selecteaza imaginea ${i + 1}`} onClick={() => goTo(i)}
-                    className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden transition-all bg-muted/40"
-                    style={{ border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
-                    <Image src={src} alt={imgAlt(src, i)} fill sizes="64px" className="object-contain p-1" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </motion.div>
-          <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
-            <Content mobile={false} />
+      {/* Hero: o singura grila, cu asezarea comutata din CSS. Galeria ramane in
+          doua variante (banda care culiseaza pe telefon, diapozitive suprapuse pe
+          desktop), dar zona de cumparare e una singura. */}
+      <div className="px-4 pt-3 pb-8 lg:px-6 lg:pt-8 lg:pb-16">
+        <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-2 lg:gap-16 lg:items-start">
+          <div>
+            <div className="lg:hidden">
+              <Gallery mobile slides={slides} activeSlide={activeSlide} goTo={goTo} color={color}
+                imgAlt={imgAlt} hasDiscount={!!hasDiscount} discountPct={discountPct}
+                onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} />
+            </div>
+            {/* Animatia de intrare a fost dintotdeauna doar pe desktop; aici sta pe
+                un invelis `hidden lg:block`, deci pe telefon nu are ce misca. */}
+            <motion.div className="hidden lg:block" initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+              <Gallery mobile={false} slides={slides} activeSlide={activeSlide} goTo={goTo} color={color}
+                imgAlt={imgAlt} hasDiscount={!!hasDiscount} discountPct={discountPct}
+                onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} />
+              {slides.length > 1 && (
+                <div ref={thumbStripRef} className="flex gap-2 mt-3 overflow-x-auto pb-1">
+                  {slides.map((src, i) => (
+                    <button key={i} type="button" aria-label={`Selecteaza imaginea ${i + 1}`} onClick={() => goTo(i)}
+                      className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden transition-all bg-muted/40"
+                      style={{ border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
+                      <Image src={src} alt={imgAlt(src, i)} fill sizes="64px" className="object-contain p-1" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+          {/* `contents` pe telefon: elementul nu genereaza cutie, deci animatia de
+              intrare (desktop-only, ca inainte) nu are efect, iar zona de cumparare
+              ramane copil direct al grilei. */}
+          <motion.div className="contents lg:block" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
+            {zonaDeCumparare()}
           </motion.div>
         </div>
       </div>
@@ -985,9 +1079,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
               viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
               className="border border-border rounded-xl overflow-hidden shadow-sm">
               {specifications.map((spec, i) => (
+                // Randul se stivuieste pe telefon: cu eticheta fixata la 11rem si
+                // px-6, pe un ecran de 320 px ramaneau 80 px pentru valoare.
                 <div key={i}
-                  className={`flex items-start sm:items-center gap-4 px-6 py-4 ${i % 2 === 0 ? "bg-surface" : "bg-muted/30"} ${i !== specifications.length - 1 ? "border-b border-border" : ""}`}>
-                  <span className="text-sm text-muted-foreground w-44 shrink-0 font-medium">{spec.label}</span>
+                  className={`flex flex-col gap-1 px-6 py-4 sm:flex-row sm:items-center sm:gap-4 ${i % 2 === 0 ? "bg-surface" : "bg-muted/30"} ${i !== specifications.length - 1 ? "border-b border-border" : ""}`}>
+                  <span className="text-sm text-muted-foreground font-medium sm:w-44 sm:shrink-0">{spec.label}</span>
                   <span className="text-sm font-semibold text-foreground">{spec.value}</span>
                 </div>
               ))}
@@ -1066,7 +1162,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         tiers={quantityTiers}
         customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
         cartItems={cartItems}
-        onCartConsumed={() => { try { localStorage.removeItem(`cart_${business.slug}`); } catch {} }}
+        onCartConsumed={() => {
+          try {
+            localStorage.removeItem(`cart_${business.slug}`);
+            anuntaCosSchimbat(`cart_${business.slug}`, null);
+          } catch {}
+        }}
         fbtOffer={fbtOffer}
       />
       </>

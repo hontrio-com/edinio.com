@@ -1,11 +1,37 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { PREVIEW_HEIGHT_MESSAGE } from "@/components/storefront/PreviewHeightReporter";
 import { asezareMiniatura } from "@/lib/storefront/design/preview-layout";
 
 export const INALTIME_IMPLICITA = 320;
+
+/**
+ * Cate miniaturi se randeaza in acelasi timp, in toata pagina.
+ *
+ * Fiecare miniatura e o pagina de magazin randata pe server, cu interogarile ei.
+ * La header, cele opt carduri incap intr-un singur ecran, deci fara limita s-ar
+ * deschide opt iframe-uri deodata si primul ar aparea la fel de tarziu ca
+ * ultimul. Pe rand, cele de sus se vad imediat, iar restul vin din urma.
+ *
+ * Coada e a modulului, nu a componentei: limita are sens doar pe toata pagina.
+ */
+const MINIATURI_SIMULTAN = 2;
+
+/** Cat asteptam o miniatura care nu se incarca, inainte sa-i luam locul. */
+const ASTEPTARE_MAXIMA = 8000;
+
+let inCurs = 0;
+const laRand: (() => void)[] = [];
+
+function porneste() {
+  while (inCurs < MINIATURI_SIMULTAN && laRand.length > 0) {
+    const urmatoarea = laRand.shift();
+    inCurs += 1;
+    urmatoarea?.();
+  }
+}
 
 /**
  * Cardul unei variante de design, cu miniatura randata live.
@@ -53,7 +79,10 @@ export function VariantCard({
   const box = useRef<HTMLDivElement>(null);
   const rama = useRef<HTMLIFrameElement>(null);
   const [latimeCard, setLatimeCard] = useState(0);
+  const [aproape, setAproape] = useState(false);
   const [vizibil, setVizibil] = useState(false);
+  /** Cardul tine unul dintre locurile de randare cat timp isi incarca miniatura. */
+  const locOcupat = useRef(false);
   /**
    * Inaltimea masurata, impreuna cu latimea la care s-a masurat. Cele doua merg
    * in aceeasi stare pentru ca inaltimea unei benzi randate la 390 de pixeli nu
@@ -74,16 +103,59 @@ export function VariantCard({
     return () => ro.disconnect();
   }, []);
 
+  const elibereaza = useCallback(() => {
+    if (!locOcupat.current) return;
+    locOcupat.current = false;
+    inCurs -= 1;
+    porneste();
+  }, []);
+
+  // Locul se da inapoi si cand cardul dispare inainte sa apuce sa randeze ceva:
+  // la inchiderea galeriei, un card care tocmai si-a primit randul de la vecinul
+  // care se demonteaza nu mai ajunge sa monteze efectul de mai jos. Coada e a
+  // modulului si nu se reseteaza, deci un loc pierdut ramane pierdut pana la
+  // reincarcarea paginii, iar dupa cateva inchideri galeria ar ramane goala.
+  useEffect(() => elibereaza, [elibereaza]);
+
   useEffect(() => {
     const el = box.current;
     if (!el) return;
     const io = new IntersectionObserver(
-      ([intrare]) => { if (intrare.isIntersecting) setVizibil(true); },
+      ([intrare]) => { if (intrare.isIntersecting) setAproape(true); },
       { rootMargin: "400px" },
     );
     io.observe(el);
     return () => io.disconnect();
   }, []);
+
+  // Apropierea de ecran il pune la coada; randeaza cand ii vine randul. Asteapta
+  // si scara: fara latimea cardului masurata, iframe-ul nu s-ar randa oricum,
+  // deci ar tine un loc degeaba.
+  useEffect(() => {
+    if (!aproape || vizibil || scara <= 0) return;
+    const incepe = () => {
+      locOcupat.current = true;
+      setVizibil(true);
+    };
+    laRand.push(incepe);
+    porneste();
+    return () => {
+      const i = laRand.indexOf(incepe);
+      if (i >= 0) laRand.splice(i, 1);
+    };
+  }, [aproape, vizibil, scara]);
+
+  // Locul se elibereaza cand miniatura s-a incarcat (`onLoad`) sau cand cardul
+  // dispare. Cronometrul e plasa de siguranta: una care nu se incarca niciodata
+  // nu are voie sa tina coada pe loc.
+  useEffect(() => {
+    if (!vizibil) return;
+    const t = setTimeout(elibereaza, ASTEPTARE_MAXIMA);
+    return () => {
+      clearTimeout(t);
+      elibereaza();
+    };
+  }, [vizibil, elibereaza]);
 
   // Miniatura isi anunta singura inaltimea. Numarul din registry ramane doar ca
   // estimare pana se incarca, altfel cardul ar sari cand apare continutul.
@@ -111,6 +183,7 @@ export function VariantCard({
             ref={rama}
             src={`/preview-sectiune/${slug}?kind=${encodeURIComponent(kind)}&variant=${encodeURIComponent(variantId)}`}
             title={`Previzualizare ${label}`}
+            onLoad={elibereaza}
             tabIndex={-1}
             scrolling="no"
             className="absolute top-0 origin-top-left border-0 pointer-events-none"

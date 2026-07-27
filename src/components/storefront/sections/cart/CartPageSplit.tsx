@@ -3,9 +3,9 @@
 import { ArrowLeft } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
-import { useCart } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing } from "@/lib/storefront/cart/pricing";
-import { CartLine, CosGol, ProgresTransport, RezumatCos } from "./_shared/CartPieces";
+import { CartLine, CosGol, ProgresTransport, RezumatCos, ScheletCos } from "./_shared/CartPieces";
 import type { CartPageProps } from "./cart-page.types";
 
 /**
@@ -35,9 +35,11 @@ export function CartPageSplit({
   const areRecomandari = settings.showRecommendations !== false && !preview;
   const arePrag = settings.showProgress !== false;
 
-  // Cosul vine din localStorage dupa montare: pana atunci „gol" inca nu inseamna
-  // gol, iar un ecran de cos gol aratat o clipa la fiecare incarcare sperie degeaba.
-  if (hydrated && items.length === 0) return <CosGol basePath={basePath} color={color} />;
+  // Cosul vine din localStorage dupa montare: pana atunci nu se stie nici ce e in
+  // el, nici daca e gol. Un ecran de cos gol aratat o clipa sperie degeaba, iar
+  // lista si totalurile randate cu cosul inca necitit arata cifre false.
+  if (!hydrated) return <ScheletCos latime="max-w-6xl" />;
+  if (items.length === 0) return <CosGol basePath={basePath} color={color} />;
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 lg:py-12 pb-28 lg:pb-12">
@@ -47,13 +49,13 @@ export function CartPageSplit({
         <div className="min-w-0">
           {arePrag && (
             <div className="mb-6">
-              <ProgresTransport pricing={pricing} color={color} areaPrag={freeShippingThreshold !== null} />
+              <ProgresTransport pricing={pricing} color={color} />
             </div>
           )}
 
           <div className="divide-y divide-border border-y border-border">
             {items.map((item) => (
-              <CartLine key={`${item.productId}${item.variantTitle ?? ""}`} item={item} color={color}
+              <CartLine key={lineKey(item)} item={item} color={color}
                 basePath={basePath} onQty={updateQty} onRemove={removeItem} />
             ))}
           </div>
@@ -73,8 +75,16 @@ export function CartPageSplit({
           )}
         </div>
 
-        {/* Rezumatul ramane la vedere cat timp se deruleaza lista. */}
-        <aside className="hidden lg:block lg:sticky lg:top-24 rounded-2xl border border-border bg-surface p-5">
+        {/* Rezumatul ramane la vedere cat timp se deruleaza lista, oprit sub
+            headerul lipit. Inaltimea headerului depinde de varianta aleasa (si
+            creste cu bara de anunt), asa ca un decalaj scris de mana ii baga
+            primele randuri — titlul si subtotalul — sub header, adica exact ce
+            trebuia sa ramana la vedere. Rezerva acopera headerul classic cu bara
+            de anunt (64 + 36 px) pana cand headerele emit `--st-header-offset`.
+            `top` sta in stil, nu in clasa: sub `lg` cardul e ascuns si pozitionat
+            static, deci valoarea n-are ce afecta. */}
+        <aside className="hidden lg:block lg:sticky rounded-2xl border border-border bg-surface p-5"
+          style={{ top: "calc(var(--st-header-offset, 100px) + 1rem)" }}>
           <h2 className="text-sm font-semibold text-foreground mb-4">Rezumatul comenzii</h2>
           <RezumatCos total={total} pricing={pricing} color={color} minOrderAmount={minOrderAmount} onCheckout={onCheckout} />
         </aside>

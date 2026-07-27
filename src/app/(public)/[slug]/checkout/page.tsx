@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -19,7 +20,9 @@ import { CheckoutPageClient } from "@/components/storefront/sections/checkout/Ch
  *
  * Nu se indexeaza: e un pas personal, cu cosul fiecarui vizitator in el.
  */
-export const metadata: Metadata = { title: "Finalizeaza comanda", robots: { index: false, follow: false } };
+// `absolute` scoate sablonul „%s | Edinio" al layout-ului: pe domeniul
+// comerciantului, taman la pasul de plata, nu are ce cauta numele platformei.
+export const metadata: Metadata = { title: { absolute: "Finalizeaza comanda" }, robots: { index: false, follow: false } };
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -32,15 +35,20 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const { code } = await searchParams;
 
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
-    .eq("slug", slug)
-    .single();
+  const [{ data: business }, { data: { user } }] = await Promise.all([
+    supabase
+      .from("businesses")
+      .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, suspended_until, custom_domain, social, gallery, features")
+      .eq("slug", slug)
+      .single(),
+    supabase.auth.getUser(),
+  ]);
   if (!business) notFound();
 
+  const isOwner = user?.id === business.user_id;
+
   const admin = createAdminClient();
-  const [{ data: storeSettings }, { data: produseCuGreutate }] = await Promise.all([
+  const [{ data: storeSettings }, produseCuGreutate] = await Promise.all([
     admin
       .from("store_settings")
       .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold")
@@ -50,15 +58,24 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     // Doar cele care AU greutate: la un magazin fara livrare internationala
     // lista iese goala si interogarea nu costa nimic. Fara ele, acelasi cos ar
     // primi alt tarif pe pagina decat in fereastra.
-    admin
-      .from("products")
-      .select("id, weight_grams")
-      .eq("business_id", business.id)
-      .not("weight_grams", "is", null),
+    //
+    // In ferestre .range(), ca si catalogul paginii de magazin: un query simplu
+    // se taie silentios la 1000 de randuri (cap PostgREST), iar produsele
+    // ramase pe dinafara ar intra in cotatie cu greutate zero.
+    fetchAllRows("storefront.checkout.weights", (from, to) =>
+      admin
+        .from("products")
+        .select("id, weight_grams")
+        .eq("business_id", business.id)
+        .eq("is_active", true)
+        .not("weight_grams", "is", null)
+        .order("id")
+        .range(from, to)
+    ),
   ]);
 
   const productWeights: Record<string, number> = {};
-  for (const p of produseCuGreutate ?? []) if (p.weight_grams) productWeights[p.id] = p.weight_grams;
+  for (const p of produseCuGreutate) if (p.weight_grams) productWeights[p.id] = p.weight_grams;
 
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
   const resolved = resolveDesign(storeSettings?.storefront_design, {
@@ -74,6 +91,25 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
   if (!checkoutOnPage(resolved.design)) redirect(`${basePath}/`);
+
+  // Magazin suspendat sau abonament expirat: pagina magazinului arata deja
+  // „suspendat", dar aici se putea comanda mai departe cu cosul din localStorage.
+  // Aceeasi verificare ca pe pagina de magazin si pe paginile personalizate;
+  // proprietarul trece, ca sa isi poata vedea magazinul.
+  if (!isOwner) {
+    let suspendat = business.suspended_until ? new Date(business.suspended_until) < new Date() : false;
+    if (!suspendat) {
+      const { data: ownerProfile } = await admin
+        .from("users_profile")
+        .select("plan, plan_expires_at")
+        .eq("id", business.user_id)
+        .single();
+      if ((ownerProfile?.plan === "free" || ownerProfile?.plan === "trial") && ownerProfile?.plan_expires_at) {
+        suspendat = new Date(ownerProfile.plan_expires_at) < new Date();
+      }
+    }
+    if (suspendat) redirect(`${basePath}/`);
+  }
 
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({

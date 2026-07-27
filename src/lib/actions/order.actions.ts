@@ -1060,6 +1060,10 @@ export async function placeCartOrder(data: {
   if (!rateLimit(`placeCartOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
+  // An empty cart passes every check below (`some` on [] is false, subtotal 0),
+  // so a direct call would insert a phantom order, send both emails and burn a
+  // discount use. Only the UI guarded this; the action must guard it too.
+  if (!data.items?.length) return { error: "Cosul este gol." };
 
   // Use admin client — customers are anonymous
   const admin = createAdminClient();

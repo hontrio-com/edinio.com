@@ -59,7 +59,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
               {are("cautare") && (
                 <button type="button" onClick={() => setCauta(true)} aria-label="Cauta produse"
-                  className="w-8 h-8 flex items-center justify-center text-[var(--st-text)] hover:opacity-60 transition-opacity">
+                  className="w-11 h-11 -m-1.5 flex items-center justify-center text-[var(--st-text)] hover:opacity-60 transition-opacity">
                   <Search className="h-[19px] w-[19px]" strokeWidth={STROKE} />
                 </button>
               )}

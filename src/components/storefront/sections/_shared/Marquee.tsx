@@ -51,7 +51,9 @@ export function Marquee({
     // repede decat inainte si textul nu se putea citi.
     <div className="flex w-max whitespace-nowrap marquee-banda" style={{ animation: `marquee ${durata * repetari}s linear infinite` }}>
       {Array.from({ length: repetari * 2 }, (_, i) => (
-        <span key={i} className={className}>
+        // Randul poarta 16 copii ale aceluiasi text, ca sa para continuu.
+        // Cititorul de ecran are nevoie de una singura; restul sunt decor.
+        <span key={i} className={className} aria-hidden={i > 0}>
           {children}
         </span>
       ))}

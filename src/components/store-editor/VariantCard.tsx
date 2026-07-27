@@ -207,7 +207,7 @@ export function VariantCard({
             Activ
           </span>
         ) : (
-          <button type="button" onClick={onPick}
+          <button type="button" onClick={onPick} aria-label={`Alege designul ${label}`}
             className="shrink-0 h-9 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity">
             Alege
           </button>

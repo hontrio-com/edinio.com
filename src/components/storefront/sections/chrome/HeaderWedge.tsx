@@ -53,7 +53,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
           Panoul de cautare sta in afara ei, ca sa poata cobori sub bara. */}
       <div className="relative overflow-hidden">
         <div aria-hidden
-          className="absolute inset-y-0 right-0 w-24 lg:w-[20rem] [clip-path:polygon(56px_0,100%_0,100%_100%,0_100%)] lg:[clip-path:polygon(88px_0,100%_0,100%_100%,0_100%)]"
+          className="absolute inset-y-0 right-0 w-24 lg:w-[calc((100vw-var(--st-container))/2+20rem)] [clip-path:polygon(56px_0,100%_0,100%_100%,0_100%)] lg:[clip-path:polygon(88px_0,100%_0,100%_100%,0_100%)]"
           style={{ backgroundColor: "var(--st-primary)" }} />
 
         <div className="relative mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
@@ -62,7 +62,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
               {are("cautare") && (
                 <button type="button" onClick={() => setCautareDeschisa((v) => !v)} aria-label="Cauta produse"
-                  className="w-8 h-8 flex items-center justify-center hover:opacity-70 transition-opacity">
+                  className="w-11 h-11 -m-1.5 flex items-center justify-center hover:opacity-70 transition-opacity">
                   <Search className="h-[19px] w-[19px]" strokeWidth={STROKE} />
                 </button>
               )}

@@ -142,7 +142,7 @@ function OfferCard({ product, basePath, color, onAddToCart }: {
     <div className="group bg-surface border border-border rounded-2xl overflow-hidden flex flex-col hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
       <a href={href} className="block relative aspect-square bg-muted/40 overflow-hidden">
         {product.imageUrl
-          ? <Image src={product.imageUrl} alt={product.name} fill sizes="(max-width:1024px) 50vw, 25vw" className="object-contain p-2 group-hover:scale-105 transition-transform duration-300" />
+          ? <Image src={product.imageUrl} alt={product.name} fill sizes="(max-width:1024px) 50vw, 280px" className="object-contain p-2 group-hover:scale-105 transition-transform duration-300" />
           : <div className="w-full h-full flex items-center justify-center"><Package className="h-8 w-8 text-muted-foreground/40" /></div>}
         {hasDiscount && (
           <span className="absolute top-2 right-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: color }}>

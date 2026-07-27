@@ -480,7 +480,9 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
             type: "range",
             label: "Cate categorii se vad",
             min: 6,
-            max: 14,
+            // Bara are loc fizic pentru zece randuri; peste, reglajul promitea
+            // ceva ce nu se vedea, iar comerciantul il urca degeaba.
+            max: 10,
             step: 1,
           },
         ],

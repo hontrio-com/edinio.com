@@ -86,7 +86,11 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
             {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`
                 `truncate` n-are de unde taia si un nume lung latfeste randul. */}
             {business.logo_url ? (
-              <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
+              <a href={acasa}
+                className={cauta
+                  ? "hidden lg:flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0"
+                  : "flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0"}
+                aria-label={nume}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
                   style={{ height: logoSize, maxWidth: logoSize * 5 }}

@@ -235,7 +235,7 @@ function CautareRotunjita({ basePath, compact = false }: { basePath: string; com
     // Campul stinge conturul implicit al browserului, deci pastila primeste ea
     // semnul de focus: fara el, navigarea cu tastatura n-ar avea niciun reper.
     <form role="search" onSubmit={trimite}
-      className={`flex items-center gap-1 rounded-full bg-[var(--st-surface)] pl-5 pr-1 focus-within:ring-2 focus-within:ring-[var(--st-primary)] ${compact ? "h-11" : "h-12"}`}>
+      className={`flex items-center gap-1 rounded-full bg-[var(--st-surface)] pl-5 pr-1 focus-within:ring-2 focus-within:ring-[var(--st-text)] ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"
         value={valoare}

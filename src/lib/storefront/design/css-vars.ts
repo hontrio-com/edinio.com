@@ -35,19 +35,47 @@ function contrast(a: number, b: number): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
+/** Minimul WCAG AA pentru text normal. */
+const PRAG_AA = 4.5;
 /**
- * Textul cu contrastul mai bun pe un fundal colorat. Doar pentru culori hex.
+ * Negrul de rezerva.
  *
- * Se compara cele doua rapoarte, nu luminanta cu un prag fix: cu pragul de 0.5
- * verdele implicit al platformei (#1AB554) primea alb — 2,7:1, sub minimul AA de
- * 4,5:1 — desi pe inchis da 6,6:1.
+ * Cand nici textul inchis, nici cel deschis nu trec pragul pe fundalul ales —
+ * culorile de mijloc, ca un galben-mustar sau un turcoaz mediu — se coboara la
+ * negru curat, care are contrastul maxim posibil pe orice fundal deschis.
+ */
+const TEXT_NEGRU = "#000000";
+const TEXT_ALB = "#FFFFFF";
+
+/**
+ * Textul care se citeste pe un fundal colorat. Doar pentru culori hex.
+ *
+ * Se compara rapoartele de contrast, nu luminanta cu un prag fix: cu pragul de
+ * 0.5 verdele implicit al platformei (#1AB554) primea alb — 2,7:1, sub minimul
+ * AA de 4,5:1 — desi pe inchis da 6,6:1.
+ *
+ * Dar „cel mai bun din doua" nu inseamna „destul de bun": exista culori pe care
+ * ambele variante cad sub prag, iar magazinul respectiv ramanea cu text pe care
+ * nu-l poate citi nimeni. Cand se intampla, se trece pe negru sau alb curat,
+ * care castiga cateva zecimi in plus. Pentru culorile care treceau deja — marea
+ * lor majoritate — rezultatul e neschimbat.
  */
 function contrastOn(color: string): string {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
   if (!m) return TEXT_DESCHIS;
   const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
   const lum = luminanta(hex);
-  return contrast(lum, LUM_INCHIS) >= contrast(lum, LUM_DESCHIS) ? TEXT_INCHIS : TEXT_DESCHIS;
+
+  const peInchis = contrast(lum, LUM_INCHIS);
+  const peDeschis = contrast(lum, LUM_DESCHIS);
+  if (Math.max(peInchis, peDeschis) >= PRAG_AA) {
+    return peInchis >= peDeschis ? TEXT_INCHIS : TEXT_DESCHIS;
+  }
+  // Niciunul nu trece: mergem pe extremele absolute. Alegerea asta nu poate da
+  // gres — cea mai proasta luminanta posibila (0,179) lasa si negrul si albul
+  // la 4,58:1, adica tot peste prag. Deci orice culoare isi primeste un text
+  // lizibil, oricat de nefericit ar fi aleasa.
+  return contrast(lum, luminanta("000000")) >= contrast(lum, 1) ? TEXT_NEGRU : TEXT_ALB;
 }
 
 const CARD_SHADOW = {

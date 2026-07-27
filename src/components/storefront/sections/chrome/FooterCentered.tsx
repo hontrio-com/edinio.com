@@ -33,7 +33,7 @@ export function FooterCentered() {
 
   return (
     <footer className="bg-[var(--st-surface)] text-[var(--st-text)] border-t border-[var(--st-border)]">
-      <div className={`max-w-4xl mx-auto px-5 pt-12 sm:pt-14 ${spatiuJos}`}>
+      <div className={`max-w-6xl mx-auto px-5 pt-12 sm:pt-14 ${spatiuJos}`}>
         <div className="flex flex-col items-center text-center gap-5">
           <a href={`${basePath}/`} className="hover:opacity-80 transition-opacity" aria-label={nume}>
             {business.logo_url ? (

@@ -288,7 +288,7 @@ export function CheckoutForm({
               {extras.map(extra => {
                 const checked = !!selectedExtras[extra.id];
                 return (
-                  <button key={extra.id} type="button"
+                  <button key={extra.id} type="button" aria-pressed={checked}
                     onClick={() => setSelectedExtras(s => ({ ...s, [extra.id]: !s[extra.id] }))}
                     className="w-full text-left rounded-xl border-2 border-dashed p-3.5 transition-all"
                     style={checked
@@ -390,7 +390,10 @@ export function CheckoutForm({
               <p className="text-sm font-semibold text-foreground">Metoda de plata</p>
               <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(availablePaymentMethods.length, 3)}, minmax(0, 1fr))` }}>
                 {availablePaymentMethods.map((m) => (
+                  // Starea aleasa se vede doar prin culoare: fara `aria-pressed`,
+                  // cititorul de ecran anunta trei butoane identice.
                   <button key={m.type} type="button" onClick={() => setPaymentMethod(m.type)}
+                    aria-pressed={paymentMethod === m.type}
                     className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                     style={paymentMethod === m.type
                       ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--color-foreground)" }

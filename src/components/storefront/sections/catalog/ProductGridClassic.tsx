@@ -41,7 +41,7 @@ export function ProductGridClassic() {
   };
 
   return (
-    <section id="produse" className="mb-16">
+    <section id="produse" className="mb-16" style={{ scrollMarginTop: "calc(var(--st-header-offset, 100px) + 1rem)" }}>
       {!hasHero && !areRecomandate && (
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-foreground">Produse</h2>
@@ -119,7 +119,7 @@ function Paginare({
   const href = (p: number) => (p <= 1 ? radacinaMagazin(basePath) : `${radacinaMagazin(basePath)}?page=${p}`);
 
   return (
-    <div className="flex items-center justify-center gap-2 mt-8">
+    <div className="flex flex-wrap items-center justify-center gap-2 mt-8">
       <button onClick={() => onGo(Math.max(1, current - 1))} disabled={current === 1} className={nav}>
         Inapoi
       </button>

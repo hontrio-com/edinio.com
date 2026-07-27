@@ -231,19 +231,19 @@ function BaraCautare({
     // campul stinge conturul implicit al browserului si fara inelul asta
     // navigarea cu tastatura n-ar avea niciun reper aici.
     <form role="search" onSubmit={trimite}
-      className={`flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--st-primary)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
+      className={`flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--st-text)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
       style={{ borderColor: "var(--st-primary)" }}>
       {categorii.length > 0 && (
         <div className="relative hidden sm:block shrink-0"
           onBlur={() => { inchide.current = window.setTimeout(() => setDeschis(false), 120); }}
           onFocus={() => { if (inchide.current) window.clearTimeout(inchide.current); }}>
-          <button type="button" onClick={() => setDeschis((v) => !v)} aria-expanded={deschis} aria-haspopup="listbox"
+          <button type="button" onClick={() => setDeschis((v) => !v)} aria-expanded={deschis}
             className="h-full pl-4 pr-3 flex items-center gap-1.5 text-sm text-[var(--st-text)] hover:opacity-70 transition-opacity whitespace-nowrap border-r border-[var(--st-border)]">
             <span className="max-w-[9rem] truncate">{categorie === "toate" ? "Toate" : categorie}</span>
             <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${deschis ? "rotate-180" : ""}`} strokeWidth={STROKE} />
           </button>
           {deschis && (
-            <ul role="listbox"
+            <ul aria-label="Categorii"
               className="absolute left-0 top-full mt-1 z-50 min-w-[14rem] max-h-72 overflow-y-auto rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-lg py-1">
               {["toate", ...categorii].map((c) => (
                 <li key={c}>
@@ -352,10 +352,10 @@ function Cos({
     <>
       <span className="relative shrink-0">
         <ShoppingBag className="h-[26px] w-[26px] text-[var(--st-text)]" strokeWidth={STROKE} />
-        <span className="absolute -bottom-1 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ring-2 ring-[var(--st-surface)]"
+        {count > 0 && <span className="absolute -bottom-1 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ring-2 ring-[var(--st-surface)]"
           style={{ backgroundColor: "var(--st-accent)", color: "var(--st-accent-contrast)" }}>
           {count > 9 ? "9+" : count}
-        </span>
+        </span>}
       </span>
       <span className="hidden lg:flex flex-col leading-tight">
         <span className="text-xs text-[var(--st-muted)]">Cosul meu</span>

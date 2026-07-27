@@ -969,7 +969,8 @@ export function ProductPageDetailed({
           )}
 
           {/* ─── Bara lipita jos, pe telefon ─────────────────────────────── */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 py-3 flex items-center gap-3">
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 py-3 flex items-center gap-3"
+            style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] text-muted-foreground truncate">{product.name}</p>
               <p className="text-base font-bold text-foreground">

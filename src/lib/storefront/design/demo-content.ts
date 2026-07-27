@@ -60,32 +60,33 @@ export const DEMO_MENU: MenuItem[] = [
 /**
  * Produse demonstrative.
  *
- * Forma e cea a randurilor din `products` pe care le asteapta cardurile; ce nu
- * se vede intr-o miniatura (stoc, greutate, sectiuni) ramane la valorile
- * neutre.
+ * Sase, nu patru cate fotografii avem: variantele de carusel arata patru
+ * carduri deodata, iar cu exact patru n-ar avea ce derula si nu s-ar mai vedea
+ * ce le deosebeste. Doua fotografii se repeta cu alta configuratie, cum se
+ * intampla si in magazinele reale.
+ *
+ * Cateva au pret taiat, ca sa se vada si eticheta de reducere.
  */
+const DEMO_PRODUSE: [string, number, number | null, string][] = [
+  ["Laptop 15.6 inch, Intel, Windows 11", 2499, 2999, "/demo/produs-laptop.webp"],
+  ["Telefon 6.9 inch, 256 GB, portocaliu", 5799, null, "/demo/produs-telefon.webp"],
+  ["Televizor Smart 4K, 55 inch", 1899, 2349, "/demo/produs-televizor.webp"],
+  ["Consola de jocuri, editie digitala", 2299, null, "/demo/produs-consola.webp"],
+  ["Telefon 6.9 inch, 512 GB, portocaliu", 6499, 6999, "/demo/produs-telefon.webp"],
+  ["Laptop 15.6 inch, 32 GB RAM", 3199, null, "/demo/produs-laptop.webp"],
+];
+
 export function demoProducts(businessId: string) {
-  const nume = [
-    "Produsul tau, aici",
-    "Alt produs de exemplu",
-    "Inca un exemplu",
-    "Al patrulea produs",
-    "Al cincilea produs",
-    "Al saselea produs",
-    "Al saptelea produs",
-    "Al optulea produs",
-  ];
-  return nume.map((name, i) => ({
+  return DEMO_PRODUSE.map(([name, price, vechi, imagine], i) => ({
     id: `demo_prod_${i}`,
     business_id: businessId,
     name,
     slug: `exemplu-${i}`,
     description: "Descriere scurta a produsului, asa cum va aparea in magazinul tau.",
-    price: 99 + i * 40,
-    // Cateva cu pret taiat, ca sa se vada si eticheta de reducere.
-    compare_at_price: i % 3 === 0 ? 149 + i * 40 : null,
-    images: [DEMO_CATEGORIES[i % DEMO_CATEGORIES.length].image_url],
-    category: DEMO_CATEGORY_NAMES[i % DEMO_CATEGORY_NAMES.length],
+    price,
+    compare_at_price: vechi,
+    images: [imagine],
+    category: DEMO_CATEGORY_NAMES[0],
     is_featured: i < 4,
     is_active: true,
     is_bundle: false,

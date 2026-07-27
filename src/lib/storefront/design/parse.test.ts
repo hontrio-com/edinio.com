@@ -154,20 +154,36 @@ test("doar setarile declarate de varianta se salveaza", () => {
   const d = parseStoreDesign(
     {
       version: 1,
+      chrome: {
+        header: {
+          id: "header",
+          kind: "header",
+          variant: "market",
+          settings: { topText: "Ok", nedeclarat: "<script>" },
+        },
+      },
+      home: [],
+    },
+    ctx,
+  );
+  assert.equal(d.chrome.header.settings.topText, "Ok");
+  assert.equal(d.chrome.header.settings.nedeclarat, undefined);
+});
+
+test("cheile de legatura ale unui rand de produse trec, desi nu sunt campuri", () => {
+  // `mode` si `sectionRef` spun randului de unde isi ia produsele. Nu apar in
+  // formular, deci nu sunt validate prin `fields`, dar fara ele randul ramane gol.
+  const d = parseStoreDesign(
+    {
+      version: 1,
       chrome: {},
       home: [
-        {
-          id: "r",
-          kind: "product_row",
-          variant: "grid",
-          settings: { title: "Ok", mode: "featured", evil: "<script>" },
-        },
+        { id: "r", kind: "product_row", variant: "grid", settings: { mode: "featured", evil: "<script>" } },
       ],
     },
     ctx,
   );
   const row = byId(d.home, "r");
-  assert.equal(row?.settings.title, "Ok");
   assert.equal(row?.settings.mode, "featured");
   assert.equal(row?.settings.evil, undefined);
 });

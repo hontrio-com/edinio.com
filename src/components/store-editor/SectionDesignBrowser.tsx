@@ -49,7 +49,6 @@ export function SectionDesignBrowser({
   const [design, setDesign] = useState<StoreDesign>(designInitial);
   const [publicat, setPublicat] = useState<StoreDesign>(designPublicat);
   const [kindActiv, setKindActiv] = useState<SectionKind>("header");
-  const [instantaActiva, setInstantaActiva] = useState(0);
   const [setariDeschise, setSetariDeschise] = useState(false);
   const [peMobil, setPeMobil] = useState(false);
   const [salvez, setSalvez] = useState(false);
@@ -115,7 +114,8 @@ export function SectionDesignBrowser({
   }, [design]);
 
   const intrare = intrari.get(kindActiv) ?? intrari.values().next().value;
-  const sectiune = intrare?.instante[Math.min(instantaActiva, intrare.instante.length - 1)] ?? null;
+  // Prima instanta e reprezentanta tipului: designul se aplica oricum tuturor.
+  const sectiune = intrare?.instante[0] ?? null;
   const meta = sectiune ? sectionMeta(sectiune.kind) : undefined;
   const variante = Object.entries(meta?.variants ?? {});
   const variantaActiva = sectiune ? meta?.variants[sectiune.variant] : undefined;
@@ -138,8 +138,13 @@ export function SectionDesignBrowser({
   }
 
   function alegeVarianta(variant: string, label: string) {
-    if (!sectiune) return;
-    aplica(updateSection(design, sectiune.id, { variant }));
+    if (!intrare) return;
+    // Un tip cu mai multe instante (randurile de produse) le primeste pe toate:
+    // designul e al tipului, iar doua randuri cu asezari diferite pe aceeasi
+    // pagina arata a greseala, nu a alegere.
+    let next = design;
+    for (const s of intrare.instante) next = updateSection(next, s.id, { variant });
+    aplica(next);
     toast.success(`Design ales: ${label}`, {
       description: "Apasa Publica in magazin ca sa il vada si clientii.",
     });
@@ -197,7 +202,7 @@ export function SectionDesignBrowser({
                     const nrVariante = Object.keys(sectionMeta(i.kind)?.variants ?? {}).length;
                     return (
                       <button key={i.kind} type="button"
-                        onClick={() => { setKindActiv(i.kind); setInstantaActiva(0); setSetariDeschise(false); }}
+                        onClick={() => { setKindActiv(i.kind); setSetariDeschise(false); }}
                         className={`shrink-0 h-11 px-3.5 lg:px-3 lg:w-full rounded-xl flex items-center gap-2 text-sm transition-colors whitespace-nowrap border lg:border-0 ${activ ? "bg-primary/10 text-primary font-semibold border-primary/30" : "text-foreground border-border hover:bg-muted"}`}>
                         <span className="truncate">{i.label}</span>
                         <span className={`text-[11px] tabular-nums lg:ml-auto ${activ ? "text-primary" : "text-muted-foreground"}`}>
@@ -254,19 +259,6 @@ export function SectionDesignBrowser({
                   </button>
                 )}
               </div>
-
-              {/* Mai multe instante ale aceluiasi tip (randurile de produse):
-                  setarile sunt ale instantei, nu ale tipului. */}
-              {intrare && intrare.instante.length > 1 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {intrare.instante.map((s, i) => (
-                    <button key={s.id} type="button" onClick={() => setInstantaActiva(i)}
-                      className={`shrink-0 h-9 px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${i === instantaActiva ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
-                      {String(s.settings.title || `${meta.label} ${i + 1}`)}
-                    </button>
-                  ))}
-                </div>
-              )}
 
               {/* O singura coloana: un header e o banda lata, iar pe doua coloane
                   miniatura ajunge prea mica pentru a alege ceva. */}

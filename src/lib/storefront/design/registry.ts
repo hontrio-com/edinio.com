@@ -130,10 +130,6 @@ export interface SectionMeta {
 // Catalogul
 // ---------------------------------------------------------------------------
 
-const PRODUCT_ROW_FIELDS: Field[] = [
-  { key: "title", type: "text", label: "Titlu", placeholder: "Recomandate", maxLength: 80 },
-];
-
 /**
  * Iconitele de actiune dintr-un header, in ordinea implicita.
  *
@@ -467,8 +463,29 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: true,
     inCatalog: true,
     variants: {
-      grid: { label: "Grila", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: PRODUCT_ROW_FIELDS },
-      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: PRODUCT_ROW_FIELDS },
+      grid: { label: "Grila de patru", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: [] },
+      carousel: { label: "Carusel simplu", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: [] },
+      peek: {
+        label: "Carusel cu sageti",
+        tags: ["indraznet"],
+        layout: "contained",
+        previewHeight: 560,
+        fields: [],
+      },
+      showcase: {
+        label: "Vitrina, primul produs mare",
+        tags: ["indraznet", "cu imagine"],
+        layout: "contained",
+        previewHeight: 760,
+        fields: [],
+      },
+      compact: {
+        label: "Lista compacta",
+        tags: ["compact", "simplu"],
+        layout: "contained",
+        previewHeight: 420,
+        fields: [],
+      },
     },
   },
   product_grid: {

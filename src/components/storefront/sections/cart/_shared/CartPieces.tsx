@@ -41,10 +41,12 @@ export function StepperCantitate({
   onSchimba: (n: number) => void;
   marime?: "normal" | "mic";
 }) {
+  // `shrink-0`: la 320 px coloana ramasa nu mai are loc pentru stepper si
+  // butonul de stergere, iar fara asta ele se strang pana devin de neapasat.
   const buton =
     marime === "mic"
-      ? "w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
-      : "w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors";
+      ? "shrink-0 w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
+      : "shrink-0 w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors";
   const iconita = marime === "mic" ? "h-3 w-3" : "h-3.5 w-3.5";
 
   return (

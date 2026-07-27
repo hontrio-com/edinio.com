@@ -226,7 +226,8 @@ function MeniuInline({
         const activ = it.type === "page" && it.target === currentPageSlug;
         return (
           <a key={it.id} href={menuItemHref(it, basePath)} className={link}
-            style={activ ? { color: "var(--st-primary)", fontWeight: 600 } : undefined}>
+            aria-current={activ ? "page" : undefined}
+            style={activ ? { color: "var(--st-primary)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: "6px" } : undefined}>
             {it.label}
           </a>
         );

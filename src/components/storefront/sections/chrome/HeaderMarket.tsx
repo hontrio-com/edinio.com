@@ -298,7 +298,8 @@ function ToateCategoriile({
   }, [deschis]);
 
   return (
-    <div ref={zona} className="relative shrink-0">
+    <div ref={zona} className="relative shrink-0"
+      onKeyDown={(e) => { if (e.key === "Escape") setDeschis(false); }}>
       <button type="button" onClick={() => setDeschis((v) => !v)} aria-expanded={deschis}
         className="inline-flex items-center gap-2 text-sm font-bold text-[var(--st-text)] hover:opacity-70 transition-opacity">
         <Menu className="h-[18px] w-[18px]" strokeWidth={2} />

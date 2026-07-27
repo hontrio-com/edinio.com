@@ -76,7 +76,8 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
               return (
                 <a key={it.id} href={menuItemHref(it, basePath)}
                   className={`text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors whitespace-nowrap ${meniuCls}`}
-                  style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", fontWeight: 600 } : {}) }}>
+                  aria-current={activ ? "page" : undefined}
+                  style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
                   {it.label}
                 </a>
               );
@@ -109,7 +110,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
           {actiuneVizibila && (
             <a href={actiuneLink}
               className="hidden lg:inline-flex items-center h-10 px-5 rounded-full border-[1.5px] text-sm font-semibold whitespace-nowrap transition-colors hover:bg-[var(--st-primary-soft)]"
-              style={{ borderColor: "var(--st-primary)", color: "var(--st-primary)" }}>
+              style={{ backgroundColor: "var(--st-primary)", borderColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
               {actiuneText}
             </a>
           )}

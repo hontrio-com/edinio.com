@@ -141,6 +141,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? ["discount"];
   const emailField = liveCheckoutConfig?.email_field ?? { enabled: true, required: false };
 
+  // `onClose` vine ca functie noua la fiecare randare a paginii gazda. Citita
+  // direct in efectul de resetare, il re-declansa si golea formularul sub
+  // degetele clientului; prin ref, efectul ramane legat doar de `open`.
+  const inchide = useRef(onClose);
+  useEffect(() => { inchide.current = onClose; }, [onClose]);
+
   const [selectedTierIdx, setSelectedTierIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
@@ -326,14 +332,17 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       return defaults;
     });
     setCustUploading({});
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") inchide.current(); };
     document.addEventListener("keydown", handler);
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", handler);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+    // `onClose` se citeste printr-un ref: e o functie noua la fiecare randare
+    // a paginii, deci in dependente re-declansa TOT blocul de resetare si
+    // golea formularul sub degetele clientului.
+  }, [open]);
 
   // Focusul intra in panou la deschidere si se intoarce pe butonul declansator la
   // inchidere. Efect separat, cu `open` singura dependenta: efectul de resetare

@@ -313,7 +313,13 @@ export async function applyBumpPricing(
     // produs care chiar poate fi luat dintr-o apasare, deci cand primul din
     // lista e epuizat sau are variante, clientul vede altul. Cu potrivirea pe
     // primul, serverul nu gasea linia si taxa pretul INTREG, in tacere.
-    const line = out.find((i) => cfg.productIds.includes(i.product_id));
+    // De la coada catre inceput: liniile de bump se adauga DUPA cele din cos,
+    // deci cand acelasi produs e si in cos si oferit ca bump, cautarea de la
+    // inceput nimerea linia din cos si reducerea ateriza pe cantitatea ei.
+    let line: BumpItem | undefined;
+    for (let k = out.length - 1; k >= 0; k--) {
+      if (cfg.productIds.includes(out[k].product_id)) { line = out[k]; break; }
+    }
     if (!line) continue; // the customer didn't actually add the bump product — no discount
     const priced = computeSetPricing([line.price], cfg);
     if (!priced || priced.price >= line.price) continue;

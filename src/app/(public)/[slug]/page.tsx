@@ -214,6 +214,13 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * migratia promitea exact contrariul. Tipul propului n-o contine, dar un tip
    * nu curata nimic la executie.
    */
+  // Ciorna se randeaza DOAR pentru proprietar si doar in preview: pana la
+  // Publica, vizitatorii vad neaparat versiunea publicata. Se calculeaza aici,
+  // inaintea ramurii cu un singur produs — altfel acele magazine n-aveau deloc
+  // previzualizare live, editorul le arata mereu designul publicat.
+  const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
+  const designDeRandat = useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design;
+
   const setariDeTrimis = storeSettings
     ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
     : storeSettings;
@@ -267,7 +274,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max });
       // Modul „un singur produs": nu exista catalog in spate, deci butonul de
       // cos din header n-are unde sa duca.
-      const opsResolved = resolveDesign(storeSettings?.storefront_design, {
+      const opsResolved = resolveDesign(designDeRandat, {
         primaryColor: business.primary_color ?? "#1AB554",
         pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
         features: (business.features as Record<string, unknown>) ?? {},
@@ -319,10 +326,9 @@ export default async function SlugPage({ params, searchParams }: Props) {
 
   // Designul magazinului. Ciorna se randeaza DOAR pentru proprietar si doar in
   // preview: pana la Publica, vizitatorii vad neaparat versiunea publicata.
-  const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
 
   const resolved = resolveDesign(
-    useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design,
+    designDeRandat,
     {
       primaryColor: business.primary_color ?? "#1AB554",
       pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},

@@ -7,7 +7,7 @@ import { SectionPreviewFrame } from "@/components/storefront/SectionPreviewFrame
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
-import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_MENU, demoProducts } from "@/lib/storefront/design/demo-content";
+import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, demoProducts } from "@/lib/storefront/design/demo-content";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionKind } from "@/lib/storefront/design/types";
@@ -76,7 +76,13 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   });
 
   const chrome = buildChromeData({
-    business,
+    // Logo-ul si sloganul raman ale magazinului cand exista; se imprumuta doar
+    // cand lipsesc, ca header-ul sa nu apara gol in miniatura.
+    business: {
+      ...business,
+      logo_url: business.logo_url || DEMO_LOGO,
+      tagline: business.tagline || "Produse alese cu grija, livrate rapid",
+    },
     pageContent,
     basePath: `/${business.slug}`,
     searchCategories: DEMO_CATEGORIES.map((c) => c.name),

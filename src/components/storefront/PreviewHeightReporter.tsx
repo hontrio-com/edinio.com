@@ -19,19 +19,33 @@ export const PREVIEW_HEIGHT_MESSAGE = "__edinioPreviewHeight";
  */
 export function PreviewHeightReporter() {
   useEffect(() => {
+    /**
+     * `scrollHeight`, nu inaltimea ferestrei.
+     *
+     * Fereastra iframe-ului e exact inaltimea pe care i-o da parintele, iar
+     * parintele o ia de aici: masurata asa, valoarea si-ar confirma la nesfarsit
+     * propria estimare, iar sectiunile mai inalte decat ea ar ramane taiate.
+     * `scrollHeight` masoara continutul, deci creste peste fereastra.
+     */
     const trimite = () => {
-      const h = Math.ceil(document.documentElement.getBoundingClientRect().height);
+      const h = Math.ceil(Math.max(
+        document.documentElement.scrollHeight,
+        document.body?.scrollHeight ?? 0,
+      ));
       if (h > 0) window.parent?.postMessage({ [PREVIEW_HEIGHT_MESSAGE]: h }, window.location.origin);
     };
     trimite();
 
+    // Continutul, nu radacina: radacina e tinuta la inaltimea ferestrei.
     const ro = new ResizeObserver(trimite);
-    ro.observe(document.documentElement);
-    // Fonturile si imaginile pot schimba inaltimea dupa montare.
+    if (document.body) ro.observe(document.body);
+    // Fonturile si imaginile schimba inaltimea dupa montare.
     window.addEventListener("load", trimite);
+    const tarziu = setTimeout(trimite, 600);
     return () => {
       ro.disconnect();
       window.removeEventListener("load", trimite);
+      clearTimeout(tarziu);
     };
   }, []);
 

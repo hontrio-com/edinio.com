@@ -14,40 +14,38 @@ import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
  * trebuie sa se simta a magazinului sau, doar continutul e imprumutat.
  */
 
+/** Logo folosit doar cand magazinul inca nu are unul al lui. */
+export const DEMO_LOGO = "/demo/logo.webp";
+
 /** Bannere demonstrative — fisiere din `public/demo`, servite ca orice imagine locala. */
 export const DEMO_BANNERS = [
-  "/demo/ImaginePrincipala.webp",
-  "/demo/ImagineSecundara1.webp",
-  "/demo/ImagineSecundara2.webp",
+  "/demo/banner-1.webp",
+  "/demo/banner-2.webp",
+  "/demo/banner-3.webp",
 ];
 
 /**
- * Categorii demonstrative.
+ * Categorii demonstrative, cu imaginile lor.
  *
- * Sunt destule cat sa treaca pragul cerut de design-urile cu bara laterala:
- * altfel comerciantul n-ar vedea niciodata cum arata varianta pe care tocmai o
- * cantareste.
+ * Sase, exact pragul cerut de design-urile cu bara laterala: destule cat varianta
+ * sa se vada intreaga, si putine cat randurile sa ramana generoase langa banner.
  */
-export const DEMO_CATEGORY_NAMES = [
-  "Noutati",
-  "Reduceri",
-  "Cele mai vandute",
-  "Accesorii",
-  "Cadouri",
-  "Ingrijire",
-  "Casa si gradina",
-  "Electronice",
-  "Imbracaminte",
-  "Sport si timp liber",
-  "Copii",
-  "Auto",
-];
+const DEMO_CATEGORII = [
+  ["Electronice", "/demo/categorie-electronice.webp"],
+  ["Electrocasnice", "/demo/categorie-electrocasnice.webp"],
+  ["Fashion", "/demo/categorie-fashion.webp"],
+  ["Casa si gradina", "/demo/categorie-casa-gradina.webp"],
+  ["Sport si timp liber", "/demo/categorie-sport.webp"],
+  ["Auto", "/demo/categorie-auto.webp"],
+] as const;
 
-export const DEMO_CATEGORIES: StoreCategoryNode[] = DEMO_CATEGORY_NAMES.map((name, i) => ({
+export const DEMO_CATEGORY_NAMES = DEMO_CATEGORII.map(([name]) => name);
+
+export const DEMO_CATEGORIES: StoreCategoryNode[] = DEMO_CATEGORII.map(([name, image], i) => ({
   id: `demo_cat_${i}`,
   name,
   parent_id: null,
-  image_url: null,
+  image_url: image,
   sort_order: i,
 }));
 
@@ -86,7 +84,7 @@ export function demoProducts(businessId: string) {
     price: 99 + i * 40,
     // Cateva cu pret taiat, ca sa se vada si eticheta de reducere.
     compare_at_price: i % 3 === 0 ? 149 + i * 40 : null,
-    images: [DEMO_BANNERS[i % DEMO_BANNERS.length]],
+    images: [DEMO_CATEGORIES[i % DEMO_CATEGORIES.length].image_url],
     category: DEMO_CATEGORY_NAMES[i % DEMO_CATEGORY_NAMES.length],
     is_featured: i < 4,
     is_active: true,

@@ -372,12 +372,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: true,
     inCatalog: true,
     variants: {
-      banners: { label: "Doar imagini", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 420, fields: [] },
+      banners: { label: "Doar imagini", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 655, fields: [] },
       categories: {
         label: "Categorii la stanga, bannere la dreapta",
         tags: ["cu imagine", "compact"],
         layout: "full",
-        previewHeight: 470,
+        previewHeight: 515,
         // Cu doua-trei categorii bara ar fi un ciot langa o imagine mare.
         requires: { minCategories: MIN_CATEGORII_HERO_SIDEBAR },
         fields: [

@@ -45,6 +45,10 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
       <div className="mx-auto max-w-6xl px-0 md:px-4">
         <div className={areBara ? "lg:grid lg:grid-cols-[236px_1fr] lg:gap-4" : ""}>
           {areBara && (
+            // Inaltimea o da bannerul, cu raportul lui neatins, iar randurile se
+            // impart ce a mai ramas. Invers — inaltimea din numarul de randuri —
+            // bannerul ar fi fost taiat cu atat mai mult cu cat magazinul are mai
+            // putine categorii, adica exact acolo unde arata deja mai sarac.
             <nav aria-label="Categorii" className="hidden lg:flex flex-col rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] overflow-hidden py-1.5">
               {categorii.map((c) => (
                 <Rand key={c.key} nume={c.name} imagine={c.image} basePath={basePath}
@@ -59,11 +63,8 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
               links={links}
               alt={nume}
               basePath={basePath}
-              wrapperClass="relative md:rounded-2xl md:overflow-hidden h-full"
-              // Pe telefon raportul fix tine locul imaginii; pe desktop
-              // inaltimea vine din coloana cu categorii, ca cele doua sa se
-              // termine la aceeasi linie.
-              slideClass="shrink-0 w-full snap-center bg-muted aspect-[16/9] lg:aspect-auto lg:h-full"
+              wrapperClass="relative md:rounded-2xl md:overflow-hidden"
+              slideClass="shrink-0 w-full snap-center bg-muted aspect-[16/9]"
             />
           )}
         </div>
@@ -87,11 +88,11 @@ function Rand({
   const continut = (
     <>
       {imagine ? (
-        <span className="relative w-6 h-6 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
-          <Image src={imagine} alt="" fill sizes="24px" className="object-cover" />
+        <span className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-[var(--st-bg)]">
+          <Image src={imagine} alt="" fill sizes="32px" className="object-cover" />
         </span>
       ) : (
-        <span className="w-6 h-6 rounded-md shrink-0 flex items-center justify-center text-[11px] font-bold"
+        <span className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-xs font-bold"
           style={{ backgroundColor: "var(--st-primary-soft)", color: "var(--st-primary)" }}>
           {nume[0]?.toUpperCase()}
         </span>
@@ -101,7 +102,7 @@ function Rand({
     </>
   );
 
-  const cls = "flex items-center gap-2.5 h-11 px-3.5 hover:bg-[var(--st-primary-soft)] transition-colors text-left";
+  const cls = "flex flex-1 items-center gap-2.5 min-h-11 px-3.5 hover:bg-[var(--st-primary-soft)] transition-colors text-left";
 
   // Pe pagina de magazin filtreaza pe loc; miniatura din galerie n-are catalog.
   return onAlege ? (

@@ -13,6 +13,7 @@ import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/componen
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
+import { hrefCategorie } from "@/lib/storefront/category-href";
 
 const STROKE = 1.7;
 
@@ -181,7 +182,7 @@ function PastilaCategorii({
         <div className="absolute left-0 top-full mt-2 z-50 w-[min(34rem,80vw)] rounded-[var(--st-radius-lg)] bg-[var(--st-surface)] shadow-xl border border-[var(--st-border)] p-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
             {categorii.slice(0, 12).map((c) => (
-              <a key={c.name} href={`${basePath}/?cat=${encodeURIComponent(c.name)}`}
+              <a key={c.name} href={hrefCategorie(basePath, c.name)}
                 className="flex items-center gap-2.5 p-2 rounded-full hover:bg-[var(--st-primary-soft)] transition-colors">
                 {c.image ? (
                   <span className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 bg-[var(--st-bg)]">

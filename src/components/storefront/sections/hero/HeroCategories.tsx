@@ -6,6 +6,7 @@ import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { MIN_CATEGORII_HERO_SIDEBAR } from "@/lib/storefront/design/registry";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
 import { BannerSlider } from "./HeroBanners";
+import { hrefCategorie } from "@/lib/storefront/category-href";
 
 /** Cate categorii se arata implicit. */
 const MAX_IMPLICIT = 10;
@@ -125,6 +126,6 @@ function Rand({
   return onAlege ? (
     <button type="button" onClick={onAlege} className={cls}>{continut}</button>
   ) : (
-    <a href={`${basePath}/?cat=${encodeURIComponent(nume)}`} className={cls}>{continut}</a>
+    <a href={hrefCategorie(basePath, nume)} className={cls}>{continut}</a>
   );
 }

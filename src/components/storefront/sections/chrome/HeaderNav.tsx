@@ -13,6 +13,7 @@ import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/componen
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
+import { hrefCategorie } from "@/lib/storefront/category-href";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -194,7 +195,7 @@ function MeniuInline({
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                 {categorii.slice(0, 12).map((c) => (
-                  <a key={c.key} href={`${basePath}/?cat=${encodeURIComponent(c.name)}`}
+                  <a key={c.key} href={hrefCategorie(basePath, c.name)}
                     className="flex items-center gap-2.5 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
                     {c.image ? (
                       <span className="relative w-9 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">

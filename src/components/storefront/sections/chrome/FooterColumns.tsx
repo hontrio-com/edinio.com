@@ -8,6 +8,7 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
 import { FooterCredit, FooterLegal, type TonFooter } from "@/components/storefront/sections/_shared/FooterLegal";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
+import { hrefCategorie } from "@/lib/storefront/category-href";
 
 /**
  * Footer deschis, pe coloane, varianta „columns".
@@ -83,7 +84,7 @@ export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
           <Coloana titlu="Magazin" separator={separator} marunt={marunt}>
             <Legatura cls={legatura} href={`${basePath}/`}>Toate produsele</Legatura>
             {categorii.map((c) => (
-              <Legatura key={c.key} cls={legatura} href={`${basePath}/?cat=${encodeURIComponent(c.name)}`}>{c.name}</Legatura>
+              <Legatura key={c.key} cls={legatura} href={hrefCategorie(basePath, c.name)}>{c.name}</Legatura>
             ))}
           </Coloana>
 

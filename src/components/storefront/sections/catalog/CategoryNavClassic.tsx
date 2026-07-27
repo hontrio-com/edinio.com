@@ -4,6 +4,7 @@ import type { MouseEvent } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { hrefCategorie } from "@/lib/storefront/category-href";
 import { CategoryScroller } from "./CategoryScroller";
 
 /** Ctrl/Cmd/Shift-click pe o categorie deschide adresa in fila noua. */
@@ -17,10 +18,10 @@ function altaFila(e: MouseEvent): boolean {
  * categorie (in headere linkurile apar abia dupa deschiderea dropdown-ului, iar
  * footerul „centered" nu arata categorii deloc). Serverul stie deja sa citeasca
  * `?cat=`, adresele functioneaza; lipsea doar cine sa le scrie.
+ *
+ * Adresa se compune in `lib/storefront/category-href`, impreuna cu celelalte
+ * sase locuri care arata aceleasi categorii.
  */
-function hrefCategorie(basePath: string, nume: string): string {
-  return `${basePath}/?cat=${encodeURIComponent(nume)}`;
-}
 
 /**
  * Navigarea pe categorii, varianta classic.

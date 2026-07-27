@@ -92,7 +92,6 @@ export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
             {pagini.map((it) => (
               <Legatura key={it.id} cls={legatura} href={menuItemHref(it, basePath)}>{it.label}</Legatura>
             ))}
-            <Legatura cls={legatura} href={`${basePath}/retur`}>Retur produs</Legatura>
           </Coloana>
 
           <Coloana titlu="Contact" separator={separator} marunt={marunt}>

@@ -141,7 +141,7 @@ export function CheckoutForm({
                 Email{" "}
                 {(emailField.required || isIntl)
                   ? <span className="text-red-500">*</span>
-                  : <span className="text-xs font-normal text-muted-foreground">(optional — pentru confirmare comanda)</span>
+                  : <span className="text-xs font-normal text-muted-foreground">(optional, pentru confirmare comanda)</span>
                 }
               </label>
               <FieldWrap icon={Mail} error={!!errors.email}>

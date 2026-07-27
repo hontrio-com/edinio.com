@@ -23,8 +23,9 @@ import { headers } from "next/headers";
 
 interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string; sale?: string }>; }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
+  const { page: pageQ, cat: catQ, sale: saleQ } = await searchParams;
   // Read via the service role: the SEO overrides live in store_settings, which
   // is no longer anon-readable, so a nested anon select would return null there.
   const { data: business } = await createAdminClient()
@@ -45,7 +46,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = seo.description || deriveStoreDescription({ tagline: business.tagline, description: business.description, displayName });
   // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
   // also points its canonical at the store's own domain).
-  const url = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
+  const radacina = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
+  /*
+   * Canonicalul urmeaza filtrele care CHIAR schimba continutul.
+   *
+   * Paginile 2..N, categoriile si reducerile sunt adrese crawlabile, cu produse
+   * diferite; toate aratau catre radacina, deci Google le vedea ca duplicate ale
+   * primei pagini si nu indexa niciuna. Cautarea libera (?q=) ramane in afara:
+   * acolo canonicalul catre radacina e corect, sunt infinit de multe.
+   */
+  const filtre = new URLSearchParams();
+  if (catQ) filtre.set("cat", catQ);
+  if (saleQ === "1") filtre.set("sale", "1");
+  const nrPagina = Math.max(1, parseInt(pageQ ?? "1", 10) || 1);
+  if (nrPagina > 1) filtre.set("page", String(nrPagina));
+  const sir = filtre.toString();
+  const url = sir ? `${radacina}?${sir}` : radacina;
 
   // One Product Store: the homepage *is* the chosen product's landing page, so its
   // metadata comes from that product (canonical stays on the homepage URL). Store

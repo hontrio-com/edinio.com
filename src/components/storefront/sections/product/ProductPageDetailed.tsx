@@ -632,7 +632,9 @@ export function ProductPageDetailed({
                   <div key={optiune.id ?? optiune.name}>
                     <p className="text-[13px] text-muted-foreground mb-2">
                       {optiune.name}:{" "}
-                      <span className="text-foreground font-medium">{selectedOptions[optiune.name] || "alege"}</span>
+                      {selectedOptions[optiune.name]
+                        ? <span className="text-foreground font-medium">{selectedOptions[optiune.name]}</span>
+                        : <span className="italic">alege</span>}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {optiune.values.map((valoare) => {
@@ -684,9 +686,11 @@ export function ProductPageDetailed({
               ) : (
                 <span className="inline-flex items-center gap-1.5 font-medium" style={{ color }}>
                   <Check size={15} />
-                  {stocRamas !== null && stocRamas > 0 && stocRamas <= 10
-                    ? `Ultimele ${stocRamas} bucati in stoc`
-                    : "In stoc"}
+                  {stocRamas === null || stocRamas <= 0 || stocRamas > 10
+                    ? "In stoc"
+                    : stocRamas === 1
+                      ? "Ultima bucata in stoc"
+                      : `Ultimele ${stocRamas} bucati in stoc`}
                 </span>
               )}
             </div>
@@ -877,14 +881,22 @@ export function ProductPageDetailed({
                 ))}
               </div>
 
+              {/*
+                Filele ascunse raman in HTML, ascunse cu `hidden`, nu scoase din
+                el. Randate conditionat, specificatiile si intrebarile frecvente
+                nu ajungeau deloc in pagina servita: Google vedea o pagina de
+                produs fara niciun detaliu, tocmai la varianta care se numeste
+                „Detaliat".
+              */}
               <div className="pt-6">
-                {filaCurenta === "descriere" && hasLongDesc && (
-                  <div className="policy-content text-muted-foreground leading-relaxed text-sm max-w-3xl"
+                {hasLongDesc && (
+                  <div hidden={filaCurenta !== "descriere"}
+                    className="policy-content text-muted-foreground leading-relaxed text-sm max-w-3xl"
                     dangerouslySetInnerHTML={{ __html: product.description! }} />
                 )}
 
-                {filaCurenta === "specificatii" && specifications.length > 0 && (
-                  <dl className="max-w-3xl divide-y divide-border">
+                {specifications.length > 0 && (
+                  <dl hidden={filaCurenta !== "specificatii"} className="max-w-3xl divide-y divide-border">
                     {specifications.map((spec, i) => (
                       <div key={`${spec.label}-${i}`} className="flex flex-col sm:flex-row gap-1 sm:gap-4 py-2.5 text-sm">
                         <dt className="sm:w-40 sm:shrink-0 text-muted-foreground">{spec.label}</dt>
@@ -894,8 +906,8 @@ export function ProductPageDetailed({
                   </dl>
                 )}
 
-                {filaCurenta === "intrebari" && faqSection?.enabled && (
-                  <div className="max-w-3xl">
+                {faqSection?.enabled && (
+                  <div hidden={filaCurenta !== "intrebari"} className="max-w-3xl">
                     {(faqSection.items ?? []).map((faq, i) => (
                       <FAQItem key={i} faq={faq} isOpen={faqOpen === i}
                         onToggle={() => setFaqOpen(faqOpen === i ? null : i)} />

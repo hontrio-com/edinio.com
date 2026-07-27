@@ -63,7 +63,7 @@ export function ProductGridClassic() {
             {cauta ? "Niciun produs gasit" : "Niciun produs disponibil"}
           </p>
           <p className="text-sm text-muted-foreground">
-            {cauta ? "Incearca alta cautare sau categorie." : "Reveniti curand pentru produse noi."}
+            {cauta ? "Incearca alta cautare sau categorie." : "Revino curand pentru produse noi."}
           </p>
         </div>
       ) : (

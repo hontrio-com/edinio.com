@@ -78,7 +78,7 @@ export function CartPageCompact({
         <div className="flex items-center gap-4">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground truncate">
-              {pricing.shipping === 0 ? "Livrare gratuita" : `Transport ${formatPrice(pricing.shipping)}`}
+              {pricing.shipping === 0 ? "Livrare gratuita" : `Livrare ${formatPrice(pricing.shipping)}`}
             </p>
             <p className="text-base font-bold text-foreground tabular-nums truncate">{formatPrice(pricing.grandTotal)}</p>
           </div>

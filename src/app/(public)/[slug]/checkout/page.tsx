@@ -8,6 +8,7 @@ import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { checkoutOnPage } from "@/lib/storefront/design/commerce";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CheckoutPageClient } from "@/components/storefront/sections/checkout/CheckoutPageClient";
@@ -90,7 +91,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
-  if (!checkoutOnPage(resolved.design)) redirect(`${basePath}/`);
+  if (!checkoutOnPage(resolved.design)) redirect(radacinaMagazin(basePath));
 
   // Magazin suspendat sau abonament expirat: pagina magazinului arata deja
   // „suspendat", dar aici se putea comanda mai departe cu cosul din localStorage.
@@ -108,7 +109,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
         suspendat = new Date(ownerProfile.plan_expires_at) < new Date();
       }
     }
-    if (suspendat) redirect(`${basePath}/`);
+    if (suspendat) redirect(radacinaMagazin(basePath));
   }
 
   const searchCategories = await loadSearchCategories(business.id, resolved.design);

@@ -8,6 +8,7 @@ import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { cartOnPage, checkoutOnPage } from "@/lib/storefront/design/commerce";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CartPageClient } from "@/components/storefront/sections/cart/CartPageClient";
@@ -99,7 +100,7 @@ export default async function CosPage({ params }: Props) {
 
   // Magazinul e pe sertar: aici n-are ce cauta nimeni. Redirect, nu 404 — un
   // link vechi catre cos trebuie sa duca la magazin, nu intr-o pagina de eroare.
-  if (!cartOnPage(resolved.design)) redirect(`${basePath}/`);
+  if (!cartOnPage(resolved.design)) redirect(radacinaMagazin(basePath));
 
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({

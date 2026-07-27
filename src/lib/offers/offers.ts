@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { computeBundlePricing, type BundlePricingMode } from "@/lib/bundles";
 import { hasVariants } from "@/lib/storefront/variants";
+import { aplicaBumpPeOBucata, type BumpItem } from "@/lib/offers/bump-pricing";
 import {
   parseOfferTrigger, parseOfferConfig, parseOfferDisplay,
   defaultTitleFor, isOfferType, PHASE1_OFFER_TYPES,
@@ -276,7 +277,7 @@ export async function resolveCartOffers(
   return resolved;
 }
 
-export interface BumpItem { product_id: string; name: string; price: number; quantity: number }
+export type { BumpItem };
 
 /**
  * Order-time enforcement for accepted order-bump offers. Re-prices any order line
@@ -308,15 +309,16 @@ export async function applyBumpPricing(
   for (const o of data) {
     if (o.type !== "order_bump" || !withinWindow(o.starts_at, o.ends_at, nowMs)) continue;
     const cfg = parseOfferConfig(o.config);
-    const pid = cfg.productIds[0];
-    if (!pid) continue;
-    const line = out.find((i) => i.product_id === pid);
+    // ORICARE dintre produsele ofertei, nu doar primul: magazinul arata primul
+    // produs care chiar poate fi luat dintr-o apasare, deci cand primul din
+    // lista e epuizat sau are variante, clientul vede altul. Cu potrivirea pe
+    // primul, serverul nu gasea linia si taxa pretul INTREG, in tacere.
+    const line = out.find((i) => cfg.productIds.includes(i.product_id));
     if (!line) continue; // the customer didn't actually add the bump product — no discount
     const priced = computeSetPricing([line.price], cfg);
-    if (priced && priced.price < line.price) {
-      savings = round2(savings + (line.price - priced.price) * line.quantity);
-      line.price = priced.price;
-    }
+    if (!priced || priced.price >= line.price) continue;
+
+    savings = round2(savings + aplicaBumpPeOBucata(out, line, priced.price));
   }
   return { items: out, savings };
 }

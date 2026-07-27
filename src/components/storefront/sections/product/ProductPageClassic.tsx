@@ -747,6 +747,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none */}
       <ProductOffers offers={productOffers} basePath={basePath} color={color}
         anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+        ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
         onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
 
       {/* Benefits */}

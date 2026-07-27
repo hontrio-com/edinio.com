@@ -932,6 +932,7 @@ export function ProductPageDetailed({
           {productOffers.length > 0 && (
             <ProductOffers offers={productOffers} basePath={basePath} color={color}
               anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
+              ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
               onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
           )}
 

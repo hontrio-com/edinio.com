@@ -68,7 +68,15 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
             </a>
             <p className="text-xs font-medium text-foreground mt-1.5 line-clamp-2 leading-snug">{p.name}</p>
             <div className="flex items-center justify-between gap-1 mt-1">
-              <span className="text-xs font-bold text-foreground">{formatPrice(p.price)}</span>
+              {/* Pretul taiat lipsea: aceeasi recomandare arata reducerea pe
+                  card si o ascundea in cos, adica exact acolo unde clientul
+                  compara inainte sa mai adauge ceva. */}
+              <span className="min-w-0 flex items-baseline gap-1">
+                <span className="text-xs font-bold text-foreground">{formatPrice(p.price)}</span>
+                {p.compareAtPrice != null && p.compareAtPrice > p.price && (
+                  <span className="text-[10px] text-muted-foreground line-through">{formatPrice(p.compareAtPrice)}</span>
+                )}
+              </span>
               {p.hasVariants ? (
                 /* Variable product — send the shopper to its page to choose options. */
                 <a href={p.slug ? `${basePath}/product/${p.slug}` : basePath || "/"} aria-label={`Alege optiunile pentru ${p.name}`}

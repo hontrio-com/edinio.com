@@ -68,6 +68,7 @@ export function CheckoutForm({
     availablePaymentMethods,
     belowMinOrder,
     bumps,
+    acceptedBumpOffers,
     customFields,
     customValues,
     discountAmount,
@@ -212,7 +213,14 @@ export function CheckoutForm({
               postCode={isIntl ? form.postCode : undefined}
               weightKg={isIntl && dpdUseWeight && totalWeightKg > 0 ? totalWeightKg : undefined}
               cod={paymentMethod === "cash_on_delivery" ? total : 0}
-              cart={items.map((i) => ({ productId: i.productId, quantity: i.quantity }))}
+              // Bump-urile acceptate intra si ele in cotatie: sunt produse
+              // reale in comanda, cu greutatea si volumul lor. Modalul le
+              // trimitea deja; pagina de checkout nu, deci acelasi cos dadea
+              // doua preturi de transport, dupa drumul ales de client.
+              cart={[
+                ...items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+                ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
+              ]}
               subtotal={Math.max(0, goodsTotal - discountAmount)}
               onSelect={setCourierSelection}
               optiuniDemo={preview?.courierOptions}

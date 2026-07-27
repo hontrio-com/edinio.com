@@ -17,12 +17,19 @@ import { distributeFbtSavings } from "@/lib/offers/offer.types";
  * Fully additive: with no applicable offers this renders nothing and the product page
  * is byte-for-byte unchanged.
  */
-export function ProductOffers({ offers, basePath, color, anchor, onBuyTogether, onAddToCart }: {
+export function ProductOffers({ offers, basePath, color, anchor, ancoraIndisponibila, onBuyTogether, onAddToCart }: {
   offers: ResolvedOffer[];
   basePath: string;
   color: string;
   /** Current product, shown as the first item of an FBT set. */
   anchor?: { name: string; price: number; imageUrl: string | null };
+  /**
+   * Produsul paginii nu poate fi comandat acum: e epuizat, sau are variante si
+   * clientul n-a ales inca. Setul il contine, deci nici el nu se poate cumpara —
+   * fara asta butonul ramanea aprins cand toate celelalte erau stinse, iar
+   * comanda pleca fara varianta, la pretul de baza.
+   */
+  ancoraIndisponibila?: { motiv: string } | null;
   onBuyTogether?: (offer: ResolvedOffer) => void;
   onAddToCart?: (p: OfferProduct) => void;
 }) {
@@ -34,7 +41,8 @@ export function ProductOffers({ offers, basePath, color, anchor, onBuyTogether, 
     <section className="py-8 md:py-14 px-4 md:px-6 bg-background border-t border-border">
       <div className="max-w-6xl mx-auto space-y-10">
         {anchor && onBuyTogether && fbt.map((offer) => (
-          <FbtCard key={offer.id} offer={offer} anchor={anchor} color={color} onBuyTogether={onBuyTogether} />
+          <FbtCard key={offer.id} offer={offer} anchor={anchor} color={color} onBuyTogether={onBuyTogether}
+            indisponibil={ancoraIndisponibila ?? null} />
         ))}
 
         {crossSell.map((offer) => (
@@ -64,11 +72,12 @@ function SetThumb({ name, imageUrl }: { name: string; imageUrl: string | null })
   );
 }
 
-function FbtCard({ offer, anchor, color, onBuyTogether }: {
+function FbtCard({ offer, anchor, color, onBuyTogether, indisponibil }: {
   offer: ResolvedOffer;
   anchor: { name: string; price: number; imageUrl: string | null };
   color: string;
   onBuyTogether: (offer: ResolvedOffer) => void;
+  indisponibil: { motiv: string } | null;
 }) {
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const compPrices = offer.products.map((p) => p.price);
@@ -102,10 +111,10 @@ function FbtCard({ offer, anchor, color, onBuyTogether }: {
           {hasSaving && (
             <p className="text-xs font-semibold mb-3" style={{ color }}>Economisesti {formatPrice(setSavings)}</p>
           )}
-          <button type="button" onClick={() => onBuyTogether(offer)}
-            className="w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98]"
+          <button type="button" onClick={() => onBuyTogether(offer)} disabled={!!indisponibil}
+            className="w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
-            {offer.buttonLabel || "Cumpara impreuna"}
+            {indisponibil ? indisponibil.motiv : (offer.buttonLabel || "Cumpara impreuna")}
           </button>
         </div>
       </div>

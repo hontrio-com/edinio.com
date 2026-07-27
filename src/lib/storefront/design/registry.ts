@@ -96,6 +96,12 @@ export interface VariantMeta {
    * o data deasupra header-ului si o data inauntru.
    */
   hostsAnnouncement?: boolean;
+  /**
+   * Conditii pe care magazinul trebuie sa le indeplineasca pentru ca varianta sa
+   * poata fi aleasa. Catalogul o arata stinsa, cu motivul scris, in loc sa lase
+   * comerciantul sa aleaga un design care la el ar arata prost.
+   */
+  requires?: { minCategories?: number };
   fields: Field[];
   defaults?: Record<string, unknown>;
 }
@@ -190,6 +196,16 @@ const HEADER_FIELDS_BARA: Field[] = HEADER_FIELDS.map((f) =>
 );
 
 const HEADER_DEFAULTS = { menuFont: "body", menuCase: "normal" };
+
+/**
+ * Cate categorii de nivel intai cere hero-ul cu bara laterala.
+ *
+ * Aceeasi valoare e folosita si de catalog (ca sa stinga varianta) si de
+ * componenta (ca sa cada inapoi pe bannere daca magazinul scade sub prag dupa
+ * ce a fost aleasa). Doua numere scrise separat s-ar fi despartit la prima
+ * ajustare.
+ */
+export const MIN_CATEGORII_HERO_SIDEBAR = 6;
 
 export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   // --- Chrome -------------------------------------------------------------
@@ -357,6 +373,25 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     inCatalog: true,
     variants: {
       banners: { label: "Doar imagini", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 420, fields: [] },
+      categories: {
+        label: "Categorii la stanga, bannere la dreapta",
+        tags: ["cu imagine", "compact"],
+        layout: "full",
+        previewHeight: 470,
+        // Cu doua-trei categorii bara ar fi un ciot langa o imagine mare.
+        requires: { minCategories: MIN_CATEGORII_HERO_SIDEBAR },
+        fields: [
+          {
+            key: "maxCategories",
+            type: "range",
+            label: "Cate categorii se vad",
+            min: 6,
+            max: 14,
+            step: 1,
+          },
+        ],
+        defaults: { maxCategories: 10 },
+      },
       overlay: {
         label: "Imagine cu text peste",
         // Titlul magazinului e vizibil in aceasta varianta, deci ea e H1-ul

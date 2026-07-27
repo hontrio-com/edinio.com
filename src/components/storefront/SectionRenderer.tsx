@@ -54,6 +54,10 @@ const HeroBannersOnly = dynamic(
   () => import("./sections/hero/HeroBannersOnly").then((m) => m.HeroBannersOnly),
   { ssr: true },
 );
+const HeroCategories = dynamic(
+  () => import("./sections/hero/HeroCategories").then((m) => m.HeroCategories),
+  { ssr: true },
+);
 const HeroOverlay = dynamic(
   () => import("./sections/hero/HeroOverlay").then((m) => m.HeroOverlay),
   { ssr: true },
@@ -86,9 +90,10 @@ const HEADERE: Record<string, VariantaSectiune> = {
 };
 
 /** Variantele de hero, dupa id-ul din registry. */
-const HEROURI: Record<string, ComponentType> = {
-  banners: HeroBannersOnly,
-  overlay: HeroOverlay,
+const HEROURI: Record<string, VariantaSectiune> = {
+  banners: HeroBannersOnly as VariantaSectiune,
+  overlay: HeroOverlay as VariantaSectiune,
+  categories: HeroCategories as VariantaSectiune,
 };
 
 /**
@@ -110,7 +115,7 @@ function SectionOne({ section }: { section: SectionInstance }) {
       return <FooterDark />;
     case "hero": {
       const Varianta = HEROURI[section.variant];
-      return Varianta ? <Varianta /> : <HeroClassic />;
+      return Varianta ? <Varianta settings={section.settings} /> : <HeroClassic />;
     }
     case "usp_strip":
       return <UspStripIcons />;

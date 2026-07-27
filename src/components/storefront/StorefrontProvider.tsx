@@ -136,6 +136,12 @@ export interface StorefrontContextValue extends StoreChromeValue {
   categories: StoreCategoryNode[];
   categoryFilter: string;
   currentCategoryItems: CategoryItem[];
+  /**
+   * Categoriile de nivel intai, indiferent unde a navigat vizitatorul.
+   * `currentCategoryItems` se schimba la intrarea intr-o categorie; o bara
+   * laterala fixa are nevoie de o lista care nu-i fuge de sub ochi.
+   */
+  rootCategoryItems: CategoryItem[];
   /** Suntem intr-o subcategorie: controlul din fata devine „Inapoi", nu „Toate". */
   isDrilled: boolean;
   drillParentName: string | null;

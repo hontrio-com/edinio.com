@@ -88,6 +88,13 @@ export function SectionPreviewFrame({
         image: c.image_url,
         hasChildren: categories.some((x) => x.parent_id === c.id),
       })),
+      rootCategoryItems: topLevel.map((c) => ({
+        key: c.id,
+        id: c.id,
+        name: c.name,
+        image: c.image_url,
+        hasChildren: categories.some((x) => x.parent_id === c.id),
+      })),
       isDrilled: false,
       drillParentName: null,
       hasCategories: topLevel.length > 0,

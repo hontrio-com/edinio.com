@@ -1443,6 +1443,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     categories: categories ?? [],
     categoryFilter,
     currentCategoryItems: currentItems,
+    rootCategoryItems: catTree.topItems,
     isDrilled: drillParentId !== null,
     drillParentName: drillParent?.name ?? null,
     hasCategories,

@@ -37,6 +37,7 @@ export function VariantCard({
   inaltime,
   activ,
   onPick,
+  motivIndisponibil,
 }: {
   slug: string;
   kind: string;
@@ -46,6 +47,8 @@ export function VariantCard({
   inaltime: number;
   activ: boolean;
   onPick: () => void;
+  /** Scris cand designul nu poate fi ales inca; cardul ramane vizibil, dar stins. */
+  motivIndisponibil?: string | null;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const rama = useRef<HTMLIFrameElement>(null);
@@ -101,7 +104,7 @@ export function VariantCard({
 
   return (
     <div className={`rounded-2xl border overflow-hidden bg-surface transition-shadow ${activ ? "border-primary ring-1 ring-primary/20" : "border-border hover:shadow-md"}`}>
-      <div ref={box} className="relative bg-muted/30 overflow-hidden"
+      <div ref={box} className={`relative bg-muted/30 overflow-hidden ${motivIndisponibil ? "opacity-45 grayscale" : ""}`}
         style={{ height: scara ? inaltimeRandare * scara : inaltime / 3 }}>
         {vizibil && scara > 0 && (
           <iframe
@@ -123,7 +126,11 @@ export function VariantCard({
             <p className="text-[11px] text-muted-foreground truncate">{tags.join(" - ")}</p>
           )}
         </div>
-        {activ ? (
+        {motivIndisponibil ? (
+          <span className="shrink-0 max-w-[60%] text-right text-[11px] leading-snug text-muted-foreground">
+            {motivIndisponibil}
+          </span>
+        ) : activ ? (
           <span className="shrink-0 h-9 px-3 rounded-xl bg-primary/10 text-primary text-sm font-semibold inline-flex items-center gap-1.5">
             <Check className="h-4 w-4" />
             Activ

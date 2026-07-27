@@ -42,12 +42,20 @@ export default async function SectionDesignPage() {
     ? parseStoreDesign(settings.storefront_design_draft, ctx)
     : publicat;
 
+  // Unele design-uri au nevoie de un numar minim de categorii ca sa arate bine.
+  const { count: numarCategorii } = await supabase
+    .from("categories")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", business.id)
+    .is("parent_id", null);
+
   return (
     <SectionDesignBrowser
       businessId={business.id}
       slug={business.slug}
       designInitial={design}
       designPublicat={publicat}
+      numarCategorii={numarCategorii ?? 0}
     />
   );
 }

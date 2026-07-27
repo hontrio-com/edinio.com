@@ -40,6 +40,30 @@ export function HeroBanners({ banners, links, alt, basePath }: HeroBannersProps)
 }
 
 export function BannerCarousel({ banners, links, alt, basePath }: HeroBannersProps) {
+  return (
+    <section className="relative overflow-hidden md:pt-6">
+      <div className="mx-auto md:max-w-6xl md:px-4">
+        <BannerSlider banners={banners} links={links} alt={alt} basePath={basePath} />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Caruselul propriu-zis, fara sectiune si fara container.
+ *
+ * Separat de `BannerCarousel` ca sa poata fi asezat si in alta parte — de
+ * exemplu langa o bara de categorii, unde inaltimea nu mai vine dintr-un raport
+ * fix, ci din coloana de alaturi.
+ */
+export function BannerSlider({
+  banners,
+  links,
+  alt,
+  basePath,
+  wrapperClass = "relative md:rounded-2xl md:overflow-hidden",
+  slideClass = "aspect-[16/9]",
+}: HeroBannersProps & { wrapperClass?: string; slideClass?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
   const paused = useRef(false);
@@ -74,13 +98,11 @@ export function BannerCarousel({ banners, links, alt, basePath }: HeroBannersPro
     "hidden md:flex absolute top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full items-center justify-center bg-black/35 text-white hover:bg-black/55 transition-colors";
 
   return (
-    <section
-      className="relative overflow-hidden md:pt-6"
+    <div
+      className={wrapperClass}
       onPointerEnter={() => { paused.current = true; }}
       onPointerLeave={() => { paused.current = false; }}
     >
-      <div className="mx-auto md:max-w-6xl md:px-4">
-        <div className="relative md:rounded-2xl md:overflow-hidden">
           <div
             ref={ref}
             onScroll={onScroll}
@@ -109,7 +131,7 @@ export function BannerCarousel({ banners, links, alt, basePath }: HeroBannersPro
                 <img src={cdnImage(src, 1600)} alt={alt} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
               );
               return (
-                <div key={i} className="shrink-0 w-full snap-center aspect-[16/9] bg-muted">
+                <div key={i} className={`shrink-0 w-full snap-center bg-muted ${slideClass}`}>
                   {href ? (
                     <a href={href} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
                   ) : img}
@@ -131,8 +153,6 @@ export function BannerCarousel({ banners, links, alt, basePath }: HeroBannersPro
                 className={`h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-surface" : "w-1.5 bg-surface/60 hover:bg-surface/80"}`} />
             ))}
           </div>
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }

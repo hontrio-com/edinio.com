@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { headerHostsAnnouncement, standaloneAnnouncement } from "./chrome";
 import { buildClassicDesign } from "./defaults";
-import { SECTION_REGISTRY } from "./registry";
+import { MIN_CATEGORII_HERO_SIDEBAR, SECTION_REGISTRY } from "./registry";
 import type { StoreDesign } from "./types";
 
 function design(variant: string, enabled = true): StoreDesign {
@@ -53,4 +53,13 @@ test("catalogul de design-uri contine exact zonele pentru care facem variante", 
     .map(([k]) => k)
     .sort();
   assert.deepEqual(inCatalog, ["footer", "header", "hero", "product_row"]);
+});
+
+test("hero-ul cu bara de categorii isi declara pragul minim", () => {
+  // Pragul e citit si de catalog (ca sa stinga varianta) si de componenta (ca sa
+  // cada inapoi pe bannere daca magazinul scade sub el). Daca dispare de aici,
+  // varianta devine alegibila la orice magazin si arata strambatura.
+  const v = SECTION_REGISTRY.hero?.variants.categories;
+  assert.equal(v?.requires?.minCategories, MIN_CATEGORII_HERO_SIDEBAR);
+  assert.ok(MIN_CATEGORII_HERO_SIDEBAR >= 4);
 });

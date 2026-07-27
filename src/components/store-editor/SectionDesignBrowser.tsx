@@ -37,11 +37,14 @@ export function SectionDesignBrowser({
   slug,
   designInitial,
   designPublicat,
+  numarCategorii,
 }: {
   businessId: string;
   slug: string;
   designInitial: StoreDesign;
   designPublicat: StoreDesign;
+  /** Cate categorii de nivel intai are magazinul; unele design-uri cer un minim. */
+  numarCategorii: number;
 }) {
   const [design, setDesign] = useState<StoreDesign>(designInitial);
   const [publicat, setPublicat] = useState<StoreDesign>(designPublicat);
@@ -118,6 +121,20 @@ export function SectionDesignBrowser({
   const areSetari = (variantaActiva?.fields.length ?? 0) > 0;
 
   const aplica = useCallback((next: StoreDesign) => setDesign(next), []);
+
+  /**
+   * De ce nu poate fi ales un design, daca e cazul.
+   *
+   * Verificarea sta aici, langa alegere, nu in componenta de storefront:
+   * comerciantul afla motivul inainte sa aplice ceva ce la el ar arata prost.
+   */
+  function motivIndisponibil(v: { requires?: { minCategories?: number } }): string | null {
+    const min = v.requires?.minCategories;
+    if (min && numarCategorii < min) {
+      return `Ai nevoie de cel putin ${min} categorii (acum ai ${numarCategorii})`;
+    }
+    return null;
+  }
 
   function alegeVarianta(variant: string, label: string) {
     if (!sectiune) return;
@@ -247,6 +264,7 @@ export function SectionDesignBrowser({
                     tags={v.tags}
                     inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
                     activ={id === sectiune.variant}
+                    motivIndisponibil={motivIndisponibil(v)}
                     onPick={() => alegeVarianta(id, v.label)}
                   />
                 ))}

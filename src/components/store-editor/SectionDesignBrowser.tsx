@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Loader2, Settings2, SlidersHorizontal, Undo2, X } from "lucide-react";
+import { Check, Loader2, Monitor, Settings2, SlidersHorizontal, Smartphone, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
 import { updateSection } from "@/lib/storefront/design/edit";
@@ -51,6 +51,7 @@ export function SectionDesignBrowser({
   const [kindActiv, setKindActiv] = useState<SectionKind>("header");
   const [instantaActiva, setInstantaActiva] = useState(0);
   const [setariDeschise, setSetariDeschise] = useState(false);
+  const [peMobil, setPeMobil] = useState(false);
   const [salvez, setSalvez] = useState(false);
   const [publica, setPublica] = useState(false);
 
@@ -229,6 +230,22 @@ export function SectionDesignBrowser({
                   </p>
                 </div>
 
+                {/* Aproape tot traficul unui magazin vine de pe telefon, deci
+                    alegerea designului nu se poate face doar dupa cum arata pe
+                    desktop. */}
+                <div className="shrink-0 flex items-center gap-0.5 p-0.5 rounded-xl border border-border">
+                  {([["desktop", Monitor, "Pe calculator"], ["mobil", Smartphone, "Pe telefon"]] as const).map(([k, Icon, eticheta]) => {
+                    const activ = (k === "mobil") === peMobil;
+                    return (
+                      <button key={k} type="button" onClick={() => setPeMobil(k === "mobil")} aria-label={eticheta} title={eticheta}
+                        aria-pressed={activ}
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${activ ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    );
+                  })}
+                </div>
+
                 {areSetari && (
                   <button type="button" onClick={() => setSetariDeschise(true)}
                     className="shrink-0 h-10 px-3.5 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted transition-colors inline-flex items-center gap-2">
@@ -253,7 +270,7 @@ export function SectionDesignBrowser({
 
               {/* O singura coloana: un header e o banda lata, iar pe doua coloane
                   miniatura ajunge prea mica pentru a alege ceva. */}
-              <div className="grid gap-5">
+              <div className={`grid gap-5 ${peMobil ? "sm:grid-cols-2 xl:grid-cols-3" : ""}`}>
                 {variante.map(([id, v]) => (
                   <VariantCard
                     key={id}
@@ -264,6 +281,7 @@ export function SectionDesignBrowser({
                     tags={v.tags}
                     inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
                     activ={id === sectiune.variant}
+                    peMobil={peMobil}
                     motivIndisponibil={motivIndisponibil(v)}
                     onPick={() => alegeVarianta(id, v.label)}
                   />

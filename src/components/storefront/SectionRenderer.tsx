@@ -55,7 +55,7 @@ const HeroBannersOnly = dynamic(
   { ssr: true },
 );
 const FooterColumns = dynamic(
-  () => import("./sections/chrome/FooterColumns").then((m) => m.FooterColumns),
+  () => import("./sections/chrome/FooterColumnsLight").then((m) => m.FooterColumnsLight),
   { ssr: true },
 );
 const FooterCentered = dynamic(

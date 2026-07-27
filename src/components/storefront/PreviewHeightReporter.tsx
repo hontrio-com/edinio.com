@@ -20,18 +20,18 @@ export const PREVIEW_HEIGHT_MESSAGE = "__edinioPreviewHeight";
 export function PreviewHeightReporter() {
   useEffect(() => {
     /**
-     * `scrollHeight`, nu inaltimea ferestrei.
+     * Marginea de jos a continutului, nu inaltimea documentului.
      *
      * Fereastra iframe-ului e exact inaltimea pe care i-o da parintele, iar
-     * parintele o ia de aici: masurata asa, valoarea si-ar confirma la nesfarsit
-     * propria estimare, iar sectiunile mai inalte decat ea ar ramane taiate.
-     * `scrollHeight` masoara continutul, deci creste peste fereastra.
+     * parintele o ia de aici. Masurat pe document, numarul nu poate cobori
+     * niciodata sub fereastra: o sectiune mai scurta decat estimarea initiala ar
+     * ramane cu o banda goala dedesubt, si si-ar confirma la nesfarsit propria
+     * greseala. Masurata pe elementele randate, valoarea si creste si scade.
      */
     const trimite = () => {
-      const h = Math.ceil(Math.max(
-        document.documentElement.scrollHeight,
-        document.body?.scrollHeight ?? 0,
-      ));
+      const copii = Array.from(document.body?.children ?? []);
+      const jos = copii.reduce((max, el) => Math.max(max, el.getBoundingClientRect().bottom), 0);
+      const h = Math.ceil(jos > 0 ? jos : document.documentElement.scrollHeight);
       if (h > 0) window.parent?.postMessage({ [PREVIEW_HEIGHT_MESSAGE]: h }, window.location.origin);
     };
     trimite();

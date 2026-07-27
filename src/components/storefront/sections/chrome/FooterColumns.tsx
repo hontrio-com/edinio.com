@@ -6,7 +6,7 @@ import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
 import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
-import { FooterCredit, FooterLegal } from "@/components/storefront/sections/_shared/FooterLegal";
+import { FooterCredit, FooterLegal, type TonFooter } from "@/components/storefront/sections/_shared/FooterLegal";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
 
 /**
@@ -24,7 +24,7 @@ import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_s
  * `FooterLegal` si `FooterCredit` sunt compuse obligatoriu — vezi comentariul de
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
-export function FooterColumns() {
+export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
   const { business, basePath, menu, pageContent, social, hasStickyBottomBar } = useStoreChrome();
   const catalog = useStorefrontOptional();
 
@@ -33,10 +33,24 @@ export function FooterColumns() {
   const spatiuJos = hasStickyBottomBar ? "pb-24 lg:pb-8" : "pb-8";
 
   const categorii = (catalog?.rootCategoryItems ?? []).slice(0, 6);
+  const inchis = ton === "inchis";
+  // Pe fundal inchis culorile vin din perechea de footer a magazinului, ca sa
+  // ramana reglabila dintr-un singur loc.
+  const fundal = inchis
+    ? "bg-[var(--st-footer-bg)] text-[var(--st-footer-text)]"
+    : "bg-[var(--st-bg)] text-[var(--st-text)] border-t border-[var(--st-border)]";
+  const separator = inchis ? "border-[var(--st-footer-text)]/10" : "border-[var(--st-border)]";
+  const marunt = inchis ? "text-[var(--st-footer-text)]/50" : "text-[var(--st-muted)]";
+  const legatura = inchis
+    ? "flex items-start gap-2 text-[13px] text-[var(--st-footer-text)]/50 hover:text-[var(--st-footer-text)] transition-colors"
+    : "flex items-start gap-2 text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors";
+  const cerc = inchis
+    ? "w-9 h-9 rounded-full border border-[var(--st-footer-text)]/15 flex items-center justify-center hover:bg-[var(--st-footer-text)]/10 transition-colors"
+    : "w-9 h-9 rounded-full border border-[var(--st-border)] flex items-center justify-center text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors";
   const pagini = menu.filter((m) => m.type === "page" || m.type === "link");
 
   return (
-    <footer className="bg-[var(--st-bg)] text-[var(--st-text)] border-t border-[var(--st-border)]">
+    <footer className={fundal}>
       <div className={`max-w-6xl mx-auto px-5 pt-10 sm:pt-12 ${spatiuJos}`}>
         <div className="grid gap-8 sm:gap-10 md:grid-cols-[1.4fr_1fr_1fr_1.2fr] pb-8">
           <div className="min-w-0">
@@ -51,50 +65,48 @@ export function FooterColumns() {
               )}
             </div>
             {business.tagline && (
-              <p className="mt-3 text-[13px] leading-relaxed text-[var(--st-muted)] max-w-xs">{business.tagline}</p>
+              <p className={`mt-3 text-[13px] leading-relaxed max-w-xs ${marunt}`}>{business.tagline}</p>
             )}
             {areSocialLinks(social) && (
               <div className="mt-4 flex items-center gap-2">
-                <SocialLinks social={social}
-                  className="w-9 h-9 rounded-full border border-[var(--st-border)] flex items-center justify-center text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors"
-                  iconClass="h-4 w-4" />
+                <SocialLinks social={social} className={cerc} iconClass="h-4 w-4" />
               </div>
             )}
           </div>
 
-          <Coloana titlu="Magazin">
-            <Legatura href={`${basePath}/`}>Toate produsele</Legatura>
+          <Coloana titlu="Magazin" separator={separator} marunt={marunt}>
+            <Legatura cls={legatura} href={`${basePath}/`}>Toate produsele</Legatura>
             {categorii.map((c) => (
-              <Legatura key={c.key} href={`${basePath}/?cat=${encodeURIComponent(c.name)}`}>{c.name}</Legatura>
+              <Legatura key={c.key} cls={legatura} href={`${basePath}/?cat=${encodeURIComponent(c.name)}`}>{c.name}</Legatura>
             ))}
           </Coloana>
 
-          <Coloana titlu="Informatii">
+          <Coloana titlu="Informatii" separator={separator} marunt={marunt}>
             {pagini.map((it) => (
-              <Legatura key={it.id} href={menuItemHref(it, basePath)}>{it.label}</Legatura>
+              <Legatura key={it.id} cls={legatura} href={menuItemHref(it, basePath)}>{it.label}</Legatura>
             ))}
-            <Legatura href={`${basePath}/retur`}>Retur produs</Legatura>
+            <Legatura cls={legatura} href={`${basePath}/retur`}>Retur produs</Legatura>
           </Coloana>
 
-          <Coloana titlu="Contact">
+          <Coloana titlu="Contact" separator={separator} marunt={marunt}>
             {business.phone && (
-              <Legatura href={`tel:${business.phone}`} icon={<Phone className="h-4 w-4" strokeWidth={1.6} />}>
+              <Legatura cls={legatura} href={`tel:${business.phone}`} icon={<Phone className="h-4 w-4" strokeWidth={1.6} />}>
                 {business.phone}
               </Legatura>
             )}
             {business.whatsapp && (
-              <Legatura href={whatsappLink(business.whatsapp)} extern
+              <Legatura cls={legatura} href={whatsappLink(business.whatsapp)} extern
                 icon={<svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>}>
                 WhatsApp
               </Legatura>
             )}
             {business.email && (
-              <Legatura href={`mailto:${business.email}`} icon={<Mail className="h-4 w-4" strokeWidth={1.6} />}>
+              <Legatura cls={legatura} href={`mailto:${business.email}`} icon={<Mail className="h-4 w-4" strokeWidth={1.6} />}>
                 {business.email}
               </Legatura>
             )}
             {(business.store_city || business.city) && (
-              <span className="flex items-start gap-2 text-[13px] text-[var(--st-muted)]">
+              <span className={`flex items-start gap-2 text-[13px] ${marunt}`}>
                 <MapPin className="h-4 w-4 shrink-0 mt-0.5" strokeWidth={1.6} />
                 {business.store_city || business.city}
               </span>
@@ -102,11 +114,11 @@ export function FooterColumns() {
           </Coloana>
         </div>
 
-        <div className="border-t border-[var(--st-border)]">
+        <div className={`border-t ${separator}`}>
           {/* Paginile apar deja in coloana „Informatii". */}
-          <FooterLegal ton="deschis" cuPagini={false} />
-          <div className="border-t border-[var(--st-border)]">
-            <FooterCredit ton="deschis" />
+          <FooterLegal ton={ton} cuPagini={false} />
+          <div className={`border-t ${separator}`}>
+            <FooterCredit ton={ton} />
           </div>
         </div>
       </div>
@@ -115,15 +127,20 @@ export function FooterColumns() {
 }
 
 /** Coloana de linkuri: deschisa pe desktop, pliata pe telefon. */
-function Coloana({ titlu, children }: { titlu: string; children: React.ReactNode }) {
+function Coloana({ titlu, children, separator, marunt }: {
+  titlu: string;
+  children: React.ReactNode;
+  separator: string;
+  marunt: string;
+}) {
   const [deschisa, setDeschisa] = useState(false);
 
   return (
-    <div className="min-w-0 border-t border-[var(--st-border)] md:border-0 pt-3 md:pt-0">
+    <div className={`min-w-0 border-t md:border-0 pt-3 md:pt-0 ${separator}`}>
       <button type="button" onClick={() => setDeschisa((v) => !v)} aria-expanded={deschisa}
         className="w-full flex items-center justify-between gap-2 md:pointer-events-none">
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-[var(--st-muted)]">{titlu}</span>
-        <ChevronDown className={`h-4 w-4 text-[var(--st-muted)] md:hidden transition-transform ${deschisa ? "rotate-180" : ""}`} />
+        <span className={`text-[11px] font-semibold uppercase tracking-widest ${marunt}`}>{titlu}</span>
+        <ChevronDown className={`h-4 w-4 md:hidden transition-transform ${marunt} ${deschisa ? "rotate-180" : ""}`} />
       </button>
       <div className={`flex-col gap-2 pt-3 ${deschisa ? "flex" : "hidden"} md:flex`}>
         {children}
@@ -133,11 +150,13 @@ function Coloana({ titlu, children }: { titlu: string; children: React.ReactNode
 }
 
 function Legatura({
+  cls,
   href,
   children,
   icon,
   extern = false,
 }: {
+  cls: string;
   href: string;
   children: React.ReactNode;
   icon?: React.ReactNode;
@@ -145,7 +164,7 @@ function Legatura({
 }) {
   return (
     <a href={href} {...(extern ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className="flex items-start gap-2 text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
+      className={cls}>
       {icon && <span className="shrink-0 mt-0.5">{icon}</span>}
       <span className="min-w-0 truncate">{children}</span>
     </a>

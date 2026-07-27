@@ -38,6 +38,7 @@ export function VariantCard({
   activ,
   onPick,
   motivIndisponibil,
+  peMobil = false,
 }: {
   slug: string;
   kind: string;
@@ -49,6 +50,8 @@ export function VariantCard({
   onPick: () => void;
   /** Scris cand designul nu poate fi ales inca; cardul ramane vizibil, dar stins. */
   motivIndisponibil?: string | null;
+  /** Randeaza la latime de telefon, indiferent cat de lat e cardul. */
+  peMobil?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const rama = useRef<HTMLIFrameElement>(null);
@@ -63,7 +66,7 @@ export function VariantCard({
    */
   const [masurat, setMasurat] = useState<{ latime: number; inaltime: number } | null>(null);
 
-  const latimeDupa = (l: number) => (l > 0 && l < PRAG_MOBIL ? LATIME_MOBIL : LATIME_DESKTOP);
+  const latimeDupa = (l: number) => (peMobil || (l > 0 && l < PRAG_MOBIL) ? LATIME_MOBIL : LATIME_DESKTOP);
   const latimeRandare = latimeDupa(latimeCard);
   const scara = latimeCard > 0 ? latimeCard / latimeRandare : 0;
   const inaltimeRandare = masurat?.latime === latimeRandare ? masurat.inaltime : inaltime;
@@ -95,12 +98,14 @@ export function VariantCard({
       const h = (e.data as Record<string, unknown>)?.[PREVIEW_HEIGHT_MESSAGE];
       // Latimea se citeste din DOM in momentul mesajului, nu din starea de la
       // montare: intre timp cardul poate fi trecut de la telefon la desktop.
-      const l = latimeDupa(box.current?.clientWidth ?? 0);
+      // Latimea ceruta acum, nu cea de la montare: cardul poate fi trecut
+      // intre telefon si desktop intre timp.
+      const l = latimeRandare;
       if (typeof h === "number" && h > 0) setMasurat({ latime: l, inaltime: h });
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [latimeRandare]);
 
   return (
     <div className={`rounded-2xl border overflow-hidden bg-surface transition-shadow ${activ ? "border-primary ring-1 ring-primary/20" : "border-border hover:shadow-md"}`}>

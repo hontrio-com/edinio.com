@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Monitor, Smartphone, X } from "lucide-react";
 import { sectionMeta } from "@/lib/storefront/design/registry";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { INALTIME_IMPLICITA, VariantCard } from "./VariantCard";
@@ -31,6 +31,7 @@ export function DesignGallery({
 }) {
   const meta = sectionMeta(section.kind);
   const variante = Object.entries(meta?.variants ?? {});
+  const [peMobil, setPeMobil] = useState(false);
 
   // Escape inchide galeria: e o suprapunere, nu o pagina.
   useEffect(() => {
@@ -48,14 +49,27 @@ export function DesignGallery({
             {variante.length} {variante.length === 1 ? "varianta" : "variante"} - previzualizate cu magazinul tau
           </p>
         </div>
+        {/* Aproape tot traficul unui magazin vine de pe telefon. */}
+        <div className="ml-auto flex items-center gap-0.5 p-0.5 rounded-xl border border-border">
+          {([["desktop", Monitor, "Pe calculator"], ["mobil", Smartphone, "Pe telefon"]] as const).map(([k, Icon, eticheta]) => {
+            const activ = (k === "mobil") === peMobil;
+            return (
+              <button key={k} type="button" onClick={() => setPeMobil(k === "mobil")} aria-label={eticheta} title={eticheta}
+                aria-pressed={activ}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${activ ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+                <Icon className="h-4 w-4" />
+              </button>
+            );
+          })}
+        </div>
         <button type="button" onClick={onClose} aria-label="Inchide galeria"
-          className="ml-auto w-10 h-10 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          className="w-10 h-10 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
           <X className="h-4 w-4" />
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="grid gap-5 xl:grid-cols-2">
+        <div className={`grid gap-5 ${peMobil ? "sm:grid-cols-2 xl:grid-cols-3" : ""}`}>
           {variante.map(([id, v]) => (
             <VariantCard
               key={id}
@@ -66,6 +80,7 @@ export function DesignGallery({
               tags={v.tags}
               inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
               activ={id === section.variant}
+              peMobil={peMobil}
               onPick={() => onPick(id)}
             />
           ))}

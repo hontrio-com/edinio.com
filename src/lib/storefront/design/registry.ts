@@ -359,12 +359,13 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: false,
     inCatalog: true,
     variants: {
-      dark: { label: "Fundal inchis", tags: ["clasic", "indraznet"], layout: "full", previewHeight: 460, fields: [] },
+      dark: { label: "Inchis, pe coloane", tags: ["clasic", "indraznet"], layout: "full", previewHeight: 560, needsCategories: true, fields: [] },
       columns: {
         label: "Deschis, pe coloane",
         tags: ["simplu", "cu imagine"],
         layout: "full",
         previewHeight: 560,
+        needsCategories: true,
         fields: [],
       },
       centered: {

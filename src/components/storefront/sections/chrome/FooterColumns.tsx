@@ -25,14 +25,20 @@ import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_s
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
 export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
-  const { business, basePath, menu, pageContent, social, hasStickyBottomBar } = useStoreChrome();
+  const { business, basePath, menu, pageContent, social, hasStickyBottomBar, searchCategories } = useStoreChrome();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.footer_logo_size ?? 36;
   const spatiuJos = hasStickyBottomBar ? "pb-24 lg:pb-8" : "pb-8";
 
-  const categorii = (catalog?.rootCategoryItems ?? []).slice(0, 6);
+  // Pe pagina de magazin categoriile vin din catalogul deja incarcat; pe
+  // celelalte pagini, din lista adusa pentru sectiunile fixe. Fara a doua sursa,
+  // coloana ar fi fost goala peste tot in afara paginii de magazin.
+  const categorii = (
+    catalog?.rootCategoryItems.map((c) => ({ key: c.key, name: c.name })) ??
+    (searchCategories ?? []).map((name) => ({ key: name, name }))
+  ).slice(0, 6);
   const inchis = ton === "inchis";
   // Pe fundal inchis culorile vin din perechea de footer a magazinului, ca sa
   // ramana reglabila dintr-un singur loc.

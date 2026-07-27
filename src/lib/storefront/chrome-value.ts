@@ -6,6 +6,7 @@ import type {
   StorePageContent,
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
+import type { StoreDesign } from "@/lib/storefront/design/types";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -69,9 +70,12 @@ export function buildChromeData({
  */
 export async function loadSearchCategories(
   businessId: string,
-  headerVariant: string,
+  design: StoreDesign,
 ): Promise<string[] | undefined> {
-  if (variantMeta("header", headerVariant)?.needsCategories !== true) return undefined;
+  const cerute =
+    variantMeta("header", design.chrome.header.variant)?.needsCategories === true ||
+    variantMeta("footer", design.chrome.footer.variant)?.needsCategories === true;
+  if (!cerute) return undefined;
   const { data } = await createAdminClient()
     .from("categories")
     .select("name")

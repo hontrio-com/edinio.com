@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { headerHostsAnnouncement, standaloneAnnouncement } from "./chrome";
 import { buildClassicDesign } from "./defaults";
+import { DEMO_BANNERS } from "./demo-content";
 import { MIN_CATEGORII_HERO_SIDEBAR, SECTION_REGISTRY } from "./registry";
 import type { StoreDesign } from "./types";
 
@@ -62,4 +63,13 @@ test("hero-ul cu bara de categorii isi declara pragul minim", () => {
   const v = SECTION_REGISTRY.hero?.variants.categories;
   assert.equal(v?.requires?.minCategories, MIN_CATEGORII_HERO_SIDEBAR);
   assert.ok(MIN_CATEGORII_HERO_SIDEBAR >= 4);
+});
+
+test("continutul demo are cel putin doua bannere", () => {
+  // Cu un singur banner, hero-ul „doar imagini" foloseste varianta turnata, a
+  // carei inaltime e limitata la 60% din fereastra. In miniatura, fereastra e
+  // exact inaltimea pe care i-o da parintele dupa masuratoare, deci imaginea si
+  // masuratoarea s-ar micsora una pe alta pana la disparitie. Cu doua sau mai
+  // multe se randeaza caruselul, cu raport fix, si bucla nu exista.
+  assert.ok(DEMO_BANNERS.length >= 2, "hero-ul cu un singur banner depinde de inaltimea ferestrei");
 });

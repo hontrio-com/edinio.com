@@ -54,7 +54,7 @@ export default async function ReturPage({ params, searchParams }: Props) {
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
-  const searchCategories = await loadSearchCategories(business.id, resolved.design.chrome.header.variant);
+  const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({
     searchCategories, business: business as never, pageContent, basePath });
 

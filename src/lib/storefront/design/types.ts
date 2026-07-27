@@ -52,8 +52,15 @@ export const HOME_KINDS = [
   "rich_blocks",
 ] as const;
 
-/** Sectiuni ale paginii de produs. */
-export const PRODUCT_KINDS = ["pdp_gallery", "pdp_buybox", "pdp_details", "pdp_related"] as const;
+/**
+ * Pagina de produs. O singura sectiune, nu una per bloc.
+ *
+ * Galeria si zona de cumparare impart aproape toata starea paginii (imaginea
+ * curenta, combinatia de varianta aleasa, pretul rezultat), deci taiate in doua
+ * sectiuni n-ar putea exista una fara alta. Un design de pagina de produs le
+ * schimba oricum impreuna.
+ */
+export const PRODUCT_KINDS = ["product_page"] as const;
 
 /** „Sectiuni" care sunt de fapt componente reutilizate peste tot in comert. */
 export const COMMERCE_KINDS = ["product_card", "cart_drawer", "checkout"] as const;
@@ -187,9 +194,7 @@ export interface StoreDesign {
   };
   home: SectionInstance[];
   product: {
-    gallery: SectionInstance;
-    buybox: SectionInstance;
-    sections: SectionInstance[];
+    page: SectionInstance;
   };
   commerce: {
     productCard: SectionInstance;

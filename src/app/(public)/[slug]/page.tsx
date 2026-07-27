@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
-import { ProductPage } from "@/components/ministore/ProductPage";
+import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
@@ -263,7 +263,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
           />
           <StorefrontThemeScope style={opsResolved.style}>
             <StorePageShell chrome={opsChrome} design={opsResolved.design} className="min-h-screen">
-              <ProductPage
+              <ProductPageSection
+                variant={opsResolved.design.product.page.variant}
                 business={business}
                 product={product}
                 storeSettings={storeSettings as never}

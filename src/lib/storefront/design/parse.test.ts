@@ -224,3 +224,48 @@ test("isEmptyDesign distinge magazinele nematerializate", () => {
   assert.equal(isEmptyDesign({}), true);
   assert.equal(isEmptyDesign({ version: 1 }), false);
 });
+
+test("pagina de produs e o singura sectiune, cu designul classic implicit", () => {
+  const d = parseStoreDesign(null, ctx);
+  assert.equal(d.product.page.kind, "product_page");
+  assert.equal(d.product.page.variant, "classic");
+});
+
+test("o ciorna veche, cu sectiunile separate ale paginii de produs, nu rupe nimic", () => {
+  // Inainte, pagina de produs era descrisa prin patru sectiuni (galerie, zona de
+  // cumparare, detalii, similare) pe care nu le randa nimeni. Configuratiile
+  // salvate atunci trebuie sa cada elegant pe pagina intreaga.
+  const d = parseStoreDesign(
+    {
+      version: 1,
+      chrome: {},
+      home: [],
+      product: {
+        gallery: { id: "pdp_gallery", kind: "pdp_gallery", variant: "classic", settings: {} },
+        buybox: { id: "pdp_buybox", kind: "pdp_buybox", variant: "classic", settings: {} },
+        sections: [{ id: "pdp_related", kind: "pdp_related", variant: "carousel", settings: {} }],
+      },
+    },
+    ctx,
+  );
+  assert.equal(d.product.page.kind, "product_page");
+  assert.equal(d.product.page.variant, "classic");
+});
+
+test("cosul si finalizarea comenzii isi pastreaza designul salvat", () => {
+  const d = parseStoreDesign(
+    {
+      version: 1,
+      chrome: {},
+      home: [],
+      commerce: {
+        cartDrawer: { id: "cart_drawer", kind: "cart_drawer", variant: "clasic-inexistent", settings: {} },
+        checkout: { id: "checkout", kind: "checkout", variant: "classic", settings: {} },
+      },
+    },
+    ctx,
+  );
+  // Varianta necunoscuta cade pe prima declarata, nu lasa magazinul fara cos.
+  assert.equal(d.commerce.cartDrawer.variant, "classic");
+  assert.equal(d.commerce.checkout.variant, "classic");
+});

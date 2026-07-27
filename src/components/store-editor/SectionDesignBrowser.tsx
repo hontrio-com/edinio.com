@@ -93,9 +93,7 @@ export function SectionDesignBrowser({
       design.chrome.header,
       ...design.home,
       design.chrome.footer,
-      design.product.gallery,
-      design.product.buybox,
-      ...design.product.sections,
+      design.product.page,
       design.commerce.productCard,
       design.commerce.cartDrawer,
       design.commerce.checkout,
@@ -272,6 +270,7 @@ export function SectionDesignBrowser({
                     label={v.label}
                     tags={v.tags}
                     inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
+              latimeFixa={v.previewWidth}
                     activ={id === sectiune.variant}
                     peMobil={peMobil}
                     motivIndisponibil={motivIndisponibil(v)}

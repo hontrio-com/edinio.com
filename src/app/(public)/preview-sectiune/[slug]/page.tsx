@@ -7,7 +7,7 @@ import { SectionPreviewFrame } from "@/components/storefront/SectionPreviewFrame
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
-import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, demoProducts } from "@/lib/storefront/design/demo-content";
+import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionKind } from "@/lib/storefront/design/types";
@@ -54,6 +54,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
     .eq("business_id", business.id)
     .single();
   const produseDemo = demoProducts(business.id);
+  const paginaProdusDemo = demoProductPage(business.id);
 
   // Continutul e demonstrativ, identitatea magazinului nu: designul se alege cu
   // logo-ul, culorile si fontul lui, dar cu bannere, categorii si produse care
@@ -103,6 +104,19 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
         }}
         products={produseDemo.map(slimCatalogProduct)}
         categories={DEMO_CATEGORIES}
+        // Pagina de produs primeste produsul demonstrativ INTREG, nu trecut prin
+        // `slimCatalogProduct`: acela taie tocmai combinatiile de variante si
+        // imaginile de dupa prima, adica jumatate din ce arata designul.
+        produsDemo={{
+          product: paginaProdusDemo.product as never,
+          storeSettings: {
+            ...(storeSettings ?? {}),
+            page_content: { ...realPageContent, ...paginaProdusDemo.pageContent },
+            default_shipping_cost: DEMO_TRANSPORT,
+            free_shipping_threshold: null,
+            min_order_amount: null,
+          } as never,
+        }}
       />
       <PreviewHeightReporter />
     </StorefrontThemeScope>

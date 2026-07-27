@@ -3,18 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { PREVIEW_HEIGHT_MESSAGE } from "@/components/storefront/PreviewHeightReporter";
+import { asezareMiniatura } from "@/lib/storefront/design/preview-layout";
 
-/**
- * Latimea la care se randeaza miniatura inainte de micsorare.
- *
- * Pe un card ingust nu micsoram desktopul si mai tare — la 350 de pixeli, un
- * desktop de 1280 ajunge la un sfert si nu se mai citeste nimic. Randam direct
- * varianta de telefon, aproape la marime reala: cine alege designul de pe
- * telefon vede exact ce vor vedea clientii lui de pe telefon.
- */
-export const LATIME_DESKTOP = 1280;
-export const LATIME_MOBIL = 390;
-const PRAG_MOBIL = 560;
 export const INALTIME_IMPLICITA = 320;
 
 /**
@@ -39,6 +29,7 @@ export function VariantCard({
   onPick,
   motivIndisponibil,
   peMobil = false,
+  latimeFixa,
 }: {
   slug: string;
   kind: string;
@@ -52,6 +43,12 @@ export function VariantCard({
   motivIndisponibil?: string | null;
   /** Randeaza la latime de telefon, indiferent cat de lat e cardul. */
   peMobil?: boolean;
+  /**
+   * Latime impusa de sectiune, care are prioritate peste comutatorul
+   * telefon/calculator. Cosul si formularul de comanda sunt panouri inguste: pe
+   * panza de desktop ar fi o fasie intr-un camp gol, oricat de lat ar fi cardul.
+   */
+  latimeFixa?: number;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const rama = useRef<HTMLIFrameElement>(null);
@@ -66,9 +63,7 @@ export function VariantCard({
    */
   const [masurat, setMasurat] = useState<{ latime: number; inaltime: number } | null>(null);
 
-  const latimeDupa = (l: number) => (peMobil || (l > 0 && l < PRAG_MOBIL) ? LATIME_MOBIL : LATIME_DESKTOP);
-  const latimeRandare = latimeDupa(latimeCard);
-  const scara = latimeCard > 0 ? latimeCard / latimeRandare : 0;
+  const { latimeRandare, scara, marginea } = asezareMiniatura({ latimeCard, peMobil, latimeFixa });
   const inaltimeRandare = masurat?.latime === latimeRandare ? masurat.inaltime : inaltime;
 
   useEffect(() => {
@@ -118,8 +113,8 @@ export function VariantCard({
             title={`Previzualizare ${label}`}
             tabIndex={-1}
             scrolling="no"
-            className="absolute top-0 left-0 origin-top-left border-0 pointer-events-none"
-            style={{ width: latimeRandare, height: inaltimeRandare, transform: `scale(${scara})` }}
+            className="absolute top-0 origin-top-left border-0 pointer-events-none"
+            style={{ width: latimeRandare, height: inaltimeRandare, left: marginea, transform: `scale(${scara})` }}
           />
         )}
       </div>

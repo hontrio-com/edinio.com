@@ -36,10 +36,7 @@ function findSection(design: StoreDesign, id: string): SectionInstance | undefin
   const dinHome = design.home.find((s) => s.id === id);
   if (dinHome) return dinHome;
 
-  if (design.product.gallery.id === id) return design.product.gallery;
-  if (design.product.buybox.id === id) return design.product.buybox;
-  const dinProdus = design.product.sections.find((s) => s.id === id);
-  if (dinProdus) return dinProdus;
+  if (design.product.page.id === id) return design.product.page;
 
   return [design.commerce.productCard, design.commerce.cartDrawer, design.commerce.checkout]
     .find((s) => s.id === id);

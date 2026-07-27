@@ -9,7 +9,7 @@ import { parseStoreMode, parseStoreModeFromSettings } from "@/lib/storefront/sto
 import { enrichStoreProduct } from "@/lib/storefront/product-data";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
-import { ProductPage } from "@/components/ministore/ProductPage";
+import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import { resolveProductOffers } from "@/lib/offers/offers";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
@@ -195,7 +195,8 @@ export default async function ProductDetailPage({ params }: Props) {
       />
       <StorefrontThemeScope style={resolved.style}>
         <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen">
-          <ProductPage
+          <ProductPageSection
+            variant={resolved.design.product.page.variant}
             business={business as never}
             product={product}
             storeSettings={storeSettings as never}

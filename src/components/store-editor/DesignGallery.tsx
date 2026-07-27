@@ -79,6 +79,7 @@ export function DesignGallery({
               label={v.label}
               tags={v.tags}
               inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
+              latimeFixa={v.previewWidth}
               activ={id === section.variant}
               peMobil={peMobil}
               onPick={() => onPick(id)}

@@ -4,6 +4,17 @@ import { useState, useEffect, useRef } from "react";
 import { Truck, MapPin, Package, Loader2, Search, X, ChevronDown } from "lucide-react";
 import { getShippingOptions, getLockers, type ShippingOption, type LockerItem } from "@/lib/actions/shipping.actions";
 
+/**
+ * Brokers (Woot, Colete Online) return several offers under one courier id —
+ * disambiguate by service.
+ *
+ * La nivel de modul, nu in componenta: e o functie pura de argumentul ei si e
+ * nevoie de ea si la initializarea starii, inainte de corpul componentei.
+ */
+function optionKey(o: ShippingOption) {
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}`;
+}
+
 export interface CourierSelection {
   courier: string;
   courierLabel: string;
@@ -39,13 +50,19 @@ interface Props {
   /** Goods value after promo — feeds value-based shipping rules. */
   subtotal?: number;
   onSelect: (selection: CourierSelection | null) => void;
+  /**
+   * Optiuni date de-a gata, pentru miniatura din catalogul de design-uri: nu se
+   * mai cere nicio cotatie. Fara ele, fiecare card din galerie ar intreba live
+   * Sameday, FAN, Cargus, DPD, Woot si Colete cu contul comerciantului.
+   */
+  optiuniDemo?: ShippingOption[];
 }
 
-export function CourierSelector({ businessId, county, city, weightKg, cod, color, country, postCode, cart, subtotal, onSelect }: Props) {
-  const [options, setOptions] = useState<ShippingOption[]>([]);
+export function CourierSelector({ businessId, county, city, weightKg, cod, color, country, postCode, cart, subtotal, onSelect, optiuniDemo }: Props) {
+  const [options, setOptions] = useState<ShippingOption[]>(optiuniDemo ?? []);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(optiuniDemo?.[0] ? optionKey(optiuniDemo[0]) : null);
   const [lockers, setLockers] = useState<LockerItem[]>([]);
   const [lockersLoading, setLockersLoading] = useState(false);
   const [lockerSearch, setLockerSearch] = useState("");
@@ -68,6 +85,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
   useEffect(() => {
     // cod is part of the key: COD switches FAN to "Cont Colector" (extra fee)
     // and changes Woot repayment quotes, so prices must refresh with payment.
+    if (optiuniDemo) return;
     const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}::${cod ?? ""}::${subtotal ?? ""}::${cartSig}`;
     if (!ready) {
       setOptions([]);
@@ -121,7 +139,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
 
   // Fetch lockers when a locker option is selected
   useEffect(() => {
-    if (!selectedKey) return;
+    if (optiuniDemo || !selectedKey) return;
     const opt = options.find((o) => optionKey(o) === selectedKey);
     if (!opt || opt.deliveryType !== "locker") {
       setLockers([]);
@@ -137,12 +155,6 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
       .finally(() => setLockersLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKey]);
-
-  function optionKey(o: ShippingOption) {
-    // Brokers (Woot, Colete Online) return several offers under one courier id —
-    // disambiguate by service.
-    return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}`;
-  }
 
   function handleSelect(opt: ShippingOption) {
     const k = optionKey(opt);
@@ -185,7 +197,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     }
   }
 
-  if (!ready) return null;
+  if (!ready && !optiuniDemo) return null;
 
   if (loading) {
     return (

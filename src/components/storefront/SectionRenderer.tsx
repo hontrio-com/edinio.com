@@ -15,7 +15,7 @@ import { CatalogToolbar } from "./sections/catalog/CatalogToolbar";
 import { CategoryNavClassic } from "./sections/catalog/CategoryNavClassic";
 import { ProductGridClassic } from "./sections/catalog/ProductGridClassic";
 import { ShippingProgressBanner } from "./sections/shipping/ShippingProgressBanner";
-import { CustomProductRow, FeaturedRowClassic, type LayoutRand } from "./sections/products/ProductRowClassic";
+import { CustomProductRow, FeaturedRowClassic } from "./sections/products/ProductRowClassic";
 import { AboutClassic } from "./sections/content/AboutClassic";
 import { BenefitsClassic } from "./sections/content/BenefitsClassic";
 import { ContactClassic } from "./sections/content/ContactClassic";
@@ -141,16 +141,15 @@ function SectionOne({ section }: { section: SectionInstance }) {
       return <CategoryNavClassic />;
     case "shipping_progress":
       return <ShippingProgressBanner />;
-    case "product_row": {
-      // Asezarea randului vine din varianta aleasa. Pentru magazinele care n-au
-      // atins inca designul, varianta e derivata din editor, deci randeaza la fel.
-      const asezare = section.variant as LayoutRand;
+    case "product_row":
+      // Asezarea randului vine din editorul magazinului (`page_content`), nu din
+      // varianta: randul n-are catalog de design-uri, iar o varianta salvata ar
+      // ingheta o alegere pe care comerciantul o schimba din alta parte.
       return section.settings.mode === "featured" ? (
-        <FeaturedRowClassic layout={asezare} />
+        <FeaturedRowClassic />
       ) : (
-        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} layout={asezare} />
+        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} />
       );
-    }
     case "product_grid":
       return <ProductGridClassic />;
     case "benefits":

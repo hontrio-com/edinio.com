@@ -77,6 +77,12 @@ export interface VariantMeta {
    * banda joasa, un hero e aproape un ecran.
    */
   previewHeight?: number;
+  /**
+   * Latimea la care se randeaza miniatura, cand cea aleasa din comutatorul
+   * telefon/calculator n-are sens pentru sectiunea asta. Panourile inguste —
+   * cosul si formularul de comanda — sunt singurele care o folosesc azi.
+   */
+  previewWidth?: number;
   /** Varianta afiseaza deja un H1 vizibil (conteaza doar la hero). */
   providesH1?: boolean;
   /**
@@ -455,37 +461,23 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       banner: { label: "Bara de progres", tags: ["clasic", "compact"], layout: "contained", fields: [] },
     },
   },
+  /**
+   * Randul de produse NU are catalog de design-uri.
+   *
+   * Cele doua variante oglindesc comutatorul Grila/Carusel din editorul
+   * magazinului (`page_content.product_sections[].layout`), care ramane singura
+   * sursa a asezarii. Sunt aici doar ca parserul si derivarea classic sa aiba ce
+   * scrie; design-uri proprii de rand facem separat, mai tarziu.
+   */
   product_row: {
     label: "Rand de produse",
     icon: "Rows3",
     scope: "home",
     singleton: false,
     removable: true,
-    inCatalog: true,
     variants: {
-      grid: { label: "Grila de patru", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: [] },
-      carousel: { label: "Carusel simplu", tags: ["clasic"], layout: "contained", previewHeight: 560, fields: [] },
-      peek: {
-        label: "Carusel cu sageti",
-        tags: ["indraznet"],
-        layout: "contained",
-        previewHeight: 560,
-        fields: [],
-      },
-      showcase: {
-        label: "Vitrina, primul produs mare",
-        tags: ["indraznet", "cu imagine"],
-        layout: "contained",
-        previewHeight: 760,
-        fields: [],
-      },
-      compact: {
-        label: "Lista compacta",
-        tags: ["compact", "simplu"],
-        layout: "contained",
-        previewHeight: 420,
-        fields: [],
-      },
+      grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: [] },
+      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [] },
     },
   },
   product_grid: {
@@ -550,37 +542,25 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   },
 
   // --- Pagina de produs ---------------------------------------------------
-  pdp_gallery: {
-    label: "Galerie produs",
-    icon: "Image",
+  product_page: {
+    label: "Pagina de produs",
+    icon: "Package",
     scope: "product",
     singleton: true,
     removable: false,
-        variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
-  },
-  pdp_buybox: {
-    label: "Zona de cumparare",
-    icon: "ShoppingCart",
-    scope: "product",
-    singleton: true,
-    removable: false,
-        variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
-  },
-  pdp_details: {
-    label: "Detalii produs",
-    icon: "List",
-    scope: "product",
-    singleton: true,
-    removable: true,
-        variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
-  },
-  pdp_related: {
-    label: "Produse similare",
-    icon: "Rows3",
-    scope: "product",
-    singleton: true,
-    removable: true,
-        variants: { carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [] } },
+    inCatalog: true,
+    variants: {
+      classic: {
+        label: "Clasic",
+        tags: ["clasic"],
+        layout: "full",
+        // Miniatura arata partea de sus a paginii — galeria si zona de
+        // cumparare. Pagina intreaga trece de 3000 px, iar micsorata intr-un
+        // card ar deveni o banda ilizibila.
+        previewHeight: 780,
+        fields: [],
+      },
+    },
   },
 
   // --- Comert -------------------------------------------------------------
@@ -598,15 +578,40 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "commerce",
     singleton: true,
     removable: false,
-    variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "full", fields: [] } },
+    inCatalog: true,
+    variants: {
+      classic: {
+        label: "Clasic",
+        tags: ["clasic"],
+        layout: "full",
+        previewHeight: 620,
+        // Sertarul e un panou ingust (max-w-sm): randat pe panza de desktop ar
+        // fi o fasie intr-un camp gol. La latime de telefon umple cadrul, adica
+        // exact cum il vad clientii care cumpara de pe telefon.
+        previewWidth: 390,
+        fields: [],
+      },
+    },
   },
   checkout: {
-    label: "Formular de comanda",
+    label: "Finalizare comanda",
     icon: "ClipboardList",
     scope: "commerce",
     singleton: true,
     removable: false,
-    variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "full", fields: [] } },
+    inCatalog: true,
+    variants: {
+      classic: {
+        label: "Clasic",
+        tags: ["clasic"],
+        layout: "full",
+        // Cat inaltimea data panoului in miniatura: formularul intreg trece de
+        // 1800 px si ar face din fiecare card un perete.
+        previewHeight: 900,
+        previewWidth: 390,
+        fields: [],
+      },
+    },
   },
 };
 

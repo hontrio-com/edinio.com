@@ -119,3 +119,47 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
     </CartContext.Provider>
   );
 }
+
+/**
+ * Un cos demonstrativ, tinut doar in memorie.
+ *
+ * Miniaturile din catalogul de design-uri trebuie sa arate un cos plin, dar
+ * ruleaza in dashboard, pe aceeasi origine cu magazinul: orice scriere ar
+ * ateriza in cheia `cart_<slug>` a comerciantului si i-ar aparea produsele
+ * demonstrative in cosul lui adevarat. Aici nu se citeste si nu se scrie nimic.
+ *
+ * Sta in acelasi fisier pentru ca `CartContext` e privat modulului — asa
+ * `useCart()` merge nemodificat in sertar si in formularul de comanda.
+ */
+export function CartDemoProvider({ items: initiale, children }: { items: CartItem[]; children: ReactNode }) {
+  const [items, setItems] = useState<CartItem[]>(initiale);
+
+  const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const count = items.reduce((s, i) => s + i.quantity, 0);
+
+  return (
+    <CartContext.Provider
+      value={{
+        items,
+        addItem: (item) =>
+          setItems((prev) =>
+            prev.some((i) => lineKey(i) === lineKey(item))
+              ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: i.quantity + 1 } : i))
+              : [...prev, { ...item, quantity: 1 }],
+          ),
+        removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
+        updateQty: (key, qty) =>
+          setItems((prev) =>
+            qty <= 0 ? prev.filter((i) => lineKey(i) !== key) : prev.map((i) => (lineKey(i) === key ? { ...i, quantity: qty } : i)),
+          ),
+        total,
+        count,
+        clear: () => setItems([]),
+        restoreCart: setItems,
+        sessionId: "",
+      }}
+    >
+      {children}
+    </CartContext.Provider>
+  );
+}

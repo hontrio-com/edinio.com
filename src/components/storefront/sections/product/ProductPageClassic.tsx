@@ -10,11 +10,11 @@ import {
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
-import { OrderModal } from "./OrderModal";
-import type { QuantityTier } from "./OrderModal";
+import { OrderModal } from "@/components/ministore/OrderModal";
+import type { QuantityTier } from "@/components/ministore/OrderModal";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { Database } from "@/types/database.types";
-import { ProductOffers } from "./ProductOffers";
+import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
 
@@ -222,7 +222,7 @@ function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayme
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [] }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], demo = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -235,6 +235,18 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   isHome?: boolean;
   /** Cross-sell offers resolved server-side for this product (rendered as "Merge bine cu"). */
   productOffers?: ResolvedOffer[];
+  /**
+   * Miniatura din catalogul de design-uri: pagina se randeaza inerta.
+   *
+   * Fara pixeli (altfel fiecare card din galerie ar trimite un ViewContent in
+   * Facebook, TikTok si Analytics ale comerciantului), fara sa atinga cosul lui
+   * din localStorage (galeria ruleaza pe aceeasi origine cu magazinul), fara
+   * animatii care se repeta la nesfarsit si fara bara lipita jos, care ar pluti
+   * peste miniatura fara sa intre in inaltimea masurata. Se opreste dupa galerie
+   * si zona de cumparare: pagina intreaga trece de 3000 px si, micsorata intr-un
+   * card, ar deveni o banda ilizibila.
+   */
+  demo?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -244,10 +256,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const productName = product.name;
   const productPrice = Number(product.price) || 0;
   useEffect(() => {
+    if (demo) return;
     gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
     fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
     ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
-  }, [productId, productName, productPrice]);
+  }, [demo, productId, productName, productPrice]);
   // SEO alt text from the Media Library, falling back to the product name.
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
 
@@ -275,16 +288,26 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const benefitsSection = pageContent.benefits_section;
   const howItWorksSection = pageContent.how_it_works_section;
   const faqSection = pageContent.faq_section;
-  const buttonEffect = pageContent.button_effect ?? "none";
+  // In miniatura, cinci din cele sase efecte de buton sunt animatii care se
+  // repeta la nesfarsit; zece iframe-uri deodata ar arde procesorul degeaba.
+  const buttonEffect = demo ? "none" : (pageContent.button_effect ?? "none");
   const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
   const deliveryEstimate = pageContent.delivery_estimate;
   const showQualityBadge = pageContent.show_quality_badge === true; // "Calitate verificata" badge — off unless enabled (ANPC/Omnibus: merchant opt-in)
-  const viewerCount = useRef(18 + Math.floor(Math.random() * 10)).current;
+  // Numar fix in miniatura: altfel cardul ar arata alt numar la fiecare randare.
+  const viewerCount = useRef(demo ? 23 : 18 + Math.floor(Math.random() * 10)).current;
   const showSocialProof = pageContent.show_social_proof === true; // fake live-viewers counter — off unless enabled
 
   // Variants
   const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
-  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  // In miniatura prima combinatie e deja aleasa. Altfel butonul principal ar
+  // aparea stins, cu „Selecteaza optiunile", in fiecare design de pagina de
+  // produs — adica tocmai elementul dupa care se alege designul ar lipsi.
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() =>
+    demo && variantsData
+      ? Object.fromEntries(variantsData.options.map((o) => [o.name, o.values[0] ?? ""]))
+      : {},
+  );
 
   const selectedComboTitle = useMemo(() => {
     if (!variantsData) return null;
@@ -428,7 +451,9 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   // page includes what the customer already added. Current product excluded to avoid
   // duplication; read once on mount (storefront cart is built before reaching here).
   const [cartItems, setCartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[]>(() => {
-    if (typeof window === "undefined") return [];
+    // Miniatura ruleaza in dashboard, pe aceeasi origine cu magazinul: fara garda,
+    // ar citi cosul adevarat al comerciantului si i l-ar arata in card.
+    if (demo || typeof window === "undefined") return [];
     try {
       const raw = localStorage.getItem(`cart_${business.slug}`);
       const parsed = raw ? JSON.parse(raw) : [];
@@ -439,6 +464,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   // storefront cart) + the carried cart the OrderModal reads on open, so it rides
   // into the order. No discount — the price is unchanged.
   const addOfferProductToCart = useCallback((p: OfferProduct) => {
+    if (demo) return;
     try {
       const raw = localStorage.getItem(`cart_${business.slug}`);
       const arr = raw ? JSON.parse(raw) : [];
@@ -453,7 +479,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       if (i >= 0) return prev.map((x) => x.productId === p.id ? { ...x, quantity: x.quantity + 1 } : x);
       return [...prev, { productId: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 }];
     });
-  }, [business.slug]);
+  }, [business.slug, demo]);
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [zoomPos] = useState<{x: number; y: number} | null>(null);
@@ -723,7 +749,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
         {!isOutOfStock && !isPreorder && product.track_inventory && product.stock_quantity !== null && product.stock_quantity > 0 && product.stock_quantity <= 10 && (
           <motion.div className="flex items-center gap-2"
-            animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+            animate={demo ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
             <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
             <span className="text-sm font-semibold text-red-600">
               Doar {product.stock_quantity} {product.stock_quantity === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
@@ -811,6 +837,13 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         </div>
       </div>
 
+      {/* Miniatura se opreste aici: galeria si zona de cumparare sunt ce
+          deosebeste designurile de pagina de produs. Mai jos urmeaza sectiuni de
+          continut care depind de ce a completat comerciantul si care, in plus, se
+          animeaza abia cand intra in ecran — intr-un cadru care nu deruleaza ar
+          ramane transparente. */}
+      {demo ? null : (
+      <>
       {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none */}
       <ProductOffers offers={productOffers} basePath={basePath} color={color}
         anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
@@ -1036,6 +1069,8 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         onCartConsumed={() => { try { localStorage.removeItem(`cart_${business.slug}`); } catch {} }}
         fbtOffer={fbtOffer}
       />
+      </>
+      )}
     </>
   );
 }

@@ -45,15 +45,15 @@ test("varianta necunoscuta nu gazduieste banda", () => {
 });
 
 test("catalogul de design-uri contine exact zonele pentru care facem variante", () => {
-  // Un ecran plin de sectiuni cu o singura varianta ar da impresia unei alegeri
-  // care nu exista, asa ca lista e explicita, nu derivata din numarul de variante.
-  // Pagina de produs intra aici cand ii construim design-urile: pana atunci ar fi
-  // o intrare cu un singur card si cu previzualizare goala.
+  // Lista e explicita, nu derivata din numarul de variante: randul de produse a
+  // iesit (asezarea lui ramane in editorul magazinului), iar pagina de produs,
+  // cosul si finalizarea comenzii au intrat, deocamdata cu designul de azi ca
+  // singura varianta — de la el pornesc cele urmatoare.
   const inCatalog = Object.entries(SECTION_REGISTRY)
     .filter(([, m]) => m?.inCatalog)
     .map(([k]) => k)
     .sort();
-  assert.deepEqual(inCatalog, ["footer", "header", "hero", "product_row"]);
+  assert.deepEqual(inCatalog, ["cart_drawer", "checkout", "footer", "header", "hero", "product_page"]);
 });
 
 test("hero-ul cu bara de categorii isi declara pragul minim", () => {
@@ -72,4 +72,32 @@ test("continutul demo are cel putin doua bannere", () => {
   // masuratoarea s-ar micsora una pe alta pana la disparitie. Cu doua sau mai
   // multe se randeaza caruselul, cu raport fix, si bucla nu exista.
   assert.ok(DEMO_BANNERS.length >= 2, "hero-ul cu un singur banner depinde de inaltimea ferestrei");
+});
+
+test("fiecare design din catalog isi declara inaltimea miniaturii", () => {
+  // Fara ea, cardul porneste de la o inaltime implicita si sare vizibil in clipa
+  // in care miniatura isi raporteaza inaltimea adevarata.
+  for (const [kind, meta] of Object.entries(SECTION_REGISTRY)) {
+    if (!meta?.inCatalog) continue;
+    for (const [variant, v] of Object.entries(meta.variants)) {
+      assert.ok(v.previewHeight, `${kind}:${variant} nu are previewHeight`);
+    }
+  }
+});
+
+test("cosul si formularul de comanda se previzualizeaza la latime de telefon", () => {
+  // Sunt panouri inguste: pe panza de desktop ar fi o fasie intr-un camp gol.
+  for (const kind of ["cart_drawer", "checkout"] as const) {
+    const variante = Object.values(SECTION_REGISTRY[kind]?.variants ?? {});
+    assert.ok(variante.length > 0);
+    for (const v of variante) assert.equal(v.previewWidth, 390);
+  }
+});
+
+test("designurile din catalog acopera si comertul, nu doar paginile", () => {
+  // Gruparea din bara laterala a catalogului se face pe `scope`; un scope gresit
+  // ar muta „Cos" in „Pagina magazinului".
+  assert.equal(SECTION_REGISTRY.product_page?.scope, "product");
+  assert.equal(SECTION_REGISTRY.cart_drawer?.scope, "commerce");
+  assert.equal(SECTION_REGISTRY.checkout?.scope, "commerce");
 });

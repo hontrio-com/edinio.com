@@ -201,12 +201,7 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
     },
     home,
     product: {
-      gallery: section("pdp_gallery", "pdp_gallery", "classic"),
-      buybox: section("pdp_buybox", "pdp_buybox", "classic"),
-      sections: [
-        section("pdp_details", "pdp_details", "classic"),
-        section("pdp_related", "pdp_related", "carousel"),
-      ],
+      page: section("product_page", "product_page", "classic"),
     },
     commerce: {
       productCard: section("product_card", "product_card", "classic"),

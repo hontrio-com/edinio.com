@@ -36,7 +36,6 @@ import {
  */
 
 const MAX_HOME_SECTIONS = 40;
-const MAX_PRODUCT_SECTIONS = 20;
 const MAX_REPEATER_ITEMS = 24;
 const MAX_PRODUCT_IDS = 24;
 const MAX_TEXT = 200;
@@ -320,9 +319,7 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
     },
     home,
     product: {
-      gallery: pickOne(productRaw.gallery, classic.product.gallery, seenIds),
-      buybox: pickOne(productRaw.buybox, classic.product.buybox, seenIds),
-      sections: parseSectionList(productRaw.sections, seenIds, MAX_PRODUCT_SECTIONS),
+      page: pickOne(productRaw.page, classic.product.page, seenIds),
     },
     commerce: {
       productCard: pickOne(commerceRaw.productCard, classic.commerce.productCard, seenIds),

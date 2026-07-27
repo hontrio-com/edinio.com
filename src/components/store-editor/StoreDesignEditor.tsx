@@ -25,8 +25,18 @@ import { SectionSettings } from "./SectionSettings";
 
 type Dispozitiv = "mobil" | "tableta" | "desktop";
 
-/** Cate design-uri are sectiunea. Sub doua, galeria n-are ce arata. */
-const numarVariante = (s: SectionInstance) => Object.keys(sectionMeta(s.kind)?.variants ?? {}).length;
+/**
+ * Cate design-uri are sectiunea de ALES. Sub doua, galeria n-are ce arata.
+ *
+ * Sectiunile din afara catalogului dau zero, oricate variante ar avea in
+ * registry: randul de produse are „grila" si „carusel", dar ele oglindesc
+ * comutatorul din editorul magazinului, iar o galerie care nu schimba nimic ar
+ * fi exact butonul mort pe care l-am scos.
+ */
+const numarVariante = (s: SectionInstance) => {
+  const meta = sectionMeta(s.kind);
+  return meta?.inCatalog ? Object.keys(meta.variants).length : 0;
+};
 
 const LATIMI: Record<Dispozitiv, string> = { mobil: "390px", tableta: "768px", desktop: "100%" };
 

@@ -63,7 +63,7 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
               // Pe telefon raportul fix tine locul imaginii; pe desktop
               // inaltimea vine din coloana cu categorii, ca cele doua sa se
               // termine la aceeasi linie.
-              slideClass="aspect-[16/9] lg:aspect-auto lg:h-full"
+              slideClass="shrink-0 w-full snap-center bg-muted aspect-[16/9] lg:aspect-auto lg:h-full"
             />
           )}
         </div>

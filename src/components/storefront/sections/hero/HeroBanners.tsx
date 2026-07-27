@@ -62,7 +62,10 @@ export function BannerSlider({
   alt,
   basePath,
   wrapperClass = "relative md:rounded-2xl md:overflow-hidden",
-  slideClass = "aspect-[16/9]",
+  // Sirul intreg, nu doar raportul: compus din parte fixa plus parte variabila,
+  // ordinea claselor s-ar schimba fata de marcajul de dinainte, iar comparatia
+  // cu productia ar semnala o diferenta acolo unde CSS-ul e identic.
+  slideClass = "shrink-0 w-full snap-center aspect-[16/9] bg-muted",
 }: HeroBannersProps & { wrapperClass?: string; slideClass?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
@@ -131,7 +134,7 @@ export function BannerSlider({
                 <img src={cdnImage(src, 1600)} alt={alt} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
               );
               return (
-                <div key={i} className={`shrink-0 w-full snap-center bg-muted ${slideClass}`}>
+                <div key={i} className={slideClass}>
                   {href ? (
                     <a href={href} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
                   ) : img}

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
-  ShoppingBag, ArrowLeft, Package, Plus, Calendar, Star,
+  ShoppingBag, ShoppingCart, Check, ArrowLeft, Package, Plus, Calendar, Star,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
@@ -23,10 +23,13 @@ import type {
   Business, Product, StoreSettings, PageContent, PageSections,
 } from "./_shared/product-page.types";
 import {
-  abonareMiscareRedusa, citesteMiscareRedusa, hashSir, anuntaCosSchimbat,
+  abonareMiscareRedusa, citesteMiscareRedusa, hashSir,
   SocialProof, FAQItem, CTAButton,
 } from "./_shared/pieces";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
+import { trackAddToCart } from "@/lib/storefront/cart/track-add";
+import { useCartOptional } from "@/components/storefront/cart/CartProvider";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 
 /* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
@@ -352,41 +355,54 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [fbtOffer, setFbtOffer] = useState<{ id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] } | undefined>(undefined);
-  // Cart carried over from the storefront (localStorage) so ordering from a product
-  // page includes what the customer already added. Current product excluded to avoid
-  // duplication; read once on mount (storefront cart is built before reaching here).
-  const [cartItems, setCartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[]>(() => {
-    // Miniatura ruleaza in dashboard, pe aceeasi origine cu magazinul: fara garda,
-    // ar citi cosul adevarat al comerciantului si i l-ar arata in card.
-    if (demo || typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(`cart_${business.slug}`);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.filter((i) => i?.productId && i.productId !== product.id) : [];
-    } catch { return []; }
-  });
-  // Add a cross-sell product to the store cart (localStorage, shared with the
-  // storefront cart) + the carried cart the OrderModal reads on open, so it rides
-  // into the order. No discount — the price is unchanged.
-  const addOfferProductToCart = useCallback((p: OfferProduct) => {
-    if (demo) return;
-    try {
-      const raw = localStorage.getItem(`cart_${business.slug}`);
-      const arr = raw ? JSON.parse(raw) : [];
-      const list: { productId: string; slug?: string | null; name: string; price: number; imageUrl: string | null; quantity: number }[] = Array.isArray(arr) ? arr : [];
-      const i = list.findIndex((x) => x?.productId === p.id);
-      if (i >= 0) list[i].quantity = (list[i].quantity || 1) + 1;
-      else list.push({ productId: p.id, slug: p.slug, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 });
-      const serializat = JSON.stringify(list);
-      localStorage.setItem(`cart_${business.slug}`, serializat);
-      anuntaCosSchimbat(`cart_${business.slug}`, serializat);
-    } catch {}
-    setCartItems((prev) => {
-      const i = prev.findIndex((x) => x.productId === p.id);
-      if (i >= 0) return prev.map((x) => x.productId === p.id ? { ...x, quantity: x.quantity + 1 } : x);
-      return [...prev, { productId: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 }];
+  /**
+   * Cosul magazinului, citit LIVE din provider.
+   *
+   * Inainte pagina il citea o singura data din localStorage la montare si scria
+   * direct inapoi, in paralel cu providerul. Cu doi scriitori, orice produs
+   * adaugat dupa montare lipsea din comanda dar era sters odata cu ea. Acum
+   * exista un singur scriitor, iar `useCartOptional` acopera miniatura din
+   * catalogul de design-uri, care randeaza pagina fara provider.
+   */
+  const cos = useCartOptional();
+  const chrome = useStoreChromeOptional();
+  // Produsul curent iese: el se comanda separat, cu cantitatea din formular.
+  const cartItems = useMemo(
+    () => (demo || !cos ? [] : cos.items.filter((i) => i.productId !== product.id)),
+    [demo, cos, product.id],
+  );
+  // In magazinul cu un singur produs cosul nu are nicio interfata — nici in
+  // header, nici sertar, nici pagina — deci butonul ar confirma o actiune care
+  // nu duce nicaieri. In miniatura nu exista chrome, dar butonul trebuie vazut.
+  const arataButonCos = demo || chrome?.cartMode !== "hidden";
+  const [adaugatInCos, setAdaugatInCos] = useState(false);
+
+  function adaugaInCos() {
+    if (demo || !cos || isOutOfStock || needsVariant) return;
+    cos.addItem({
+      productId: product.id,
+      slug: product.slug ?? undefined,
+      // Numele ramane simplu, combinatia sta in `variantTitle`: asa cheia de
+      // linie iese identica cu cea din grila si acelasi produs creste in
+      // cantitate in loc sa se dubleze.
+      name: product.name,
+      price: displayPrice,
+      imageUrl: selectedCombo?.image || slides[0] || null,
+      variantTitle: selectedComboTitle ?? undefined,
+      variantSku: selectedCombo?.sku || undefined,
     });
-  }, [business.slug, demo]);
+    trackAddToCart({ productId: product.id, name: product.name, price: displayPrice });
+    setAdaugatInCos(true);
+    setTimeout(() => setAdaugatInCos(false), 1800);
+  }
+
+  // Add a cross-sell product to the store cart, so it rides into the order.
+  // No discount — the price is unchanged.
+  const addOfferProductToCart = useCallback((p: OfferProduct) => {
+    if (demo || !cos) return;
+    cos.addItem({ productId: p.id, slug: p.slug ?? undefined, name: p.name, price: p.price, imageUrl: p.imageUrl });
+    trackAddToCart({ productId: p.id, name: p.name, price: p.price });
+  }, [demo, cos]);
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const touchStartX = useRef<number>(0);
@@ -616,6 +632,18 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
         {/* CTA */}
         <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} />
+
+        {/* Comanda directa ramane actiunea principala; cosul e pentru cine mai
+            vrea sa se uite prin magazin inainte sa cumpere. */}
+        {arataButonCos && (
+          <button type="button" onClick={adaugaInCos} disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+            className="w-full py-3.5 text-base font-semibold rounded-xl border-2 bg-surface hover:bg-muted/40 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+            style={{ borderColor: color, color }}>
+            {adaugatInCos ? <Check size={18} /> : <ShoppingCart size={18} />}
+            {adaugatInCos ? "Adaugat in cos" : "Adauga in cos"}
+          </button>
+        )}
+        <p aria-live="polite" className="sr-only">{adaugatInCos ? "Produsul a fost adaugat in cos" : ""}</p>
 
         {/* Trust mini */}
         {trustBadgesEnabled && (
@@ -939,19 +967,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
         cartItems={cartItems}
         onCartConsumed={(liniiComandate) => {
-          // Doar liniile care au intrat in comanda. Stergerea intregii chei lasa
-          // pe dinafara linia produsului curent: ea nu e purtata in comanda (el
-          // se comanda separat, cu cantitatea din formular), deci ar fi disparut
-          // necomandata.
-          try {
-            const cheie = `cart_${business.slug}`;
-            const brut = localStorage.getItem(cheie);
-            const cos = brut ? JSON.parse(brut) : [];
-            const ramas = cosDupaComanda(Array.isArray(cos) ? cos : [], liniiComandate);
-            const valoare = ramas.length > 0 ? JSON.stringify(ramas) : null;
-            if (valoare) localStorage.setItem(cheie, valoare); else localStorage.removeItem(cheie);
-            anuntaCosSchimbat(cheie, valoare);
-          } catch {}
+          // Doar liniile care au intrat efectiv in comanda. Stergerea intregului
+          // cos lasa pe dinafara linia produsului curent: ea nu e purtata in
+          // comanda (el se comanda separat, cu cantitatea din formular), deci ar
+          // fi disparut necomandata.
+          if (!cos) return;
+          cos.restoreCart(cosDupaComanda(cos.items, liniiComandate));
         }}
         fbtOffer={fbtOffer}
       />

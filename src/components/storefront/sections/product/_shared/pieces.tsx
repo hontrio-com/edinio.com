@@ -90,10 +90,19 @@ export function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boole
 
 const BTN_CLS = "w-full py-4 text-base font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
 
-export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayment, effect, onClick, eticheta }: {
+export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayment, effect, onClick, eticheta, clase }: {
   color: string; isOutOfStock: boolean; isPreorder: boolean; needsVariant: boolean; hasCardPayment: boolean; effect: string; onClick: () => void;
   /** Inlocuieste eticheta calculata. Variantele care au si un buton de cos numesc altfel actiunea de comanda. */
   eticheta?: ReactNode;
+  /**
+   * Inlocuieste complet sirul de clase.
+   *
+   * Butonul poarta cele sase efecte alese de comerciant, deci fiecare varianta
+   * de design trebuie sa il poata folosi si cu forma ei — altfel un design plat
+   * si drept ar fi nevoit sa isi scrie propriul buton si ar pierde efectele.
+   * Sirul se da INTREG, nu compus, ca la orice alta clasa din proiect.
+   */
+  clase?: string;
 }) {
   // Drop the "- Plata la livrare" suffix when card payment is available.
   const codSuffix = hasCardPayment ? "" : " - Plata la livrare";
@@ -106,6 +115,7 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
         : `Comanda acum${codSuffix}`}
     </>
   );
+  const cls = clase ?? BTN_CLS;
   const base = { backgroundColor: color, boxShadow: `0px 4px 16px ${color}55` };
 
   const disabled = isOutOfStock || needsVariant;
@@ -118,12 +128,12 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
         animate={{ opacity: [0.7, 0], scale: [1, 1.15] }}
         transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
       />
-      <button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}>{label}</button>
+      <button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}>{label}</button>
     </div>
   );
 
   if (effect === "shake") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
+    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}
       animate={{ x: [0, -5, 5, -5, 5, 0] }}
       transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 3 }}>
       {label}
@@ -131,7 +141,7 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
   );
 
   if (effect === "bounce") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
+    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}
       animate={{ y: [0, -6, 0] }}
       transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}>
       {label}
@@ -139,7 +149,7 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
   );
 
   if (effect === "glow") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS}
+    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls}
       style={{ backgroundColor: color }}
       animate={{ boxShadow: [`0px 4px 16px ${color}44`, `0px 4px 36px ${color}CC`, `0px 4px 16px ${color}44`] }}
       transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}>
@@ -148,7 +158,7 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
   );
 
   if (effect === "heartbeat") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
+    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}
       animate={{ scale: [1, 1.06, 1, 1.06, 1] }}
       transition={{ duration: 1, repeat: Infinity, repeatDelay: 1.5 }}>
       {label}
@@ -156,7 +166,7 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
   );
 
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS + " transition-all"} style={base}>
+    <button type="button" onClick={onClick} disabled={disabled} className={clase ?? BTN_CLS + " transition-all"} style={base}>
       {label}
     </button>
   );

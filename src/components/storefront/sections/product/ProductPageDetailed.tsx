@@ -71,7 +71,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
 
   if (slides.length === 0) {
     return (
-      <div className="aspect-square rounded-2xl bg-muted/40 flex items-center justify-center">
+      <div className="aspect-square rounded-md border border-border bg-muted/20 flex items-center justify-center">
         <Package size={64} className="text-muted-foreground/40" />
       </div>
     );
@@ -96,7 +96,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
               <button key={src + i} type="button" onClick={() => mergiLa(i)}
                 aria-label={`Vezi imaginea ${i + 1}`} aria-current={i === activ}
                 ref={i === activ ? miniaturaActiva : undefined}
-                className="relative w-[4.5rem] h-[4.5rem] shrink-0 rounded-lg overflow-hidden bg-muted/30 transition-all"
+                className="relative w-[4.5rem] h-[4.5rem] shrink-0 rounded-md overflow-hidden bg-muted/20 transition-all"
                 style={{ border: `2px solid ${i === activ ? color : "transparent"}`, opacity: i === activ ? 1 : 0.6 }}>
                 <Image src={src} alt={imgAlt(src, i)} fill sizes="72px" className="object-contain p-1" />
               </button>
@@ -113,7 +113,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
       <div className="relative flex-1 min-w-0">
         {/* Panou deschis in spatele produsului, ca in modelul de referinta: pune
             in valoare fotografiile decupate pe fundal alb. */}
-        <div className="relative aspect-square rounded-2xl bg-muted/30 overflow-hidden">
+        <div className="relative aspect-square rounded-md border border-border bg-muted/20 overflow-hidden">
           {slides.map((src, i) => (
             <div key={src + i}
               aria-hidden={i !== activ}
@@ -124,7 +124,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
             </div>
           ))}
           {hasDiscount && (
-            <span className="absolute top-4 right-4 px-2.5 py-1 rounded-lg text-xs font-bold text-white"
+            <span className="absolute top-3 left-3 px-2 py-1 rounded-sm text-[11px] font-bold text-white tracking-wide"
               style={{ backgroundColor: color }}>
               -{discountPct}%
             </span>
@@ -137,7 +137,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
             {slides.map((src, i) => (
               <button key={src + i} type="button" onClick={() => mergiLa(i)}
                 aria-label={`Vezi imaginea ${i + 1}`} aria-current={i === activ}
-                className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-muted/30 transition-all"
+                className="relative w-16 h-16 shrink-0 rounded-md overflow-hidden bg-muted/20 transition-all"
                 style={{ border: `2px solid ${i === activ ? color : "transparent"}`, opacity: i === activ ? 1 : 0.6 }}>
                 <Image src={src} alt={imgAlt(src, i)} fill sizes="64px" className="object-contain p-1" />
               </button>
@@ -148,6 +148,16 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
     </div>
   );
 }
+
+/**
+ * Negrul celei de-a doua actiuni.
+ *
+ * Modelul are chemarea principala in culoarea magazinului si comanda directa in
+ * negru, ca sa se distinga una de alta fara sa se bata cap in cap. Nu e o
+ * variabila de tema: e parte din designul acestei variante, la fel ca muchiile
+ * drepte, si nu trebuie sa se schimbe cu paleta magazinului.
+ */
+const NEGRU = "#111111";
 
 /* ─── Bucati mici ale coloanei de cumparare ──────────────────────────────── */
 
@@ -163,7 +173,7 @@ function RandMeta({ eticheta, children }: { eticheta: string; children: React.Re
 function Stepper({ valoare, seteaza, maxim }: { valoare: number; seteaza: (n: number) => void; maxim: number | null }) {
   const laLimita = maxim !== null && valoare >= maxim;
   return (
-    <div className="flex items-center rounded-xl border border-border h-[52px] shrink-0">
+    <div className="flex items-center rounded-md border border-border h-12 shrink-0">
       <button type="button" aria-label="Scade cantitatea" onClick={() => seteaza(Math.max(1, valoare - 1))}
         disabled={valoare <= 1}
         className="w-11 h-full flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
@@ -295,6 +305,33 @@ export function ProductPageDetailed({
     [variantImage, images],
   );
 
+  /**
+   * Fotografia fiecarei valori, cand valoarea o determina singura.
+   *
+   * O optiune primeste zaruri de imagine doar daca TOATE valorile ei duc la
+   * cate o singura fotografie: la „Culoare" merge, la „Marime" nu, fiindca
+   * aceeasi marime apare in toate culorile. Cu doar o parte din valori avand
+   * poze, randul ar iesi un amestec de patrate si cuvinte.
+   */
+  const pozeOptiuni = useMemo(() => {
+    const harta = new Map<string, Map<string, string>>();
+    if (!variantsData) return harta;
+    for (const optiune of variantsData.options) {
+      const perValoare = new Map<string, string>();
+      for (const valoare of optiune.values) {
+        const gasite = new Set<string>();
+        for (const c of variantsData.combinations) {
+          if (!c.enabled || !c.image) continue;
+          if (!c.title.split(VARIANT_TITLE_SEP).includes(valoare)) continue;
+          if (images.includes(c.image)) gasite.add(c.image);
+        }
+        if (gasite.size === 1) perValoare.set(valoare, [...gasite][0]);
+      }
+      if (perValoare.size === optiune.values.length) harta.set(optiune.name, perValoare);
+    }
+    return harta;
+  }, [variantsData, images]);
+
   const basePrice = Number(product.price);
   const displayPrice = comboUnitPrice(selectedCombo, basePrice);
   const displayComparePrice = comboCompareAtPrice(
@@ -362,9 +399,19 @@ export function ProductPageDetailed({
   );
 
   const [activeSlide, setActiveSlide] = useState(0);
-  // Imaginea variantei trece pe pozitia 0; fara reset, galeria ramane pe cadrul
-  // vechi si alegerea culorii pare ca n-a facut nimic.
-  useEffect(() => { setActiveSlide(0); }, [variantImage]);
+
+  /**
+   * Alegerea unei valori duce galeria inapoi la prima imagine.
+   *
+   * Imaginea combinatiei trece pe pozitia 0, deci fara asta galeria ar ramane pe
+   * cadrul vechi si alegerea culorii ar parea ca n-a facut nimic. Resetul sta in
+   * actiune, nu intr-un efect pe `variantImage`: efectul ar fi o randare in plus
+   * dupa fiecare apasare, pentru un lucru pe care il stim deja cand se apasa.
+   */
+  function alegeValoare(optiune: string, valoare: string) {
+    setSelectedOptions((prev) => ({ ...prev, [optiune]: valoare }));
+    setActiveSlide(0);
+  }
   const [modalOpen, setModalOpen] = useState(false);
   const [cantitate, setCantitate] = useState(1);
   const [fila, setFila] = useState<FilaActiva>(hasLongDesc ? "descriere" : "specificatii");
@@ -508,7 +555,7 @@ export function ProductPageDetailed({
             hasDiscount={!!hasDiscount} discountPct={discountPct} color={color} />
 
           <div className="flex flex-col gap-4">
-            <h1 className="text-2xl lg:text-[28px] font-semibold text-foreground leading-snug tracking-tight">
+            <h1 className="text-[26px] lg:text-[32px] font-normal text-foreground leading-tight tracking-tight">
               {product.name}
             </h1>
 
@@ -530,12 +577,12 @@ export function ProductPageDetailed({
             {/* Pret */}
             <div className="flex items-end gap-3 flex-wrap">
               {showPriceRange ? (
-                <span className="text-3xl font-bold text-foreground">
+                <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">
                   {formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)}
                 </span>
               ) : (
                 <>
-                  <span className="text-3xl font-bold text-foreground">{formatPrice(displayPrice)}</span>
+                  <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">{formatPrice(displayPrice)}</span>
                   {hasDiscount && (
                     <span className="text-lg text-muted-foreground line-through mb-0.5">{formatPrice(displayComparePrice!)}</span>
                   )}
@@ -562,11 +609,24 @@ export function ProductPageDetailed({
                       {optiune.values.map((valoare) => {
                         const ales = selectedOptions[optiune.name] === valoare;
                         const disponibil = isValueAvailable(variantsData, selectedOptions, optiune.name, valoare);
+                        const poza = pozeOptiuni.get(optiune.name)?.get(valoare);
+                        const alege = () => alegeValoare(optiune.name, valoare);
+
+                        // Optiunea care poarta fotografii se alege din fotografii,
+                        // ca in model: culoarea se vede, nu se citeste.
+                        if (poza) return (
+                          <button key={valoare} type="button" disabled={!disponibil}
+                            aria-pressed={ales} aria-label={valoare} title={valoare} onClick={alege}
+                            className="relative w-16 h-16 rounded-md overflow-hidden bg-muted/20 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+                            style={{ border: `2px solid ${ales ? color : "var(--color-border)"}` }}>
+                            <Image src={poza} alt="" fill sizes="64px" className="object-contain p-1" />
+                          </button>
+                        );
+
                         return (
                           <button key={valoare} type="button" disabled={!disponibil}
-                            aria-pressed={ales}
-                            onClick={() => setSelectedOptions((prev) => ({ ...prev, [optiune.name]: valoare }))}
-                            className="px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:line-through"
+                            aria-pressed={ales} onClick={alege}
+                            className="min-w-[76px] px-4 py-2.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:line-through"
                             style={ales
                               ? { borderColor: color, color, backgroundColor: `${color}0F` }
                               : { borderColor: "var(--color-border)" }}>
@@ -578,7 +638,7 @@ export function ProductPageDetailed({
                   </div>
                 ))}
                 {Object.keys(selectedOptions).length > 0 && (
-                  <button type="button" onClick={() => setSelectedOptions({})}
+                  <button type="button" onClick={() => { setSelectedOptions({}); setActiveSlide(0); }}
                     className="self-start text-[13px] text-muted-foreground underline hover:text-foreground transition-colors">
                     Sterge selectia
                   </button>
@@ -616,17 +676,21 @@ export function ProductPageDetailed({
                 {arataButonCos && (
                   <button type="button" onClick={adaugaInCos}
                     disabled={isOutOfStock || needsVariant || (!demo && !cos)}
-                    className="flex-1 min-w-0 h-[52px] px-4 rounded-xl border-2 font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
-                    style={{ borderColor: color, color }}>
+                    className="flex-1 min-w-0 h-12 px-4 rounded-md font-semibold text-sm text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                    style={{ backgroundColor: color }}>
                     {adaugat ? <Check size={17} /> : <ShoppingCart size={17} />}
                     <span className="truncate">{adaugat ? "Adaugat in cos" : "Adauga in cos"}</span>
                   </button>
                 )}
               </div>
 
-              <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
+              {/* Perechea din model: cosul poarta culoarea magazinului, comanda
+                  directa e neagra. Butonul comun ii da si efectele alese de
+                  comerciant, doar forma difera. */}
+              <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
                 needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
                 onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
+                clase="w-full h-12 text-sm font-semibold text-white rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                 eticheta={
                   <>
                     <CreditCard size={18} />
@@ -645,7 +709,7 @@ export function ProductPageDetailed({
                 fiecare rand duce acolo, cu numarul lui de bucati: altfel ar sta
                 langa un buton de cos care le ignora. */}
             {quantityTiers && quantityTiers.length > 1 && (
-              <div className="rounded-xl border border-border overflow-hidden mt-1">
+              <div className="rounded-md border border-border overflow-hidden mt-1">
                 <p className="px-4 py-2.5 text-sm font-semibold text-foreground bg-muted/40 border-b border-border">
                   Cumperi mai multe, platesti mai putin
                 </p>
@@ -689,11 +753,10 @@ export function ProductPageDetailed({
 
             {trustBadgesEnabled && (
               <>
-                <hr className="border-border" />
-                <ul className="flex flex-wrap gap-x-5 gap-y-2">
+                <ul className="rounded-md border border-border divide-y divide-border">
                   {insigneIncredere.map(({ icon: Icon, text }) => (
-                    <li key={text} className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                      <Icon size={14} style={{ color }} />
+                    <li key={text} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-muted-foreground">
+                      <Icon size={15} style={{ color }} />
                       {text}
                     </li>
                   ))}
@@ -734,7 +797,7 @@ export function ProductPageDetailed({
                 {fileVizibile.map((f) => (
                   <button key={f.id} type="button" onClick={() => setFila(f.id)}
                     aria-current={filaCurenta === f.id}
-                    className="shrink-0 pb-3 text-sm font-semibold border-b-2 -mb-px transition-colors"
+                    className="shrink-0 pb-3 text-xs font-bold uppercase tracking-widest border-b-2 -mb-px transition-colors"
                     style={filaCurenta === f.id
                       ? { borderColor: color, color: "var(--color-foreground)" }
                       : { borderColor: "transparent", color: "var(--color-muted-foreground)" }}>
@@ -778,8 +841,8 @@ export function ProductPageDetailed({
               <h2 className="text-lg font-bold text-foreground mb-4">Pachetul conține</h2>
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {bundleComponents.map((c) => (
-                  <li key={c.id} className="flex items-center gap-3 rounded-xl border border-border p-3">
-                    <div className="relative w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-muted/40">
+                  <li key={c.id} className="flex items-center gap-3 rounded-md border border-border p-3">
+                    <div className="relative w-14 h-14 shrink-0 rounded-md overflow-hidden bg-muted/20">
                       {c.image_url
                         ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
                         : <Package size={20} className="text-muted-foreground/40 absolute inset-0 m-auto" />}
@@ -807,7 +870,7 @@ export function ProductPageDetailed({
               <h2 className="text-lg font-bold text-foreground mb-4">{benefitsSection.title}</h2>
               <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {benefitsSection.items.map((b, i) => (
-                  <li key={i} className="rounded-xl border border-border p-4">
+                  <li key={i} className="rounded-md border border-border p-4">
                     <p className="font-semibold text-foreground text-sm mb-1">{b.title}</p>
                     <p className="text-sm text-muted-foreground leading-relaxed">{b.desc}</p>
                   </li>
@@ -822,7 +885,7 @@ export function ProductPageDetailed({
               <h2 className="text-lg font-bold text-foreground mb-4">{howItWorksSection.title}</h2>
               <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {howItWorksSection.steps.map((s, i) => (
-                  <li key={i} className="rounded-xl border border-border p-4">
+                  <li key={i} className="rounded-md border border-border p-4">
                     <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold text-white mb-2"
                       style={{ backgroundColor: color }}>{i + 1}</span>
                     <p className="font-semibold text-foreground text-sm mb-1">{s.title}</p>
@@ -847,15 +910,15 @@ export function ProductPageDetailed({
               <button type="button" onClick={adaugaInCos}
                 disabled={isOutOfStock || needsVariant || (!demo && !cos)}
                 aria-label={adaugat ? "Adaugat in cos" : "Adauga in cos"}
-                className="w-12 h-12 shrink-0 rounded-xl border-2 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                style={{ borderColor: color, color }}>
+                className="w-12 h-12 shrink-0 rounded-md flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
+                style={{ backgroundColor: color }}>
                 {adaugat ? <Check size={18} /> : <ShoppingCart size={18} />}
               </button>
             )}
             <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
               disabled={isOutOfStock || needsVariant}
-              className="shrink-0 px-5 h-12 rounded-xl text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
-              style={{ backgroundColor: color }}>
+              className="shrink-0 px-5 h-12 rounded-md text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
+              style={{ backgroundColor: NEGRU }}>
               {isOutOfStock ? "Epuizat" : isPreorder ? "Precomanda" : "Comanda"}
             </button>
           </div>

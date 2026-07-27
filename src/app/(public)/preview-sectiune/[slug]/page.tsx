@@ -7,6 +7,7 @@ import { SectionPreviewFrame } from "@/components/storefront/SectionPreviewFrame
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
+import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_MENU, demoProducts } from "@/lib/storefront/design/demo-content";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionKind } from "@/lib/storefront/design/types";
@@ -47,32 +48,28 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   const { data: business } = await supabase.from("businesses").select("*").eq("slug", slug).single();
   if (!business) notFound();
 
-  const [{ data: storeSettings }, { data: products }, { data: categories }] = await Promise.all([
-    createAdminClient()
-      .from("store_settings")
-      .select("page_content, storefront_design")
-      .eq("business_id", business.id)
-      .single(),
-    // Cateva produse sunt de ajuns pentru o miniatura; nu incarcam catalogul.
-    supabase
-      .from("products")
-      .select("id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id, page_sections, weight_grams")
-      .eq("business_id", business.id)
-      .eq("is_active", true)
-      .order("is_featured", { ascending: false })
-      .limit(8),
-    supabase
-      .from("categories")
-      .select("id, name, parent_id, image_url, sort_order")
-      .eq("business_id", business.id)
-      .order("sort_order")
-      .limit(20),
-  ]);
+  const { data: storeSettings } = await createAdminClient()
+    .from("store_settings")
+    .select("page_content, storefront_design")
+    .eq("business_id", business.id)
+    .single();
+  const produseDemo = demoProducts(business.id);
 
-  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  // Continutul e demonstrativ, identitatea magazinului nu: designul se alege cu
+  // logo-ul, culorile si fontul lui, dar cu bannere, categorii si produse care
+  // exista mereu, ca fiecare varianta sa se vada intreaga.
+  const realPageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const pageContent: StorePageContent = {
+    ...realPageContent,
+    menu: DEMO_MENU,
+    hero_banners: DEMO_BANNERS,
+    hero_banner_links: [],
+  };
+  // Designul se deriva din configuratia REALA: ce sectiuni are magazinul aprinse
+  // si ce varianta foloseste nu trebuie sa depinda de continutul demonstrativ.
   const resolved = resolveDesign(storeSettings?.storefront_design, {
     primaryColor: business.primary_color ?? "#1AB554",
-    pageContent: pageContent as Record<string, unknown>,
+    pageContent: realPageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
     tagline: business.tagline,
@@ -82,7 +79,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
     business,
     pageContent,
     basePath: `/${business.slug}`,
-    searchCategories: (categories ?? []).filter((c) => c.parent_id === null).map((c) => c.name),
+    searchCategories: DEMO_CATEGORIES.map((c) => c.name),
   });
 
   return (
@@ -98,8 +95,8 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
           // primeste comerciantul daca o alege.
           settings: { ...(variantMeta(kind, variantParam)?.defaults ?? {}) },
         }}
-        products={(products ?? []).map(slimCatalogProduct)}
-        categories={categories ?? []}
+        products={produseDemo.map(slimCatalogProduct)}
+        categories={DEMO_CATEGORIES}
       />
       <PreviewHeightReporter />
     </StorefrontThemeScope>

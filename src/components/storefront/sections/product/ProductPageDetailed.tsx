@@ -52,6 +52,12 @@ import {
 const SIZES_GALERIE = "(min-width: 1024px) 560px, 100vw";
 /** Cate miniaturi incap in sina inainte sa aiba nevoie de derulare. */
 const MINIATURI_VIZIBILE = 5;
+/**
+ * Cate specificatii urca langa galerie, ca rezumat.
+ * Restul raman in fila lor: sase randuri echilibreaza coloanele, un tabel
+ * intreg ar impinge din nou pagina in gol, doar in cealalta parte.
+ */
+const SPECIFICATII_LANGA_GALERIE = 6;
 
 function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, color }: {
   slides: string[];
@@ -416,6 +422,7 @@ export function ProductPageDetailed({
   const [cantitate, setCantitate] = useState(1);
   const [fila, setFila] = useState<FilaActiva>(hasLongDesc ? "descriere" : "specificatii");
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
+  const fileRef = useRef<HTMLDivElement | null>(null);
   const [adaugat, setAdaugat] = useState(false);
   const [fbtOffer, setFbtOffer] = useState<{ id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] } | undefined>(undefined);
 
@@ -550,11 +557,16 @@ export function ProductPageDetailed({
 
       {/* ─── Galerie + coloana de cumparare ─────────────────────────────── */}
       <div className="max-w-6xl mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:items-start">
-          <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
-            hasDiscount={!!hasDiscount} discountPct={discountPct} color={color} />
+        {/* Doua randuri pe desktop: galeria sus-stanga, datele sub ea, iar
+            coloana de cumparare intinsa peste amandoua. Pe telefon grila are o
+            singura coloana si totul curge in ordinea din marcaj. */}
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start">
+          <div className="lg:col-start-1 lg:row-start-1">
+            <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
+              hasDiscount={!!hasDiscount} discountPct={discountPct} color={color} />
+          </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 flex flex-col gap-4">
             <h1 className="text-[26px] lg:text-[32px] font-normal text-foreground leading-tight tracking-tight">
               {product.name}
             </h1>
@@ -731,39 +743,6 @@ export function ProductPageDetailed({
               </div>
             )}
 
-            {/* Date despre produs */}
-            <div className="flex flex-col gap-1.5 pt-1">
-              {dateLivrare && (
-                <RandMeta eticheta={deliveryEstimate?.text || "Livrare estimata"}>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Calendar size={13} className="text-muted-foreground" />
-                    {dateLivrare.de} - {dateLivrare.pana}
-                  </span>
-                </RandMeta>
-              )}
-              {codProdus !== "" && <RandMeta eticheta="Cod produs">{codProdus}</RandMeta>}
-              {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
-              {categorie !== "" && (
-                <RandMeta eticheta="Categorie">
-                  <a href={hrefCategorie(basePath, categorie)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
-                </RandMeta>
-              )}
-              {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}
-            </div>
-
-            {trustBadgesEnabled && (
-              <>
-                <ul className="rounded-md border border-border divide-y divide-border">
-                  {insigneIncredere.map(({ icon: Icon, text }) => (
-                    <li key={text} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-muted-foreground">
-                      <Icon size={15} style={{ color }} />
-                      {text}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-
             {/* Intrebari: telefonul si WhatsApp-ul magazinului, cand exista */}
             {(business.phone || business.whatsapp) && (
               <div className="flex items-center gap-4 flex-wrap text-[13px] pt-1">
@@ -783,6 +762,77 @@ export function ProductPageDetailed({
               </div>
             )}
           </div>
+
+          {/*
+            Datele produsului stau SUB galerie pe desktop, nu in coloana de
+            cumparare: coloana aceea e de doua ori mai inalta decat o imagine
+            patrata, deci sub galerie ramanea un gol cat jumatate din ecran.
+            Aici e un singur bloc, asezat din grila (`row-start-2`), nu doua
+            copii ascunse pe rand — pe telefon coloana e una singura si blocul
+            cade oricum dupa butoane, unde ii e locul.
+          */}
+          <div className="lg:col-start-1 lg:row-start-2 flex flex-col gap-4">
+            <div className="rounded-md border border-border divide-y divide-border">
+              <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
+                Detalii produs
+              </p>
+              <div className="flex flex-col gap-2 px-4 py-3.5">
+                {dateLivrare && (
+                  <RandMeta eticheta={deliveryEstimate?.text || "Livrare estimata"}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar size={13} className="text-muted-foreground" />
+                      {dateLivrare.de} - {dateLivrare.pana}
+                    </span>
+                  </RandMeta>
+                )}
+                {codProdus !== "" && <RandMeta eticheta="Cod produs">{codProdus}</RandMeta>}
+                {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
+                {categorie !== "" && (
+                  <RandMeta eticheta="Categorie">
+                    <a href={hrefCategorie(basePath, categorie)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
+                  </RandMeta>
+                )}
+                {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}
+                {product.weight_grams ? <RandMeta eticheta="Greutate">{product.weight_grams} g</RandMeta> : null}
+              </div>
+            </div>
+
+            {/* Primele specificatii urca aici, langa imagine: pe o pagina care
+                se lauda ca e „detaliata", tabelul complet nu poate incepe abia
+                dupa doua ecrane de derulare. */}
+            {specifications.length > 0 && (
+              <div className="rounded-md border border-border divide-y divide-border">
+                <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
+                  Pe scurt
+                </p>
+                <dl className="flex flex-col gap-2 px-4 py-3.5">
+                  {specifications.slice(0, SPECIFICATII_LANGA_GALERIE).map((spec, i) => (
+                    <div key={`${spec.label}-${i}`} className="flex flex-col sm:flex-row gap-0.5 sm:gap-3 text-[13px]">
+                      <dt className="sm:w-36 sm:shrink-0 text-muted-foreground">{spec.label}</dt>
+                      <dd className="text-foreground font-medium min-w-0">{spec.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {specifications.length > SPECIFICATII_LANGA_GALERIE && (
+                  <button type="button" onClick={() => { setFila("specificatii"); fileRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                    className="w-full px-4 py-2.5 text-[13px] font-semibold text-left hover:bg-muted/30 transition-colors" style={{ color }}>
+                    Vezi toate specificatiile
+                  </button>
+                )}
+              </div>
+            )}
+
+            {trustBadgesEnabled && (
+              <ul className="rounded-md border border-border divide-y divide-border">
+                {insigneIncredere.map(({ icon: Icon, text }) => (
+                  <li key={text} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-muted-foreground">
+                    <Icon size={15} style={{ color }} />
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
 
@@ -792,7 +842,7 @@ export function ProductPageDetailed({
         <>
           {/* ─── File ────────────────────────────────────────────────────── */}
           {fileVizibile.length > 0 && (
-            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+            <div ref={fileRef} className="max-w-6xl mx-auto px-4 lg:px-6 pb-12 scroll-mt-24">
               <div className="border-b border-border flex gap-6 overflow-x-auto">
                 {fileVizibile.map((f) => (
                   <button key={f.id} type="button" onClick={() => setFila(f.id)}

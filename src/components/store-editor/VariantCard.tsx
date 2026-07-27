@@ -49,7 +49,6 @@ export function VariantCard({
   kind,
   variantId,
   label,
-  tags,
   inaltime,
   activ,
   onPick,
@@ -61,7 +60,6 @@ export function VariantCard({
   kind: string;
   variantId: string;
   label: string;
-  tags: string[];
   inaltime: number;
   activ: boolean;
   onPick: () => void;
@@ -193,11 +191,11 @@ export function VariantCard({
       </div>
 
       <div className="px-4 py-3 flex items-center gap-3 border-t border-border">
+        {/* Doar numele designului. Randul de etichete de dedesubt repeta
+            aproape mereu numele („Simplu" cu eticheta „clasic") si nu ajuta pe
+            nimeni sa aleaga. */}
         <div className="min-w-0 flex-1">
           <p className={`text-sm font-semibold truncate ${activ ? "text-primary" : "text-foreground"}`}>{label}</p>
-          {tags.length > 0 && (
-            <p className="text-[11px] text-muted-foreground truncate">{tags.join(" - ")}</p>
-          )}
         </div>
         {motivIndisponibil ? (
           <span className="shrink-0 max-w-[60%] text-right text-[11px] leading-snug text-muted-foreground">

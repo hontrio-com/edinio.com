@@ -8,6 +8,7 @@ import { ProductPageSection } from "@/components/storefront/sections/product/Pro
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
+import { resolveProductOffers } from "@/lib/offers/offers";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { isNonProductionHost } from "@/lib/storefront/host";
@@ -234,6 +235,15 @@ export default async function SlugPage({ params, searchParams }: Props) {
     const product = await getStoreProduct(business.id, storeMode.productId);
     if (product) {
       const { altMap, hasCardPayment, bundleComponents } = await enrichStoreProduct(business, product);
+      // Ofertele produsului, exact ca pe ruta normala de produs. Fara ele,
+      // magazinul cu un singur produs era singurul unde „Cumparate impreuna" si
+      // „Merge bine cu" nu se randau nicaieri: ruta /product/<principal> face
+      // 301 incoace, deci nu mai ajunge niciodata la locul unde se rezolvau.
+      const opsProductOffers = await resolveProductOffers(createAdminClient(), business.id, {
+        id: product.id,
+        category: product.category,
+        price: Number(product.price) || 0,
+      });
       // Product structured data for the landing page. The product's canonical URL
       // is this homepage (the /product/<main> URL 301s here), so the JSON-LD points
       // at the homepage too — mirrors the shipping/delivery used on the product route.
@@ -276,6 +286,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
             <StorePageShell chrome={opsChrome} design={opsResolved.design} className="min-h-screen">
               <ProductPageSection
                 variant={opsResolved.design.product.page.variant}
+                setari={opsResolved.design.product.page.settings}
                 business={business}
                 product={product}
                 storeSettings={storeSettings as never}
@@ -283,6 +294,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
                 hasCardPayment={hasCardPayment}
                 bundleComponents={bundleComponents}
                 altMap={altMap}
+                productOffers={opsProductOffers}
                 isHome
               />
             </StorePageShell>

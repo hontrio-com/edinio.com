@@ -7,6 +7,7 @@ import { EdinioCredit } from "@/components/ministore/EdinioCredit";
 import { POLICY_LINKS } from "@/lib/storefront/policy-links";
 import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
+import { ButonSetariCookie } from "./ButonSetariCookie";
 
 /**
  * Blocul legal obligatoriu din footer. NU e optional si nu are setare de ascundere.
@@ -101,6 +102,11 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
               {label}
             </a>
           ))}
+          {/* Retragerea consimtamantului trebuie sa fie la fel de usoara ca
+              acordarea lui. Butonul plutea peste magazin; acum sta aici, langa
+              politici, si deschide acelasi panou. Se randeaza doar cand exista
+              banner de cookie-uri — altfel n-ar avea ce deschide. */}
+          <ButonSetariCookie className={t.link} />
         </div>
       </div>
 

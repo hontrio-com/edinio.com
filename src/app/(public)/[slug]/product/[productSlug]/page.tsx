@@ -208,6 +208,7 @@ export default async function ProductDetailPage({ params }: Props) {
         <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen">
           <ProductPageSection
             variant={resolved.design.product.page.variant}
+                setari={resolved.design.product.page.settings}
             business={business as never}
             product={product}
             storeSettings={storeSettings as never}

@@ -86,7 +86,6 @@ export function DesignGallery({
               kind={section.kind}
               variantId={id}
               label={v.label}
-              tags={v.tags}
               inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
               latimeFixa={v.previewWidth}
               activ={id === section.variant}

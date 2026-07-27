@@ -199,8 +199,11 @@ export async function resolveProductOffers(
     };
     // FBT: combined price over the anchor + all in-stock companions (an FBT you
     // cannot fully buy is pointless, so out-of-stock companions are dropped).
+    // Produsele cu variante ies si ele: setul se cumpara dintr-o apasare, deci
+    // n-are unde sa intrebe ce marime, iar fara alegere ar intra in comanda la
+    // pretul de baza si serverul ar respinge-o.
     if (o.type === "frequently_bought") {
-      const buyable = products.filter((p) => !p.outOfStock);
+      const buyable = products.filter((p) => !p.outOfStock && !p.hasVariants);
       if (buyable.length === 0) continue;
       base.products = buyable;
       base.pricing = computeSetPricing([anchor.price, ...buyable.map((p) => p.price)], o.config);
@@ -235,7 +238,16 @@ export async function resolveCartOffers(
   const exclude = new Set(cartProductIds);
   const resolved: ResolvedOffer[] = [];
   for (const o of applicable) {
-    const products = (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
+    // „Alege automat produse din aceeasi categorie" mergea doar pe pagina de
+    // produs: in cos se cerea lista de id-uri, care la ofertele automate e
+    // goala, deci oferta disparea tacut din toate cele patru variante de cos.
+    // Categoria se ia din primul produs din cos care declanseaza oferta.
+    const categorieAuto = o.type === "cross_sell" && o.config.autoByCategory
+      ? cartProducts.find((p) => triggerMatchesProduct(o.trigger, p) && p.category)?.category ?? null
+      : null;
+    const products = categorieAuto
+      ? await fetchCategoryProducts(admin, businessId, categorieAuto, exclude, o.config.maxProducts)
+      : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
     if (products.length === 0) continue;
 
     const base: ResolvedOffer = {
@@ -247,8 +259,15 @@ export async function resolveCartOffers(
       products,
     };
     // Order bump: a single product with its own discounted price.
+    //
+    // Nu primul produs din lista, ci primul care poate fi luat dintr-o apasare:
+    // unul epuizat trecea de afisare si abia la ultimul clic serverul respingea
+    // TOATA comanda, iar unul cu variante intra fara varianta, la pretul de
+    // baza. Bump-ul n-are cum sa intrebe nimic — de aceea alege doar ce e gata
+    // de adaugat.
     if (o.type === "order_bump") {
-      const p = products[0];
+      const p = products.find((x) => !x.outOfStock && !x.hasVariants);
+      if (!p) continue;
       base.products = [p];
       base.pricing = computeSetPricing([p.price], o.config);
     }

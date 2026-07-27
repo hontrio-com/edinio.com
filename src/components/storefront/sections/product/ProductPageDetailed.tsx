@@ -59,7 +59,7 @@ const MINIATURI_VIZIBILE = 5;
  */
 const SPECIFICATII_LANGA_GALERIE = 6;
 
-function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, color }: {
+function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, color, miniaturiInStanga }: {
   slides: string[];
   activ: number;
   mergiLa: (i: number) => void;
@@ -67,6 +67,8 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
   hasDiscount: boolean;
   discountPct: number;
   color: string;
+  /** Sina verticala langa imagine, sau rand sub ea. Pe telefon e mereu jos. */
+  miniaturiInStanga: boolean;
 }) {
   // Sagetile pot duce activul in afara ferestrei de derulare a sinei; fara
   // asta, dupa cateva apasari miniatura curenta nu se mai vede deloc.
@@ -84,12 +86,13 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
   }
 
   const cuSina = slides.length > 1;
+  const cuSinaLaterala = cuSina && miniaturiInStanga;
 
   return (
     <div className="flex gap-3">
       {/* Sina verticala, doar pe desktop: pe telefon miniaturile ar manca
           latimea imaginii, care e singurul lucru pentru care s-a deschis pagina. */}
-      {cuSina && (
+      {cuSinaLaterala && (
         <div className="hidden lg:flex flex-col items-center gap-2 shrink-0">
           <button type="button" aria-label="Imaginea anterioara"
             onClick={() => mergiLa(activ - 1)}
@@ -139,7 +142,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
 
         {/* Pe telefon miniaturile trec dedesubt, pe un rand derulabil. */}
         {cuSina && (
-          <div className="flex lg:hidden gap-2 mt-3 overflow-x-auto pb-1">
+          <div className={miniaturiInStanga ? "flex lg:hidden gap-2 mt-3 overflow-x-auto pb-1" : "flex gap-2 mt-3 overflow-x-auto pb-1"}>
             {slides.map((src, i) => (
               <button key={src + i} type="button" onClick={() => mergiLa(i)}
                 aria-label={`Vezi imaginea ${i + 1}`} aria-current={i === activ}
@@ -209,6 +212,7 @@ export function ProductPageDetailed({
   altMap = {},
   isHome = false,
   productOffers = [],
+  setari = {},
   demo = false,
 }: {
   business: Business;
@@ -220,6 +224,8 @@ export function ProductPageDetailed({
   altMap?: Record<string, string>;
   isHome?: boolean;
   productOffers?: ResolvedOffer[];
+  /** Reglajele variantei, din `design.product.page.settings`. Vezi registry. */
+  setari?: Record<string, unknown>;
   /** Miniatura din catalogul de design-uri: pagina se randeaza inerta. Vezi `classic`. */
   demo?: boolean;
 }) {
@@ -432,7 +438,13 @@ export function ProductPageDetailed({
   // sertar, fara pagina. Un buton „Adauga in cos" ar confirma o actiune care nu
   // duce nicaieri. In miniatura din catalog nu exista chrome, dar butonul
   // trebuie sa se vada — el e jumatate din designul ales.
-  const arataButonCos = demo || chrome?.cartMode !== "hidden";
+  const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
+  const miniaturiInStanga = setari.galleryThumbs !== "bottom";
+  const arataDetalii = setari.showDetails !== false;
+  const arataRezumatSpec = setari.showSpecsSummary !== false;
+  const cateSpecificatii = Number(setari.specsCount) > 0 ? Number(setari.specsCount) : SPECIFICATII_LANGA_GALERIE;
+  const arataTrepte = setari.showTiers !== false;
+  const arataContact = setari.showContact !== false;
   // Liniile purtate in comanda: tot cosul in afara produsului curent, care se
   // comanda separat, cu cantitatea din formular.
   const cartItems = useMemo(
@@ -516,6 +528,10 @@ export function ProductPageDetailed({
 
   const categorie = (product.category ?? "").trim();
   const codProdus = (selectedCombo?.sku || product.sku || "").trim();
+  // Blocul de detalii se randeaza doar daca are macar un rand de aratat: un
+  // chenar cu titlu si nimic dedesubt arata a eroare, nu a informatie.
+  const areDetalii = !!dateLivrare || codProdus !== "" || ean !== "" || categorie !== ""
+    || etichete.length > 0 || !!product.weight_grams;
 
   const insigneIncredere = [
     { icon: Truck, text: "Livrare rapida" },
@@ -534,7 +550,7 @@ export function ProductPageDetailed({
   return (
     <>
       {/* ─── Firimituri ─────────────────────────────────────────────────── */}
-      {!isHome && (
+      {!isHome && setari.showBreadcrumb !== false && (
         <nav aria-label="Firimituri" className="max-w-6xl mx-auto px-4 lg:px-6 pt-4 pb-1">
           <ol className="flex items-center gap-1.5 text-[13px] text-muted-foreground overflow-x-auto">
             <li className="shrink-0">
@@ -563,7 +579,8 @@ export function ProductPageDetailed({
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start">
           <div className="lg:col-start-1 lg:row-start-1">
             <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
-              hasDiscount={!!hasDiscount} discountPct={discountPct} color={color} />
+              hasDiscount={!!hasDiscount} discountPct={discountPct} color={color}
+              miniaturiInStanga={miniaturiInStanga} />
           </div>
 
           <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 flex flex-col gap-4">
@@ -720,7 +737,7 @@ export function ProductPageDetailed({
                 Preturile de treapta le onoreaza doar comanda directa, deci
                 fiecare rand duce acolo, cu numarul lui de bucati: altfel ar sta
                 langa un buton de cos care le ignora. */}
-            {quantityTiers && quantityTiers.length > 1 && (
+            {arataTrepte && quantityTiers && quantityTiers.length > 1 && (
               <div className="rounded-md border border-border overflow-hidden mt-1">
                 <p className="px-4 py-2.5 text-sm font-semibold text-foreground bg-muted/40 border-b border-border">
                   Cumperi mai multe, platesti mai putin
@@ -744,7 +761,7 @@ export function ProductPageDetailed({
             )}
 
             {/* Intrebari: telefonul si WhatsApp-ul magazinului, cand exista */}
-            {(business.phone || business.whatsapp) && (
+            {arataContact && (business.phone || business.whatsapp) && (
               <div className="flex items-center gap-4 flex-wrap text-[13px] pt-1">
                 <span className="text-muted-foreground">Ai intrebari despre produs?</span>
                 {business.phone && (
@@ -772,6 +789,9 @@ export function ProductPageDetailed({
             cade oricum dupa butoane, unde ii e locul.
           */}
           <div className="lg:col-start-1 lg:row-start-2 flex flex-col gap-4">
+            {/* Un magazin poate sa nu fi completat niciunul dintre randuri: un
+                chenar cu titlu si nimic sub el arata a eroare, nu a informatie. */}
+            {arataDetalii && areDetalii && (
             <div className="rounded-md border border-border divide-y divide-border">
               <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
                 Detalii produs
@@ -796,17 +816,18 @@ export function ProductPageDetailed({
                 {product.weight_grams ? <RandMeta eticheta="Greutate">{product.weight_grams} g</RandMeta> : null}
               </div>
             </div>
+            )}
 
             {/* Primele specificatii urca aici, langa imagine: pe o pagina care
                 se lauda ca e „detaliata", tabelul complet nu poate incepe abia
                 dupa doua ecrane de derulare. */}
-            {specifications.length > 0 && (
+            {arataRezumatSpec && specifications.length > 0 && (
               <div className="rounded-md border border-border divide-y divide-border">
                 <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
                   Pe scurt
                 </p>
                 <dl className="flex flex-col gap-2 px-4 py-3.5">
-                  {specifications.slice(0, SPECIFICATII_LANGA_GALERIE).map((spec, i) => (
+                  {specifications.slice(0, cateSpecificatii).map((spec, i) => (
                     <div key={`${spec.label}-${i}`} className="flex flex-col sm:flex-row gap-0.5 sm:gap-3 text-[13px]">
                       <dt className="sm:w-36 sm:shrink-0 text-muted-foreground">{spec.label}</dt>
                       <dd className="text-foreground font-medium min-w-0">{spec.value}</dd>

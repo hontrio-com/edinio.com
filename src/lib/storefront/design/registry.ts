@@ -240,6 +240,25 @@ const HEADER_DEFAULTS = { menuFont: "body", menuCase: "normal" };
 export const MIN_CATEGORII_HERO_SIDEBAR = 6;
 
 /**
+ * Reglajele pe care le au TOATE variantele de pagina de produs.
+ *
+ * Aici intra doar lucruri care azi sunt scrise in cod, nu si cele care au deja
+ * un comutator in editorul magazinului (insignele de incredere, numarul de
+ * vizitatori, estimarea de livrare, efectul butonului, intervalul de pret). Doua
+ * comutatoare pentru acelasi lucru inseamna, mai devreme sau mai tarziu, un
+ * comerciant care stinge unul si nu intelege de ce lucrul ramane aprins.
+ */
+const PDP_FIELDS_COMUNE: Field[] = [
+  { key: "showBreadcrumb", type: "toggle", label: "Arata firimiturile de navigare" },
+  {
+    key: "showAddToCart", type: "toggle", label: "Arata butonul „Adauga in cos”",
+    help: "Stins, ramane doar comanda directa. In magazinul cu un singur produs butonul nu apare oricum, fiindca acolo nu exista cos.",
+  },
+];
+
+const PDP_DEFAULTS_COMUNE = { showBreadcrumb: true, showAddToCart: true };
+
+/**
  * Setarile comune modelelor de pagina de cos.
  *
  * Doar ce tine de pagina in sine. Ce se intampla la comanda — campuri
@@ -614,14 +633,42 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // cumparare. Pagina intreaga trece de 3000 px, iar micsorata intr-un
         // card ar deveni o banda ilizibila.
         previewHeight: 780,
-        fields: [],
+        fields: PDP_FIELDS_COMUNE,
+        defaults: PDP_DEFAULTS_COMUNE,
       },
       detailed: {
         label: "Detaliat",
         tags: ["detaliat"],
         layout: "full",
         previewHeight: 780,
-        fields: [],
+        fields: [
+          ...PDP_FIELDS_COMUNE,
+          {
+            key: "galleryThumbs", type: "select", label: "Miniaturile galeriei",
+            options: [
+              { value: "left", label: "In stanga imaginii" },
+              { value: "bottom", label: "Sub imagine" },
+            ],
+          },
+          { key: "showDetails", type: "toggle", label: "Arata caseta „Detalii produs”" },
+          { key: "showSpecsSummary", type: "toggle", label: "Arata un rezumat al specificatiilor" },
+          {
+            key: "specsCount", type: "range", label: "Cate specificatii in rezumat",
+            min: 3, max: 12, step: 1, unit: " randuri",
+            showIf: { key: "showSpecsSummary", equals: true },
+          },
+          { key: "showTiers", type: "toggle", label: "Arata reducerile de cantitate", help: "Se completeaza din fisa produsului. Preturile de treapta se aplica la comanda directa." },
+          { key: "showContact", type: "toggle", label: "Arata telefonul si WhatsApp sub produs" },
+        ],
+        defaults: {
+          ...PDP_DEFAULTS_COMUNE,
+          galleryThumbs: "left",
+          showDetails: true,
+          showSpecsSummary: true,
+          specsCount: 6,
+          showTiers: true,
+          showContact: true,
+        },
       },
     },
   },

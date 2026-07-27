@@ -21,6 +21,7 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
   onAdd: (p: OfferProduct) => void;
 }) {
   const [recs, setRecs] = useState<OfferProduct[]>([]);
+  const [titlu, setTitlu] = useState<string | null>(null);
   const [added, setAdded] = useState<Set<string>>(new Set());
   const cartKey = cartProductIds.join(",");
 
@@ -36,6 +37,10 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
         if (!seen.has(p.id) && !p.outOfStock) { seen.add(p.id); flat.push(p); }
       }
       setRecs(flat.slice(0, 6));
+      // Titlul scris de comerciant, cand toate recomandarile vin dintr-o
+      // singura oferta. Cu mai multe oferte amestecate niciun titlu nu le-ar
+      // descrie pe toate, deci ramane cel general.
+      setTitlu(offers.length === 1 ? offers[0].title : null);
     }).catch(() => {});
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -51,7 +56,7 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
 
   return (
     <div className="px-5 py-4 border-t border-border">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">S-ar putea sa-ti placa</p>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">{titlu || "S-ar putea sa-ti placa"}</p>
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
         {recs.map((p) => (
           <div key={p.id} className="w-32 shrink-0">

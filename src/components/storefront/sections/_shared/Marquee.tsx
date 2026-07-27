@@ -44,7 +44,12 @@ export function Marquee({
     // `marquee-banda` exista doar ca sa poata fi oprita din CSS la
     // `prefers-reduced-motion`: durata e dinamica, deci animatia trebuie sa stea
     // intr-un stil inline, iar un stil inline nu poate fi anulat de o clasa.
-    <div className="flex w-max whitespace-nowrap marquee-banda" style={{ animation: `marquee ${durata}s linear infinite` }}>
+    // `durata` e timpul in care trece O copie, cum era cand animatia statea pe
+    // fiecare copie in parte. Randul insa parcurge intr-un ciclu `repetari`
+    // copii (jumatate din cele doua garnituri), deci ciclul lui dureaza de
+    // `repetari` ori mai mult. Fara inmultirea asta banda mergea de opt ori mai
+    // repede decat inainte si textul nu se putea citi.
+    <div className="flex w-max whitespace-nowrap marquee-banda" style={{ animation: `marquee ${durata * repetari}s linear infinite` }}>
       {Array.from({ length: repetari * 2 }, (_, i) => (
         <span key={i} className={className}>
           {children}

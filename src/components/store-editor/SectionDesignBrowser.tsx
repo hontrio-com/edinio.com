@@ -276,7 +276,6 @@ export function SectionDesignBrowser({
                     kind={sectiune.kind}
                     variantId={id}
                     label={v.label}
-                    tags={v.tags}
                     inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
               latimeFixa={v.previewWidth}
                     activ={id === sectiune.variant}

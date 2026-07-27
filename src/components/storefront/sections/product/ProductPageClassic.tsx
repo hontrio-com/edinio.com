@@ -137,7 +137,7 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], demo = false }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -150,6 +150,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   isHome?: boolean;
   /** Cross-sell offers resolved server-side for this product (rendered as "Merge bine cu"). */
   productOffers?: ResolvedOffer[];
+  /** Reglajele variantei, din `design.product.page.settings`. Vezi registry. */
+  setari?: Record<string, unknown>;
   /**
    * Miniatura din catalogul de design-uri: pagina se randeaza inerta.
    *
@@ -374,7 +376,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // In magazinul cu un singur produs cosul nu are nicio interfata — nici in
   // header, nici sertar, nici pagina — deci butonul ar confirma o actiune care
   // nu duce nicaieri. In miniatura nu exista chrome, dar butonul trebuie vazut.
-  const arataButonCos = demo || chrome?.cartMode !== "hidden";
+  const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
   const [adaugatInCos, setAdaugatInCos] = useState(false);
 
   function adaugaInCos() {

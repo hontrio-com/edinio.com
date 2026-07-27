@@ -1,0 +1,896 @@
+"use client";
+
+import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import Image from "next/image";
+import {
+  ChevronUp, ChevronDown, ChevronRight, Check, Package, Plus, Minus,
+  Calendar, ShoppingCart, CreditCard, Truck, RotateCcw, ShieldCheck, MessageCircle, Phone,
+} from "lucide-react";
+import { formatPrice, formatPriceRange } from "@/lib/utils/format";
+import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { getProductPriceRange } from "@/lib/utils/product-price";
+import {
+  parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
+  VARIANT_TITLE_SEP,
+} from "@/lib/storefront/variants";
+import { OrderModal } from "@/components/ministore/OrderModal";
+import type { QuantityTier } from "@/components/ministore/OrderModal";
+import { ProductOffers } from "@/components/ministore/ProductOffers";
+import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
+import { distributeFbtSavings } from "@/lib/offers/offer.types";
+import { useCartOptional } from "@/components/storefront/cart/CartProvider";
+import { trackAddToCart } from "@/lib/storefront/cart/track-add";
+import { cosDupaComanda } from "@/lib/storefront/cart/consume";
+import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
+import type {
+  Business, Product, StoreSettings, PageContent, PageSections,
+} from "./_shared/product-page.types";
+import {
+  abonareMiscareRedusa, citesteMiscareRedusa, hashSir,
+  SocialProof, FAQItem, CTAButton,
+} from "./_shared/pieces";
+
+/**
+ * Pagina de produs, varianta „Detaliat".
+ *
+ * Modelul e magazinul de electronice: informatia bate atmosfera. Fata de
+ * `classic`, care ii da produsului o pagina de vanzare cu o singura chemare la
+ * actiune, aici cumparatorul primeste tot ce stie magazinul despre produs
+ * inainte sa deruleze — cod, categorie, etichete, livrare estimata — plus doua
+ * actiuni separate: pune in cos ca sa mai caute, sau comanda pe loc.
+ *
+ * Ce arata in plus fata de classic, DIN DATE CARE EXISTAU DEJA si nu se vedeau
+ * nicaieri: codul produsului, EAN-ul si brandul (din atributele de marketplace),
+ * categoria si etichetele, si treptele de cantitate — pana acum ajungeau doar in
+ * formularul de comanda, desi sunt chiar argumentul de a cumpara mai multe.
+ */
+
+/* ─── Galerie cu sina verticala ───────────────────────────────────────────── */
+
+/** Acelasi `sizes` pe telefon si pe desktop, din acelasi motiv ca la classic. */
+const SIZES_GALERIE = "(min-width: 1024px) 560px, 100vw";
+/** Cate miniaturi incap in sina inainte sa aiba nevoie de derulare. */
+const MINIATURI_VIZIBILE = 5;
+
+function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, color }: {
+  slides: string[];
+  activ: number;
+  mergiLa: (i: number) => void;
+  imgAlt: (src: string, i: number) => string;
+  hasDiscount: boolean;
+  discountPct: number;
+  color: string;
+}) {
+  // Sagetile pot duce activul in afara ferestrei de derulare a sinei; fara
+  // asta, dupa cateva apasari miniatura curenta nu se mai vede deloc.
+  const miniaturaActiva = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    miniaturaActiva.current?.scrollIntoView({ block: "nearest" });
+  }, [activ]);
+
+  if (slides.length === 0) {
+    return (
+      <div className="aspect-square rounded-2xl bg-muted/40 flex items-center justify-center">
+        <Package size={64} className="text-muted-foreground/40" />
+      </div>
+    );
+  }
+
+  const cuSina = slides.length > 1;
+
+  return (
+    <div className="flex gap-3">
+      {/* Sina verticala, doar pe desktop: pe telefon miniaturile ar manca
+          latimea imaginii, care e singurul lucru pentru care s-a deschis pagina. */}
+      {cuSina && (
+        <div className="hidden lg:flex flex-col items-center gap-2 shrink-0">
+          <button type="button" aria-label="Imaginea anterioara"
+            onClick={() => mergiLa(activ - 1)}
+            className="w-8 h-6 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+            <ChevronUp size={14} />
+          </button>
+          <div className="flex flex-col gap-2 overflow-y-auto"
+            style={{ maxHeight: `${MINIATURI_VIZIBILE * 5.5}rem` }}>
+            {slides.map((src, i) => (
+              <button key={src + i} type="button" onClick={() => mergiLa(i)}
+                aria-label={`Vezi imaginea ${i + 1}`} aria-current={i === activ}
+                ref={i === activ ? miniaturaActiva : undefined}
+                className="relative w-[4.5rem] h-[4.5rem] shrink-0 rounded-lg overflow-hidden bg-muted/30 transition-all"
+                style={{ border: `2px solid ${i === activ ? color : "transparent"}`, opacity: i === activ ? 1 : 0.6 }}>
+                <Image src={src} alt={imgAlt(src, i)} fill sizes="72px" className="object-contain p-1" />
+              </button>
+            ))}
+          </div>
+          <button type="button" aria-label="Imaginea urmatoare"
+            onClick={() => mergiLa(activ + 1)}
+            className="w-8 h-6 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+            <ChevronDown size={14} />
+          </button>
+        </div>
+      )}
+
+      <div className="relative flex-1 min-w-0">
+        {/* Panou deschis in spatele produsului, ca in modelul de referinta: pune
+            in valoare fotografiile decupate pe fundal alb. */}
+        <div className="relative aspect-square rounded-2xl bg-muted/30 overflow-hidden">
+          {slides.map((src, i) => (
+            <div key={src + i}
+              aria-hidden={i !== activ}
+              className="absolute inset-0 transition-opacity duration-300"
+              style={{ opacity: i === activ ? 1 : 0, pointerEvents: i === activ ? "auto" : "none" }}>
+              <Image src={src} alt={imgAlt(src, i)} fill sizes={SIZES_GALERIE}
+                className="object-contain p-6" priority={i === 0} loading={i === 0 ? undefined : "lazy"} />
+            </div>
+          ))}
+          {hasDiscount && (
+            <span className="absolute top-4 right-4 px-2.5 py-1 rounded-lg text-xs font-bold text-white"
+              style={{ backgroundColor: color }}>
+              -{discountPct}%
+            </span>
+          )}
+        </div>
+
+        {/* Pe telefon miniaturile trec dedesubt, pe un rand derulabil. */}
+        {cuSina && (
+          <div className="flex lg:hidden gap-2 mt-3 overflow-x-auto pb-1">
+            {slides.map((src, i) => (
+              <button key={src + i} type="button" onClick={() => mergiLa(i)}
+                aria-label={`Vezi imaginea ${i + 1}`} aria-current={i === activ}
+                className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-muted/30 transition-all"
+                style={{ border: `2px solid ${i === activ ? color : "transparent"}`, opacity: i === activ ? 1 : 0.6 }}>
+                <Image src={src} alt={imgAlt(src, i)} fill sizes="64px" className="object-contain p-1" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Bucati mici ale coloanei de cumparare ──────────────────────────────── */
+
+function RandMeta({ eticheta, children }: { eticheta: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2 text-[13px]">
+      <span className="text-muted-foreground shrink-0">{eticheta}:</span>
+      <span className="text-foreground font-medium min-w-0">{children}</span>
+    </div>
+  );
+}
+
+function Stepper({ valoare, seteaza, maxim }: { valoare: number; seteaza: (n: number) => void; maxim: number | null }) {
+  const laLimita = maxim !== null && valoare >= maxim;
+  return (
+    <div className="flex items-center rounded-xl border border-border h-[52px] shrink-0">
+      <button type="button" aria-label="Scade cantitatea" onClick={() => seteaza(Math.max(1, valoare - 1))}
+        disabled={valoare <= 1}
+        className="w-11 h-full flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+        <Minus size={15} />
+      </button>
+      <span aria-live="polite" className="w-9 text-center font-semibold text-foreground tabular-nums">{valoare}</span>
+      <button type="button" aria-label="Creste cantitatea" onClick={() => seteaza(valoare + 1)}
+        disabled={laLimita}
+        className="w-11 h-full flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+        <Plus size={15} />
+      </button>
+    </div>
+  );
+}
+
+/* ─── Pagina ─────────────────────────────────────────────────────────────── */
+
+type FilaActiva = "descriere" | "specificatii" | "intrebari";
+
+export function ProductPageDetailed({
+  business,
+  product,
+  storeSettings,
+  basePath: basePathProp,
+  hasCardPayment = false,
+  bundleComponents = [],
+  altMap = {},
+  isHome = false,
+  productOffers = [],
+  demo = false,
+}: {
+  business: Business;
+  product: Product;
+  storeSettings: StoreSettings | null;
+  basePath?: string;
+  hasCardPayment?: boolean;
+  bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
+  altMap?: Record<string, string>;
+  isHome?: boolean;
+  productOffers?: ResolvedOffer[];
+  /** Miniatura din catalogul de design-uri: pagina se randeaza inerta. Vezi `classic`. */
+  demo?: boolean;
+}) {
+  const basePath = basePathProp ?? `/${business.slug}`;
+  const images = useMemo(
+    () => (Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : []),
+    [product.images],
+  );
+
+  const productId = product.id;
+  const productName = product.name;
+  const productPrice = Number(product.price) || 0;
+  useEffect(() => {
+    if (demo) return;
+    gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
+    fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
+    ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
+  }, [demo, productId, productName, productPrice]);
+
+  const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
+  const color = business.primary_color ?? "#1AB554";
+
+  const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
+  const freeShippingThreshold = storeSettings?.free_shipping_threshold
+    ? Number(storeSettings.free_shipping_threshold) : null;
+  const minOrderAmount = storeSettings?.min_order_amount
+    ? Number(storeSettings.min_order_amount) : null;
+  const vatEnabled = storeSettings?.vat_enabled ?? false;
+  const pricesIncludeVat = storeSettings?.prices_include_vat ?? true;
+
+  const pageContent = (storeSettings?.page_content as PageContent) ?? {};
+  const pageSections = (product.page_sections as PageSections) ?? {};
+
+  const shortDesc = (pageSections.short_description ?? "").trim();
+  const hasShortDesc = shortDesc !== "" && shortDesc !== "<p></p>";
+  const hasLongDesc = !!product.description && product.description !== "<p></p>";
+
+  const trustBadgesEnabled = pageContent.trust_badges_enabled !== false;
+  const benefitsSection = pageContent.benefits_section;
+  const howItWorksSection = pageContent.how_it_works_section;
+  const faqSection = pageContent.faq_section;
+  const reduceMotion = useSyncExternalStore(abonareMiscareRedusa, citesteMiscareRedusa, () => false);
+  const buttonEffect = demo || reduceMotion ? "none" : (pageContent.button_effect ?? "none");
+  const deliveryEstimate = pageContent.delivery_estimate;
+  const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
+  const showSocialProof = pageContent.show_social_proof === true;
+
+  /* Variante — aceiasi helperi ca in grila, ca pretul afisat sa fie acelasi pe
+     care il accepta serverul la plasarea comenzii. */
+  const variantsData = useMemo(() => parseVariants(product.page_sections), [product.page_sections]);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() =>
+    demo && variantsData
+      ? Object.fromEntries(variantsData.options.map((o) => [o.name, o.values[0] ?? ""]))
+      : {},
+  );
+
+  const selectedComboTitle = useMemo(
+    () => (variantsData ? comboTitle(variantsData.options, selectedOptions) : null),
+    [variantsData, selectedOptions],
+  );
+  const selectedCombo = useMemo(
+    () => (variantsData ? findCombo(variantsData, selectedComboTitle) : null),
+    [variantsData, selectedComboTitle],
+  );
+
+  const variantImage = useMemo(() => {
+    if (!variantsData) return null;
+    let candidate: string | null = null;
+    if (selectedCombo?.image) {
+      candidate = selectedCombo.image;
+    } else {
+      const chosen = variantsData.options.map((o) => selectedOptions[o.name]).filter(Boolean) as string[];
+      if (chosen.length === 0) return null;
+      const imgs = new Set<string>();
+      for (const c of variantsData.combinations) {
+        if (!c.enabled || !c.image) continue;
+        const parts = c.title.split(VARIANT_TITLE_SEP);
+        if (chosen.every((s) => parts.includes(s))) imgs.add(c.image);
+      }
+      if (imgs.size !== 1) return null;
+      candidate = [...imgs][0];
+    }
+    // O imagine de varianta care nu e in galerie e invechita: ar aparea dublata.
+    return candidate && images.includes(candidate) ? candidate : null;
+  }, [variantsData, selectedCombo, selectedOptions, images]);
+
+  const slides = useMemo(
+    () => (variantImage ? [variantImage, ...images.filter((img) => img !== variantImage)] : images),
+    [variantImage, images],
+  );
+
+  const basePrice = Number(product.price);
+  const displayPrice = comboUnitPrice(selectedCombo, basePrice);
+  const displayComparePrice = comboCompareAtPrice(
+    selectedCombo,
+    product.compare_at_price ? Number(product.compare_at_price) : null,
+  );
+
+  const priceRange = getProductPriceRange(basePrice, pageSections);
+  const priceLowestOnly = pageContent.price_range_display?.enabled === false;
+  const showPriceRange = !selectedCombo && priceRange.hasRange;
+
+  const hasDiscount = !showPriceRange && !!displayComparePrice && displayComparePrice > displayPrice;
+  const discountPct = hasDiscount ? Math.round((1 - displayPrice / displayComparePrice!) * 100) : 0;
+
+  const stockStatus = pageSections.stock_status ?? "in_stock";
+  const isOutOfStock = stockStatus === "out_of_stock"
+    || (product.track_inventory && product.stock_quantity !== null && product.stock_quantity === 0);
+  const isPreorder = !isOutOfStock && stockStatus === "preorder";
+  // Nu doar „titlul e complet", ci si „combinatia exista si e activa": altfel
+  // linia intra in cos cu pretul de baza, iar serverul o respinge la comanda.
+  const needsVariant = !!variantsData && !selectedCombo;
+  const combinatieIndisponibila = !!variantsData && !!selectedComboTitle && !selectedCombo;
+  const stocRamas = product.track_inventory ? product.stock_quantity : null;
+
+  const dimensions = pageSections.dimensions;
+  const specRows = useMemo(() => pageSections.specifications ?? [], [pageSections.specifications]);
+  const specifications = useMemo(() => {
+    const rows = [...specRows];
+    if (dimensions) {
+      if (dimensions.length > 0) rows.push({ label: "Lungime", value: `${dimensions.length} cm` });
+      if (dimensions.width > 0) rows.push({ label: "Latime", value: `${dimensions.width} cm` });
+      if (dimensions.height > 0) rows.push({ label: "Inaltime", value: `${dimensions.height} cm` });
+    }
+    if (product.weight_grams) rows.push({ label: "Greutate", value: `${product.weight_grams} g` });
+    return rows;
+  }, [specRows, dimensions, product.weight_grams]);
+
+  const tierConfig = pageSections.quantity_tiers;
+  const quantityTiers: QuantityTier[] | undefined = tierConfig?.enabled
+    ? (() => {
+        const isPercent = tierConfig.mode === "percent";
+        const tier2Price = isPercent
+          ? displayPrice * 2 * (1 - (tierConfig.tier2_percent ?? 0) / 100)
+          : tierConfig.tier2_price;
+        const tier3Price = isPercent
+          ? displayPrice * 3 * (1 - (tierConfig.tier3_percent ?? 0) / 100)
+          : tierConfig.tier3_price;
+        const hasT2 = isPercent ? (tierConfig.tier2_percent ?? 0) > 0 : tier2Price > 0;
+        const hasT3 = isPercent ? (tierConfig.tier3_percent ?? 0) > 0 : tier3Price > 0;
+        return [
+          { qty: 1, price: displayPrice, badge: "" },
+          ...(hasT2 ? [{ qty: 2, price: Math.round(tier2Price * 100) / 100, badge: tierConfig.tier2_badge }] : []),
+          ...(hasT3 ? [{ qty: 3, price: Math.round(tier3Price * 100) / 100, badge: tierConfig.tier3_badge }] : []),
+        ];
+      })()
+    : undefined;
+
+  /* Atribute de marketplace: brandul si EAN-ul stau in `page_sections.google`,
+     nu in coloane, si pana acum nu se vedeau nicaieri pe magazin. */
+  const brand = (pageSections.google?.brand ?? "").trim();
+  const ean = (pageSections.google?.gtin ?? "").trim();
+  const etichete = useMemo(
+    () => (Array.isArray(product.tags) ? product.tags.map(String).map((t) => t.trim()).filter(Boolean) : []),
+    [product.tags],
+  );
+
+  const [activeSlide, setActiveSlide] = useState(0);
+  // Imaginea variantei trece pe pozitia 0; fara reset, galeria ramane pe cadrul
+  // vechi si alegerea culorii pare ca n-a facut nimic.
+  useEffect(() => { setActiveSlide(0); }, [variantImage]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [cantitate, setCantitate] = useState(1);
+  const [fila, setFila] = useState<FilaActiva>(hasLongDesc ? "descriere" : "specificatii");
+  const [faqOpen, setFaqOpen] = useState<number | null>(0);
+  const [adaugat, setAdaugat] = useState(false);
+  const [fbtOffer, setFbtOffer] = useState<{ id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] } | undefined>(undefined);
+
+  const cos = useCartOptional();
+  const chrome = useStoreChromeOptional();
+  // In magazinul cu un singur produs cosul e ascuns peste tot: fara header, fara
+  // sertar, fara pagina. Un buton „Adauga in cos" ar confirma o actiune care nu
+  // duce nicaieri. In miniatura din catalog nu exista chrome, dar butonul
+  // trebuie sa se vada — el e jumatate din designul ales.
+  const arataButonCos = demo || chrome?.cartMode !== "hidden";
+  // Liniile purtate in comanda: tot cosul in afara produsului curent, care se
+  // comanda separat, cu cantitatea din formular.
+  const cartItems = useMemo(
+    () => (demo || !cos ? [] : cos.items.filter((i) => i.productId !== product.id)),
+    [demo, cos, product.id],
+  );
+
+  const mergiLa = useCallback((i: number) => {
+    setActiveSlide((prev) => {
+      const n = slides.length;
+      if (n === 0) return prev;
+      return ((i % n) + n) % n;
+    });
+  }, [slides.length]);
+
+  function adaugaInCos() {
+    if (demo || !cos || isOutOfStock || needsVariant) return;
+    const imagine = selectedCombo?.image || slides[0] || null;
+    cos.addItem({
+      productId: product.id,
+      slug: product.slug ?? undefined,
+      // Numele ramane SIMPLU, combinatia sta in `variantTitle`: asa cheia de
+      // linie iese identica cu cea din grila si acelasi produs creste in
+      // cantitate in loc sa se dubleze.
+      name: product.name,
+      price: displayPrice,
+      imageUrl: imagine,
+      variantTitle: selectedComboTitle ?? undefined,
+      variantSku: selectedCombo?.sku || undefined,
+    }, cantitate);
+    trackAddToCart({ productId: product.id, name: product.name, price: displayPrice, cantitate });
+    setAdaugat(true);
+    setTimeout(() => setAdaugat(false), 1800);
+  }
+
+  function addOfferProductToCart(p: OfferProduct) {
+    if (demo || !cos) return;
+    cos.addItem({
+      productId: p.id,
+      // Fara slug, linia din cos nu mai are link catre pagina produsului.
+      slug: p.slug ?? undefined,
+      name: p.name,
+      price: Number(p.price),
+      imageUrl: p.imageUrl,
+    });
+    trackAddToCart({ productId: p.id, name: p.name, price: Number(p.price) });
+  }
+
+  function handleBuyTogether(offer: ResolvedOffer) {
+    if (!offer.pricing) return;
+    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings);
+    setFbtOffer({
+      id: offer.id,
+      items: offer.products.map((p, idx) => ({
+        product_id: p.id, name: p.name, imageUrl: p.imageUrl, price: distributed[idx], quantity: 1,
+      })),
+    });
+    setModalOpen(true);
+  }
+
+  /* Estimarea de livrare, ancorata in fusul de la Bucuresti ca sa nu difere
+     intre server si browser. */
+  const dateLivrare = useMemo(() => {
+    if (!deliveryEstimate?.enabled) return null;
+    const fmt = (zile: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + zile);
+      return d.toLocaleDateString("ro-RO", { day: "numeric", month: "long", timeZone: "Europe/Bucharest" });
+    };
+    return { de: fmt(deliveryEstimate.min_days), pana: fmt(deliveryEstimate.max_days) };
+  }, [deliveryEstimate]);
+
+  // Catalogul isi tine pagina curenta in sessionStorage tocmai ca intoarcerea
+  // de pe pagina de produs sa nu arunce clientul inapoi la pagina 1.
+  function laMagazin(e: React.MouseEvent) {
+    try {
+      const p = sessionStorage.getItem(`store_page_${business.slug}`);
+      if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${radacinaMagazin(basePath)}?page=${p}`; }
+    } catch {}
+  }
+
+  const categorie = (product.category ?? "").trim();
+  const codProdus = (selectedCombo?.sku || product.sku || "").trim();
+
+  const insigneIncredere = [
+    { icon: Truck, text: "Livrare rapida" },
+    { icon: RotateCcw, text: "Retur in 14 zile" },
+    { icon: ShieldCheck, text: "Plata securizata" },
+  ];
+
+  const file: { id: FilaActiva; eticheta: string; areContinut: boolean }[] = [
+    { id: "descriere", eticheta: "Descriere", areContinut: hasLongDesc },
+    { id: "specificatii", eticheta: "Specificatii", areContinut: specifications.length > 0 },
+    { id: "intrebari", eticheta: "Intrebari frecvente", areContinut: !!faqSection?.enabled && (faqSection.items?.length ?? 0) > 0 },
+  ];
+  const fileVizibile = file.filter((f) => f.areContinut);
+  const filaCurenta = fileVizibile.some((f) => f.id === fila) ? fila : fileVizibile[0]?.id;
+
+  return (
+    <>
+      {/* ─── Firimituri ─────────────────────────────────────────────────── */}
+      {!isHome && (
+        <nav aria-label="Firimituri" className="max-w-6xl mx-auto px-4 lg:px-6 pt-4 pb-1">
+          <ol className="flex items-center gap-1.5 text-[13px] text-muted-foreground overflow-x-auto">
+            <li className="shrink-0">
+              <a href={radacinaMagazin(basePath)} onClick={laMagazin}
+                className="hover:text-foreground transition-colors">Magazin</a>
+            </li>
+            {categorie !== "" && (
+              <>
+                <li aria-hidden="true" className="shrink-0"><ChevronRight size={13} /></li>
+                <li className="shrink-0">
+                  <a href={hrefCategorie(basePath, categorie)} className="hover:text-foreground transition-colors">{categorie}</a>
+                </li>
+              </>
+            )}
+            <li aria-hidden="true" className="shrink-0"><ChevronRight size={13} /></li>
+            <li className="text-foreground font-medium truncate">{product.name}</li>
+          </ol>
+        </nav>
+      )}
+
+      {/* ─── Galerie + coloana de cumparare ─────────────────────────────── */}
+      <div className="max-w-6xl mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12 lg:items-start">
+          <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
+            hasDiscount={!!hasDiscount} discountPct={discountPct} color={color} />
+
+          <div className="flex flex-col gap-4">
+            <h1 className="text-2xl lg:text-[28px] font-semibold text-foreground leading-snug tracking-tight">
+              {product.name}
+            </h1>
+
+            {brand !== "" && (
+              <p className="text-[13px] text-muted-foreground -mt-2">
+                Brand: <span className="font-semibold" style={{ color }}>{brand}</span>
+              </p>
+            )}
+
+            {hasShortDesc && (
+              <div className="policy-content text-sm text-muted-foreground leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: shortDesc }} />
+            )}
+
+            {showSocialProof && <div><SocialProof count={viewerCount} color={color} /></div>}
+
+            <hr className="border-border" />
+
+            {/* Pret */}
+            <div className="flex items-end gap-3 flex-wrap">
+              {showPriceRange ? (
+                <span className="text-3xl font-bold text-foreground">
+                  {formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)}
+                </span>
+              ) : (
+                <>
+                  <span className="text-3xl font-bold text-foreground">{formatPrice(displayPrice)}</span>
+                  {hasDiscount && (
+                    <span className="text-lg text-muted-foreground line-through mb-0.5">{formatPrice(displayComparePrice!)}</span>
+                  )}
+                </>
+              )}
+            </div>
+
+            {vatEnabled && (
+              <p className="text-xs text-muted-foreground -mt-2">
+                {pricesIncludeVat ? "Prețul include TVA" : "Prețul nu include TVA"}
+              </p>
+            )}
+
+            {/* Variante */}
+            {variantsData && (
+              <div className="flex flex-col gap-4 pt-1">
+                {variantsData.options.map((optiune) => (
+                  <div key={optiune.id ?? optiune.name}>
+                    <p className="text-[13px] text-muted-foreground mb-2">
+                      {optiune.name}:{" "}
+                      <span className="text-foreground font-medium">{selectedOptions[optiune.name] || "alege"}</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {optiune.values.map((valoare) => {
+                        const ales = selectedOptions[optiune.name] === valoare;
+                        const disponibil = isValueAvailable(variantsData, selectedOptions, optiune.name, valoare);
+                        return (
+                          <button key={valoare} type="button" disabled={!disponibil}
+                            aria-pressed={ales}
+                            onClick={() => setSelectedOptions((prev) => ({ ...prev, [optiune.name]: valoare }))}
+                            className="px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:line-through"
+                            style={ales
+                              ? { borderColor: color, color, backgroundColor: `${color}0F` }
+                              : { borderColor: "var(--color-border)" }}>
+                            {valoare}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {Object.keys(selectedOptions).length > 0 && (
+                  <button type="button" onClick={() => setSelectedOptions({})}
+                    className="self-start text-[13px] text-muted-foreground underline hover:text-foreground transition-colors">
+                    Sterge selectia
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Stoc */}
+            <div className="text-sm">
+              {isOutOfStock ? (
+                <span className="font-medium text-muted-foreground">Stoc epuizat</span>
+              ) : isPreorder ? (
+                <span className="font-medium" style={{ color }}>Disponibil la precomanda</span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 font-medium" style={{ color }}>
+                  <Check size={15} />
+                  {stocRamas !== null && stocRamas > 0 && stocRamas <= 10
+                    ? `Ultimele ${stocRamas} bucati in stoc`
+                    : "In stoc"}
+                </span>
+              )}
+            </div>
+
+            {combinatieIndisponibila && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Aceasta combinatie nu este disponibila.
+              </p>
+            )}
+
+            {/* Cantitate + cele doua actiuni */}
+            <div className="flex flex-col gap-2.5 pt-1">
+              <div className="flex items-stretch gap-2.5">
+                <Stepper valoare={cantitate} seteaza={setCantitate}
+                  maxim={stocRamas !== null && stocRamas > 0 ? stocRamas : null} />
+                {arataButonCos && (
+                  <button type="button" onClick={adaugaInCos}
+                    disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+                    className="flex-1 min-w-0 h-[52px] px-4 rounded-xl border-2 font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                    style={{ borderColor: color, color }}>
+                    {adaugat ? <Check size={17} /> : <ShoppingCart size={17} />}
+                    <span className="truncate">{adaugat ? "Adaugat in cos" : "Adauga in cos"}</span>
+                  </button>
+                )}
+              </div>
+
+              <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
+                needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
+                onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
+                eticheta={
+                  <>
+                    <CreditCard size={18} />
+                    {isOutOfStock ? "Stoc epuizat"
+                      : needsVariant ? "Selecteaza optiunile"
+                      : isPreorder ? "Precomanda acum"
+                      : "Comanda acum"}
+                  </>
+                } />
+              <p aria-live="polite" className="sr-only">{adaugat ? "Produsul a fost adaugat in cos" : ""}</p>
+            </div>
+
+            {/* Trepte de cantitate: existau in date, dar se vedeau abia in
+                formularul de comanda — adica dupa ce clientul decisese cate ia.
+                Preturile de treapta le onoreaza doar comanda directa, deci
+                fiecare rand duce acolo, cu numarul lui de bucati: altfel ar sta
+                langa un buton de cos care le ignora. */}
+            {quantityTiers && quantityTiers.length > 1 && (
+              <div className="rounded-xl border border-border overflow-hidden mt-1">
+                <p className="px-4 py-2.5 text-sm font-semibold text-foreground bg-muted/40 border-b border-border">
+                  Cumperi mai multe, platesti mai putin
+                </p>
+                <ul>
+                  {quantityTiers.slice(1).map((treapta) => (
+                    <li key={treapta.qty} className="border-b border-border last:border-0">
+                      <button type="button" disabled={isOutOfStock || needsVariant}
+                        onClick={() => { setCantitate(treapta.qty); setFbtOffer(undefined); setModalOpen(true); }}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                        <span className="text-sm text-foreground">
+                          <span className="font-semibold">{treapta.qty} bucati</span>
+                          {treapta.badge ? <span className="text-muted-foreground"> · {treapta.badge}</span> : null}
+                        </span>
+                        <span className="text-sm font-bold shrink-0" style={{ color }}>{formatPrice(treapta.price)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Date despre produs */}
+            <div className="flex flex-col gap-1.5 pt-1">
+              {dateLivrare && (
+                <RandMeta eticheta={deliveryEstimate?.text || "Livrare estimata"}>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Calendar size={13} className="text-muted-foreground" />
+                    {dateLivrare.de} - {dateLivrare.pana}
+                  </span>
+                </RandMeta>
+              )}
+              {codProdus !== "" && <RandMeta eticheta="Cod produs">{codProdus}</RandMeta>}
+              {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
+              {categorie !== "" && (
+                <RandMeta eticheta="Categorie">
+                  <a href={hrefCategorie(basePath, categorie)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
+                </RandMeta>
+              )}
+              {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}
+            </div>
+
+            {trustBadgesEnabled && (
+              <>
+                <hr className="border-border" />
+                <ul className="flex flex-wrap gap-x-5 gap-y-2">
+                  {insigneIncredere.map(({ icon: Icon, text }) => (
+                    <li key={text} className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                      <Icon size={14} style={{ color }} />
+                      {text}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            {/* Intrebari: telefonul si WhatsApp-ul magazinului, cand exista */}
+            {(business.phone || business.whatsapp) && (
+              <div className="flex items-center gap-4 flex-wrap text-[13px] pt-1">
+                <span className="text-muted-foreground">Ai intrebari despre produs?</span>
+                {business.phone && (
+                  <a href={`tel:${business.phone}`} className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
+                    <Phone size={14} /> {business.phone}
+                  </a>
+                )}
+                {business.whatsapp && (
+                  <a href={`https://wa.me/${String(business.whatsapp).replace(/[^0-9]/g, "")}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
+                    <MessageCircle size={14} /> WhatsApp
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Miniatura din catalog se opreste aici: restul paginii trece de 3000 px
+          si, micsorata intr-un card, ar deveni o banda ilizibila. */}
+      {demo ? null : (
+        <>
+          {/* ─── File ────────────────────────────────────────────────────── */}
+          {fileVizibile.length > 0 && (
+            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+              <div className="border-b border-border flex gap-6 overflow-x-auto">
+                {fileVizibile.map((f) => (
+                  <button key={f.id} type="button" onClick={() => setFila(f.id)}
+                    aria-current={filaCurenta === f.id}
+                    className="shrink-0 pb-3 text-sm font-semibold border-b-2 -mb-px transition-colors"
+                    style={filaCurenta === f.id
+                      ? { borderColor: color, color: "var(--color-foreground)" }
+                      : { borderColor: "transparent", color: "var(--color-muted-foreground)" }}>
+                    {f.eticheta}
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-6">
+                {filaCurenta === "descriere" && hasLongDesc && (
+                  <div className="policy-content text-muted-foreground leading-relaxed text-sm max-w-3xl"
+                    dangerouslySetInnerHTML={{ __html: product.description! }} />
+                )}
+
+                {filaCurenta === "specificatii" && specifications.length > 0 && (
+                  <dl className="max-w-3xl divide-y divide-border">
+                    {specifications.map((spec, i) => (
+                      <div key={`${spec.label}-${i}`} className="flex flex-col sm:flex-row gap-1 sm:gap-4 py-2.5 text-sm">
+                        <dt className="sm:w-40 sm:shrink-0 text-muted-foreground">{spec.label}</dt>
+                        <dd className="text-foreground font-medium min-w-0">{spec.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+
+                {filaCurenta === "intrebari" && faqSection?.enabled && (
+                  <div className="max-w-3xl">
+                    {(faqSection.items ?? []).map((faq, i) => (
+                      <FAQItem key={i} faq={faq} isOpen={faqOpen === i}
+                        onToggle={() => setFaqOpen(faqOpen === i ? null : i)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Continutul pachetului ───────────────────────────────────── */}
+          {product.is_bundle && bundleComponents.length > 0 && (
+            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+              <h2 className="text-lg font-bold text-foreground mb-4">Pachetul conține</h2>
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {bundleComponents.map((c) => (
+                  <li key={c.id} className="flex items-center gap-3 rounded-xl border border-border p-3">
+                    <div className="relative w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-muted/40">
+                      {c.image_url
+                        ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
+                        : <Package size={20} className="text-muted-foreground/40 absolute inset-0 m-auto" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.quantity} buc.</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* ─── Merge bine cu ───────────────────────────────────────────── */}
+          {productOffers.length > 0 && (
+            <ProductOffers offers={productOffers} basePath={basePath} color={color}
+              anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
+              onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+          )}
+
+          {/* ─── Beneficii ───────────────────────────────────────────────── */}
+          {benefitsSection?.enabled && (benefitsSection.items?.length ?? 0) > 0 && (
+            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+              <h2 className="text-lg font-bold text-foreground mb-4">{benefitsSection.title}</h2>
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {benefitsSection.items.map((b, i) => (
+                  <li key={i} className="rounded-xl border border-border p-4">
+                    <p className="font-semibold text-foreground text-sm mb-1">{b.title}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{b.desc}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* ─── Cum functioneaza ────────────────────────────────────────── */}
+          {howItWorksSection?.enabled && (howItWorksSection.steps?.length ?? 0) > 0 && (
+            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+              <h2 className="text-lg font-bold text-foreground mb-4">{howItWorksSection.title}</h2>
+              <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {howItWorksSection.steps.map((s, i) => (
+                  <li key={i} className="rounded-xl border border-border p-4">
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold text-white mb-2"
+                      style={{ backgroundColor: color }}>{i + 1}</span>
+                    <p className="font-semibold text-foreground text-sm mb-1">{s.title}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* ─── Bara lipita jos, pe telefon ─────────────────────────────── */}
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 py-3 flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] text-muted-foreground truncate">{product.name}</p>
+              <p className="text-base font-bold text-foreground">
+                {showPriceRange
+                  ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
+                  : formatPrice(displayPrice)}
+              </p>
+            </div>
+            {arataButonCos && (
+              <button type="button" onClick={adaugaInCos}
+                disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+                aria-label={adaugat ? "Adaugat in cos" : "Adauga in cos"}
+                className="w-12 h-12 shrink-0 rounded-xl border-2 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                style={{ borderColor: color, color }}>
+                {adaugat ? <Check size={18} /> : <ShoppingCart size={18} />}
+              </button>
+            )}
+            <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
+              disabled={isOutOfStock || needsVariant}
+              className="shrink-0 px-5 h-12 rounded-xl text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
+              style={{ backgroundColor: color }}>
+              {isOutOfStock ? "Epuizat" : isPreorder ? "Precomanda" : "Comanda"}
+            </button>
+          </div>
+
+          <OrderModal
+            open={modalOpen}
+            onClose={() => { setModalOpen(false); setFbtOffer(undefined); }}
+            product={{
+              id: product.id,
+              name: selectedComboTitle ? `${product.name} (${selectedComboTitle})` : product.name,
+              price: displayPrice,
+              compare_at_price: displayComparePrice,
+              images: slides,
+              weight_grams: product.weight_grams,
+            }}
+            business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
+            shippingCost={shippingCost}
+            freeShippingThreshold={freeShippingThreshold}
+            minOrderAmount={minOrderAmount}
+            tiers={quantityTiers}
+            initialQuantity={cantitate}
+            customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
+            cartItems={cartItems}
+            onCartConsumed={() => {
+              // Doar liniile purtate in comanda ies din cos. Produsul curent nu
+              // e printre ele (se comanda separat, cu cantitatea din formular),
+              // deci linia lui, daca exista, ramane vizibila in loc sa dispara.
+              if (!cos) return;
+              const ramas = cosDupaComanda(cos.items, cartItems);
+              cos.restoreCart(ramas);
+            }}
+            fbtOffer={fbtOffer}
+          />
+        </>
+      )}
+    </>
+  );
+}

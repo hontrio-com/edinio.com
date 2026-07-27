@@ -35,7 +35,7 @@ export function lineKey(item: Pick<CartItem, "productId" | "variantTitle">): str
 
 export interface CartContextValue {
   items: CartItem[];
-  addItem: (item: Omit<CartItem, "quantity">) => void;
+  addItem: (item: Omit<CartItem, "quantity">, cantitate?: number) => void;
   removeItem: (key: string) => void;
   updateQty: (key: string, qty: number) => void;
   total: number;
@@ -61,6 +61,16 @@ export function useCart(): CartContextValue {
   const ctx = useContext(CartContext);
   if (!ctx) throw new Error("useCart must be inside CartProvider");
   return ctx;
+}
+
+/**
+ * Pentru componentele care apar si acolo unde nu exista cos.
+ *
+ * Miniaturile din catalogul de design-uri randeaza pagina de produs fara
+ * `CartProvider`; cu `useCart()` ar arunca, iar cardul ar ramane alb.
+ */
+export function useCartOptional(): CartContextValue | null {
+  return useContext(CartContext);
 }
 
 export function CartProvider({ children, slug }: { children: ReactNode; slug: string }) {
@@ -114,13 +124,19 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
     });
   }
 
-  function addItem(item: Omit<CartItem, "quantity">) {
+  /**
+   * `cantitate` exista pentru paginile de produs, care au selector de bucati.
+   * Implicit ramane 1, deci apelurile din grila si din quick-add sunt neatinse.
+   * Valorile sub 1 sau nefinite cad tot pe 1: o adaugare nu poate scadea cosul.
+   */
+  function addItem(item: Omit<CartItem, "quantity">, cantitate = 1) {
+    const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
     save((prev) => {
       const key = lineKey(item);
       const exists = prev.find((i) => lineKey(i) === key);
       return exists
-        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i))
-        : [...prev, { ...item, quantity: 1 }];
+        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + n } : i))
+        : [...prev, { ...item, quantity: n }];
     });
   }
 
@@ -177,12 +193,14 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
     <CartContext.Provider
       value={{
         items,
-        addItem: (item) =>
+        addItem: (item, cantitate = 1) => {
+          const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
           setItems((prev) =>
             prev.some((i) => lineKey(i) === lineKey(item))
-              ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: i.quantity + 1 } : i))
-              : [...prev, { ...item, quantity: 1 }],
-          ),
+              ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: i.quantity + n } : i))
+              : [...prev, { ...item, quantity: n }],
+          );
+        },
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>
           setItems((prev) =>

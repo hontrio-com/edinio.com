@@ -80,11 +80,27 @@ interface Props {
   freeShippingThreshold: number | null;
   minOrderAmount?: number | null;
   tiers?: QuantityTier[];
+  /**
+   * Cate bucati a ales clientul INAINTE sa deschida formularul.
+   *
+   * Paginile de produs cu selector de cantitate il trimit incoace; fara el,
+   * clientul alege 3 bucati, apasa „Comanda acum" si formularul reincepe de la
+   * una singura. Cand produsul are trepte de cantitate, se alege treapta cu
+   * exact acest numar de bucati, daca exista.
+   */
+  initialQuantity?: number;
   customizationFields?: CustomizationFieldDef[];
   /** Items already in the storefront cart, carried into this order. */
   cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[];
   /** Called after the order is placed so the caller can clear the cart. */
-  onCartConsumed?: () => void;
+  /**
+   * Comanda a plecat cu liniile astea de cos in ea.
+   *
+   * Primeste lista REALA, dupa ce clientul a mai putut sterge sau reduce
+   * linii in formular: apelantul scade exact ce s-a comandat, nu ce era in
+   * cos cand s-a deschis modalul.
+   */
+  onCartConsumed?: (liniiComandate: { productId: string; variantTitle?: string }[]) => void;
   /** Pre-accepted "frequently bought together" set — companions at FBT-distributed prices. */
   fbtOffer?: { id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] };
 }
@@ -104,7 +120,7 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, customizationFields, cartItems, onCartConsumed, fbtOffer }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, customizationFields, cartItems, onCartConsumed, fbtOffer }: Props) {
   const color = business.primary_color;
   // Upsell-ul de cantitate se suprima in fluxul "Cumpara impreuna" (FBT): setul FBT
   // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
@@ -275,8 +291,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Reset on open
   useEffect(() => {
     if (!open) return;
-    setSelectedTierIdx(0);
-    setQuantity(1);
+    // Cantitatea aleasa pe pagina, cand pagina are selector. Cu trepte de
+    // cantitate, se preselecteaza treapta cu exact atatea bucati, daca exista.
+    const cerute = Math.max(1, Math.floor(Number(initialQuantity) || 1));
+    const treapta = tiers ? tiers.findIndex((t) => t.qty === cerute) : -1;
+    setSelectedTierIdx(treapta >= 0 ? treapta : 0);
+    setQuantity(cerute);
     setErrors({});
     setDiscountInput("");
     setAppliedDiscount(null);
@@ -564,7 +584,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           // Order created with the cart folded in — clear it so it isn't re-ordered.
           // Deferred to here so a failed payment start keeps the form (and payloadKey)
           // intact for the retry above.
-          if (cart.length > 0) onCartConsumed?.();
+          if (cart.length > 0) onCartConsumed?.(cart);
           window.location.href = redirect;
           return;
         }
@@ -572,7 +592,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         return;
       }
 
-      if (cart.length > 0) onCartConsumed?.();
+      if (cart.length > 0) onCartConsumed?.(cart);
       onClose();
       window.location.href = `${business.basePath}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
     });

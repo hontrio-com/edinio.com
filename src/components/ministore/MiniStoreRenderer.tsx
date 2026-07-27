@@ -16,6 +16,7 @@ import { parseVariants } from "@/lib/storefront/variants";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
+import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { cartHref, cartOnPage, checkoutHref, checkoutOnPage } from "@/lib/storefront/design/commerce";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { variantMeta } from "@/lib/storefront/design/registry";
@@ -502,9 +503,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).
   function trackAndFlash(productId: string, name: string, price: number) {
-    fbTrack("AddToCart", { value: price, currency: "RON", content_name: name, content_ids: [productId], content_type: "product" });
-    ttqTrack("AddToCart", { value: price, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: name, price, quantity: 1 }] });
-    gtagEvent("add_to_cart", { currency: "RON", value: price, items: [{ item_id: productId, item_name: name, price, quantity: 1 }] });
+    trackAddToCart({ productId, name, price });
     setAddedId(productId);
     setTimeout(() => setAddedId(null), 1500);
   }

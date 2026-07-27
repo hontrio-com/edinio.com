@@ -115,7 +115,13 @@ export function isValueAvailable(
 export function comboUnitPrice(combo: VariantCombo | null, basePrice: number): number {
   if (combo && combo.price != null && String(combo.price).trim() !== "") {
     const n = Number(combo.price);
-    if (Number.isFinite(n)) return n;
+    // Zero inseamna „fara pret propriu", nu „gratis": formularul salveaza sirul
+    // gol, dar importul pune 0 numeric pentru combinatiile fara `pret=` in CSV
+    // (lib/import/normalize.ts). Fara conditia asta, un dus-intors export-import
+    // transforma toate marimile unui produs in variante de 0 lei, iar serverul
+    // le accepta la comanda. `comboCompareAtPrice` de mai jos si
+    // `getProductPriceRange` cer deja acelasi lucru.
+    if (Number.isFinite(n) && n > 0) return n;
   }
   return basePrice;
 }

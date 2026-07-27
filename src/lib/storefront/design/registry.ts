@@ -61,7 +61,7 @@ export interface ActionState {
   on: boolean;
 }
 
-export type VariantTag = "clasic" | "simplu" | "indraznet" | "cu imagine" | "compact" | "elegant";
+export type VariantTag = "clasic" | "simplu" | "indraznet" | "cu imagine" | "compact" | "elegant" | "detaliat";
 
 export interface VariantMeta {
   label: string;
@@ -484,7 +484,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      icons: { label: "Iconite", tags: ["clasic", "compact"], layout: "full", fields: [] },
+      icons: { label: "Iconite", tags: ["detaliat"], layout: "full", fields: [] },
     },
   },
   catalog_toolbar: {
@@ -613,6 +613,13 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // Miniatura arata partea de sus a paginii — galeria si zona de
         // cumparare. Pagina intreaga trece de 3000 px, iar micsorata intr-un
         // card ar deveni o banda ilizibila.
+        previewHeight: 780,
+        fields: [],
+      },
+      detailed: {
+        label: "Detaliat",
+        tags: ["detaliat"],
+        layout: "full",
         previewHeight: 780,
         fields: [],
       },

@@ -2,10 +2,10 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
-  ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Star, Eye,
+  ShoppingBag, ArrowLeft, Package, Plus, Calendar, Star,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
@@ -15,242 +15,18 @@ import {
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
-import type { MenuItem } from "@/lib/pages/menu";
-import type { Database } from "@/types/database.types";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
 
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
-type Product = Database["public"]["Tables"]["products"]["Row"];
-type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
-
-/* ─── Page content types ──────────────────────────────────────────────────── */
-
-interface TrustBadge { icon: string; title: string; desc: string; }
-interface BenefitItem { title: string; desc: string; }
-interface HowItWorksStep { title: string; desc: string; }
-interface FaqItem { q: string; a: string; }
-interface SpecItem { label: string; value: string; }
-
-interface PageContent {
-  announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number; };
-  menu?: MenuItem[];
-  logo_size?: number;
-  trust_badges_enabled?: boolean;
-  trust_badges?: TrustBadge[];
-  benefits_section?: { enabled: boolean; title: string; items: BenefitItem[]; };
-  how_it_works_section?: { enabled: boolean; title: string; steps: HowItWorksStep[]; };
-  faq_section?: { enabled: boolean; title: string; items: FaqItem[]; };
-  image_zoom?: { enabled: boolean };
-  delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
-  price_range_display?: { enabled: boolean };
-  button_effect?: string;
-  show_social_proof?: boolean;
-  show_quality_badge?: boolean;
-  footer_logo_size?: number;
-  checkout_config?: {
-    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
-    extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
-  };
-}
-
-interface VariantCombo {
-  id: string;
-  title: string;
-  price: string;
-  compare_at_price: string;
-  sku: string;
-  stock_quantity: string;
-  image: string;
-  enabled: boolean;
-}
-
-interface CustomizationFieldDef {
-  id: string;
-  type: "text" | "textarea" | "image" | "select" | "color";
-  label: string;
-  placeholder?: string;
-  required: boolean;
-  max_length?: number;
-  max_files?: number;
-  max_file_size_mb?: number;
-  options?: string[];
-  default_color?: string;
-  helper_text?: string;
-}
-
-interface PageSections {
-  short_description?: string;
-  specifications?: SpecItem[];
-  quantity_tiers?: {
-    enabled: boolean;
-    mode?: "fixed" | "percent";
-    tier2_price: number;
-    tier2_percent?: number;
-    tier2_badge: string;
-    tier3_price: number;
-    tier3_percent?: number;
-    tier3_badge: string;
-  };
-  stock_status?: "in_stock" | "out_of_stock" | "preorder";
-  dimensions?: { length: number; width: number; height: number };
-  variants?: {
-    enabled: boolean;
-    options: { id: string; name: string; values: string[] }[];
-    combinations: VariantCombo[];
-  };
-  customization?: {
-    enabled: boolean;
-    fields: CustomizationFieldDef[];
-  };
-}
-
-/* ─── Helpers ─────────────────────────────────────────────────────────────── */
-
-const MQ_MISCARE_REDUSA = "(prefers-reduced-motion: reduce)";
-function abonareMiscareRedusa(la: () => void) {
-  const mq = window.matchMedia(MQ_MISCARE_REDUSA);
-  mq.addEventListener("change", la);
-  return () => mq.removeEventListener("change", la);
-}
-function citesteMiscareRedusa() { return window.matchMedia(MQ_MISCARE_REDUSA).matches; }
-
-/** Hash stabil, ca numarul de vizitatori sa iasa acelasi pe server si in browser. */
-function hashSir(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
-/**
- * Cosul e detinut de `CartProvider` (contorul din antet citeste de acolo), dar
- * pagina de produs scrie direct in `cart_<slug>`. Evenimentul „storage" nu se
- * declanseaza in fila care a scris, deci il emitem noi: fara el antetul ramane pe
- * cifra veche dupa o adaugare din „Merge bine cu", iar cosul sters dupa comanda
- * ramane plin in memoria providerului.
- */
-function anuntaCosSchimbat(cheie: string, valoare: string | null) {
-  try {
-    window.dispatchEvent(new StorageEvent("storage", { key: cheie, newValue: valoare }));
-  } catch {}
-}
-
-/* ─── Default content ─────────────────────────────────────────────────────── */
-
-/* ─── Sub-components ──────────────────────────────────────────────────────── */
-
-function SocialProof({ count, color }: { count: number; color: string }) {
-  return (
-    <div className="inline-flex items-center gap-2 bg-surface border border-border shadow-sm rounded-full px-4 py-2 text-sm">
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: color }} />
-        <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: color }} />
-      </span>
-      <Eye size={14} className="text-muted-foreground" />
-      <span className="font-medium text-muted-foreground">
-        <span className="text-foreground font-bold">{count}</span> persoane se uita acum
-      </span>
-    </div>
-  );
-}
-
-function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boolean; onToggle: () => void }) {
-  return (
-    <div className="border-b border-border last:border-0">
-      <button type="button" onClick={onToggle} aria-expanded={isOpen}
-        className="w-full flex items-start gap-4 py-5 text-left hover:text-foreground transition-colors">
-        <span className="mt-0.5 shrink-0 w-6 h-6 rounded-full border border-border flex items-center justify-center">
-          {isOpen ? <Minus size={12} className="text-foreground" /> : <Plus size={12} className="text-muted-foreground" />}
-        </span>
-        <span className="font-semibold text-foreground text-base pr-4">{faq.q}</span>
-      </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden">
-            <p className="text-muted-foreground text-sm leading-relaxed pb-5 pl-10 pr-4">{faq.a}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ─── CTA Button with effects ─────────────────────────────────────────────── */
-
-const BTN_CLS = "w-full py-4 text-base font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
-
-function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayment, effect, onClick }: {
-  color: string; isOutOfStock: boolean; isPreorder: boolean; needsVariant: boolean; hasCardPayment: boolean; effect: string; onClick: () => void;
-}) {
-  // Drop the "- Plata la livrare" suffix when card payment is available.
-  const codSuffix = hasCardPayment ? "" : " - Plata la livrare";
-  const label = (
-    <>
-      <ShoppingBag size={18} />
-      {isOutOfStock ? "Stoc epuizat"
-        : needsVariant ? "Selecteaza optiunile"
-        : isPreorder ? `Precomanda${codSuffix}`
-        : `Comanda acum${codSuffix}`}
-    </>
-  );
-  const base = { backgroundColor: color, boxShadow: `0px 4px 16px ${color}55` };
-
-  const disabled = isOutOfStock || needsVariant;
-
-  if (effect === "pulse") return (
-    <div className="relative">
-      <motion.div
-        className="absolute inset-0 rounded-xl pointer-events-none"
-        style={{ backgroundColor: color }}
-        animate={{ opacity: [0.7, 0], scale: [1, 1.15] }}
-        transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
-      />
-      <button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}>{label}</button>
-    </div>
-  );
-
-  if (effect === "shake") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
-      animate={{ x: [0, -5, 5, -5, 5, 0] }}
-      transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 3 }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "bounce") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
-      animate={{ y: [0, -6, 0] }}
-      transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "glow") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS}
-      style={{ backgroundColor: color }}
-      animate={{ boxShadow: [`0px 4px 16px ${color}44`, `0px 4px 36px ${color}CC`, `0px 4px 16px ${color}44`] }}
-      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "heartbeat") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
-      animate={{ scale: [1, 1.06, 1, 1.06, 1] }}
-      transition={{ duration: 1, repeat: Infinity, repeatDelay: 1.5 }}>
-      {label}
-    </motion.button>
-  );
-
-  return (
-    <button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS + " transition-all"} style={base}>
-      {label}
-    </button>
-  );
-}
+import type {
+  Business, Product, StoreSettings, PageContent, PageSections,
+} from "./_shared/product-page.types";
+import {
+  abonareMiscareRedusa, citesteMiscareRedusa, hashSir, anuntaCosSchimbat,
+  SocialProof, FAQItem, CTAButton,
+} from "./_shared/pieces";
+import { cosDupaComanda } from "@/lib/storefront/cart/consume";
 
 /* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
@@ -1162,10 +938,19 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         tiers={quantityTiers}
         customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
         cartItems={cartItems}
-        onCartConsumed={() => {
+        onCartConsumed={(liniiComandate) => {
+          // Doar liniile care au intrat in comanda. Stergerea intregii chei lasa
+          // pe dinafara linia produsului curent: ea nu e purtata in comanda (el
+          // se comanda separat, cu cantitatea din formular), deci ar fi disparut
+          // necomandata.
           try {
-            localStorage.removeItem(`cart_${business.slug}`);
-            anuntaCosSchimbat(`cart_${business.slug}`, null);
+            const cheie = `cart_${business.slug}`;
+            const brut = localStorage.getItem(cheie);
+            const cos = brut ? JSON.parse(brut) : [];
+            const ramas = cosDupaComanda(Array.isArray(cos) ? cos : [], liniiComandate);
+            const valoare = ramas.length > 0 ? JSON.stringify(ramas) : null;
+            if (valoare) localStorage.setItem(cheie, valoare); else localStorage.removeItem(cheie);
+            anuntaCosSchimbat(cheie, valoare);
           } catch {}
         }}
         fbtOffer={fbtOffer}

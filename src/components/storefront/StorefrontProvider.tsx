@@ -205,6 +205,16 @@ export function useStorefront(): StorefrontContextValue {
  * unde exista catalog — de exemplu un header cu cautare, care filtreaza pe loc
  * pe pagina de magazin si navigheaza catre ea de oriunde altundeva.
  */
+/**
+ * Ca useStoreChrome, dar fara sa arunce acolo unde nu exista chrome.
+ *
+ * Miniaturile din catalogul de design-uri randeaza pagina de produs in afara
+ * magazinului, deci fara provider; ele trebuie totusi sa se randeze.
+ */
+export function useStoreChromeOptional(): StoreChromeValue | null {
+  return useContext(ChromeContext);
+}
+
 export function useStorefrontOptional(): StorefrontContextValue | null {
   return useContext(CatalogContext);
 }

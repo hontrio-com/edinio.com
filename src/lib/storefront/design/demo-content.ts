@@ -157,7 +157,7 @@ export function demoProductPage(businessId: string) {
     external_id: null,
     sku: "DEMO-001",
     source: null,
-    tags: [],
+    tags: ["exterior", "solar"],
     shipping_class: null,
     weight_grams: 1200,
     page_sections: {
@@ -178,6 +178,20 @@ export function demoProductPage(businessId: string) {
         ],
         combinations: combinatii,
       },
+      // Blocurile pe care doar unele variante de design le arata: fara ele,
+      // designul care le pune in valoare ar aparea gol tocmai in miniatura dupa
+      // care se alege.
+      quantity_tiers: {
+        enabled: true,
+        mode: "percent",
+        tier2_price: 0,
+        tier2_percent: 10,
+        tier2_badge: "Cel mai ales",
+        tier3_price: 0,
+        tier3_percent: 15,
+        tier3_badge: "Pret pe bucata cel mai mic",
+      },
+      google: { brand: "Lumina", gtin: "5941234567890" },
     },
   };
 

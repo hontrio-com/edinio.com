@@ -1,7 +1,12 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import type { ComponentProps, ComponentType } from "react";
+import dynamic from "next/dynamic";
 import { ProductPageClassic } from "./ProductPageClassic";
+
+const ProductPageDetailed = dynamic(
+  () => import("./ProductPageDetailed").then((m) => m.ProductPageDetailed),
+);
 
 /**
  * Pagina de produs, in designul ales de comerciant.
@@ -12,12 +17,17 @@ import { ProductPageClassic } from "./ProductPageClassic";
  * cu un singur produs) trec prin locul asta, deci o varianta noua inseamna un
  * fisier de componenta si o linie in lista de mai jos.
  *
- * Variantele care nu sunt „classic" se vor incarca cu `next/dynamic`, ca la
+ * Variantele care nu sunt „classic" se incarca cu `next/dynamic`, ca la
  * headere: altfel fiecare magazin ar descarca toate design-urile de pagina de
  * produs, nu doar pe al lui.
+ *
+ * `classic` trebuie sa ramana PRIMA cheie: parserul cade pe prima varianta
+ * declarata cand cea salvata nu se recunoaste, iar o alta pe pozitia asta ar
+ * muta magazinele pe un design nou fara ca nimeni sa fi cerut-o.
  */
-const VARIANTE: Record<string, typeof ProductPageClassic> = {
+const VARIANTE: Record<string, ComponentType<ComponentProps<typeof ProductPageClassic>>> = {
   classic: ProductPageClassic,
+  detailed: ProductPageDetailed,
 };
 
 export function ProductPageSection({

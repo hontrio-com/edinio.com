@@ -55,12 +55,15 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
    * primei pagini si nu indexa niciuna. Cautarea libera (?q=) ramane in afara:
    * acolo canonicalul catre radacina e corect, sunt infinit de multe.
    */
-  const filtre = new URLSearchParams();
-  if (catQ) filtre.set("cat", catQ);
-  if (saleQ === "1") filtre.set("sale", "1");
+  // Codificarea e cea din linkuri (`encodeURIComponent`), nu cea din
+  // `URLSearchParams`: aceea scrie spatiile cu `+`, deci canonicalul ar arata
+  // catre alta adresa decat cea pe care a crawlat-o Google.
+  const filtre: string[] = [];
+  if (catQ) filtre.push(`cat=${encodeURIComponent(catQ)}`);
+  if (saleQ === "1") filtre.push("sale=1");
   const nrPagina = Math.max(1, parseInt(pageQ ?? "1", 10) || 1);
-  if (nrPagina > 1) filtre.set("page", String(nrPagina));
-  const sir = filtre.toString();
+  if (nrPagina > 1) filtre.push(`page=${nrPagina}`);
+  const sir = filtre.join("&");
   const url = sir ? `${radacina}?${sir}` : radacina;
 
   // One Product Store: the homepage *is* the chosen product's landing page, so its

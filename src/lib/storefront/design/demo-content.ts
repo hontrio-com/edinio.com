@@ -87,7 +87,7 @@ export function demoProducts(businessId: string) {
     compare_at_price: vechi,
     images: [imagine],
     category: DEMO_CATEGORY_NAMES[0],
-    is_featured: i < 4,
+    is_featured: true,
     is_active: true,
     is_bundle: false,
     track_inventory: false,

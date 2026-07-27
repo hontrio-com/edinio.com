@@ -49,7 +49,9 @@ export function SectionPreviewFrame({
       productSections: [
         {
           section: { id: section.id, title: "Produse", enabled: true, mode: "selected" as const, layout: "grid" as const },
-          items: items.slice(0, 4),
+          // Sase, nu patru: caruselele arata patru deodata, iar cu exact patru
+          // n-ar avea ce derula si nu s-ar vedea ce le deosebeste.
+          items: items.slice(0, 6),
         },
       ],
       isProductOutOfStock: (p) => !!(p.track_inventory && p.stock_quantity === 0),

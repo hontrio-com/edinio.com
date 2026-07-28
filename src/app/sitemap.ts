@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN, isPlatformHost, parseStoreSeo } from "@/lib/seo";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
+import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
+import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 // Un fisier de sitemap accepta maxim 50.000 de URL-uri (limita Google) —
@@ -13,6 +15,19 @@ const SITEMAP_URL_LIMIT = 50000;
 
 /** Whether a store's homepage opted out of indexing (Settings > SEO > noindex).
  *  Reads the nested store_settings(page_content) selected on a businesses row. */
+/**
+ * Designul PUBLICAT al magazinului, din randul deja adus.
+ *
+ * Contextul e minimal: singura intrebare de aici e daca exista pagina de
+ * catalog, iar aceea nu depinde de culori, de bannere sau de flagurile paginii
+ * principale.
+ */
+function designPublicat(storeSettings: unknown) {
+  const ss = storeSettings as { storefront_design?: unknown } | { storefront_design?: unknown }[] | null;
+  const brut = ss ? (Array.isArray(ss) ? ss[0] : ss)?.storefront_design : null;
+  return parseStoreDesign(brut, { primaryColor: "#1AB554", pageContent: {}, features: {} });
+}
+
 function homepageNoindex(row: { store_settings?: unknown }): boolean {
   const ss = row.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null | undefined;
   if (!ss) return false;
@@ -34,7 +49,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!isPlatformHost(host)) {
     const { data: biz } = await createAdminClient()
       .from("businesses")
-      .select("id, updated_at, store_settings(page_content)")
+      .select("id, updated_at, store_settings(page_content, storefront_design)")
       .eq("custom_domain", host)
       .eq("is_published", true)
       .single();
@@ -46,6 +61,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const entries: MetadataRoute.Sitemap = homepageNoindex(biz)
       ? []
       : [{ url: base, lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(), changeFrequency: "weekly", priority: 1 }];
+
+    // Pagina de catalog, cand magazinul si-a ales-o. Prima ruta-sectiune
+    // indexabila: cosul si finalizarea sunt deliberat noindex, dar asta e chiar
+    // catalogul magazinului.
+    if (shopOnPage(designPublicat(biz.store_settings))) {
+      entries.push({
+        url: `${base}/${SEGMENT_MAGAZIN}`,
+        lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(),
+        changeFrequency: "daily",
+        priority: 0.9,
+      });
+    }
 
     // One Product Store: the homepage already represents the single product, so
     // skip the individual /product/* URLs (the main one 301s to the homepage; the
@@ -110,7 +137,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const businesses = await fetchAllRows("sitemap.platform.businesses", (from, to) =>
     admin
       .from("businesses")
-      .select("slug, updated_at, custom_domain, store_settings(page_content)")
+      .select("slug, updated_at, custom_domain, store_settings(page_content, storefront_design)")
       .eq("is_published", true)
       .order("id")
       .range(from, to)
@@ -123,6 +150,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: b.updated_at ? new Date(b.updated_at) : new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.8,
+    }));
+
+  const paginiDeCatalog: MetadataRoute.Sitemap = businesses
+    .filter((b) => !b.custom_domain && !homepageNoindex(b) && shopOnPage(designPublicat(b.store_settings)))
+    .map((b) => ({
+      url: `${PLATFORM_ORIGIN}/${b.slug}/${SEGMENT_MAGAZIN}`,
+      lastModified: b.updated_at ? new Date(b.updated_at) : new Date(),
+      changeFrequency: "daily" as const,
+      priority: 0.9,
     }));
 
   // One Product Store homepages represent their single product, so their
@@ -182,5 +218,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       };
     });
 
-  return [...staticPages, ...businessPages, ...productPages, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
+  return [...staticPages, ...businessPages, ...paginiDeCatalog, ...productPages, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
 }

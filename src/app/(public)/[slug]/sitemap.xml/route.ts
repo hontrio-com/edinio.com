@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { PLATFORM_ORIGIN, parseStoreSeo } from "@/lib/seo";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
+import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
+import { parseStoreDesign } from "@/lib/storefront/design/parse";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
 
   const { data: biz } = await admin
     .from("businesses")
-    .select("id, slug, updated_at, is_published, store_settings(page_content)")
+    .select("id, slug, updated_at, is_published, store_settings(page_content, storefront_design)")
     .eq("slug", slug)
     .maybeSingle();
   if (!biz || !biz.is_published) {
@@ -32,6 +34,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   // Homepage (skipped when the merchant set the store to noindex).
   if (parseStoreSeo(pageContent(biz.store_settings)).noindex !== true) {
     entries.push({ loc: base, lastmod: iso(biz.updated_at) });
+  }
+
+  /*
+   * Pagina de catalog, cand magazinul si-a ales-o.
+   *
+   * E prima ruta-sectiune INDEXABILA: cosul si finalizarea sunt deliberat
+   * noindex, fiindca sunt pasi ai cumpararii, dar asta e chiar catalogul
+   * magazinului. Fara intrarea de aici, indexarea ei ar fi depins exclusiv de
+   * linkuri interne.
+   */
+  if (shopOnPage(designPublicat(biz.store_settings))) {
+    entries.push({ loc: `${base}/${SEGMENT_MAGAZIN}`, lastmod: iso(biz.updated_at) });
   }
 
   // One Product Store: the homepage already represents the single product, so
@@ -73,6 +87,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
 
 function iso(d: string | null): string | undefined {
   return d ? new Date(d).toISOString() : undefined;
+}
+
+/**
+ * Designul PUBLICAT al magazinului, din randul deja adus.
+ *
+ * Contextul e minimal: singura intrebare de aici e daca exista pagina de
+ * catalog, iar aceea nu depinde de culori, de bannere sau de flagurile paginii
+ * principale.
+ */
+function designPublicat(storeSettings: unknown) {
+  const ss = storeSettings as { storefront_design?: unknown } | { storefront_design?: unknown }[] | null;
+  const brut = ss ? (Array.isArray(ss) ? ss[0] : ss)?.storefront_design : null;
+  return parseStoreDesign(brut, { primaryColor: "#1AB554", pageContent: {}, features: {} });
 }
 
 function pageContent(storeSettings: unknown): unknown {

@@ -21,9 +21,16 @@ const PREREQUISITES = [
   "Categorie leaf (fără subcategorii) + atributele obligatorii ale categoriei.",
 ];
 
+type Actiune = null | "conectare" | "deconectare" | "setari" | "webhook";
+
 export function TrendyolClient({ businessId, status }: { businessId: string; status: TrendyolStatus | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // Care buton a pornit tranzitia. `useTransition` da un singur `pending` pe toata
+  // componenta, deci fara asta salvarea setarilor punea spinner si pe butonul de
+  // webhook, de parca s-ar fi intamplat doua lucruri deodata.
+  const [actiune, setActiune] = useState<Actiune>(null);
+  const ruleaza = (a: Actiune) => pending && actiune === a;
 
   const [supplierId, setSupplierId] = useState(status?.supplierId ?? "");
   const [apiKey, setApiKey] = useState("");
@@ -67,6 +74,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
       toast.error("Completează Seller ID, API Key și API Secret.");
       return;
     }
+    setActiune("conectare");
     startTransition(async () => {
       const res = await connectTrendyol(businessId, {
         supplierId: supplierId.trim(), apiKey, apiSecret, environment, storefront,
@@ -80,6 +88,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
 
   const handleDisconnect = () => {
     if (!window.confirm("Sigur deconectezi Trendyol? Listările locale se șterg (produsele rămân pe Trendyol).")) return;
+    setActiune("deconectare");
     startTransition(async () => {
       const res = await disconnectTrendyol(businessId);
       if ("error" in res) { toast.error(res.error); return; }
@@ -95,6 +104,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     for (const [v, label] of [[ship, "adresa de expediere"], [ret, "adresa de retur"]] as const) {
       if (v != null && (!Number.isInteger(v) || v <= 0)) { toast.error(`ID invalid pentru ${label}.`); return; }
     }
+    setActiune("setari");
     startTransition(async () => {
       const res = await saveTrendyolSettings(businessId, {
         shipment_address_id: ship, returning_address_id: ret,
@@ -108,6 +118,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   };
 
   const handleSubscribeWebhook = () => {
+    setActiune("webhook");
     startTransition(async () => {
       const res = await subscribeTrendyolWebhook(businessId);
       if ("error" in res) { toast.error(res.error); return; }
@@ -117,6 +128,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   };
 
   const handleUnsubscribeWebhook = () => {
+    setActiune("webhook");
     startTransition(async () => {
       const res = await unsubscribeTrendyolWebhook(businessId);
       if ("error" in res) { toast.error(res.error); return; }
@@ -199,7 +211,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
             </div>
             <button onClick={handleConnect} disabled={pending}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
-              {pending ? "Se verifică..." : "Conectează și testează"}
+              {ruleaza("conectare") ? "Se verifică..." : "Conectează și testează"}
             </button>
           </div>
         </div>
@@ -220,7 +232,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   Seller: <span className="font-mono">{status.supplierId}</span> · Cheie: <span className="font-mono">{status.apiKeyMasked}</span> · {status.storefrontLabel} ({status.currency})
                 </p>
               </div>
-              <button onClick={handleDisconnect} disabled={pending}
+              <button onClick={handleDisconnect} disabled={ruleaza("deconectare")}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60">
                 Deconectează
               </button>
@@ -322,7 +334,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
             <div className="mt-4">
               <button onClick={handleSaveSettings} disabled={pending}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
-                {pending ? "Se salvează..." : "Salvează setările"}
+                {ruleaza("setari") ? "Se salvează..." : "Salvează setările"}
               </button>
             </div>
           </div>
@@ -348,12 +360,12 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               {status.webhookActive ? (
                 <button onClick={handleUnsubscribeWebhook} disabled={pending}
                   className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60">
-                  {pending ? "Se procesează..." : "Dezactivează webhook"}
+                  {ruleaza("webhook") ? "Se procesează..." : "Dezactivează webhook"}
                 </button>
               ) : (
                 <button onClick={handleSubscribeWebhook} disabled={pending}
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
-                  {pending ? "Se activează..." : "Activează webhook comenzi"}
+                  {ruleaza("webhook") ? "Se activează..." : "Activează webhook comenzi"}
                 </button>
               )}
             </div>

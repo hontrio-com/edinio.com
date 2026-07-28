@@ -69,11 +69,18 @@ function collectLeaves(nodes: TrendyolCategory[], path: string, out: { id: numbe
     else collectLeaves(n.subCategories, label, out);
   }
 }
-export async function searchLeafCategories(auth: TrendyolAuth, query: string, limit = 40): Promise<{ id: number; label: string }[] | null> {
+/** Toate categoriile finale, ca lista plata. Baza pentru maparea automata. */
+export async function getLeafCategoriesCached(auth: TrendyolAuth): Promise<{ id: number; label: string }[] | null> {
   const tree = await getCategoryTreeCached(auth);
   if (!tree) return null;
   const leaves: { id: number; label: string }[] = [];
   collectLeaves(tree, "", leaves);
+  return leaves;
+}
+
+export async function searchLeafCategories(auth: TrendyolAuth, query: string, limit = 40): Promise<{ id: number; label: string }[] | null> {
+  const leaves = await getLeafCategoriesCached(auth);
+  if (!leaves) return null;
   const nq = normalize(query);
   if (nq.length < 2) return [];
   return leaves.filter((l) => normalize(l.label).includes(nq)).slice(0, limit);

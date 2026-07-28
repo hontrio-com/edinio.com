@@ -14,13 +14,15 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { trendyolGloballyEnabled, maskSecret, trendyolWebhookUrl } from "@/lib/trendyol/auth";
 import { createWebhook, deleteWebhook, getWebhooks, isTrendyolError, testConnection, type TrendyolAuth } from "@/lib/trendyol/client";
 import { TRENDYOL_WEBHOOK_EVENTS } from "@/lib/trendyol/webhooks";
 import {
-  getCategoryAttributesCached, getCategoryAttributeValuesCached, getSupplierAddressesCached,
-  searchBrands, searchLeafCategories,
+  getCategoryAttributesCached, getCategoryAttributeValuesCached, getLeafCategoriesCached,
+  getSupplierAddressesCached, searchBrands, searchLeafCategories,
 } from "@/lib/trendyol/taxonomy";
+import { indexeazaFrunze, potrivesteIndexat, type PotrivireCategorie } from "@/lib/trendyol/category-match";
 import { loadTrendyolContext, removeProductNow, syncProductNow } from "@/lib/trendyol/sync";
 import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
 import { deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
@@ -373,6 +375,73 @@ export async function getTrendyolAddresses(businessId: string): Promise<{ addres
   return { addresses: data.supplierAddresses ?? [] };
 }
 
+// ── Mapare automată a categoriilor ──────────────────────────────────────────────
+// Propune, nu aplica. Comerciantul vede fiecare potrivire, cu increderea ei si cu
+// alternativele, si bifeaza ce vrea. Vezi lib/trendyol/category-match.ts pentru de
+// ce increderea „sigura" cere si scor mare, si distanta fata de urmatoarea varianta.
+
+// Cate categorii procesam intr-o rulare; peste atat, comerciantul le ia in transe.
+// Nu e exportat: un fisier "use server" are voie sa exporte doar functii async.
+const MAX_CATEGORII_MAPARE = 300;
+
+export interface TrendyolMapSuggestion {
+  edinioCategory: string;
+  /** Prima varianta si urmatoarele doua, in ordinea increderii. */
+  optiuni: PotrivireCategorie[];
+  /** Maparea existenta, daca e deja mapata (o aratam ca sa nu se piarda din greseala). */
+  existent: { category_id: number; label: string } | null;
+}
+
+export async function suggestTrendyolCategoryMap(
+  businessId: string, categories: string[],
+): Promise<{ sugestii: TrendyolMapSuggestion[]; totalFrunze: number } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+
+  const frunze = await getLeafCategoriesCached(g.auth);
+  if (frunze === null) return { error: "Nu am putut încărca lista de categorii Trendyol. Încearcă din nou." };
+  if (frunze.length === 0) return { error: "Trendyol nu a returnat nicio categorie pentru vitrina aleasă." };
+
+  // Indexul se construieste O SINGURA data pentru toate categoriile magazinului:
+  // catalogul lor are mii de frunze, iar tokenizarea repetata ar fi facut din
+  // butonul asta o asteptare de zeci de secunde.
+  const index = indexeazaFrunze(frunze);
+  const map = g.config.category_map ?? {};
+  const sugestii = categories.slice(0, MAX_CATEGORII_MAPARE).map((cat) => ({
+    edinioCategory: cat,
+    optiuni: potrivesteIndexat(cat, index),
+    existent: map[cat] ? { category_id: map[cat].category_id, label: map[cat].label } : null,
+  }));
+  return { sugestii, totalFrunze: frunze.length };
+}
+
+export async function applyTrendyolCategoryMap(
+  businessId: string, intrari: { edinioCategory: string; category_id: number; label: string }[],
+): Promise<{ success: true; aplicate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  if (intrari.length === 0) return { error: "Nu ai selectat nicio mapare." };
+
+  const config = await loadConfig(g.supabase, businessId);
+  const map = { ...(config.category_map ?? {}) };
+  let aplicate = 0;
+  for (const intrare of intrari) {
+    const cat = (intrare.edinioCategory ?? "").trim();
+    if (!cat || !Number.isInteger(intrare.category_id) || intrare.category_id <= 0) continue;
+    // Brandul si atributele deja alese pe categoria asta raman: schimbam doar
+    // categoria Trendyol, nu si munca facuta manual peste ea.
+    const prev = map[cat];
+    map[cat] = { category_id: intrare.category_id, label: intrare.label, brand_id: prev?.brand_id, attributes: prev?.attributes };
+    aplicate++;
+  }
+  if (aplicate === 0) return { error: "Nicio mapare validă." };
+  if (!(await saveConfig(g.supabase, businessId, { ...config, category_map: map }))) {
+    return { error: "Eroare la salvarea mapărilor." };
+  }
+  revalidatePath(FEATURE_PATH);
+  return { success: true, aplicate };
+}
+
 // ── Category mapping ────────────────────────────────────────────────────────────
 export async function saveTrendyolCategoryMapEntry(
   businessId: string, edinioCategory: string, entry: TrendyolCategoryMapEntry | null,
@@ -557,6 +626,101 @@ export async function syncTrendyolProduct(businessId: string, productId: string)
   return { success: true };
 }
 
+/**
+ * „Publică pe Trendyol" din pagina produsului.
+ *
+ * Butonul echivalent pentru OLX publică dintr-un click, așa că și acesta trebuie
+ * să funcționeze fără o trecere prealabilă prin ecranul de listare: dacă produsul
+ * n-are încă o configurare Trendyol, i-o construim din maparea categoriei
+ * (categorie + brand) și din variantele produsului, apoi trimitem.
+ *
+ * Când lipsește ceva ce nu putem deduce, spunem exact ce și de unde se rezolvă —
+ * o eroare de tipul „produsul nu are configurare" ar fi o fundătură.
+ */
+export async function publishTrendyolProduct(
+  businessId: string, productId: string,
+): Promise<{ success: true; creatAcum: boolean } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(g.supabase, businessId);
+  const gata = trendyolReadinessError(config);
+  if (gata) return { error: gata };
+
+  const { data: product } = await g.supabase
+    .from("products").select("id, name, category, price, sku, page_sections, is_active")
+    .eq("id", productId).eq("business_id", businessId).maybeSingle();
+  if (!product) return { error: "Produs negăsit." };
+  if ((product as { is_active?: boolean }).is_active === false) {
+    return { error: "Produsul este inactiv. Activează-l înainte să îl publici pe Trendyol." };
+  }
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("trendyol_listings").select("id").eq("business_id", businessId).eq("product_id", productId).maybeSingle();
+
+  let creatAcum = false;
+  if (!existing) {
+    const entry = product.category ? config.category_map?.[product.category] : undefined;
+    if (!entry?.category_id) {
+      return {
+        error: product.category
+          ? `Categoria „${product.category}" nu este mapată la Trendyol. Mapeaz-o în Integrări > Trendyol (poți folosi maparea automată).`
+          : "Produsul nu are categorie. Alege una și mapeaz-o la Trendyol.",
+      };
+    }
+    const brandId = entry.brand_id ?? config.brand_id;
+    if (!brandId) {
+      return { error: "Alege brandul Trendyol pentru această categorie, în Integrări > Trendyol." };
+    }
+
+    const slots = deriveVariantSlots(product as unknown as MappableProduct);
+    for (const s of slots) {
+      const problema = verificaBarcode(s.barcode.trim());
+      if (problema) return { error: problema };
+    }
+
+    const now = new Date().toISOString();
+    const { data: up, error: upErr } = await admin.from("trendyol_listings").upsert(
+      {
+        business_id: businessId, product_id: productId, product_main_id: productId,
+        brand_id: brandId, category_id: entry.category_id,
+        attributes: ((entry.attributes ?? []) as unknown) as never,
+        dimensional_weight: null, cargo_company_id: null, updated_at: now,
+      } as never,
+      { onConflict: "business_id,product_main_id" },
+    ).select("id").single();
+    if (upErr || !up) return { error: "Eroare la pregătirea listării." };
+    const listingId = (up as { id: string }).id;
+
+    const rows = slots.map((s) => ({
+      listing_id: listingId, business_id: businessId, product_id: productId,
+      barcode: s.barcode.trim(), stock_code: null, attributes: [] as unknown as never,
+      quantity: null, list_price: null, sale_price: null, vat_rate: null, enabled: true,
+    }));
+    // Acelasi barcode nu poate sta la doua produse: Trendyol l-ar suprascrie pe primul.
+    const { data: clash } = await admin.from("trendyol_variants")
+      .select("barcode, listing_id").eq("business_id", businessId).in("barcode", rows.map((r) => r.barcode));
+    const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
+    if (conflict) {
+      return { error: `Barcode-ul „${(conflict as { barcode: string }).barcode}" este deja folosit de alt produs. Schimbă SKU-ul sau completează manual listarea.` };
+    }
+    await admin.from("trendyol_variants").delete().eq("listing_id", listingId);
+    if (rows.length > 0) await admin.from("trendyol_variants").insert(rows as never);
+    creatAcum = true;
+  }
+
+  const ctx = await loadTrendyolContext(admin, businessId);
+  if (!ctx) return { error: "Conexiunea Trendyol nu este disponibilă. Reconectează contul." };
+  const res = await syncProductNow(admin, ctx, productId);
+  if (!res.ok) {
+    logError({ action: "trendyol.publish", message: res.error, details: { businessId, productId }, businessId });
+    return { error: res.error };
+  }
+  revalidatePath(FEATURE_PATH);
+  revalidatePath("/dashboard/products");
+  return { success: true, creatAcum };
+}
+
 export async function removeTrendyolListing(businessId: string, productId: string): Promise<{ success: true } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => removeProductNow(admin, ctx, productId));
   if ("error" in res) return { error: res.error };
@@ -573,6 +737,154 @@ export interface TrendyolListingRow {
   status: string;
   error: string | null;
   lastSyncedAt: string | null;
+}
+
+// ── Lista de produse (căutare + filtre + paginare) ──────────────────────────────
+// Un magazin cu mii de produse nu poate fi servit ca listă întreagă: pagina ar
+// cădea, iar comerciantul tot n-ar găsi produsul căutat. Totul se face pe server;
+// numărătorile sunt exacte, iar când o parcurgere atinge plafonul o spunem în loc
+// să lăsăm impresia că atât există.
+
+const TRENDYOL_PAGE_SIZE = 25;
+/** Plafon de parcurgere pentru filtrul „nelistate" (fara echivalent SQL direct). */
+const MAX_PARCURGERE = 5000;
+
+export type TrendyolProductStatusFilter =
+  | "toate" | "listate" | "nelistate" | "eroare" | "in_asteptare" | "aprobate";
+
+export interface TrendyolProductFilters {
+  q?: string;
+  category?: string;
+  status?: TrendyolProductStatusFilter;
+  page?: number;
+}
+
+export interface TrendyolProductRow {
+  id: string;
+  name: string;
+  category: string | null;
+  is_active: boolean;
+  status: string | null;
+  error: string | null;
+  lastSyncedAt: string | null;
+}
+
+export interface TrendyolProductPage {
+  items: TrendyolProductRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  /** Am atins plafonul de parcurgere: `total` e un minim, nu totalul real. */
+  truncat: boolean;
+}
+
+const STATUSURI_FILTRU: Record<string, string[]> = {
+  eroare: ["error", "rejected"],
+  in_asteptare: ["pending", "created", "draft"],
+  aprobate: ["approved", "active"],
+};
+
+interface ProdusBrut { id: string; name: string; category: string | null; is_active: boolean }
+
+export async function getTrendyolProductPage(
+  businessId: string, filters: TrendyolProductFilters = {},
+): Promise<TrendyolProductPage | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const { supabase } = g;
+
+  const q = (filters.q ?? "").trim();
+  const categorie = (filters.category ?? "").trim();
+  const status: TrendyolProductStatusFilter = filters.status ?? "toate";
+  const page = Math.max(1, Math.floor(filters.page ?? 1));
+  const pageSize = TRENDYOL_PAGE_SIZE;
+
+  // Listarile sunt doar cate produse a configurat comerciantul, deci se pot tine
+  // in memorie fara grija; produsele nu.
+  const listari = await fetchAllRows<{ product_id: string | null; status: string; error: string | null; last_synced_at: string | null }>(
+    "trendyol.listings", (from, to) =>
+      supabase.from("trendyol_listings").select("product_id, status, error, last_synced_at")
+        .eq("business_id", businessId).order("product_id").range(from, to),
+  );
+  const dupaProdus = new Map(listari.filter((l) => l.product_id).map((l) => [l.product_id as string, l]));
+
+  // `%`, `_` si `\` sunt metacaractere de LIKE: cine cauta „50%" ar primi altfel
+  // tot catalogul.
+  const tipar = q ? `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%` : null;
+
+  const randuri = (produse: ProdusBrut[]): TrendyolProductRow[] =>
+    produse.map((p) => {
+      const l = dupaProdus.get(p.id);
+      return {
+        id: p.id, name: p.name, category: p.category, is_active: p.is_active,
+        status: l?.status ?? null, error: l?.error ?? null, lastSyncedAt: l?.last_synced_at ?? null,
+      };
+    });
+
+  // ── Fără filtru de stare: numărătoarea o face baza, exact ──────────────────
+  if (status === "toate") {
+    const de_la = (page - 1) * pageSize;
+    let qb = supabase.from("products").select("id, name, category, is_active", { count: "exact" })
+      .eq("business_id", businessId);
+    if (tipar) qb = qb.ilike("name", tipar);
+    if (categorie) qb = qb.eq("category", categorie);
+    const { data, count } = await qb.order("name").order("id").range(de_la, de_la + pageSize - 1);
+    const total = count ?? 0;
+    return {
+      items: randuri((data ?? []) as ProdusBrut[]),
+      total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)), truncat: false,
+    };
+  }
+
+  // ── Stări care presupun o listare: pornim de la listări, nu de la produse ──
+  if (status !== "nelistate") {
+    const permise = STATUSURI_FILTRU[status];
+    const ids = listari
+      .filter((l) => l.product_id && (status === "listate" || permise?.includes(l.status)))
+      .map((l) => l.product_id as string);
+    if (ids.length === 0) return { items: [], total: 0, page, pageSize, totalPages: 1, truncat: false };
+
+    // Pe bucati: id-urile intra in URL-ul cererii, iar o mie de uuid-uri deodata
+    // ar depasi lungimea acceptata si ar da 414.
+    const gasite: ProdusBrut[] = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      let qb = supabase.from("products").select("id, name, category, is_active")
+        .eq("business_id", businessId).in("id", ids.slice(i, i + 200));
+      if (tipar) qb = qb.ilike("name", tipar);
+      if (categorie) qb = qb.eq("category", categorie);
+      const { data } = await qb.order("name").order("id");
+      gasite.push(...((data ?? []) as ProdusBrut[]));
+    }
+    gasite.sort((a, b) => a.name.localeCompare(b.name, "ro"));
+    const de_la = (page - 1) * pageSize;
+    return {
+      items: randuri(gasite.slice(de_la, de_la + pageSize)),
+      total: gasite.length, page, pageSize,
+      totalPages: Math.max(1, Math.ceil(gasite.length / pageSize)), truncat: false,
+    };
+  }
+
+  // ── „Nelistate": diferenta dintre produse si listări ───────────────────────
+  const nelistate: ProdusBrut[] = [];
+  let truncat = false;
+  for (let from = 0; from < MAX_PARCURGERE; from += 1000) {
+    let qb = supabase.from("products").select("id, name, category, is_active")
+      .eq("business_id", businessId);
+    if (tipar) qb = qb.ilike("name", tipar);
+    if (categorie) qb = qb.eq("category", categorie);
+    const { data } = await qb.order("name").order("id").range(from, from + 999);
+    const lot = (data ?? []) as ProdusBrut[];
+    nelistate.push(...lot.filter((p) => !dupaProdus.has(p.id)));
+    if (lot.length < 1000) break;
+    if (from + 1000 >= MAX_PARCURGERE) truncat = true;
+  }
+  const de_la = (page - 1) * pageSize;
+  return {
+    items: randuri(nelistate.slice(de_la, de_la + pageSize)),
+    total: nelistate.length, page, pageSize,
+    totalPages: Math.max(1, Math.ceil(nelistate.length / pageSize)), truncat,
+  };
 }
 
 export async function getTrendyolListings(businessId: string): Promise<TrendyolListingRow[]> {

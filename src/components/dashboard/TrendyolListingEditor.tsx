@@ -23,9 +23,12 @@ function toProductAttribute(attributeId: number, sel: AttrSel | undefined): Tren
 }
 
 export function TrendyolListingEditor({
-  businessId, productId, storefront, onClose,
+  businessId, productId, storefront, onClose, onSaved,
 }: {
-  businessId: string; productId: string; storefront: TrendyolStoreFront; onClose: () => void;
+  businessId: string; productId: string; storefront: TrendyolStoreFront;
+  onClose: () => void;
+  /** Lista de deasupra isi reimprospateaza randul, ca starea sa nu ramana veche. */
+  onSaved?: () => void | Promise<void>;
 }) {
   // Moneda si cotele de TVA nu sunt alegerea noastra: le impune vitrina pe care
   // vinde comerciantul. Preturile trimise sunt citite in moneda ei.
@@ -137,9 +140,11 @@ export function TrendyolListingEditor({
         const s = await syncTrendyolProduct(businessId, productId);
         if ("error" in s) { toast.error(s.error); return; }
         toast.success("Trimis pe Trendyol.");
+        await onSaved?.();
         router.refresh(); onClose(); return;
       }
       toast.success("Listare salvată.");
+      await onSaved?.();
       router.refresh();
     });
   };

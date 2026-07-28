@@ -19,6 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { publishOlxProduct } from "@/lib/actions/olx.actions";
+import { publishTrendyolProduct } from "@/lib/actions/trendyol.actions";
 import { createCategory } from "@/lib/actions/category.actions";
 import { flattenCategoryForest } from "@/lib/categories/tree";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
@@ -491,16 +492,34 @@ interface Props {
   // public product page is actually live (active product + published store).
   business?: { slug: string; is_published: boolean };
   olxConnected?: boolean;
+  // Butonul „Publică pe Trendyol" apare doar cand contul e conectat acolo.
+  trendyolConnected?: boolean;
   // Sectiunea Google Shopping se afiseaza doar cand contul are Google Merchant conectat.
   gmcConnected?: boolean;
   // Clasele de transport definite in Setari > Livrare (pentru selectorul de pe produs).
   shippingClasses?: { id: string; name: string }[];
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, gmcConnected = false, shippingClasses = [] }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, gmcConnected = false, shippingClasses = [] }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
+  const [tyPublishing, startTyPublish] = useTransition();
+
+  // Trendyol isi construieste singur listarea din maparea categoriei daca produsul
+  // nu a trecut inca prin ecranul de listare — altfel butonul ar fi o fundatura.
+  function handlePublishTrendyol() {
+    if (!product) return;
+    startTyPublish(async () => {
+      const res = await publishTrendyolProduct(businessId, product.id);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(
+        res.creatAcum
+          ? "Trimis pe Trendyol. Listarea a fost creată din maparea categoriei; intră în aprobare."
+          : "Trimis pe Trendyol. Intră în aprobare.",
+      );
+    });
+  }
 
   function handlePublishOlx() {
     if (!product) return;
@@ -757,7 +776,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
             </span>
           ) : "Produs nou"}
         </h1>
-        {isEditing && (olxConnected || (product?.is_active && product?.slug && business?.is_published)) && (
+        {isEditing && (olxConnected || trendyolConnected || (product?.is_active && product?.slug && business?.is_published)) && (
           <div className="ml-auto flex items-center gap-2">
             {olxConnected && (
               <button type="button" onClick={handlePublishOlx} disabled={olxPublishing}
@@ -766,6 +785,15 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <Image src="/integrations/olx.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
                 Postează pe OLX
+              </button>
+            )}
+            {trendyolConnected && (
+              <button type="button" onClick={handlePublishTrendyol} disabled={tyPublishing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
+                {tyPublishing
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Image src="/integrations/trendyol.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                Publică pe Trendyol
               </button>
             )}
             {/* Live only when the product is active AND the store is published — otherwise the page 404s. */}

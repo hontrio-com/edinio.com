@@ -14,8 +14,8 @@ import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { scrieFiltre } from "@/lib/storefront/catalog/url";
-import { radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
-import { resolveDesign } from "@/lib/storefront/design/parse";
+import { SEGMENT_MAGAZIN, grilaRamaneAcasa, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
+import { parseStoreDesign, resolveDesign } from "@/lib/storefront/design/parse";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -33,16 +33,22 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   // is no longer anon-readable, so a nested anon select would return null there.
   const { data: business } = await createAdminClient()
     .from("businesses")
-    .select("id, business_name, store_name, tagline, description, store_city, cover_url, custom_domain, store_settings(page_content)")
+    .select("id, business_name, store_name, tagline, description, store_city, cover_url, custom_domain, store_settings(page_content, storefront_design)")
     .eq("slug", slug)
     .single();
   if (!business) return {};
 
   // Merchant overrides (Settings > SEO) win; otherwise fall back to the
   // auto-derived defaults (single source of truth in @/lib/seo).
-  const rawSettings = (business as unknown as { store_settings: { page_content: unknown } | { page_content: unknown }[] | null }).store_settings;
+  const rawSettings = (business as unknown as { store_settings: { page_content: unknown; storefront_design?: unknown } | { page_content: unknown; storefront_design?: unknown }[] | null }).store_settings;
   const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
   const seo = parseStoreSeo(settings?.page_content ?? null);
+  // Designul PUBLICAT, doar ca sa stim daca exista pagina de catalog. Contextul e
+  // minimal: intrebarea nu depinde de culori sau de bannere.
+  const designPtSeo = parseStoreDesign(
+    (settings as { storefront_design?: unknown } | null)?.storefront_design ?? null,
+    { primaryColor: "#1AB554", pageContent: {}, features: {} },
+  );
 
   const displayName = business.store_name ?? business.business_name;
   const title = seo.title || deriveStoreTitle(displayName, business.store_city);
@@ -67,7 +73,21 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const nrPagina = Math.max(1, parseInt(pageQ ?? "1", 10) || 1);
   if (nrPagina > 1) filtre.push(`page=${nrPagina}`);
   const sir = filtre.join("&");
-  const url = sir ? `${radacina}?${sir}` : radacina;
+  /*
+   * Cand catalogul are si pagina lui, versiunile FILTRATE ale paginii principale
+   * arata canonical catre ea.
+   *
+   * `/?cat=Manusi` si `/magazin?cat=Manusi` listeaza aceleasi produse. Lasate
+   * amandoua auto-canonice, Google ar fi ales singur intre ele si ar fi impartit
+   * semnalul de link in doua. Canonicalul e exact unealta pentru asta: cele doua
+   * adrese raman functionale pentru vizitator, dar una singura se indexeaza.
+   *
+   * Pagina principala NEfiltrata isi pastreaza canonicalul ei: nu e un duplicat,
+   * are hero, randuri alese si restul sectiunilor pe langa grila.
+   */
+  const areCatalogSeparat = shopOnPage(designPtSeo);
+  const radacinaCanonic = areCatalogSeparat && sir ? `${radacina}/${SEGMENT_MAGAZIN}` : radacina;
+  const url = sir ? `${radacinaCanonic}?${sir}` : radacina;
 
   // One Product Store: the homepage *is* the chosen product's landing page, so its
   // metadata comes from that product (canonical stays on the homepage URL). Store
@@ -361,20 +381,25 @@ export default async function SlugPage({ params, searchParams }: Props) {
   );
 
   /*
-   * Catalogul s-a mutat: adresele lui vechi il urmeaza.
+   * Grila a plecat de pe pagina principala: adresele ei vechi o urmeaza.
    *
-   * `?cat=`, `?sale=1` si `?page=N` erau adrese crawlabile ale grilei de aici, si
-   * la magazinele mari sunt zeci sau sute deja indexate. Din clipa in care grila
-   * nu se mai randeaza pe pagina principala, ele ar fi ramas sa arate o pagina de
-   * prezentare cu un parametru fara efect: nici 404, nici continutul promis,
-   * adica exact felul de pagina pe care Google il scoate din index in tacere.
+   * Doar cand comerciantul a stins anume „pastreaza produsele si pe pagina
+   * principala". Cat timp grila ramane aici, `?cat=` face exact ce facea si nu
+   * are de ce sa navigheze nicaieri.
+   *
+   * Cand a plecat insa, `?cat=`, `?sale=1` si `?page=N` — adrese crawlabile ale
+   * grilei, zeci sau sute deja indexate la magazinele mari — ar fi ramas sa arate
+   * o pagina de prezentare cu un parametru fara efect: nici 404, nici continutul
+   * promis, adica exact felul de pagina pe care Google il scoate din index in
+   * tacere.
    *
    * Permanent, nu temporar: mutarea e o alegere de design, nu un accident, iar
    * un 307 ar fi lasat semnalul de link pe adresa veche.
    */
   // Sarit in previzualizare: acolo designul poate fi ciorna, iar o navigare ar
   // scoate iframe-ul editorului din pagina si ar rupe legatura postMessage.
-  if (!isPreview && shopOnPage(resolved.design) && (catParam || saleParam === "1" || pageParam || qParam)) {
+  const grilaAPlecat = shopOnPage(resolved.design) && !grilaRamaneAcasa(resolved.design);
+  if (!isPreview && grilaAPlecat && (catParam || saleParam === "1" || pageParam || qParam)) {
     // `scrieFiltre` codifica spatiile cu %20, la fel ca linkurile de categorie si
     // ca toate canonicalele. `URLSearchParams` le-ar fi scris cu `+`, deci
     // redirectul ar fi produs o A DOUA adresa pentru exact acelasi continut.

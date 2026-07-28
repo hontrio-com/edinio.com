@@ -315,7 +315,7 @@ export const GRUPURI_FILTRE = [
  * deci merita spus raspicat, inainte de a fi publicata.
  */
 const SHOP_NOTA =
-  "Produsele se muta pe o pagina proprie, cu adresa ei. Pagina principala ramane cu hero, randurile de produse si restul sectiunilor, iar linkurile de categorie duc la pagina noua.";
+  "Produsele capata o pagina proprie, cu adresa ei si cu toate filtrele. Implicit raman si pe pagina principala; le poti muta complet de aici, din primul comutator.";
 
 /**
  * Reglajele comune celor trei modele.
@@ -340,6 +340,11 @@ export const SORTARI_CATALOG = [
 ];
 
 const SHOP_FIELDS: Field[] = [
+  {
+    key: "pastreazaGrilaAcasa", type: "toggle", label: "Pastreaza produsele si pe pagina principala",
+    help: "Pornit, pagina principala ramane cu grila ei, iar pagina Magazin e locul cu toate filtrele. Stins, produsele se muta complet aici.",
+  },
+
   // --- Antet ---------------------------------------------------------------
   { key: "titlu", type: "text", label: "Titlul paginii", placeholder: "Toate produsele", maxLength: 60 },
   {
@@ -432,6 +437,7 @@ const SHOP_FIELDS: Field[] = [
 ];
 
 const SHOP_DEFAULTS = {
+  pastreazaGrilaAcasa: true,
   titlu: "Toate produsele",
   arataTitlu: true,
   arataFirimituri: true,

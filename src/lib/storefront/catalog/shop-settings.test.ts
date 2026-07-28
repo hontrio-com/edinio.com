@@ -103,3 +103,10 @@ test("textele goale nu inlocuiesc implicitul cu sir gol", () => {
   // pagina cu un `h1` gol.
   assert.equal(citesteSetariMagazin(cu("sidebar", { titlu: "   " })).titlu, "Toate produsele");
 });
+
+test("implicit, produsele raman si pe pagina principala", () => {
+  // Decizia comerciantului: cele doua suprafete au rosturi diferite, vitrina si
+  // catalogul de cautat. Comutatorul exista pentru cine vrea despartirea curata.
+  assert.equal(citesteSetariMagazin(cu("sidebar")).pastreazaGrilaAcasa, true);
+  assert.equal(citesteSetariMagazin(cu("sidebar", { pastreazaGrilaAcasa: false })).pastreazaGrilaAcasa, false);
+});

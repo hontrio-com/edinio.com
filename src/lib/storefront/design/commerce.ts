@@ -77,30 +77,40 @@ export function radacinaCatalog(basePath: string, design: StoreDesign): string {
 }
 
 /**
- * Sectiunile care se muta pe pagina de catalog cand comerciantul o alege.
+ * Sectiunile care pot pleca pe pagina de catalog.
  *
- * Grila si bara de cautare: singurele doua care n-au ce cauta in doua locuri
- * deodata. Categoriile RAMAN pe pagina principala — acolo sunt navigare catre
+ * Grila si bara de cautare: singurele doua care ar fi in doua locuri deodata.
+ * Categoriile RAMAN mereu pe pagina principala — acolo sunt navigare catre
  * catalog, nu filtrare in el — la fel randurile de produse si restul.
  */
 const MUTATE_PE_PAGINA_DE_CATALOG: readonly SectionKind[] = ["product_grid", "catalog_toolbar"];
 
 /**
- * Sectiunile paginii principale, dupa ce catalogul si-a luat pagina lui.
+ * Grila de produse ramane si pe pagina principala, langa pagina de catalog?
  *
- * Alegerea e EXCLUSIVA, ca la cos si la finalizare, si din aceleasi doua motive.
- * Unul de folosire: doua cataloage in acelasi magazin inseamna doua locuri in
- * care clientul si-a pierdut filtrele. Unul practic: `/magazin?cat=X&page=2` si
- * `/?cat=X&page=2` ar fi listat exact aceleasi produse la doua adrese
- * auto-canonice, iar Google ar fi ales singur intre ele — de obicei pagina
- * principala, care are toate linkurile interne, deci pagina noua nu s-ar fi
- * indexat niciodata.
+ * Implicit DA: cele doua suprafete sunt lucruri diferite pentru vizitator —
+ * pagina principala e vitrina, cu hero, randuri alese si o grila de rasfoit,
+ * iar pagina de catalog e locul unde se cauta serios, cu toate filtrele. Un
+ * magazin poate sa le vrea pe amandoua.
+ *
+ * Comutatorul exista pentru cine vrea despartirea curata. Costul lui „amandoua"
+ * e real si merita stiut: `/?cat=X` si `/magazin?cat=X` listeaza aceleasi
+ * produse, iar catalogul intreg se descarca o data pentru fiecare pagina
+ * vizitata. Primul e rezolvat prin canonical (paginile filtrate de pe acasa
+ * arata catre pagina de catalog); al doilea ramane.
+ */
+export function grilaRamaneAcasa(design: StoreDesign): boolean {
+  return design.shop.page.settings?.pastreazaGrilaAcasa !== false;
+}
+
+/**
+ * Sectiunile paginii principale.
  *
  * Se taie la RANDARE, nu in parser: sectiunile raman in configuratia salvata,
  * deci comerciantul care se razgandeste isi gaseste pagina principala exact cum
  * a lasat-o, iar editorul continua sa le arate.
  */
 export function sectiuniAcasa(design: StoreDesign): SectionInstance[] {
-  if (!shopOnPage(design)) return design.home;
+  if (!shopOnPage(design) || grilaRamaneAcasa(design)) return design.home;
   return design.home.filter((s) => !MUTATE_PE_PAGINA_DE_CATALOG.includes(s.kind));
 }

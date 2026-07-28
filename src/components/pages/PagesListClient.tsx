@@ -6,11 +6,11 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   Plus, ExternalLink, Copy, Trash2, Pencil, ArrowUp, ArrowDown, X, Loader2,
-  FileText, Menu as MenuIcon, Link2, Home,
-} from "lucide-react";
+  FileText, Menu as MenuIcon, Link2, Home, Store, } from "lucide-react";
 import { slugify } from "@/lib/utils/slugify";
 import { createPage, deletePage, duplicatePage, updateStoreMenu } from "@/lib/actions/page.actions";
 import { newMenuItemId, type MenuItem } from "@/lib/pages/menu";
+import { SEGMENT_MAGAZIN } from "@/lib/storefront/design/commerce";
 
 interface PageRow { id: string; slug: string; title: string; is_published: boolean; updated_at: string }
 interface Business { id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string }
@@ -95,6 +95,21 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
   function addHome() {
     if (menu.some((m) => m.type === "home")) return;
     persistMenu([{ id: newMenuItemId(), type: "home", label: "Magazin" }, ...menu]);
+  }
+  /*
+   * Legatura catre pagina de catalog, cand magazinul si-o alege.
+   *
+   * Tipul `home` NU se schimba pentru asta: in editor scrie de la inceput „link
+   * catre pagina principala a magazinului", iar comerciantii care l-au pus deja
+   * s-ar fi trezit ca trimite in alta parte. E o intrare de tip `page` cu tinta
+   * `magazin`, care se rezolva corect si pe domeniu propriu.
+   *
+   * Fara butonul asta, singura cale era un link scris de mana — si tocmai
+   * linkurile scrise de mana se rup pe domeniu propriu.
+   */
+  function addCatalog() {
+    if (menu.some((m) => m.type === "page" && m.target === SEGMENT_MAGAZIN)) return;
+    persistMenu([...menu, { id: newMenuItemId(), type: "page", label: "Magazin", target: SEGMENT_MAGAZIN }]);
   }
   function addLink() {
     persistMenu([...menu, { id: newMenuItemId(), type: "link", label: "Link nou", target: "https://" }]);
@@ -206,6 +221,11 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
           {!menu.some((m) => m.type === "home") && (
             <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adauga in meniu un link catre pagina principala a magazinului">
               <Home className="h-3.5 w-3.5" /> Adauga link catre magazin
+            </button>
+          )}
+          {catalogPePagina && !menu.some((m) => m.type === "page" && m.target === SEGMENT_MAGAZIN) && (
+            <button type="button" onClick={addCatalog} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adauga in meniu un link catre pagina cu toate produsele">
+              <Store className="h-3.5 w-3.5" /> Adauga link catre Magazin
             </button>
           )}
           <button type="button" onClick={addLink} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">

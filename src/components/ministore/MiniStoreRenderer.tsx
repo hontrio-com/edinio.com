@@ -640,7 +640,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // vada. Numarul paginii e singurul care se pastreaza — il scrie `goToPage`,
     // iar efectul asta nu stie despre el.
     const sp = new URLSearchParams();
-    const pagina = new URLSearchParams(window.location.search).get("page");
+    const adresa = new URLSearchParams(window.location.search);
+    const pagina = adresa.get("page");
+    // `preview=1` nu e un filtru, e modul in care proprietarul isi vede ciorna:
+    // sters din adresa, o reincarcare l-ar fi aruncat pe designul publicat.
+    if (adresa.get("preview") === "1") sp.set("preview", "1");
     if (categoryFilter && categoryFilter !== "toate") sp.set("cat", categoryFilter);
     if (search.trim()) sp.set("q", search.trim());
     for (const [cheie, valori] of Object.entries(selectieFatete)) {

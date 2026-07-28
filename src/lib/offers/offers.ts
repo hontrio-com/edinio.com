@@ -72,17 +72,66 @@ async function loadActiveOffers(admin: Client, businessId: string): Promise<Load
 }
 
 // Does an offer's trigger fire for a single (anchor) product?
-function triggerMatchesProduct(trigger: OfferTrigger, product: { id: string; category: string | null }): boolean {
+function triggerMatchesProduct(
+  trigger: OfferTrigger,
+  product: { id: string; category: string | null },
+  categoriiExtinse?: Set<string>,
+): boolean {
   if (trigger.scope === "all") return true;
   if (trigger.scope === "products") return trigger.productIds.includes(product.id);
-  if (trigger.scope === "categories") return product.category != null && trigger.categories.includes(product.category);
+  if (trigger.scope === "categories") {
+    if (product.category == null) return false;
+    return (categoriiExtinse ?? new Set(trigger.categories)).has(product.category);
+  }
   return false;
 }
 
+/**
+ * Numele categoriilor alese, IMPREUNA cu toate cele de sub ele.
+ *
+ * Comerciantul isi alege declansatorul dintr-un arbore, deci alege firesc o
+ * categorie-parinte („Imbracaminte Femei"). Produsele stau insa in frunze
+ * („Rochii", „Fuste"), iar potrivirea pe text exact nu gasea niciodata nimic:
+ * oferta parea activa in panou si nu aparea nicaieri, fara niciun mesaj.
+ * Catalogul magazinului coboara deja in arbore la filtrare — ofertele fac acum
+ * la fel, ca aceeasi alegere sa insemne acelasi lucru in ambele locuri.
+ */
+async function extindeCategorii(
+  admin: Client, businessId: string, alese: string[],
+): Promise<Set<string>> {
+  const out = new Set(alese);
+  if (alese.length === 0) return out;
+  const { data } = await admin
+    .from("categories").select("id, name, parent_id").eq("business_id", businessId);
+  const randuri = data ?? [];
+  const copiiiLui = new Map<string, typeof randuri>();
+  for (const c of randuri) {
+    if (!c.parent_id) continue;
+    const arr = copiiiLui.get(c.parent_id);
+    if (arr) arr.push(c); else copiiiLui.set(c.parent_id, [c]);
+  }
+  // Parcurgere iterativa, cu multime de vizitate: un ciclu de parinti gresit
+  // introdus in date n-are voie sa blocheze randarea magazinului.
+  const stiva = randuri.filter((c) => out.has(c.name));
+  const vazute = new Set<string>();
+  while (stiva.length) {
+    const nod = stiva.pop()!;
+    if (vazute.has(nod.id)) continue;
+    vazute.add(nod.id);
+    out.add(nod.name);
+    for (const copil of copiiiLui.get(nod.id) ?? []) stiva.push(copil);
+  }
+  return out;
+}
+
 // Does an offer's trigger fire for ANY product in a set (cart)?
-function triggerMatchesCart(trigger: OfferTrigger, products: { id: string; category: string | null }[]): boolean {
+function triggerMatchesCart(
+  trigger: OfferTrigger,
+  products: { id: string; category: string | null }[],
+  categoriiExtinse?: Set<string>,
+): boolean {
   if (trigger.scope === "all") return true;
-  return products.some((p) => triggerMatchesProduct(trigger, p));
+  return products.some((p) => triggerMatchesProduct(trigger, p, categoriiExtinse));
 }
 
 function toOfferProduct(p: {
@@ -174,11 +223,15 @@ export async function resolveProductOffers(
   admin: Client, businessId: string, anchor: OfferAnchor,
 ): Promise<ResolvedOffer[]> {
   const offers = await loadActiveOffers(admin, businessId);
+  // O singura citire a arborelui de categorii, refolosita de toate ofertele.
+  const extinse = offers.some((o) => o.trigger.scope === "categories")
+    ? await extindeCategorii(admin, businessId, [...new Set(offers.flatMap((o) => o.trigger.categories))])
+    : undefined;
   const applicable = offers.filter(
     (o) =>
       (o.type === "frequently_bought" || o.type === "cross_sell") &&
       o.display.surfaces.includes("product_page") &&
-      triggerMatchesProduct(o.trigger, anchor),
+      triggerMatchesProduct(o.trigger, anchor, extinse),
   );
   if (applicable.length === 0) return [];
 
@@ -230,9 +283,14 @@ export async function resolveCartOffers(
     .eq("business_id", businessId).in("id", [...new Set(cartProductIds)]);
   const cartProducts = (cartRows ?? []).map((r) => ({ id: r.id, category: r.category }));
 
+  // O singura citire a arborelui de categorii, refolosita de toate ofertele.
+  const extinse = offers.some((o) => o.trigger.scope === "categories")
+    ? await extindeCategorii(admin, businessId, [...new Set(offers.flatMap((o) => o.trigger.categories))])
+    : undefined;
+
   const wantType: OfferType = surface === "checkout" ? "order_bump" : "cross_sell";
   const applicable = offers.filter(
-    (o) => o.type === wantType && o.display.surfaces.includes(surface) && triggerMatchesCart(o.trigger, cartProducts),
+    (o) => o.type === wantType && o.display.surfaces.includes(surface) && triggerMatchesCart(o.trigger, cartProducts, extinse),
   );
   if (applicable.length === 0) return [];
 
@@ -244,7 +302,7 @@ export async function resolveCartOffers(
     // goala, deci oferta disparea tacut din toate cele patru variante de cos.
     // Categoria se ia din primul produs din cos care declanseaza oferta.
     const categorieAuto = o.type === "cross_sell" && o.config.autoByCategory
-      ? cartProducts.find((p) => triggerMatchesProduct(o.trigger, p) && p.category)?.category ?? null
+      ? cartProducts.find((p) => triggerMatchesProduct(o.trigger, p, extinse) && p.category)?.category ?? null
       : null;
     const products = categorieAuto
       ? await fetchCategoryProducts(admin, businessId, categorieAuto, exclude, o.config.maxProducts)

@@ -23,7 +23,7 @@ import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
-import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
+import { headerAreCautare, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { useDesignPreview } from "@/components/storefront/useDesignPreview";
 import type {
   StoreCategoryNode,
@@ -590,7 +590,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     setSortTouched,
     effectiveSort,
     hasSearchMatches: searchMatches !== null,
-    headerHasSearch: variantMeta("header", design.chrome.header.variant)?.replacesCatalogSearch === true,
+    // Orice forma de cautare din header — bara permanenta SAU lupa — ascunde
+    // campul din catalog: doua cautari una sub alta nu ajuta pe nimeni.
+    headerHasSearch: headerAreCautare(design),
 
     filtersOpen,
     setFiltersOpen,

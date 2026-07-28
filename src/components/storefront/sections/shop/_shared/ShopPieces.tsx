@@ -670,7 +670,7 @@ export function Paginare() {
 /* ─── Antet ──────────────────────────────────────────────────────────────── */
 
 export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; aratatTitlu?: boolean }) {
-  const { categoryFilter, setariMagazin, basePath, business, catalogRoot } = useStorefront();
+  const { categoryFilter, setariMagazin, basePath, business, catalogRoot, categoriiRoot, categoriiPePagina, parinteCategorie } = useStorefront();
   // Categoria aleasa devine titlul: vizitatorul venit dintr-un link de categorie
   // trebuie sa vada unde a ajuns, nu un titlu generic peste o lista filtrata.
   const inCategorie = !!categoryFilter && categoryFilter !== "toate";
@@ -690,6 +690,13 @@ export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; arat
             <a href={catalogRoot} className="hover:text-[var(--st-text)] transition-colors">{titlu}</a>
           ) : (
             <span className="text-[var(--st-text)] font-medium">{titlu}</span>
+          )}
+          {inCategorie && parinteCategorie && (
+            <>
+              <span aria-hidden="true">/</span>
+              <a href={hrefCategorie(categoriiRoot, parinteCategorie, categoriiPePagina)}
+                className="hover:text-[var(--st-text)] transition-colors truncate">{parinteCategorie}</a>
+            </>
           )}
           {inCategorie && (
             <>

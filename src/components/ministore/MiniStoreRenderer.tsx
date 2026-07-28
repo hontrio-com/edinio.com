@@ -874,6 +874,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     catalogRoot: catalogRootPagina,
     radacinaPaginare: radacinaPaginare || catalogRootPagina,
     categoriiPePagina: categoriileNavigheaza,
+    parinteCategorie,
     // Categoriile duc MEREU la pagina de catalog cand ea exista, chiar daca
     // pagina asta are si ea o grila: acolo sunt filtrele pe atribute si pret,
     // adica exact ce cauta cineva care apasa pe o categorie.

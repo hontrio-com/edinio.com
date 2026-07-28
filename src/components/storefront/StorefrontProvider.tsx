@@ -151,6 +151,14 @@ export interface StoreChromeValue {
    */
   categoriiPePagina?: boolean;
   /**
+   * Categoria de deasupra celei deschise, cand pagina e a unei categorii.
+   *
+   * Firimiturile o arata intre magazin si categoria curenta: „Magazin /
+   * Imbracaminte de lucru / Geci si jachete". Fara ea, drumul sarea un nivel, iar
+   * pagina unei subcategorii nu spunea nicaieri din ce face parte.
+   */
+  parinteCategorie?: string | null;
+  /**
    * Adresa pe care se construiesc linkurile de paginare.
    *
    * De obicei chiar `catalogRoot`. Difera pe pagina unei categorii, unde

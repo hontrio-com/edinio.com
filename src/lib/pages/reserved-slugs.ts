@@ -16,6 +16,10 @@ export const RESERVED_PAGE_SLUGS = new Set<string>([
   // pagini. Sinonimele stau langa ele ca sa nu apara o pagina custom „comanda"
   // pe care comerciantul o crede legata de checkout.
   "cos", "cart", "checkout", "finalizare", "comanda",
+  // pagina de catalog, la fel: ruta exista pentru magazinele care o aleg.
+  // Rezervarea nu repara retroactiv o pagina care poarta deja numele — blocheaza
+  // doar creari noi — deci a intrat in acelasi commit cu ruta, nu dupa.
+  "magazin", "shop", "produse", "catalog",
   // platform / framework
   "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
   // app sections that live at the root path

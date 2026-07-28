@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { CartDemoProvider, CartProvider } from "@/components/storefront/cart/CartProvider";
-import { construiesteFatete } from "@/lib/storefront/catalog/facets";
+import type { Fateta } from "@/lib/storefront/catalog/facets";
 import { PreviewSection } from "@/components/storefront/SectionRenderer";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { CHECKOUT_DEMO } from "@/components/storefront/sections/checkout/checkout-preview";
@@ -74,22 +74,28 @@ export function SectionPreviewFrame({
   section,
   products,
   categories,
+  fatete,
   produsDemo,
 }: {
   chrome: StoreChromeData;
   section: SectionInstance;
   products: StorefrontProduct[];
   categories: CategoryRow[];
+  /**
+   * Fatetele produselor demonstrative, calculate in ruta.
+   *
+   * NU aici: `slimCatalogProduct` reconstruieste `page_sections` si pastreaza
+   * doar variantele si pachetul, deci brandul si specificatiile nu mai exista
+   * pe produsele care ajung pana aici. Calculate dupa slimuire, jumatate din
+   * filtrele miniaturii ar fi fost mereu goale.
+   */
+  fatete: Fateta[];
   produsDemo?: DemoProductPage;
 }) {
   const value = useMemo<StorefrontContextValue>(() => {
     const nimic = () => {};
     const items = products.slice(0, 8);
     const topLevel = categories.filter((c) => c.parent_id === null);
-    // Aceeasi functie ca in magazin, pe produsele demonstrative: miniatura arata
-    // fatete reale, nu o lista scrisa special pentru ea.
-    const { fatete: fateteDemo, perProdus } = construiesteFatete(products);
-    const produseCuFatete = products.map((p) => ({ ...p, f: perProdus.get(p.id) }));
 
     return {
       ...chrome,
@@ -100,8 +106,8 @@ export function SectionPreviewFrame({
       // logoul e o ancora goala, nu un link care ar scoate iframe-ul din cadru.
       isHome: true,
 
-      products: produseCuFatete,
-      visibleProducts: produseCuFatete,
+      products,
+      visibleProducts: products,
       filteredProducts: items,
       paginatedProducts: items,
       featuredProducts: products.filter((p) => p.is_featured).slice(0, 8),
@@ -134,7 +140,7 @@ export function SectionPreviewFrame({
       // goale: pagina de catalog se alege tocmai dupa cum arata filtrele, iar o
       // coloana goala langa o grila ar fi facut cele trei modele sa para
       // identice. Bifarea ramane inerta — intr-o miniatura nu se filtreaza.
-      fatete: fateteDemo,
+      fatete,
       selectieFatete: {},
       comutaFateta: nimic,
       priceMin: "",
@@ -189,7 +195,7 @@ export function SectionPreviewFrame({
       priceLowestOnly: false,
       freeShippingThreshold: 200,
     };
-  }, [chrome, section.id, products, categories]);
+  }, [chrome, section.id, products, categories, fatete]);
 
   // Cosul si formularul de comanda: acelasi cod ca in magazin, dar in fluxul
   // paginii, cu un cos demonstrativ tinut in memorie si fara niciun apel pe

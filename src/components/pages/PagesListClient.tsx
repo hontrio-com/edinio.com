@@ -21,11 +21,12 @@ function publicBase(b: Business): string {
   return b.custom_domain ? `https://${b.custom_domain}` : `https://edinio.com/${b.slug}`;
 }
 
-export function PagesListClient({ business, pages, initialMenu, cosPePagina, comandaPePagina }: {
+export function PagesListClient({ business, pages, initialMenu, catalogPePagina, cosPePagina, comandaPePagina }: {
   business: Business;
   pages: PageRow[];
   initialMenu: MenuItem[];
   /** Magazinul si-a ales cosul, respectiv finalizarea comenzii, ca pagini proprii. */
+  catalogPePagina: boolean;
   cosPePagina: boolean;
   comandaPePagina: boolean;
 }) {
@@ -122,7 +123,7 @@ export function PagesListClient({ business, pages, initialMenu, cosPePagina, com
         <Link href="/dashboard/pages/messages" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors">Mesaje</Link>
       </div>
 
-      <PaginiDeSistem business={business} cosPePagina={cosPePagina} comandaPePagina={comandaPePagina} />
+      <PaginiDeSistem business={business} catalogPePagina={catalogPePagina} cosPePagina={cosPePagina} comandaPePagina={comandaPePagina} />
 
       {/* Pages list */}
       {pages.length === 0 ? (
@@ -251,7 +252,7 @@ export function PagesListClient({ business, pages, initialMenu, cosPePagina, com
 }
 
 /**
- * Paginile de sistem: cosul si finalizarea comenzii.
+ * Paginile de sistem: catalogul, cosul si finalizarea comenzii.
  *
  * Nu sunt randuri in tabelul de pagini si nu se pot sterge, duplica sau
  * redenumi — sunt pasi ai cumpararii, nu continut. Apar totusi aici pentru ca
@@ -263,24 +264,35 @@ export function PagesListClient({ business, pages, initialMenu, cosPePagina, com
  */
 function PaginiDeSistem({
   business,
+  catalogPePagina,
   cosPePagina,
   comandaPePagina,
 }: {
   business: Business;
+  catalogPePagina: boolean;
   cosPePagina: boolean;
   comandaPePagina: boolean;
 }) {
   const randuri = [
     {
+      titlu: "Magazin",
+      slug: "magazin",
+      activa: catalogPePagina,
+      inactivInsigna: "PE ACASA",
+      inactivExplicatie: "Acum produsele stau pe pagina principala, sub celelalte sectiuni.",
+    },
+    {
       titlu: "Cos",
       slug: "cos",
       activa: cosPePagina,
+      inactivInsigna: "IN FEREASTRA",
       inactivExplicatie: "Acum cosul se deschide ca sertar peste magazin.",
     },
     {
       titlu: "Finalizare comanda",
       slug: "checkout",
       activa: comandaPePagina,
+      inactivInsigna: "IN FEREASTRA",
       inactivExplicatie: "Acum comanda se completeaza intr-o fereastra peste magazin.",
     },
   ];
@@ -295,7 +307,7 @@ function PaginiDeSistem({
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm text-foreground truncate">{r.titlu}</span>
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${r.activa ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-                  {r.activa ? "PAGINA" : "IN FEREASTRA"}
+                  {r.activa ? "PAGINA" : r.inactivInsigna}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground truncate mt-0.5">

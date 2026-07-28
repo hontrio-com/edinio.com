@@ -7,6 +7,7 @@ import { SectionPreviewFrame } from "@/components/storefront/SectionPreviewFrame
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
+import { construiesteFatete } from "@/lib/storefront/catalog/facets";
 import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
@@ -55,6 +56,20 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
     .single();
   const produseDemo = demoProducts(business.id);
   const paginaProdusDemo = demoProductPage(business.id);
+  /*
+   * Fatetele se calculeaza INAINTE de slimuire, ca si in magazinul real.
+   *
+   * `slimCatalogProduct` reconstruieste `page_sections` si pastreaza doar
+   * variantele si pachetul, deci brandul si specificatiile demonstrative n-ar
+   * mai exista pe produsele care ajung la miniatura, iar filtrele ei ar fi
+   * ramas pe jumatate goale — exact ce deosebeste modelele de pagina de catalog.
+   */
+  const indexFatete = construiesteFatete(produseDemo);
+  const produseCuFatete = produseDemo.map((p) => {
+    const slim = slimCatalogProduct(p);
+    const f = indexFatete.perProdus.get(p.id);
+    return f ? { ...slim, f } : slim;
+  });
 
   // Continutul e demonstrativ, identitatea magazinului nu: designul se alege cu
   // logo-ul, culorile si fontul lui, dar cu bannere, categorii si produse care
@@ -110,8 +125,9 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
           // primeste comerciantul daca o alege.
           settings: { ...(variantMeta(kind, variantParam)?.defaults ?? {}) },
         }}
-        products={produseDemo.map(slimCatalogProduct)}
+        products={produseCuFatete}
         categories={DEMO_CATEGORIES}
+        fatete={indexFatete.fatete}
         // Pagina de produs primeste produsul demonstrativ INTREG, nu trecut prin
         // `slimCatalogProduct`: acela taie tocmai combinatiile de variante si
         // imaginile de dupa prima, adica jumatate din ce arata designul.

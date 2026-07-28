@@ -23,6 +23,7 @@ import {
   getSupplierAddressesCached, searchBrands, searchLeafCategories,
 } from "@/lib/trendyol/taxonomy";
 import { indexeazaFrunze, potrivesteIndexat, type PotrivireCategorie } from "@/lib/trendyol/category-match";
+import { sugereazaAtribute, type SugestieAtribut, type ValoriAtribut } from "@/lib/trendyol/attribute-autofill";
 import { loadTrendyolContext, removeProductNow, syncProductNow } from "@/lib/trendyol/sync";
 import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
 import { deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
@@ -360,6 +361,59 @@ export async function getTrendyolAttributeValues(businessId: string, categoryId:
   if (values === null) return { error: "Nu am putut încărca valorile atributului." };
   return { values };
 }
+/**
+ * Valorile propuse pentru atributele categoriei.
+ *
+ * Datele de conformitate (producător, importatori) sunt identice pe tot catalogul
+ * și se iau din datele firmei; restul se deduc din produs, dar numai când sunt
+ * fără echivoc. Vezi lib/trendyol/attribute-autofill.ts.
+ */
+export async function suggestTrendyolAttributes(
+  businessId: string, productId: string, categoryId: number,
+): Promise<{ sugestii: SugestieAtribut[] } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+
+  const [{ data: product }, { data: biz }] = await Promise.all([
+    g.supabase.from("products").select("name, description, page_sections, weight_grams")
+      .eq("id", productId).eq("business_id", businessId).maybeSingle(),
+    g.supabase.from("businesses").select("business_name, email, address, city, county, cui")
+      .eq("id", businessId).maybeSingle(),
+  ]);
+  if (!product) return { error: "Produs negăsit." };
+
+  const atribute = await getCategoryAttributesCached(g.auth, categoryId);
+  if (atribute === null) return { error: "Nu am putut încărca atributele categoriei." };
+
+  // Valorile se iau doar pentru atributele cu listă; la cele libere nu există ce cere.
+  const valori: ValoriAtribut = {};
+  for (const a of atribute.slice(0, 20)) {
+    if (a.allowCustom && (!a.attributeValues || a.attributeValues.length === 0)) continue;
+    const v = await getCategoryAttributeValuesCached(g.auth, categoryId, a.attribute.id);
+    if (v) valori[a.attribute.id] = v;
+  }
+
+  const b = (biz ?? {}) as { business_name?: string; email?: string | null; address?: string | null; city?: string | null; county?: string | null; cui?: string | null };
+  const google = ((product.page_sections as { google?: { gtin?: string; brand?: string } } | null)?.google) ?? {};
+  return {
+    sugestii: sugereazaAtribute(atribute, valori, {
+      nume: b.business_name ?? "",
+      email: b.email ?? null,
+      adresa: b.address ?? null,
+      oras: b.city ?? null,
+      judet: b.county ?? null,
+      cui: b.cui ?? null,
+      tara: "România",
+    }, {
+      nume: product.name,
+      descriere: product.description,
+      brand: google.brand?.trim() || null,
+      gtin: google.gtin?.trim() || null,
+      weightGrams: product.weight_grams,
+    }),
+  };
+}
+
 export async function searchTrendyolBrands(businessId: string, query: string): Promise<{ brands: TrendyolBrand[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
@@ -470,6 +524,11 @@ export interface TrendyolEditorData {
   images: string[];
   mappedCategoryId: number | null;
   mappedBrandId: number | null;
+  mappedBrandName: string | null;
+  /** Marca din atributele Google ale produsului, pentru alegerea automata a brandului. */
+  productBrand: string | null;
+  /** Valorile salvate ca implicite pentru categoria produsului. */
+  mappedAttributes: TrendyolProductAttribute[];
   listing: {
     brand_id: number | null; category_id: number | null; attributes: TrendyolProductAttribute[];
     dimensional_weight: number | null; cargo_company_id: number | null; status: string;
@@ -527,6 +586,10 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
     images: Array.isArray(product.images) ? (product.images as unknown[]).map(String) : [],
     mappedCategoryId: entry?.category_id ?? null,
     mappedBrandId: entry?.brand_id ?? config.brand_id ?? null,
+    // Fara nume, editorul afisa „#2969976" in campul de brand.
+    mappedBrandName: entry?.brand_name ?? (entry?.brand_id ? null : config.brand_name) ?? null,
+    productBrand: ((product.page_sections as { google?: { brand?: string } } | null)?.google?.brand ?? "").trim() || null,
+    mappedAttributes: entry?.attributes ?? [],
     listing: l ? {
       brand_id: (l.brand_id as number | null) ?? null,
       category_id: (l.category_id as number | null) ?? null,
@@ -543,6 +606,9 @@ export interface TrendyolListingInput {
   brand_id: number | null;
   category_id: number | null;
   attributes: TrendyolProductAttribute[];
+  /** Ridica brandul si atributele ca implicite pentru categoria produsului. */
+  save_as_category_defaults?: boolean;
+  brand_name?: string | null;
   dimensional_weight: number | null;
   cargo_company_id: number | null;
   variants: {
@@ -601,6 +667,30 @@ export async function saveTrendyolListing(
     const { error: vErr } = await admin.from("trendyol_variants").insert(rows as never);
     if (vErr) return { error: "Eroare la salvarea variantelor. Verifică barcode-urile duplicate." };
   }
+
+  // „Salvează ca implicite": munca facuta pe primul produs dintr-o categorie se
+  // aplica de la sine pe urmatoarele. Explicit, nu automat — unele atribute chiar
+  // sunt specifice produsului (ingrediente, volum).
+  if (input.save_as_category_defaults) {
+    const { data: prod } = await g.supabase
+      .from("products").select("category").eq("id", productId).eq("business_id", businessId).maybeSingle();
+    const cat = (prod as { category: string | null } | null)?.category;
+    if (cat) {
+      const config = await loadConfig(g.supabase, businessId);
+      const map = { ...(config.category_map ?? {}) };
+      const prev = map[cat];
+      if (prev) {
+        map[cat] = {
+          ...prev,
+          brand_id: input.brand_id ?? prev.brand_id,
+          brand_name: input.brand_name ?? prev.brand_name,
+          attributes: input.attributes,
+        };
+        await saveConfig(g.supabase, businessId, { ...config, category_map: map });
+      }
+    }
+  }
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }

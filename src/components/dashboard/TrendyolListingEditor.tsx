@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, Sparkles } from "lucide-react";
 import {
   getTrendyolAttributeValues, getTrendyolCategoryAttributes, getTrendyolListingEditor,
-  saveTrendyolListing, searchTrendyolBrands, syncTrendyolProduct,
+  saveTrendyolListing, searchTrendyolBrands, suggestTrendyolAttributes, syncTrendyolProduct,
   type TrendyolEditorData, type TrendyolEditorVariant,
 } from "@/lib/actions/trendyol.actions";
 import type { TrendyolBrand, TrendyolCategoryAttribute, TrendyolProductAttribute, TrendyolStoreFront } from "@/lib/trendyol/types";
@@ -48,6 +48,10 @@ export function TrendyolListingEditor({
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [dimWeight, setDimWeight] = useState("");
   const [listingAttrSel, setListingAttrSel] = useState<Record<number, AttrSel>>({});
+  // Ce a fost completat automat, ca sa i se spuna comerciantului de unde vine.
+  const [completate, setCompletate] = useState<Record<number, "firma" | "produs">>({});
+  const [salveazaImplicite, setSalveazaImplicite] = useState(false);
+  const [completeaza, startCompletare] = useTransition();
   const [variantAttrSel, setVariantAttrSel] = useState<Record<string, Record<number, AttrSel>>>({});
   const [variants, setVariants] = useState<TrendyolEditorVariant[]>([]);
 
@@ -59,7 +63,16 @@ export function TrendyolListingEditor({
       if ("error" in ed) { toast.error(ed.error); onClose(); return; }
       setData(ed);
       setBrandId(ed.listing?.brand_id ?? ed.mappedBrandId ?? null);
+      setBrandName(ed.mappedBrandName ?? "");
       setCategoryId(ed.listing?.category_id ?? ed.mappedCategoryId ?? null);
+      // Valorile deja salvate: intai cele ale produsului, altfel implicitele
+      // categoriei — munca facuta pe un produs se vede pe urmatoarele.
+      const salvate = ed.listing?.attributes?.length ? ed.listing.attributes : ed.mappedAttributes;
+      if (salvate?.length) {
+        const sel: Record<number, AttrSel> = {};
+        for (const a of salvate) sel[a.attributeId] = { valueId: a.attributeValueId, custom: a.customAttributeValue };
+        setListingAttrSel(sel);
+      }
       setDimWeight(ed.listing?.dimensional_weight != null ? String(ed.listing.dimensional_weight) : "");
       setVariants(ed.variants);
       setLoading(false);
@@ -90,11 +103,72 @@ export function TrendyolListingEditor({
     return () => { alive = false; };
   }, [businessId, categoryId]);
 
+  /**
+   * Completeaza atributele goale.
+   *
+   * `doarGoale` la incarcare: nu calcam peste ce a scris comerciantul. Butonul
+   * „Completeaza automat" trece peste tot, ca sa poata reface dupa ce si-a
+   * schimbat datele firmei.
+   */
+  const completeazaAutomat = (doarGoale: boolean) => {
+    if (!categoryId) return;
+    startCompletare(async () => {
+      const res = await suggestTrendyolAttributes(businessId, productId, categoryId);
+      if ("error" in res) { if (!doarGoale) toast.error(res.error); return; }
+      if (res.sugestii.length === 0) { if (!doarGoale) toast.info("Nu am găsit ce completa automat."); return; }
+
+      let puse = 0;
+      setListingAttrSel((prev) => {
+        const next = { ...prev };
+        for (const s of res.sugestii) {
+          const acum = next[s.attributeId];
+          const gol = !acum || (!acum.valueId && !acum.custom?.trim());
+          if (doarGoale && !gol) continue;
+          next[s.attributeId] = { valueId: s.attributeValueId, custom: s.customAttributeValue };
+          puse++;
+        }
+        return next;
+      });
+      setCompletate((prev) => {
+        const next = { ...prev };
+        for (const s of res.sugestii) next[s.attributeId] = s.sursa;
+        return next;
+      });
+      if (!doarGoale) toast.success(`${puse} ${puse === 1 ? "câmp completat" : "câmpuri completate"}.`);
+    });
+  };
+
+  // La deschidere, campurile goale se umplu singure. Datele de conformitate
+  // (producator, importatori) sunt aceleasi pe tot catalogul: cerute produs cu
+  // produs, ar insemna mii de completari identice.
+  const autoRulat = useRef(false);
+  useEffect(() => {
+    if (!categoryId || groups.length === 0 || autoRulat.current) return;
+    autoRulat.current = true;
+    completeazaAutomat(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, groups.length]);
+
   const productAttrs = useMemo(() => groups.filter((g) => !g.varianter), [groups]);
   const varianterAttrs = useMemo(() => groups.filter((g) => g.varianter), [groups]);
 
   const setVariant = (key: string, patch: Partial<TrendyolEditorVariant>) =>
     setVariants((prev) => prev.map((v) => (v.key === key ? { ...v, ...patch } : v)));
+
+  // Daca produsul are marca (din atributele Google), o cautam la Trendyol si o
+  // alegem cand se potriveste exact — un click in minus pe fiecare produs.
+  useEffect(() => {
+    const marca = data?.productBrand?.trim();
+    if (!marca || brandId) return;
+    let alive = true;
+    (async () => {
+      const res = await searchTrendyolBrands(businessId, marca);
+      if (!alive || "error" in res) return;
+      const exact = res.brands.find((b) => b.name.trim().toLowerCase() === marca.toLowerCase());
+      if (exact) { setBrandId(exact.id); setBrandName(exact.name); }
+    })();
+    return () => { alive = false; };
+  }, [businessId, data?.productBrand, brandId]);
 
   const searchBrand = (q: string) => {
     setBrandQuery(q);
@@ -111,8 +185,10 @@ export function TrendyolListingEditor({
       .filter((x): x is TrendyolProductAttribute => x !== null);
     return {
       brand_id: brandId,
+      brand_name: brandName || null,
       category_id: categoryId,
       attributes: listingAttributes,
+      save_as_category_defaults: salveazaImplicite,
       dimensional_weight: dimWeight.trim() === "" ? null : Number(dimWeight),
       // Curierul nu face parte din produs pe marketplace-ul international; se
       // declara la expediere, o data cu AWB-ul.
@@ -201,15 +277,54 @@ export function TrendyolListingEditor({
 
       {productAttrs.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-foreground mb-2">Atribute produs</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {productAttrs.map((g) => (
-              <div key={g.attribute.id}>
-                <label className="block text-[11px] text-muted-foreground mb-0.5">{g.attribute.name}{g.required ? " *" : ""}</label>
-                {renderAttrSelect(g, listingAttrSel[g.attribute.id], (s) => setListingAttrSel((p) => ({ ...p, [g.attribute.id]: s })))}
-              </div>
-            ))}
+          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <p className="text-xs font-semibold text-foreground">Atribute produs</p>
+            <button type="button" onClick={() => completeazaAutomat(false)} disabled={completeaza}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium hover:bg-muted disabled:opacity-60">
+              {completeaza ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3 text-primary" />}
+              Completează automat
+            </button>
           </div>
+          <p className="text-[11px] text-muted-foreground mb-2">
+            Datele de conformitate (producător, importatori) se iau din datele firmei tale, din Setări. Restul se
+            deduc din produs, doar când sunt fără dubiu — verifică-le înainte de trimitere.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {productAttrs.map((g) => {
+              const sursa = completate[g.attribute.id];
+              const sel = listingAttrSel[g.attribute.id];
+              const areValoare = !!sel && (!!sel.valueId || !!sel.custom?.trim());
+              return (
+                <div key={g.attribute.id}>
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
+                    <span>{g.attribute.name}{g.required ? " *" : ""}</span>
+                    {sursa && areValoare && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-1 py-px rounded">
+                        {sursa === "firma" ? "din datele firmei" : "din produs"}
+                      </span>
+                    )}
+                  </label>
+                  {renderAttrSelect(g, sel, (s) => {
+                    setListingAttrSel((p) => ({ ...p, [g.attribute.id]: s }));
+                    // Odata schimbat de om, nu mai e „completat automat".
+                    setCompletate((p) => { const n = { ...p }; delete n[g.attribute.id]; return n; });
+                  })}
+                </div>
+              );
+            })}
+          </div>
+          {data?.category && (
+            <label className="mt-3 flex items-start gap-2 text-xs text-foreground cursor-pointer">
+              <input type="checkbox" checked={salveazaImplicite} onChange={(e) => setSalveazaImplicite(e.target.checked)}
+                className="mt-0.5 rounded" />
+              <span>
+                Salvează brandul și aceste atribute ca implicite pentru categoria „{data.category}”
+                <span className="block text-[11px] text-muted-foreground">
+                  Următoarele produse din aceeași categorie vor porni completate.
+                </span>
+              </span>
+            </label>
+          )}
         </div>
       )}
 

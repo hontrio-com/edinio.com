@@ -134,6 +134,7 @@ export interface TrendyolCategoryMapEntry {
   category_id: number;
   label: string;                    // human path, e.g. "Giyim > Tişört"
   brand_id?: number;                // default brand for this category
+  brand_name?: string;              // numele lui, ca sa nu afisam ID-ul brut
   attributes?: TrendyolAttributeValue[]; // default category attribute values
 }
 

@@ -115,7 +115,13 @@ export function isValueAvailable(
 export function comboUnitPrice(combo: VariantCombo | null, basePrice: number): number {
   if (combo && combo.price != null && String(combo.price).trim() !== "") {
     const n = Number(combo.price);
-    if (Number.isFinite(n)) return n;
+    // Zero inseamna „fara pret propriu", nu „gratis": formularul salveaza sirul
+    // gol, dar importul pune 0 numeric pentru combinatiile fara `pret=` in CSV
+    // (lib/import/normalize.ts). Fara conditia asta, un dus-intors export-import
+    // transforma toate marimile unui produs in variante de 0 lei, iar serverul
+    // le accepta la comanda. `comboCompareAtPrice` de mai jos si
+    // `getProductPriceRange` cer deja acelasi lucru.
+    if (Number.isFinite(n) && n > 0) return n;
   }
   return basePrice;
 }
@@ -141,6 +147,28 @@ export function enabledComboPriceMap(pageSections: unknown, basePrice: number): 
   for (const c of variants.combinations) {
     if (!c?.enabled || !c.title) continue;
     map.set(c.title, comboUnitPrice(c, basePrice));
+  }
+  return map;
+}
+
+/**
+ * Stocul declarat al fiecarei combinatii active, cand chiar e declarat.
+ *
+ * Campul exista de la inceput in date, dar nu-l citea nimeni: un produs cu stoc
+ * total 40 lasa sa se comande marimea S si cand marimea S avea 0 bucati, iar
+ * comerciantul afla din comanda pe care n-o putea onora. Combinatiile fara
+ * numar completat lipsesc din harta — pentru ele ramane stocul produsului.
+ */
+export function comboStockMap(pageSections: unknown): Map<string, number> {
+  const variants = parseVariants(pageSections);
+  const map = new Map<string, number>();
+  if (!variants) return map;
+  for (const c of variants.combinations) {
+    if (!c?.enabled || !c.title) continue;
+    const brut = String(c.stock_quantity ?? "").trim();
+    if (brut === "") continue;
+    const n = Number(brut);
+    if (Number.isFinite(n) && n >= 0) map.set(c.title, Math.floor(n));
   }
   return map;
 }

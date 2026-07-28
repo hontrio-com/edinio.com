@@ -71,20 +71,12 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   const rejectAll = () => persist(CONSENT_NONE);
   const savePrefs = () => persist({ necessary: true, analytics: prefs.analytics, marketing: prefs.marketing });
 
-  // Persistent, subtle reopen control (GDPR: withdraw consent as easily as given).
-  const ReopenButton = hasChoices && decided && !open ? (
-    <button
-      type="button"
-      onClick={reopen}
-      aria-label="Setari cookie-uri"
-      className="fixed bottom-4 left-4 z-40 w-10 h-10 rounded-full bg-white/90 backdrop-blur border border-black/10 shadow-md flex items-center justify-center text-gray-500 hover:text-gray-800 opacity-60 hover:opacity-100 transition-opacity"
-    >
-      <Cookie className="h-5 w-5" />
-    </button>
-  ) : null;
-
+  // Retragerea consimtamantului trebuie sa fie la fel de usoara ca acordarea lui,
+  // dar nu printr-un buton care pluteste peste magazin tot timpul: legatura sta
+  // in blocul legal din footer, unde o cauta oricine, si deschide acelasi panou
+  // prin `OPEN_SETTINGS_EVENT`.
   if (!mounted) return null;
-  if (!open) return ReopenButton;
+  if (!open) return null;
 
   // ── Layout: where the banner/card sits ───────────────────────────────────
   const isCenter = position === "center" || (showDetails && position === "bottom-bar");

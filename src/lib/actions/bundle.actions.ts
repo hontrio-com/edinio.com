@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { getProductLimit } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
@@ -78,12 +79,18 @@ export async function getBundleEligibleProducts(businessId: string): Promise<{
   if (!user) return [];
   if (!(await ownsBusiness(supabase, businessId, user.id))) return [];
 
-  const { data } = await supabase
-    .from("products")
-    .select("id, name, price, images, track_inventory, stock_quantity")
-    .eq("business_id", businessId)
-    .eq("is_bundle", false)
-    .order("name");
+  // PostgREST taie SILENTIOS la 1000 de randuri: pe un magazin cu mai multe
+  // produse, cele de dupa nu apareau in selector si comerciantul nu putea pune
+  // in oferta chiar produsele lui noi.
+  const data = await fetchAllRows("produse pentru oferte", (from, to) =>
+    supabase
+      .from("products")
+      .select("id, name, price, images, track_inventory, stock_quantity")
+      .eq("business_id", businessId)
+      .eq("is_bundle", false)
+      .order("name")
+      .range(from, to),
+  );
 
   return (data ?? []).map((p) => ({
     id: p.id, name: p.name, price: Number(p.price) || 0, image_url: firstImage(p.images),

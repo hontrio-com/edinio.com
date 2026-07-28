@@ -21,8 +21,13 @@ function publicBase(b: Business): string {
   return b.custom_domain ? `https://${b.custom_domain}` : `https://edinio.com/${b.slug}`;
 }
 
-export function PagesListClient({ business, pages, initialMenu }: {
-  business: Business; pages: PageRow[]; initialMenu: MenuItem[];
+export function PagesListClient({ business, pages, initialMenu, cosPePagina, comandaPePagina }: {
+  business: Business;
+  pages: PageRow[];
+  initialMenu: MenuItem[];
+  /** Magazinul si-a ales cosul, respectiv finalizarea comenzii, ca pagini proprii. */
+  cosPePagina: boolean;
+  comandaPePagina: boolean;
 }) {
   const router = useRouter();
   const [menu, setMenu] = useState<MenuItem[]>(initialMenu);
@@ -116,6 +121,8 @@ export function PagesListClient({ business, pages, initialMenu }: {
         <Link href="/dashboard/pages/forms" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors">Formulare</Link>
         <Link href="/dashboard/pages/messages" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors">Mesaje</Link>
       </div>
+
+      <PaginiDeSistem business={business} cosPePagina={cosPePagina} comandaPePagina={comandaPePagina} />
 
       {/* Pages list */}
       {pages.length === 0 ? (
@@ -239,6 +246,76 @@ export function PagesListClient({ business, pages, initialMenu }: {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Paginile de sistem: cosul si finalizarea comenzii.
+ *
+ * Nu sunt randuri in tabelul de pagini si nu se pot sterge, duplica sau
+ * redenumi — sunt pasi ai cumpararii, nu continut. Apar totusi aici pentru ca
+ * asta cauta comerciantul cand se intreaba „unde e pagina mea de cos": in
+ * Pagini, nu intr-un catalog de design-uri.
+ *
+ * Cat timp magazinul le are ca panouri (sertar si fereastra), randurile spun
+ * raspicat ca paginile nu exista si trimit acolo unde se schimba.
+ */
+function PaginiDeSistem({
+  business,
+  cosPePagina,
+  comandaPePagina,
+}: {
+  business: Business;
+  cosPePagina: boolean;
+  comandaPePagina: boolean;
+}) {
+  const randuri = [
+    {
+      titlu: "Cos",
+      slug: "cos",
+      activa: cosPePagina,
+      inactivExplicatie: "Acum cosul se deschide ca sertar peste magazin.",
+    },
+    {
+      titlu: "Finalizare comanda",
+      slug: "checkout",
+      activa: comandaPePagina,
+      inactivExplicatie: "Acum comanda se completeaza intr-o fereastra peste magazin.",
+    },
+  ];
+
+  return (
+    <div className="mb-8">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Pagini de sistem</h2>
+      <div className="space-y-2">
+        {randuri.map((r) => (
+          <div key={r.slug} className="flex items-center gap-3 p-3 sm:p-4 bg-surface border border-border rounded-xl">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm text-foreground truncate">{r.titlu}</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${r.activa ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                  {r.activa ? "PAGINA" : "IN FEREASTRA"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                {r.activa ? `${publicBase(business)}/${r.slug}` : r.inactivExplicatie}
+              </p>
+            </div>
+
+            {r.activa && (
+              <a href={`${publicBase(business)}/${r.slug}`} target="_blank" rel="noopener noreferrer" title="Vezi pagina"
+                className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0">
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            )}
+            <Link href="/dashboard/editor/sectiuni"
+              className="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg border border-border hover:bg-muted transition-colors">
+              Alege designul
+            </Link>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

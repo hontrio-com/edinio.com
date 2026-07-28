@@ -1,0 +1,101 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Monitor, Smartphone, X } from "lucide-react";
+import { sectionMeta, type VariantMeta } from "@/lib/storefront/design/registry";
+import type { SectionInstance } from "@/lib/storefront/design/types";
+import { INALTIME_IMPLICITA, VariantCard } from "./VariantCard";
+
+/**
+ * Galeria de design-uri a unei sectiuni.
+ *
+ * Se deschide peste zona de preview, pe toata latimea, ca fiecare varianta sa
+ * poata fi vazuta mare. Fiecare card randeaza varianta REALA, cu logo-ul,
+ * culorile si produsele magazinului acestuia — nu o captura facuta cu un magazin
+ * demonstrativ. Asa se vede cum ar arata la el, iar cand isi schimba logo-ul sau
+ * culoarea, galeria se actualizeaza singura.
+ *
+ * Miniaturile se incarca doar cand ajung in dreptul ochilor: o sectiune poate
+ * ajunge la zece variante, si n-are rost sa se randeze toate deodata.
+ */
+export function DesignGallery({
+  section,
+  slug,
+  onPick,
+  onClose,
+  motivIndisponibil,
+}: {
+  section: SectionInstance;
+  slug: string;
+  onPick: (variant: string) => void;
+  onClose: () => void;
+  /**
+   * De ce nu poate fi ales un design, daca e cazul (`requires` din registry).
+   *
+   * Vine de la parinte, ca regula sa fie una singura si aici, si in „Design
+   * sectiuni": o varianta stinsa intr-un ecran si libera in celalalt inseamna un
+   * design publicat care in magazin cade inapoi pe altul, fara nicio explicatie.
+   */
+  motivIndisponibil?: (variant: VariantMeta) => string | null;
+}) {
+  const meta = sectionMeta(section.kind);
+  const variante = Object.entries(meta?.variants ?? {});
+  const [peMobil, setPeMobil] = useState(false);
+
+  // Escape inchide galeria: e o suprapunere, nu o pagina.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="absolute inset-0 z-20 bg-background flex flex-col">
+      <div className="px-4 sm:px-6 py-3 border-b border-border flex items-center gap-3 bg-surface">
+        <div className="min-w-0">
+          <h2 className="font-semibold text-foreground truncate">Design pentru {meta?.label ?? section.kind}</h2>
+          <p className="text-xs text-muted-foreground">
+            {variante.length} {variante.length === 1 ? "varianta" : "variante"} - previzualizate cu magazinul tau
+          </p>
+        </div>
+        {/* Aproape tot traficul unui magazin vine de pe telefon. */}
+        <div className="ml-auto flex items-center gap-0.5 p-0.5 rounded-xl border border-border">
+          {([["desktop", Monitor, "Pe calculator"], ["mobil", Smartphone, "Pe telefon"]] as const).map(([k, Icon, eticheta]) => {
+            const activ = (k === "mobil") === peMobil;
+            return (
+              <button key={k} type="button" onClick={() => setPeMobil(k === "mobil")} aria-label={eticheta} title={eticheta}
+                aria-pressed={activ}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${activ ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}>
+                <Icon className="h-4 w-4" />
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" onClick={onClose} aria-label="Inchide galeria"
+          className="w-10 h-10 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className={`grid gap-5 ${peMobil ? "sm:grid-cols-2 xl:grid-cols-3" : ""}`}>
+          {variante.map(([id, v]) => (
+            <VariantCard
+              key={id}
+              slug={slug}
+              kind={section.kind}
+              variantId={id}
+              label={v.label}
+              inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
+              latimeFixa={v.previewWidth}
+              activ={id === section.variant}
+              peMobil={peMobil}
+              motivIndisponibil={motivIndisponibil?.(v) ?? null}
+              onPick={() => onPick(id)}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

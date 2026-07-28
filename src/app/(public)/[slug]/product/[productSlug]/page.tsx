@@ -9,47 +9,60 @@ import { parseStoreMode, parseStoreModeFromSettings } from "@/lib/storefront/sto
 import { enrichStoreProduct } from "@/lib/storefront/product-data";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
-import { ProductPage } from "@/components/ministore/ProductPage";
+import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import { resolveProductOffers } from "@/lib/offers/offers";
+import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
+import { resolveDesign } from "@/lib/storefront/design/parse";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
 
 interface Props {
   params: Promise<{ slug: string; productSlug: string }>;
 }
 
-// React cache() deduplicates this call between generateMetadata and the page
-// — a single DB round trip serves both, per request.
 // UUID v4 pattern to detect legacy product links
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const getProductCached = cache(async (productSlug: string) => {
-  const supabase = await createClient();
-  const col = UUID_RE.test(productSlug) ? "id" : "slug";
-  const { data } = await supabase
-    .from("products")
-    .select("id, name, description, page_sections, price, images, slug")
-    .eq(col, productSlug)
-    .single();
-  return data;
-});
-
-// Store custom domain (canonical URL) + display mode (One Product Store), cached
-// per request. store_settings is not anon-readable, so this reads via the service
-// role to see page_content (where the OPS flag lives).
+// Store id + custom domain (canonical URL) + display mode (One Product Store),
+// cached per request. store_settings is not anon-readable, so this reads via the
+// service role to see page_content (where the OPS flag lives).
 const getBusinessMetaCached = cache(async (slug: string) => {
   const { data } = await createAdminClient()
     .from("businesses")
-    .select("custom_domain, store_settings(page_content)")
+    .select("id, custom_domain, store_settings(page_content)")
     .eq("slug", slug)
     .single();
   return {
+    businessId: data?.id ?? null,
     customDomain: data?.custom_domain ?? null,
     storeMode: parseStoreModeFromSettings((data as { store_settings?: unknown } | null)?.store_settings),
   };
 });
 
+// React cache() deduplicates this call between generateMetadata and the page
+// — a single DB round trip serves both, per request. De aceea aduce randul
+// intreg: pagina are nevoie de toate coloanele, nu doar de cele pentru meta.
+const getProductCached = cache(async (slug: string, productSlug: string) => {
+  const { businessId } = await getBusinessMetaCached(slug);
+  if (!businessId) return null;
+  const supabase = await createClient();
+  const col = UUID_RE.test(productSlug) ? "id" : "slug";
+  // Slug-ul de produs e unic doar in cadrul magazinului (indexul e pe
+  // business_id + slug). Fara filtrul pe magazin, doua magazine cu acelasi slug
+  // ar face `.single()` sa intoarca eroare si ar scoate 404 pe amandoua paginile.
+  const { data } = await supabase
+    .from("products")
+    .select("*")
+    .eq(col, productSlug)
+    .eq("business_id", businessId)
+    .single();
+  return data;
+});
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { productSlug, slug } = await params;
-  const product = await getProductCached(productSlug);
+  const product = await getProductCached(slug, productSlug);
   if (!product) return {};
   const ps = product.page_sections as { seo?: { title?: string; description?: string }; short_description?: string } | null;
   const seo = ps?.seo;
@@ -102,26 +115,34 @@ export default async function ProductDetailPage({ params }: Props) {
   const supabase = await createClient();
 
   // business + product in parallel (publication gated by RLS on both tables).
-  const [{ data: business }, { data: product }] = await Promise.all([
+  // Produsul vine din aceeasi functie cache()-uita ca generateMetadata, deci o
+  // singura interogare pe products serveste ambele.
+  const [{ data: business }, product] = await Promise.all([
     supabase
       .from("businesses")
       .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
       .eq("slug", slug)
       .single(),
-    supabase.from("products").select("*").eq(UUID_RE.test(productSlug) ? "id" : "slug", productSlug).single(),
+    getProductCached(slug, productSlug),
   ]);
 
   if (!business || !product || product.business_id !== business.id || !product.is_active) notFound();
 
   // SEO: redirect /product/{uuid} → /product/{slug} (301)
+  //
+  // Prefixul se calculeaza AICI, nu mai jos: pe domeniu propriu adresele n-au
+  // slug-ul magazinului in ele, deci un redirect catre `/{slug}/product/...`
+  // ducea in 404 pe chiar magazinele cu domeniul lor.
   if (UUID_RE.test(productSlug) && product.slug) {
-    redirect(`/${slug}/product/${product.slug}`);
+    const gazda = (await headers()).get("host")?.split(":")[0] ?? "";
+    const peDomeniuPropriu = !!business.custom_domain && gazda === business.custom_domain;
+    redirect(peDomeniuPropriu ? `/product/${product.slug}` : `/${slug}/product/${product.slug}`);
   }
 
   // store_settings is no longer anon-readable — fetch the public-safe columns via service role.
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design")
     .eq("business_id", business.id)
     .single();
 
@@ -159,6 +180,26 @@ export default async function ProductDetailPage({ params }: Props) {
   const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max });
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
 
+  // Acelasi header si footer ca pe pagina de magazin, din aceeasi configuratie.
+  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const resolved = resolveDesign(storeSettings?.storefront_design, {
+    primaryColor: business.primary_color ?? "#1AB554",
+    pageContent: pageContent as Record<string, unknown>,
+    features: (business.features as Record<string, unknown>) ?? {},
+    coverUrl: business.cover_url,
+    tagline: business.tagline,
+  });
+  const searchCategories = await loadSearchCategories(business.id, resolved.design);
+  const chrome = buildChromeData({
+    searchCategories,
+    business: business as never,
+    pageContent,
+    basePath,
+    design: resolved.design,
+    // Bara de cumparare lipita jos acopera subsolul pe mobil.
+    hasStickyBottomBar: true,
+  });
+
   return (
     <>
       <script
@@ -169,16 +210,22 @@ export default async function ProductDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <ProductPage
-        business={business as never}
-        product={product}
-        storeSettings={storeSettings as never}
-        basePath={basePath}
-        hasCardPayment={hasCardPayment}
-        bundleComponents={bundleComponents}
-        altMap={altMap}
-        productOffers={productOffers}
-      />
+      <StorefrontThemeScope style={resolved.style}>
+        <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen">
+          <ProductPageSection
+            variant={resolved.design.product.page.variant}
+                setari={resolved.design.product.page.settings}
+            business={business as never}
+            product={product}
+            storeSettings={storeSettings as never}
+            basePath={basePath}
+            hasCardPayment={hasCardPayment}
+            bundleComponents={bundleComponents}
+            altMap={altMap}
+            productOffers={productOffers}
+          />
+        </StorePageShell>
+      </StorefrontThemeScope>
     </>
   );
 }

@@ -1,243 +1,144 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
-  ShoppingBag, ArrowLeft, Package, Plus, Minus, Calendar, Globe, Star, Eye,
+  ShoppingBag, ShoppingCart, Check, ArrowLeft, Package, Plus, Calendar, Star,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
-import { cdnImage } from "@/lib/cdn-image";
 import { getProductPriceRange } from "@/lib/utils/product-price";
-import { OrderModal } from "./OrderModal";
-import type { QuantityTier } from "./OrderModal";
-import { NetopiaBadge } from "./NetopiaBadge";
-import { CompanyIdentity } from "./CompanyIdentity";
-import { EdinioCredit } from "./EdinioCredit";
-import { StoreHeader } from "./StoreHeader";
-import type { MenuItem } from "@/lib/pages/menu";
-import type { Database } from "@/types/database.types";
-import { ProductOffers } from "./ProductOffers";
+import {
+  parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
+  VARIANT_TITLE_SEP,
+} from "@/lib/storefront/variants";
+import { OrderModal } from "@/components/ministore/OrderModal";
+import type { QuantityTier } from "@/components/ministore/OrderModal";
+import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
 
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
-type Product = Database["public"]["Tables"]["products"]["Row"];
-type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
+import type {
+  Business, Product, StoreSettings, PageContent, PageSections,
+} from "./_shared/product-page.types";
+import {
+  abonareMiscareRedusa, citesteMiscareRedusa, hashSir,
+  SocialProof, FAQItem, CTAButton,
+} from "./_shared/pieces";
+import { cosDupaComanda } from "@/lib/storefront/cart/consume";
+import { trackAddToCart } from "@/lib/storefront/cart/track-add";
+import { useCartOptional } from "@/components/storefront/cart/CartProvider";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 
-/* ─── Page content types ──────────────────────────────────────────────────── */
+/* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
-interface TrustBadge { icon: string; title: string; desc: string; }
-interface BenefitItem { title: string; desc: string; }
-interface HowItWorksStep { title: string; desc: string; }
-interface FaqItem { q: string; a: string; }
-interface SpecItem { label: string; value: string; }
+/**
+ * Latimea reala a coloanei de galerie pe desktop: (72rem container - 4rem gap) / 2.
+ *
+ * Acelasi `sizes` pe copia de telefon si pe cea de desktop, desi arata diferit:
+ * amandoua marcheaza prima imagine cu `priority`, iar preincarcarea din <head> nu
+ * stie de `display:none`. Cu `sizes` diferiti browserul alegea doi candidati si
+ * descarca de doua ori aceeasi fotografie; identici, alege acelasi fisier o data.
+ */
+const GALLERY_SIZES = "(min-width: 1024px) 544px, 100vw";
 
-interface PageContent {
-  announcement_bar?: { enabled: boolean; text: string; bg_color: string; speed?: number; };
-  menu?: MenuItem[];
-  logo_size?: number;
-  trust_badges_enabled?: boolean;
-  trust_badges?: TrustBadge[];
-  benefits_section?: { enabled: boolean; title: string; items: BenefitItem[]; };
-  how_it_works_section?: { enabled: boolean; title: string; steps: HowItWorksStep[]; };
-  faq_section?: { enabled: boolean; title: string; items: FaqItem[]; };
-  image_zoom?: { enabled: boolean };
-  delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
-  price_range_display?: { enabled: boolean };
-  button_effect?: string;
-  show_social_proof?: boolean;
-  show_quality_badge?: boolean;
-  footer_logo_size?: number;
-  checkout_config?: {
-    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
-    extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
-  };
-}
-
-interface VariantCombo {
-  id: string;
-  title: string;
-  price: string;
-  compare_at_price: string;
-  sku: string;
-  stock_quantity: string;
-  image: string;
-  enabled: boolean;
-}
-
-interface CustomizationFieldDef {
-  id: string;
-  type: "text" | "textarea" | "image" | "select" | "color";
-  label: string;
-  placeholder?: string;
-  required: boolean;
-  max_length?: number;
-  max_files?: number;
-  max_file_size_mb?: number;
-  options?: string[];
-  default_color?: string;
-  helper_text?: string;
-}
-
-interface PageSections {
-  short_description?: string;
-  specifications?: SpecItem[];
-  quantity_tiers?: {
-    enabled: boolean;
-    mode?: "fixed" | "percent";
-    tier2_price: number;
-    tier2_percent?: number;
-    tier2_badge: string;
-    tier3_price: number;
-    tier3_percent?: number;
-    tier3_badge: string;
-  };
-  stock_status?: "in_stock" | "out_of_stock" | "preorder";
-  dimensions?: { length: number; width: number; height: number };
-  variants?: {
-    enabled: boolean;
-    options: { id: string; name: string; values: string[] }[];
-    combinations: VariantCombo[];
-  };
-  customization?: {
-    enabled: boolean;
-    fields: CustomizationFieldDef[];
-  };
-}
-
-/* ─── Default content ─────────────────────────────────────────────────────── */
-
-/* ─── Sub-components ──────────────────────────────────────────────────────── */
-
-function SocialProof({ count, color }: { count: number; color: string }) {
-  return (
-    <div className="inline-flex items-center gap-2 bg-surface border border-border shadow-sm rounded-full px-4 py-2 text-sm">
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: color }} />
-        <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: color }} />
-      </span>
-      <Eye size={14} className="text-muted-foreground" />
-      <span className="font-medium text-muted-foreground">
-        <span className="text-foreground font-bold">{count}</span> persoane se uita acum
-      </span>
-    </div>
-  );
-}
-
-function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boolean; onToggle: () => void }) {
-  return (
-    <div className="border-b border-border last:border-0">
-      <button type="button" onClick={onToggle} aria-expanded={isOpen}
-        className="w-full flex items-start gap-4 py-5 text-left hover:text-foreground transition-colors">
-        <span className="mt-0.5 shrink-0 w-6 h-6 rounded-full border border-border flex items-center justify-center">
-          {isOpen ? <Minus size={12} className="text-foreground" /> : <Plus size={12} className="text-muted-foreground" />}
-        </span>
-        <span className="font-semibold text-foreground text-base pr-4">{faq.q}</span>
-      </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden">
-            <p className="text-muted-foreground text-sm leading-relaxed pb-5 pl-10 pr-4">{faq.a}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ─── CTA Button with effects ─────────────────────────────────────────────── */
-
-const BTN_CLS = "w-full py-4 text-base font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
-
-function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayment, effect, onClick }: {
-  color: string; isOutOfStock: boolean; isPreorder: boolean; needsVariant: boolean; hasCardPayment: boolean; effect: string; onClick: () => void;
+function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount, discountPct, onTouchStart, onTouchEnd }: {
+  slides: string[];
+  activeSlide: number;
+  goTo: (idx: number) => void;
+  mobile: boolean;
+  color: string;
+  imgAlt: (src: string, i: number) => string;
+  hasDiscount: boolean;
+  discountPct: number;
+  onTouchStart: (e: React.TouchEvent) => void;
+  onTouchEnd: (e: React.TouchEvent) => void;
 }) {
-  // Drop the "- Plata la livrare" suffix when card payment is available.
-  const codSuffix = hasCardPayment ? "" : " - Plata la livrare";
-  const label = (
-    <>
-      <ShoppingBag size={18} />
-      {isOutOfStock ? "Stoc epuizat"
-        : needsVariant ? "Selecteaza optiunile"
-        : isPreorder ? `Precomanda${codSuffix}`
-        : `Comanda acum${codSuffix}`}
-    </>
-  );
-  const base = { backgroundColor: color, boxShadow: `0px 4px 16px ${color}55` };
+  return (
+    <div className="relative w-full overflow-hidden rounded-2xl bg-muted/40 shadow-lg"
+      style={{ aspectRatio: "1/1" }}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {slides.length === 0 ? (
+        <div className="w-full h-full flex items-center justify-center">
+          <Package className="h-20 w-20 text-muted-foreground/40" />
+        </div>
+      ) : mobile ? (
+        <div className="flex h-full transition-transform duration-500 ease-in-out"
+          style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
+          {slides.map((src, i) => (
+            <div key={i} className="relative w-full h-full flex-shrink-0">
+              <Image src={src} alt={imgAlt(src, i)} fill sizes={GALLERY_SIZES}
+                className="object-contain p-2" priority={i === 0} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        // Pe desktop diapozitivele stau suprapuse in acelasi cadru vizibil, deci
+        // browserul le socoteste pe toate „in ecran" si le-ar descarca deodata
+        // (`opacity: 0` nu opreste nici descarcarea, nici decodarea). Montam doar
+        // diapozitivul activ si vecinii imediati: trecerea are nevoie de cel vechi
+        // si de cel nou in acelasi timp, restul se aduc abia cand ajungi la ele.
+        slides.map((src, i) => (
+          <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
+            style={{ opacity: i === activeSlide ? 1 : 0 }}>
+            {/* Doar prima fotografie e prioritara; restul se incarca lenes.
+                Toate raman insa MONTATE: demontarea celor departate ar taia
+                tranzitia de opacitate la salturile de mai mult de o pozitie
+                (miniatura departata, sau sageata care se intoarce la prima) si
+                ar lasa un patrat gol pana soseste imaginea. */}
+            <Image src={src} alt={imgAlt(src, i)} fill sizes={GALLERY_SIZES}
+              className="object-contain p-2" priority={i === 0} loading={i === 0 ? undefined : "lazy"} />
+          </div>
+        ))
+      )}
 
-  const disabled = isOutOfStock || needsVariant;
+      {slides.length > 1 && (
+        <>
+          <button type="button" aria-label="Imaginea anterioara" onClick={e => { e.stopPropagation(); goTo(activeSlide - 1); }}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
+            <ChevronLeft size={16} className="text-foreground" />
+          </button>
+          <button type="button" aria-label="Imaginea urmatoare" onClick={e => { e.stopPropagation(); goTo(activeSlide + 1); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
+            <ChevronRight size={16} className="text-foreground" />
+          </button>
+          {/* Dot indicators: mobile only (desktop uses the thumbnail strip) and only
+              for small galleries — 33 dots would be an unusable cramped row. The
+              "1 / N" counter above covers navigation for larger sets. */}
+          {mobile && slides.length <= 8 && (
+            <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
+              {slides.map((_, i) => (
+                // Bulina inactiva pe un token de text, nu pe alb: fundalul galeriei
+                // e aproape alb, deci albul 60% ieseau la circa 1:1 (WCAG 1.4.11
+                // cere 3:1) si clientul nu vedea cate imagini mai sunt.
+                <button key={i} type="button" aria-label={`Imaginea ${i + 1}`} onClick={() => goTo(i)}
+                  className="rounded-full transition-all duration-300"
+                  style={i === activeSlide
+                    ? { width: 24, height: 8, backgroundColor: color }
+                    : { width: 8, height: 8, backgroundColor: "var(--color-muted-foreground)" }} />
+              ))}
+            </div>
+          )}
+          <div className="absolute top-3 left-3 bg-black/30 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10">
+            {activeSlide + 1} / {slides.length}
+          </div>
+        </>
+      )}
 
-  if (effect === "pulse") return (
-    <div className="relative">
-      <motion.div
-        className="absolute inset-0 rounded-xl pointer-events-none"
-        style={{ backgroundColor: color }}
-        animate={{ opacity: [0.7, 0], scale: [1, 1.15] }}
-        transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
-      />
-      <button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}>{label}</button>
+      {hasDiscount && (
+        <div className="absolute top-3 right-3 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10" style={{ backgroundColor: color }}>
+          -{discountPct}%
+        </div>
+      )}
     </div>
   );
-
-  if (effect === "shake") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
-      animate={{ x: [0, -5, 5, -5, 5, 0] }}
-      transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 3 }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "bounce") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
-      animate={{ y: [0, -6, 0] }}
-      transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "glow") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS}
-      style={{ backgroundColor: color }}
-      animate={{ boxShadow: [`0px 4px 16px ${color}44`, `0px 4px 36px ${color}CC`, `0px 4px 16px ${color}44`] }}
-      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "heartbeat") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS} style={base}
-      animate={{ scale: [1, 1.06, 1, 1.06, 1] }}
-      transition={{ duration: 1, repeat: Infinity, repeatDelay: 1.5 }}>
-      {label}
-    </motion.button>
-  );
-
-  return (
-    <button type="button" onClick={onClick} disabled={disabled} className={BTN_CLS + " transition-all"} style={base}>
-      {label}
-    </button>
-  );
 }
-
-interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; website?: string; }
-
-const POLICY_LINKS = [
-  { slug: "termeni", label: "Termeni si conditii" },
-  { slug: "livrare", label: "Politica de livrare" },
-  { slug: "retur", label: "Politica de retur" },
-  { slug: "confidentialitate", label: "Politica de confidentialitate" },
-  { slug: "gdpr", label: "GDPR" },
-  { slug: "anulare", label: "Politica de anulare" },
-] as const;
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPage({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [] }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -250,6 +151,20 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   isHome?: boolean;
   /** Cross-sell offers resolved server-side for this product (rendered as "Merge bine cu"). */
   productOffers?: ResolvedOffer[];
+  /** Reglajele variantei, din `design.product.page.settings`. Vezi registry. */
+  setari?: Record<string, unknown>;
+  /**
+   * Miniatura din catalogul de design-uri: pagina se randeaza inerta.
+   *
+   * Fara pixeli (altfel fiecare card din galerie ar trimite un ViewContent in
+   * Facebook, TikTok si Analytics ale comerciantului), fara sa atinga cosul lui
+   * din localStorage (galeria ruleaza pe aceeasi origine cu magazinul), fara
+   * animatii care se repeta la nesfarsit si fara bara lipita jos, care ar pluti
+   * peste miniatura fara sa intre in inaltimea masurata. Se opreste dupa galerie
+   * si zona de cumparare: pagina intreaga trece de 3000 px si, micsorata intr-un
+   * card, ar deveni o banda ilizibila.
+   */
+  demo?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -259,15 +174,15 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const productName = product.name;
   const productPrice = Number(product.price) || 0;
   useEffect(() => {
+    if (demo) return;
     gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
     fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
     ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
-  }, [productId, productName, productPrice]);
+  }, [demo, productId, productName, productPrice]);
   // SEO alt text from the Media Library, falling back to the product name.
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
 
   const color = business.primary_color ?? "#1AB554";
-  const social = (business.social as Social) ?? {};
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   const freeShippingThreshold = storeSettings?.free_shipping_threshold
@@ -287,33 +202,48 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const hasLongDesc = !!product.description && product.description !== "<p></p>";
   const topBlurb = hasShortDesc ? shortDesc : (hasLongDesc ? product.description : null);
 
-  const announcementBar = pageContent.announcement_bar;
   const trustBadgesEnabled = pageContent.trust_badges_enabled !== false;
   const benefitsSection = pageContent.benefits_section;
   const howItWorksSection = pageContent.how_it_works_section;
   const faqSection = pageContent.faq_section;
-  const buttonEffect = pageContent.button_effect ?? "none";
-  const imageZoomEnabled = pageContent.image_zoom?.enabled !== false;
+  // WCAG 2.2.2: cinci din cele sase efecte de buton se repeta la nesfarsit si nu
+  // au buton de oprire, deci se sting cand vizitatorul cere miscare redusa —
+  // exact ce fac deja clasele .fx-* pentru paginile custom (globals.css).
+  const reduceMotion = useSyncExternalStore(abonareMiscareRedusa, citesteMiscareRedusa, () => false);
+  // In miniatura, cinci din cele sase efecte de buton sunt animatii care se
+  // repeta la nesfarsit; zece iframe-uri deodata ar arde procesorul degeaba.
+  const buttonEffect = demo || reduceMotion ? "none" : (pageContent.button_effect ?? "none");
   const deliveryEstimate = pageContent.delivery_estimate;
   const showQualityBadge = pageContent.show_quality_badge === true; // "Calitate verificata" badge — off unless enabled (ANPC/Omnibus: merchant opt-in)
-  const viewerCount = useRef(18 + Math.floor(Math.random() * 10)).current;
+  // Numar stabil, derivat din id-ul produsului: cu Math.random() serverul si
+  // browserul scriau numere diferite in acelasi HTML (nepotrivire de hidratare).
+  // Fix in miniatura, ca fiecare card din galerie sa arate acelasi numar.
+  const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
   const showSocialProof = pageContent.show_social_proof === true; // fake live-viewers counter — off unless enabled
 
-  // Variants
-  const variantsData = pageSections.variants?.enabled ? pageSections.variants : null;
-  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  // Variante — sursa unica din lib/storefront/variants.ts. Un produs cu
+  // `variants.enabled` dar fara nicio optiune NU e variabil: altfel butonul de
+  // comanda ramanea stins cu „Selecteaza optiunile" si nimic de selectat, desi
+  // acelasi produs se adauga normal in cos din cardul de catalog.
+  const variantsData = useMemo(() => parseVariants(product.page_sections), [product.page_sections]);
+  // In miniatura prima combinatie e deja aleasa. Altfel butonul principal ar
+  // aparea stins, cu „Selecteaza optiunile", in fiecare design de pagina de
+  // produs — adica tocmai elementul dupa care se alege designul ar lipsi.
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() =>
+    demo && variantsData
+      ? Object.fromEntries(variantsData.options.map((o) => [o.name, o.values[0] ?? ""]))
+      : {},
+  );
 
-  const selectedComboTitle = useMemo(() => {
-    if (!variantsData) return null;
-    const parts = variantsData.options.map(o => selectedOptions[o.name] ?? "");
-    if (parts.some(p => !p)) return null;
-    return parts.join(" / ");
-  }, [variantsData, selectedOptions]);
+  const selectedComboTitle = useMemo(
+    () => (variantsData ? comboTitle(variantsData.options, selectedOptions) : null),
+    [variantsData, selectedOptions],
+  );
 
-  const selectedCombo = useMemo(() => {
-    if (!variantsData || !selectedComboTitle) return null;
-    return variantsData.combinations.find(c => c.title === selectedComboTitle && c.enabled) ?? null;
-  }, [variantsData, selectedComboTitle]);
+  const selectedCombo = useMemo(
+    () => (variantsData ? findCombo(variantsData, selectedComboTitle) : null),
+    [variantsData, selectedComboTitle],
+  );
 
   // Variant image: the exact combo image when everything is selected, otherwise the
   // image of the first enabled combination that matches the partial selection (e.g.
@@ -336,7 +266,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
       const imgs = new Set<string>();
       for (const c of variantsData.combinations) {
         if (!c.enabled || !c.image) continue;
-        const parts = c.title.split(" / ");
+        const parts = c.title.split(VARIANT_TITLE_SEP);
         if (chosen.every(s => parts.includes(s))) imgs.add(c.image);
       }
       if (imgs.size !== 1) return null;
@@ -356,19 +286,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     return selected.length > 0 ? `${product.name} - ${selected.join(" / ")}` : product.name;
   }, [variantsData, selectedOptions, product.name]);
 
-  // Check if a variant value leads to any available combination
-  function isValueAvailable(optionName: string, value: string): boolean {
-    if (!variantsData) return true;
-    const otherSels = Object.entries(selectedOptions)
-      .filter(([k, v]) => k !== optionName && v)
-      .map(([, v]) => v);
-    return variantsData.combinations.some(c => {
-      if (!c.enabled) return false;
-      const parts = c.title.split(" / ");
-      return parts.includes(value) && otherSels.every(s => parts.includes(s));
-    });
-  }
-
   // Display images — prepend the (full or partial) variant image if available
   const displayImages = useMemo(() => {
     if (variantImage) {
@@ -379,12 +296,16 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
   const slides = displayImages.length > 0 ? displayImages : [];
 
-  // Price — use variant price if set
+  // Pretul combinatiei trece prin ACELASI helper ca grila, cealalta varianta de
+  // pagina si repretuirea de pe server. Formula proprie de aici trata sirul „0"
+  // ca pret real, deci pagina scria 0 lei si serverul incasa pretul de baza:
+  // clientul platea altceva decat i s-a aratat.
   const basePrice = Number(product.price);
-  const displayPrice = selectedCombo?.price ? Number(selectedCombo.price) : basePrice;
-  const displayComparePrice = selectedCombo?.compare_at_price
-    ? Number(selectedCombo.compare_at_price)
-    : product.compare_at_price ? Number(product.compare_at_price) : null;
+  const displayPrice = comboUnitPrice(selectedCombo, basePrice);
+  const displayComparePrice = comboCompareAtPrice(
+    selectedCombo,
+    product.compare_at_price ? Number(product.compare_at_price) : null,
+  );
 
   // Inainte de a alege o varianta, afiseaza intervalul de pret (sau doar minimul daca e setat din editor).
   const priceRange = getProductPriceRange(basePrice, pageSections);
@@ -401,13 +322,19 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const isOutOfStock = stockStatus === "out_of_stock"
     || (product.track_inventory && product.stock_quantity !== null && product.stock_quantity === 0);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
-  const needsVariant = !!variantsData && !selectedComboTitle;
+  // Combinatia trebuie sa EXISTE si sa fie activa, nu doar sa aiba titlul
+  // complet: altfel linia intra in cos cu pretul de baza, iar serverul respinge
+  // comanda intreaga la trimitere.
+  const needsVariant = !!variantsData && !selectedCombo;
 
-  // Specifications — auto-append dimensions if present
-  const dimensions = pageSections.dimensions;
-  const specRows = pageSections.specifications ?? [];
+  // Specifications — auto-append dimensions if present.
+  //
+  // Citirile din `pageSections` stau INAUNTRUL memoizarii: scoase afara, ele
+  // produceau un vector nou la fiecare randare, deci dependenta se schimba mereu
+  // si compilatorul renunta sa optimizeze componenta intreaga.
   const specifications = useMemo(() => {
-    const rows = [...specRows];
+    const dimensions = pageSections.dimensions;
+    const rows = [...(pageSections.specifications ?? [])];
     if (dimensions) {
       if (dimensions.length > 0) rows.push({ label: "Lungime", value: `${dimensions.length} cm` });
       if (dimensions.width > 0) rows.push({ label: "Latime", value: `${dimensions.width} cm` });
@@ -415,7 +342,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     }
     if (product.weight_grams) rows.push({ label: "Greutate", value: `${product.weight_grams} g` });
     return rows;
-  }, [specRows, dimensions, product.weight_grams]);
+  }, [pageSections.specifications, pageSections.dimensions, product.weight_grams]);
 
   // Build quantity tiers — percent mode when variants enabled
   const tierConfig = pageSections.quantity_tiers;
@@ -441,51 +368,74 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [fbtOffer, setFbtOffer] = useState<{ id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] } | undefined>(undefined);
-  // Cart carried over from the storefront (localStorage) so ordering from a product
-  // page includes what the customer already added. Current product excluded to avoid
-  // duplication; read once on mount (storefront cart is built before reaching here).
-  const [cartItems, setCartItems] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(`cart_${business.slug}`);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.filter((i) => i?.productId && i.productId !== product.id) : [];
-    } catch { return []; }
-  });
-  // Add a cross-sell product to the store cart (localStorage, shared with the
-  // storefront cart) + the carried cart the OrderModal reads on open, so it rides
-  // into the order. No discount — the price is unchanged.
-  const addOfferProductToCart = useCallback((p: OfferProduct) => {
-    try {
-      const raw = localStorage.getItem(`cart_${business.slug}`);
-      const arr = raw ? JSON.parse(raw) : [];
-      const list: { productId: string; slug?: string | null; name: string; price: number; imageUrl: string | null; quantity: number }[] = Array.isArray(arr) ? arr : [];
-      const i = list.findIndex((x) => x?.productId === p.id);
-      if (i >= 0) list[i].quantity = (list[i].quantity || 1) + 1;
-      else list.push({ productId: p.id, slug: p.slug, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 });
-      localStorage.setItem(`cart_${business.slug}`, JSON.stringify(list));
-    } catch {}
-    setCartItems((prev) => {
-      const i = prev.findIndex((x) => x.productId === p.id);
-      if (i >= 0) return prev.map((x) => x.productId === p.id ? { ...x, quantity: x.quantity + 1 } : x);
-      return [...prev, { productId: p.id, name: p.name, price: p.price, imageUrl: p.imageUrl, quantity: 1 }];
+  /**
+   * Cosul magazinului, citit LIVE din provider.
+   *
+   * Inainte pagina il citea o singura data din localStorage la montare si scria
+   * direct inapoi, in paralel cu providerul. Cu doi scriitori, orice produs
+   * adaugat dupa montare lipsea din comanda dar era sters odata cu ea. Acum
+   * exista un singur scriitor, iar `useCartOptional` acopera miniatura din
+   * catalogul de design-uri, care randeaza pagina fara provider.
+   */
+  const cos = useCartOptional();
+  const chrome = useStoreChromeOptional();
+  // Produsul curent iese: el se comanda separat, cu cantitatea din formular.
+  const cartItems = useMemo(
+    () => (demo || !cos ? [] : cos.items.filter((i) => i.productId !== product.id)),
+    [demo, cos, product.id],
+  );
+  // In magazinul cu un singur produs cosul nu are nicio interfata — nici in
+  // header, nici sertar, nici pagina — deci butonul ar confirma o actiune care
+  // nu duce nicaieri. In miniatura nu exista chrome, dar butonul trebuie vazut.
+  const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
+  const [adaugatInCos, setAdaugatInCos] = useState(false);
+
+  function adaugaInCos() {
+    if (demo || !cos || isOutOfStock || needsVariant) return;
+    cos.addItem({
+      productId: product.id,
+      slug: product.slug ?? undefined,
+      // Numele ramane simplu, combinatia sta in `variantTitle`: asa cheia de
+      // linie iese identica cu cea din grila si acelasi produs creste in
+      // cantitate in loc sa se dubleze.
+      name: product.name,
+      price: displayPrice,
+      imageUrl: selectedCombo?.image || slides[0] || null,
+      variantTitle: selectedComboTitle ?? undefined,
+      variantSku: selectedCombo?.sku || undefined,
     });
-  }, [business.slug]);
+    trackAddToCart({ productId: product.id, name: product.name, price: displayPrice });
+    setAdaugatInCos(true);
+    setTimeout(() => setAdaugatInCos(false), 1800);
+  }
+
+  // Add a cross-sell product to the store cart, so it rides into the order.
+  // No discount — the price is unchanged.
+  const addOfferProductToCart = useCallback((p: OfferProduct) => {
+    if (demo || !cos) return;
+    cos.addItem({ productId: p.id, slug: p.slug ?? undefined, name: p.name, price: p.price, imageUrl: p.imageUrl });
+    trackAddToCart({ productId: p.id, name: p.name, price: p.price });
+  }, [demo, cos]);
 
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [zoomPos] = useState<{x: number; y: number} | null>(null);
   const touchStartX = useRef<number>(0);
   const thumbStripRef = useRef<HTMLDivElement>(null);
 
   const deliveryDates = useMemo(() => {
     if (!deliveryEstimate?.enabled) return null;
-    const now = new Date();
-    const minDate = new Date(now);
-    minDate.setDate(minDate.getDate() + (deliveryEstimate.min_days ?? 2));
-    const maxDate = new Date(now);
-    maxDate.setDate(maxDate.getDate() + (deliveryEstimate.max_days ?? 4));
-    const fmt = (d: Date) => d.toLocaleDateString("ro-RO", { day: "numeric", month: "long" });
-    return { min: fmt(minDate), max: fmt(maxDate) };
+    const acum = new Date().getTime();
+    const ZI = 24 * 60 * 60 * 1000;
+    // Zilele se adauga pe instant si data se formateaza ancorata in fusul
+    // Romaniei: serverul ruleaza in UTC, browserul in fusul vizitatorului, iar
+    // fara ancora cele doua randari dau zile diferite in jurul miezului noptii
+    // (nepotrivire de hidratare + estimare care se schimba sub ochii clientului).
+    const fmt = (ms: number) => new Date(ms).toLocaleDateString("ro-RO", {
+      timeZone: "Europe/Bucharest", day: "numeric", month: "long",
+    });
+    return {
+      min: fmt(acum + (deliveryEstimate.min_days ?? 2) * ZI),
+      max: fmt(acum + (deliveryEstimate.max_days ?? 4) * ZI),
+    };
   }, [deliveryEstimate]);
 
   // Reset slide when variant image changes
@@ -523,77 +473,22 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
     if (Math.abs(dx) > 40) goTo(activeSlide + (dx > 0 ? 1 : -1));
   };
 
-  function Gallery({ mobile }: { mobile: boolean }) {
+  // Zona de cumparare, randata O SINGURA DATA. Pana acum existau doua copii, una
+  // pentru telefon si una pentru desktop, ascunse una pe alta din CSS: in acelasi
+  // document ajungeau doi <h1> identici, doua descrieri si doua seturi de butoane.
+  // Marimile se comuta acum din clase responsive.
+  //
+  // Se apeleaza ca functie, nu ca element JSX: o componenta declarata in corpul
+  // randarii primeste alt tip la fiecare randare, iar React demonteaza si
+  // remonteaza tot subarborele la orice alegere de varianta (imaginile se
+  // re-decodeaza, focusul de pe butonul apasat dispare, tranzitiile nu apuca sa
+  // ruleze).
+  function zonaDeCumparare() {
     return (
-      <div className="relative w-full overflow-hidden rounded-2xl bg-muted/40 shadow-lg"
-        style={{ aspectRatio: "1/1" }}
-        onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        {slides.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center">
-            <Package className="h-20 w-20 text-muted-foreground/40" />
-          </div>
-        ) : mobile ? (
-          <div className="flex h-full transition-transform duration-500 ease-in-out"
-            style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
-            {slides.map((src, i) => (
-              <div key={i} className="relative w-full h-full flex-shrink-0">
-                <Image src={src} alt={imgAlt(src, i)} fill sizes="100vw"
-                  className="object-contain p-2" priority={i === 0} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          slides.map((src, i) => (
-            <div key={i} className="absolute inset-0 transition-opacity duration-700 overflow-hidden"
-              style={{ opacity: i === activeSlide ? 1 : 0 }}>
-              <Image src={src} alt={imgAlt(src, i)} fill sizes="50vw"
-                className="object-contain p-2" priority={i === 0} />
-            </div>
-          ))
-        )}
-
-        {slides.length > 1 && (
-          <>
-            <button type="button" aria-label="Imaginea anterioara" onClick={e => { e.stopPropagation(); goTo(activeSlide - 1); }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
-              <ChevronLeft size={16} className="text-foreground" />
-            </button>
-            <button type="button" aria-label="Imaginea urmatoare" onClick={e => { e.stopPropagation(); goTo(activeSlide + 1); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center shadow-md z-10 hover:bg-surface transition-colors">
-              <ChevronRight size={16} className="text-foreground" />
-            </button>
-            {/* Dot indicators: mobile only (desktop uses the thumbnail strip) and only
-                for small galleries — 33 dots would be an unusable cramped row. The
-                "1 / N" counter above covers navigation for larger sets. */}
-            {mobile && slides.length <= 8 && (
-              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
-                {slides.map((_, i) => (
-                  <button key={i} type="button" aria-label={`Imaginea ${i + 1}`} onClick={() => goTo(i)}
-                    className="rounded-full transition-all duration-300"
-                    style={i === activeSlide
-                      ? { width: 24, height: 8, backgroundColor: color }
-                      : { width: 8, height: 8, backgroundColor: "rgba(255,255,255,0.6)" }} />
-                ))}
-              </div>
-            )}
-            <div className="absolute top-3 left-3 bg-black/30 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10">
-              {activeSlide + 1} / {slides.length}
-            </div>
-          </>
-        )}
-
-        {hasDiscount && (
-          <div className="absolute top-3 right-3 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md z-10" style={{ backgroundColor: color }}>
-            -{discountPct}%
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function Content({ mobile }: { mobile: boolean }) {
-    return (
-      <div className={`flex flex-col ${mobile ? "gap-3" : "gap-4"}`}>
+      // `min-w-0`: pe telefon divul e element de grila, iar dimensiunea minima
+      // automata l-ar lasa sa se dilate la latimea unui tabel sau a unei imagini
+      // din descrierea scurta, largind si coloana galeriei.
+      <div className="flex flex-col gap-3 lg:gap-4 min-w-0">
         {/* Quality badge */}
         {showQualityBadge && (
           <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 w-fit" style={{ backgroundColor: `${color}1a` }}>
@@ -603,13 +498,13 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
 
         {/* Title */}
-        <h1 className={`tracking-tight font-bold text-foreground leading-tight ${mobile ? "text-2xl" : "text-3xl lg:text-4xl"}`}>
+        <h1 className="tracking-tight font-bold text-foreground leading-tight text-2xl lg:text-4xl">
           {displayName}
         </h1>
 
         {topBlurb && (
           <div
-            className={`policy-content text-muted-foreground leading-relaxed ${mobile ? "text-sm" : "text-base"}`}
+            className="policy-content text-muted-foreground leading-relaxed text-sm lg:text-base"
             // Sanitized server-side (see product route) before reaching the client.
             dangerouslySetInnerHTML={{ __html: topBlurb }}
           />
@@ -617,7 +512,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
         {/* Price */}
         <div className="flex items-center gap-3 flex-wrap">
-          <span className={`tracking-tight font-bold text-foreground ${mobile ? "text-3xl" : "text-4xl"}`}>
+          <span className="tracking-tight font-bold text-foreground text-3xl lg:text-4xl">
             {showPriceRange
               ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
               : formatPrice(displayPrice)}
@@ -703,7 +598,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
                 <div className="flex flex-wrap gap-2">
                   {option.values.map(val => {
                     const isSelected = selectedOptions[option.name] === val;
-                    const available = isValueAvailable(option.name, val);
+                    const available = isValueAvailable(variantsData, selectedOptions, option.name, val);
                     return (
                       <button key={val} type="button"
                         onClick={() => setSelectedOptions(prev => ({
@@ -740,7 +635,7 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         )}
         {!isOutOfStock && !isPreorder && product.track_inventory && product.stock_quantity !== null && product.stock_quantity > 0 && product.stock_quantity <= 10 && (
           <motion.div className="flex items-center gap-2"
-            animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+            animate={demo || reduceMotion ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
             <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
             <span className="text-sm font-semibold text-red-600">
               Doar {product.stock_quantity} {product.stock_quantity === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
@@ -750,6 +645,18 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
 
         {/* CTA */}
         <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} />
+
+        {/* Comanda directa ramane actiunea principala; cosul e pentru cine mai
+            vrea sa se uite prin magazin inainte sa cumpere. */}
+        {arataButonCos && (
+          <button type="button" onClick={adaugaInCos} disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+            className="w-full py-3.5 text-base font-semibold rounded-xl border-2 bg-surface hover:bg-muted/40 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+            style={{ borderColor: color, color }}>
+            {adaugatInCos ? <Check size={18} /> : <ShoppingCart size={18} />}
+            {adaugatInCos ? "Adaugat in cos" : "Adauga in cos"}
+          </button>
+        )}
+        <p aria-live="polite" className="sr-only">{adaugatInCos ? "Produsul a fost adaugat in cos" : ""}</p>
 
         {/* Trust mini */}
         {trustBadgesEnabled && (
@@ -767,41 +674,22 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </div>
         )}
 
-        {!mobile && showSocialProof && <SocialProof count={viewerCount} color={color} />}
+        {/* Doar pe desktop, ca pana acum. `flex-col` pe invelis, nu `block`:
+            pastilata e `inline-flex`, deci intr-un bloc s-ar stramta la latimea
+            textului in loc sa umple coloana, cum face azi. */}
+        {showSocialProof && (
+          <div className="hidden lg:flex lg:flex-col">
+            <SocialProof count={viewerCount} color={color} />
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Announcement bar */}
-      {announcementBar?.enabled && (
-        <div className="h-9 overflow-hidden flex items-center sticky top-0 z-40"
-          style={{ background: announcementBar.bg_color || color }}>
-          <div className="flex whitespace-nowrap">
-            {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className="inline-block text-xs font-medium tracking-wide text-white"
-                style={{ animation: `marquee ${[80, 50, 30, 18, 10][(announcementBar.speed ?? 3) - 1]}s linear infinite` }}>
-                {announcementBar.text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Full store header (logo + menu + phone + cart) — same as the homepage.
-          One Product Store: no catalog/cart behind this page — hide the cart link. */}
-      <StoreHeader
-        business={{ slug: business.slug, business_name: business.business_name, store_name: business.store_name, logo_url: business.logo_url, primary_color: color, phone: business.phone }}
-        menu={pageContent.menu ?? []}
-        basePath={basePath}
-        logoSize={pageContent.logo_size ?? 36}
-        topClass={announcementBar?.enabled ? "top-9" : "top-0"}
-        showCart={!isHome}
-      />
-
+    <>
       {/* Breadcrumb back to catalog (restores the catalog page the visitor left from) */}
-      {!isHome && (
+      {!isHome && setari.showBreadcrumb !== false && (
         <div className="bg-surface/80 border-b border-border">
           <div className="max-w-6xl mx-auto px-4 md:px-6 h-11 flex items-center gap-3">
             <a href={basePath || "/"} aria-label="Inapoi la magazin"
@@ -821,42 +709,56 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         </div>
       )}
 
-      {/* MOBILE hero */}
-      <div className="lg:hidden">
-        <div className="px-4 pt-3 pb-2">
-          <Gallery mobile />
-        </div>
-        <div className="px-4 pt-4 pb-8">
-          <Content mobile />
+      {/* Hero: o singura grila, cu asezarea comutata din CSS. Galeria ramane in
+          doua variante (banda care culiseaza pe telefon, diapozitive suprapuse pe
+          desktop), dar zona de cumparare e una singura. */}
+      <div className="px-4 pt-3 pb-8 lg:px-6 lg:pt-8 lg:pb-16">
+        <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-2 lg:gap-16 lg:items-start">
+          <div>
+            <div className="lg:hidden">
+              <Gallery mobile slides={slides} activeSlide={activeSlide} goTo={goTo} color={color}
+                imgAlt={imgAlt} hasDiscount={!!hasDiscount} discountPct={discountPct}
+                onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} />
+            </div>
+            {/* Animatia de intrare a fost dintotdeauna doar pe desktop; aici sta pe
+                un invelis `hidden lg:block`, deci pe telefon nu are ce misca. */}
+            <motion.div className="hidden lg:block" initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+              <Gallery mobile={false} slides={slides} activeSlide={activeSlide} goTo={goTo} color={color}
+                imgAlt={imgAlt} hasDiscount={!!hasDiscount} discountPct={discountPct}
+                onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} />
+              {slides.length > 1 && (
+                <div ref={thumbStripRef} className="flex gap-2 mt-3 overflow-x-auto pb-1">
+                  {slides.map((src, i) => (
+                    <button key={i} type="button" aria-label={`Selecteaza imaginea ${i + 1}`} onClick={() => goTo(i)}
+                      className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden transition-all bg-muted/40"
+                      style={{ border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
+                      <Image src={src} alt={imgAlt(src, i)} fill sizes="64px" className="object-contain p-1" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+          {/* `contents` pe telefon: elementul nu genereaza cutie, deci animatia de
+              intrare (desktop-only, ca inainte) nu are efect, iar zona de cumparare
+              ramane copil direct al grilei. */}
+          <motion.div className="contents lg:block" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
+            {zonaDeCumparare()}
+          </motion.div>
         </div>
       </div>
 
-      {/* DESKTOP hero */}
-      <div className="hidden lg:block px-6 pt-8 pb-16">
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-start">
-          <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-            <Gallery mobile={false} />
-            {slides.length > 1 && (
-              <div ref={thumbStripRef} className="flex gap-2 mt-3 overflow-x-auto pb-1">
-                {slides.map((src, i) => (
-                  <button key={i} type="button" aria-label={`Selecteaza imaginea ${i + 1}`} onClick={() => goTo(i)}
-                    className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden transition-all bg-muted/40"
-                    style={{ border: `2px solid ${i === activeSlide ? color : "transparent"}`, opacity: i === activeSlide ? 1 : 0.55 }}>
-                    <Image src={src} alt={imgAlt(src, i)} fill sizes="64px" className="object-contain p-1" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </motion.div>
-          <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
-            <Content mobile={false} />
-          </motion.div>
-        </div>
-      </div>
-
+      {/* Miniatura se opreste aici: galeria si zona de cumparare sunt ce
+          deosebeste designurile de pagina de produs. Mai jos urmeaza sectiuni de
+          continut care depind de ce a completat comerciantul si care, in plus, se
+          animeaza abia cand intra in ecran — intr-un cadru care nu deruleaza ar
+          ramane transparente. */}
+      {demo ? null : (
+      <>
       {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none */}
       <ProductOffers offers={productOffers} basePath={basePath} color={color}
         anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+        ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
         onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
 
       {/* Benefits */}
@@ -995,9 +897,11 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
               viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
               className="border border-border rounded-xl overflow-hidden shadow-sm">
               {specifications.map((spec, i) => (
+                // Randul se stivuieste pe telefon: cu eticheta fixata la 11rem si
+                // px-6, pe un ecran de 320 px ramaneau 80 px pentru valoare.
                 <div key={i}
-                  className={`flex items-start sm:items-center gap-4 px-6 py-4 ${i % 2 === 0 ? "bg-surface" : "bg-muted/30"} ${i !== specifications.length - 1 ? "border-b border-border" : ""}`}>
-                  <span className="text-sm text-muted-foreground w-44 shrink-0 font-medium">{spec.label}</span>
+                  className={`flex flex-col gap-1 px-6 py-4 sm:flex-row sm:items-center sm:gap-4 ${i % 2 === 0 ? "bg-surface" : "bg-muted/30"} ${i !== specifications.length - 1 ? "border-b border-border" : ""}`}>
+                  <span className="text-sm text-muted-foreground font-medium sm:w-44 sm:shrink-0">{spec.label}</span>
                   <span className="text-sm font-semibold text-foreground">{spec.value}</span>
                 </div>
               ))}
@@ -1026,119 +930,6 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
           </div>
         </section>
       )}
-
-      {/* Footer */}
-      <footer className="bg-[#0A0A0A] text-white">
-        <div className="max-w-6xl mx-auto px-5 pt-10 pb-24 sm:pt-12 lg:pb-6">
-          {/* Top row: brand + social */}
-          <div className="flex items-center justify-between gap-4 pb-8">
-            <div className="flex items-center gap-3 min-w-0">
-              {business.logo_url ? (
-                /* Free logo: full image at any ratio, merchant-set height, no box/crop. */
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={cdnImage(business.logo_url, 320)} alt={business.store_name ?? business.business_name}
-                  style={{ height: pageContent.footer_logo_size ?? 36, maxWidth: (pageContent.footer_logo_size ?? 36) * 4.2 }}
-                  className="w-auto object-contain shrink-0" />
-              ) : (
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0"
-                  style={{ backgroundColor: color }}>
-                  {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="font-semibold text-sm text-white truncate">{business.store_name ?? business.business_name}</p>
-                {business.store_city && <p className="text-[11px] text-white/40">{business.store_city}</p>}
-              </div>
-            </div>
-            {(social.instagram || social.facebook || social.tiktok || social.website) && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                {social.instagram && (
-                  <a href={social.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                    </svg>
-                  </a>
-                )}
-                {social.facebook && (
-                  <a href={social.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
-                    </svg>
-                  </a>
-                )}
-                {social.tiktok && (
-                  <a href={social.tiktok} target="_blank" rel="noopener noreferrer" aria-label="TikTok"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.82a8.16 8.16 0 004.77 1.52V6.9a4.85 4.85 0 01-1-.21z"/>
-                    </svg>
-                  </a>
-                )}
-                {social.website && (
-                  <a href={social.website} target="_blank" rel="noopener noreferrer" aria-label="Website"
-                    className="w-8 h-8 rounded-lg bg-surface/[0.06] hover:bg-surface/[0.12] flex items-center justify-center transition-colors">
-                    <Globe className="h-3.5 w-3.5" />
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-surface/[0.06]" />
-
-          {/* Middle: policies + consumer protection */}
-          <div className="py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start gap-8 sm:gap-16">
-            {/* Date de identificare firma — obligatoriu legal + procesatori de plati (Netopia) */}
-            <CompanyIdentity business={business} />
-            <div className="flex-1">
-              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Informatii legale</p>
-              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-                {/* Funcția de retragere din contract — obligatorie conform OUG 18/2026 */}
-                <a href={`${basePath}/retur`}
-                  className="text-[13px] text-white/70 hover:text-white transition-colors font-medium">
-                  Retrage-te din contract
-                </a>
-                {POLICY_LINKS.map(({ slug: pSlug, label }) => (
-                  <a key={pSlug} href={`${basePath}/politici/${pSlug}`}
-                    className="text-[13px] text-white/50 hover:text-white transition-colors">
-                    {label}
-                  </a>
-                ))}
-              </div>
-            </div>
-            <div className="shrink-0">
-              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest mb-3">Protectia consumatorilor</p>
-              <div className="flex items-center gap-3">
-                <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
-                  className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
-                  <Image src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
-                </a>
-                <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
-                  className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
-                  <Image src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
-                </a>
-              </div>
-            </div>
-
-            {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
-            <NetopiaBadge businessId={business.id} />
-          </div>
-
-          {/* Divider */}
-          <div className="h-px bg-surface/[0.06]" />
-
-          {/* Bottom: copyright */}
-          <div className="pt-5 flex items-center justify-between gap-3">
-            <p className="text-[11px] text-white/25">
-              &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
-            </p>
-            <EdinioCredit businessId={business.id} color={color} className="text-[11px] text-white/25" />
-          </div>
-        </div>
-      </footer>
 
       {/* Sticky bottom bar (mobile) */}
       {!modalOpen && (
@@ -1189,9 +980,18 @@ export function ProductPage({ business, product, storeSettings, basePath: basePa
         tiers={quantityTiers}
         customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
         cartItems={cartItems}
-        onCartConsumed={() => { try { localStorage.removeItem(`cart_${business.slug}`); } catch {} }}
+        onCartConsumed={(liniiComandate) => {
+          // Doar liniile care au intrat efectiv in comanda. Stergerea intregului
+          // cos lasa pe dinafara linia produsului curent: ea nu e purtata in
+          // comanda (el se comanda separat, cu cantitatea din formular), deci ar
+          // fi disparut necomandata.
+          if (!cos) return;
+          cos.restoreCart(cosDupaComanda(cos.items, liniiComandate));
+        }}
         fbtOffer={fbtOffer}
       />
-    </div>
+      </>
+      )}
+    </>
   );
 }

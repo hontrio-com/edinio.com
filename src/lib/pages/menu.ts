@@ -5,6 +5,7 @@
  * existing stores are untouched until the merchant adds something.
  */
 
+import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveHref } from "./href";
 
 export type MenuItemType = "home" | "page" | "category" | "link";
@@ -27,12 +28,14 @@ export function newMenuItemId(): string {
 export function menuItemHref(item: MenuItem, basePath: string): string {
   switch (item.type) {
     case "home":
-      return `${basePath}/`;
+      // Not `${basePath}/`: with a slug that trailing slash costs a 308 on
+      // every click, and Search Console files each one as a redirect.
+      return radacinaMagazin(basePath);
     case "page":
       return `${basePath}/${item.target ?? ""}`;
     case "category":
       // Categories are filtered on the store home via ?cat=
-      return `${basePath}/?cat=${encodeURIComponent(item.target ?? "")}`;
+      return hrefCategorie(basePath, item.target ?? "");
     case "link":
       // Reuse the href resolver so javascript:/data: schemes are rejected.
       return resolveHref(item.target, basePath);

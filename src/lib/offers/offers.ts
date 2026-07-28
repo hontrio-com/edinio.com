@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { computeBundlePricing, type BundlePricingMode } from "@/lib/bundles";
 import { hasVariants } from "@/lib/storefront/variants";
+import { aplicaBumpPeOBucata, type BumpItem } from "@/lib/offers/bump-pricing";
 import {
   parseOfferTrigger, parseOfferConfig, parseOfferDisplay,
   defaultTitleFor, isOfferType, PHASE1_OFFER_TYPES,
@@ -199,8 +200,11 @@ export async function resolveProductOffers(
     };
     // FBT: combined price over the anchor + all in-stock companions (an FBT you
     // cannot fully buy is pointless, so out-of-stock companions are dropped).
+    // Produsele cu variante ies si ele: setul se cumpara dintr-o apasare, deci
+    // n-are unde sa intrebe ce marime, iar fara alegere ar intra in comanda la
+    // pretul de baza si serverul ar respinge-o.
     if (o.type === "frequently_bought") {
-      const buyable = products.filter((p) => !p.outOfStock);
+      const buyable = products.filter((p) => !p.outOfStock && !p.hasVariants);
       if (buyable.length === 0) continue;
       base.products = buyable;
       base.pricing = computeSetPricing([anchor.price, ...buyable.map((p) => p.price)], o.config);
@@ -235,7 +239,16 @@ export async function resolveCartOffers(
   const exclude = new Set(cartProductIds);
   const resolved: ResolvedOffer[] = [];
   for (const o of applicable) {
-    const products = (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
+    // „Alege automat produse din aceeasi categorie" mergea doar pe pagina de
+    // produs: in cos se cerea lista de id-uri, care la ofertele automate e
+    // goala, deci oferta disparea tacut din toate cele patru variante de cos.
+    // Categoria se ia din primul produs din cos care declanseaza oferta.
+    const categorieAuto = o.type === "cross_sell" && o.config.autoByCategory
+      ? cartProducts.find((p) => triggerMatchesProduct(o.trigger, p) && p.category)?.category ?? null
+      : null;
+    const products = categorieAuto
+      ? await fetchCategoryProducts(admin, businessId, categorieAuto, exclude, o.config.maxProducts)
+      : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
     if (products.length === 0) continue;
 
     const base: ResolvedOffer = {
@@ -247,8 +260,15 @@ export async function resolveCartOffers(
       products,
     };
     // Order bump: a single product with its own discounted price.
+    //
+    // Nu primul produs din lista, ci primul care poate fi luat dintr-o apasare:
+    // unul epuizat trecea de afisare si abia la ultimul clic serverul respingea
+    // TOATA comanda, iar unul cu variante intra fara varianta, la pretul de
+    // baza. Bump-ul n-are cum sa intrebe nimic — de aceea alege doar ce e gata
+    // de adaugat.
     if (o.type === "order_bump") {
-      const p = products[0];
+      const p = products.find((x) => !x.outOfStock && !x.hasVariants);
+      if (!p) continue;
       base.products = [p];
       base.pricing = computeSetPricing([p.price], o.config);
     }
@@ -257,7 +277,7 @@ export async function resolveCartOffers(
   return resolved;
 }
 
-export interface BumpItem { product_id: string; name: string; price: number; quantity: number }
+export type { BumpItem };
 
 /**
  * Order-time enforcement for accepted order-bump offers. Re-prices any order line
@@ -289,15 +309,22 @@ export async function applyBumpPricing(
   for (const o of data) {
     if (o.type !== "order_bump" || !withinWindow(o.starts_at, o.ends_at, nowMs)) continue;
     const cfg = parseOfferConfig(o.config);
-    const pid = cfg.productIds[0];
-    if (!pid) continue;
-    const line = out.find((i) => i.product_id === pid);
+    // ORICARE dintre produsele ofertei, nu doar primul: magazinul arata primul
+    // produs care chiar poate fi luat dintr-o apasare, deci cand primul din
+    // lista e epuizat sau are variante, clientul vede altul. Cu potrivirea pe
+    // primul, serverul nu gasea linia si taxa pretul INTREG, in tacere.
+    // De la coada catre inceput: liniile de bump se adauga DUPA cele din cos,
+    // deci cand acelasi produs e si in cos si oferit ca bump, cautarea de la
+    // inceput nimerea linia din cos si reducerea ateriza pe cantitatea ei.
+    let line: BumpItem | undefined;
+    for (let k = out.length - 1; k >= 0; k--) {
+      if (cfg.productIds.includes(out[k].product_id)) { line = out[k]; break; }
+    }
     if (!line) continue; // the customer didn't actually add the bump product — no discount
     const priced = computeSetPricing([line.price], cfg);
-    if (priced && priced.price < line.price) {
-      savings = round2(savings + (line.price - priced.price) * line.quantity);
-      line.price = priced.price;
-    }
+    if (!priced || priced.price >= line.price) continue;
+
+    savings = round2(savings + aplicaBumpPeOBucata(out, line, priced.price));
   }
   return { items: out, savings };
 }

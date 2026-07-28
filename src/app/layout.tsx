@@ -79,9 +79,14 @@ export const metadata: Metadata = {
       "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
     images: ["/og-image.png"],
   },
-  alternates: {
-    canonical: SITE_URL,
-  },
+  // Fara `alternates` implicit aici. Metadata radacinii se mosteneste intreaga
+  // de orice pagina care nu o redeclara, iar paginile de magazin fara canonical
+  // propriu (cos, finalizare, retur, confirmare, politici, previzualizare) ar fi
+  // anuntat crawlerului ca adresa lor canonica e edinio.com, inclusiv de pe
+  // domeniul propriu al comerciantului: canonical intre domenii, pe pagini care
+  // se declara in acelasi timp noindex. Toate paginile de prezentare isi pun
+  // fiecare canonical-ul ei, deci nu pierd nimic; restul rutelor raman pe
+  // propria adresa, ceea ce e si raspunsul corect.
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

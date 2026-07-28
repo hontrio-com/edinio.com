@@ -1,0 +1,132 @@
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { PreviewHeightReporter } from "@/components/storefront/PreviewHeightReporter";
+import { SectionPreviewFrame } from "@/components/storefront/SectionPreviewFrame";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData } from "@/lib/storefront/chrome-value";
+import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
+import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
+import { resolveDesign } from "@/lib/storefront/design/parse";
+import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
+import type { SectionKind } from "@/lib/storefront/design/types";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
+
+/**
+ * O singura sectiune de magazin, randata izolat.
+ *
+ * Sursa miniaturilor din galeria de design-uri a editorului: fiecare card e un
+ * iframe catre ruta asta, deci arata varianta reala cu logo-ul, culorile si
+ * produsele magazinului. Alternativa — capturi pregatite dinainte — ar fi
+ * insemnat ~160 de imagini de intretinut, care oricum ar fi aratat produsele
+ * altcuiva.
+ *
+ * Nu expune nimic in plus: randeaza exact ce vede oricine pe magazinul public.
+ *
+ * Ruta sta DELIBERAT in afara lui `[slug]`, nu sub el. Layout-ul magazinului
+ * injecteaza pixelii de marketing si bannerul de cookies: bannerul acoperea
+ * miniaturile, iar pixelii ar fi trimis cate un pageview in Facebook, TikTok si
+ * Google Analytics ale comerciantului la fiecare card din galerie — statistici
+ * si audiente de reclame stricate de propriul editor.
+ */
+export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+interface Props {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ kind?: string; variant?: string }>;
+}
+
+export default async function SectionPreviewPage({ params, searchParams }: Props) {
+  const { slug } = await params;
+  const { kind: kindParam, variant: variantParam } = await searchParams;
+
+  const kind = kindParam as SectionKind | undefined;
+  if (!kind || !sectionMeta(kind) || !variantParam || !variantMeta(kind, variantParam)) notFound();
+
+  const supabase = await createClient();
+  const { data: business } = await supabase.from("businesses").select("*").eq("slug", slug).single();
+  if (!business) notFound();
+
+  const { data: storeSettings } = await createAdminClient()
+    .from("store_settings")
+    .select("page_content, storefront_design")
+    .eq("business_id", business.id)
+    .single();
+  const produseDemo = demoProducts(business.id);
+  const paginaProdusDemo = demoProductPage(business.id);
+
+  // Continutul e demonstrativ, identitatea magazinului nu: designul se alege cu
+  // logo-ul, culorile si fontul lui, dar cu bannere, categorii si produse care
+  // exista mereu, ca fiecare varianta sa se vada intreaga.
+  const realPageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const pageContent: StorePageContent = {
+    ...realPageContent,
+    menu: DEMO_MENU,
+    hero_banners: DEMO_BANNERS,
+    hero_banner_links: [],
+  };
+  // Designul se deriva din configuratia REALA: ce sectiuni are magazinul aprinse
+  // si ce varianta foloseste nu trebuie sa depinda de continutul demonstrativ.
+  const resolved = resolveDesign(storeSettings?.storefront_design, {
+    primaryColor: business.primary_color ?? "#1AB554",
+    pageContent: realPageContent as Record<string, unknown>,
+    features: (business.features as Record<string, unknown>) ?? {},
+    coverUrl: business.cover_url,
+    tagline: business.tagline,
+  });
+
+  const chrome = {
+    ...buildChromeData({
+      // Logo-ul si sloganul raman ale magazinului cand exista; se imprumuta doar
+      // cand lipsesc, ca header-ul sa nu apara gol in miniatura.
+      business: {
+        ...business,
+        logo_url: business.logo_url || DEMO_LOGO,
+        tagline: business.tagline || "Produse alese cu grija, livrate rapid",
+      },
+      pageContent,
+      basePath: `/${business.slug}`,
+      searchCategories: DEMO_CATEGORIES.map((c) => c.name),
+    }),
+    // Miniatura randeaza o singura sectiune, deci deasupra header-ului nu exista
+    // nicio bara de anunt de ocolit, oricat de aprinsa ar fi ea in magazin.
+    // Altfel header-urile isi calculau `top-9` fata de ceva ce aici nu se
+    // randeaza. Se stinge aici, nu in `pageContent`: miniatura barei de anunt
+    // insasi se randeaza din acel continut si trebuie sa ramana intreaga.
+    hasAnnouncementBar: false,
+  };
+
+  return (
+    <StorefrontThemeScope style={resolved.style}>
+      <SectionPreviewFrame
+        chrome={chrome}
+        section={{
+          id: `preview_${kind}`,
+          kind,
+          variant: variantParam,
+          enabled: true,
+          // Cu setarile implicite ale variantei, ca miniatura sa arate exact ce
+          // primeste comerciantul daca o alege.
+          settings: { ...(variantMeta(kind, variantParam)?.defaults ?? {}) },
+        }}
+        products={produseDemo.map(slimCatalogProduct)}
+        categories={DEMO_CATEGORIES}
+        // Pagina de produs primeste produsul demonstrativ INTREG, nu trecut prin
+        // `slimCatalogProduct`: acela taie tocmai combinatiile de variante si
+        // imaginile de dupa prima, adica jumatate din ce arata designul.
+        produsDemo={{
+          product: paginaProdusDemo.product as never,
+          storeSettings: {
+            ...(storeSettings ?? {}),
+            page_content: { ...realPageContent, ...paginaProdusDemo.pageContent },
+            default_shipping_cost: DEMO_TRANSPORT,
+            free_shipping_threshold: null,
+            min_order_amount: null,
+          } as never,
+        }}
+      />
+      <PreviewHeightReporter />
+    </StorefrontThemeScope>
+  );
+}

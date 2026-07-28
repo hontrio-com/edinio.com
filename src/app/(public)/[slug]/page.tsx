@@ -4,20 +4,28 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
-import { ProductPage } from "@/components/ministore/ProductPage";
+import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
+import { resolveProductOffers } from "@/lib/offers/offers";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
+import { isNonProductionHost } from "@/lib/storefront/host";
+import { resolveDesign } from "@/lib/storefront/design/parse";
+import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
+import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
 
-interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string }>; }
+interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string; sale?: string }>; }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
+  const { page: pageQ, cat: catQ, sale: saleQ } = await searchParams;
   // Read via the service role: the SEO overrides live in store_settings, which
   // is no longer anon-readable, so a nested anon select would return null there.
   const { data: business } = await createAdminClient()
@@ -38,7 +46,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = seo.description || deriveStoreDescription({ tagline: business.tagline, description: business.description, displayName });
   // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
   // also points its canonical at the store's own domain).
-  const url = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
+  const radacina = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
+  /*
+   * Canonicalul urmeaza filtrele care CHIAR schimba continutul.
+   *
+   * Paginile 2..N, categoriile si reducerile sunt adrese crawlabile, cu produse
+   * diferite; toate aratau catre radacina, deci Google le vedea ca duplicate ale
+   * primei pagini si nu indexa niciuna. Cautarea libera (?q=) ramane in afara:
+   * acolo canonicalul catre radacina e corect, sunt infinit de multe.
+   */
+  // Codificarea e cea din linkuri (`encodeURIComponent`), nu cea din
+  // `URLSearchParams`: aceea scrie spatiile cu `+`, deci canonicalul ar arata
+  // catre alta adresa decat cea pe care a crawlat-o Google.
+  const filtre: string[] = [];
+  if (catQ) filtre.push(`cat=${encodeURIComponent(catQ)}`);
+  if (saleQ === "1") filtre.push("sale=1");
+  const nrPagina = Math.max(1, parseInt(pageQ ?? "1", 10) || 1);
+  if (nrPagina > 1) filtre.push(`page=${nrPagina}`);
+  const sir = filtre.join("&");
+  const url = sir ? `${radacina}?${sir}` : radacina;
 
   // One Product Store: the homepage *is* the chosen product's landing page, so its
   // metadata comes from that product (canonical stays on the homepage URL). Store
@@ -60,7 +86,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         title: { absolute: opsTitle },
         description: opsDescription,
         ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
-        openGraph: { title: opsTitle, description: opsDescription, url, images: opsImages },
+        // `type` si `locale` se scriu explicit: obiectul asta inlocuieste in
+        // intregime openGraph-ul din layout-ul radacina, deci ce nu e aici nu se
+        // emite deloc, iar og:type e obligatoriu in protocol.
+        openGraph: { type: "website", locale: "ro_RO", siteName: displayName, title: opsTitle, description: opsDescription, url, images: opsImages },
         twitter: {
           card: opsImages.length ? "summary_large_image" : "summary",
           title: opsTitle,
@@ -83,7 +112,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     // Advanced opt-in: hide the homepage from search. "follow" stays on so
     // crawlers still reach the (indexable) product pages it links to.
     ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
-    openGraph: { title, description, url, images },
+    openGraph: { type: "website", locale: "ro_RO", siteName: displayName, title, description, url, images },
     twitter: {
       card: images.length ? "summary_large_image" : "summary",
       title,
@@ -96,8 +125,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SlugPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, preview: previewParam, q: qParam, cat: catParam, sale: saleParam } = await searchParams;
   const initialPage = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  const isPreview = previewParam === "1";
   const supabase = await createClient();
 
   const [{ data: business }, { data: { user } }] = await Promise.all([
@@ -180,7 +210,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ),
     createAdminClient()
       .from("store_settings")
-      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount")
+      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, storefront_design_draft")
       .eq("business_id", business.id)
       .single(),
     fetchAllRows("storefront.home.categories", (from, to) =>
@@ -194,6 +224,26 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ),
   ]);
 
+  /*
+   * Ciorna de design nu are voie sa iasa din functia asta.
+   *
+   * `storeSettings` ajunge INTREG ca prop la componente de client, iar React
+   * serializeaza props-urile in HTML: coloana de ciorna — pana la 200 KB de
+   * design nepublicat — ajungea in pagina fiecarui vizitator anonim, desi
+   * migratia promitea exact contrariul. Tipul propului n-o contine, dar un tip
+   * nu curata nimic la executie.
+   */
+  // Ciorna se randeaza DOAR pentru proprietar si doar in preview: pana la
+  // Publica, vizitatorii vad neaparat versiunea publicata. Se calculeaza aici,
+  // inaintea ramurii cu un singur produs — altfel acele magazine n-aveau deloc
+  // previzualizare live, editorul le arata mereu designul publicat.
+  const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
+  const designDeRandat = useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design;
+
+  const setariDeTrimis = storeSettings
+    ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
+    : storeSettings;
+
   // Slimuire payload: cardurile/cautarea/cosul folosesc doar o fractiune din
   // fiecare rand — restul (combinatii de variante, imagini 2+, descrieri
   // intregi, alte sectiuni din page_sections) umfla pagina de ~9x la
@@ -206,8 +256,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  // Fire-and-forget analytics (skip for owner)
-  if (!isOwner) {
+  // Fire-and-forget analytics (skip for owner). Sarita si pe preview/localhost:
+  // acele medii scriu in baza de PRODUCTIE, deci fiecare vizita de test ar
+  // aparea in statisticile comerciantului. Detalii in lib/storefront/host.ts.
+  if (!isOwner && !isNonProductionHost(host)) {
     const ua = headersList.get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     supabase.from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
@@ -222,6 +274,15 @@ export default async function SlugPage({ params, searchParams }: Props) {
     const product = await getStoreProduct(business.id, storeMode.productId);
     if (product) {
       const { altMap, hasCardPayment, bundleComponents } = await enrichStoreProduct(business, product);
+      // Ofertele produsului, exact ca pe ruta normala de produs. Fara ele,
+      // magazinul cu un singur produs era singurul unde „Cumparate impreuna" si
+      // „Merge bine cu" nu se randau nicaieri: ruta /product/<principal> face
+      // 301 incoace, deci nu mai ajunge niciodata la locul unde se rezolvau.
+      const opsProductOffers = await resolveProductOffers(createAdminClient(), business.id, {
+        id: product.id,
+        category: product.category,
+        price: Number(product.price) || 0,
+      });
       // Product structured data for the landing page. The product's canonical URL
       // is this homepage (the /product/<main> URL 301s here), so the JSON-LD points
       // at the homepage too — mirrors the shipping/delivery used on the product route.
@@ -230,26 +291,79 @@ export default async function SlugPage({ params, searchParams }: Props) {
       const opsDe = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
       const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 1, max: opsDe.max_days ?? 3 } : { min: 1, max: 3 };
       const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max });
+      // Modul „un singur produs": nu exista catalog in spate, deci butonul de
+      // cos din header n-are unde sa duca.
+      const opsResolved = resolveDesign(designDeRandat, {
+        primaryColor: business.primary_color ?? "#1AB554",
+        pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
+        features: (business.features as Record<string, unknown>) ?? {},
+        coverUrl: business.cover_url,
+        tagline: business.tagline,
+      });
+      // Categoriile pentru header/footer se aduc ca pe orice alta ruta fara
+      // catalog: fara ele, subsolul paginii principale ramanea fara coloana de
+      // categorii, desi paginile de produs ale ACELUIASI magazin o aveau plina.
+      // `cartMode: "hidden"` ramane deasupra designului (chrome-value.ts:62), deci
+      // cosul nu reapare.
+      const opsSearchCategories = await loadSearchCategories(business.id, opsResolved.design);
+      const opsChrome = buildChromeData({
+        business,
+        pageContent: (storeSettings?.page_content ?? {}) as StorePageContent,
+        basePath,
+        design: opsResolved.design,
+        cartMode: "hidden",
+        hasStickyBottomBar: true,
+        searchCategories: opsSearchCategories,
+      });
       return (
         <>
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(opsJsonLd) }}
           />
-          <ProductPage
-            business={business}
-            product={product}
-            storeSettings={storeSettings as never}
-            basePath={basePath}
-            hasCardPayment={hasCardPayment}
-            bundleComponents={bundleComponents}
-            altMap={altMap}
-            isHome
-          />
+          <StorefrontThemeScope style={opsResolved.style}>
+            <StorePageShell chrome={opsChrome} design={opsResolved.design} className="min-h-screen">
+              <ProductPageSection
+                variant={opsResolved.design.product.page.variant}
+                setari={opsResolved.design.product.page.settings}
+                business={business}
+                product={product}
+                storeSettings={setariDeTrimis as never}
+                basePath={basePath}
+                hasCardPayment={hasCardPayment}
+                bundleComponents={bundleComponents}
+                altMap={altMap}
+                productOffers={opsProductOffers}
+                isHome
+              />
+            </StorePageShell>
+          </StorefrontThemeScope>
         </>
       );
     }
   }
+
+  // Designul magazinului. Ciorna se randeaza DOAR pentru proprietar si doar in
+  // preview: pana la Publica, vizitatorii vad neaparat versiunea publicata.
+
+  const resolved = resolveDesign(
+    designDeRandat,
+    {
+      primaryColor: business.primary_color ?? "#1AB554",
+      pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
+      features: (business.features as Record<string, unknown>) ?? {},
+      coverUrl: business.cover_url,
+      tagline: business.tagline,
+    },
+  );
+
+  // `?cat=` poate veni cu numele categoriei (din header) sau cu id-ul ei
+  // (linkurile de meniu de tip categorie trimit `target`, care e un id). Filtrul
+  // catalogului lucreaza pe nume, deci id-urile se traduc aici; altfel linkul ar
+  // duce la un catalog gol.
+  const catRaw = (catParam ?? "").slice(0, 100);
+  const initialCategory =
+    (catRaw && categoriesData.find((c) => c.id === catRaw)?.name) || catRaw || "toate";
 
   const displayName = business.store_name ?? business.business_name;
   const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
@@ -280,10 +394,16 @@ export default async function SlugPage({ params, searchParams }: Props) {
       <MiniStoreRenderer
         business={business}
         products={products}
-        storeSettings={storeSettings}
+        storeSettings={setariDeTrimis}
         basePath={basePath}
         categories={categoriesData}
         initialPage={initialPage}
+        initialSearch={(qParam ?? "").slice(0, 100)}
+        initialCategory={initialCategory}
+        initialOnSale={saleParam === "1"}
+        preview={isPreview}
+        design={resolved.design}
+        designStyle={resolved.style}
       />
     </>
   );

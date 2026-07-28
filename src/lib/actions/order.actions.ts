@@ -13,7 +13,7 @@ import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
-import { enabledComboPriceMap } from "@/lib/storefront/variants";
+import { comboStockMap, enabledComboPriceMap } from "@/lib/storefront/variants";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
@@ -59,7 +59,12 @@ function legitUnitPrices(product: OrderProduct): number[] {
   };
   if (ps.variants?.enabled && Array.isArray(ps.variants.combinations)) {
     for (const c of ps.variants.combinations) {
-      if (c?.enabled && c.price != null) set.add(round2(Number(c.price)));
+      // Doar preturi strict pozitive, ca in `comboUnitPrice`: zero inseamna
+      // „fara pret propriu", si il pune si importul pentru combinatiile fara
+      // `pret=` in CSV. Acceptat aici, ar fi lasat o comanda de 0 lei sa treaca
+      // pe orice produs cu variante.
+      const n = Number(c?.price);
+      if (c?.enabled && Number.isFinite(n) && n > 0) set.add(round2(n));
     }
   }
   return [...set];
@@ -1060,6 +1065,10 @@ export async function placeCartOrder(data: {
   if (!rateLimit(`placeCartOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
+  // An empty cart passes every check below (`some` on [] is false, subtotal 0),
+  // so a direct call would insert a phantom order, send both emails and burn a
+  // discount use. Only the UI guarded this; the action must guard it too.
+  if (!data.items?.length) return { error: "Cosul este gol." };
 
   // Use admin client — customers are anonymous
   const admin = createAdminClient();
@@ -1093,6 +1102,34 @@ export async function placeCartOrder(data: {
   if (data.items.some((i) => i.variant_title && !comboMap.get(i.product_id)?.has(i.variant_title))) {
     logError({ action: "placeCartOrder.variantUnavailable", message: "Cart variant no longer enabled", details: { businessId: data.business_id, productIds }, severity: "warning" });
     return { error: "O varianta din cos nu mai este disponibila. Reincarca cosul." };
+  }
+  /*
+   * Stocul DECLARAT pe combinatie.
+   *
+   * Pana acum se verifica doar stocul produsului, deci un produs cu 40 de bucati
+   * in total lasa sa se comande marimea S si cand marimea S avea zero, iar
+   * comerciantul afla din comanda pe care n-o putea onora. Combinatiile fara
+   * numar completat nu intra in harta, deci pentru ele nu se schimba nimic.
+   */
+  const stocCombo = new Map(activeProducts.map((p) => [p.id, comboStockMap(p.page_sections)]));
+  const cerutPeCombo = new Map<string, number>();
+  for (const i of data.items) {
+    if (!i.variant_title) continue;
+    const cheie = `${i.product_id}::${i.variant_title}`;
+    cerutPeCombo.set(cheie, (cerutPeCombo.get(cheie) ?? 0) + Math.max(1, Math.floor(Number(i.quantity) || 1)));
+  }
+  for (const [cheie, cerut] of cerutPeCombo) {
+    const taiat = cheie.indexOf("::");
+    const productId = cheie.slice(0, taiat);
+    const titlu = cheie.slice(taiat + 2);
+    const disponibil = stocCombo.get(productId)?.get(titlu);
+    if (disponibil !== undefined && cerut > disponibil) {
+      return {
+        error: disponibil <= 0
+          ? `Varianta „${titlu}" nu mai este in stoc. Alege alta optiune.`
+          : `Din varianta „${titlu}" au mai ramas ${disponibil} bucati.`,
+      };
+    }
   }
 
   let validatedItems = data.items.map((i) => {

@@ -2669,6 +2669,9 @@ export type Database = {
           smartbill_config: Json | null
           smso_config: Json | null
           store_policies: Json
+          storefront_design: Json
+          storefront_design_draft: Json | null
+          storefront_design_pub_at: string | null
           stripe_config: Json | null
           trendyol_config: Json
           updated_at: string
@@ -2725,6 +2728,9 @@ export type Database = {
           smartbill_config?: Json | null
           smso_config?: Json | null
           store_policies?: Json
+          storefront_design?: Json
+          storefront_design_draft?: Json | null
+          storefront_design_pub_at?: string | null
           stripe_config?: Json | null
           trendyol_config?: Json
           updated_at?: string
@@ -2781,6 +2787,9 @@ export type Database = {
           smartbill_config?: Json | null
           smso_config?: Json | null
           store_policies?: Json
+          storefront_design?: Json
+          storefront_design_draft?: Json | null
+          storefront_design_pub_at?: string | null
           stripe_config?: Json | null
           trendyol_config?: Json
           updated_at?: string

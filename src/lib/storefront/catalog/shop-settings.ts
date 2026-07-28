@@ -19,6 +19,8 @@ import type { StoreDesign } from "@/lib/storefront/design/types";
 export type ModPaginare = "pagini" | "buton" | "infinit";
 
 export interface SetariMagazin {
+  /** Grila ramane si pe pagina principala, langa pagina de catalog. */
+  pastreazaGrilaAcasa: boolean;
   titlu: string;
   arataTitlu: boolean;
   subtitlu: string;
@@ -45,6 +47,7 @@ export interface SetariMagazin {
 
 /** Implicitele codului. Registry-ul le repeta in `defaults`, pentru editor. */
 const IMPLICITE: SetariMagazin = {
+  pastreazaGrilaAcasa: true,
   titlu: "Toate produsele",
   arataTitlu: true,
   subtitlu: "",
@@ -114,6 +117,7 @@ export function citesteSetariMagazinDinSectiune(
 
   const mod = citeste("modPaginare");
   return {
+    pastreazaGrilaAcasa: comutator(citeste("pastreazaGrilaAcasa"), IMPLICITE.pastreazaGrilaAcasa),
     titlu: sir(citeste("titlu"), IMPLICITE.titlu),
     arataTitlu: comutator(citeste("arataTitlu"), IMPLICITE.arataTitlu),
     subtitlu: sir(citeste("subtitlu"), IMPLICITE.subtitlu),

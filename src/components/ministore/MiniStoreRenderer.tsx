@@ -17,9 +17,9 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
-import { hrefCategorie } from "@/lib/storefront/category-href";
+import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import {
-  cartHref, cartOnPage, checkoutHref, checkoutOnPage, radacinaCatalog, sectiuniAcasa, shopOnPage,
+  cartHref, cartOnPage, checkoutHref, checkoutOnPage, grilaRamaneAcasa, sectiuniAcasa, shopHref, shopOnPage,
 } from "@/lib/storefront/design/commerce";
 import {
   indiciSelectati, numaraSelectia, trecefiltrele,
@@ -151,20 +151,36 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const comandaPePagina = checkoutOnPage(design);
   const basePath = basePathProp ?? `/${business.slug}`;
   /*
-   * Catalogul si-a luat pagina lui, iar noi randam pagina principala.
+   * Catalogul a PLECAT de pe pagina principala, iar noi randam pagina principala.
    *
-   * Din semnul asta ies trei lucruri: grila si bara de cautare nu se mai
-   * randeaza aici, cautarea din header navigheaza in loc sa filtreze, iar
-   * apasarea unei categorii duce la pagina de catalog. Fara el, fiecare dintre
-   * cele trei ar fi schimbat o stare pe care n-o vede nimeni.
+   * Nu e acelasi lucru cu „exista o pagina de catalog": implicit, produsele
+   * raman si aici. Semnul e adevarat doar cand comerciantul a stins anume
+   * „pastreaza produsele si pe pagina principala".
+   *
+   * Din el ies trei lucruri, toate legate de absenta grilei: cautarea din header
+   * navigheaza in loc sa filtreze o lista invizibila, apasarea unei categorii
+   * duce la pagina de catalog, iar „Vezi toate" nu mai deruleaza catre o ancora
+   * care nu mai exista in DOM.
    */
-  const catalogMutat = surface === "home" && shopOnPage(design);
+  const catalogMutat = surface === "home" && shopOnPage(design) && !grilaRamaneAcasa(design);
   // Setarile paginii de catalog, cu implicitele aplicate. Aceleasi valori le
   // citeste si modelul de pagina, dintr-un singur loc: citite separat, cele
   // doua ar aplica implicite diferite pentru acelasi camp lipsa, iar un catalog
   // care numara 24 pe pagina cu o paginare care crede 20 arata pagini goale.
   const setariMagazin = useMemo(() => citesteSetariMagazin(design), [design]);
-  const catalogRootPagina = radacinaCatalog(basePath, design);
+  /*
+   * Radacina catalogului, vazuta DE PE PAGINA ASTA.
+   *
+   * Fiecare suprafata cu grila trimite catre ea insasi: pastilele de categorii
+   * de pe pagina principala filtreaza grila de acolo, cele de pe pagina de
+   * catalog o filtreaza pe a lor. Doar cand grila a plecat de acasa pleaca si
+   * linkurile ei. Paginile fara catalog — produs, pagini proprii — primesc
+   * raspunsul din `buildChromeData`, care arata catre pagina de catalog cand
+   * exista, fiindca acolo e experienta completa.
+   */
+  const catalogRootPagina = surface === "shop" || catalogMutat
+    ? shopHref(basePath)
+    : radacinaMagazin(basePath);
   const mergiLaCos = useCallback(() => { window.location.href = cartHref(basePath); }, [basePath]);
   const mergiLaComanda = useCallback(() => { window.location.href = checkoutHref(basePath); }, [basePath]);
   const [cartOpen, setCartOpen] = useState(false);

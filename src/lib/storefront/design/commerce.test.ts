@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { radacinaCatalog, sectiuniAcasa, shopHref, shopOnPage } from "./commerce";
+import { grilaRamaneAcasa, radacinaCatalog, sectiuniAcasa, shopHref, shopOnPage } from "./commerce";
 import { buildClassicDesign } from "./defaults";
 import type { DesignContext, StoreDesign } from "./types";
 
@@ -11,9 +11,13 @@ import type { DesignContext, StoreDesign } from "./types";
 
 const ctx: DesignContext = { primaryColor: "#1AB554", pageContent: {}, features: {} };
 const classic = () => buildClassicDesign(ctx);
-const cuVarianta = (variant: string, enabled = true): StoreDesign => {
+const cuVarianta = (
+  variant: string,
+  settings: Record<string, unknown> = {},
+  enabled = true,
+): StoreDesign => {
   const d = classic();
-  return { ...d, shop: { page: { ...d.shop.page, variant, enabled } } };
+  return { ...d, shop: { page: { ...d.shop.page, variant, enabled, settings } } };
 };
 
 test("magazinul care n-a ales nimic nu are pagina de catalog", () => {
@@ -32,7 +36,7 @@ test("sectiunea stinsa inchide ruta, chiar cu o varianta de tip pagina", () => {
    * panou ca alternativa. Aici orice varianta in afara de „none" e o pagina,
    * deci fara ea o sectiune stinsa ar fi lasat ruta deschisa mai departe.
    */
-  assert.equal(shopOnPage(cuVarianta("sidebar", false)), false);
+  assert.equal(shopOnPage(cuVarianta("sidebar", {}, false)), false);
 });
 
 test("o varianta necunoscuta nu deschide ruta", () => {
@@ -56,26 +60,43 @@ test("fara pagina de catalog, pagina principala ramane neatinsa", () => {
   assert.equal(sectiuniAcasa(d), d.home);
 });
 
-test("cu pagina de catalog, grila si bara de cautare ies de pe pagina principala", () => {
-  // Altfel aceleasi produse ar fi listate la doua adrese auto-canonice, iar
-  // Google ar fi ales singur intre ele.
-  const acasa = sectiuniAcasa(cuVarianta("sidebar"));
+test("IMPLICIT, produsele raman si pe pagina principala", () => {
+  /*
+   * Cele doua suprafete sunt lucruri diferite pentru vizitator: pagina
+   * principala e vitrina, cu hero, randuri alese si o grila de rasfoit; pagina
+   * de catalog e locul unde se cauta serios, cu toate filtrele. Un magazin poate
+   * sa le vrea pe amandoua, si asta e implicitul.
+   */
+  const d = cuVarianta("sidebar");
+  assert.equal(grilaRamaneAcasa(d), true);
+  assert.equal(sectiuniAcasa(d), d.home);
+});
+
+test("comerciantul poate cere despartirea curata, si atunci grila pleaca", () => {
+  const acasa = sectiuniAcasa(cuVarianta("sidebar", { pastreazaGrilaAcasa: false }));
   assert.ok(!acasa.some((s) => s.kind === "product_grid"));
   assert.ok(!acasa.some((s) => s.kind === "catalog_toolbar"));
 });
 
-test("categoriile si randurile de produse RAMAN pe pagina principala", () => {
+test("chiar si atunci, categoriile si randurile de produse RAMAN acasa", () => {
   // Pastilele de categorii sunt navigare catre catalog, nu filtrare in el.
-  const acasa = sectiuniAcasa(cuVarianta("sidebar"));
+  const acasa = sectiuniAcasa(cuVarianta("sidebar", { pastreazaGrilaAcasa: false }));
   assert.ok(acasa.some((s) => s.kind === "category_nav"));
   assert.ok(acasa.some((s) => s.kind === "product_row"));
   assert.ok(acasa.some((s) => s.kind === "hero"));
 });
 
+test("comutatorul n-are efect fara pagina de catalog", () => {
+  // Stins la un magazin care n-a ales pagina, ar fi lasat magazinul FARA nicio
+  // grila nicaieri — un catalog invizibil.
+  const acasa = sectiuniAcasa(cuVarianta("none", { pastreazaGrilaAcasa: false }));
+  assert.ok(acasa.some((s) => s.kind === "product_grid"));
+});
+
 test("taierea nu atinge configuratia salvata", () => {
   // Comerciantul care se razgandeste isi gaseste pagina principala exact cum a
   // lasat-o: sectiunile raman in design, se sar doar la randare.
-  const d = cuVarianta("sidebar");
+  const d = cuVarianta("sidebar", { pastreazaGrilaAcasa: false });
   const inainte = d.home.length;
   sectiuniAcasa(d);
   assert.equal(d.home.length, inainte);

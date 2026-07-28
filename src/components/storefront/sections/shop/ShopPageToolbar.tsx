@@ -59,7 +59,7 @@ function PanouFateta({ eticheta, copii, cateBifate }: { eticheta: string; copii:
 }
 
 export function ShopPageToolbar({ titlu, coloane, grupuriPornite, arataTitlu }: ShopPageProps) {
-  const { fatete, selectieFatete } = useStorefront();
+  const { fatete, selectieFatete, priceMin, priceMax, onSaleOnly, inStockOnly } = useStorefront();
   const arata = (g: string) => grupuriPornite.includes(g);
   const numeGrup: Record<string, string> = {
     atribut: "atribute", brand: "brand", eticheta: "etichete", specificatie: "specificatii",
@@ -78,7 +78,12 @@ export function ShopPageToolbar({ titlu, coloane, grupuriPornite, arataTitlu }: 
           de jos, cu toate filtrele intr-un singur loc. */}
       <div className="hidden lg:flex flex-wrap items-center gap-2 mb-4">
         {arata("pret") && (
-          <PanouFateta eticheta="Pret si stoc" cateBifate={0} copii={<div className="space-y-4"><FiltreDeBaza /></div>} />
+          // Numarul e REAL, nu zero: butonul e singurul loc in care se vede ca
+          // pretul, reducerile sau stocul sunt filtrate, iar codat pe zero nu se
+          // colora niciodata si filtrul parea stins desi taia produse.
+          <PanouFateta eticheta="Pret si stoc"
+            cateBifate={(priceMin.trim() || priceMax.trim() ? 1 : 0) + (onSaleOnly ? 1 : 0) + (inStockOnly ? 1 : 0)}
+            copii={<div className="space-y-4"><FiltreDeBaza /></div>} />
         )}
         {vizibile.map((f) => (
           <PanouFateta key={f.cheie} eticheta={f.eticheta}

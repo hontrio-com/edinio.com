@@ -250,6 +250,7 @@ export default async function PaginaMagazin({ params, searchParams }: Props) {
       initialPriceMin={filtre.pretMin}
       initialPriceMax={filtre.pretMax}
       initialSelectieFatete={filtre.fatete}
+      initialSort={filtre.sortare}
     />
   );
 }

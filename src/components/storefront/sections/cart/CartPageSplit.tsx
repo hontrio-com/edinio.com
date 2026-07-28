@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing } from "@/lib/storefront/cart/pricing";
@@ -29,6 +30,16 @@ export function CartPageSplit({
   settings,
   preview = false,
 }: CartPageProps) {
+  /*
+   * Iesirea din palnie duce la PRODUSE, nu la radacina magazinului.
+   *
+   * Cand catalogul si-a luat pagina lui, pagina principala nu mai are grila:
+   * clientul care apasa „continua cumparaturile" ajungea intr-o pagina de
+   * prezentare fara niciun produs. Optional fiindca miniatura din editor
+   * randeaza fara chrome.
+   */
+  const chromeCatalog = useStoreChromeOptional();
+  const catreProduse = chromeCatalog?.catalogRoot ?? `${basePath}/`;
   const { items, addItem, updateQty, removeItem, total, hydrated } = useCart();
   const pricing = computeCartPricing({ total, shippingCost, freeShippingThreshold, minOrderAmount });
   const areRecomandari = settings.showRecommendations !== false && !preview;
@@ -59,7 +70,7 @@ export function CartPageSplit({
             ))}
           </div>
 
-          <a href={`${basePath}/`}
+          <a href={catreProduse}
             className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" />
             Continua cumparaturile

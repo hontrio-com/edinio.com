@@ -25,7 +25,14 @@ export function ShopPageCompact({ titlu, coloane, grupuriPornite, arataTitlu }: 
       <div className="mb-4 space-y-3">
         <AntetPagina titlu={titlu} aratatTitlu={arataTitlu} />
         <div className="max-w-xl"><CautareCatalog /></div>
-        <CategoriiSus />
+        {/*
+          Doar cand comerciantul a pornit grupul, si doar cand ele nu apar deja
+          in bara laterala: altfel aceleasi categorii se randau de doua ori pe
+          ecran lat, iar stingerea grupului din editor nu le scotea pe niciuna.
+        */}
+        {grupuriPornite.includes("categorii") && (
+          <div className={areFiltre ? "xl:hidden" : ""}><CategoriiSus /></div>
+        )}
       </div>
 
       <div className={areFiltre ? "flex gap-6 items-start" : ""}>
@@ -46,7 +53,14 @@ export function ShopPageCompact({ titlu, coloane, grupuriPornite, arataTitlu }: 
             style={{ top: "var(--st-header-offset, 100px)" }}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                {areFiltre && <span className="xl:hidden"><FiltrePeTelefon grupuriPornite={grupuriPornite} /></span>}
+                {/*
+                  `panaLa="xl"`: bara laterala apare abia de la 1280 px, deci pana
+                  acolo butonul si foaia trebuie sa se vada AMANDOUA. Fara asta,
+                  intre 1024 si 1279 px butonul era vizibil dar foaia lui avea
+                  `lg:hidden` — filtre complet inaccesibile pe exact latimea unui
+                  laptop obisnuit.
+                */}
+                {areFiltre && <span className="xl:hidden"><FiltrePeTelefon grupuriPornite={grupuriPornite} panaLa="xl" /></span>}
                 <NumarRezultate />
               </div>
               <Sortare />

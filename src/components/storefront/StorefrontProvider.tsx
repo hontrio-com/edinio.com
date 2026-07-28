@@ -182,6 +182,16 @@ export interface StorefrontContextValue extends StoreChromeValue {
   fatete: Fateta[];
   selectieFatete: SelectieFatete;
   comutaFateta: (cheie: string, valoare: string) => void;
+  /**
+   * Filtrele curente scrise ca interogare, fara numarul paginii.
+   *
+   * Exista ca sa fie o SINGURA sursa pentru doi consumatori care trebuie sa
+   * spuna acelasi lucru: linkurile de paginare, care se randeaza si pe server,
+   * si rescrierea barei de adrese, care se intampla pe client. Compusa separat
+   * in fiecare, prima nepotrivire ar fi fost o pagina 2 care pierde filtrele —
+   * si nimic n-ar fi semnalat-o.
+   */
+  interogareFiltre: string;
   priceMin: string;
   setPriceMin: (v: string) => void;
   priceMax: string;

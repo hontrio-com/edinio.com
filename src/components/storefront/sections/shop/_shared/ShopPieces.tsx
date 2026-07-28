@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
 
@@ -53,15 +54,22 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
                 fie citita de cititoarele de ecran fara sa depinda de culoare.
               */}
               <label className="flex items-center gap-2 py-1 cursor-pointer group">
+                {/*
+                  Caseta adevarata e `sr-only`, deci inelul de focus al
+                  browserului nu se vede nicaieri: fara `peer-focus-visible` pe
+                  patratul desenat, navigarea cu tastatura prin patruzeci de
+                  valori era complet oarba. Ordinea conteaza — `peer` trebuie sa
+                  fie INAINTEA elementului care il citeste.
+                */}
+                <input type="checkbox" className="sr-only peer" checked={bifat}
+                  onChange={() => comutaFateta(fateta.cheie, v.valoare)} />
                 <span
-                  className="w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 transition-colors"
+                  className="w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-[var(--st-primary)]"
                   style={bifat
                     ? { backgroundColor: color, borderColor: color }
                     : { borderColor: "var(--st-border)" }}>
                   {bifat && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
                 </span>
-                <input type="checkbox" className="sr-only" checked={bifat}
-                  onChange={() => comutaFateta(fateta.cheie, v.valoare)} />
                 <span className="text-[13px] text-[var(--st-text)] group-hover:opacity-70 transition-opacity truncate">
                   {v.valoare}
                 </span>
@@ -75,7 +83,7 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
         <button type="button" onClick={() => setToate((v) => !v)}
           className="mt-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
           style={{ color: "var(--st-primary)" }}>
-          {toate ? "Arata mai putine" : `Arata toate (${fateta.valori.length})`}
+          {toate ? "Arata mai putine" : `Inca ${fateta.valori.length - VALORI_VIZIBILE}`}
         </button>
       )}
     </div>
@@ -215,9 +223,19 @@ export function useAreFiltre(grupuriPornite: string[]): boolean {
 
 /** Filtrele bifate, ca pastile care se sterg una cate una. */
 export function FiltreActive() {
-  const { selectieFatete, comutaFateta, activeFilterCount, resetFilters, onSaleOnly, setOnSaleOnly, inStockOnly, setInStockOnly } =
-    useStorefront();
+  const {
+    selectieFatete, comutaFateta, activeFilterCount, resetFilters,
+    onSaleOnly, setOnSaleOnly, inStockOnly, setInStockOnly,
+    priceMin, setPriceMin, priceMax, setPriceMax,
+  } = useStorefront();
   if (activeFilterCount === 0) return null;
+  // Pretul e numarat de contor, deci trebuie sa aiba si el pastila lui: fara ea,
+  // un filtru de pret activ dadea „Sterge toate" fara nimic de sters langa el,
+  // iar in modelul cu filtre in capul paginii nu se vedea nicaieri ca e pornit.
+  const arePret = !!priceMin.trim() || !!priceMax.trim();
+  const etichetaPret = priceMin.trim() && priceMax.trim()
+    ? `${priceMin.trim()} - ${priceMax.trim()} lei`
+    : priceMin.trim() ? `Peste ${priceMin.trim()} lei` : `Sub ${priceMax.trim()} lei`;
 
   const pastila =
     "inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full text-[12px] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] hover:opacity-70 transition-opacity";
@@ -232,6 +250,12 @@ export function FiltreActive() {
             <X className="h-3 w-3" />
           </button>
         )),
+      )}
+      {arePret && (
+        <button type="button" className={pastila} aria-label="Scoate filtrul de pret"
+          onClick={() => { setPriceMin(""); setPriceMax(""); }}>
+          {etichetaPret}<X className="h-3 w-3" />
+        </button>
       )}
       {onSaleOnly && (
         <button type="button" className={pastila} onClick={() => setOnSaleOnly(false)}>
@@ -312,11 +336,46 @@ export function CautareCatalog() {
  * grilei ar impinge produsele sub prima derulare — adica exact ce a venit
  * clientul sa vada.
  */
-export function FiltrePeTelefon({ grupuriPornite }: { grupuriPornite: string[] }) {
+export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPornite: string[]; panaLa?: "lg" | "xl" }) {
   const { filtersOpen, setFiltersOpen, activeFilterCount, resetFilters, filteredProducts } = useStorefront();
+  const panou = useRef<HTMLDivElement>(null);
+  const declansator = useRef<HTMLButtonElement>(null);
+  // Pragul vine de la model, nu e fix: la „Compact" bara laterala apare abia de
+  // la 1280 px. Codat `lg`, foaia ramanea ascunsa exact acolo unde butonul care
+  // o deschide era inca vizibil.
+  const ascundeDeLa = panaLa === "xl" ? "xl:hidden" : "lg:hidden";
+
+  /*
+   * Escape inchide, derularea din spate se blocheaza, focusul intra in panou si
+   * se intoarce pe buton la inchidere.
+   *
+   * Fara ele, foaia era doar un strat colorat: pe telefon pagina continua sa
+   * curga sub ea, iar cine navigheaza cu tastatura ajungea in linkurile de sub
+   * suprapunere, fara nicio cale de intoarcere. Sertarul de cos face deja exact
+   * asta; o foaie care nu o face e o exceptie pe care nimeni n-a cerut-o.
+   */
+  useEffect(() => {
+    if (!filtersOpen) return;
+    // Nodul se retine acum, nu la curatare: pana atunci `declansator.current`
+    // poate fi deja altul, sau null.
+    const buton = declansator.current;
+    const laTasta = (e: KeyboardEvent) => { if (e.key === "Escape") setFiltersOpen(false); };
+    document.addEventListener("keydown", laTasta);
+    const dinainte = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const t = window.setTimeout(() => panou.current?.focus(), 0);
+    return () => {
+      document.removeEventListener("keydown", laTasta);
+      document.body.style.overflow = dinainte;
+      window.clearTimeout(t);
+      buton?.focus();
+    };
+  }, [filtersOpen, setFiltersOpen]);
+
   return (
     <>
-      <button type="button" onClick={() => setFiltersOpen(true)}
+      <button ref={declansator} type="button" onClick={() => setFiltersOpen(true)}
+        aria-expanded={filtersOpen}
         className="inline-flex items-center gap-2 px-3.5 py-2 text-[13px] font-medium rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)]">
         <SlidersHorizontal className="h-4 w-4" />
         Filtre
@@ -329,9 +388,9 @@ export function FiltrePeTelefon({ grupuriPornite }: { grupuriPornite: string[] }
       </button>
 
       {filtersOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Filtre">
+        <div className={`fixed inset-0 z-40 ${ascundeDeLa}`} role="dialog" aria-modal="true" aria-label="Filtre">
           <div className="absolute inset-0 bg-black/50" onClick={() => setFiltersOpen(false)} />
-          <div className="absolute inset-x-0 bottom-0 max-h-[85vh] flex flex-col rounded-t-2xl bg-[var(--st-surface)]">
+          <div ref={panou} tabIndex={-1} className="absolute inset-x-0 bottom-0 max-h-[85vh] flex flex-col rounded-t-2xl bg-[var(--st-surface)] outline-none">
             <div className="flex items-center justify-between px-4 h-14 border-b border-[var(--st-border)] shrink-0">
               <span className="font-semibold text-[var(--st-text)]">Filtre</span>
               <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Inchide filtrele"
@@ -412,7 +471,7 @@ export function GrilaProduse({ coloane }: { coloane: number }) {
  * vizitatorul inapoi pe pagina principala.
  */
 export function Paginare() {
-  const { currentPage, totalPages, goToPage, color } = useStorefront();
+  const { currentPage, totalPages, goToPage, color, catalogRoot, interogareFiltre } = useStorefront();
   if (totalPages <= 1) return null;
 
   const pagini = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -423,12 +482,21 @@ export function Paginare() {
       return acc;
     }, []);
 
+  /*
+   * Adresa se compune din CONTEXT, nu din `window`.
+   *
+   * Citit la randare, `window` nu exista pe server: fiecare numar ar fi iesit cu
+   * `href="#"` in HTML-ul initial si abia la hidratare ar fi primit adresa
+   * adevarata. Doua consecinte, amandoua exact pe dos fata de ce promite
+   * comentariul de mai sus: o nepotrivire de hidratare la fiecare incarcare, si
+   * un robot de cautare care nu vede niciun link catre paginile 2..N — pe chiar
+   * pagina facuta ca sa fie catalogul crawlabil al magazinului.
+   */
   const href = (p: number) => {
-    if (typeof window === "undefined") return "#";
-    const sp = new URLSearchParams(window.location.search);
-    if (p <= 1) sp.delete("page"); else sp.set("page", String(p));
-    const qs = sp.toString();
-    return `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+    const qs = p <= 1
+      ? interogareFiltre
+      : `${interogareFiltre}${interogareFiltre ? "&" : ""}page=${p}`;
+    return hrefCatalog(catalogRoot, qs);
   };
   const mergiLa = (p: number) => {
     goToPage(p);
@@ -496,7 +564,7 @@ export function CategoriiSus() {
         {isDrilled ? "Inapoi" : "Toate"}
       </button>
       {currentCategoryItems.map((c) => (
-        <a key={c.key} href={`${catalogRoot}?cat=${encodeURIComponent(c.name)}`}
+        <a key={c.key} href={hrefCategorie(catalogRoot, c.name)}
           onClick={(e) => {
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             e.preventDefault();

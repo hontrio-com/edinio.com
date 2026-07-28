@@ -4,6 +4,7 @@ import Image from "next/image";
 import { ShoppingCart } from "lucide-react";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
+import { hrefCatreProduse } from "@/lib/storefront/category-href";
 
 /**
  * Hero cu imagine si text peste ea, varianta „overlay".
@@ -16,10 +17,12 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
  * nu se mai adauga unul ascuns.
  */
 export function HeroOverlay() {
-  const { business, pageContent } = useStoreChrome();
+  const chrome = useStoreChrome();
+  const { business, pageContent } = chrome;
 
   const nume = business.store_name ?? business.business_name;
   const { banners } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
+  const catreProduse = hrefCatreProduse(chrome);
 
   return (
     <section className="relative overflow-hidden">
@@ -37,7 +40,7 @@ export function HeroOverlay() {
         {business.tagline && (
           <p className="text-lg text-white/85 mb-8 leading-relaxed max-w-xl mx-auto">{business.tagline}</p>
         )}
-        <a href="#produse"
+        <a href={catreProduse}
           className="inline-flex items-center gap-2 px-8 py-3.5 text-sm font-bold rounded-2xl shadow-lg transition-all hover:scale-105 active:scale-[0.98]"
           style={{
             backgroundColor: "var(--st-primary)",

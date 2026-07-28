@@ -25,6 +25,7 @@ import {
   indiciSelectati, numaraSelectia, trecefiltrele,
   type Fateta, type SelectieFatete,
 } from "@/lib/storefront/catalog/facets";
+import { scrieFiltre } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { variantMeta } from "@/lib/storefront/design/registry";
@@ -250,6 +251,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    */
   const [selectieFatete, setSelectieFatete] = useState<SelectieFatete>(initialSelectieFatete ?? {});
   const selectieIndici = useMemo(() => indiciSelectati(selectieFatete, jetoane), [selectieFatete, jetoane]);
+  // Cheile care sunt filtre ale catalogului. Restul parametrilor din adresa
+  // sunt straini si trebuie pastrati la rescriere.
+  const jetoaneChei = useMemo(() => new Set(fatete.map((f) => f.cheie)), [fatete]);
 
   const comutaFateta = useCallback((cheie: string, valoare: string) => {
     setSelectieFatete((prev) => {
@@ -619,6 +623,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    */
   const listaTrimisa = useRef("");
   useEffect(() => {
+    // Pagina principala fara grila nu mai ARATA lista: un `view_item_list` de
+    // acolo ar fi raportat douazeci de produse pe care nu le vede nimeni, si ar
+    // fi stricat rata de clic din rapoartele comerciantului.
+    if (catalogMutat) return;
     if (paginatedProducts.length === 0) return;
     const semnatura = `${currentPage}:${paginatedProducts.map((p) => p.id).join(",")}`;
     if (listaTrimisa.current === semnatura) return;
@@ -648,32 +656,76 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * filtrele e un bug raportat. Se scrie cu `replaceState`, ca butonul Inapoi sa
    * ramana al paginilor, nu al fiecarei bife.
    */
+  /*
+   * Parametrii care NU sunt ai catalogului, citititi o singura data la montare.
+   *
+   * `utm_*`, `gclid`, `fbclid` si `preview=1` trebuie sa supravietuiasca
+   * rescrierii adresei. Fara ei, prima bifa pe un filtru stergea atribuirea
+   * campaniei din bara de adrese, in cursa cu pixelii care tocmai o citeau — iar
+   * proprietarul care isi vedea ciorna pierdea preview-ul la reincarcare.
+   */
+  const parametriStraini = useRef<[string, string][]>([]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const rezervati = new Set(["cat", "q", "page", "sort", "pmin", "pmax", "sale", "stoc", "cos", "recover", "code"]);
+    parametriStraini.current = [...new URLSearchParams(window.location.search).entries()]
+      .filter(([k]) => !rezervati.has(k) && !jetoaneChei.has(k));
+  }, [jetoaneChei]);
+
+  /*
+   * Adresa paginii de catalog, compusa din starea curenta.
+   *
+   * Se calculeaza aici, o singura data, si o folosesc AMANDOI consumatorii:
+   * efectul care rescrie bara de adrese si linkurile de paginare, care se
+   * randeaza si pe server. Scrisa in doua locuri, prima nepotrivire ar fi fost o
+   * pagina 2 care pierde filtrele.
+   */
+  const interogareFiltre = useMemo(
+    () => scrieFiltre({
+      categorie: categoryFilter,
+      cautare: search,
+      sortare: sortTouched ? sort : "",
+      reduceri: onSaleOnly,
+      stoc: inStockOnly,
+      pretMin: priceMin,
+      pretMax: priceMax,
+      fatete: selectieFatete,
+    }),
+    [categoryFilter, search, sort, sortTouched, onSaleOnly, inStockOnly, priceMin, priceMax, selectieFatete],
+  );
+
+  /*
+   * Adresa se rescrie cu INTARZIERE, nu la fiecare tasta.
+   *
+   * Cautarea scrie la fiecare caracter, iar `goToPage(1)` mai scrie o data la
+   * fiecare schimbare de filtru: doua `replaceState` per tasta. Safari le
+   * limiteaza la o suta in treizeci de secunde si arunca `SecurityError` dupa,
+   * adica o eroare in consola exact la magazinele unde se cauta mult.
+   */
   useEffect(() => {
     if (surface !== "shop" || typeof window === "undefined") return;
-    // Se construieste de la zero, nu se peticeste adresa existenta: altfel un
-    // filtru scos ar fi ramas in link, fiindca stergerea lui n-are unde sa se
-    // vada. Numarul paginii e singurul care se pastreaza — il scrie `goToPage`,
-    // iar efectul asta nu stie despre el.
-    const sp = new URLSearchParams();
-    const adresa = new URLSearchParams(window.location.search);
-    const pagina = adresa.get("page");
-    // `preview=1` nu e un filtru, e modul in care proprietarul isi vede ciorna:
-    // sters din adresa, o reincarcare l-ar fi aruncat pe designul publicat.
-    if (adresa.get("preview") === "1") sp.set("preview", "1");
-    if (categoryFilter && categoryFilter !== "toate") sp.set("cat", categoryFilter);
-    if (search.trim()) sp.set("q", search.trim());
-    for (const [cheie, valori] of Object.entries(selectieFatete)) {
-      if (valori.length) sp.set(cheie, valori.join("|"));
-    }
-    if (priceMin.trim()) sp.set("pmin", priceMin.trim());
-    if (priceMax.trim()) sp.set("pmax", priceMax.trim());
-    if (onSaleOnly) sp.set("sale", "1");
-    if (inStockOnly) sp.set("stoc", "1");
-    if (sortTouched && sort) sp.set("sort", sort);
-    if (pagina) sp.set("page", pagina);
-    const qs = sp.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
-  }, [surface, selectieFatete, priceMin, priceMax, onSaleOnly, inStockOnly, sort, sortTouched, categoryFilter, search]);
+    const id = window.setTimeout(() => {
+      /*
+       * Parametrii straini se adauga AICI, nu in `interogareFiltre`.
+       *
+       * Interogarea aceea alimenteaza si linkurile de paginare, care se
+       * randeaza pe server: adaugati acolo, ar fi lipsit din HTML-ul initial si
+       * ar fi aparut la hidratare, adica exact nepotrivirea pe care tocmai am
+       * scos-o din paginare. In plus, o eticheta de campanie n-are ce cauta
+       * copiata in linkul catre pagina 2.
+       */
+      const straine = parametriStraini.current
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&");
+      const qs = [
+        interogareFiltre,
+        currentPage > 1 ? `page=${currentPage}` : "",
+        straine,
+      ].filter(Boolean).join("&");
+      window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [surface, interogareFiltre, currentPage]);
 
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).
@@ -732,7 +784,18 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // Acelasi calcul ca bara randata mai jos: stinsa sau stearsa din editorul de
     // sectiuni, `page_content` ramane pe „enabled" si header-ul ar fi ramas lipit
     // la `top-9` peste o fasie goala.
-    hasAnnouncementBar: showAnnouncementOnStore && standaloneAnnouncement(design)?.enabled === true,
+    /*
+     * Bara si decalajul header-ului se calculeaza din ACEEASI conditie.
+     *
+     * `AnnouncementMarquee` se ascunde pe pagina principala cand comerciantul a
+     * stins „arata pe pagina magazinului"; pe pagina de catalog nu se ascunde,
+     * fiindca `isHome` e fals acolo. Cu regula veche, header-ul se aseza pe
+     * `top-0` ca si cum bara n-ar exista, dar bara se randa — si i se suprapunea.
+     */
+    hasAnnouncementBar:
+      (surface !== "home" || showAnnouncementOnStore)
+      && pageContent.announcement_bar?.enabled === true
+      && standaloneAnnouncement(design)?.enabled === true,
     announcementOn: design.chrome.announcement?.enabled === true,
     hasHero,
 
@@ -763,6 +826,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     fatete,
     selectieFatete,
     comutaFateta,
+    interogareFiltre,
     priceMin,
     setPriceMin,
     priceMax,

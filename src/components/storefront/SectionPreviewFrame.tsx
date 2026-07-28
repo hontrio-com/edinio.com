@@ -143,6 +143,7 @@ export function SectionPreviewFrame({
       fatete,
       selectieFatete: {},
       comutaFateta: nimic,
+      interogareFiltre: "",
       priceMin: "",
       setPriceMin: nimic,
       priceMax: "",

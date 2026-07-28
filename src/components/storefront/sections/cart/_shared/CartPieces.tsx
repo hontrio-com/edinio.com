@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import Image from "next/image";
 import { Check, Minus, Package, Plus, ShoppingCart, Truck, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
@@ -304,6 +305,16 @@ export function ScheletCos({ randuri = 3, latime = "max-w-4xl" }: { randuri?: nu
  * link vechi sau dupa ce si-a golit cosul nu trebuie lasat intr-o fundatura.
  */
 export function CosGol({ basePath, color }: { basePath: string; color: string }) {
+  /*
+   * Iesirea din palnie duce la PRODUSE, nu la radacina magazinului.
+   *
+   * Cand catalogul si-a luat pagina lui, pagina principala nu mai are grila:
+   * clientul care apasa „continua cumparaturile" ajungea intr-o pagina de
+   * prezentare fara niciun produs. Optional fiindca miniatura din editor
+   * randeaza fara chrome.
+   */
+  const chromeCatalog = useStoreChromeOptional();
+  const catreProduse = chromeCatalog?.catalogRoot ?? `${basePath}/`;
   return (
     <div className="py-20 text-center">
       <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
@@ -311,7 +322,7 @@ export function CosGol({ basePath, color }: { basePath: string; color: string })
       </div>
       <p className="text-base font-semibold text-foreground mb-1">Cosul este gol</p>
       <p className="text-sm text-muted-foreground mb-6">Adauga produse ca sa continui</p>
-      <a href={`${basePath}/`}
+      <a href={catreProduse}
         className="inline-flex items-center justify-center h-11 px-5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
         style={{ backgroundColor: color }}>
         Vezi produsele

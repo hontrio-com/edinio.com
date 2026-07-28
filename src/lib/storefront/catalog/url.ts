@@ -17,9 +17,6 @@ import type { Fateta, SelectieFatete } from "./facets";
 /** Parametrii care NU sunt fatete si au fiecare intelesul lor. */
 const REZERVATI = new Set(["cat", "q", "page", "sort", "pmin", "pmax", "sale", "stoc", "preview", "cos", "recover", "code"]);
 
-/** Separatorul dintre valorile aceleiasi fatete: `tag=Textile|Bumbac`. */
-const SEPARATOR_VALORI = "|";
-
 const MAX_VALORI_PER_CHEIE = 20;
 const MAX_TEXT = 100;
 
@@ -67,9 +64,17 @@ export function citesteFiltreDinAdresa(
     if (REZERVATI.has(cheie)) continue;
     const set = permise.get(cheie);
     if (!set) continue;
-    const valori = primul(brut)
-      .split(SEPARATOR_VALORI)
-      .map((v) => v.trim())
+    /*
+     * Valori REPETATE, nu unite cu un separator: `?tag=A&tag=B`.
+     *
+     * Un separator ar fi cerut un caracter care nu poate aparea intr-o valoare,
+     * si nu exista unul: etichetele si specificatiile sunt text scris de
+     * comerciant sau venit din CSV, iar adresa e decodificata inainte sa ajunga
+     * aici, deci o eticheta care contine chiar separatorul s-ar fi rupt in doua
+     * filtre inexistente.
+     */
+    const valori = (Array.isArray(brut) ? brut : [brut])
+      .map((v) => (v ?? "").trim())
       .filter((v) => v && set.has(v))
       .slice(0, MAX_VALORI_PER_CHEIE);
     if (valori.length) selectie[cheie] = valori;
@@ -106,6 +111,7 @@ export function citesteFiltreDinAdresa(
 export function canonicalCatalog(
   radacina: string,
   sp: Record<string, string | string[] | undefined>,
+  fatete: Fateta[] = [],
 ): { url: string; indexabila: boolean } {
   const cat = primul(sp.cat);
   const sale = primul(sp.sale) === "1";
@@ -118,13 +124,66 @@ export function canonicalCatalog(
   if (pagina > 1) bucati.push(`page=${pagina}`);
   const sir = bucati.join("&");
 
-  // Cate filtre in plus fata de cele canonice poarta adresa. Unul singur ramane
-  // indexabil — e o pagina cu inteles, „bocanci ARDON" — dar de la doua incolo
-  // incep combinatiile, si acelea nu trebuie crawlate.
-  const inPlus = Object.entries(sp).filter(([k, v]) => !REZERVATI.has(k) && primul(v)).length
+  /*
+   * Cate filtre in plus fata de cele canonice poarta adresa.
+   *
+   * Se numara DOAR cheile care sunt cu adevarat fatete ale catalogului, nu orice
+   * parametru necunoscut. Altfel `utm_source` + `utm_campaign` — adica aterizarea
+   * din orice reclama, exact traficul pe care comerciantul plateste — ar fi facut
+   * pagina `noindex` fara sa existe niciun filtru bifat.
+   *
+   * Unul singur ramane indexabil: e o pagina cu inteles, „bocanci ARDON". De la
+   * doua incolo incep combinatiile, si acelea n-au ce cauta in index.
+   */
+  const cheiDeFateta = new Set(fatete.map((f) => f.cheie));
+  const inPlus = Object.entries(sp).filter(([k, v]) => cheiDeFateta.has(k) && primul(v)).length
     + (primul(sp.q) ? 1 : 0)
     + (primul(sp.stoc) === "1" ? 1 : 0)
     + (primul(sp.pmin) || primul(sp.pmax) ? 1 : 0);
 
   return { url: sir ? `${radacina}?${sir}` : radacina, indexabila: inPlus < 2 };
+}
+
+/**
+ * Interogarea catalogului, compusa din starea curenta a filtrelor.
+ *
+ * Sursa UNICA pentru doi consumatori care trebuie sa spuna acelasi lucru:
+ * linkurile de paginare, care se randeaza si pe server, si sincronizarea adresei
+ * de pe client. Scrisa in doua locuri, prima nepotrivire ar fi fost o pagina 2
+ * care pierde filtrele.
+ *
+ * Codificarea e `encodeURIComponent`, nu `URLSearchParams`: aceea scrie spatiile
+ * cu `+`, deci ar fi produs alta adresa decat canonicalul si decat linkurile de
+ * categorie, pentru exact acelasi continut.
+ */
+export function scrieFiltre(f: {
+  categorie?: string;
+  cautare?: string;
+  sortare?: string;
+  reduceri?: boolean;
+  stoc?: boolean;
+  pretMin?: string;
+  pretMax?: string;
+  fatete?: SelectieFatete;
+  pagina?: number;
+  /** Parametri care nu sunt ai catalogului si trebuie sa supravietuiasca. */
+  pastrate?: [string, string][];
+}): string {
+  const p: string[] = [];
+  const pune = (k: string, v: string) => p.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+
+  if (f.categorie && f.categorie !== "toate") pune("cat", f.categorie);
+  if (f.cautare?.trim()) pune("q", f.cautare.trim());
+  for (const [cheie, valori] of Object.entries(f.fatete ?? {})) {
+    for (const v of valori) pune(cheie, v);
+  }
+  if (f.pretMin?.trim()) pune("pmin", f.pretMin.trim());
+  if (f.pretMax?.trim()) pune("pmax", f.pretMax.trim());
+  if (f.reduceri) pune("sale", "1");
+  if (f.stoc) pune("stoc", "1");
+  if (f.sortare) pune("sort", f.sortare);
+  if (f.pagina && f.pagina > 1) pune("page", String(f.pagina));
+  for (const [k, v] of f.pastrate ?? []) pune(k, v);
+
+  return p.join("&");
 }

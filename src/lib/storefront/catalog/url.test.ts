@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canonicalCatalog, citesteFiltreDinAdresa } from "./url";
+import { canonicalCatalog, citesteFiltreDinAdresa, scrieFiltre } from "./url";
 import type { Fateta } from "./facets";
 
 /**
@@ -16,7 +16,7 @@ const fatete: Fateta[] = [
 ];
 
 test("filtrele din adresa se citesc doar daca exista in catalog", () => {
-  const f = citesteFiltreDinAdresa({ brand: "ARDON|3M", tag: "Textile" }, fatete);
+  const f = citesteFiltreDinAdresa({ brand: ["ARDON", "3M"], tag: "Textile" }, fatete);
   assert.deepEqual(f.fatete, { brand: ["ARDON", "3M"], tag: ["Textile"] });
 });
 
@@ -28,7 +28,7 @@ test("o cheie necunoscuta din adresa e ignorata", () => {
 test("o valoare disparuta din catalog cade, restul filtrului ramane", () => {
   // Comerciantul a sters produsele 3M intre timp. Linkul vechi nu are voie sa
   // intoarca zero produse: cade filtrul, nu catalogul.
-  const f = citesteFiltreDinAdresa({ brand: "ARDON|Disparut" }, fatete);
+  const f = citesteFiltreDinAdresa({ brand: ["ARDON", "Disparut"] }, fatete);
   assert.deepEqual(f.fatete, { brand: ["ARDON"] });
 });
 
@@ -75,13 +75,13 @@ test("prima pagina si cautarea nu intra in canonical", () => {
 test("un singur filtru ramane indexabil, doua nu", () => {
   // „Bocanci ARDON" e o pagina cu inteles; de la doua bife incolo incep
   // combinatiile, iar acelea ar deschide un spatiu de crawl fara fund.
-  assert.equal(canonicalCatalog("https://x.ro/magazin", { brand: "ARDON" }).indexabila, true);
-  assert.equal(canonicalCatalog("https://x.ro/magazin", { brand: "ARDON", tag: "Textile" }).indexabila, false);
-  assert.equal(canonicalCatalog("https://x.ro/magazin", { q: "bocanci", stoc: "1" }).indexabila, false);
+  assert.equal(canonicalCatalog("https://x.ro/magazin", { brand: "ARDON" }, fatete).indexabila, true);
+  assert.equal(canonicalCatalog("https://x.ro/magazin", { brand: "ARDON", tag: "Textile" }, fatete).indexabila, false);
+  assert.equal(canonicalCatalog("https://x.ro/magazin", { q: "bocanci", stoc: "1" }, fatete).indexabila, false);
 });
 
 test("categoria si pagina singure raman indexabile", () => {
-  assert.equal(canonicalCatalog("https://x.ro/magazin", { cat: "Manusi", page: "2", sale: "1" }).indexabila, true);
+  assert.equal(canonicalCatalog("https://x.ro/magazin", { cat: "Manusi", page: "2", sale: "1" }, fatete).indexabila, true);
 });
 
 test("sortarea din adresa e acceptata doar daca o stie catalogul", () => {
@@ -90,4 +90,63 @@ test("sortarea din adresa e acceptata doar daca o stie catalogul", () => {
   // „relevance" nu se salveaza: exista doar cat timp e o cautare activa, deci un
   // link cu ea ar fi cerut o ordine care nu se poate reface.
   assert.equal(citesteFiltreDinAdresa({ sort: "relevance" }, fatete).sortare, "");
+});
+
+test("o valoare care contine bara verticala nu se rupe in doua filtre", () => {
+  /*
+   * Valorile se repeta in adresa, nu se unesc cu un separator. Un separator ar
+   * fi cerut un caracter care nu poate aparea intr-o valoare, si nu exista unul:
+   * etichetele vin din text scris de comerciant sau din CSV.
+   */
+  const cuBara: Fateta[] = [
+    { cheie: "tag", eticheta: "Etichete", grup: "eticheta", valori: [{ valoare: "A|B", cate: 3 }, { valoare: "C", cate: 2 }] },
+  ];
+  assert.deepEqual(citesteFiltreDinAdresa({ tag: "A|B" }, cuBara).fatete, { tag: ["A|B"] });
+});
+
+test("parametrii de urmarire nu trec pagina pe noindex", () => {
+  /*
+   * `utm_source` + `utm_campaign` inseamna aterizarea din orice reclama, adica
+   * exact traficul pe care comerciantul plateste. Numarati ca filtre, ar fi
+   * scos din index fix acele pagini.
+   */
+  const sp = { utm_source: "facebook", utm_campaign: "toamna", fbclid: "xyz", gclid: "abc" };
+  assert.equal(canonicalCatalog("https://x.ro/magazin", sp, fatete).indexabila, true);
+});
+
+test("doua fatete adevarate trec pagina pe noindex, chiar cu etichete de campanie", () => {
+  const sp = { brand: "ARDON", tag: "Textile", utm_source: "facebook" };
+  assert.equal(canonicalCatalog("https://x.ro/magazin", sp, fatete).indexabila, false);
+});
+
+test("interogarea compusa codifica spatiile cu %20, ca linkurile si canonicalul", () => {
+  const qs = scrieFiltre({ categorie: "Articole casa", cautare: "banda adeziva" });
+  assert.equal(qs, "cat=Articole%20casa&q=banda%20adeziva");
+  assert.ok(!qs.includes("+"));
+});
+
+test("interogarea compusa repeta cheia pentru fiecare valoare bifata", () => {
+  assert.equal(scrieFiltre({ fatete: { brand: ["ARDON", "3M"] } }), "brand=ARDON&brand=3M");
+});
+
+test("ce se scrie in adresa se poate citi inapoi identic", () => {
+  // Serverul citeste, clientul scrie: daca cele doua nu se inteleg, un link
+  // partajat arata alt catalog decat cel din care a fost copiat.
+  const stare = { categorie: "Manusi", cautare: "bocanci", reduceri: true, stoc: true, pretMin: "50", pretMax: "300", sortare: "price_asc", fatete: { brand: ["ARDON"], tag: ["Textile"] } };
+  const qs = scrieFiltre(stare);
+  const sp: Record<string, string | string[]> = {};
+  for (const [k, v] of new URLSearchParams(qs)) {
+    const existent = sp[k];
+    if (existent === undefined) sp[k] = v;
+    else sp[k] = Array.isArray(existent) ? [...existent, v] : [existent, v];
+  }
+  const citit = citesteFiltreDinAdresa(sp, fatete);
+  assert.equal(citit.categorie, stare.categorie);
+  assert.equal(citit.cautare, stare.cautare);
+  assert.equal(citit.reduceri, true);
+  assert.equal(citit.stoc, true);
+  assert.equal(citit.pretMin, "50");
+  assert.equal(citit.pretMax, "300");
+  assert.equal(citit.sortare, "price_asc");
+  assert.deepEqual(citit.fatete, stare.fatete);
 });

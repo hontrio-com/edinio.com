@@ -10,6 +10,7 @@ import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { radacinaCatalog } from "@/lib/storefront/design/commerce";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { Metadata } from "next";
@@ -113,6 +114,15 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     tagline: business.tagline,
   });
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
+  /*
+   * „Inapoi la magazin" duce la PRODUSE, nu la radacina.
+   *
+   * Cel mai scump dintre cele opt linkuri de intoarcere: aici ajunge clientul
+   * caruia i-a fost refuzata plata si care trebuie sa reia cumparaturile. Cand
+   * catalogul si-a luat pagina lui, radacina nu mai are niciun produs.
+   */
+  const catreProduse = radacinaCatalog(basePath, resolved.design);
+
   const chrome = buildChromeData({
     searchCategories, business: business as never, pageContent, basePath, design: resolved.design });
 
@@ -135,7 +145,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                   {orderNumber && <p className="text-xs text-[var(--st-muted)] font-medium mt-3">{orderNumber}</p>}
                 </div>
               </div>
-              <a href={`${basePath}/`}
+              <a href={catreProduse}
                 className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
                 style={{ backgroundColor: color }}>
                 <ArrowLeft className="h-4 w-4" />
@@ -286,7 +296,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
               </div>
             </div>
 
-            <a href={`${basePath}/`}
+            <a href={catreProduse}
               className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"
               style={{ backgroundColor: color }}>
               <ArrowLeft className="h-4 w-4" />

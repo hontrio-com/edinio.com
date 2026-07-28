@@ -41,3 +41,23 @@ export function hrefCatalog(catalogRoot: string, query?: string): string {
   const radacina = radacinaMagazin(catalogRoot);
   return query ? `${radacina}?${query}` : radacina;
 }
+
+/** Ancora grilei de produse. Traieste pe sectiunea `product_grid`. */
+export const ANCORA_PRODUSE = "#produse";
+
+/**
+ * Unde duce un buton „vezi produsele", de oriunde ar fi apasat.
+ *
+ * Cat timp grila e pe pagina curenta, raspunsul e ancora ei: o derulare pe loc e
+ * mai buna decat o navigare. Cand catalogul si-a luat pagina lui, elementul nu
+ * mai exista in DOM, iar ancora devine un buton care nu face NIMIC si nu da
+ * nicio eroare — exact soarta pe care ar fi avut-o singurul indemn la actiune al
+ * hero-ului, cel mai apasat element al paginii principale.
+ *
+ * Semnul ca grila e aici nu e un flag in plus: `catalogRoot` e deja radacina
+ * magazinului exact atunci cand catalogul n-a plecat nicaieri.
+ */
+export function hrefCatreProduse(chrome: { basePath: string; catalogRoot: string; isHome?: boolean }): string {
+  const acasaAreGrila = chrome.isHome === true && chrome.catalogRoot === radacinaMagazin(chrome.basePath);
+  return acasaAreGrila ? ANCORA_PRODUSE : chrome.catalogRoot;
+}

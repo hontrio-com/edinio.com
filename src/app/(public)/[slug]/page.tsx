@@ -13,6 +13,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { hrefCatalog } from "@/lib/storefront/category-href";
+import { scrieFiltre } from "@/lib/storefront/catalog/url";
 import { radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -373,13 +374,19 @@ export default async function SlugPage({ params, searchParams }: Props) {
    */
   // Sarit in previzualizare: acolo designul poate fi ciorna, iar o navigare ar
   // scoate iframe-ul editorului din pagina si ar rupe legatura postMessage.
-  if (!isPreview && shopOnPage(resolved.design) && (catParam || saleParam === "1" || pageParam)) {
-    const p = new URLSearchParams();
-    if (catParam) p.set("cat", catParam);
-    if (saleParam === "1") p.set("sale", "1");
-    if (pageParam) p.set("page", pageParam);
-    if (qParam) p.set("q", qParam);
-    permanentRedirect(hrefCatalog(radacinaCatalog(basePath, resolved.design), p.toString()));
+  if (!isPreview && shopOnPage(resolved.design) && (catParam || saleParam === "1" || pageParam || qParam)) {
+    // `scrieFiltre` codifica spatiile cu %20, la fel ca linkurile de categorie si
+    // ca toate canonicalele. `URLSearchParams` le-ar fi scris cu `+`, deci
+    // redirectul ar fi produs o A DOUA adresa pentru exact acelasi continut.
+    permanentRedirect(hrefCatalog(
+      radacinaCatalog(basePath, resolved.design),
+      scrieFiltre({
+        categorie: catParam,
+        cautare: qParam,
+        reduceri: saleParam === "1",
+        pagina: pageParam ? Number(pageParam) : undefined,
+      }),
+    ));
   }
 
   // `?cat=` poate veni cu numele categoriei (din header) sau cu id-ul ei

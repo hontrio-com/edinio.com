@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
@@ -60,6 +60,22 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
     () => subcategorii(arbore, deschisa?.item.id ?? null),
     [arbore, deschisa],
   );
+  const invelis = useRef<HTMLDivElement>(null);
+  const panou = useRef<HTMLDivElement>(null);
+  /*
+   * Inaltimea la care se aseaza panoul, dupa ce stim cat de inalt e.
+   *
+   * Aliniat strict la rand, un panou deschis dintr-o categorie de jos ar fi
+   * atarnat sub bara si sub hero. Se ridica exact cat sa incapa, si numai atunci:
+   * `useLayoutEffect` masoara inainte de vopsire, deci nu se vede niciun salt.
+   */
+  const [sus, setSus] = useState(0);
+  useLayoutEffect(() => {
+    if (!deschisa) return;
+    const inaltimeBara = invelis.current?.clientHeight ?? 0;
+    const inaltimePanou = panou.current?.offsetHeight ?? 0;
+    setSus(Math.max(0, Math.min(deschisa.sus, inaltimeBara - inaltimePanou)));
+  }, [deschisa, subcategoriiDeschise]);
 
   // H1-ul se emite inaintea oricarei conditii, ca in HeroBannersOnly: un magazin
   // fara bannere care scade si sub pragul de categorii si-ar pierde altfel
@@ -87,7 +103,11 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
                 // lasat un gol sub banner, cu punctele caruselului plutind
                 // dedesubt. Fara banner nu are de la cine sa isi ia inaltimea,
                 // deci ramane in flux.
-                <div className={areBanner ? "relative hidden lg:block" : "hidden lg:block"}
+                // `relative` si fara banner: panoul cu subcategorii se aseaza fata
+                // de invelisul asta, iar fara el s-ar fi agatat de primul stramos
+                // pozitionat — adica ar fi aparut aiurea exact la magazinele care
+                // n-au pus niciun banner.
+                <div ref={invelis} className={areBanner ? "relative hidden lg:block" : "relative hidden lg:block"}
                   onMouseLeave={() => setDeschisa(null)}>
                   {/* `overflow-visible`, nu `auto`: panoul cu subcategorii iese in
                       dreapta barei, iar o taietura l-ar fi ascuns exact acolo unde
@@ -113,23 +133,30 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
                     fiecare trecere cu mausul.
                   */}
                   {deschisa && subcategoriiDeschise.length > 0 && (
-                    <div
-                      className="absolute left-full ml-2 z-30 w-72 max-h-[22rem] overflow-y-auto rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-2"
-                      style={{ top: deschisa.sus }}>
-                      <p className="px-3.5 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--st-muted)]">
-                        {deschisa.item.name}
-                      </p>
-                      <a href={hrefCategorie(categoriiRoot, deschisa.item.name, categoriiPePagina)}
-                        className="block px-3.5 py-1.5 text-[13px] font-semibold hover:opacity-70 transition-opacity"
-                        style={{ color: "var(--st-primary)" }}>
-                        Vezi tot din {deschisa.item.name}
-                      </a>
-                      {subcategoriiDeschise.map((sub) => (
-                        <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name, categoriiPePagina)}
-                          className="block px-3.5 py-1.5 text-[13px] text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors truncate">
-                          {sub.name}
+                    /*
+                      Elementul pozitionat porneste LIPIT de bara, iar spatiul de 8
+                      pixeli e margine INAUNTRUL lui. Cu marginea pe elementul
+                      pozitionat, spatiul acela nu apartinea nimanui: mausul care
+                      pleca din rand catre subcategorii iesea o clipa din invelis,
+                      `onMouseLeave` inchidea panoul, si nu se putea ajunge la el.
+                    */
+                    <div ref={panou} className="absolute left-full z-30 w-72" style={{ top: sus }}>
+                      <div className="ml-2 max-h-[22rem] overflow-y-auto rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-2">
+                        <p className="px-3.5 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--st-muted)]">
+                          {deschisa.item.name}
+                        </p>
+                        <a href={hrefCategorie(categoriiRoot, deschisa.item.name, categoriiPePagina)}
+                          className="block px-3.5 py-1.5 text-[13px] font-semibold hover:opacity-70 transition-opacity"
+                          style={{ color: "var(--st-primary)" }}>
+                          Vezi tot din {deschisa.item.name}
                         </a>
-                      ))}
+                        {subcategoriiDeschise.map((sub) => (
+                          <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name, categoriiPePagina)}
+                            className="block px-3.5 py-1.5 text-[13px] text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors truncate">
+                            {sub.name}
+                          </a>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

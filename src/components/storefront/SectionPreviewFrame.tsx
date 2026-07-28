@@ -87,6 +87,9 @@ export function SectionPreviewFrame({
       openCart: nimic,
       openLightbox: nimic,
       isPreview: false,
+      // Miniatura arata sectiunea asa cum apare pe pagina principala: acolo
+      // logoul e o ancora goala, nu un link care ar scoate iframe-ul din cadru.
+      isHome: true,
 
       products,
       visibleProducts: products,

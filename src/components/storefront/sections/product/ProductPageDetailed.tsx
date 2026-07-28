@@ -517,12 +517,21 @@ export function ProductPageDetailed({
     return { de: fmt(deliveryEstimate.min_days), pana: fmt(deliveryEstimate.max_days) };
   }, [deliveryEstimate]);
 
+  /*
+   * Radacina catalogului, nu a magazinului: firimiturile si linkurile de
+   * categorie duc la produse, iar produsele nu stau neaparat la radacina.
+   *
+   * Miniatura din catalogul de design-uri randeaza pagina fara chrome, deci
+   * acolo se cade pe valoarea derivata din `basePath` — exact cea de dinainte.
+   */
+  const radacinaCatalog = chrome?.catalogRoot ?? radacinaMagazin(basePath);
+
   // Catalogul isi tine pagina curenta in sessionStorage tocmai ca intoarcerea
   // de pe pagina de produs sa nu arunce clientul inapoi la pagina 1.
   function laMagazin(e: React.MouseEvent) {
     try {
       const p = sessionStorage.getItem(`store_page_${business.slug}`);
-      if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${radacinaMagazin(basePath)}?page=${p}`; }
+      if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${radacinaCatalog}?page=${p}`; }
     } catch {}
   }
 
@@ -554,14 +563,14 @@ export function ProductPageDetailed({
         <nav aria-label="Firimituri" className="max-w-6xl mx-auto px-4 lg:px-6 pt-4 pb-1">
           <ol className="flex items-center gap-1.5 text-[13px] text-muted-foreground overflow-x-auto">
             <li className="shrink-0">
-              <a href={radacinaMagazin(basePath)} onClick={laMagazin}
+              <a href={radacinaCatalog} onClick={laMagazin}
                 className="hover:text-foreground transition-colors">Magazin</a>
             </li>
             {categorie !== "" && (
               <>
                 <li aria-hidden="true" className="shrink-0"><ChevronRight size={13} /></li>
                 <li className="shrink-0">
-                  <a href={hrefCategorie(basePath, categorie)} className="hover:text-foreground transition-colors">{categorie}</a>
+                  <a href={hrefCategorie(radacinaCatalog, categorie)} className="hover:text-foreground transition-colors">{categorie}</a>
                 </li>
               </>
             )}
@@ -813,7 +822,7 @@ export function ProductPageDetailed({
                 {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
                 {categorie !== "" && (
                   <RandMeta eticheta="Categorie">
-                    <a href={hrefCategorie(basePath, categorie)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
+                    <a href={hrefCategorie(radacinaCatalog, categorie)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
                   </RandMeta>
                 )}
                 {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}

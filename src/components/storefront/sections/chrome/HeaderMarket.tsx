@@ -12,7 +12,7 @@ import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/componen
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
-import { hrefCategorie } from "@/lib/storefront/category-href";
+import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 
 const STROKE = 1.6;
 
@@ -32,19 +32,21 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
   const {
     business,
     basePath,
+    catalogRoot,
     menu,
     pageContent,
     hasAnnouncementBar,
     cartMode,
     currentPageSlug,
     searchCategories,
+    isHome,
   } = useStoreChrome();
   const { count, total } = useCart();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const acasa = catalog ? "#" : `${basePath}/`;
+  const acasa = isHome ? "#" : `${basePath}/`;
 
   const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.market);
 
@@ -105,7 +107,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
           </a>
 
           <div className="hidden lg:block flex-1 min-w-0">
-            <BaraCautare basePath={basePath} categorii={categorii.map((c) => c.name)} />
+            <BaraCautare categorii={categorii.map((c) => c.name)} />
           </div>
 
           <div className="flex items-center gap-4 sm:gap-5 shrink-0 ml-auto lg:ml-0">
@@ -130,7 +132,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
       <div className="hidden lg:block border-t border-[var(--st-border)]">
         <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
           <div className="h-12 flex items-center gap-7">
-            {categorii.length > 0 && <ToateCategoriile categorii={categorii} basePath={basePath} />}
+            {categorii.length > 0 && <ToateCategoriile categorii={categorii} />}
 
             {/* Meniul se deruleaza in interiorul barii: cu multe pagini ar impinge
                 altfel toata pagina pe orizontala. Panoul de categorii ramane in
@@ -142,7 +144,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
                   return (
                     // Pagina curenta nu se marcheaza doar prin culoare: subliniere
                     // pentru cine nu o distinge, `aria-current` pentru cititoare.
-                    <a key={it.id} href={menuItemHref(it, basePath)} aria-current={activ ? "page" : undefined}
+                    <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)} aria-current={activ ? "page" : undefined}
                       className={`text-sm font-medium text-[var(--st-text)] hover:opacity-70 transition-opacity whitespace-nowrap ${meniuCls}`}
                       style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
                       {it.label}
@@ -166,7 +168,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
       <div className="lg:hidden px-4 pb-3 flex items-center gap-3">
         <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
         <div className="flex-1 min-w-0">
-          <BaraCautare basePath={basePath} categorii={categorii.map((c) => c.name)} compact />
+          <BaraCautare categorii={categorii.map((c) => c.name)} compact />
         </div>
       </div>
     </header>
@@ -181,14 +183,13 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
  * magazin cu termenul si categoria in adresa.
  */
 function BaraCautare({
-  basePath,
   categorii,
   compact = false,
 }: {
-  basePath: string;
   categorii: string[];
   compact?: boolean;
 }) {
+  const { catalogRoot } = useStoreChrome();
   const catalog = useStorefrontOptional();
   const [local, setLocal] = useState("");
   const [catLocal, setCatLocal] = useState("toate");
@@ -223,7 +224,7 @@ function BaraCautare({
     const p = new URLSearchParams();
     if (valoare.trim()) p.set("q", valoare.trim());
     if (categorie !== "toate") p.set("cat", categorie);
-    window.location.href = `${basePath}/${p.toString() ? `?${p}` : ""}`;
+    window.location.href = hrefCatalog(catalogRoot, p.toString());
   }
 
   return (
@@ -280,11 +281,10 @@ function BaraCautare({
 /** Panoul cu toate categoriile, deschis din randul de jos. */
 function ToateCategoriile({
   categorii,
-  basePath,
 }: {
   categorii: { name: string; image: string | null }[];
-  basePath: string;
 }) {
+  const { catalogRoot } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -311,7 +311,7 @@ function ToateCategoriile({
         <ul className="absolute left-0 top-full mt-2 z-50 w-72 max-h-[70vh] overflow-y-auto rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-1.5">
           {categorii.map((c) => (
             <li key={c.name}>
-              <a href={hrefCategorie(basePath, c.name)}
+              <a href={hrefCategorie(catalogRoot, c.name)}
                 className="flex items-center gap-3 px-3.5 py-2 hover:bg-[var(--st-primary-soft)] transition-colors">
                 {c.image ? (
                   <span className="relative w-7 h-7 rounded-[var(--st-radius-sm)] overflow-hidden shrink-0 bg-[var(--st-bg)]">

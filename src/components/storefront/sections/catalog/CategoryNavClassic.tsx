@@ -41,7 +41,7 @@ export function CategoryNavClassic() {
 }
 
 function PastileText() {
-  const { basePath, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
+  const { catalogRoot, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
     useStorefront();
 
   const inactiv = {
@@ -71,7 +71,7 @@ function PastileText() {
           return (
             // `aria-current` fiindca altfel starea „aceasta e categoria aleasa"
             // se vede exclusiv din culoarea de fundal.
-            <a key={item.key} href={hrefCategorie(basePath, item.name)}
+            <a key={item.key} href={hrefCategorie(catalogRoot, item.name)}
               onClick={(e) => {
                 if (altaFila(e)) return;
                 e.preventDefault();
@@ -90,7 +90,7 @@ function PastileText() {
 }
 
 function CerculeteCuImagini() {
-  const { basePath, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
+  const { catalogRoot, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
     useStorefront();
 
   const buton = "flex flex-col items-center gap-2 flex-shrink-0 group";
@@ -133,7 +133,7 @@ function CerculeteCuImagini() {
         {currentCategoryItems.map((item) => {
           const activ = categoryFilter === item.name;
           return (
-            <a key={item.key} href={hrefCategorie(basePath, item.name)}
+            <a key={item.key} href={hrefCategorie(catalogRoot, item.name)}
               onClick={(e) => {
                 if (altaFila(e)) return;
                 e.preventDefault();

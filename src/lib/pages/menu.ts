@@ -24,8 +24,16 @@ export function newMenuItemId(): string {
   return `m_${Date.now().toString(36)}_${mcounter.toString(36)}`;
 }
 
-/** Resolve the href for a menu item, honouring custom-domain vs /slug basePath. */
-export function menuItemHref(item: MenuItem, basePath: string): string {
+/**
+ * Resolve the href for a menu item, honouring custom-domain vs /slug basePath.
+ *
+ * `catalogRoot` e pagina care gazduieste produsele; implicit chiar `basePath`,
+ * ca un apel care nu il da sa se comporte exact ca inainte (`hrefCategorie`
+ * normalizeaza oricum). Doar intrarile de tip categorie il folosesc: „home"
+ * ramane deliberat pe radacina magazinului, fiindca in editorul de meniu acel
+ * tip e descris comerciantului drept „link catre pagina principala".
+ */
+export function menuItemHref(item: MenuItem, basePath: string, catalogRoot: string = basePath): string {
   switch (item.type) {
     case "home":
       // Not `${basePath}/`: with a slug that trailing slash costs a 308 on
@@ -34,8 +42,8 @@ export function menuItemHref(item: MenuItem, basePath: string): string {
     case "page":
       return `${basePath}/${item.target ?? ""}`;
     case "category":
-      // Categories are filtered on the store home via ?cat=
-      return hrefCategorie(basePath, item.target ?? "");
+      // Categories are filtered on the catalog page via ?cat=
+      return hrefCategorie(catalogRoot, item.target ?? "");
     case "link":
       // Reuse the href resolver so javascript:/data: schemes are rejected.
       return resolveHref(item.target, basePath);

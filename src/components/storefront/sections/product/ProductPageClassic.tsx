@@ -31,6 +31,7 @@ import { cosDupaComanda } from "@/lib/storefront/cart/consume";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 
 /* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
@@ -379,6 +380,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
    */
   const cos = useCartOptional();
   const chrome = useStoreChromeOptional();
+  /*
+   * Radacina catalogului, nu a magazinului: firimitura duce inapoi la produse,
+   * iar produsele nu stau neaparat la radacina. Miniatura din catalogul de
+   * design-uri randeaza pagina fara chrome, deci acolo cade pe valoarea derivata
+   * din `basePath` — exact cea de dinainte.
+   */
+  const radacinaCatalog = chrome?.catalogRoot ?? radacinaMagazin(basePath);
   // Produsul curent iese: el se comanda separat, cu cantitatea din formular.
   const cartItems = useMemo(
     () => (demo || !cos ? [] : cos.items.filter((i) => i.productId !== product.id)),
@@ -692,11 +700,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       {!isHome && setari.showBreadcrumb !== false && (
         <div className="bg-surface/80 border-b border-border">
           <div className="max-w-6xl mx-auto px-4 md:px-6 h-11 flex items-center gap-3">
-            <a href={basePath || "/"} aria-label="Inapoi la magazin"
+            <a href={radacinaCatalog} aria-label="Inapoi la magazin"
               onClick={(e) => {
                 try {
                   const p = sessionStorage.getItem(`store_page_${business.slug}`);
-                  if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${basePath || "/"}?page=${p}`; }
+                  if (p && Number(p) > 1) { e.preventDefault(); window.location.href = `${radacinaCatalog}?page=${p}`; }
                 } catch {}
               }}
               className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors shrink-0">

@@ -18,7 +18,7 @@ import { StoreProductCard } from "@/components/storefront/sections/products/Stor
  */
 export function ProductGridClassic() {
   const {
-    basePath,
+    catalogRoot,
     color,
     search,
     categoryFilter,
@@ -74,7 +74,7 @@ export function ProductGridClassic() {
             ))}
           </div>
           {totalPages > 1 && (
-            <Paginare current={currentPage} total={totalPages} color={color} basePath={basePath} onGo={mergiLa} />
+            <Paginare current={currentPage} total={totalPages} color={color} catalogRoot={catalogRoot} onGo={mergiLa} />
           )}
         </>
       )}
@@ -96,13 +96,18 @@ function Paginare({
   current,
   total,
   color,
-  basePath,
+  catalogRoot,
   onGo,
 }: {
   current: number;
   total: number;
   color: string;
-  basePath: string;
+  /**
+   * Adresa paginii care gazduieste catalogul. Vine ca prop, nu se deduce din
+   * `basePath`: grila se randeaza acolo unde e pusa, iar dedusa aici, lantul de
+   * paginare ar fi trimis mereu la radacina magazinului.
+   */
+  catalogRoot: string;
   onGo: (n: number) => void;
 }) {
   const pagini = Array.from({ length: total }, (_, i) => i + 1)
@@ -116,7 +121,8 @@ function Paginare({
   const nav = "px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors";
   // Fara slash inaintea interogarii: `/magazin/?page=2` ia un 308 la fiecare
   // apasare, iar Search Console numara fiecare pagina ca redirectionare.
-  const href = (p: number) => (p <= 1 ? radacinaMagazin(basePath) : `${radacinaMagazin(basePath)}?page=${p}`);
+  const radacina = radacinaMagazin(catalogRoot);
+  const href = (p: number) => (p <= 1 ? radacina : `${radacina}?page=${p}`);
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 mt-8">

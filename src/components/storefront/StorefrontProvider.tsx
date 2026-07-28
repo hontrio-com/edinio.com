@@ -57,6 +57,26 @@ export interface CatalogFacets {
 export interface StoreChromeValue {
   business: Business;
   basePath: string;
+  /**
+   * Unde traieste catalogul de produse.
+   *
+   * Azi e mereu radacina magazinului, deci `radacinaMagazin(basePath)`. Exista ca
+   * un camp separat fiindca „radacina magazinului" si „pagina cu produsele" sunt
+   * doua intrebari diferite, iar toate cele ~12 locuri care leaga o categorie, o
+   * pagina de catalog sau sertarul de cos raspund la a doua. Scrise cu `basePath`,
+   * ar fi trebuit corectate una cate una in ziua in care catalogul se muta.
+   */
+  catalogRoot: string;
+  /**
+   * Pagina curenta ESTE pagina principala a magazinului.
+   *
+   * Se foloseste pentru linkul de pe logo: acolo ancora goala duce in capul
+   * paginii, fara navigare. Pana acum raspunsul se ghicea din prezenta
+   * contextului de catalog, care azi coincide cu pagina principala; sunt insa
+   * doua intrebari diferite — o pagina de catalog separata ar avea catalog fara
+   * sa fie acasa, si toate cele opt headere ar fi ramas cu logoul mort.
+   */
+  isHome?: boolean;
   /** Culoarea principala. Variantele noi folosesc `var(--st-primary)`. */
   color: string;
   pageContent: StorePageContent;

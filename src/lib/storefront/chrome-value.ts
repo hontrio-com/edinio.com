@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { cartHref, cartOnPage } from "@/lib/storefront/design/commerce";
 import { variantMeta } from "@/lib/storefront/design/registry";
@@ -38,6 +39,7 @@ export function buildChromeData({
   cartMode = "link",
   currentPageSlug = null,
   hasStickyBottomBar = false,
+  isHome = false,
   searchCategories,
 }: {
   business: Business;
@@ -54,6 +56,14 @@ export function buildChromeData({
   cartMode?: CartMode;
   currentPageSlug?: string | null;
   hasStickyBottomBar?: boolean;
+  /**
+   * Pagina randata e chiar pagina principala a magazinului.
+   *
+   * Implicit `false`: functia asta serveste tocmai paginile care NU sunt pagina
+   * principala. Pagina principala isi construieste singura contextul, in
+   * `MiniStoreRenderer`.
+   */
+  isHome?: boolean;
   searchCategories?: string[];
 }): StoreChromeData {
   // Un magazin cu cosul pe pagina il are pe pagina PESTE TOT: si in header-ul
@@ -65,6 +75,11 @@ export function buildChromeData({
   return {
     business,
     basePath,
+    // Catalogul sta azi la radacina magazinului. Se calculeaza aici, o singura
+    // data, ca cele ~12 componente care leaga o categorie sau o pagina de
+    // catalog sa nu il mai deduca fiecare din `basePath`.
+    catalogRoot: radacinaMagazin(basePath),
+    isHome,
     color: business.primary_color ?? "#1AB554",
     pageContent,
     features: (business.features as StoreFeatures) ?? {},

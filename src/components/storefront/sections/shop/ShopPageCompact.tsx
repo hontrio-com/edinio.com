@@ -1,9 +1,8 @@
 "use client";
 
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import {
   AntetPagina, CategoriiSus, CautareCatalog, FiltreActive, FiltrePeTelefon,
-  GrilaProduse, NumarRezultate, Paginare, PanouFiltre, Sortare,
+  GrilaProduse, NumarRezultate, Paginare, PanouFiltre, Sortare, useAreFiltre,
 } from "./_shared/ShopPieces";
 import type { ShopPageProps } from "./shop-page.types";
 
@@ -19,8 +18,7 @@ import type { ShopPageProps } from "./shop-page.types";
  * grila stramtata la mijloc ar fi anulat-o.
  */
 export function ShopPageCompact({ titlu, coloane, grupuriPornite, arataTitlu }: ShopPageProps) {
-  const { fatete } = useStorefront();
-  const areFiltre = fatete.length > 0;
+  const areFiltre = useAreFiltre(grupuriPornite);
 
   return (
     <div className="px-4 py-6 xl:px-8">

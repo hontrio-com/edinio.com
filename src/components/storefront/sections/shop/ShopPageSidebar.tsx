@@ -1,9 +1,8 @@
 "use client";
 
-import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import {
   AntetPagina, CautareCatalog, FiltreActive, FiltrePeTelefon, GrilaProduse,
-  NumarRezultate, Paginare, PanouFiltre, Sortare,
+  NumarRezultate, Paginare, PanouFiltre, Sortare, useAreFiltre,
 } from "./_shared/ShopPieces";
 import type { ShopPageProps } from "./shop-page.types";
 
@@ -19,10 +18,10 @@ import type { ShopPageProps } from "./shop-page.types";
  * venit clientul sa vada.
  */
 export function ShopPageSidebar({ titlu, coloane, grupuriPornite, arataTitlu }: ShopPageProps) {
-  const { fatete } = useStorefront();
-  // Fara nicio fateta, coloana ar fi o banda goala langa grila: magazinul fara
-  // atribute completate primeste automat asezarea pe toata latimea.
-  const areFiltre = fatete.length > 0;
+  // Fara nimic de aratat, coloana ar fi o banda goala langa grila: magazinul
+  // fara categorii si fara atribute completate primeste automat asezarea pe
+  // toata latimea.
+  const areFiltre = useAreFiltre(grupuriPornite);
 
   return (
     <div className="mx-auto px-4 py-8" style={{ maxWidth: "var(--st-container)" }}>

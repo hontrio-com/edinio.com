@@ -121,6 +121,51 @@ export function FiltreDeBaza() {
 }
 
 /**
+ * Numele grupului de filtre din editor, pentru fiecare grup de fateta.
+ *
+ * Cele doua nu coincid: in editor comerciantul citeste „Atribute (marime,
+ * culoare)", iar in date grupul se cheama `atribut`. Maparea sta intr-un singur
+ * loc ca cele trei modele sa nu ajunga sa arate grupuri diferite.
+ */
+export const GRUP_DIN_FATETA: Record<Fateta["grup"], string> = {
+  atribut: "atribute",
+  brand: "brand",
+  eticheta: "etichete",
+  specificatie: "specificatii",
+};
+
+/** Categoriile ca lista de filtre, pentru modelele cu bara laterala. */
+export function FiltreCategorii() {
+  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, color } =
+    useStorefront();
+  if (!hasCategories) return null;
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-[var(--st-text)] mb-2">Categorii</p>
+      <ul className="space-y-0.5">
+        <li>
+          <button type="button" onClick={isDrilled ? goBackCategory : resetCategory}
+            className="w-full text-left text-[13px] py-1 hover:opacity-70 transition-opacity"
+            style={categoryFilter === "toate" ? { color, fontWeight: 600 } : { color: "var(--st-text)" }}>
+            {isDrilled ? "Inapoi" : "Toate produsele"}
+          </button>
+        </li>
+        {currentCategoryItems.map((c) => (
+          <li key={c.key}>
+            <button type="button" onClick={() => selectCategoryItem(c)}
+              className="w-full text-left text-[13px] py-1 hover:opacity-70 transition-opacity truncate"
+              style={categoryFilter === c.name ? { color, fontWeight: 600 } : { color: "var(--st-text)" }}>
+              {c.name}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * Toate filtrele, in ordinea si cu grupurile alese de comerciant.
  *
  * `grupuriPornite` vine din setarile variantei (campul de tip `actions`), deci
@@ -128,14 +173,22 @@ export function FiltreDeBaza() {
  */
 export function PanouFiltre({ grupuriPornite }: { grupuriPornite: string[] }) {
   const { fatete } = useStorefront();
-  const arata = (g: string) => grupuriPornite.includes(g);
 
-  const dupaGrup = (grup: Fateta["grup"]) => fatete.filter((f) => f.grup === grup);
   const bucati: { cheie: string; nod: React.ReactNode }[] = [];
-  if (arata("pret")) bucati.push({ cheie: "pret", nod: <FiltreDeBaza /> });
-  for (const g of ["atribut", "brand", "eticheta", "specificatie"] as const) {
-    if (!arata(g === "atribut" ? "atribute" : g === "eticheta" ? "etichete" : g === "brand" ? "brand" : "specificatii")) continue;
-    for (const f of dupaGrup(g)) bucati.push({ cheie: f.cheie, nod: <GrupFatete fateta={f} /> });
+  // Ordinea e a comerciantului, nu a codului: se parcurg grupurile pornite in
+  // ordinea salvata, nu fatetele in ordinea lor din date.
+  for (const grup of grupuriPornite) {
+    if (grup === "categorii") {
+      bucati.push({ cheie: "categorii", nod: <FiltreCategorii /> });
+      continue;
+    }
+    if (grup === "pret") {
+      bucati.push({ cheie: "pret", nod: <FiltreDeBaza /> });
+      continue;
+    }
+    for (const f of fatete.filter((x) => GRUP_DIN_FATETA[x.grup] === grup)) {
+      bucati.push({ cheie: f.cheie, nod: <GrupFatete fateta={f} /> });
+    }
   }
 
   if (bucati.length === 0) return null;
@@ -144,6 +197,20 @@ export function PanouFiltre({ grupuriPornite }: { grupuriPornite: string[] }) {
       {bucati.map((b) => <div key={b.cheie}>{b.nod}</div>)}
     </div>
   );
+}
+
+/**
+ * Are magazinul ceva de aratat intr-o bara de filtre?
+ *
+ * Fara asta, un magazin fara atribute completate ar fi primit o coloana goala
+ * langa grila. Categoriile si pretul conteaza si ele: un magazin cu categorii
+ * dar fara atribute merita in continuare bara.
+ */
+export function useAreFiltre(grupuriPornite: string[]): boolean {
+  const { fatete, hasCategories } = useStorefront();
+  if (grupuriPornite.includes("categorii") && hasCategories) return true;
+  if (grupuriPornite.includes("pret")) return true;
+  return fatete.some((f) => grupuriPornite.includes(GRUP_DIN_FATETA[f.grup]));
 }
 
 /** Filtrele bifate, ca pastile care se sterg una cate una. */

@@ -23,10 +23,15 @@ const SEPARATOR_VALORI = "|";
 const MAX_VALORI_PER_CHEIE = 20;
 const MAX_TEXT = 100;
 
+/** Sortarile pe care le stie catalogul. „relevance" nu se salveaza: exista doar cat timp e o cautare activa. */
+const SORTARI = ["newest", "price_asc", "price_desc", "popular", "name_asc"];
+
 export interface FiltreCitite {
   categorie: string;
   cautare: string;
   pagina: number;
+  /** Sortarea ceruta explicit in adresa. Gol = ramane cea implicita a magazinului. */
+  sortare: string;
   reduceri: boolean;
   stoc: boolean;
   pretMin: string;
@@ -76,6 +81,7 @@ export function citesteFiltreDinAdresa(
     categorie: primul(sp.cat).slice(0, MAX_TEXT),
     cautare: primul(sp.q).slice(0, MAX_TEXT),
     pagina: Number.isFinite(paginaBruta) && paginaBruta > 0 ? paginaBruta : 1,
+    sortare: SORTARI.includes(primul(sp.sort)) ? primul(sp.sort) : "",
     reduceri: primul(sp.sale) === "1",
     stoc: primul(sp.stoc) === "1",
     pretMin: numarPozitiv(primul(sp.pmin)),

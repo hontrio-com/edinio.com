@@ -83,3 +83,11 @@ test("un singur filtru ramane indexabil, doua nu", () => {
 test("categoria si pagina singure raman indexabile", () => {
   assert.equal(canonicalCatalog("https://x.ro/magazin", { cat: "Manusi", page: "2", sale: "1" }).indexabila, true);
 });
+
+test("sortarea din adresa e acceptata doar daca o stie catalogul", () => {
+  assert.equal(citesteFiltreDinAdresa({ sort: "price_asc" }, fatete).sortare, "price_asc");
+  assert.equal(citesteFiltreDinAdresa({ sort: "inventata" }, fatete).sortare, "");
+  // „relevance" nu se salveaza: exista doar cat timp e o cautare activa, deci un
+  // link cu ea ar fi cerut o ordine care nu se poate reface.
+  assert.equal(citesteFiltreDinAdresa({ sort: "relevance" }, fatete).sortare, "");
+});

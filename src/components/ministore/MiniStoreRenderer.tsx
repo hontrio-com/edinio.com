@@ -112,9 +112,11 @@ interface Props {
   initialPriceMin?: string;
   initialPriceMax?: string;
   initialInStock?: boolean;
+  /** Sortarea din adresa. Gol = ramane cea implicita a magazinului. */
+  initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", fatete = [], jetoane = [], initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", fatete = [], jetoane = [], initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -333,10 +335,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Sorting is a standard storefront feature — always shown. Honour the saved
   // default sort if present, otherwise newest-first.
   const defaultSort = pageContent.sort_options?.default_sort ?? "newest";
-  const [sort, setSort] = useState<string>(defaultSort);
+  // Sortarea din adresa bate implicitul magazinului: un link partajat trebuie
+  // sa arate lista in aceeasi ordine ca cea din care a fost copiat.
+  const [sort, setSort] = useState<string>(initialSort || defaultSort);
   // While a search is active and no sort was explicitly chosen, results order
   // by relevance — surfaced as a visible "Relevanta" option in the dropdown.
-  const [sortTouched, setSortTouched] = useState(false);
+  const [sortTouched, setSortTouched] = useState(!!initialSort);
 
   // Titlul grilei principale depinde de existenta hero-ului: cand pagina nu are
   // hero si nici sectiunea Recomandate, catalogul isi pune propriul titlu.
@@ -631,11 +635,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    */
   useEffect(() => {
     if (surface !== "shop" || typeof window === "undefined") return;
-    const sp = new URLSearchParams(window.location.search);
-    for (const cheie of [...sp.keys()]) {
-      if (cheie === "cat" || cheie === "q" || cheie === "page") continue;
-      sp.delete(cheie);
-    }
+    // Se construieste de la zero, nu se peticeste adresa existenta: altfel un
+    // filtru scos ar fi ramas in link, fiindca stergerea lui n-are unde sa se
+    // vada. Numarul paginii e singurul care se pastreaza — il scrie `goToPage`,
+    // iar efectul asta nu stie despre el.
+    const sp = new URLSearchParams();
+    const pagina = new URLSearchParams(window.location.search).get("page");
+    if (categoryFilter && categoryFilter !== "toate") sp.set("cat", categoryFilter);
+    if (search.trim()) sp.set("q", search.trim());
     for (const [cheie, valori] of Object.entries(selectieFatete)) {
       if (valori.length) sp.set(cheie, valori.join("|"));
     }
@@ -644,9 +651,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     if (onSaleOnly) sp.set("sale", "1");
     if (inStockOnly) sp.set("stoc", "1");
     if (sortTouched && sort) sp.set("sort", sort);
+    if (pagina) sp.set("page", pagina);
     const qs = sp.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
-  }, [surface, selectieFatete, priceMin, priceMax, onSaleOnly, inStockOnly, sort, sortTouched]);
+  }, [surface, selectieFatete, priceMin, priceMax, onSaleOnly, inStockOnly, sort, sortTouched, categoryFilter, search]);
 
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isReservedSlug, validatePageSlug, RESERVED_PAGE_SLUGS } from "./reserved-slugs";
+import { isReservedSlug, validatePageSlug, RESERVED_PAGE_SLUGS, SEGMENT_MAGAZIN } from "./reserved-slugs";
 import { SEGMENT_CHECKOUT, SEGMENT_COS } from "@/lib/storefront/design/commerce";
 
 /**
@@ -18,11 +18,21 @@ test("fiecare segment de ruta de comert e rezervat", () => {
   }
 });
 
-test("segmentul paginii de catalog si sinonimele lui sunt rezervate", () => {
-  // Sinonimele stau langa el ca sa nu apara o pagina proprie „produse" pe care
-  // comerciantul o crede legata de catalog.
-  for (const slug of ["magazin", "shop", "produse", "catalog"]) {
+test("segmentul paginii de catalog e rezervat", () => {
+  for (const slug of [SEGMENT_MAGAZIN, "shop"]) {
     assert.ok(isReservedSlug(slug), `${slug} nu e rezervat`);
+  }
+});
+
+test("nu se rezerva nume de pagina pentru care nu exista ruta", () => {
+  /*
+   * „produse" si „catalog" sunt nume plauzibile de pagina proprie in romana, iar
+   * nicio ruta nu le foloseste. Rezervate „pentru viitor", ar fi luat
+   * comerciantilor doua nume bune fara sa apere nimic — si tocmai comerciantii
+   * cu multe produse sunt cei care isi fac o pagina de prezentare a gamei.
+   */
+  for (const slug of ["produse", "catalog"]) {
+    assert.equal(isReservedSlug(slug), false, `${slug} e rezervat degeaba`);
   }
 });
 

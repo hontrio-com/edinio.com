@@ -10,7 +10,7 @@ import {
 import { slugify } from "@/lib/utils/slugify";
 import { createPage, deletePage, duplicatePage, updateStoreMenu } from "@/lib/actions/page.actions";
 import { newMenuItemId, type MenuItem } from "@/lib/pages/menu";
-import { SEGMENT_MAGAZIN } from "@/lib/storefront/design/commerce";
+import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
 
 interface PageRow { id: string; slug: string; title: string; is_published: boolean; updated_at: string }
 interface Business { id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string }

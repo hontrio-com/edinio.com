@@ -67,6 +67,21 @@ const CheckoutClassic = dynamic(
 const VARIANTE_COS: Record<string, typeof CartDrawerClassic> = { classic: CartDrawerClassic };
 const VARIANTE_COMANDA: Record<string, typeof CheckoutClassic> = { classic: CheckoutClassic };
 
+/*
+ * Implicitele goale ale fatetelor, ca CONSTANTE de modul.
+ *
+ * Scrise ca literali in lista de parametri (`fatete = []`), se evalueaza din nou
+ * la FIECARE randare, deci sunt referinte noi de fiecare data. `useMemo` compara
+ * dependintele cu `Object.is`, asa ca memo-ul fatetelor se invalida mereu, iar
+ * prin el si `filteredProducts` — care il are in dependinte. Rezultatul ar fi
+ * fost o refiltrare si o resortare a intregului catalog la fiecare tasta, la
+ * fiecare adaugare in cos si la fiecare trecere cu mausul peste un card, pe
+ * TOATE magazinele, inclusiv cele care nu ating pagina de catalog. La 1221 de
+ * produse, sortarea implicita „newest" face doua parsari de data per comparatie.
+ */
+const FARA_FATETE: Fateta[] = [];
+const FARA_JETOANE: string[] = [];
+
 interface Props {
   business: Business;
   products: Product[];
@@ -116,7 +131,7 @@ interface Props {
   initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", fatete = [], jetoane = [], initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin

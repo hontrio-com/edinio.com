@@ -1,3 +1,4 @@
+import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { variantMeta } from "./registry";
 import type { SectionInstance, SectionKind, StoreDesign } from "./types";
@@ -20,7 +21,9 @@ import type { SectionInstance, SectionKind, StoreDesign } from "./types";
 /** Segmentele rutelor de comert. Rezervate deja in `lib/pages/reserved-slugs.ts`. */
 export const SEGMENT_COS = "cos";
 export const SEGMENT_CHECKOUT = "checkout";
-export const SEGMENT_MAGAZIN = "magazin";
+// Definit langa lista de sluguri rezervate, ca ecranele de dashboard sa il poata
+// citi fara sa traga registry-ul de sectiuni in bundle-ul lor de client.
+export { SEGMENT_MAGAZIN };
 
 /** `true` cand designul publicat pune cosul pe o pagina proprie. */
 export function cartOnPage(design: StoreDesign): boolean {

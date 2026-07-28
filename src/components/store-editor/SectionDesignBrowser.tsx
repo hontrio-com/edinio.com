@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, Loader2, Monitor, Settings2, SlidersHorizontal, Smartphone, Sparkles, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ export function SectionDesignBrowser({
   /** Cate categorii de nivel intai are magazinul; unele design-uri cer un minim. */
   numarCategorii: number;
 }) {
+  const router = useRouter();
   const [design, setDesign] = useState<StoreDesign>(designInitial);
   const [publicat, setPublicat] = useState<StoreDesign>(designPublicat);
   const [kindActiv, setKindActiv] = useState<SectionKind>("header");
@@ -142,7 +144,7 @@ export function SectionDesignBrowser({
   function motivIndisponibil(v: { requires?: { minCategories?: number } }): string | null {
     const min = v.requires?.minCategories;
     if (min && numarCategorii < min) {
-      return `Ai nevoie de cel putin ${min} categorii (acum ai ${numarCategorii})`;
+      return `Ai nevoie de cel putin ${min} categorii CU PRODUSE (acum ai ${numarCategorii}). O categorie goala ar duce clientul intr-un catalog gol, deci nu se pune la socoteala.`;
     }
     return null;
   }

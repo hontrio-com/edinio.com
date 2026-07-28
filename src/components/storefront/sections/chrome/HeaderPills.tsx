@@ -90,7 +90,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
             <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
           </div>
 
-          <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0" aria-label={nume}>
+          <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity" aria-label={nume}>
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}

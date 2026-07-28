@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 
 /**
  * Ce face butonul de cos dintr-un header, decis o singura data.
@@ -32,9 +33,20 @@ export function useCartTarget(): TintaCos {
     // segmentul standard, ca butonul sa nu ramana fara tinta.
     return { fel: "link", href: cartHref ?? `${basePath}/cos`, eticheta: "Mergi la cos", textFaraProduse: "Cos" };
   }
-  // „link": pe paginile fara catalog ale magazinelor ramase pe sertar, cosul nu
-  // are unde sa se deschida, deci butonul duce inapoi la magazin.
-  return { fel: "link", href: `${basePath}/`, eticheta: "Mergi la magazin", textFaraProduse: "Magazin" };
+  /*
+   * „link": paginile fara catalog ale magazinelor ramase pe sertar.
+   *
+   * Sertarul traieste pe pagina de magazin, deci de aici nu are unde sa se
+   * deschida. Butonul duce acolo CU SERTARUL DESCHIS (`?cos=1`), nu pur si
+   * simplu „la magazin": de cand pagina de produs are „Adauga in cos", clientul
+   * adauga, apasa cosul si ateriza in prima pagina, fara sa vada ce a adaugat.
+   */
+  return {
+    fel: "link",
+    href: `${radacinaMagazin(basePath)}?cos=1`,
+    eticheta: "Mergi la cos",
+    textFaraProduse: "Cos",
+  };
 }
 
 /**

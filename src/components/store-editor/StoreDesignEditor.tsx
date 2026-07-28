@@ -186,7 +186,7 @@ export function StoreDesignEditor({
   function motivIndisponibil(v: { requires?: { minCategories?: number } }): string | null {
     const min = v.requires?.minCategories;
     if (min && numarCategorii < min) {
-      return `Ai nevoie de cel putin ${min} categorii (acum ai ${numarCategorii})`;
+      return `Ai nevoie de cel putin ${min} categorii CU PRODUSE (acum ai ${numarCategorii}). O categorie goala ar duce clientul intr-un catalog gol, deci nu se pune la socoteala.`;
     }
     return null;
   }

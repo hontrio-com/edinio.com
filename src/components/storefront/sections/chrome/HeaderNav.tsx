@@ -73,14 +73,14 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
             {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`
                 `truncate` n-are de unde taia si un nume lung latfeste randul. */}
             {business.logo_url ? (
-              <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0 lg:mr-6" aria-label={nume}>
+              <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity lg:mr-6" aria-label={nume}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
                   style={{ height: logoSize, maxWidth: logoSize * 5 }}
                   className="w-auto max-w-full object-contain" />
               </a>
             ) : (
-              <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity mx-auto lg:mx-0 lg:mr-6" aria-label={nume}>
+              <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity lg:mr-6" aria-label={nume}>
                 <span className="text-xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
               </a>
             )}

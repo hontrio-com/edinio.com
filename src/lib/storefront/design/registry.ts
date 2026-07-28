@@ -124,6 +124,13 @@ export interface VariantMeta {
    * comerciantul sa aleaga un design care la el ar arata prost.
    */
   requires?: { minCategories?: number };
+  /**
+   * Ce trebuie sa stie comerciantul dupa ce alege varianta.
+   *
+   * Pentru design-urile care depind de ceva reglat in ALT ecran: fara nota, el
+   * alege designul, nu vede elementul care il defineste si crede ca s-a stricat.
+   */
+  note?: string;
   fields: Field[];
   defaults?: Record<string, unknown>;
 }
@@ -335,6 +342,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // Bara de contact, randul cu logo si meniu, banda de anunt.
         previewHeight: 144,
         hostsAnnouncement: true,
+        note: "Mesajul derulant se scrie si se porneste din Editeaza magazinul > Design magazin, la „Bara de anunt”. Aici il vezi ca exemplu.",
         fields: [
           ...headerFields(HEADER_VARIANT_ACTIONS.editorial),
           { key: "showTopBar", type: "toggle", label: "Arata bara de contact" },

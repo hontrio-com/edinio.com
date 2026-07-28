@@ -151,9 +151,10 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={cdnImage(logoUrl, 256)} alt={storeName} className="h-8 w-auto max-w-[120px] object-contain" />
                 ) : (
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: color }}>
-                    {storeName[0]?.toUpperCase()}
-                  </div>
+                  // Fara logo, panoul arata NUMELE, ca header-ul de deasupra lui.
+                  // Patratul cu initiala era a doua cadere de rezerva pentru
+                  // acelasi lucru, si comerciantul o citea drept „logo gresit".
+                  <span className="font-bold text-foreground truncate">{storeName}</span>
                 )}
               </div>
               <button ref={inchidere} type="button" aria-label="Inchide meniul" onClick={() => setOpen(false)}

@@ -25,13 +25,17 @@ export function SectionSettings({
   onChange: (settings: Record<string, unknown>) => void;
   cuTitlu?: boolean;
 }) {
-  const fields = variantMeta(section.kind, section.variant)?.fields ?? [];
-  if (fields.length === 0) return null;
+  const meta = variantMeta(section.kind, section.variant);
+  const fields = meta?.fields ?? [];
+  // Nota apare si la variantele fara niciun reglaj: e singurul loc unde poate fi
+  // spus ca elementul care defineste designul se porneste din alt ecran.
+  const nota = meta?.note;
+  if (fields.length === 0 && !nota) return null;
 
   // Ce nu e salvat inca vine din valorile implicite ale variantei: designurile
   // salvate inainte de a exista un camp n-au cheia lui, iar un comutator care
   // citeste „nedefinit" s-ar desena stins desi magazinul il are aprins.
-  const implicite = variantMeta(section.kind, section.variant)?.defaults ?? {};
+  const implicite = meta?.defaults ?? {};
   const citeste = (cheie: string) =>
     cheie in section.settings ? section.settings[cheie] : implicite[cheie];
 
@@ -46,6 +50,11 @@ export function SectionSettings({
   return (
     <div className={cuTitlu ? "mt-4 pt-3 border-t border-border space-y-3" : "pt-4 space-y-4"}>
       {cuTitlu && <p className="text-xs font-semibold text-foreground">Setari</p>}
+      {nota && (
+        <p className="text-xs text-muted-foreground leading-relaxed rounded-lg bg-muted/50 px-3 py-2">
+          {nota}
+        </p>
+      )}
       {fields.filter(vizibil).map((f) => (
         <Control key={f.key} field={f} value={valoare(f)} onChange={(v) => seteaza(f.key, v)} />
       ))}

@@ -106,6 +106,28 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const mergiLaCos = useCallback(() => { window.location.href = cartHref(basePath); }, [basePath]);
   const mergiLaComanda = useCallback(() => { window.location.href = checkoutHref(basePath); }, [basePath]);
   const [cartOpen, setCartOpen] = useState(false);
+
+  /*
+   * `?cos=1` deschide sertarul la sosire.
+   *
+   * Butonul de cos de pe paginile fara catalog (produs, politici, pagini
+   * proprii) nu are unde sa deschida sertarul, deci trimite aici cu semnul
+   * asta. Fara el, clientul care adauga un produs de pe pagina lui ateriza in
+   * prima pagina a magazinului, fara sa vada ce a adaugat. Semnul se sterge
+   * imediat din adresa, ca reincarcarea sa nu redeschida sertarul.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("cos") !== "1") return;
+    // Adresa nu poate fi citita la randare: pe server nu exista, iar o stare
+    // initiala diferita ar da eroare de hidratare. Efectul e singurul loc.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCartOpen(true);
+    sp.delete("cos");
+    const qs = sp.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
+  }, []);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [recoverDiscountCode, setRecoverDiscountCode] = useState<string | null>(null);
   const [search, setSearch] = useState(initialSearch);

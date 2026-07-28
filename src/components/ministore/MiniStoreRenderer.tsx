@@ -17,8 +17,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
-import { radacinaMagazin } from "@/lib/storefront/category-href";
-import { cartHref, cartOnPage, checkoutHref, checkoutOnPage } from "@/lib/storefront/design/commerce";
+import { cartHref, cartOnPage, checkoutHref, checkoutOnPage, radacinaCatalog } from "@/lib/storefront/design/commerce";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
@@ -563,8 +562,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const storefront: StorefrontContextValue = {
     business,
     basePath,
-    // Catalogul e chiar pagina asta, deci radacina lui e radacina magazinului.
-    catalogRoot: radacinaMagazin(basePath),
+    // Pe pagina principala catalogul e chiar aici, dar linkurile de categorie
+    // trebuie sa duca unde il pune designul: cand exista pagina de magazin,
+    // acolo, nu inapoi in grila de aici.
+    catalogRoot: radacinaCatalog(basePath, design),
     isHome: true,
     color,
     pageContent,

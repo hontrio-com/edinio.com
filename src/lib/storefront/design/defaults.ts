@@ -206,6 +206,12 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
     product: {
       page: section("product_page", "product_page", "classic"),
     },
+    // Implicitul e „fara pagina separata": produsele raman pe pagina principala,
+    // exact ca pana acum. Aprins din start, ca alegerea unui design de pagina sa
+    // fie o singura apasare, nu doua.
+    shop: {
+      page: section("shop_page", "shop_page", "none"),
+    },
     commerce: {
       productCard: section("product_card", "product_card", "classic"),
       cartDrawer: section("cart_drawer", "cart_drawer", "classic"),

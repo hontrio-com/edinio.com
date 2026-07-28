@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
-import { cartHref, cartOnPage } from "@/lib/storefront/design/commerce";
+import { cartHref, cartOnPage, radacinaCatalog } from "@/lib/storefront/design/commerce";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { CartMode, StoreChromeValue } from "@/components/storefront/StorefrontProvider";
 import type {
@@ -75,10 +75,11 @@ export function buildChromeData({
   return {
     business,
     basePath,
-    // Catalogul sta azi la radacina magazinului. Se calculeaza aici, o singura
-    // data, ca cele ~12 componente care leaga o categorie sau o pagina de
-    // catalog sa nu il mai deduca fiecare din `basePath`.
-    catalogRoot: radacinaMagazin(basePath),
+    // Se calculeaza aici, o singura data, ca cele ~12 componente care leaga o
+    // categorie sau o pagina de catalog sa nu il mai deduca fiecare din
+    // `basePath`. Fara design — doar miniaturile din editor — ramane radacina
+    // magazinului, adica exact ce era inainte.
+    catalogRoot: design ? radacinaCatalog(basePath, design) : radacinaMagazin(basePath),
     isHome,
     color: business.primary_color ?? "#1AB554",
     pageContent,

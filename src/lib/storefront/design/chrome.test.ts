@@ -109,6 +109,28 @@ test("varianta implicita a cosului si a comenzii ramane panoul", () => {
   }
 });
 
+test("nicio sectiune nu declara o pagina drept prima varianta", () => {
+  // Acelasi motiv ca la testul de deasupra, dar general: fiecare sectiune care
+  // capata o varianta de tip pagina intra automat sub regula, fara sa fie nevoie
+  // ca cineva sa isi aminteasca sa adauge un test. Refugiul parserului
+  // (`firstVariant`) ajunge la magazine care n-au ales nimic, deci o pagina pusa
+  // prima ar deschide o ruta publica pe toate deodata.
+  for (const [kind, meta] of Object.entries(SECTION_REGISTRY)) {
+    const variante = Object.values(meta?.variants ?? {});
+    if (!variante.some((v) => v.surface === "page")) continue;
+    assert.notEqual(variante[0]?.surface, "page", `${kind} are o pagina ca prima varianta`);
+  }
+});
+
+test("implicitul paginii de magazin lasa produsele pe pagina principala", () => {
+  // Spre deosebire de cos, aici nu exista alternativa de tip panou: orice
+  // varianta in afara de asta e o pagina. Cheia trebuie sa ramana prima si fara
+  // `surface`, altfel ruta se deschide singura pe toate magazinele publicate.
+  const variante = SECTION_REGISTRY.shop_page?.variants ?? {};
+  assert.equal(Object.keys(variante)[0], "none");
+  assert.equal(variante.none?.surface, undefined);
+});
+
 test("designurile din catalog acopera si comertul, nu doar paginile", () => {
   // Gruparea din bara laterala a catalogului se face pe `scope`; un scope gresit
   // ar muta „Cos" in „Pagina magazinului".

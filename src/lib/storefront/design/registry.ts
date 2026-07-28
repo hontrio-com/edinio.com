@@ -139,7 +139,7 @@ export interface SectionMeta {
   label: string;
   /** Nume de iconita Lucide, rezolvat in editor. */
   icon: string;
-  scope: "chrome" | "home" | "product" | "commerce";
+  scope: "chrome" | "home" | "product" | "shop" | "commerce";
   /** Poate exista o singura instanta (header, footer, grila principala). */
   singleton: boolean;
   /** Poate fi stearsa din lista de sectiuni. */
@@ -679,6 +679,36 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           showTiers: true,
           showContact: true,
         },
+      },
+    },
+  },
+
+  // --- Pagina de catalog --------------------------------------------------
+  /**
+   * Unde stau produsele: pe pagina principala, ca pana acum, sau pe o pagina a
+   * lor, cu adresa proprie.
+   *
+   * ATENTIE: `none` trebuie sa ramana PRIMA cheie, si trebuie sa ramana fara
+   * `surface`. Parserul cade pe prima varianta declarata pentru orice
+   * configuratie pe care n-o recunoaste, iar slotul ajunge prin designul classic
+   * la absolut toate magazinele. O varianta de tip pagina pusa prima ar fi
+   * deschis, in ziua deployului, o ruta publica si crawlabila pe fiecare magazin
+   * publicat — inclusiv pe cele fara niciun produs, unde ar fi aratat un catalog
+   * gol. Nimeni n-ar fi apasat nimic. Acelasi avertisment ca la `cart_drawer`,
+   * cu o miza mai mare: acolo exista un panou ca alternativa, aici nu.
+   */
+  shop_page: {
+    label: "Pagina Magazin",
+    icon: "Store",
+    scope: "shop",
+    singleton: true,
+    removable: false,
+    variants: {
+      none: {
+        label: "Produsele stau pe pagina principala",
+        tags: ["clasic"],
+        layout: "contained",
+        fields: [],
       },
     },
   },

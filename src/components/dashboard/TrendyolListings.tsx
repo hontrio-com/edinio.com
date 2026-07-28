@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, Send, X } from "lucide-react";
 import {
-  getTrendyolProductPage, removeTrendyolListing, syncTrendyolProduct,
+  bulkPublishTrendyol, getTrendyolProductIds, getTrendyolProductPage, removeTrendyolListing, syncTrendyolProduct,
   type TrendyolProductPage, type TrendyolProductStatusFilter,
 } from "@/lib/actions/trendyol.actions";
 import { TrendyolListingEditor } from "@/components/dashboard/TrendyolListingEditor";
@@ -49,6 +49,19 @@ export function TrendyolListings({
   const [date, setDate] = useState<TrendyolProductPage | null>(null);
   const [incarca, setIncarca] = useState(true);
   const [eroare, setEroare] = useState<string | null>(null);
+
+  // Selectia traieste peste paginare: bifezi pe pagina 1, treci pe 2, bifezi si
+  // acolo, apoi trimiti tot. Un Set, nu un vector: verificarea e pe fiecare rand.
+  const [selectate, setSelectate] = useState<Set<string>>(new Set());
+  const [trimite, setTrimite] = useState(false);
+  const [progres, setProgres] = useState<{ facut: number; total: number } | null>(null);
+  const [raport, setRaport] = useState<{ submitted: number; failed: number; errors: { product: string; message: string }[] } | null>(null);
+
+  const comuta = (id: string) => setSelectate((p) => {
+    const n = new Set(p);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
 
   const aplicaRezultatul = useCallback((res: TrendyolProductPage | { error: string }) => {
     if ("error" in res) { setEroare(res.error); setDate(null); }
@@ -97,6 +110,62 @@ export function TrendyolListings({
     router.refresh();
   });
 
+  const idPagina = (date?.items ?? []).map((i) => i.id);
+  const totPagina = idPagina.length > 0 && idPagina.every((id) => selectate.has(id));
+
+  const comutaPagina = () => setSelectate((p) => {
+    const n = new Set(p);
+    if (totPagina) idPagina.forEach((id) => n.delete(id));
+    else idPagina.forEach((id) => n.add(id));
+    return n;
+  });
+
+  const selecteazaTot = () => startTransition(async () => {
+    const res = await getTrendyolProductIds(businessId, { q: cautare, category: categorie, status });
+    if ("error" in res) { toast.error(res.error); return; }
+    setSelectate(new Set(res.ids));
+    if (res.truncat) toast.info(`Am selectat primele ${res.ids.length}. Restrânge filtrele pentru restul.`);
+  });
+
+  /**
+   * Trimiterea in masa, pe transe.
+   *
+   * O singura actiune cu mii de produse ar depasi timpul functiei si s-ar opri
+   * fara sa spuna cat a apucat sa faca. Pe transe, progresul e vizibil si o transa
+   * cazuta nu le anuleaza pe cele deja trimise.
+   */
+  const trimiteSelectia = async () => {
+    const ids = [...selectate];
+    if (ids.length === 0) return;
+    if (!window.confirm(`Trimiți ${ids.length} ${ids.length === 1 ? "produs" : "produse"} pe Trendyol?`)) return;
+
+    setTrimite(true);
+    setRaport(null);
+    setProgres({ facut: 0, total: ids.length });
+    const cumulat = { submitted: 0, failed: 0, errors: [] as { product: string; message: string }[] };
+
+    for (let i = 0; i < ids.length; i += 100) {
+      const transa = ids.slice(i, i + 100);
+      const res = await bulkPublishTrendyol(businessId, transa);
+      if ("error" in res) { toast.error(res.error); break; }
+      cumulat.submitted += res.submitted;
+      cumulat.failed += res.failed;
+      cumulat.errors.push(...res.errors);
+      setProgres({ facut: Math.min(i + transa.length, ids.length), total: ids.length });
+    }
+
+    setTrimite(false);
+    setProgres(null);
+    setRaport(cumulat);
+    if (cumulat.submitted > 0) {
+      toast.success(`${cumulat.submitted} ${cumulat.submitted === 1 ? "produs trimis" : "produse trimise"} pe Trendyol.`);
+      setSelectate(new Set());
+    }
+    if (cumulat.failed > 0 && cumulat.submitted === 0) toast.error("Niciun produs nu a putut fi trimis.");
+    await incarcaPagina();
+    router.refresh();
+  };
+
   const areFiltre = cautare !== "" || categorie !== "" || status !== "toate";
   const total = date?.total ?? 0;
   const totalPagini = date?.totalPages ?? 1;
@@ -132,7 +201,13 @@ export function TrendyolListings({
       </div>
 
       <div className="flex items-center justify-between gap-3 mb-2 text-xs text-muted-foreground">
-        <span>
+        <span className="flex items-center gap-2">
+          {idPagina.length > 0 && (
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={totPagina} onChange={comutaPagina} className="rounded" />
+              Selectează pagina
+            </label>
+          )}
           {incarca ? "Se încarcă..." : (
             <>
               {total} {total === 1 ? "produs" : "produse"}
@@ -145,6 +220,51 @@ export function TrendyolListings({
             className="text-primary hover:underline">Șterge filtrele</button>
         )}
       </div>
+
+      {/* Bara de selecție: apare doar când există ceva selectat, ca să nu ocupe loc degeaba. */}
+      {selectate.size > 0 && (
+        <div className="flex items-center gap-3 flex-wrap rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 mb-3">
+          <span className="text-sm font-medium text-foreground">
+            {selectate.size} {selectate.size === 1 ? "produs selectat" : "produse selectate"}
+          </span>
+          {total > selectate.size && (
+            <button onClick={selecteazaTot} disabled={pending || trimite}
+              className="text-xs text-primary hover:underline disabled:opacity-60">
+              Selectează toate cele {total}
+            </button>
+          )}
+          <button onClick={() => setSelectate(new Set())} disabled={trimite}
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60">
+            Deselectează
+          </button>
+          <button onClick={trimiteSelectia} disabled={trimite}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
+            {trimite ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            {progres ? `Se trimite ${progres.facut}/${progres.total}...` : "Trimite pe Trendyol"}
+          </button>
+        </div>
+      )}
+
+      {/* Raportul rămâne pe ecran: la sute de produse, un toast trece prea repede. */}
+      {raport && (
+        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 mb-3 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-foreground">
+              {raport.submitted} trimise, {raport.failed} cu probleme. Aprobarea durează câteva ore.
+            </span>
+            <button onClick={() => setRaport(null)} className="text-muted-foreground hover:text-foreground" aria-label="Închide raportul">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {raport.errors.length > 0 && (
+            <ul className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+              {raport.errors.map((e, i) => (
+                <li key={i} className="text-red-600"><span className="font-medium">{e.product}:</span> {e.message}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {eroare && <p className="text-sm text-red-600 py-4">{eroare}</p>}
 
@@ -167,7 +287,9 @@ export function TrendyolListings({
           return (
             <div key={p.id} className="py-3">
               <div className="flex items-center justify-between gap-3">
-                <button onClick={() => setOpenId(isOpen ? null : p.id)} className="flex items-center gap-2 min-w-0 text-left">
+                <input type="checkbox" checked={selectate.has(p.id)} onChange={() => comuta(p.id)}
+                  className="rounded flex-shrink-0" aria-label={`Selectează ${p.name}`} />
+                <button onClick={() => setOpenId(isOpen ? null : p.id)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
                   {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{p.name}</p>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTrendyolItems, tvaPentruVitrina, verificaBarcode, type MappableProduct } from "./mapping";
 import { fereastraComenzi } from "./orders";
+import { grupeazaInLoturi } from "./sync";
 import { traduMesajTrendyol, mesajDupaStatus } from "./errors";
 import { coteTvaVitrina, curieriVitrina, esteAdresaDe, infoVitrina, tvaImplicitVitrina } from "./types";
 import type { TrendyolConfig } from "./types";
@@ -180,4 +181,44 @@ test("recunoastem forma reala a adreselor, nu doar campul din documentatia veche
   assert.equal(esteAdresaDe({ id: 1, shipmentAddress: true }, "Shipment"), true);
   assert.equal(esteAdresaDe({ id: 1, addressType: "Returning" }, "Returning"), true);
   assert.equal(esteAdresaDe({ id: 1, shipmentAddress: true }, "Returning"), false);
+});
+
+// ── Trimiterea in masa ────────────────────────────────────────────────────────
+// Serviciul de creare accepta pana la 1000 de articole intr-o cerere, deci o
+// selectie de 200 de produse pleaca in cateva cereri, nu in 200.
+
+function produsDeTrimis(id: string, nrVariante: number) {
+  return {
+    listingId: `l-${id}`,
+    mainId: id,
+    items: Array.from({ length: nrVariante }, (_, i) => ({ barcode: `${id}-${i}` } as never)),
+  };
+}
+
+test("mai multe produse intra in aceeasi cerere", () => {
+  const loturi = grupeazaInLoturi([produsDeTrimis("a", 2), produsDeTrimis("b", 3)], 200);
+  assert.equal(loturi.length, 1);
+  assert.equal(loturi[0].items.length, 5);
+  assert.deepEqual(loturi[0].mainIds, ["a", "b"]);
+});
+
+test("un produs nu se rupe intre doua cereri", () => {
+  // Variantele aceluiasi produs sunt legate prin productMainId: trimise separat,
+  // a doua cerere il suprascrie pe primul in catalogul Trendyol.
+  const loturi = grupeazaInLoturi([produsDeTrimis("a", 3), produsDeTrimis("b", 3)], 4);
+  assert.equal(loturi.length, 2);
+  for (const lot of loturi) {
+    assert.equal(lot.mainIds.length, 1);
+    assert.equal(lot.items.length, 3);
+  }
+});
+
+test("un produs mai mare decat plafonul pleaca totusi intreg", () => {
+  const loturi = grupeazaInLoturi([produsDeTrimis("mare", 250)], 200);
+  assert.equal(loturi.length, 1);
+  assert.equal(loturi[0].items.length, 250);
+});
+
+test("fara produse nu se trimite nicio cerere", () => {
+  assert.deepEqual(grupeazaInLoturi([], 200), []);
 });

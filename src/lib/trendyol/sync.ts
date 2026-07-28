@@ -10,10 +10,10 @@ import {
   createProducts, getApprovedProducts, getBatchResult, isTrendyolError, updatePriceInventory,
 } from "./client";
 import {
-  buildTrendyolItems, buildVariantPrices, resolveVariantQuantity, type MappableProduct,
-  type TrendyolListingEnrichment, type TrendyolVariantData,
+  buildTrendyolItems, buildVariantPrices, deriveVariantSlots, resolveVariantQuantity, verificaBarcode,
+  type MappableProduct, type TrendyolListingEnrichment, type TrendyolVariantData,
 } from "./mapping";
-import type { TrendyolConfig, TrendyolProductAttribute } from "./types";
+import type { TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 
 type Db = SupabaseClient<Database>;
@@ -158,6 +158,213 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
   await setListingStatus(admin, listing.id, "pending", { error: null, last_synced_at: new Date().toISOString() });
   if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "product", [listing.product_main_id]);
   return { ok: true, action: "submitted", batchRequestId };
+}
+
+// ── Listare din maparea categoriei ──────────────────────────────────────────────
+// Ca sa nu ceara o trecere prin editor pentru fiecare produs: categoria mapata da
+// categoria si brandul Trendyol, iar variantele produsului dau barcode-urile.
+// Folosit si de butonul din pagina produsului, si de trimiterea in masa.
+
+export interface ListingPregatit { listingId: string; creatAcum: boolean }
+
+export async function ensureListingFromMapping(
+  admin: Db, ctx: TrendyolSyncContext, product: MappableProduct,
+): Promise<ListingPregatit | { error: string }> {
+  const existing = await getListing(admin, ctx.businessId, product.id);
+  if (existing) return { listingId: existing.id, creatAcum: false };
+
+  const entry = product.category ? ctx.config.category_map?.[product.category] : undefined;
+  if (!entry?.category_id) {
+    return {
+      error: product.category
+        ? `Categoria „${product.category}" nu este mapată la Trendyol.`
+        : "Produsul nu are categorie.",
+    };
+  }
+  const brandId = entry.brand_id ?? ctx.config.brand_id;
+  if (!brandId) return { error: "Categoria nu are brand Trendyol ales." };
+
+  const slots = deriveVariantSlots(product);
+  for (const s of slots) {
+    const problema = verificaBarcode(s.barcode.trim());
+    if (problema) return { error: problema };
+  }
+
+  const now = new Date().toISOString();
+  const { data: up, error: upErr } = await admin.from("trendyol_listings").upsert(
+    {
+      business_id: ctx.businessId, product_id: product.id, product_main_id: product.id,
+      brand_id: brandId, category_id: entry.category_id,
+      attributes: ((entry.attributes ?? []) as unknown) as never,
+      dimensional_weight: null, cargo_company_id: null, updated_at: now,
+    } as never,
+    { onConflict: "business_id,product_main_id" },
+  ).select("id").single();
+  if (upErr || !up) return { error: "Eroare la pregătirea listării." };
+  const listingId = (up as { id: string }).id;
+
+  // Barcode-ul e identificatorul lui Trendyol: folosit de doua produse, al doilea
+  // il suprascrie pe primul in catalogul lor.
+  const barcodes = slots.map((s) => s.barcode.trim());
+  const { data: clash } = await admin.from("trendyol_variants")
+    .select("barcode, listing_id").eq("business_id", ctx.businessId).in("barcode", barcodes);
+  const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
+  if (conflict) {
+    return { error: `Barcode-ul „${(conflict as { barcode: string }).barcode}" este deja folosit de alt produs.` };
+  }
+
+  await admin.from("trendyol_variants").delete().eq("listing_id", listingId);
+  if (slots.length > 0) {
+    await admin.from("trendyol_variants").insert(slots.map((s) => ({
+      listing_id: listingId, business_id: ctx.businessId, product_id: product.id,
+      barcode: s.barcode.trim(), stock_code: null, attributes: [] as unknown as never,
+      quantity: null, list_price: null, sale_price: null, vat_rate: null, enabled: true,
+    })) as never);
+  }
+  return { listingId, creatAcum: true };
+}
+
+// ── Trimitere in masa ───────────────────────────────────────────────────────────
+// Trendyol accepta pana la 1000 de articole intr-o singura cerere de creare. Un
+// apel pe produs ar insemna 200 de cereri pentru 200 de produse — deci construim
+// articolele pentru toata selectia si le trimitem impreuna. Citirile din baza sunt
+// si ele grupate: altfel 200 de produse insemnau sute de interogari.
+
+/** Cate articole trimitem intr-o cerere. Sub plafonul lor, ca sa ramana loc de variante. */
+const ARTICOLE_PE_CERERE = 200;
+
+export interface BulkSyncOutcome {
+  submitted: number;
+  failed: number;
+  errors: { product: string; message: string }[];
+  batchRequestIds: string[];
+}
+
+interface ProdusDeTrimis { items: TrendyolProductItem[]; listingId: string; mainId: string }
+export interface LotTrendyol { items: TrendyolProductItem[]; listingIds: string[]; mainIds: string[] }
+
+/**
+ * Imparte produsele in cereri, fara sa rupa un produs in doua.
+ *
+ * Variantele aceluiasi produs sunt legate prin `productMainId`: trimise in loturi
+ * diferite, Trendyol le proceseaza ca doua produse distincte si a doua cerere il
+ * suprascrie pe primul. Deci un produs incape intreg intr-un lot, chiar daca lotul
+ * depaseste plafonul — un singur produs cu foarte multe variante e mai bine trimis
+ * intreg decat spart.
+ */
+export function grupeazaInLoturi(produse: ProdusDeTrimis[], maxArticole: number): LotTrendyol[] {
+  const loturi: LotTrendyol[] = [];
+  let curent: LotTrendyol = { items: [], listingIds: [], mainIds: [] };
+  for (const p of produse) {
+    if (curent.items.length > 0 && curent.items.length + p.items.length > maxArticole) {
+      loturi.push(curent);
+      curent = { items: [], listingIds: [], mainIds: [] };
+    }
+    curent.items.push(...p.items);
+    curent.listingIds.push(p.listingId);
+    curent.mainIds.push(p.mainId);
+  }
+  if (curent.items.length > 0) loturi.push(curent);
+  return loturi;
+}
+
+export async function syncProductsBulk(
+  admin: Db, ctx: TrendyolSyncContext, productIds: string[],
+): Promise<BulkSyncOutcome> {
+  const out: BulkSyncOutcome = { submitted: 0, failed: 0, errors: [], batchRequestIds: [] };
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (ids.length === 0) return out;
+
+  const { data: produse } = await admin
+    .from("products").select(PRODUCT_FIELDS).eq("business_id", ctx.businessId).in("id", ids);
+  const lista = (produse ?? []) as unknown as MappableProduct[];
+
+  // Fiecare produs isi pregateste listarea; erorile sunt per produs, ca sa nu
+  // pice toata selectia din cauza unuia fara categorie mapata.
+  const pregatite: { product: MappableProduct; listingId: string }[] = [];
+  for (const p of lista) {
+    if ((p as { is_active?: boolean }).is_active === false) {
+      out.failed++;
+      out.errors.push({ product: p.name, message: "Produs inactiv." });
+      continue;
+    }
+    const gata = await ensureListingFromMapping(admin, ctx, p);
+    if ("error" in gata) { out.failed++; out.errors.push({ product: p.name, message: gata.error }); continue; }
+    pregatite.push({ product: p, listingId: gata.listingId });
+  }
+  if (pregatite.length === 0) return out;
+
+  // Listarile si variantele, citite o singura data pentru toate.
+  const listingIds = pregatite.map((x) => x.listingId);
+  const [{ data: randuriListari }, { data: randuriVariante }] = await Promise.all([
+    admin.from("trendyol_listings")
+      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id")
+      .eq("business_id", ctx.businessId).in("id", listingIds),
+    admin.from("trendyol_variants")
+      .select("listing_id, barcode, stock_code, attributes, quantity, list_price, sale_price, vat_rate, enabled")
+      .in("listing_id", listingIds),
+  ]);
+  const listariDupaId = new Map((randuriListari ?? []).map((l) => [(l as ListingRow).id, l as ListingRow]));
+  const varianteDupaListare = new Map<string, TrendyolVariantData[]>();
+  for (const v of randuriVariante ?? []) {
+    const row = v as { listing_id: string } & Record<string, unknown>;
+    const arr = varianteDupaListare.get(row.listing_id) ?? [];
+    arr.push({
+      barcode: row.barcode as string,
+      stock_code: (row.stock_code as string | null) ?? null,
+      attributes: Array.isArray(row.attributes) ? (row.attributes as unknown as TrendyolProductAttribute[]) : [],
+      quantity: (row.quantity as number | null) ?? null,
+      list_price: (row.list_price as number | null) ?? null,
+      sale_price: (row.sale_price as number | null) ?? null,
+      vat_rate: (row.vat_rate as number | null) ?? null,
+      enabled: (row.enabled as boolean) ?? true,
+    });
+    varianteDupaListare.set(row.listing_id, arr);
+  }
+
+  // Constructia articolelor, pastrand legatura articol -> listare pentru statusuri.
+  const deTrimis: { items: TrendyolProductItem[]; listingId: string; mainId: string }[] = [];
+  for (const { product, listingId } of pregatite) {
+    const listing = listariDupaId.get(listingId);
+    if (!listing) { out.failed++; out.errors.push({ product: product.name, message: "Listare negăsită." }); continue; }
+    const built = buildTrendyolItems({
+      config: ctx.config, product, listing: toEnrichment(listing),
+      variants: varianteDupaListare.get(listingId) ?? [],
+    });
+    if ("error" in built) {
+      await setListingStatus(admin, listingId, "error", { error: built.error });
+      out.failed++;
+      out.errors.push({ product: product.name, message: built.error });
+      continue;
+    }
+    deTrimis.push({ items: built.items, listingId, mainId: listing.product_main_id });
+  }
+  if (deTrimis.length === 0) return out;
+
+  const loturi = grupeazaInLoturi(deTrimis, ARTICOLE_PE_CERERE);
+
+  const acum = new Date().toISOString();
+  for (const lot of loturi) {
+    const res = await createProducts(ctx.auth, lot.items);
+    if (isTrendyolError(res)) {
+      for (const listingId of lot.listingIds) await setListingStatus(admin, listingId, "error", { error: res.error });
+      out.failed += lot.listingIds.length;
+      // Un singur mesaj pe lot: e aceeasi eroare pentru toate produsele din el.
+      out.errors.push({ product: `${lot.listingIds.length} produse`, message: res.error });
+      continue;
+    }
+    for (const listingId of lot.listingIds) {
+      await setListingStatus(admin, listingId, "pending", { error: null, last_synced_at: acum });
+    }
+    out.submitted += lot.listingIds.length;
+    const batchRequestId = res.data?.batchRequestId;
+    if (batchRequestId) {
+      out.batchRequestIds.push(batchRequestId);
+      await recordBatch(admin, ctx.businessId, batchRequestId, "product", lot.mainIds);
+    }
+    await pause(200);
+  }
+  return out;
 }
 
 // ── Inventory / price push (also used to deactivate by zeroing stock) ───────────

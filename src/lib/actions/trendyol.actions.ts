@@ -24,7 +24,7 @@ import {
 } from "@/lib/trendyol/taxonomy";
 import { indexeazaFrunze, potrivesteIndexat, type PotrivireCategorie } from "@/lib/trendyol/category-match";
 import { sugereazaAtribute, type SugestieAtribut, type ValoriAtribut } from "@/lib/trendyol/attribute-autofill";
-import { loadTrendyolContext, removeProductNow, syncProductNow } from "@/lib/trendyol/sync";
+import { loadTrendyolContext, removeProductNow, syncProductNow, syncProductsBulk } from "@/lib/trendyol/sync";
 import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
 import { deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
 import type {
@@ -836,6 +836,11 @@ export interface TrendyolListingRow {
 // să lăsăm impresia că atât există.
 
 const TRENDYOL_PAGE_SIZE = 25;
+// Cate produse trimitem intr-o apasare. Clientul imparte selectia in transe si
+// arata progresul: o singura actiune cu mii de produse ar depasi timpul functiei.
+const MAX_TRANSA = 100;
+// Plafonul pentru „selecteaza toate cele N".
+const MAX_SELECTIE = 2000;
 /** Plafon de parcurgere pentru filtrul „nelistate" (fara echivalent SQL direct). */
 const MAX_PARCURGERE = 5000;
 
@@ -975,6 +980,62 @@ export async function getTrendyolProductPage(
     total: nelistate.length, page, pageSize,
     totalPages: Math.max(1, Math.ceil(nelistate.length / pageSize)), truncat,
   };
+}
+
+/**
+ * Toate id-urile care se potrivesc filtrelor, pentru „selectează tot".
+ *
+ * Separată de pagină fiindcă selecția „toate cele N" nu are voie să depindă de ce
+ * s-a întâmplat să fie afișat. Plafonată: peste atât, comerciantul le ia în tranșe.
+ */
+export async function getTrendyolProductIds(
+  businessId: string, filters: TrendyolProductFilters = {},
+): Promise<{ ids: string[]; truncat: boolean } | { error: string }> {
+  const strans: string[] = [];
+  let truncat = false;
+  for (let page = 1; page <= Math.ceil(MAX_SELECTIE / TRENDYOL_PAGE_SIZE); page++) {
+    const res = await getTrendyolProductPage(businessId, { ...filters, page });
+    if ("error" in res) return res;
+    strans.push(...res.items.map((i) => i.id));
+    if (page >= res.totalPages) break;
+    if (strans.length >= MAX_SELECTIE) { truncat = true; break; }
+  }
+  return { ids: strans.slice(0, MAX_SELECTIE), truncat };
+}
+
+/**
+ * Trimite mai multe produse deodată pe Trendyol.
+ *
+ * Articolele întregii tranșe pleacă într-o singură cerere de creare (serviciul lor
+ * acceptă până la 1000), nu una pe produs. Produsele care nu se pot construi —
+ * categorie nemapată, fără brand, barcode invalid — sunt raportate individual, ca
+ * să nu pice toată tranșa din cauza unuia.
+ */
+export async function bulkPublishTrendyol(
+  businessId: string, productIds: string[],
+): Promise<{ submitted: number; failed: number; errors: { product: string; message: string }[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(g.supabase, businessId);
+  const gata = trendyolReadinessError(config);
+  if (gata) return { error: gata };
+
+  const ids = [...new Set((productIds ?? []).filter(Boolean))].slice(0, MAX_TRANSA);
+  if (ids.length === 0) return { error: "Niciun produs selectat." };
+
+  const admin = createAdminClient();
+  const ctx = await loadTrendyolContext(admin, businessId);
+  if (!ctx) return { error: "Conexiunea Trendyol nu este disponibilă. Reconectează contul." };
+
+  const res = await syncProductsBulk(admin, ctx, ids);
+  logError({
+    action: "trendyol.bulkPublish",
+    message: `submitted=${res.submitted} failed=${res.failed}`,
+    details: { businessId, cerute: ids.length }, businessId, userId: g.userId, severity: "info",
+  });
+  revalidatePath(FEATURE_PATH);
+  revalidatePath("/dashboard/products");
+  return { submitted: res.submitted, failed: res.failed, errors: res.errors.slice(0, 20) };
 }
 
 export async function getTrendyolListings(businessId: string): Promise<TrendyolListingRow[]> {

@@ -53,7 +53,7 @@ test("catalogul de design-uri contine exact zonele pentru care facem variante", 
     .filter(([, m]) => m?.inCatalog)
     .map(([k]) => k)
     .sort();
-  assert.deepEqual(inCatalog, ["cart_drawer", "checkout", "footer", "header", "hero", "product_page"]);
+  assert.deepEqual(inCatalog, ["cart_drawer", "checkout", "footer", "header", "hero", "product_page", "shop_page"]);
 });
 
 test("hero-ul cu bara de categorii isi declara pragul minim", () => {

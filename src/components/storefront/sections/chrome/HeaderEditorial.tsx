@@ -8,7 +8,7 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shared/Marquee";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
@@ -192,7 +192,7 @@ function BandaAnunt() {
  */
 function CampCautare({ onInchide }: { onInchide: () => void }) {
   const { catalogRoot } = useStoreChrome();
-  const catalog = useStorefrontOptional();
+  const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const camp = useRef<HTMLInputElement>(null);
   const valoare = catalog ? catalog.search : local;

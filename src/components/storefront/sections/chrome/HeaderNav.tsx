@@ -9,7 +9,7 @@ import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -247,7 +247,7 @@ function MeniuInline({
  */
 function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => void }) {
   const { catalogRoot } = useStoreChrome();
-  const catalog = useStorefrontOptional();
+  const catalog = useCatalogCautabil();
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const panou = useRef<HTMLDivElement>(null);

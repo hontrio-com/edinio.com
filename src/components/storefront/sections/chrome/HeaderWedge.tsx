@@ -8,7 +8,7 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -146,7 +146,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
  */
 function PanouCautare({ onInchide }: { onInchide: () => void }) {
   const { catalogRoot } = useStoreChrome();
-  const catalog = useStorefrontOptional();
+  const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const camp = useRef<HTMLInputElement>(null);
 

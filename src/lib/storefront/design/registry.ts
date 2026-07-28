@@ -290,6 +290,64 @@ const CART_PAGE_FIELDS: Field[] = [
 
 const CART_PAGE_DEFAULTS = { showProgress: true, showRecommendations: true };
 
+/**
+ * Grupurile de filtre ale paginii de catalog.
+ *
+ * Sunt STATICE, desi valorile dinauntru vin din produsele fiecarui magazin:
+ * comerciantul alege ce FELURI de filtre se vad si in ce ordine, nu ce valori.
+ * Asa reglajul incape in campul de tip `actions`, care stie deja sa pastreze
+ * ordinea si sa adauge la coada un grup aparut mai tarziu — fara un tip de camp
+ * nou, cu optiuni venite din date.
+ */
+export const GRUPURI_FILTRE = [
+  { value: "categorii", label: "Categorii" },
+  { value: "pret", label: "Pret, reduceri si stoc" },
+  { value: "atribute", label: "Atribute (marime, culoare)" },
+  { value: "brand", label: "Brand" },
+  { value: "etichete", label: "Etichete" },
+  { value: "specificatii", label: "Specificatii" },
+];
+
+/**
+ * Ce trebuie sa stie comerciantul dupa ce alege un design de pagina de catalog.
+ *
+ * Alegerea nu schimba doar aspectul: muta produsele de pe pagina principala,
+ * deci merita spus raspicat, inainte de a fi publicata.
+ */
+const SHOP_NOTA =
+  "Produsele se muta pe o pagina proprie, cu adresa ei. Pagina principala ramane cu hero, randurile de produse si restul sectiunilor, iar linkurile de categorie duc la pagina noua.";
+
+/**
+ * Reglajele comune celor trei modele.
+ *
+ * Doar ce tine de PAGINA. Ce produse se vad — ascunde-le pe cele fara imagini
+ * sau fara stoc — ramane in „Editeaza magazinul", unde era: aceeasi decizie in
+ * doua locuri inseamna, mai devreme sau mai tarziu, un comerciant care stinge
+ * unul si nu intelege de ce lucrul ramane aprins.
+ */
+const SHOP_FIELDS: Field[] = [
+  { key: "titlu", type: "text", label: "Titlul paginii", placeholder: "Toate produsele", maxLength: 60 },
+  {
+    key: "arataTitlu", type: "toggle", label: "Arata titlul",
+    help: "Stins, titlul ramane doar pentru cititoarele de ecran si pentru Google.",
+  },
+  {
+    key: "coloane", type: "select", label: "Cate produse pe rand",
+    options: [
+      { value: "3", label: "3" },
+      { value: "4", label: "4" },
+      { value: "5", label: "5" },
+    ],
+  },
+  {
+    key: "filtre", type: "actions", label: "Filtre",
+    help: "Ordinea si care se vad. Cele fara date in produse lipsesc oricum.",
+    options: GRUPURI_FILTRE,
+  },
+];
+
+const SHOP_DEFAULTS = { titlu: "Toate produsele", arataTitlu: true };
+
 export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   // --- Chrome -------------------------------------------------------------
   announcement: {
@@ -703,12 +761,47 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "shop",
     singleton: true,
     removable: false,
+    inCatalog: true,
     variants: {
       none: {
         label: "Produsele stau pe pagina principala",
         tags: ["clasic"],
         layout: "contained",
+        previewHeight: 420,
         fields: [],
+      },
+      sidebar: {
+        label: "Filtre in bara laterala",
+        tags: ["clasic", "detaliat"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        providesH1: true,
+        note: SHOP_NOTA,
+        fields: SHOP_FIELDS,
+        defaults: { ...SHOP_DEFAULTS, coloane: "4" },
+      },
+      toolbar: {
+        label: "Filtre in capul paginii",
+        tags: ["simplu", "elegant"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        providesH1: true,
+        note: SHOP_NOTA,
+        fields: SHOP_FIELDS,
+        defaults: { ...SHOP_DEFAULTS, coloane: "4" },
+      },
+      compact: {
+        label: "Compact, pentru cataloage mari",
+        tags: ["compact", "indraznet"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        providesH1: true,
+        note: SHOP_NOTA,
+        fields: SHOP_FIELDS,
+        defaults: { ...SHOP_DEFAULTS, coloane: "5" },
       },
     },
   },

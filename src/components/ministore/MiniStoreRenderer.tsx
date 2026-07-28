@@ -17,7 +17,15 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
-import { cartHref, cartOnPage, checkoutHref, checkoutOnPage, radacinaCatalog } from "@/lib/storefront/design/commerce";
+import { hrefCategorie } from "@/lib/storefront/category-href";
+import {
+  cartHref, cartOnPage, checkoutHref, checkoutOnPage, radacinaCatalog, sectiuniAcasa, shopOnPage,
+} from "@/lib/storefront/design/commerce";
+import {
+  indiciSelectati, numaraSelectia, trecefiltrele,
+  type Fateta, type SelectieFatete,
+} from "@/lib/storefront/catalog/facets";
+import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
@@ -84,9 +92,29 @@ interface Props {
    * suprascris live prin postMessage, fara salvare si fara reincarcare.
    */
   preview?: boolean;
+  /**
+   * Care suprafata de magazin se randeaza: pagina principala sau pagina de
+   * catalog.
+   *
+   * Amandoua au nevoie de EXACT aceeasi masinarie — un singur `CartProvider`, un
+   * singur sertar, aceleasi filtre, acelasi quick-add, aceiasi pixeli — si
+   * difera doar prin sectiunile pe care le arata. Doua componente ar fi insemnat
+   * doua copii ale acelei masinarii, iar prima diferenta strecurata intre ele ar
+   * fi fost un al doilea `CartProvider`: numarul din cos ar fi inghetat in
+   * header, fiindca evenimentul `storage` nu se declanseaza in fila care scrie.
+   */
+  surface?: "home" | "shop";
+  /** Fatetele calculate pe server. Doar pagina de catalog le cere. */
+  fatete?: Fateta[];
+  jetoane?: string[];
+  /** Filtrele venite din adresa, ca un link partajat sa arate acelasi catalog. */
+  initialSelectieFatete?: SelectieFatete;
+  initialPriceMin?: string;
+  initialPriceMax?: string;
+  initialInStock?: boolean;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", fatete = [], jetoane = [], initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -103,6 +131,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const cosPePagina = cartOnPage(design);
   const comandaPePagina = checkoutOnPage(design);
   const basePath = basePathProp ?? `/${business.slug}`;
+  /*
+   * Catalogul si-a luat pagina lui, iar noi randam pagina principala.
+   *
+   * Din semnul asta ies trei lucruri: grila si bara de cautare nu se mai
+   * randeaza aici, cautarea din header navigheaza in loc sa filtreze, iar
+   * apasarea unei categorii duce la pagina de catalog. Fara el, fiecare dintre
+   * cele trei ar fi schimbat o stare pe care n-o vede nimeni.
+   */
+  const catalogMutat = surface === "home" && shopOnPage(design);
+  const catalogRootPagina = radacinaCatalog(basePath, design);
   const mergiLaCos = useCallback(() => { window.location.href = cartHref(basePath); }, [basePath]);
   const mergiLaComanda = useCallback(() => { window.location.href = checkoutHref(basePath); }, [basePath]);
   const [cartOpen, setCartOpen] = useState(false);
@@ -178,11 +216,34 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Product filters (price range, variant options, on-sale, in-stock)
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [priceMin, setPriceMin] = useState("");
-  const [priceMax, setPriceMax] = useState("");
+  const [priceMin, setPriceMin] = useState(initialPriceMin);
+  const [priceMax, setPriceMax] = useState(initialPriceMax);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [onSaleOnly, setOnSaleOnly] = useState(initialOnSale);
-  const [inStockOnly, setInStockOnly] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(initialInStock);
+  /*
+   * Fatetele bogate stau intr-o stare SEPARATA de `selectedOptions`.
+   *
+   * Cele doua se aduna la filtrare, dar nu se amesteca: pagina principala
+   * ramane exact pe filtrele ei de azi (optiuni de varianta derivate din
+   * payload-ul slimuit), iar pagina de catalog foloseste fatetele calculate pe
+   * server, care includ brandul si specificatiile. Unificate acum, orice
+   * greseala din regula de calitate a fatetelor s-ar fi vazut si in filtrele
+   * deja folosite ale paginii principale.
+   */
+  const [selectieFatete, setSelectieFatete] = useState<SelectieFatete>(initialSelectieFatete ?? {});
+  const selectieIndici = useMemo(() => indiciSelectati(selectieFatete, jetoane), [selectieFatete, jetoane]);
+
+  const comutaFateta = useCallback((cheie: string, valoare: string) => {
+    setSelectieFatete((prev) => {
+      const cur = prev[cheie] ?? [];
+      const next = cur.includes(valoare) ? cur.filter((v) => v !== valoare) : [...cur, valoare];
+      const out = { ...prev };
+      if (next.length) out[cheie] = next;
+      else delete out[cheie];
+      return out;
+    });
+  }, []);
 
   function toggleOption(name: string, value: string) {
     setSelectedOptions((prev) => {
@@ -200,10 +261,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     setSelectedOptions({});
     setOnSaleOnly(false);
     setInStockOnly(false);
+    setSelectieFatete({});
   }
   const activeFilterCount =
     (priceMin.trim() || priceMax.trim() ? 1 : 0) +
     Object.values(selectedOptions).reduce((s, v) => s + v.length, 0) +
+    numaraSelectia(selectieFatete) +
     (onSaleOnly ? 1 : 0) +
     (inStockOnly ? 1 : 0);
   const { addItem, count, total, restoreCart, items: cartItemsForTracking } = useCart();
@@ -288,13 +351,20 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     && (resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url).banners.length > 0
       || !!business.tagline);
 
+  // Grila si bara de cautare se muta pe pagina de catalog cand exista una.
+  // Regula sta in `commerce.ts`, langa gate, ca sa fie una singura si testabila.
+  const sectiuniDeAcasa = useMemo(() => sectiuniAcasa(design), [design]);
+
   // H1-ul paginii de magazin traieste in hero, singura sectiune care il emite si
   // in acelasi timp se poate stinge si sterge. Cand nicio sectiune activa nu il
   // declara, il punem noi, ascuns: o pagina fara niciun titlu de nivel unu isi
   // pierde titlul in rezultatele cautarii.
-  const areTitluDePagina = design.home.some(
-    (s) => s.enabled && variantMeta(s.kind, s.variant)?.providesH1 === true,
-  );
+  // Pe pagina de catalog H1-ul il emite chiar varianta aleasa, deci fallback-ul
+  // ascuns n-are ce cauta acolo; scanarea listei paginii principale n-ar fi
+  // gasit-o oricum, fiindca slotul e in afara lui `design.home`.
+  const areTitluDePagina = surface === "shop"
+    ? variantMeta("shop_page", design.shop.page.variant)?.providesH1 === true
+    : sectiuniDeAcasa.some((s) => s.enabled && variantMeta(s.kind, s.variant)?.providesH1 === true);
   const showCategoryBadges = pageContent.show_category_badges !== false; // category chip on product cards
 
   // Vizibilitate catalog (opt-in din editor): ascunde produsele fara imagini
@@ -375,11 +445,19 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const hasAnyCategoryImage = catTree.hasAnyImage;
 
   function selectCategoryItem(item: { id: string | null; name: string; hasChildren: boolean }) {
+    if (catalogMutat) {
+      window.location.href = hrefCategorie(catalogRootPagina, item.name);
+      return;
+    }
     // Drill into a category that has subcategories; otherwise just filter by it.
     if (item.hasChildren && item.id) setDrillParentId(item.id);
     setCategoryFilter(item.name);
   }
   function resetCategory() {
+    if (catalogMutat) {
+      window.location.href = catalogRootPagina;
+      return;
+    }
     setCategoryFilter("toate");
     setDrillParentId(null);
   }
@@ -402,6 +480,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   }, [pageContent.product_sections, visibleProducts, catTree.subtreeByName]);
 
   function viewAllCategory(category: string) {
+    // Ancora `#produse` traieste pe grila. Mutata, „Vezi toate" ar fi derulat
+    // catre `null`, adica n-ar fi facut nimic si n-ar fi dat nicio eroare.
+    if (catalogMutat) {
+      window.location.href = hrefCategorie(catalogRootPagina, category);
+      return;
+    }
     setCategoryFilter(category);
     setDrillParentId(null);
     if (typeof document !== "undefined") {
@@ -477,7 +561,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           return s ? vals.some((v) => s.has(v)) : false;
         });
       }
-      return matchesSearch && matchesCategory && matchesPrice && matchesSale && matchesStock && matchesOptions;
+      const matchesFatete = trecefiltrele(p.f, selectieIndici);
+      return matchesSearch && matchesCategory && matchesPrice && matchesSale && matchesStock && matchesOptions && matchesFatete;
     });
     // Sort. "relevance" only exists while a search is active (see effectiveSort).
     if (searchMatches && effectiveSort === "relevance") {
@@ -494,7 +579,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       case "newest": default: list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
     }
     return list;
-  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly]);
+  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici]);
 
   const PRODUCTS_PER_PAGE = 20;
   const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
@@ -503,12 +588,25 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     currentPage * PRODUCTS_PER_PAGE,
   );
 
-  // GA4 view_item_list for the visible catalog page (fires on filter / page change).
+  /*
+   * GA4 `view_item_list` pentru pagina de catalog vizibila.
+   *
+   * Lista se numeste dupa SUPRAFATA, nu „catalog" peste tot: cu doua suprafete
+   * care arata produse, un singur nume ar fi amestecat in rapoarte grila de pe
+   * pagina principala cu pagina de catalog, iar comerciantul n-ar mai fi putut
+   * compara. Semnatura opreste si trimiterile repetate: efectul depinde de
+   * `filteredProducts`, care se recalculeaza la fiecare cautare asezata, deci o
+   * cautare de opt litere emitea pana la opt evenimente pentru aceeasi lista.
+   */
+  const listaTrimisa = useRef("");
   useEffect(() => {
     if (paginatedProducts.length === 0) return;
+    const semnatura = `${currentPage}:${paginatedProducts.map((p) => p.id).join(",")}`;
+    if (listaTrimisa.current === semnatura) return;
+    listaTrimisa.current = semnatura;
     gtagEvent("view_item_list", {
-      item_list_id: "catalog",
-      item_list_name: "Produse",
+      item_list_id: surface === "shop" ? "pagina_magazin" : "catalog",
+      item_list_name: surface === "shop" ? "Pagina Magazin" : "Produse",
       items: paginatedProducts.map((p, i) => ({ item_id: p.id, item_name: p.name, price: Number(p.price) || 0, index: (currentPage - 1) * PRODUCTS_PER_PAGE + i, quantity: 1 })),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -520,7 +618,35 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   useEffect(() => {
     if (filtersInitRef.current) { filtersInitRef.current = false; return; }
     goToPage(1);
-  }, [search, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, goToPage]);
+  }, [search, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieFatete, goToPage]);
+
+  /*
+   * Filtrele traiesc si in adresa, nu doar in stare.
+   *
+   * Pe pagina principala grila e o parte a unei pagini de prezentare si nimeni
+   * nu trimite mai departe „pagina 3 filtrata"; pe o pagina care se numeste
+   * Magazin si isi face reclama cu filtrare pe atribute, un link care nu poarta
+   * filtrele e un bug raportat. Se scrie cu `replaceState`, ca butonul Inapoi sa
+   * ramana al paginilor, nu al fiecarei bife.
+   */
+  useEffect(() => {
+    if (surface !== "shop" || typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    for (const cheie of [...sp.keys()]) {
+      if (cheie === "cat" || cheie === "q" || cheie === "page") continue;
+      sp.delete(cheie);
+    }
+    for (const [cheie, valori] of Object.entries(selectieFatete)) {
+      if (valori.length) sp.set(cheie, valori.join("|"));
+    }
+    if (priceMin.trim()) sp.set("pmin", priceMin.trim());
+    if (priceMax.trim()) sp.set("pmax", priceMax.trim());
+    if (onSaleOnly) sp.set("sale", "1");
+    if (inStockOnly) sp.set("stoc", "1");
+    if (sortTouched && sort) sp.set("sort", sort);
+    const qs = sp.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+  }, [surface, selectieFatete, priceMin, priceMax, onSaleOnly, inStockOnly, sort, sortTouched]);
 
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).
@@ -562,11 +688,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const storefront: StorefrontContextValue = {
     business,
     basePath,
-    // Pe pagina principala catalogul e chiar aici, dar linkurile de categorie
-    // trebuie sa duca unde il pune designul: cand exista pagina de magazin,
-    // acolo, nu inapoi in grila de aici.
-    catalogRoot: radacinaCatalog(basePath, design),
-    isHome: true,
+    // Linkurile de categorie duc unde pune designul catalogul: cand exista
+    // pagina de magazin, acolo, nu inapoi in grila paginii principale.
+    catalogRoot: catalogRootPagina,
+    isHome: surface === "home",
+    // Pagina principala fara grila nu mai poate filtra pe loc: cautarea din
+    // header trebuie sa navigheze, nu sa scrie intr-o lista pe care n-o vede
+    // nimeni. Vezi `useCatalogCautabil`.
+    filtreazaPeLoc: !catalogMutat,
     color,
     pageContent,
     features,
@@ -604,6 +733,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     activeFilterCount,
     resetFilters,
     facets,
+    fatete,
+    selectieFatete,
+    comutaFateta,
     priceMin,
     setPriceMin,
     priceMax,
@@ -659,7 +791,13 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           {business.tagline ? ` - ${business.tagline}` : ""}
         </h1>
       )}
-      <SectionRenderer sections={design.home} />
+      {surface === "shop" ? (
+        <main>
+          <ShopPageSection variant={design.shop.page.variant} setari={design.shop.page.settings} />
+        </main>
+      ) : (
+        <SectionRenderer sections={sectiuniDeAcasa} />
+      )}
 
       <ChromeSection section={design.chrome.footer} />
 

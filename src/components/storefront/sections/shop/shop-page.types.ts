@@ -14,6 +14,8 @@ export interface ShopPageProps {
   titlu: string;
   /** Cate coloane are grila pe ecran mare. */
   coloane: number;
+  /** Cate coloane are pe telefon. Una singura da carduri mari, cu imagine lata. */
+  coloaneMobil: number;
   /**
    * Grupurile de filtre pornite, in ordinea aleasa de comerciant.
    *

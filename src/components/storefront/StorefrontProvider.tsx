@@ -3,6 +3,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { ProductSection } from "@/lib/store-sections";
 import type { Fateta, SelectieFatete } from "@/lib/storefront/catalog/facets";
+import type { SetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type {
@@ -192,6 +193,15 @@ export interface StorefrontContextValue extends StoreChromeValue {
    * si nimic n-ar fi semnalat-o.
    */
   interogareFiltre: string;
+  /**
+   * Reglajele paginii de catalog, cu implicitele deja aplicate.
+   *
+   * Le citesc si `MiniStoreRenderer` (cate produse pe pagina, felul paginarii) si
+   * modelele de pagina (antet, filtre, sortari, text). Normalizate intr-un
+   * singur loc, ca cele doua sa nu aplice implicite diferite pentru acelasi camp
+   * lipsa. Pe pagina principala sunt implicitele si nu le citeste nimeni.
+   */
+  setariMagazin: SetariMagazin;
   priceMin: string;
   setPriceMin: (v: string) => void;
   priceMax: string;

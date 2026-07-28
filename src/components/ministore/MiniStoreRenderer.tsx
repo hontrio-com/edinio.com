@@ -25,6 +25,7 @@ import {
   indiciSelectati, numaraSelectia, trecefiltrele,
   type Fateta, type SelectieFatete,
 } from "@/lib/storefront/catalog/facets";
+import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { scrieFiltre } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
@@ -158,6 +159,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * cele trei ar fi schimbat o stare pe care n-o vede nimeni.
    */
   const catalogMutat = surface === "home" && shopOnPage(design);
+  // Setarile paginii de catalog, cu implicitele aplicate. Aceleasi valori le
+  // citeste si modelul de pagina, dintr-un singur loc: citite separat, cele
+  // doua ar aplica implicite diferite pentru acelasi camp lipsa, iar un catalog
+  // care numara 24 pe pagina cu o paginare care crede 20 arata pagini goale.
+  const setariMagazin = useMemo(() => citesteSetariMagazin(design), [design]);
   const catalogRootPagina = radacinaCatalog(basePath, design);
   const mergiLaCos = useCallback(() => { window.location.href = cartHref(basePath); }, [basePath]);
   const mergiLaComanda = useCallback(() => { window.location.href = checkoutHref(basePath); }, [basePath]);
@@ -354,9 +360,17 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Sorting is a standard storefront feature — always shown. Honour the saved
   // default sort if present, otherwise newest-first.
   const defaultSort = pageContent.sort_options?.default_sort ?? "newest";
-  // Sortarea din adresa bate implicitul magazinului: un link partajat trebuie
-  // sa arate lista in aceeasi ordine ca cea din care a fost copiat.
-  const [sort, setSort] = useState<string>(initialSort || defaultSort);
+  /*
+   * Ordinea: ce cere adresa, apoi ce a ales comerciantul pentru pagina de
+   * catalog, apoi implicitul magazinului.
+   *
+   * Setarea de pagina CADE pe cea globala cand e goala, nu o dubleaza: doua
+   * comutatoare pentru acelasi lucru inseamna, mai devreme sau mai tarziu, un
+   * comerciant care stinge unul si nu intelege de ce lucrul ramane aprins.
+   */
+  const [sort, setSort] = useState<string>(
+    initialSort || (surface === "shop" ? setariMagazin.sortareImplicita : "") || defaultSort,
+  );
   // While a search is active and no sort was explicitly chosen, results order
   // by relevance — surfaced as a visible "Relevanta" option in the dropdown.
   const [sortTouched, setSortTouched] = useState(!!initialSort);
@@ -604,10 +618,26 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     return list;
   }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici]);
 
-  const PRODUCTS_PER_PAGE = 20;
-  const totalPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
+  /*
+   * Cate produse intra pe o pagina, si cum se ajunge la urmatoarele.
+   *
+   * Pagina principala ramane pe douazeci, cat avea inainte sa existe reglajul:
+   * un magazin nu trebuie sa vada alta densitate doar fiindca a aparut o setare
+   * pe alta pagina. Pagina de catalog citeste ce a ales comerciantul.
+   */
+  const PRODUCTS_PER_PAGE = surface === "shop" ? setariMagazin.perPage : 20;
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  /*
+   * La „incarca mai multe" si la derulare, paginile se ADUNA in loc sa se
+   * inlocuiasca: `currentPage` inseamna acolo „cate pagini s-au incarcat".
+   *
+   * Numarul ramane scris in adresa la toate trei modurile, deci un link
+   * partajat reface exact cat vazuse expeditorul, iar linkurile de paginare
+   * raman crawlabile — doar ca la modurile care aduna sunt ascunse vizual.
+   */
+  const aduna = surface === "shop" && setariMagazin.modPaginare !== "pagini";
   const paginatedProducts = filteredProducts.slice(
-    (currentPage - 1) * PRODUCTS_PER_PAGE,
+    aduna ? 0 : (currentPage - 1) * PRODUCTS_PER_PAGE,
     currentPage * PRODUCTS_PER_PAGE,
   );
 
@@ -827,6 +857,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     selectieFatete,
     comutaFateta,
     interogareFiltre,
+    setariMagazin,
     priceMin,
     setPriceMin,
     priceMax,

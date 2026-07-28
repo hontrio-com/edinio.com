@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import {
-  AntetPagina, CategoriiSus, CautareCatalog, FiltreActive, FiltrePeTelefon,
+  AntetPagina, ImagineAntet, TextSubGrila, CategoriiSus, CautareCatalog, FiltreActive, FiltrePeTelefon,
   FiltreDeBaza, GrilaProduse, GrupFatete, NumarRezultate, Paginare, Sortare,
 } from "./_shared/ShopPieces";
 import type { ShopPageProps } from "./shop-page.types";
@@ -58,7 +58,7 @@ function PanouFateta({ eticheta, copii, cateBifate }: { eticheta: string; copii:
   );
 }
 
-export function ShopPageToolbar({ titlu, coloane, grupuriPornite, arataTitlu }: ShopPageProps) {
+export function ShopPageToolbar({ titlu, coloane, coloaneMobil, grupuriPornite, arataTitlu }: ShopPageProps) {
   const { fatete, selectieFatete, priceMin, priceMax, onSaleOnly, inStockOnly } = useStorefront();
   const arata = (g: string) => grupuriPornite.includes(g);
   const numeGrup: Record<string, string> = {
@@ -69,6 +69,7 @@ export function ShopPageToolbar({ titlu, coloane, grupuriPornite, arataTitlu }: 
   return (
     <div className="mx-auto px-4 py-8" style={{ maxWidth: "var(--st-container)" }}>
       <div className="mb-5 space-y-3">
+        <ImagineAntet />
         <AntetPagina titlu={titlu} aratatTitlu={arataTitlu} />
         <CautareCatalog />
         {arata("categorii") && <CategoriiSus />}
@@ -101,8 +102,9 @@ export function ShopPageToolbar({ titlu, coloane, grupuriPornite, arataTitlu }: 
       </div>
       <div className="mb-4"><FiltreActive /></div>
 
-      <GrilaProduse coloane={coloane} />
+      <GrilaProduse coloane={coloane} coloaneMobil={coloaneMobil} />
       <Paginare />
+      <TextSubGrila />
     </div>
   );
 }

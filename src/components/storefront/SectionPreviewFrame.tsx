@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { CartDemoProvider, CartProvider } from "@/components/storefront/cart/CartProvider";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
+import { citesteSetariMagazinDinSectiune } from "@/lib/storefront/catalog/shop-settings";
 import { PreviewSection } from "@/components/storefront/SectionRenderer";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { CHECKOUT_DEMO } from "@/components/storefront/sections/checkout/checkout-preview";
@@ -144,6 +145,9 @@ export function SectionPreviewFrame({
       selectieFatete: {},
       comutaFateta: nimic,
       interogareFiltre: "",
+      // Miniatura arata varianta cu setarile ei implicite, exact ca restul
+      // galeriei: sectiunea sintetica de la ruta poarta deja `defaults`.
+      setariMagazin: citesteSetariMagazinDinSectiune(section),
       priceMin: "",
       setPriceMin: nimic,
       priceMax: "",
@@ -196,7 +200,7 @@ export function SectionPreviewFrame({
       priceLowestOnly: false,
       freeShippingThreshold: 200,
     };
-  }, [chrome, section.id, products, categories, fatete]);
+  }, [chrome, section, products, categories, fatete]);
 
   // Cosul si formularul de comanda: acelasi cod ca in magazin, dar in fluxul
   // paginii, cu un cos demonstrativ tinut in memorie si fara niciun apel pe

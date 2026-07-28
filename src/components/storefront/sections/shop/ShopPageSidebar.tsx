@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  AntetPagina, CautareCatalog, FiltreActive, FiltrePeTelefon, GrilaProduse,
+  AntetPagina, ImagineAntet, TextSubGrila, CautareCatalog, FiltreActive, FiltrePeTelefon, GrilaProduse,
   NumarRezultate, Paginare, PanouFiltre, Sortare, useAreFiltre,
 } from "./_shared/ShopPieces";
 import type { ShopPageProps } from "./shop-page.types";
@@ -17,7 +17,7 @@ import type { ShopPageProps } from "./shop-page.types";
  * deasupra grilei, ar fi impins produsele sub prima derulare, adica exact ce a
  * venit clientul sa vada.
  */
-export function ShopPageSidebar({ titlu, coloane, grupuriPornite, arataTitlu }: ShopPageProps) {
+export function ShopPageSidebar({ titlu, coloane, coloaneMobil, grupuriPornite, arataTitlu }: ShopPageProps) {
   // Fara nimic de aratat, coloana ar fi o banda goala langa grila: magazinul
   // fara categorii si fara atribute completate primeste automat asezarea pe
   // toata latimea.
@@ -26,6 +26,7 @@ export function ShopPageSidebar({ titlu, coloane, grupuriPornite, arataTitlu }: 
   return (
     <div className="mx-auto px-4 py-8" style={{ maxWidth: "var(--st-container)" }}>
       <div className="mb-5 space-y-3">
+        <ImagineAntet />
         <AntetPagina titlu={titlu} aratatTitlu={arataTitlu} />
         <CautareCatalog />
       </div>
@@ -47,8 +48,9 @@ export function ShopPageSidebar({ titlu, coloane, grupuriPornite, arataTitlu }: 
             <Sortare />
           </div>
           <div className="mb-4"><FiltreActive /></div>
-          <GrilaProduse coloane={coloane} />
+          <GrilaProduse coloane={coloane} coloaneMobil={coloaneMobil} />
           <Paginare />
+          <TextSubGrila />
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  AntetPagina, CategoriiSus, CautareCatalog, FiltreActive, FiltrePeTelefon,
+  AntetPagina, ImagineAntet, TextSubGrila, CategoriiSus, CautareCatalog, FiltreActive, FiltrePeTelefon,
   GrilaProduse, NumarRezultate, Paginare, PanouFiltre, Sortare, useAreFiltre,
 } from "./_shared/ShopPieces";
 import type { ShopPageProps } from "./shop-page.types";
@@ -17,12 +17,13 @@ import type { ShopPageProps } from "./shop-page.types";
  * Nu are container: pe ecrane late, densitatea e chiar rostul modelului, iar o
  * grila stramtata la mijloc ar fi anulat-o.
  */
-export function ShopPageCompact({ titlu, coloane, grupuriPornite, arataTitlu }: ShopPageProps) {
+export function ShopPageCompact({ titlu, coloane, coloaneMobil, grupuriPornite, arataTitlu }: ShopPageProps) {
   const areFiltre = useAreFiltre(grupuriPornite);
 
   return (
     <div className="px-4 py-6 xl:px-8">
       <div className="mb-4 space-y-3">
+        <ImagineAntet />
         <AntetPagina titlu={titlu} aratatTitlu={arataTitlu} />
         <div className="max-w-xl"><CautareCatalog /></div>
         {/*
@@ -68,8 +69,9 @@ export function ShopPageCompact({ titlu, coloane, grupuriPornite, arataTitlu }: 
           </div>
 
           <div className="mb-4"><FiltreActive /></div>
-          <GrilaProduse coloane={coloane} />
+          <GrilaProduse coloane={coloane} coloaneMobil={coloaneMobil} />
           <Paginare />
+          <TextSubGrila />
         </div>
       </div>
     </div>

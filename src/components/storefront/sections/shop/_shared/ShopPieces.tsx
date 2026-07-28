@@ -5,6 +5,8 @@ import { Check, ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
+import { cdnImage } from "@/lib/cdn-image";
+import { SORTARI_CATALOG } from "@/lib/storefront/design/registry";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
 
 /**
@@ -18,14 +20,17 @@ import type { Fateta } from "@/lib/storefront/catalog/facets";
  * Acelasi tipar ca `sections/cart/_shared/CartPieces.tsx`.
  */
 
-/** Cate valori se vad inainte de „Arata toate": restul sunt sub o apasare. */
-const VALORI_VIZIBILE = 6;
+
 
 /* ─── Fatete ─────────────────────────────────────────────────────────────── */
 
 export function GrupFatete({ fateta }: { fateta: Fateta }) {
-  const { color, selectieFatete, comutaFateta } = useStorefront();
+  const { color, selectieFatete, comutaFateta, setariMagazin } = useStorefront();
+  const VALORI_VIZIBILE = setariMagazin.valoriVizibile;
+  // Pliate implicit: comerciantul cu multe atribute vrea lista de filtre dintr-o
+  // privire, nu patruzeci de valori desfasurate una sub alta.
   const [toate, setToate] = useState(false);
+  const [pliat, setPliat] = useState(setariMagazin.filtrePliate);
   // Memoizat, nu scris inline: `?? []` produce un vector nou la fiecare randare,
   // deci lista de mai jos s-ar recalcula si cand nu s-a schimbat nicio bifa.
   const alese = useMemo(() => selectieFatete[fateta.cheie] ?? [], [selectieFatete, fateta.cheie]);
@@ -38,11 +43,29 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
     const primele = fateta.valori.slice(0, VALORI_VIZIBILE);
     const ascunseBifate = fateta.valori.slice(VALORI_VIZIBILE).filter((v) => alese.includes(v.valoare));
     return [...primele, ...ascunseBifate];
-  }, [toate, fateta.valori, alese]);
+  }, [toate, fateta.valori, alese, VALORI_VIZIBILE]);
+
+  const bifate = alese.length;
 
   return (
     <div>
-      <p className="text-xs font-semibold text-[var(--st-text)] mb-2">{fateta.eticheta}</p>
+      {/*
+        Titlul e buton doar cand grupurile pornesc pliate: altfel ar fi un
+        control care nu face nimic vizibil si ar aparea in ordinea de tabulare
+        degeaba, la fiecare fateta.
+      */}
+      {setariMagazin.filtrePliate ? (
+        <button type="button" onClick={() => setPliat((v) => !v)} aria-expanded={!pliat}
+          className="w-full flex items-center gap-1.5 text-xs font-semibold text-[var(--st-text)] mb-2 hover:opacity-70 transition-opacity">
+          {fateta.eticheta}
+          {bifate > 0 && <span style={{ color: "var(--st-primary)" }}>({bifate})</span>}
+          <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${pliat ? "" : "rotate-180"}`} />
+        </button>
+      ) : (
+        <p className="text-xs font-semibold text-[var(--st-text)] mb-2">{fateta.eticheta}</p>
+      )}
+      {pliat ? null : (
+      <>
       <ul className="space-y-1">
         {vizibile.map((v) => {
           const bifat = alese.includes(v.valoare);
@@ -73,7 +96,9 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
                 <span className="text-[13px] text-[var(--st-text)] group-hover:opacity-70 transition-opacity truncate">
                   {v.valoare}
                 </span>
-                <span className="ml-auto text-[11px] text-[var(--st-muted)] tabular-nums shrink-0">{v.cate}</span>
+                {setariMagazin.arataNumaratori && (
+                  <span className="ml-auto text-[11px] text-[var(--st-muted)] tabular-nums shrink-0">{v.cate}</span>
+                )}
               </label>
             </li>
           );
@@ -85,6 +110,8 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
           style={{ color: "var(--st-primary)" }}>
           {toate ? "Arata mai putine" : `Inca ${fateta.valori.length - VALORI_VIZIBILE}`}
         </button>
+      )}
+      </>
       )}
     </div>
   );
@@ -280,7 +307,9 @@ export function FiltreActive() {
 export function Sortare() {
   // `effectiveSort`, nu `sort`: cat timp exista o cautare si nimeni n-a ales
   // altceva, sortarea e „relevanta", si asta trebuie sa arate si selectorul.
-  const { setSort, setSortTouched, effectiveSort, hasSearchMatches } = useStorefront();
+  const { setSort, setSortTouched, effectiveSort, hasSearchMatches, setariMagazin } = useStorefront();
+  // O singura optiune inseamna un selector fara alegere: mai bine lipseste.
+  if (setariMagazin.sortariOferite.length < 2 && !hasSearchMatches) return null;
   return (
     <label className="inline-flex items-center gap-2 text-[13px] text-[var(--st-muted)]">
       <span className="hidden sm:inline">Sorteaza</span>
@@ -290,11 +319,9 @@ export function Sortare() {
           onChange={(e) => { setSortTouched(true); setSort(e.target.value); }}
           className="appearance-none pl-3 pr-8 py-2 text-[13px] rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]">
           {hasSearchMatches && <option value="relevance">Relevanta</option>}
-          <option value="newest">Cele mai noi</option>
-          <option value="price_asc">Pret crescator</option>
-          <option value="price_desc">Pret descrescator</option>
-          <option value="name_asc">Nume A-Z</option>
-          <option value="popular">Recomandate</option>
+          {SORTARI_CATALOG
+            .filter((o) => setariMagazin.sortariOferite.includes(o.value))
+            .map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <ChevronDown className="h-4 w-4 absolute right-2 pointer-events-none text-[var(--st-muted)]" />
       </span>
@@ -303,7 +330,8 @@ export function Sortare() {
 }
 
 export function NumarRezultate() {
-  const { filteredProducts, visibleProducts } = useStorefront();
+  const { filteredProducts, visibleProducts, setariMagazin } = useStorefront();
+  if (!setariMagazin.arataNumarul) return null;
   const n = filteredProducts.length;
   const total = visibleProducts.length;
   return (
@@ -424,7 +452,7 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
 
 /* ─── Grila si paginarea ─────────────────────────────────────────────────── */
 
-export function GrilaProduse({ coloane }: { coloane: number }) {
+export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; coloaneMobil?: number }) {
   const { paginatedProducts, filteredProducts, activeFilterCount, resetFilters, search } = useStorefront();
 
   if (filteredProducts.length === 0) {
@@ -447,11 +475,22 @@ export function GrilaProduse({ coloane }: { coloane: number }) {
     );
   }
 
-  const clase = coloane >= 5
-    ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-    : coloane === 4
-      ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
-      : "grid-cols-2 sm:grid-cols-2 lg:grid-cols-3";
+  /*
+   * Clasele se aleg dintr-o harta, nu se compun din bucati.
+   *
+   * Tailwind citeste sursa ca text si nu vede un nume construit la executie:
+   * `grid-cols-${n}` n-ar ajunge niciodata in CSS-ul final, iar grila ar cadea
+   * pe o singura coloana la fiecare magazin care schimba reglajul.
+   */
+  const PE_MOBIL: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2" };
+  const PE_ECRAN_MARE: Record<number, string> = {
+    2: "sm:grid-cols-2 lg:grid-cols-2",
+    3: "sm:grid-cols-2 lg:grid-cols-3",
+    4: "sm:grid-cols-3 lg:grid-cols-4",
+    5: "sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+    6: "sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6",
+  };
+  const clase = `${PE_MOBIL[coloaneMobil] ?? "grid-cols-2"} ${PE_ECRAN_MARE[coloane] ?? PE_ECRAN_MARE[4]}`;
 
   return (
     <div className={`grid ${clase} gap-3 sm:gap-4`}>
@@ -471,7 +510,33 @@ export function GrilaProduse({ coloane }: { coloane: number }) {
  * vizitatorul inapoi pe pagina principala.
  */
 export function Paginare() {
-  const { currentPage, totalPages, goToPage, color, catalogRoot, interogareFiltre } = useStorefront();
+  const {
+    currentPage, totalPages, goToPage, color, catalogRoot, interogareFiltre,
+    setariMagazin, filteredProducts, paginatedProducts,
+  } = useStorefront();
+  const mod = setariMagazin.modPaginare;
+  const santinela = useRef<HTMLDivElement>(null);
+  const maiSunt = currentPage < totalPages;
+
+  /*
+   * Derularea infinita incarca urmatoarea pagina cand santinela intra in ecran.
+   *
+   * `IntersectionObserver`, nu un ascultator de derulare: acesta din urma se
+   * declanseaza de sute de ori pe secunda si obliga la masuratori de asezare in
+   * mijlocul derularii, adica exact felul de cod care face pagina sa se
+   * balbaie pe telefon.
+   */
+  useEffect(() => {
+    if (mod !== "infinit" || !maiSunt) return;
+    const tinta = santinela.current;
+    if (!tinta || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver((intrari) => {
+      if (intrari.some((i) => i.isIntersecting)) goToPage(currentPage + 1);
+    }, { rootMargin: "600px" });
+    obs.observe(tinta);
+    return () => obs.disconnect();
+  }, [mod, maiSunt, currentPage, goToPage]);
+
   if (totalPages <= 1) return null;
 
   const pagini = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -504,6 +569,39 @@ export function Paginare() {
   };
   const nav =
     "px-3 py-2 text-sm rounded-[var(--st-radius-sm)] border border-[var(--st-border)] text-[var(--st-text)] disabled:opacity-30 hover:opacity-70 transition-opacity";
+
+  /*
+   * Numerele raman in HTML si la modurile care ADUNA paginile.
+   *
+   * Ascunse vizual, nu scoase: linkurile sunt singurul drum prin care un robot
+   * de cautare ajunge la paginile 2..N, iar la 1221 de produse sunt 61 de pagini
+   * pe care altfel nu le-ar gasi nimeni. Cititoarele de ecran le primesc si ele,
+   * ca alternativa la un buton pe care trebuie sa il apesi de saizeci de ori.
+   */
+  if (mod !== "pagini") {
+    return (
+      <>
+        <div className="mt-8 flex flex-col items-center gap-3">
+          {maiSunt && mod === "buton" && (
+            <button type="button" onClick={() => goToPage(currentPage + 1)}
+              className="px-6 py-3 text-sm font-semibold rounded-[var(--st-radius-sm)] border-2 transition-opacity hover:opacity-80"
+              style={{ borderColor: color, color }}>
+              Incarca mai multe
+            </button>
+          )}
+          {mod === "infinit" && maiSunt && <div ref={santinela} className="h-px w-full" aria-hidden="true" />}
+          <p className="text-[13px] text-[var(--st-muted)]" aria-live="polite">
+            {paginatedProducts.length} din {filteredProducts.length} produse
+          </p>
+        </div>
+        <nav aria-label="Paginare" className="sr-only">
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <a key={p} href={href(p)}>Pagina {p}</a>
+          ))}
+        </nav>
+      </>
+    );
+  }
 
   return (
     <nav aria-label="Paginare" className="flex flex-wrap items-center justify-center gap-2 mt-8">
@@ -539,12 +637,65 @@ export function Paginare() {
 /* ─── Antet ──────────────────────────────────────────────────────────────── */
 
 export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; aratatTitlu?: boolean }) {
-  const { categoryFilter } = useStorefront();
+  const { categoryFilter, setariMagazin, basePath, business } = useStorefront();
   // Categoria aleasa devine titlul: vizitatorul venit dintr-un link de categorie
   // trebuie sa vada unde a ajuns, nu un titlu generic peste o lista filtrata.
-  const text = categoryFilter && categoryFilter !== "toate" ? categoryFilter : titlu;
+  const inCategorie = !!categoryFilter && categoryFilter !== "toate";
+  const text = inCategorie ? categoryFilter : titlu;
+
   return (
-    <h1 className={aratatTitlu ? "text-2xl font-bold text-[var(--st-text)]" : "sr-only"}>{text}</h1>
+    <div className="space-y-2">
+      {setariMagazin.arataFirimituri && (
+        <nav aria-label="Firimituri" className="flex items-center gap-1.5 text-[13px] text-[var(--st-muted)]">
+          <a href={basePath || "/"} className="hover:text-[var(--st-text)] transition-colors">
+            {business.store_name ?? business.business_name}
+          </a>
+          <span aria-hidden="true">/</span>
+          <span className={inCategorie ? "" : "text-[var(--st-text)] font-medium"}>{titlu}</span>
+          {inCategorie && (
+            <>
+              <span aria-hidden="true">/</span>
+              <span className="text-[var(--st-text)] font-medium truncate">{categoryFilter}</span>
+            </>
+          )}
+        </nav>
+      )}
+      <h1 className={aratatTitlu ? "text-2xl font-bold text-[var(--st-text)]" : "sr-only"}>{text}</h1>
+      {/*
+        Subtitlul dispare cand vizitatorul e intr-o categorie: e scris despre
+        catalogul intreg, iar peste o lista filtrata ar descrie altceva decat
+        se vede.
+      */}
+      {setariMagazin.subtitlu && !inCategorie && (
+        <p className="text-sm text-[var(--st-muted)] max-w-2xl leading-relaxed">{setariMagazin.subtitlu}</p>
+      )}
+    </div>
+  );
+}
+
+/** Imaginea de antet, pe toata latimea, deasupra titlului. */
+export function ImagineAntet() {
+  const { setariMagazin } = useStorefront();
+  if (!setariMagazin.imagineAntet) return null;
+  return (
+    <div className="relative w-full aspect-[16/5] sm:aspect-[16/4] overflow-hidden rounded-[var(--st-radius)] mb-5 bg-[var(--st-bg)]">
+      {/* Decorativa: ce spune pagina e scris in titlu, chiar sub ea. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={cdnImage(setariMagazin.imagineAntet, 1600)} alt="" className="w-full h-full object-cover" />
+    </div>
+  );
+}
+
+/** Textul de prezentare de sub grila. Locul obisnuit al textului de catalog. */
+export function TextSubGrila() {
+  const { setariMagazin } = useStorefront();
+  if (!setariMagazin.textSubGrila) return null;
+  return (
+    <div className="mt-10 pt-6 border-t border-[var(--st-border)]">
+      <p className="text-sm text-[var(--st-muted)] leading-relaxed whitespace-pre-line max-w-3xl">
+        {setariMagazin.textSubGrila}
+      </p>
+    </div>
   );
 }
 

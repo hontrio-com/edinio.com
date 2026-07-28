@@ -1,6 +1,9 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { cdnImage } from "@/lib/cdn-image";
+import { MediaPicker } from "@/components/media/MediaPicker";
 import { variantMeta, type Field } from "@/lib/storefront/design/registry";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 
@@ -64,6 +67,59 @@ export function SectionSettings({
 
 const INPUT =
   "w-full h-10 px-3 text-sm border border-border rounded-xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors";
+
+/**
+ * Alegerea unei imagini pentru o setare de sectiune.
+ *
+ * Miniatura arata ce e ales, nu doar adresa: o setare de imagine fara
+ * previzualizare inseamna un comerciant care schimba fisierul si nu stie daca a
+ * nimerit.
+ */
+function ControlImagine({
+  eticheta,
+  value,
+  onChange,
+}: {
+  eticheta: React.ReactNode;
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const [deschis, setDeschis] = useState(false);
+  const url = typeof value === "string" && value.trim() ? value : "";
+
+  return (
+    <div className="space-y-1.5">
+      {eticheta}
+      <div className="flex items-center gap-2">
+        {url && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={cdnImage(url, 160)} alt="" className="w-16 h-16 rounded-lg object-cover border border-border shrink-0" />
+        )}
+        <button type="button" onClick={() => setDeschis(true)}
+          className="flex-1 h-10 px-3 text-sm border border-border rounded-xl bg-surface text-foreground hover:bg-muted transition-colors">
+          {url ? "Schimba imaginea" : "Alege o imagine"}
+        </button>
+        {url && (
+          <button type="button" onClick={() => onChange(undefined)} aria-label="Scoate imaginea"
+            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl border border-border text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      <MediaPicker
+        open={deschis}
+        onClose={() => setDeschis(false)}
+        accept="image"
+        bucket="gallery"
+        onSelect={(urls) => {
+          const ales = Array.isArray(urls) ? urls[0] : urls;
+          if (ales) onChange(ales);
+          setDeschis(false);
+        }}
+      />
+    </div>
+  );
+}
 
 function Control({
   field,
@@ -143,6 +199,18 @@ function Control({
             onChange={(e) => onChange(e.target.value)} />
         </label>
       );
+
+    /*
+     * Imaginea trece prin librarie, nu printr-un camp de adresa.
+     *
+     * Tipul era declarat in registry si validat de parser inca de la inceput,
+     * dar cadea pe `default: return null`, deci setarea se salva fara sa aiba
+     * vreun control — o setare invizibila e mai rea decat una care lipseste.
+     * `MediaPicker` e acelasi de la categorii si de la produse: incarcarea,
+     * stergerea din R2 si evidenta fisierelor raman intr-un singur loc.
+     */
+    case "image":
+      return <ControlImagine eticheta={eticheta} value={value} onChange={onChange} />;
 
     case "range":
       return (

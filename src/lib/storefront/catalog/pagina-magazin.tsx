@@ -273,7 +273,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    * „orfane". O pagina 404 pentru un link pe care magazinul singur il arata ar
    * fi cel mai prost raspuns cu putinta.
    */
-  let categorieDinCale: (CategorieMinima & { areCopii: boolean }) | null = null;
+  let categorieDinCale: (CategorieMinima & { areCopii: boolean; numeParinte: string | null }) | null = null;
   let numeCategorie = "";
   if (categorieSlug) {
     const gasita = potrivesteCategorie(categoriesData, categorieSlug);
@@ -284,6 +284,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
         name: gasita.name,
         parent_id: gasita.parent_id,
         areCopii: categoriesData.some((c) => c.parent_id === gasita.id),
+        numeParinte: categoriesData.find((c) => c.id === gasita.parent_id)?.name ?? null,
       };
     } else {
       const orfane = Array.from(new Set(productsRaw.map((p) => p.category).filter(Boolean) as string[]));
@@ -369,7 +370,10 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       caleCategorie={numeCategorie
         ? `${shopHref(basePath)}/${slugCategorie(numeCategorie)}`
         : undefined}
-      initialDrillParentId={categorieDinCale?.areCopii ? categorieDinCale.id : null}
+      initialDrillParentId={categorieDinCale
+        ? (categorieDinCale.areCopii ? categorieDinCale.id : categorieDinCale.parent_id)
+        : null}
+      parinteCategorie={categorieDinCale?.numeParinte ?? null}
     />
   );
 }

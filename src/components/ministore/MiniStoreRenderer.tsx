@@ -130,8 +130,14 @@ interface Props {
    * fi spus o categorie si continutul ar fi aratat alta.
    */
   caleCategorie?: string;
-  /** Categoria din cale, ca sa se vada de la inceput subcategoriile ei in navigare. */
+  /**
+   * Ce lista de categorii se vede de la inceput pe pagina unei categorii: copiii
+   * ei daca are, altfel fratii ei. O categorie fara copii care ar fi aratat lista
+   * de la radacina si-ar fi pierdut vecinii exact acolo unde se cauta mai departe.
+   */
   initialDrillParentId?: string | null;
+  /** Categoria parinte a celei din cale. „Inapoi" urca la ea, nu la lista curenta. */
+  parinteCategorie?: string | null;
   /** Fatetele calculate pe server. Doar pagina de catalog le cere. */
   fatete?: Fateta[];
   jetoane?: string[];
@@ -144,7 +150,7 @@ interface Props {
   initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -554,9 +560,13 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   function goBackCategory() {
     const backTo = drillParent?.parent_id ?? null;
     const numeParinte = backTo ? catTree.byId.get(backTo)?.name : null;
+    // Pe pagina unei categorii, „Inapoi" urca la parintele CATEGORIEI, nu la
+    // parintele listei afisate: dintr-o subcategorie, lista aratata e cea a
+    // fratilor, iar parintele listei ar fi fost cu un nivel mai sus decat se
+    // asteapta oricine.
     if (caleCategorie) {
-      window.location.href = numeParinte
-        ? hrefCategorie(categoriiRootPagina, numeParinte, true)
+      window.location.href = parinteCategorie
+        ? hrefCategorie(categoriiRootPagina, parinteCategorie, true)
         : categoriiRootPagina;
       return;
     }

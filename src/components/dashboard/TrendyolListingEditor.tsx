@@ -9,7 +9,8 @@ import {
   saveTrendyolListing, searchTrendyolBrands, syncTrendyolProduct,
   type TrendyolEditorData, type TrendyolEditorVariant,
 } from "@/lib/actions/trendyol.actions";
-import type { TrendyolBrand, TrendyolCategoryAttribute, TrendyolProductAttribute } from "@/lib/trendyol/types";
+import type { TrendyolBrand, TrendyolCategoryAttribute, TrendyolProductAttribute, TrendyolStoreFront } from "@/lib/trendyol/types";
+import { coteTvaVitrina, infoVitrina, tvaImplicitVitrina } from "@/lib/trendyol/types";
 
 type AttrSel = { valueId?: number; custom?: string };
 type AttrValue = { attributeValueId: number; attributeValue: string };
@@ -22,10 +23,14 @@ function toProductAttribute(attributeId: number, sel: AttrSel | undefined): Tren
 }
 
 export function TrendyolListingEditor({
-  businessId, productId, cargoCompanyIdDefault, onClose,
+  businessId, productId, storefront, onClose,
 }: {
-  businessId: string; productId: string; cargoCompanyIdDefault: number | null; onClose: () => void;
+  businessId: string; productId: string; storefront: TrendyolStoreFront; onClose: () => void;
 }) {
+  // Moneda si cotele de TVA nu sunt alegerea noastra: le impune vitrina pe care
+  // vinde comerciantul. Preturile trimise sunt citite in moneda ei.
+  const moneda = infoVitrina(storefront).moneda;
+  const coteTva = coteTvaVitrina(storefront);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
@@ -38,7 +43,6 @@ export function TrendyolListingEditor({
   const [brandQuery, setBrandQuery] = useState("");
   const [brandResults, setBrandResults] = useState<TrendyolBrand[]>([]);
   const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [cargoId, setCargoId] = useState<number | null>(cargoCompanyIdDefault);
   const [dimWeight, setDimWeight] = useState("");
   const [listingAttrSel, setListingAttrSel] = useState<Record<number, AttrSel>>({});
   const [variantAttrSel, setVariantAttrSel] = useState<Record<string, Record<number, AttrSel>>>({});
@@ -53,13 +57,12 @@ export function TrendyolListingEditor({
       setData(ed);
       setBrandId(ed.listing?.brand_id ?? ed.mappedBrandId ?? null);
       setCategoryId(ed.listing?.category_id ?? ed.mappedCategoryId ?? null);
-      setCargoId(ed.listing?.cargo_company_id ?? cargoCompanyIdDefault);
       setDimWeight(ed.listing?.dimensional_weight != null ? String(ed.listing.dimensional_weight) : "");
       setVariants(ed.variants);
       setLoading(false);
     })();
     return () => { alive = false; };
-  }, [businessId, productId, onClose, cargoCompanyIdDefault]);
+  }, [businessId, productId, onClose]);
 
   // Load category attributes + their selectable values when the category is known.
   useEffect(() => {
@@ -108,7 +111,9 @@ export function TrendyolListingEditor({
       category_id: categoryId,
       attributes: listingAttributes,
       dimensional_weight: dimWeight.trim() === "" ? null : Number(dimWeight),
-      cargo_company_id: cargoId,
+      // Curierul nu face parte din produs pe marketplace-ul international; se
+      // declara la expediere, o data cu AWB-ul.
+      cargo_company_id: null,
       variants: variants.map((v) => {
         const sel = variantAttrSel[v.key] ?? {};
         const variantAttributes = varianterAttrs
@@ -125,7 +130,6 @@ export function TrendyolListingEditor({
   const save = (then?: "sync") => {
     if (!categoryId) { toast.error("Mapează categoria produsului mai întâi."); return; }
     if (!brandId) { toast.error("Alege brandul."); return; }
-    if (!cargoId) { toast.error("Alege compania de curierat."); return; }
     startTransition(async () => {
       const res = await saveTrendyolListing(businessId, productId, buildInput());
       if ("error" in res) { toast.error(res.error); return; }
@@ -228,14 +232,22 @@ export function TrendyolListingEditor({
                     className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-muted-foreground mb-0.5">Preț vânzare (RON)</label>
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Preț vânzare ({moneda})</label>
                   <input type="number" step="0.01" min="0" value={v.sale_price ?? ""} onChange={(e) => setVariant(v.key, { sale_price: e.target.value === "" ? null : Number(e.target.value) })}
                     placeholder={String(v.ron_price)} className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-muted-foreground mb-0.5">Preț listă (RON)</label>
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Preț listă ({moneda})</label>
                   <input type="number" step="0.01" min="0" value={v.list_price ?? ""} onChange={(e) => setVariant(v.key, { list_price: e.target.value === "" ? null : Number(e.target.value) })}
                     className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">TVA</label>
+                  <select value={v.vat_rate ?? tvaImplicitVitrina(storefront)}
+                    onChange={(e) => setVariant(v.key, { vat_rate: Number(e.target.value) })}
+                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs">
+                    {coteTva.map((c) => <option key={c} value={c}>{c}%</option>)}
+                  </select>
                 </div>
                 {varianterAttrs.map((g) => (
                   <div key={g.attribute.id}>

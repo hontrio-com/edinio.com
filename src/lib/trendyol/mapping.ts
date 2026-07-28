@@ -2,13 +2,17 @@
 // (one item per variant/barcode). Trendyol is variant-first: variants share a
 // `productMainId` (we use the Edinio product id) and each carries its own barcode.
 //
-// Pricing is DIRECT in RON (decision: Trendyol RO) — no FX. listPrice is the
-// crossed-out (compare-at) price when higher, salePrice the selling price;
-// listPrice must be >= salePrice. `varianter` attributes (size/color) live on the
-// variant; the rest are product-level and repeated on every item.
+// Preturile pleaca DIRECT, fara conversie: Trendyol le citeste in moneda vitrinei
+// alese (RO -> RON). listPrice e pretul taiat cand exista, salePrice cel de
+// vanzare, si listPrice trebuie sa fie >= salePrice. Atributele `varianter`
+// (marime/culoare) stau pe varianta; restul sunt la nivel de produs si se repeta
+// pe fiecare item.
+//
+// Ce NU trimitem, desi API-ul domestic turcesc le are: `currencyType` (moneda o da
+// vitrina) si `cargoCompanyId` (curierul se declara la expediere).
 
 import type { TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
-import { TRENDYOL_CURRENCY, TRENDYOL_DEFAULT_VAT } from "./types";
+import { coteTvaVitrina, infoVitrina, tvaImplicitVitrina } from "./types";
 
 // ── Edinio-side shapes ────────────────────────────────────────────────────────
 export interface MappableProduct {
@@ -62,9 +66,41 @@ function stripHtml(html: string): string {
     .replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
 }
 
+// Trendyol accepta DOAR https la imagini; una pe http e respinsa la validare si
+// pica tot produsul, asa ca o sarim din start.
 function productImages(product: MappableProduct): string[] {
   const raw = Array.isArray(product.images) ? product.images : [];
-  return raw.map((x) => String(x).trim()).filter((u) => /^https?:\/\//i.test(u)).slice(0, 8);
+  return raw.map((x) => String(x).trim()).filter((u) => /^https:\/\//i.test(u)).slice(0, 8);
+}
+
+/**
+ * Barcode-ul, verificat dupa regulile Trendyol.
+ *
+ * Documentatia lasa litere, cifre si doar `.`, `-`, `_`. Un SKU cu spatii sau
+ * diacritice trece de noi si e respins de ei abia dupa procesarea lotului, cu un
+ * mesaj greu de legat de produs — deci il prindem aici.
+ */
+export function verificaBarcode(barcode: string): string | null {
+  if (!barcode) return "O variantă nu are barcode.";
+  if (barcode.length > 40) return `Barcode-ul „${barcode}" depășește 40 de caractere (limita Trendyol).`;
+  if (!/^[A-Za-z0-9._-]+$/.test(barcode)) {
+    return `Barcode-ul „${barcode}" conține caractere nepermise. Trendyol acceptă doar litere, cifre, punct, liniuță și underscore.`;
+  }
+  return null;
+}
+
+/**
+ * Cota de TVA a variantei, adusa in setul acceptat de vitrina.
+ *
+ * Vitrina RO primeste doar 0, 11 sau 21. O cota veche (19) sau lipsa ar fi
+ * respinsa, deci alegem cea mai apropiata valoare permisa in loc sa trimitem un
+ * lot intreg la refuz.
+ */
+export function tvaPentruVitrina(config: TrendyolConfig, vatRate: number | null): number {
+  const permise = coteTvaVitrina(config.storefront);
+  if (vatRate == null) return tvaImplicitVitrina(config.storefront);
+  if (permise.includes(vatRate)) return vatRate;
+  return permise.reduce((best, c) => (Math.abs(c - vatRate) < Math.abs(best - vatRate) ? c : best), permise[0]);
 }
 
 function productWeight(product: MappableProduct, listing: TrendyolListingEnrichment): number {
@@ -153,21 +189,23 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
   if (!brandId) return { error: "Alege brandul Trendyol." };
   const categoryId = effectiveCategoryId(config, product, listing);
   if (!categoryId) return { error: "Categoria produsului nu este mapată la Trendyol." };
-  const cargoCompanyId = listing.cargo_company_id ?? config.default_cargo_company_id;
-  if (!cargoCompanyId) return { error: "Alege compania de curierat Trendyol." };
-  if (!config.shipment_address_id || !config.returning_address_id) {
-    return { error: "Setează adresele de expediere și retur în setări." };
-  }
+  // Curierul si adresele NU mai sunt conditii pentru listare: pe marketplace-ul
+  // international curierul se comunica abia la expediere (`providerCode`), iar
+  // adresele sunt optionale — Trendyol foloseste implicitele contului. Cerute
+  // aici, blocau listarea unor produse perfect valide.
 
   const images = productImages(product);
-  if (images.length === 0) return { error: "Produsul nu are imagini valide." };
+  if (images.length === 0) {
+    return { error: "Produsul nu are imagini pe https. Trendyol acceptă doar imagini https." };
+  }
 
   const title = stripHtml(product.name).slice(0, 100);
   const description = stripHtml(product.description ?? product.name).slice(0, 30000);
   const weight = productWeight(product, listing);
   const productLevelAttrs = effectiveAttributes(config, product, listing);
-  const currencyType = config.currency || TRENDYOL_CURRENCY;
-  const productMainId = product.id;
+  // `productMainId` are aceeasi limita ca barcode-ul: 40 de caractere. Un uuid
+  // intra lejer, dar taiem oricum, ca sa nu depinda de forma id-ului.
+  const productMainId = product.id.slice(0, 40);
 
   const enabled = ctx.variants.filter((v) => v.enabled);
   if (enabled.length === 0) return { error: "Nicio variantă activă de listat." };
@@ -175,11 +213,11 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
 
   const items: TrendyolProductItem[] = [];
   for (const v of enabled) {
-    const barcode = (v.barcode || "").trim();
-    if (!barcode) return { error: "O variantă nu are barcode." };
     // Barcode is the cross-endpoint identifier (create, inventory, order match); it
-    // must be identical everywhere, so reject > 40 rather than silently truncating.
-    if (barcode.length > 40) return { error: `Barcode-ul „${barcode}" depășește 40 de caractere (limita Trendyol).` };
+    // must be identical everywhere, so reject bad ones rather than silently fixing.
+    const barcode = (v.barcode || "").trim();
+    const problema = verificaBarcode(barcode);
+    if (problema) return { error: problema };
     const priced = buildVariantPrices(product, v);
     if ("error" in priced) return priced;
 
@@ -193,17 +231,22 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
       stockCode: (v.stock_code || barcode).slice(0, 100),
       dimensionalWeight: weight,
       description,
-      currencyType,
       listPrice: priced.listPrice,
       salePrice: priced.salePrice,
-      vatRate: v.vat_rate ?? TRENDYOL_DEFAULT_VAT,
-      cargoCompanyId,
+      vatRate: tvaPentruVitrina(config, v.vat_rate),
       images: images.map((url) => ({ url })),
       attributes: [...productLevelAttrs, ...(Array.isArray(v.attributes) ? v.attributes : [])],
-      shipmentAddressId: config.shipment_address_id,
-      returningAddressId: config.returning_address_id,
     };
+    // Adresele sunt optionale: le trimitem doar daca vanzatorul a ales explicit
+    // altele decat implicitele contului sau.
+    if (config.shipment_address_id) item.shipmentAddressId = config.shipment_address_id;
+    if (config.returning_address_id) item.returningAddressId = config.returning_address_id;
     items.push(item);
   }
   return { items };
+}
+
+/** Moneda in care Trendyol citeste preturile trimise, dupa vitrina aleasa. */
+export function monedaVitrina(config: TrendyolConfig): string {
+  return infoVitrina(config.storefront).moneda;
 }

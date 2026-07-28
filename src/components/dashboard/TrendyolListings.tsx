@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { removeTrendyolListing, syncTrendyolProduct, type TrendyolListingRow } from "@/lib/actions/trendyol.actions";
 import { TrendyolListingEditor } from "@/components/dashboard/TrendyolListingEditor";
+import type { TrendyolStoreFront } from "@/lib/trendyol/types";
 
 interface ProductLite { id: string; name: string; category: string | null; is_active: boolean }
 
@@ -21,9 +22,9 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 };
 
 export function TrendyolListings({
-  businessId, products, listings, cargoCompanyIdDefault,
+  businessId, products, listings, storefront,
 }: {
-  businessId: string; products: ProductLite[]; listings: TrendyolListingRow[]; cargoCompanyIdDefault: number | null;
+  businessId: string; products: ProductLite[]; listings: TrendyolListingRow[]; storefront: TrendyolStoreFront;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -90,7 +91,7 @@ export function TrendyolListings({
 
               {isOpen && (
                 <div className="mt-3 ml-6">
-                  <TrendyolListingEditor businessId={businessId} productId={p.id} cargoCompanyIdDefault={cargoCompanyIdDefault} onClose={() => setOpenId(null)} />
+                  <TrendyolListingEditor businessId={businessId} productId={p.id} storefront={storefront} onClose={() => setOpenId(null)} />
                 </div>
               )}
             </div>

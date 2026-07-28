@@ -1,8 +1,9 @@
 // Trendyol nomenclature (category tree, category attributes + values, brands,
-// supplier addresses) with in-process caching. Data is global (the marketplace
-// taxonomy), but every call needs valid credentials, so we populate the cache
-// using whichever connected merchant triggered the fetch. Cache keys include the
-// environment (stage and production taxonomies differ).
+// supplier addresses) with in-process caching. Every call needs valid credentials,
+// so we populate the cache using whichever connected merchant triggered the fetch.
+//
+// Doua feluri de date, doua feluri de chei — vezi `cheiePublica` si `cheieVanzator`.
+// Nomenclatoarele sunt publice si se pot imparti; adresele NU.
 
 import {
   getBrandsByName, getCategoryAttributes, getCategoryAttributeValues, getCategoryTree,
@@ -11,12 +12,32 @@ import {
 import type {
   TrendyolBrand, TrendyolCategory, TrendyolCategoryAttribute, TrendyolSupplierAddresses,
 } from "./types";
+import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 
 const TTL_6H = 6 * 60 * 60 * 1000;
 const TTL_24H = 24 * 60 * 60 * 1000;
 
-function envKey(auth: TrendyolAuth): string {
-  return auth.environment === "stage" ? "stage" : "production";
+/**
+ * Cheia pentru date PUBLICE (taxonomia marketplace-ului).
+ *
+ * Include vitrina, nu doar mediul: categoriile si atributele vin traduse si
+ * filtrate pe tara, deci arborele romanesc si cel german sunt liste diferite.
+ * Fara vitrina in cheie, al doilea comerciant primea taxonomia primului.
+ */
+function cheiePublica(auth: TrendyolAuth): string {
+  const env = auth.environment === "stage" ? "stage" : "production";
+  return `${env}:${auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT}`;
+}
+
+/**
+ * Cheia pentru date ale UNUI vanzator (adresele lui).
+ *
+ * Trebuie sa contina supplierId. Cache-ul era pe mediu, deci adresele primului
+ * magazin conectat se serveau tuturor celorlalte — scurgere intre chiriasi si,
+ * practic, colete trimise de la adresa altcuiva.
+ */
+function cheieVanzator(auth: TrendyolAuth): string {
+  return `${cheiePublica(auth)}:${auth.supplierId}`;
 }
 
 const treeCache = new Map<string, { data: TrendyolCategory[]; exp: number }>();
@@ -26,7 +47,7 @@ const addressCache = new Map<string, { data: TrendyolSupplierAddresses; exp: num
 
 // Whole category tree in one call; cached, navigated in memory by the UI.
 export async function getCategoryTreeCached(auth: TrendyolAuth): Promise<TrendyolCategory[] | null> {
-  const key = envKey(auth);
+  const key = cheiePublica(auth);
   const hit = treeCache.get(key);
   if (hit && hit.exp > Date.now()) return hit.data;
   const res = await getCategoryTree(auth);
@@ -59,7 +80,7 @@ export async function searchLeafCategories(auth: TrendyolAuth, query: string, li
 }
 
 export async function getCategoryAttributesCached(auth: TrendyolAuth, categoryId: number): Promise<TrendyolCategoryAttribute[] | null> {
-  const key = `${envKey(auth)}:${categoryId}`;
+  const key = `${cheiePublica(auth)}:${categoryId}`;
   const hit = attrCache.get(key);
   if (hit && hit.exp > Date.now()) return hit.data;
   const res = await getCategoryAttributes(auth, categoryId);
@@ -70,7 +91,7 @@ export async function getCategoryAttributesCached(auth: TrendyolAuth, categoryId
 }
 
 export async function getCategoryAttributeValuesCached(auth: TrendyolAuth, categoryId: number, attributeId: number): Promise<{ attributeValueId: number; attributeValue: string }[] | null> {
-  const key = `${envKey(auth)}:${categoryId}:${attributeId}`;
+  const key = `${cheiePublica(auth)}:${categoryId}:${attributeId}`;
   const hit = valuesCache.get(key);
   if (hit && hit.exp > Date.now()) return hit.data;
   const res = await getCategoryAttributeValues(auth, categoryId, attributeId);
@@ -81,20 +102,39 @@ export async function getCategoryAttributeValuesCached(auth: TrendyolAuth, categ
 }
 
 // Brands: the catalogue is huge, so we search by name rather than caching all.
+// Raspunsul cautarii e un array simplu (spre deosebire de lista completa, care
+// vine invelita in `{ brands }`); tolerăm ambele forme, ca sa nu se rupa daca
+// Trendyol le uniformizeaza vreodata.
 export async function searchBrands(auth: TrendyolAuth, name: string): Promise<TrendyolBrand[] | null> {
   const q = name.trim();
   if (q.length < 2) return [];
   const res = await getBrandsByName(auth, q);
   if (isTrendyolError(res)) return null;
-  return (res.data?.brands ?? []).slice(0, 30);
+  const brut = res.data as TrendyolBrand[] | { brands?: TrendyolBrand[] } | null;
+  const lista = Array.isArray(brut) ? brut : (brut?.brands ?? []);
+  return lista.slice(0, 30);
 }
 
+/**
+ * Adresele vanzatorului.
+ *
+ * Serviciul e limitat la O SINGURA cerere pe ora, deci cache-ul nu e o optimizare,
+ * ci singurul mod de a-l folosi fara sa lovim 429. `force` reimprospateaza, dar nu
+ * mai des de un sfert de ora, si pastreaza ultimul raspuns bun daca apelul esueaza
+ * — mai bine adrese de acum zece minute decat un selector gol.
+ */
+const REIMPROSPATARE_MIN = 15 * 60 * 1000;
+
 export async function getSupplierAddressesCached(auth: TrendyolAuth, force = false): Promise<TrendyolSupplierAddresses | null> {
-  const key = envKey(auth);
+  const key = cheieVanzator(auth);
   const hit = addressCache.get(key);
-  if (!force && hit && hit.exp > Date.now()) return hit.data;
+  const acum = Date.now();
+  if (hit && hit.exp > acum) {
+    const proaspat = hit.exp - acum > TTL_6H - REIMPROSPATARE_MIN;
+    if (!force || proaspat) return hit.data;
+  }
   const res = await getSupplierAddresses(auth);
-  if (isTrendyolError(res)) return null;
+  if (isTrendyolError(res)) return hit?.data ?? null;
   const data = res.data ?? { supplierAddresses: [] };
   addressCache.set(key, { data, exp: Date.now() + TTL_6H });
   return data;

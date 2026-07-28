@@ -1,16 +1,18 @@
 "use client";
 
 // Fulfillment panel for a Trendyol marketplace order, shown in the order detail in
-// place of the courier-AWB panel. Trendyol ships with its own cargo, so the seller
-// only advances the package Picking -> Invoiced; the cargo tracking number arrives
-// automatically afterwards (via webhook/poll). Self-contained: loads its own state.
+// place of the courier-AWB panel. Self-contained: loads its own state.
+//
+// Doua cazuri, dupa curier: la cei platiti de Trendyol, vanzatorul doar avanseaza
+// pachetul Picking -> Invoiced si primeste AWB-ul inapoi; la cei platiti de el,
+// trebuie sa TRIMITA numarul AWB, altfel coletul ramane blocat in „Picking".
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Package, Truck, Loader2, CheckCircle2 } from "lucide-react";
 import {
-  getTrendyolOrderFulfillment, markTrendyolPicking, markTrendyolInvoiced,
+  getTrendyolOrderFulfillment, markTrendyolPicking, markTrendyolInvoiced, sendTrendyolTracking,
 } from "@/lib/actions/trendyol.actions";
 import type { TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
 
@@ -32,12 +34,16 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
   const [state, setState] = useState<TrendyolFulfillmentState | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
+  const [awb, setAwb] = useState("");
+  const [curier, setCurier] = useState("");
 
   useEffect(() => {
     let active = true;
     getTrendyolOrderFulfillment(businessId, orderId).then((res) => {
       if (!active) return;
-      setState(res && "error" in res ? null : res);
+      const st = res && "error" in res ? null : res;
+      setState(st);
+      if (st?.providerCode) setCurier(st.providerCode);
       setLoading(false);
     });
     return () => { active = false; };
@@ -73,6 +79,21 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
   const terminal = TERMINAL.includes(s);
   const canPicking = ["created", "awaiting", "unpacked", "verified", ""].includes(s);
   const canInvoiced = s === "picking";
+  // AWB-ul propriu se trimite doar pentru curierii pe care ii plateste vanzatorul.
+  const curieriProprii = state.curieri.filter((c) => c.platesteVanzatorul);
+  const arataAwb = state.poateTrimiteAwb && !terminal && curieriProprii.length > 0;
+
+  const trimiteAwb = () => {
+    if (!curier) { toast.error("Alege curierul cu care ai făcut AWB-ul."); return; }
+    if (!awb.trim()) { toast.error("Completează numărul AWB."); return; }
+    startTransition(async () => {
+      const res = await sendTrendyolTracking(businessId, orderId, { trackingNumber: awb.trim(), providerCode: curier });
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success("AWB trimis către Trendyol.");
+      setAwb("");
+      refresh();
+    });
+  };
 
   return (
     <div className={`${CARD} overflow-hidden`}>
@@ -114,6 +135,29 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               Trendyol preia expedierea cu curierul contractat. După predarea coletului, statusul devine automat „Expediat” și primești numărul de tracking.
             </p>
+          </div>
+        )}
+
+        {arataAwb && (
+          <div className="space-y-2 pt-1 border-t border-border">
+            <p className="text-xs font-semibold text-foreground pt-2">Trimite AWB-ul tău</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Necesar dacă expediezi cu un curier plătit de tine. Fără numărul AWB, Trendyol nu poate marca coletul ca expediat.
+            </p>
+            <select value={curier} onChange={(e) => setCurier(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+              <option value="">Alege curierul</option>
+              {curieriProprii.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}{c.nota ? ` — ${c.nota}` : ""}</option>
+              ))}
+            </select>
+            <input value={awb} onChange={(e) => setAwb(e.target.value)} placeholder="Număr AWB"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
+            <button type="button" disabled={pending} onClick={trimiteAwb}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-50 transition-colors">
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+              Trimite AWB la Trendyol
+            </button>
           </div>
         )}
 

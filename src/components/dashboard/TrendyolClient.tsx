@@ -9,13 +9,16 @@ import {
   subscribeTrendyolWebhook, unsubscribeTrendyolWebhook,
   type TrendyolStatus,
 } from "@/lib/actions/trendyol.actions";
-import { TRENDYOL_CARGO_PROVIDERS, type TrendyolSupplierAddress } from "@/lib/trendyol/types";
+import {
+  TRENDYOL_STOREFRONTS, curieriVitrina, esteAdresaDe, infoVitrina,
+  type TrendyolStoreFront, type TrendyolSupplierAddress,
+} from "@/lib/trendyol/types";
 
 const PREREQUISITES = [
-  "Cont Trendyol seller aprobat + credențiale (SupplierID, API Key, API Secret) din panoul Trendyol > Integrare.",
-  "Produse cu barcode (EAN) pentru fiecare variantă și brand aprobat pe Trendyol.",
+  "Cont Trendyol de vânzător aprobat, cu procesul de înregistrare finalizat.",
+  "Cele trei credențiale din panoul Trendyol: Seller ID, API Key și API Secret (Informații cont > Detalii integrare).",
+  "Produse cu barcode (EAN) pentru fiecare variantă și brand existent în catalogul Trendyol.",
   "Categorie leaf (fără subcategorii) + atributele obligatorii ale categoriei.",
-  "Livrarea folosește curierul contractat Trendyol (nu curierul tău din Edinio).",
 ];
 
 export function TrendyolClient({ businessId, status }: { businessId: string; status: TrendyolStatus | null }) {
@@ -26,10 +29,11 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [environment, setEnvironment] = useState<"stage" | "production">(status?.environment ?? "production");
+  const [storefront, setStorefront] = useState<TrendyolStoreFront>(status?.storefront ?? "RO");
 
   const [shipmentAddressId, setShipmentAddressId] = useState(status?.shipmentAddressId != null ? String(status.shipmentAddressId) : "");
   const [returningAddressId, setReturningAddressId] = useState(status?.returningAddressId != null ? String(status.returningAddressId) : "");
-  const [cargoCompanyId, setCargoCompanyId] = useState(status?.defaultCargoCompanyId != null ? String(status.defaultCargoCompanyId) : "");
+  const [carrierCode, setCarrierCode] = useState(status?.defaultCarrierCode ?? "");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
   const [addresses, setAddresses] = useState<TrendyolSupplierAddress[]>([]);
 
@@ -55,14 +59,17 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     );
   }
 
+  const curieri = curieriVitrina(status.storefront);
+  const vitrinaAleasa = infoVitrina(storefront);
+
   const handleConnect = () => {
     if (!supplierId.trim() || !apiKey.trim() || apiSecret.trim().length < 8) {
-      toast.error("Completează SupplierID, API Key și API Secret.");
+      toast.error("Completează Seller ID, API Key și API Secret.");
       return;
     }
     startTransition(async () => {
       const res = await connectTrendyol(businessId, {
-        supplierId: supplierId.trim(), apiKey, apiSecret, environment,
+        supplierId: supplierId.trim(), apiKey, apiSecret, environment, storefront,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont Trendyol conectat.");
@@ -85,13 +92,14 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     const nOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
     const ship = nOrNull(shipmentAddressId);
     const ret = nOrNull(returningAddressId);
-    const cargo = nOrNull(cargoCompanyId);
-    for (const [v, label] of [[ship, "adresa de expediere"], [ret, "adresa de retur"], [cargo, "compania de curierat"]] as const) {
+    for (const [v, label] of [[ship, "adresa de expediere"], [ret, "adresa de retur"]] as const) {
       if (v != null && (!Number.isInteger(v) || v <= 0)) { toast.error(`ID invalid pentru ${label}.`); return; }
     }
     startTransition(async () => {
       const res = await saveTrendyolSettings(businessId, {
-        shipment_address_id: ship, returning_address_id: ret, default_cargo_company_id: cargo, auto_sync: autoSync,
+        shipment_address_id: ship, returning_address_id: ret,
+        default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
+        auto_sync: autoSync,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
@@ -139,22 +147,31 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
         <div className="rounded-xl border border-border bg-surface p-5">
           <h2 className="text-base font-semibold text-foreground mb-1">Conectează contul Trendyol</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Găsești SupplierID, API Key și API Secret în contul tău de vânzător Trendyol, la secțiunea de integrare (Integrare / API).
+            În panoul Trendyol mergi la <span className="font-medium text-foreground">Informații cont &gt; Detalii integrare</span> (vizibil
+            doar utilizatorului principal al contului). Ai nevoie de exact trei valori: Seller ID, API Key și API Secret.
           </p>
+          <div className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground mb-4">
+            Vei mai vedea acolo un <span className="font-medium text-foreground">cod de referință al integrării</span> și
+            un <span className="font-medium text-foreground">token</span>. Nu îți trebuie aici: codul de referință se folosește doar când
+            deschizi un tichet la suportul Trendyol.
+          </div>
           <div className="space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">SupplierID</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Seller ID</label>
                 <input value={supplierId} onChange={(e) => setSupplierId(e.target.value)} placeholder="ex. 123456"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+                  inputMode="numeric" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+                <p className="text-[11px] text-muted-foreground mt-1">Doar cifre.</p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Mediu</label>
-                <select value={environment} onChange={(e) => setEnvironment(e.target.value as "stage" | "production")}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Țara magazinului</label>
+                <select value={storefront} onChange={(e) => setStorefront(e.target.value as TrendyolStoreFront)}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                  <option value="production">Producție</option>
-                  <option value="stage">Stage (testare)</option>
+                  {TRENDYOL_STOREFRONTS.map((s) => <option key={s.code} value={s.code}>{s.tara}</option>)}
                 </select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Prețurile vor fi citite de Trendyol în {vitrinaAleasa.moneda}.
+                </p>
               </div>
             </div>
             <div>
@@ -166,6 +183,19 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               <label className="block text-xs font-medium text-muted-foreground mb-1">API Secret</label>
               <input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="off"
                 placeholder="Cheia secretă API" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Mediu</label>
+              <select value={environment} onChange={(e) => setEnvironment(e.target.value as "stage" | "production")}
+                className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                <option value="production">Producție</option>
+                <option value="stage">Stage (testare)</option>
+              </select>
+              {environment === "stage" && (
+                <p className="text-[11px] text-amber-700 mt-1">
+                  Stage-ul are chei separate și cere ca Trendyol să autorizeze IP-ul serverului nostru. Dacă nu ai cerut asta, folosește Producție.
+                </p>
+              )}
             </div>
             <button onClick={handleConnect} disabled={pending}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
@@ -187,7 +217,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Seller: <span className="font-mono">{status.supplierId}</span> · Cheie: <span className="font-mono">{status.apiKeyMasked}</span> · {status.currency}
+                  Seller: <span className="font-mono">{status.supplierId}</span> · Cheie: <span className="font-mono">{status.apiKeyMasked}</span> · {status.storefrontLabel} ({status.currency})
                 </p>
               </div>
               <button onClick={handleDisconnect} disabled={pending}
@@ -207,9 +237,13 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                 <span>{status.readinessError}</span>
               </div>
             )}
-            {status.ready && (
-              <div className="mt-3 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-700">
-                Configurarea de bază este completă. Maparea produselor și listarea vin în pasul următor.
+            {status.currency !== "RON" && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                <span>
+                  Prețurile din Edinio sunt în lei, dar vitrina {status.storefrontLabel} le citește
+                  ca {status.currency}. Setează manual prețurile de vânzare pe fiecare listare înainte de a trimite produse.
+                </span>
               </div>
             )}
 
@@ -237,8 +271,8 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                 {addresses.length > 0 ? (
                   <select value={shipmentAddressId} onChange={(e) => setShipmentAddressId(e.target.value)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                    <option value="">Alege adresa</option>
-                    {addresses.filter((a) => a.isShipmentAddress || a.addressType === "Shipment").map((a) => (
+                    <option value="">Implicită din contul Trendyol</option>
+                    {addresses.filter((a) => esteAdresaDe(a, "Shipment")).map((a) => (
                       <option key={a.id} value={a.id}>{a.fullAddress || a.city || `#${a.id}`}</option>
                     ))}
                   </select>
@@ -252,8 +286,8 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                 {addresses.length > 0 ? (
                   <select value={returningAddressId} onChange={(e) => setReturningAddressId(e.target.value)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                    <option value="">Alege adresa</option>
-                    {addresses.filter((a) => a.isReturningAddress || a.addressType === "Returning").map((a) => (
+                    <option value="">Implicită din contul Trendyol</option>
+                    {addresses.filter((a) => esteAdresaDe(a, "Returning")).map((a) => (
                       <option key={a.id} value={a.id}>{a.fullAddress || a.city || `#${a.id}`}</option>
                     ))}
                   </select>
@@ -263,15 +297,22 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                 )}
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Companie curierat</label>
-                <select value={cargoCompanyId} onChange={(e) => setCargoCompanyId(e.target.value)}
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Curier implicit</label>
+                <select value={carrierCode} onChange={(e) => setCarrierCode(e.target.value)}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                  <option value="">Alege curierul</option>
-                  {TRENDYOL_CARGO_PROVIDERS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">Fără curier implicit</option>
+                  {curieri.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}{c.platesteVanzatorul ? " (plătit de tine)" : " (plătit de Trendyol)"}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-2">Adresele se încarcă din contul tău Trendyol. Curierul trebuie să fie cel contractat de tine.</p>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Adresele se încarcă din contul tău Trendyol; lăsate goale, se folosesc cele implicite de acolo. Curierii
+              „plătiți de Trendyol” își completează singuri AWB-ul; la cei plătiți de tine, trimiți tu numărul AWB din pagina comenzii.
+            </p>
 
             <label className="mt-4 flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} className="rounded" />

@@ -14,6 +14,7 @@ import {
   type TrendyolListingEnrichment, type TrendyolVariantData,
 } from "./mapping";
 import type { TrendyolConfig, TrendyolProductAttribute } from "./types";
+import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 
 type Db = SupabaseClient<Database>;
 
@@ -28,7 +29,15 @@ export interface TrendyolSyncContext {
 
 export type SyncOutcome =
   | { ok: true; action: "submitted" | "removed" | "skipped"; batchRequestId?: string }
-  | { ok: false; error: string };
+  // `authFailed` = Trendyol a respins cheile. Nu are rost sa reincercam: cronul
+  // marcheaza contul „de reconectat", ca sa vada comerciantul, in loc sa consume
+  // tacut incercarile si sa lase produsele nelistate fara explicatie.
+  | { ok: false; error: string; authFailed?: true };
+
+/** 401 = chei invalide/revocate. Restul erorilor merita reincercate. */
+export function esteEroareDeChei(status: number): boolean {
+  return status === 401;
+}
 
 export function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -42,7 +51,8 @@ export async function loadTrendyolContext(admin: Db, businessId: string): Promis
   return {
     auth: {
       supplierId: config.supplier_id, apiKey: config.api_key, apiSecret: config.api_secret,
-      environment: config.environment, userAgentCompany: config.user_agent_company,
+      environment: config.environment, storefront: config.storefront ?? TRENDYOL_DEFAULT_STOREFRONT,
+      userAgentCompany: config.user_agent_company,
     },
     config,
     businessId,
@@ -140,7 +150,9 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
   const res = await createProducts(ctx.auth, built.items);
   if (isTrendyolError(res)) {
     await setListingStatus(admin, listing.id, "error", { error: res.error });
-    return { ok: false, error: res.error };
+    return esteEroareDeChei(res.status)
+      ? { ok: false, error: res.error, authFailed: true }
+      : { ok: false, error: res.error };
   }
   const batchRequestId = res.data?.batchRequestId;
   await setListingStatus(admin, listing.id, "pending", { error: null, last_synced_at: new Date().toISOString() });
@@ -186,7 +198,11 @@ export async function pushInventoryNow(admin: Db, ctx: TrendyolSyncContext, prod
   if ("error" in built) return { ok: false, error: built.error };
 
   const res = await updatePriceInventory(ctx.auth, built.items);
-  if (isTrendyolError(res)) return { ok: false, error: res.error };
+  if (isTrendyolError(res)) {
+    return esteEroareDeChei(res.status)
+      ? { ok: false, error: res.error, authFailed: true }
+      : { ok: false, error: res.error };
+  }
   const batchRequestId = res.data?.batchRequestId;
   if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", [built.listing.product_main_id]);
   return { ok: true, action: "submitted", batchRequestId };

@@ -70,6 +70,12 @@ export async function GET(req: NextRequest) {
         processed++;
       } else {
         failed++;
+        // Chei respinse: oprim coada magazinului si ii aratam ca trebuie sa
+        // reconecteze. Altfel ar ramane cu produse nelistate si zero explicatii.
+        if (res.authFailed) {
+          await patchConfig(admin, businessId, { needs_reconnect: true });
+          break;
+        }
         const attempts = (item.attempts ?? 0) + 1;
         if (attempts >= MAX_ATTEMPTS) {
           await admin.from("trendyol_sync_queue").delete().eq("id", item.id);

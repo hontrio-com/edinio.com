@@ -9,18 +9,36 @@
 // runtime for small upstream calls in the OLX/About You clients).
 
 import { basicAuthHeader, trendyolBaseUrl, userAgent } from "./auth";
+import { mesajDupaStatus, traduMesajTrendyol } from "./errors";
 import type {
   TrendyolBatchAck, TrendyolBatchResult, TrendyolBrand, TrendyolCategory,
   TrendyolCategoryAttribute, TrendyolEnvironment, TrendyolProductItem, TrendyolShipmentPackage,
-  TrendyolSupplierAddresses,
+  TrendyolSupplierAddresses, TrendyolStoreFront,
 } from "./types";
+import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 
 export interface TrendyolAuth {
   supplierId: string;
   apiKey: string;
   apiSecret: string;
   environment?: TrendyolEnvironment;
+  /**
+   * Vitrina (tara). Antet OBLIGATORIU pe marketplace-ul international.
+   * Fara el, Trendyol raspunde „furnizor negasit" desi cheile sunt bune.
+   */
+  storefront?: TrendyolStoreFront;
   userAgentCompany?: string;
+}
+
+/**
+ * Limba nomenclatoarelor. Trendyol accepta doar `ro`, `el`, `ar` si `en`; orice
+ * altceva (`bg`, `cz`) e ignorat sau respins, deci restul cad pe engleza.
+ */
+function limbaVitrinei(vitrina: TrendyolStoreFront): string {
+  if (vitrina === "RO") return "ro";
+  if (vitrina === "GR") return "el";
+  if (vitrina === "SA" || vitrina === "AE" || vitrina === "KW") return "ar";
+  return "en";
 }
 
 export type TrendyolResult<T> =
@@ -40,17 +58,27 @@ async function call<T>(
   if (!auth?.apiKey || !auth?.apiSecret || !auth?.supplierId) {
     return { error: "Credențialele Trendyol lipsesc.", status: 0 };
   }
+  const vitrina = auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
   try {
     const res = await fetch(`${trendyolBaseUrl(auth.environment)}${path}`, {
       method,
       headers: {
         Authorization: basicAuthHeader(auth.apiKey, auth.apiSecret),
         "User-Agent": userAgent(auth.supplierId, auth.userAgentCompany),
+        // Vitrina: OpenAPI-ul international il declara `required: true` pe
+        // practic toate serviciile, inclusiv pe cel de adrese folosit la testul
+        // de conexiune. Lipsa lui a fost cauza erorii „furnizor negasit".
+        storeFrontCode: vitrina,
+        // Nomenclatoarele (categorii, atribute) vin in limba ceruta aici.
+        "Accept-Language": limbaVitrinei(vitrina),
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",
+      // Fara asta, o cerere blocata consuma tot bugetul functiei si esueaza
+      // fara mesaj util — apelurile astea ruleaza si din cron-uri.
+      signal: AbortSignal.timeout(20000),
     });
     if (res.status === 204) return { data: undefined as T };
     const text = await res.text();
@@ -58,34 +86,44 @@ async function call<T>(
     try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
     if (!res.ok) {
       const obj = (json ?? {}) as { errors?: { message?: string }[]; message?: string; exception?: string };
-      const detail =
+      const brut =
         (Array.isArray(obj.errors) && obj.errors[0]?.message) ||
         (typeof obj.message === "string" && obj.message) ||
         (typeof obj.exception === "string" && obj.exception) ||
-        `HTTP ${res.status}`;
+        "";
+      // Codul HTTP spune uneori mai mult decat textul; altfel traducem textul.
+      const detail = mesajDupaStatus(res.status, auth.environment) ?? traduMesajTrendyol(brut, res.status);
       return { error: detail, status: res.status, details: json };
     }
     return { data: json as T };
-  } catch {
-    return { error: "Eroare de rețea către Trendyol.", status: 0 };
+  } catch (e) {
+    const abandonat = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    return {
+      error: abandonat
+        ? "Trendyol nu a raspuns la timp. Reincearca peste cateva minute."
+        : "Nu am putut contacta Trendyol. Verifica reteaua si reincearca.",
+      status: 0,
+    };
   }
 }
 
 // ── Connection test ───────────────────────────────────────────────────────────
-// getSuppliersAddresses is seller-scoped, lightweight, and validates supplierId +
-// Basic auth together; the addresses are also needed for product creation.
+// Filtrul de produse aprobate: seller-scoped (valideaza supplierId + Basic auth +
+// vitrina deodata), ieftin cu size=1, si cu limita generoasa (2000 cereri/minut).
+//
+// NU folosim serviciul de adrese aici, desi ar parea mai natural: e limitat la
+// O SINGURA cerere pe ora, deci al doilea click pe „Conecteaza" ar da 429, iar
+// documentatia cere sa nu fie apelat pana nu e aprobat contul de vanzator — adica
+// exact cand comerciantul isi testeaza prima oara cheile.
 export async function testConnection(
   auth: TrendyolAuth,
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const res = await getSupplierAddresses(auth);
+  const res = await getApprovedProducts(auth, { page: 0, size: 1 });
   if (!isTrendyolError(res)) return { ok: true };
-  if (res.status === 401 || res.status === 403) {
-    return { ok: false, error: "Credențiale Trendyol invalide (SupplierID / API Key / API Secret).", status: res.status };
-  }
-  if (res.status === 0) {
-    return { ok: false, error: "Nu am putut contacta Trendyol. Verifică rețeaua și reîncearcă.", status: 0 };
-  }
-  return { ok: false, error: res.error || `Eroare Trendyol (HTTP ${res.status}).`, status: res.status };
+  // `call` traduce deja mesajul si trateaza codurile HTTP; aici nu mai
+  // reinterpretam nimic, ca sa nu ajungem sa spunem „chei invalide" pentru un
+  // 403 care inseamna cu totul altceva.
+  return { ok: false, error: res.error, status: res.status };
 }
 
 // ── Seller info / nomenclature ────────────────────────────────────────────────
@@ -109,8 +147,11 @@ export function getCategoryAttributeValues(auth: TrendyolAuth, categoryId: numbe
 export function getBrands(auth: TrendyolAuth, page = 0, size = 1000) {
   return call<{ brands: TrendyolBrand[] }>(auth, "GET", `/integration/product/brands?page=${page}&size=${size}`);
 }
+// Atentie: lista completa vine invelita in `{ brands: [...] }`, dar cautarea
+// dupa nume raspunde cu un ARRAY simplu. Citit gresit, cautarea de brand nu
+// returna niciodata nimic.
 export function getBrandsByName(auth: TrendyolAuth, name: string) {
-  return call<{ brands: TrendyolBrand[] }>(auth, "GET", `/integration/product/brands/by-name?name=${encodeURIComponent(name)}`);
+  return call<TrendyolBrand[]>(auth, "GET", `/integration/product/brands/by-name?name=${encodeURIComponent(name)}`);
 }
 
 // Approved products (stock/price). Presence of a productMainId here => approved;
@@ -121,7 +162,9 @@ export function getApprovedProducts(
 ) {
   const q = new URLSearchParams();
   if (params.page != null) q.set("page", String(params.page));
-  if (params.size != null) q.set("size", String(params.size));
+  // Serviciul refuza peste 100 pe pagina; cerut mai mult, raspunde 400 si
+  // reconcilierea se opreste tacut la prima pagina.
+  if (params.size != null) q.set("size", String(Math.max(1, Math.min(100, params.size))));
   if (params.productMainId) q.set("productMainId", params.productMainId);
   if (params.barcode) q.set("barcode", params.barcode);
   if (params.status) q.set("status", params.status);
@@ -162,6 +205,7 @@ export function getOrders(
   if (params.orderByField) q.set("orderByField", params.orderByField);
   if (params.orderByDirection) q.set("orderByDirection", params.orderByDirection);
   const qs = q.toString();
+  // Fereastra de date e limitata la 2 saptamani; vezi `fereastraComenzi` in orders.ts.
   return call<{ content: TrendyolShipmentPackage[]; totalElements?: number; totalPages?: number; page?: number; size?: number }>(
     auth, "GET", `/integration/order/sellers/${auth.supplierId}/orders${qs ? `?${qs}` : ""}`);
 }
@@ -175,10 +219,29 @@ export function updatePackage(
   return call<undefined>(auth, "PUT", `/integration/order/sellers/${auth.supplierId}/shipment-packages/${packageId}`, body);
 }
 
+/**
+ * Trimite AWB-ul propriu catre Trendyol.
+ *
+ * Pe marketplace-ul international, jumatate din curieri sunt platiti de vanzator
+ * (DPD, DHL, GLS, PACKETA): acolo Trendyol NU are de unde sa stie numarul de
+ * urmarire, iar comanda ramane blocata daca nu il trimitem noi. Doar curierii
+ * „platiti de Trendyol" (FAN Courier, DPD-RO, FANEX) isi completeaza singuri AWB-ul.
+ *
+ * Pachetul trebuie sa fie deja pe „Picking"; dupa „Shipped" nu se mai poate schimba.
+ */
+export function updateTrackingDetails(
+  auth: TrendyolAuth,
+  packageId: number,
+  body: { cargoSenderNumber: string; providerCode: string; returnTrackingNumber?: string },
+) {
+  return call<undefined>(
+    auth, "PUT", `/integration/order/sellers/${auth.supplierId}/shipment-packages/${packageId}/tracking-details`, body);
+}
+
 // ── Webhooks ──────────────────────────────────────────────────────────────────
 export function createWebhook(
   auth: TrendyolAuth,
-  body: { url: string; authenticationType: "BASIC_AUTHENTICATION" | "API_KEY"; username?: string; password?: string; apiKey?: string; subscribedStatuses?: string[] },
+  body: { url: string; authenticationType: "BASIC_AUTHENTICATION" | "API_KEY"; username?: string; password?: string; apiKey?: string; subscribedStatuses?: string[]; countryCodes?: string[] },
 ) {
   return call<{ id?: string }>(auth, "POST", `/integration/webhook/sellers/${auth.supplierId}/webhooks`, body);
 }

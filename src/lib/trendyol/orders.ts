@@ -152,13 +152,32 @@ export async function ingestByOrderNumber(admin: Db, ctx: TrendyolSyncContext, o
   for (const pkg of res.data?.content ?? []) await ingestPackage(admin, ctx, pkg);
 }
 
+/**
+ * Fereastra de interogare a comenzilor, taiata la ce accepta Trendyol.
+ *
+ * Serviciul refuza un interval mai mare de DOUA SAPTAMANI. Un magazin care sta
+ * o luna fara sincronizare ar fi cerut o fereastra mai lunga si ar fi primit
+ * eroare la fiecare rulare de cron — adica exact magazinul care avea nevoie de
+ * recuperare nu si-ar mai fi luat niciodata comenzile. Cerem ultimele doua
+ * saptamani si lasam pasul urmator sa continue.
+ */
+const DOUA_SAPTAMANI = 14 * 24 * 60 * 60 * 1000;
+
+export function fereastraComenzi(sinceMs: number | undefined, acum = Date.now()): { startDate: number; endDate: number } {
+  const minim = acum - DOUA_SAPTAMANI;
+  // O marja de un minut: ceasurile noastre si ale lor nu bat perfect.
+  const start = sinceMs != null && sinceMs > minim ? sinceMs : minim + 60_000;
+  return { startDate: Math.min(start, acum), endDate: acum };
+}
+
 // Poll recent shipment packages for one business (cron safety net). `sinceMs` is a
 // unix-millisecond timestamp (Trendyol uses GMT+3 epoch millis).
 export async function pollPackages(admin: Db, ctx: TrendyolSyncContext, sinceMs?: number): Promise<{ ingested: number; ok: boolean }> {
   let ingested = 0;
   let ok = true;
+  const { startDate, endDate } = fereastraComenzi(sinceMs);
   for (let page = 0; page < 5; page++) {
-    const res = await getOrders(ctx.auth, { startDate: sinceMs, page, size: 100, orderByField: "PackageLastModifiedDate", orderByDirection: "DESC" });
+    const res = await getOrders(ctx.auth, { startDate, endDate, page, size: 100, orderByField: "PackageLastModifiedDate", orderByDirection: "DESC" });
     if (isTrendyolError(res)) { ok = false; break; }
     const content = res.data?.content ?? [];
     if (content.length === 0) break;

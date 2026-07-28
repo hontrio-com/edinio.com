@@ -54,7 +54,7 @@ export default async function TrendyolPage() {
             businessId={biz.id}
             products={products}
             listings={listings}
-            cargoCompanyIdDefault={st.defaultCargoCompanyId ?? null}
+            storefront={st.storefront}
           />
         </div>
       )}

@@ -22,13 +22,15 @@ import {
   searchBrands, searchLeafCategories,
 } from "@/lib/trendyol/taxonomy";
 import { loadTrendyolContext, removeProductNow, syncProductNow } from "@/lib/trendyol/sync";
-import { setPackageStatus, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
-import { deriveVariantSlots, type MappableProduct } from "@/lib/trendyol/mapping";
+import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
+import { deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
 import type {
   TrendyolBrand, TrendyolCategoryAttribute, TrendyolCategoryMapEntry, TrendyolConfig,
-  TrendyolEnvironment, TrendyolProductAttribute, TrendyolSupplierAddress,
+  TrendyolEnvironment, TrendyolProductAttribute, TrendyolStoreFront, TrendyolSupplierAddress,
 } from "@/lib/trendyol/types";
-import { TRENDYOL_CURRENCY } from "@/lib/trendyol/types";
+import {
+  TRENDYOL_DEFAULT_STOREFRONT, TRENDYOL_STOREFRONTS, curieriVitrina, infoVitrina,
+} from "@/lib/trendyol/types";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/trendyol";
@@ -72,14 +74,15 @@ async function saveConfig(supabase: ServerClient, businessId: string, config: Tr
 }
 
 // Local (not exported): a "use server" module may only export async functions.
+//
+// Ce e cu adevarat obligatoriu ca sa poti lista: contul si brandul. Adresele sunt
+// optionale in API (Trendyol foloseste implicitele contului), iar curierul se
+// declara abia la expediere — cerute aici, blocau degeaba integrarea.
 function trendyolReadinessError(config: TrendyolConfig): string | null {
   if (!config.connected || !config.api_key || !config.api_secret || !config.supplier_id) {
-    return "Conectează mai întâi contul Trendyol (SupplierID + API Key + Secret).";
+    return "Conectează mai întâi contul Trendyol (Seller ID + API Key + Secret).";
   }
   if (config.needs_reconnect) return "Sesiunea Trendyol a expirat. Reconectează contul.";
-  if (!config.shipment_address_id) return "Alege adresa de expediere în setări.";
-  if (!config.returning_address_id) return "Alege adresa de retur în setări.";
-  if (!config.default_cargo_company_id) return "Alege compania de curierat Trendyol în setări.";
   return null;
 }
 
@@ -89,12 +92,14 @@ export interface TrendyolStatus {
   connected: boolean;
   needsReconnect: boolean;
   environment: TrendyolEnvironment;
+  storefront: TrendyolStoreFront;
+  storefrontLabel: string;
   supplierId?: string;
   apiKeyMasked: string | null;
   sellerName?: string;
   shipmentAddressId?: number;
   returningAddressId?: number;
-  defaultCargoCompanyId?: number;
+  defaultCarrierCode?: string;
   currency: string;
   brandId?: number;
   brandName?: string;
@@ -123,18 +128,23 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     supabase.from("trendyol_orders").select("id", { count: "exact", head: true }).eq("business_id", businessId),
   ]);
 
+  const vitrina = config.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
+  const info = infoVitrina(vitrina);
   return {
     globallyEnabled: trendyolGloballyEnabled(),
     connected: !!config.connected && !!config.api_key && !!config.supplier_id,
     needsReconnect: config.needs_reconnect === true,
     environment: config.environment ?? "production",
+    storefront: vitrina,
+    storefrontLabel: info.tara,
     supplierId: config.supplier_id,
     apiKeyMasked: config.api_key ? maskSecret(config.api_key) : null,
     sellerName: config.seller_name,
     shipmentAddressId: config.shipment_address_id,
     returningAddressId: config.returning_address_id,
-    defaultCargoCompanyId: config.default_cargo_company_id,
-    currency: config.currency ?? TRENDYOL_CURRENCY,
+    defaultCarrierCode: config.default_carrier_code,
+    // Moneda o dicteaza vitrina, nu noi: preturile trimise sunt citite in ea.
+    currency: info.moneda,
     brandId: config.brand_id,
     brandName: config.brand_name,
     autoSync: config.auto_sync !== false,
@@ -154,7 +164,7 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
 // ── Connect / disconnect ────────────────────────────────────────────────────────
 export async function connectTrendyol(
   businessId: string,
-  input: { supplierId: string; apiKey: string; apiSecret: string; environment: TrendyolEnvironment; company?: string },
+  input: { supplierId: string; apiKey: string; apiSecret: string; environment: TrendyolEnvironment; storefront?: TrendyolStoreFront; company?: string },
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
@@ -164,12 +174,20 @@ export async function connectTrendyol(
   const apiKey = (input.apiKey ?? "").trim();
   const apiSecret = (input.apiSecret ?? "").trim();
   if (!supplierId || !apiKey || apiSecret.length < 8) {
-    return { error: "Completează SupplierID, API Key și API Secret din panoul Trendyol." };
+    return { error: "Completează Seller ID, API Key și API Secret din panoul Trendyol." };
+  }
+  // Seller ID-ul e numeric si intra direct in calea cererii. Lipit din portal, vine
+  // adesea cu spatii sau cu alt camp cu totul (codul de referinta al integrarii),
+  // si atunci Trendyol raspunde „furnizor negasit" — eroare care pare a cheilor.
+  if (!/^\d+$/.test(supplierId)) {
+    return { error: "Seller ID trebuie să fie doar cifre. Îl găsești în panoul Trendyol, la Informații cont > Detalii integrare (nu este codul de referință al integrării)." };
   }
   const env: TrendyolEnvironment = input.environment === "stage" ? "stage" : "production";
+  const vitrina: TrendyolStoreFront =
+    TRENDYOL_STOREFRONTS.find((s) => s.code === input.storefront)?.code ?? TRENDYOL_DEFAULT_STOREFRONT;
   const company = (input.company ?? "").trim() || undefined;
 
-  const test = await testConnection({ supplierId, apiKey, apiSecret, environment: env, userAgentCompany: company });
+  const test = await testConnection({ supplierId, apiKey, apiSecret, environment: env, storefront: vitrina, userAgentCompany: company });
   if (!test.ok) return { error: test.error };
 
   const prev = await loadConfig(g.supabase, businessId);
@@ -180,9 +198,10 @@ export async function connectTrendyol(
     api_key: apiKey,
     api_secret: apiSecret,
     environment: env,
+    storefront: vitrina,
     user_agent_company: company,
     needs_reconnect: false,
-    currency: prev.currency ?? TRENDYOL_CURRENCY,
+    currency: infoVitrina(vitrina).moneda,
     auto_sync: prev.auto_sync ?? true,
   };
   const ok = await saveConfig(g.supabase, businessId, next);
@@ -215,10 +234,9 @@ export async function disconnectTrendyol(businessId: string): Promise<{ success:
 export interface TrendyolSettingsInput {
   shipment_address_id?: number | null;
   returning_address_id?: number | null;
-  default_cargo_company_id?: number | null;
+  default_carrier_code?: string | null;
   brand_id?: number | null;
   brand_name?: string | null;
-  currency?: string;
   auto_sync?: boolean;
 }
 
@@ -229,14 +247,24 @@ export async function saveTrendyolSettings(
   if ("error" in g) return g;
   const config = await loadConfig(g.supabase, businessId);
 
+  // Curierul trebuie sa existe si sa fie valabil pe vitrina magazinului; altfel
+  // AWB-ul e respins abia la expediere, cand comerciantul are coletul in mana.
+  let carrier = input.default_carrier_code === null ? undefined : (input.default_carrier_code ?? config.default_carrier_code);
+  if (carrier) {
+    const permis = curieriVitrina(config.storefront).some((c) => c.code === carrier);
+    if (!permis) return { error: "Curierul ales nu este disponibil pe vitrina magazinului tău." };
+  } else {
+    carrier = undefined;
+  }
+
   const next: TrendyolConfig = {
     ...config,
     shipment_address_id: input.shipment_address_id === null ? undefined : (input.shipment_address_id ?? config.shipment_address_id),
     returning_address_id: input.returning_address_id === null ? undefined : (input.returning_address_id ?? config.returning_address_id),
-    default_cargo_company_id: input.default_cargo_company_id === null ? undefined : (input.default_cargo_company_id ?? config.default_cargo_company_id),
+    default_carrier_code: carrier,
     brand_id: input.brand_id === null ? undefined : (input.brand_id ?? config.brand_id),
     brand_name: input.brand_name === null ? undefined : (input.brand_name ?? config.brand_name),
-    currency: input.currency?.trim() || config.currency || TRENDYOL_CURRENCY,
+    currency: infoVitrina(config.storefront).moneda,
     auto_sync: input.auto_sync ?? config.auto_sync,
   };
   const ok = await saveConfig(g.supabase, businessId, next);
@@ -267,6 +295,9 @@ export async function subscribeTrendyolWebhook(businessId: string): Promise<{ su
   const secret = randomBytes(24).toString("hex");
   const res = await createWebhook(g.auth, {
     url, authenticationType: "API_KEY", apiKey: secret, subscribedStatuses: TRENDYOL_WEBHOOK_EVENTS,
+    // Fara tara, abonamentul prinde toate vitrinele contului; magazinul asculta
+    // doar de a lui, ca sa nu importe comenzi din alta tara si alta moneda.
+    countryCodes: [g.config.storefront ?? TRENDYOL_DEFAULT_STOREFRONT],
   });
   if (isTrendyolError(res)) return { error: res.error };
 
@@ -291,7 +322,8 @@ function authFromConfig(config: TrendyolConfig): TrendyolAuth | null {
   if (!config.supplier_id || !config.api_key || !config.api_secret) return null;
   return {
     supplierId: config.supplier_id, apiKey: config.api_key, apiSecret: config.api_secret,
-    environment: config.environment, userAgentCompany: config.user_agent_company,
+    environment: config.environment, storefront: config.storefront ?? TRENDYOL_DEFAULT_STOREFRONT,
+    userAgentCompany: config.user_agent_company,
   };
 }
 async function guardedAuth(
@@ -480,10 +512,13 @@ export async function saveTrendyolListing(
     barcode: v.barcode.trim(), stock_code: v.stock_code, attributes: (v.attributes as unknown) as never,
     quantity: v.quantity, list_price: v.list_price, sale_price: v.sale_price, vat_rate: v.vat_rate, enabled: v.enabled,
   }));
-  // Barcode is Trendyol's cross-endpoint identifier (max 40): reject over-long ones
-  // at save so create/inventory/order-match all use the exact same value.
-  const tooLong = rows.find((r) => r.barcode.length > 40);
-  if (tooLong) return { error: `Barcode-ul „${tooLong.barcode}" depășește 40 de caractere (limita Trendyol). Folosește un barcode mai scurt (ex. EAN).` };
+  // Barcode is Trendyol's cross-endpoint identifier (create, inventory, order match):
+  // validate here so the merchant sees the problem while editing, not hours later in
+  // a batch result that only names the barcode.
+  for (const r of rows) {
+    const problema = verificaBarcode(r.barcode);
+    if (problema) return { error: problema };
+  }
 
   const newBarcodes = rows.map((r) => r.barcode);
   if (newBarcodes.length > 0) {
@@ -589,4 +624,21 @@ export async function markTrendyolInvoiced(
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
   return { success: true, status: res.status };
+}
+
+/**
+ * Trimite catre Trendyol AWB-ul facut cu curierul propriu.
+ *
+ * Necesar pentru curierii pe care ii plateste vanzatorul (DPD, DHL, GLS,
+ * PACKETA): fara numar, coletul ramane blocat in „Picking" la Trendyol, oricat
+ * de repede l-ar preda comerciantul.
+ */
+export async function sendTrendyolTracking(
+  businessId: string, orderId: string,
+  input: { trackingNumber: string; providerCode: string; returnTrackingNumber?: string },
+): Promise<{ success: true } | { error: string }> {
+  const res = await withContext(businessId, (admin, ctx) => sendTrackingNumber(admin, ctx, orderId, input));
+  if ("error" in res) return { error: res.error };
+  revalidatePath("/dashboard/orders");
+  return { success: true };
 }

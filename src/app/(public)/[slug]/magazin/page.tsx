@@ -62,10 +62,30 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     : `https://www.edinio.com/${slug}`;
   const { url, indexabila } = canonicalCatalog(`${radacina}/magazin`, sp);
 
-  const title = `Toate produsele | ${displayName}`;
+  /*
+   * Cu o categorie in adresa, pagina ESTE pagina acelei categorii.
+   *
+   * Un titlu „Toate produsele" pe `?cat=Manusi de protectie` spune si
+   * vizitatorului din fila si motorului de cautare exact pe langa: adresa e
+   * canonica, e in sitemap prin linkurile interne, si e singurul loc din magazin
+   * unde categoria aia are o pagina.
+   *
+   * `cat` poate purta si un id de categorie, cand vine dintr-un element de
+   * meniu. Un id in titlu ar fi mai rau decat titlul generic, deci se foloseste
+   * doar cand arata a nume.
+   */
+  const catBrut = (Array.isArray(sp.cat) ? sp.cat[0] : sp.cat)?.trim() ?? "";
+  const pareId = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(catBrut);
+  const categorie = catBrut && !pareId ? catBrut.slice(0, 80) : "";
+
+  const title = categorie
+    ? `${categorie} | ${displayName}`
+    : `Toate produsele | ${displayName}`;
   const description =
     seo.description
-    || `Vezi toate produsele din ${deriveStoreTitle(displayName, business.store_city)}. Filtreaza dupa categorie, pret si atribute.`;
+    || (categorie
+      ? `${categorie} de la ${displayName}. Filtreaza dupa pret, brand si atribute.`
+      : `Vezi toate produsele din ${deriveStoreTitle(displayName, business.store_city)}. Filtreaza dupa categorie, pret si atribute.`);
   const images = business.cover_url ? [business.cover_url] : [];
 
   return {

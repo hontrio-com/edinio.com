@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import Image from "next/image";
 import { ChevronDown, Search, ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -57,7 +58,7 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
   // paginile fara catalog `searchCategories` sunt oricum radacinile.
   const categorii = catalog
     ? catalog.rootCategoryItems.map((c) => ({ key: c.key, name: c.name, image: c.image }))
-    : (searchCategories ?? []).map((name, i) => ({ key: `cat-${i}`, name, image: null }));
+    : radaciniCategorii(searchCategories).map((c) => ({ key: c.key, name: c.name, image: c.image }));
 
   const iconBtn =
     "w-10 h-10 rounded-full flex items-center justify-center text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors";
@@ -164,7 +165,7 @@ function MeniuInline({
   meniuCls: string;
   meniuStyle: { fontFamily: string };
 }) {
-  const { catalogRoot } = useStoreChrome();
+  const { categoriiRoot, catalogRoot } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -197,7 +198,7 @@ function MeniuInline({
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                 {categorii.slice(0, 12).map((c) => (
-                  <a key={c.key} href={hrefCategorie(catalogRoot, c.name)}
+                  <a key={c.key} href={hrefCategorie(categoriiRoot, c.name)}
                     className="flex items-center gap-2.5 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
                     {c.image ? (
                       <span className="relative w-9 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">

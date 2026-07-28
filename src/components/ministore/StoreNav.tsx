@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useId, useRef } from "react";
+import { useState, useEffect, useId, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Menu, X } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import { menuItemHref, isExternalLink, type MenuItem } from "@/lib/pages/menu";
-import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
+import { useStoreChromeOptional, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { hrefCategorie } from "@/lib/storefront/category-href";
+import { radaciniCategorii, subcategorii } from "@/lib/storefront/categories-chrome";
 import { cdnImage } from "@/lib/cdn-image";
 
 /** Desktop inline navigation links (hidden on mobile). */
@@ -79,7 +81,11 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
 }) {
   const bp = PANA_LA[panaLa];
   // Aceeasi sursa ca la meniul de desktop, din acelasi motiv: vezi StoreNavLinks.
-  const catalogRoot = useStoreChromeOptional()?.catalogRoot ?? basePath;
+  const chromeMeniu = useStoreChromeOptional();
+  const catalogRoot = chromeMeniu?.catalogRoot ?? basePath;
+  // Categoriile duc la pagina de catalog cand exista; `catalogRoot` ramane
+  // pentru intrarea „Magazin" din meniu.
+  const categoriiRoot = chromeMeniu?.categoriiRoot ?? catalogRoot;
   const [open, setOpen] = useState(false);
   const idPanou = useId();
   const declansator = useRef<HTMLButtonElement>(null);
@@ -185,11 +191,95 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                   </a>
                 );
               })}
+
+              {/*
+                Categoriile, cu subcategoriile lor, direct in meniu.
+                Pe telefon bara de categorii din hero e ascunsa si panourile din
+                header nu incap, deci asta e SINGURUL loc din care vizitatorul
+                ajunge la cele douazeci si doua de subcategorii ale magazinului.
+                Fara ele, meniul arata patru linkuri de pagini si atat.
+              */}
+              <CategoriiInMeniu categoriiRoot={categoriiRoot} color={color} onNaviga={() => setOpen(false)} />
             </nav>
           </div>
         </>,
         tinta,
       )}
     </>
+  );
+}
+
+/**
+ * Categoriile magazinului in meniul de pe telefon, cu subcategoriile pliate.
+ *
+ * Arborele vine din catalog cand pagina il are, si din chrome in rest — acolo il
+ * aduce `loadSearchCategories`, gated pe varianta de header. Cand nu exista
+ * niciuna dintre surse, sectiunea lipseste cu totul in loc sa apara un titlu
+ * gol: un magazin fara categorii n-are ce arata aici.
+ */
+function CategoriiInMeniu({
+  categoriiRoot,
+  color,
+  onNaviga,
+}: {
+  categoriiRoot: string;
+  color: string;
+  onNaviga: () => void;
+}) {
+  const chrome = useStoreChromeOptional();
+  const catalog = useStorefrontOptional();
+  const [deschisa, setDeschisa] = useState<string | null>(null);
+
+  const arbore = catalog?.categories ?? chrome?.searchCategories;
+  const radacini = useMemo(() => radaciniCategorii(arbore), [arbore]);
+  const copii = useMemo(() => subcategorii(arbore, deschisa), [arbore, deschisa]);
+  if (radacini.length === 0) return null;
+
+  return (
+    <div className="pt-2 mt-2 border-t border-border">
+      <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+        Categorii
+      </p>
+      {radacini.map((c) => {
+        const desfasurata = deschisa === c.id;
+        return (
+          <div key={c.key}>
+            <div className="flex items-stretch">
+              <a href={hrefCategorie(categoriiRoot, c.name)} onClick={onNaviga}
+                className="flex-1 min-w-0 px-3 py-3 rounded-xl text-base font-medium text-foreground hover:bg-muted transition-colors truncate">
+                {c.name}
+              </a>
+              {/*
+                Sageata e un buton SEPARAT de link: pe telefon, un singur element
+                care si navigheaza si desfasoara inseamna ca vizitatorul care vrea
+                subcategoriile ajunge in catalog, si invers.
+              */}
+              {c.hasChildren && (
+                <button type="button" aria-expanded={desfasurata}
+                  aria-label={desfasurata ? `Ascunde subcategoriile din ${c.name}` : `Arata subcategoriile din ${c.name}`}
+                  onClick={() => setDeschisa(desfasurata ? null : c.id)}
+                  className="w-11 shrink-0 flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted transition-colors">
+                  <ChevronDown className={`h-4 w-4 transition-transform ${desfasurata ? "rotate-180" : ""}`} />
+                </button>
+              )}
+            </div>
+            {desfasurata && copii.length > 0 && (
+              <div className="pl-3 pb-1">
+                {copii.map((sub) => (
+                  <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name)} onClick={onNaviga}
+                    className="block px-3 py-2.5 rounded-xl text-[15px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors truncate">
+                    {sub.name}
+                  </a>
+                ))}
+                <a href={hrefCategorie(categoriiRoot, c.name)} onClick={onNaviga}
+                  className="block px-3 py-2 text-[13px] font-semibold" style={{ color }}>
+                  Vezi tot din {c.name}
+                </a>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

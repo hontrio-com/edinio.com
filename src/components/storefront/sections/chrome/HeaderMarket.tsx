@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import Image from "next/image";
 import { ChevronDown, Menu, Phone, Search, ShoppingBag, Undo2 } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -55,7 +56,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
   // lasa vizitatorul blocat acolo, fara sa mai poata ajunge la restul.
   const categorii = catalog
     ? catalog.rootCategoryItems.map((c) => ({ name: c.name, image: c.image }))
-    : (searchCategories ?? []).map((name) => ({ name, image: null }));
+    : radaciniCategorii(searchCategories).map((c) => ({ name: c.name, image: c.image }));
 
   const baraSus = settings.showTopBar !== false;
   const textSus = typeof settings.topText === "string" ? settings.topText.trim() : "";
@@ -232,7 +233,7 @@ function BaraCautare({
     // campul stinge conturul implicit al browserului si fara inelul asta
     // navigarea cu tastatura n-ar avea niciun reper aici.
     <form role="search" onSubmit={trimite}
-      className={`flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] overflow-hidden focus-within:ring-2 focus-within:ring-[var(--st-text)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
+      className={`relative flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] focus-within:ring-2 focus-within:ring-[var(--st-text)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
       style={{ borderColor: "var(--st-primary)" }}>
       {categorii.length > 0 && (
         <div className="relative hidden sm:block shrink-0"
@@ -284,7 +285,7 @@ function ToateCategoriile({
 }: {
   categorii: { name: string; image: string | null }[];
 }) {
-  const { catalogRoot } = useStoreChrome();
+  const { categoriiRoot } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -311,7 +312,7 @@ function ToateCategoriile({
         <ul className="absolute left-0 top-full mt-2 z-50 w-72 max-h-[70vh] overflow-y-auto rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-1.5">
           {categorii.map((c) => (
             <li key={c.name}>
-              <a href={hrefCategorie(catalogRoot, c.name)}
+              <a href={hrefCategorie(categoriiRoot, c.name)}
                 className="flex items-center gap-3 px-3.5 py-2 hover:bg-[var(--st-primary-soft)] transition-colors">
                 {c.image ? (
                   <span className="relative w-7 h-7 rounded-[var(--st-radius-sm)] overflow-hidden shrink-0 bg-[var(--st-bg)]">

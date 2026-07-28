@@ -102,7 +102,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
       },
       pageContent,
       basePath: `/${business.slug}`,
-      searchCategories: DEMO_CATEGORIES.map((c) => c.name),
+      searchCategories: DEMO_CATEGORIES,
     }),
     // Miniatura randeaza o singura sectiune, deci deasupra header-ului nu exista
     // nicio bara de anunt de ocolit, oricat de aprinsa ar fi ea in magazin.

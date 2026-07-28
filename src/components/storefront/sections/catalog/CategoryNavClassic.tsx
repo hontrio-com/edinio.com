@@ -41,7 +41,7 @@ export function CategoryNavClassic() {
 }
 
 function PastileText() {
-  const { catalogRoot, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
+  const { heroAreCategorii, categoriiRoot, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
     useStorefront();
 
   const inactiv = {
@@ -52,7 +52,7 @@ function PastileText() {
   const pastila = "flex-shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all";
 
   return (
-    <CategoryScroller className="mb-6">
+    <CategoryScroller className={heroAreCategorii ? "mb-6 lg:hidden" : "mb-6"}>
       <div className="flex items-center gap-2 pb-1 w-max mx-auto">
         {isDrilled ? (
           <button type="button" onClick={goBackCategory}
@@ -71,7 +71,7 @@ function PastileText() {
           return (
             // `aria-current` fiindca altfel starea „aceasta e categoria aleasa"
             // se vede exclusiv din culoarea de fundal.
-            <a key={item.key} href={hrefCategorie(catalogRoot, item.name)}
+            <a key={item.key} href={hrefCategorie(categoriiRoot, item.name)}
               onClick={(e) => {
                 if (altaFila(e)) return;
                 e.preventDefault();
@@ -90,7 +90,7 @@ function PastileText() {
 }
 
 function CerculeteCuImagini() {
-  const { catalogRoot, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
+  const { heroAreCategorii, categoriiRoot, color, categoryFilter, currentCategoryItems, isDrilled, drillParentName, selectCategoryItem, resetCategory, goBackCategory } =
     useStorefront();
 
   const buton = "flex flex-col items-center gap-2 flex-shrink-0 group";
@@ -98,7 +98,7 @@ function CerculeteCuImagini() {
   const toateActiv = categoryFilter === "toate";
 
   return (
-    <CategoryScroller className="mb-6">
+    <CategoryScroller className={heroAreCategorii ? "mb-6 lg:hidden" : "mb-6"}>
       <div className="flex gap-4 pb-1 w-max mx-auto">
         {/* Controlul din fata: „Toate" la nivelul de sus, „Inapoi" intr-o subcategorie. */}
         {isDrilled ? (
@@ -133,7 +133,7 @@ function CerculeteCuImagini() {
         {currentCategoryItems.map((item) => {
           const activ = categoryFilter === item.name;
           return (
-            <a key={item.key} href={hrefCategorie(catalogRoot, item.name)}
+            <a key={item.key} href={hrefCategorie(categoriiRoot, item.name)}
               onClick={(e) => {
                 if (altaFila(e)) return;
                 e.preventDefault();

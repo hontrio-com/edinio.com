@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import { ChevronDown, Mail, MapPin, Phone } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
@@ -26,7 +27,7 @@ import { hrefCategorie } from "@/lib/storefront/category-href";
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
 export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
-  const { business, basePath, catalogRoot, menu, pageContent, social, hasStickyBottomBar, searchCategories } = useStoreChrome();
+  const { business, basePath, catalogRoot, categoriiRoot, menu, pageContent, social, hasStickyBottomBar, searchCategories } = useStoreChrome();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
@@ -38,7 +39,7 @@ export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
   // coloana ar fi fost goala peste tot in afara paginii de magazin.
   const categorii = (
     catalog?.rootCategoryItems.map((c) => ({ key: c.key, name: c.name })) ??
-    (searchCategories ?? []).map((name) => ({ key: name, name }))
+    radaciniCategorii(searchCategories).map((c) => ({ key: c.key, name: c.name }))
   ).slice(0, 6);
   const inchis = ton === "inchis";
   // Pe fundal inchis culorile vin din perechea de footer a magazinului, ca sa
@@ -87,7 +88,7 @@ export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
                 un 308 la fiecare apasare, ca `${basePath}/`. */}
             <Legatura cls={legatura} href={catalogRoot}>Toate produsele</Legatura>
             {categorii.map((c) => (
-              <Legatura key={c.key} cls={legatura} href={hrefCategorie(catalogRoot, c.name)}>{c.name}</Legatura>
+              <Legatura key={c.key} cls={legatura} href={hrefCategorie(categoriiRoot, c.name)}>{c.name}</Legatura>
             ))}
           </Coloana>
 

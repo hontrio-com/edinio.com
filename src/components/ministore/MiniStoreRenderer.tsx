@@ -29,7 +29,7 @@ import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { scrieFiltre } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { variantMeta } from "@/lib/storefront/design/registry";
+import { MIN_CATEGORII_HERO_SIDEBAR, variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
@@ -178,6 +178,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * raspunsul din `buildChromeData`, care arata catre pagina de catalog cand
    * exista, fiindca acolo e experienta completa.
    */
+  const categoriiRootPagina = shopOnPage(design) ? shopHref(basePath) : radacinaMagazin(basePath);
   const catalogRootPagina = surface === "shop" || catalogMutat
     ? shopHref(basePath)
     : radacinaMagazin(basePath);
@@ -497,9 +498,21 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const hasCategories = catTree.topItems.length > 0;
   const hasAnyCategoryImage = catTree.hasAnyImage;
 
+  /*
+   * Apasarea unei categorii DUCE la pagina de catalog, cand ea exista.
+   *
+   * De oriunde, nu doar cand grila a plecat de acasa: cine apasa pe o categorie
+   * vrea sa vada tot ce e in ea si sa filtreze mai departe dupa pret sau
+   * atribute, iar acelea sunt pe pagina de catalog. Grila de pe pagina
+   * principala ramane pentru rasfoit, nu pentru cautat.
+   *
+   * Pe pagina de catalog insa se filtreaza pe loc: acolo suntem deja.
+   */
+  const categoriileNavigheaza = surface !== "shop" && shopOnPage(design);
+
   function selectCategoryItem(item: { id: string | null; name: string; hasChildren: boolean }) {
-    if (catalogMutat) {
-      window.location.href = hrefCategorie(catalogRootPagina, item.name);
+    if (categoriileNavigheaza) {
+      window.location.href = hrefCategorie(categoriiRootPagina, item.name);
       return;
     }
     // Drill into a category that has subcategories; otherwise just filter by it.
@@ -535,8 +548,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   function viewAllCategory(category: string) {
     // Ancora `#produse` traieste pe grila. Mutata, „Vezi toate" ar fi derulat
     // catre `null`, adica n-ar fi facut nimic si n-ar fi dat nicio eroare.
-    if (catalogMutat) {
-      window.location.href = hrefCategorie(catalogRootPagina, category);
+    if (categoriileNavigheaza) {
+      window.location.href = hrefCategorie(categoriiRootPagina, category);
       return;
     }
     setCategoryFilter(category);
@@ -816,6 +829,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // Linkurile de categorie duc unde pune designul catalogul: cand exista
     // pagina de magazin, acolo, nu inapoi in grila paginii principale.
     catalogRoot: catalogRootPagina,
+    // Categoriile duc MEREU la pagina de catalog cand ea exista, chiar daca
+    // pagina asta are si ea o grila: acolo sunt filtrele pe atribute si pret,
+    // adica exact ce cauta cineva care apasa pe o categorie.
+    categoriiRoot: categoriiRootPagina,
     isHome: surface === "home",
     // Pagina principala fara grila nu mai poate filtra pe loc: cautarea din
     // header trebuie sa navigheze, nu sa scrie intr-o lista pe care n-o vede
@@ -892,6 +909,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     isDrilled: drillParentId !== null,
     drillParentName: drillParent?.name ?? null,
     hasCategories,
+    // Bara de categorii din hero se randeaza doar pe ecran mare si doar cand
+    // magazinul are destule categorii; sectiunea de sub ea se da la o parte
+    // acolo, nu peste tot.
+    heroAreCategorii: sectiuniDeAcasa.some(
+      (s) => s.kind === "hero" && s.enabled && s.variant === "categories",
+    ) && catTree.topItems.length >= MIN_CATEGORII_HERO_SIDEBAR,
     hasAnyCategoryImage,
     selectCategoryItem,
     resetCategory,

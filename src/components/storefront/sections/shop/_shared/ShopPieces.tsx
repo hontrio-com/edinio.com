@@ -701,7 +701,7 @@ export function TextSubGrila() {
 
 /** Pastilele de categorie de sus, cand comerciantul le cere. */
 export function CategoriiSus() {
-  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, catalogRoot, color } =
+  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, categoriiRoot, color } =
     useStorefront();
   if (!hasCategories) return null;
   const pastila = "px-3.5 py-1.5 rounded-full text-[13px] border whitespace-nowrap transition-colors";
@@ -715,7 +715,7 @@ export function CategoriiSus() {
         {isDrilled ? "Inapoi" : "Toate"}
       </button>
       {currentCategoryItems.map((c) => (
-        <a key={c.key} href={hrefCategorie(catalogRoot, c.name)}
+        <a key={c.key} href={hrefCategorie(categoriiRoot, c.name)}
           onClick={(e) => {
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             e.preventDefault();

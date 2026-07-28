@@ -5,6 +5,7 @@ import { cartHref, cartOnPage, radacinaCatalog } from "@/lib/storefront/design/c
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { CartMode, StoreChromeValue } from "@/components/storefront/StorefrontProvider";
 import type {
+  StoreCategoryNode,
   StoreFeatures,
   StorePageContent,
   StoreSocial,
@@ -64,7 +65,7 @@ export function buildChromeData({
    * `MiniStoreRenderer`.
    */
   isHome?: boolean;
-  searchCategories?: string[];
+  searchCategories?: StoreCategoryNode[];
 }): StoreChromeData {
   // Un magazin cu cosul pe pagina il are pe pagina PESTE TOT: si in header-ul
   // paginii de produs, si in cel al paginilor custom. Modul „hidden" (magazinul
@@ -80,6 +81,9 @@ export function buildChromeData({
     // `basePath`. Fara design — doar miniaturile din editor — ramane radacina
     // magazinului, adica exact ce era inainte.
     catalogRoot: design ? radacinaCatalog(basePath, design) : radacinaMagazin(basePath),
+    // Pe paginile fara catalog, cele doua coincid: nu exista o grila locala
+    // catre care sa arate.
+    categoriiRoot: design ? radacinaCatalog(basePath, design) : radacinaMagazin(basePath),
     isHome,
     color: business.primary_color ?? "#1AB554",
     pageContent,
@@ -112,17 +116,28 @@ export function buildChromeData({
 export async function loadSearchCategories(
   businessId: string,
   design: StoreDesign,
-): Promise<string[] | undefined> {
+): Promise<StoreCategoryNode[] | undefined> {
   const cerute =
     variantMeta("header", design.chrome.header.variant)?.needsCategories === true ||
     variantMeta("footer", design.chrome.footer.variant)?.needsCategories === true;
   if (!cerute) return undefined;
+  /*
+   * ARBORELE intreg, nu doar radacinile.
+   *
+   * Radacinile ajungeau pentru un selector de langa cautare, dar meniul de pe
+   * telefon si panourile din header trebuie sa arate si subcategoriile —
+   * altfel, la un magazin cu opt categorii si douazeci si doua de subcategorii,
+   * vizitatorul de pe telefon vede opt nume si n-are cum sa ajunga la restul.
+   *
+   * Costul e acelasi: o interogare, tot gated pe `needsCategories`. Plafonul
+   * urca la 300 fiindca acum se numara si copiii.
+   */
   const { data } = await createAdminClient()
     .from("categories")
-    .select("name")
+    .select("id, name, parent_id, image_url, sort_order")
     .eq("business_id", businessId)
-    .is("parent_id", null)
     .order("sort_order")
-    .limit(50);
-  return (data ?? []).map((c) => c.name);
+    .order("id")
+    .limit(300);
+  return data ?? [];
 }

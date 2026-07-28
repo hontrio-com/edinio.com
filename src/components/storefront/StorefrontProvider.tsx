@@ -116,11 +116,27 @@ export interface StoreChromeValue {
   /** Slug-ul paginii curente, pentru starea activa din meniu. */
   currentPageSlug?: string | null;
   /**
-   * Categoriile de nivel intai, pentru variantele de header care au un selector
-   * de categorie langa cautare. Se incarca doar cand varianta aleasa are nevoie
-   * de ele — nu punem o interogare in plus pe fiecare pagina degeaba.
+   * Arborele de categorii al magazinului, cu subcategorii cu tot.
+   *
+   * Se incarca doar cand varianta de header sau de footer aleasa il cere — nu
+   * punem o interogare in plus pe fiecare pagina degeaba. Pe pagina de catalog
+   * exista oricum in `categories`, din contextul de catalog; aici e pentru
+   * paginile fara el: selectorul de langa cautare, panourile din header si
+   * meniul de pe telefon, care altfel ar arata opt nume si niciun drum catre
+   * cele douazeci si doua de subcategorii de dedesubt.
    */
-  searchCategories?: string[];
+  searchCategories?: StoreCategoryNode[];
+  /**
+   * Unde duc linkurile de CATEGORIE.
+   *
+   * Separat de `catalogRoot`, care inseamna „catalogul acestei pagini" si
+   * alimenteaza paginarea si sertarul. O categorie apasata oriunde trebuie sa
+   * duca la pagina de catalog cand ea exista — acolo sunt filtrele pe atribute
+   * si pret — chiar daca pagina curenta are si ea o grila. Cu un singur camp
+   * pentru amandoua, paginarea de pe pagina principala ar fi sarit pe pagina de
+   * catalog la fiecare apasare pe „2".
+   */
+  categoriiRoot: string;
   /** Galeria foto poate aparea pe orice pagina, deci lightbox-ul sta aici. */
   openLightbox: (url: string) => void;
   /**
@@ -227,6 +243,15 @@ export interface StorefrontContextValue extends StoreChromeValue {
   isDrilled: boolean;
   drillParentName: string | null;
   hasCategories: boolean;
+  /**
+   * Hero-ul paginii arata deja o bara de categorii, pe ecran mare.
+   *
+   * Sectiunea de categorii de sub el ramane pentru TELEFON, unde bara din hero e
+   * ascunsa; pe calculator s-ar fi vazut aceleasi opt categorii de doua ori, la
+   * doua ecrane distanta. Nu se rezolva scotand sectiunea din design: pe telefon
+   * ea e singura navigare pe categorii de pe pagina.
+   */
+  heroAreCategorii?: boolean;
   hasAnyCategoryImage: boolean;
   selectCategoryItem: (item: CategoryItem) => void;
   resetCategory: () => void;

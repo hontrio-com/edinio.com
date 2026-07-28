@@ -1,10 +1,12 @@
 "use client";
 
 import { Fragment, useRef, useState } from "react";
+import { numeRadacini } from "@/lib/storefront/categories-chrome";
 import { ChevronDown, Search, ShoppingBag } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { hrefCatalog } from "@/lib/storefront/category-href";
+import { RezultateCautare } from "@/components/storefront/sections/_shared/RezultateCautare";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
@@ -49,7 +51,7 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
   // blocat in subarbore. Pe paginile fara catalog sunt oricum radacinile.
   const categorii = catalog
     ? catalog.rootCategoryItems.map((c) => c.name)
-    : (searchCategories ?? []);
+    : numeRadacini(searchCategories);
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)]/95 backdrop-blur-md border-b border-[var(--st-border)]`}>
@@ -138,17 +140,19 @@ function SearchBar({
   categorii: string[];
   compact?: boolean;
 }) {
-  const { catalogRoot } = useStoreChrome();
+  const { catalogRoot, basePath } = useStoreChrome();
   const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const [catLocal, setCatLocal] = useState("toate");
   const [deschis, setDeschis] = useState(false);
+  const [rezultateDeschise, setRezultateDeschise] = useState(false);
   const inchide = useRef<number | null>(null);
 
   const valoare = catalog ? catalog.search : local;
   const categorie = catalog ? catalog.categoryFilter : catLocal;
 
   function scrie(v: string) {
+    setRezultateDeschise(v.trim().length > 0);
     if (catalog) {
       if (catalog.search === "" && v !== "") catalog.setSortTouched(false);
       catalog.setSearch(v);
@@ -181,14 +185,20 @@ function SearchBar({
 
   return (
     <form role="search" onSubmit={trimite}
-      className={`flex items-stretch rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] overflow-hidden focus-within:border-[var(--st-primary)] transition-colors ${compact ? "h-11" : "h-12"}`}>
+      onKeyDown={(e) => { if (e.key === "Escape") setRezultateDeschise(false); }}
+      onBlur={(e) => {
+        // Doar cand focusul chiar pleaca din bara: altfel trecerea de la camp la
+        // butonul de cautare ar fi inchis panoul sub degetul vizitatorului.
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setRezultateDeschise(false);
+      }}
+      className={`relative flex items-stretch rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] transition-colors ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"
         value={valoare}
         onChange={(e) => scrie(e.target.value)}
         placeholder="Cauta produse..."
         aria-label="Cauta produse"
-        className="flex-1 min-w-0 px-4 bg-transparent text-sm text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none"
+        className="flex-1 min-w-0 px-4 bg-transparent text-sm text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none rounded-l-[inherit]"
       />
 
       {categorii.length > 0 && (
@@ -222,9 +232,15 @@ function SearchBar({
       )}
 
       <button type="submit" aria-label="Cauta"
-        className="px-4 flex items-center justify-center border-l border-[var(--st-border)] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
+        className="px-4 flex items-center justify-center border-l border-[var(--st-border)] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors rounded-r-[inherit]">
         <Search className="h-4 w-4" />
       </button>
+
+      {/* Rezultatele apar sub bara, nu dupa o navigare. Se inchid la Escape si
+          la parasirea barei, ca orice panou care acopera pagina. */}
+      {rezultateDeschise && (
+        <RezultateCautare text={valoare} basePath={basePath} onAlege={() => setRezultateDeschise(false)} />
+      )}
     </form>
   );
 }

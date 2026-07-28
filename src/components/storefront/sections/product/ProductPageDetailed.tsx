@@ -570,7 +570,7 @@ export function ProductPageDetailed({
               <>
                 <li aria-hidden="true" className="shrink-0"><ChevronRight size={13} /></li>
                 <li className="shrink-0">
-                  <a href={hrefCategorie(radacinaCatalog, categorie)} className="hover:text-foreground transition-colors">{categorie}</a>
+                  <a href={hrefCategorie(radacinaCatalog, categorie, chrome?.categoriiPePagina)} className="hover:text-foreground transition-colors">{categorie}</a>
                 </li>
               </>
             )}
@@ -822,7 +822,7 @@ export function ProductPageDetailed({
                 {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
                 {categorie !== "" && (
                   <RandMeta eticheta="Categorie">
-                    <a href={hrefCategorie(radacinaCatalog, categorie)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
+                    <a href={hrefCategorie(radacinaCatalog, categorie, chrome?.categoriiPePagina)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
                   </RandMeta>
                 )}
                 {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}

@@ -33,7 +33,7 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
   const {
     business,
     basePath,
-    catalogRoot,
+    categoriiRoot,
     menu,
     pageContent,
     social,
@@ -111,7 +111,7 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
                 {menu.map((it) => {
                   const activ = it.type === "page" && it.target === currentPageSlug;
                   return (
-                    <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)}
+                    <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)}
                       className={`text-[15px] font-semibold text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`}
                       style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)" } : {}) }}>
                       {it.label}

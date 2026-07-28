@@ -22,7 +22,7 @@ import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_s
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
 export function FooterCentered() {
-  const { business, basePath, catalogRoot, menu, pageContent, social, hasStickyBottomBar } = useStoreChrome();
+  const { business, basePath, categoriiRoot, menu, pageContent, social, hasStickyBottomBar } = useStoreChrome();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = (pageContent.footer_logo_size ?? 36) * 1.4;
@@ -53,7 +53,7 @@ export function FooterCentered() {
           {pagini.length > 0 && (
             <nav className="flex flex-wrap items-center justify-center gap-x-7 gap-y-2">
               {pagini.map((it) => (
-                <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)}
+                <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)}
                   className="text-sm font-medium hover:opacity-60 transition-opacity">
                   {it.label}
                 </a>

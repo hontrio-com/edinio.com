@@ -18,7 +18,8 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
   // adaugat in zece locuri si tinut in sincron la fiecare varianta noua. Optional
   // fiindca `useStoreChrome` arunca fara provider, iar aici o lipsa nu merita o
   // pagina alba — se cade pe `basePath`, adica pe comportamentul de dinainte.
-  const catalogRoot = useStoreChromeOptional()?.catalogRoot ?? basePath;
+  const chrome = useStoreChromeOptional();
+  const categoriiRoot = chrome?.categoriiRoot ?? chrome?.catalogRoot ?? basePath;
   if (items.length === 0) return null;
   // `overflow-x-auto` duce dimensiunea minima automata la zero — cu `visible`, un
   // meniu de opt intrari `whitespace-nowrap` nu se poate stramta sub suma lor si
@@ -33,7 +34,7 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
     <nav className={`hidden md:flex items-center min-w-0 overflow-x-auto ${className ?? ""}`}>
       <span className="flex items-center gap-0.5 mx-auto">
       {items.map((it) => {
-        const href = menuItemHref(it, basePath, catalogRoot);
+        const href = menuItemHref(it, basePath, categoriiRoot);
         const ext = isExternalLink(it);
         const active = !!currentSlug && it.type === "page" && it.target === currentSlug;
         return (
@@ -86,6 +87,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
   // Categoriile duc la pagina de catalog cand exista; `catalogRoot` ramane
   // pentru intrarea „Magazin" din meniu.
   const categoriiRoot = chromeMeniu?.categoriiRoot ?? catalogRoot;
+  const categoriiPePagina = chromeMeniu?.categoriiPePagina === true;
   const [open, setOpen] = useState(false);
   const idPanou = useId();
   const declansator = useRef<HTMLButtonElement>(null);
@@ -179,7 +181,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
             </div>
             <nav className="flex-1 overflow-y-auto p-3 space-y-1">
               {items.map((it) => {
-                const href = menuItemHref(it, basePath, catalogRoot);
+                const href = menuItemHref(it, basePath, categoriiRoot);
                 const ext = isExternalLink(it);
                 const active = !!currentSlug && it.type === "page" && it.target === currentSlug;
                 return (
@@ -199,7 +201,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                 ajunge la cele douazeci si doua de subcategorii ale magazinului.
                 Fara ele, meniul arata patru linkuri de pagini si atat.
               */}
-              <CategoriiInMeniu categoriiRoot={categoriiRoot} color={color} onNaviga={() => setOpen(false)} />
+              <CategoriiInMeniu categoriiRoot={categoriiRoot} pePagina={categoriiPePagina} color={color} onNaviga={() => setOpen(false)} />
             </nav>
           </div>
         </>,
@@ -219,10 +221,12 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
  */
 function CategoriiInMeniu({
   categoriiRoot,
+  pePagina,
   color,
   onNaviga,
 }: {
   categoriiRoot: string;
+  pePagina: boolean;
   color: string;
   onNaviga: () => void;
 }) {
@@ -245,7 +249,7 @@ function CategoriiInMeniu({
         return (
           <div key={c.key}>
             <div className="flex items-stretch">
-              <a href={hrefCategorie(categoriiRoot, c.name)} onClick={onNaviga}
+              <a href={hrefCategorie(categoriiRoot, c.name, pePagina)} onClick={onNaviga}
                 className="flex-1 min-w-0 px-3 py-3 rounded-xl text-base font-medium text-foreground hover:bg-muted transition-colors truncate">
                 {c.name}
               </a>
@@ -266,12 +270,12 @@ function CategoriiInMeniu({
             {desfasurata && copii.length > 0 && (
               <div className="pl-3 pb-1">
                 {copii.map((sub) => (
-                  <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name)} onClick={onNaviga}
+                  <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name, pePagina)} onClick={onNaviga}
                     className="block px-3 py-2.5 rounded-xl text-[15px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors truncate">
                     {sub.name}
                   </a>
                 ))}
-                <a href={hrefCategorie(categoriiRoot, c.name)} onClick={onNaviga}
+                <a href={hrefCategorie(categoriiRoot, c.name, pePagina)} onClick={onNaviga}
                   className="block px-3 py-2 text-[13px] font-semibold" style={{ color }}>
                   Vezi tot din {c.name}
                 </a>

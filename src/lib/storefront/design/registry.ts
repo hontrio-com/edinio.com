@@ -410,8 +410,8 @@ const SHOP_FIELDS: Field[] = [
   },
   { key: "arataNumaratori", type: "toggle", label: "Arata cate produse are fiecare valoare" },
   {
-    key: "filtrePliate", type: "toggle", label: "Filtrele pornesc pliate",
-    help: "Util cand ai multe atribute: vizitatorul vede lista de filtre dintr-o privire si deschide doar ce il intereseaza.",
+    key: "filtreDesfasurate", type: "toggle", label: "Filtrele pornesc desfasurate",
+    help: "Implicit sunt pliate, ca vizitatorul sa vada toata lista de filtre dintr-o privire si sa deschida doar ce il intereseaza. Porneste-l daca ai putine atribute si vrei totul la vedere.",
   },
 
   // --- Sortare -------------------------------------------------------------
@@ -447,7 +447,7 @@ const SHOP_DEFAULTS = {
   modPaginare: "pagini",
   valoriVizibile: 6,
   arataNumaratori: true,
-  filtrePliate: false,
+  filtreDesfasurate: false,
   sortareImplicita: "",
 };
 

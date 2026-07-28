@@ -121,6 +121,17 @@ interface Props {
    * header, fiindca evenimentul `storage` nu se declanseaza in fila care scrie.
    */
   surface?: "home" | "shop";
+  /*
+   * Adresa paginii de categorie pe care suntem, cand suntem pe una.
+   *
+   * Prezenta ei schimba trei lucruri: categoria NU se mai scrie in interogare
+   * (o poarta chiar calea), paginarea ramane pe calea asta, iar orice apasare pe
+   * o categorie navigheaza in loc sa filtreze pe loc — altfel bara de adrese ar
+   * fi spus o categorie si continutul ar fi aratat alta.
+   */
+  caleCategorie?: string;
+  /** Categoria din cale, ca sa se vada de la inceput subcategoriile ei in navigare. */
+  initialDrillParentId?: string | null;
   /** Fatetele calculate pe server. Doar pagina de catalog le cere. */
   fatete?: Fateta[];
   jetoane?: string[];
@@ -133,7 +144,7 @@ interface Props {
   initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -179,6 +190,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * exista, fiindca acolo e experienta completa.
    */
   const categoriiRootPagina = shopOnPage(design) ? shopHref(basePath) : radacinaMagazin(basePath);
+  // Paginarea si linkurile ei raman pe pagina curenta; `catalogRoot` ramane
+  // catalogul intreg, fiindca de el atarna „Toate produsele" din footer si
+  // cautarea din header — acelea n-au ce cauta inchise intr-o categorie.
+  const radacinaPaginare = caleCategorie ?? "";
   const catalogRootPagina = surface === "shop" || catalogMutat
     ? shopHref(basePath)
     : radacinaMagazin(basePath);
@@ -492,7 +507,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     return { topItems, childItemsById, subtreeByName, byId, hasAnyImage };
   }, [categories, visibleProducts]);
 
-  const [drillParentId, setDrillParentId] = useState<string | null>(null);
+  const [drillParentId, setDrillParentId] = useState<string | null>(initialDrillParentId);
   const drillParent = drillParentId ? catTree.byId.get(drillParentId) ?? null : null;
   const currentItems = drillParentId ? (catTree.childItemsById[drillParentId] ?? []) : catTree.topItems;
   const hasCategories = catTree.topItems.length > 0;
@@ -506,13 +521,15 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * atribute, iar acelea sunt pe pagina de catalog. Grila de pe pagina
    * principala ramane pentru rasfoit, nu pentru cautat.
    *
-   * Pe pagina de catalog insa se filtreaza pe loc: acolo suntem deja.
+   * Si pe pagina de catalog: de cand fiecare categorie are pagina ei, filtrarea
+   * pe loc ar fi lasat adresa in urma continutului. Magazinele fara pagina de
+   * catalog raman insa exact cum erau — acolo grila filtreaza pe loc, ca inainte.
    */
-  const categoriileNavigheaza = surface !== "shop" && shopOnPage(design);
+  const categoriileNavigheaza = shopOnPage(design);
 
   function selectCategoryItem(item: { id: string | null; name: string; hasChildren: boolean }) {
     if (categoriileNavigheaza) {
-      window.location.href = hrefCategorie(categoriiRootPagina, item.name);
+      window.location.href = hrefCategorie(categoriiRootPagina, item.name, true);
       return;
     }
     // Drill into a category that has subcategories; otherwise just filter by it.
@@ -520,6 +537,13 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     setCategoryFilter(item.name);
   }
   function resetCategory() {
+    // Din pagina unei categorii, „Toate" inseamna catalogul intreg, deci o
+    // navigare. Stersul filtrului pe loc ar fi aratat tot catalogul la o adresa
+    // care se numeste dupa o categorie.
+    if (caleCategorie) {
+      window.location.href = categoriiRootPagina;
+      return;
+    }
     if (catalogMutat) {
       window.location.href = catalogRootPagina;
       return;
@@ -529,8 +553,15 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   }
   function goBackCategory() {
     const backTo = drillParent?.parent_id ?? null;
+    const numeParinte = backTo ? catTree.byId.get(backTo)?.name : null;
+    if (caleCategorie) {
+      window.location.href = numeParinte
+        ? hrefCategorie(categoriiRootPagina, numeParinte, true)
+        : categoriiRootPagina;
+      return;
+    }
     setDrillParentId(backTo);
-    setCategoryFilter(backTo ? (catTree.byId.get(backTo)?.name ?? "toate") : "toate");
+    setCategoryFilter(numeParinte ?? "toate");
   }
 
   // Featured products
@@ -549,7 +580,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // Ancora `#produse` traieste pe grila. Mutata, „Vezi toate" ar fi derulat
     // catre `null`, adica n-ar fi facut nimic si n-ar fi dat nicio eroare.
     if (categoriileNavigheaza) {
-      window.location.href = hrefCategorie(categoriiRootPagina, category);
+      window.location.href = hrefCategorie(categoriiRootPagina, category, true);
       return;
     }
     setCategoryFilter(category);
@@ -741,7 +772,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    */
   const interogareFiltre = useMemo(
     () => scrieFiltre({
-      categorie: categoryFilter,
+      // Pe pagina unei categorii, categoria e chiar calea: scrisa si in
+      // interogare, ar fi dat `/magazin/bocanci?cat=Bocanci` la fiecare filtrare.
+      categorie: caleCategorie ? "" : categoryFilter,
       cautare: search,
       sortare: sortTouched ? sort : "",
       reduceri: onSaleOnly,
@@ -750,7 +783,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       pretMax: priceMax,
       fatete: selectieFatete,
     }),
-    [categoryFilter, search, sort, sortTouched, onSaleOnly, inStockOnly, priceMin, priceMax, selectieFatete],
+    [caleCategorie, categoryFilter, search, sort, sortTouched, onSaleOnly, inStockOnly, priceMin, priceMax, selectieFatete],
   );
 
   /*
@@ -829,6 +862,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // Linkurile de categorie duc unde pune designul catalogul: cand exista
     // pagina de magazin, acolo, nu inapoi in grila paginii principale.
     catalogRoot: catalogRootPagina,
+    radacinaPaginare: radacinaPaginare || catalogRootPagina,
+    categoriiPePagina: categoriileNavigheaza,
     // Categoriile duc MEREU la pagina de catalog cand ea exista, chiar daca
     // pagina asta are si ea o grila: acolo sunt filtrele pe atribute si pret,
     // adica exact ce cauta cineva care apasa pe o categorie.

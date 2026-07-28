@@ -29,7 +29,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
   const {
     business,
     basePath,
-    catalogRoot,
+    categoriiRoot,
     menu,
     pageContent,
     hasAnnouncementBar,
@@ -88,7 +88,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               {menu.map((it) => {
                 const activ = it.type === "page" && it.target === currentPageSlug;
                 return (
-                  <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)}
+                  <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)}
                     className={`text-[15px] truncate transition-opacity hover:opacity-100 ${meniuCls} ${activ ? "font-bold opacity-100" : "font-medium opacity-55"}`}
                     style={meniuStyle}>
                     {it.label}

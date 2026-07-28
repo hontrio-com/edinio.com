@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN, isPlatformHost, parseStoreSeo } from "@/lib/seo";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
+import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
@@ -72,6 +73,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: "daily",
         priority: 0.9,
       });
+      // Si paginile de categorie: de cand exista, ele sunt adresele care
+      // raspund cautarilor de tip „bocanci de protectie".
+      const categorii = await fetchAllRows("sitemap.store.categories", (from, to) =>
+        supabase.from("categories").select("name").eq("business_id", biz.id).order("id").range(from, to)
+      );
+      const vazute = new Set<string>();
+      for (const c of categorii) {
+        const seg = slugCategorie(c.name ?? "");
+        if (!seg || vazute.has(seg)) continue;
+        vazute.add(seg);
+        entries.push({
+          url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
+          lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(),
+          changeFrequency: "daily",
+          priority: 0.8,
+        });
+      }
     }
 
     // One Product Store: the homepage already represents the single product, so

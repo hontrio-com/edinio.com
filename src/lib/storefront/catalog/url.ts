@@ -40,7 +40,17 @@ function primul(v: string | string[] | undefined): string {
   return (Array.isArray(v) ? v[0] : v) ?? "";
 }
 
+/**
+ * Un numar pozitiv din adresa, sau nimic.
+ *
+ * Verificarea pe sirul GOL e prima si nu poate lipsi: `Number("")` e zero, finit
+ * si pozitiv, deci fara ea o adresa fara `pmin` producea un filtru „de la 0 pana
+ * la 0" — adica un catalog gol, la fiecare incarcare a paginii, pentru toata
+ * lumea. Exact felul de defect care trece de tipuri, de teste care verifica doar
+ * valorile invalide, si de build.
+ */
 function numarPozitiv(v: string): string {
+  if (!v.trim()) return "";
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? String(Math.floor(n)) : "";
 }

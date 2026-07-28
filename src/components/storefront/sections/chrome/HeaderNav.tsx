@@ -165,7 +165,7 @@ function MeniuInline({
   meniuCls: string;
   meniuStyle: { fontFamily: string };
 }) {
-  const { categoriiRoot, catalogRoot } = useStoreChrome();
+  const { categoriiRoot, categoriiPePagina, catalogRoot } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -198,7 +198,7 @@ function MeniuInline({
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                 {categorii.slice(0, 12).map((c) => (
-                  <a key={c.key} href={hrefCategorie(categoriiRoot, c.name)}
+                  <a key={c.key} href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
                     className="flex items-center gap-2.5 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
                     {c.image ? (
                       <span className="relative w-9 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
@@ -228,7 +228,7 @@ function MeniuInline({
       {menu.map((it) => {
         const activ = it.type === "page" && it.target === currentPageSlug;
         return (
-          <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)} className={link}
+          <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} className={link}
             aria-current={activ ? "page" : undefined}
             style={activ ? { color: "var(--st-primary)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: "6px" } : undefined}>
             {it.label}

@@ -26,12 +26,35 @@ export function CatalogToolbar() {
     activeFilterCount,
     resetFilters,
     headerHasSearch,
+    visibleProducts,
+    filteredProducts,
   } = useStorefront();
+
+  /*
+   * Cate produse se vad acum, cand cautarea sta in header.
+   *
+   * Fara caseta locala, randul ramanea cu doua controale mici lipite in stanga
+   * si o jumatate de rand goala. Contorul umple locul cu singurul lucru care
+   * merita citit acolo: cate produse a mai lasat filtrarea. Pe telefon nu se
+   * arata — acolo latimea e oricum ocupata de sortare si de butonul de filtre.
+   */
+  const total = visibleProducts.length;
+  const aratate = filteredProducts.length;
+  const contor = aratate === total
+    ? `${total} ${total === 1 ? "produs" : "produse"}`
+    : `${aratate} din ${total} ${total === 1 ? "produs" : "produse"}`;
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+      <div className={headerHasSearch
+        ? "flex items-center gap-3 mb-5"
+        : "flex flex-wrap items-center gap-3 mb-5"}>
         {/* Cand header-ul are deja o caseta de cautare, aici ar fi a doua. */}
+        {headerHasSearch && (
+          <span className="hidden md:block flex-1 min-w-0 truncate text-sm text-muted-foreground">
+            {contor}
+          </span>
+        )}
         {!headerHasSearch && (
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -77,7 +100,9 @@ export function CatalogToolbar() {
         </div>
 
         <button type="button" onClick={() => setFiltersOpen(!filtersOpen)}
-          className="h-[46px] px-4 w-full md:w-auto justify-center inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"
+          className={headerHasSearch
+            ? "h-[46px] px-4 shrink-0 justify-center inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"
+            : "h-[46px] px-4 w-full md:w-auto justify-center inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"}
           style={filtersOpen || activeFilterCount > 0 ? { borderColor: color, color } : { color: "var(--color-foreground)" }}>
           <Filter className="h-4 w-4" />
           Filtre

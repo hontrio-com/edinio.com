@@ -36,7 +36,8 @@ export interface SetariMagazin {
   grupuriFiltre: string[];
   valoriVizibile: number;
   arataNumaratori: boolean;
-  filtrePliate: boolean;
+  /** Grupurile de filtre pornesc deschise. Implicit sunt pliate. */
+  filtreDesfasurate: boolean;
 
   /** Gol = ramane sortarea implicita a magazinului, din „Editeaza magazinul". */
   sortareImplicita: string;
@@ -66,7 +67,7 @@ const IMPLICITE: SetariMagazin = {
   grupuriFiltre: GRUPURI_FILTRE.map((g) => g.value),
   valoriVizibile: 6,
   arataNumaratori: true,
-  filtrePliate: false,
+  filtreDesfasurate: false,
 
   sortareImplicita: "",
   sortariOferite: SORTARI_CATALOG.map((s) => s.value),
@@ -140,7 +141,7 @@ export function citesteSetariMagazinDinSectiune(
     ),
     valoriVizibile: numar(citeste("valoriVizibile"), IMPLICITE.valoriVizibile, 3, 20),
     arataNumaratori: comutator(citeste("arataNumaratori"), IMPLICITE.arataNumaratori),
-    filtrePliate: comutator(citeste("filtrePliate"), IMPLICITE.filtrePliate),
+    filtreDesfasurate: comutator(citeste("filtreDesfasurate"), IMPLICITE.filtreDesfasurate),
 
     sortareImplicita: sir(citeste("sortareImplicita"), IMPLICITE.sortareImplicita),
     sortariOferite: resolveActions(

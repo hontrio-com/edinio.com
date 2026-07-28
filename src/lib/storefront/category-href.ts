@@ -1,3 +1,5 @@
+import { slugify } from "@/lib/utils/slugify";
+
 /**
  * Adresa de filtrare pe categorie, scrisa intr-un singur loc.
  *
@@ -25,8 +27,29 @@ export function radacinaMagazin(basePath: string): string {
  * domeniu propriu un apel scapat ar fi produs un `?cat=x` relativ, lipit de
  * pagina curenta.
  */
-export function hrefCategorie(catalogRoot: string, nume: string): string {
-  return `${radacinaMagazin(catalogRoot)}?cat=${encodeURIComponent(nume)}`;
+export function hrefCategorie(catalogRoot: string, nume: string, pePagina = false): string {
+  const slug = pePagina ? slugCategorie(nume) : "";
+  // Slug gol (un nume din caractere pe care `slugify` le arunca tot) inseamna ca
+  // pagina de categorie n-ar avea adresa; atunci ramane forma cu interogare, care
+  // functioneaza pentru orice nume. Mai bine un link mai urat decat unul rupt.
+  return slug
+    ? `${radacinaMagazin(catalogRoot)}/${slug}`
+    : `${radacinaMagazin(catalogRoot)}?cat=${encodeURIComponent(nume)}`;
+}
+
+/**
+ * Numele categoriei, ca segment de adresa.
+ *
+ * Categoriile n-au coloana `slug` in baza — produsele isi tin categoria ca TEXT,
+ * chiar numele ei — deci segmentul se calculeaza din nume, iar ruta face drumul
+ * invers cautand categoria al carei nume da acelasi segment. Consecinta stiuta:
+ * doua categorii care dau acelasi segment (o redenumire care difera doar prin
+ * diacritice) sunt aceeasi pagina; ruta alege prima si nu da eroare.
+ *
+ * Intoarce sirul gol cand numele nu produce niciun caracter folosibil.
+ */
+export function slugCategorie(nume: string): string {
+  return slugify(nume);
 }
 
 /**

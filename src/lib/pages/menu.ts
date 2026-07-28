@@ -27,23 +27,28 @@ export function newMenuItemId(): string {
 /**
  * Resolve the href for a menu item, honouring custom-domain vs /slug basePath.
  *
- * `catalogRoot` e pagina care gazduieste produsele; implicit chiar `basePath`,
- * ca un apel care nu il da sa se comporte exact ca inainte (`hrefCategorie`
- * normalizeaza oricum). Doar intrarile de tip categorie il folosesc: „home"
- * ramane deliberat pe radacina magazinului, fiindca in editorul de meniu acel
- * tip e descris comerciantului drept „link catre pagina principala".
+ * `paginaCatalog` e pagina care gazduieste produsele: pagina de Magazin daca
+ * magazinul si-a activat-o, altfel chiar radacina magazinului. Il folosesc si
+ * categoriile, si intrarea „Magazin" — in editor scrie „link catre produsele
+ * magazinului", iar de cand catalogul poate avea pagina lui, produsele nu mai
+ * sunt neaparat pe prima pagina. Magazinele fara pagina de catalog nu simt
+ * nimic: acolo cele doua adrese coincid.
  */
-export function menuItemHref(item: MenuItem, basePath: string, catalogRoot: string = basePath): string {
+export function menuItemHref(
+  item: MenuItem,
+  basePath: string,
+  paginaCatalog: string = basePath,
+): string {
   switch (item.type) {
     case "home":
       // Not `${basePath}/`: with a slug that trailing slash costs a 308 on
       // every click, and Search Console files each one as a redirect.
-      return radacinaMagazin(basePath);
+      return radacinaMagazin(paginaCatalog);
     case "page":
       return `${basePath}/${item.target ?? ""}`;
     case "category":
       // Categories are filtered on the catalog page via ?cat=
-      return hrefCategorie(catalogRoot, item.target ?? "");
+      return hrefCategorie(paginaCatalog, item.target ?? "");
     case "link":
       // Reuse the href resolver so javascript:/data: schemes are rejected.
       return resolveHref(item.target, basePath);

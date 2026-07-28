@@ -29,7 +29,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
   const {
     business,
     basePath,
-    catalogRoot,
+    categoriiRoot,
     menu,
     pageContent,
     hasAnnouncementBar,
@@ -120,7 +120,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
               return (
                 // Pagina curenta nu se marcheaza doar prin culoare: subliniere
                 // pentru cine nu o distinge, `aria-current` pentru cititoare.
-                <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)} aria-current={activ ? "page" : undefined}
+                <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} aria-current={activ ? "page" : undefined}
                   className={`text-[13px] font-semibold text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`}
                   style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
                   {it.label}

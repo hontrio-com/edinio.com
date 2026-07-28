@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hrefCatalog, hrefCategorie, radacinaMagazin } from "./category-href";
+import { hrefCatalog, hrefCategorie, radacinaMagazin, slugCategorie } from "./category-href";
 
 /**
  * Un slash in plus nu se vede nicaieri: pagina se incarca la fel, doar ca prin
@@ -63,4 +63,34 @@ test("adresa catalogului fara interogare e chiar radacina lui", () => {
   assert.equal(hrefCatalog("/pravalie"), "/pravalie");
   assert.equal(hrefCatalog("", ""), "/");
   assert.equal(hrefCatalog(""), "/");
+});
+
+/**
+ * Paginile de categorie: aceeasi functie, alta forma de adresa.
+ *
+ * Regula pe care o apara testele de mai jos e ca forma cu interogare NU dispare
+ * — magazinele fara pagina de catalog o folosesc mai departe, iar un nume care
+ * nu produce niciun segment cade inapoi pe ea in loc sa dea un link rupt.
+ */
+
+test("cu pagini de categorie, adresa devine o cale", () => {
+  assert.equal(hrefCategorie("/pravalie/magazin", "Imbracaminte de lucru", true), "/pravalie/magazin/imbracaminte-de-lucru");
+});
+
+test("fara pagini de categorie ramane exact forma de dinainte", () => {
+  assert.equal(hrefCategorie("/pravalie", "Imbracaminte de lucru"), "/pravalie?cat=Imbracaminte%20de%20lucru");
+});
+
+test("diacriticele si semnele dispar din cale, nu si din nume", () => {
+  assert.equal(slugCategorie("Imbracaminte & incaltaminte"), "imbracaminte-incaltaminte");
+  assert.equal(slugCategorie("Manusi de protectie"), "manusi-de-protectie");
+});
+
+test("un nume care nu da niciun segment cade pe forma cu interogare", () => {
+  assert.equal(slugCategorie("!!!"), "");
+  assert.equal(hrefCategorie("/magazin", "!!!", true), "/magazin?cat=!!!");
+});
+
+test("pe domeniu propriu calea porneste de la radacina, fara slash dublu", () => {
+  assert.equal(hrefCategorie("/magazin", "Hartie", true), "/magazin/hartie");
 });

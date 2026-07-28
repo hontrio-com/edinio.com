@@ -27,10 +27,16 @@ import type { Fateta } from "@/lib/storefront/catalog/facets";
 export function GrupFatete({ fateta }: { fateta: Fateta }) {
   const { color, selectieFatete, comutaFateta, setariMagazin } = useStorefront();
   const VALORI_VIZIBILE = setariMagazin.valoriVizibile;
-  // Pliate implicit: comerciantul cu multe atribute vrea lista de filtre dintr-o
-  // privire, nu patruzeci de valori desfasurate una sub alta.
   const [toate, setToate] = useState(false);
-  const [pliat, setPliat] = useState(setariMagazin.filtrePliate);
+  /*
+   * Pliate IMPLICIT.
+   *
+   * Cu opt fatete desfasurate, bara laterala devine o coloana de doua ecrane
+   * prin care nimeni nu deruleaza ca sa vada ce filtre exista. Pliate, se vede
+   * lista intreaga dintr-o privire si se deschide doar ce intereseaza.
+   * Comerciantul cu putine atribute poate porni „filtrele pornesc desfasurate".
+   */
+  const [pliat, setPliat] = useState(!setariMagazin.filtreDesfasurate);
   // Memoizat, nu scris inline: `?? []` produce un vector nou la fiecare randare,
   // deci lista de mai jos s-ar recalcula si cand nu s-a schimbat nicio bifa.
   const alese = useMemo(() => selectieFatete[fateta.cheie] ?? [], [selectieFatete, fateta.cheie]);
@@ -54,7 +60,7 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
         control care nu face nimic vizibil si ar aparea in ordinea de tabulare
         degeaba, la fiecare fateta.
       */}
-      {setariMagazin.filtrePliate ? (
+      {!setariMagazin.filtreDesfasurate ? (
         <button type="button" onClick={() => setPliat((v) => !v)} aria-expanded={!pliat}
           className="w-full flex items-center gap-1.5 text-xs font-semibold text-[var(--st-text)] mb-2 hover:opacity-70 transition-opacity">
           {fateta.eticheta}
@@ -123,7 +129,7 @@ export function FiltreDeBaza() {
     useStorefront();
   const input =
     "w-full min-w-0 px-2.5 py-2 text-sm border border-[var(--st-border)] rounded-[var(--st-radius-sm)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]";
-  const pastila = "px-3 py-1.5 rounded-full text-[13px] border transition-colors";
+  const comutator = "px-2 py-2 rounded-[var(--st-radius-sm)] text-[13px] border transition-colors text-center truncate";
   const inactiv = { backgroundColor: "transparent", color: "var(--st-text)", borderColor: "var(--st-border)" };
   const activ = { backgroundColor: color, color: "#fff", borderColor: color };
 
@@ -141,14 +147,21 @@ export function FiltreDeBaza() {
             onChange={(e) => setPriceMax(e.target.value)} className={input} />
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      {/*
+        Doua coloane egale, nu pastile care curg.
+        Intr-o bara laterala ingusta cele doua nu incapeau una langa alta, deci
+        se rupeau pe randuri separate si ieseau de latimi diferite — doua butoane
+        de acelasi fel, aratand a doua lucruri diferite. Grila le tine egale la
+        orice latime.
+      */}
+      <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={() => setOnSaleOnly(!onSaleOnly)} aria-pressed={onSaleOnly}
-          className={pastila} style={onSaleOnly ? activ : inactiv}>
-          Doar reduceri
+          className={comutator} style={onSaleOnly ? activ : inactiv}>
+          Reduceri
         </button>
         <button type="button" onClick={() => setInStockOnly(!inStockOnly)} aria-pressed={inStockOnly}
-          className={pastila} style={inStockOnly ? activ : inactiv}>
-          Doar in stoc
+          className={comutator} style={inStockOnly ? activ : inactiv}>
+          In stoc
         </button>
       </div>
     </>
@@ -171,28 +184,46 @@ export const GRUP_DIN_FATETA: Record<Fateta["grup"], string> = {
 
 /** Categoriile ca lista de filtre, pentru modelele cu bara laterala. */
 export function FiltreCategorii() {
-  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, color } =
+  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, categoriiRoot, categoriiPePagina, catalogRoot, color } =
     useStorefront();
   if (!hasCategories) return null;
 
+  const cls = "block w-full text-left text-[13px] py-1 hover:opacity-70 transition-opacity truncate";
   return (
     <div>
       <p className="text-xs font-semibold text-[var(--st-text)] mb-2">Categorii</p>
       <ul className="space-y-0.5">
         <li>
-          <button type="button" onClick={isDrilled ? goBackCategory : resetCategory}
-            className="w-full text-left text-[13px] py-1 hover:opacity-70 transition-opacity"
+          {/*
+            Linkuri, nu butoane: de cand categoriile au pagini proprii, lista asta
+            e navigare. Un buton nu se poate deschide in fila noua, nu se poate
+            copia si nu il urmeaza niciun crawler. Apasarea simpla trece tot prin
+            `selectCategoryItem`, care stie daca pagina asta filtreaza pe loc sau
+            navigheaza.
+          */}
+          <a href={catalogRoot}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              if (isDrilled) goBackCategory(); else resetCategory();
+            }}
+            className={cls}
             style={categoryFilter === "toate" ? { color, fontWeight: 600 } : { color: "var(--st-text)" }}>
             {isDrilled ? "Inapoi" : "Toate produsele"}
-          </button>
+          </a>
         </li>
         {currentCategoryItems.map((c) => (
           <li key={c.key}>
-            <button type="button" onClick={() => selectCategoryItem(c)}
-              className="w-full text-left text-[13px] py-1 hover:opacity-70 transition-opacity truncate"
+            <a href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                selectCategoryItem(c);
+              }}
+              className={cls}
               style={categoryFilter === c.name ? { color, fontWeight: 600 } : { color: "var(--st-text)" }}>
               {c.name}
-            </button>
+            </a>
           </li>
         ))}
       </ul>
@@ -511,7 +542,7 @@ export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; c
  */
 export function Paginare() {
   const {
-    currentPage, totalPages, goToPage, color, catalogRoot, interogareFiltre,
+    currentPage, totalPages, goToPage, color, catalogRoot, radacinaPaginare, interogareFiltre,
     setariMagazin, filteredProducts, paginatedProducts,
   } = useStorefront();
   const mod = setariMagazin.modPaginare;
@@ -561,7 +592,9 @@ export function Paginare() {
     const qs = p <= 1
       ? interogareFiltre
       : `${interogareFiltre}${interogareFiltre ? "&" : ""}page=${p}`;
-    return hrefCatalog(catalogRoot, qs);
+    // Radacina paginarii, nu a catalogului: pe pagina unei categorii, „2" ramane
+    // in categorie.
+    return hrefCatalog(radacinaPaginare ?? catalogRoot, qs);
   };
   const mergiLa = (p: number) => {
     goToPage(p);
@@ -637,7 +670,7 @@ export function Paginare() {
 /* ─── Antet ──────────────────────────────────────────────────────────────── */
 
 export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; aratatTitlu?: boolean }) {
-  const { categoryFilter, setariMagazin, basePath, business } = useStorefront();
+  const { categoryFilter, setariMagazin, basePath, business, catalogRoot } = useStorefront();
   // Categoria aleasa devine titlul: vizitatorul venit dintr-un link de categorie
   // trebuie sa vada unde a ajuns, nu un titlu generic peste o lista filtrata.
   const inCategorie = !!categoryFilter && categoryFilter !== "toate";
@@ -651,7 +684,13 @@ export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; arat
             {business.store_name ?? business.business_name}
           </a>
           <span aria-hidden="true">/</span>
-          <span className={inCategorie ? "" : "text-[var(--st-text)] font-medium"}>{titlu}</span>
+          {/* Din categorie, „Magazin" e drumul inapoi la catalogul intreg — singurul
+              loc din pagina de unde se iese fara butonul browserului. */}
+          {inCategorie ? (
+            <a href={catalogRoot} className="hover:text-[var(--st-text)] transition-colors">{titlu}</a>
+          ) : (
+            <span className="text-[var(--st-text)] font-medium">{titlu}</span>
+          )}
           {inCategorie && (
             <>
               <span aria-hidden="true">/</span>
@@ -701,7 +740,7 @@ export function TextSubGrila() {
 
 /** Pastilele de categorie de sus, cand comerciantul le cere. */
 export function CategoriiSus() {
-  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, categoriiRoot, color } =
+  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, categoriiRoot, categoriiPePagina, color } =
     useStorefront();
   if (!hasCategories) return null;
   const pastila = "px-3.5 py-1.5 rounded-full text-[13px] border whitespace-nowrap transition-colors";
@@ -715,7 +754,7 @@ export function CategoriiSus() {
         {isDrilled ? "Inapoi" : "Toate"}
       </button>
       {currentCategoryItems.map((c) => (
-        <a key={c.key} href={hrefCategorie(categoriiRoot, c.name)}
+        <a key={c.key} href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
           onClick={(e) => {
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             e.preventDefault();

@@ -137,6 +137,27 @@ export interface StoreChromeValue {
    * catalog la fiecare apasare pe „2".
    */
   categoriiRoot: string;
+  /**
+   * Categoriile au pagini proprii sub pagina de catalog.
+   *
+   * Adevarat exact cand magazinul si-a activat pagina de catalog: acolo
+   * `/magazin/bocanci` e o pagina cu titlu, filtre si canonical propriu. Fals la
+   * restul magazinelor, unde categoria ramane un filtru in adresa
+   * (`?cat=Bocanci`) peste grila paginii principale — forma care functioneaza si
+   * azi, si care ramane citita si pe pagina de catalog pentru linkurile vechi.
+   *
+   * Optional dinadins: un apel care il uita produce linkul cu interogare, adica
+   * o adresa mai urata, nu una rupta.
+   */
+  categoriiPePagina?: boolean;
+  /**
+   * Adresa pe care se construiesc linkurile de paginare.
+   *
+   * De obicei chiar `catalogRoot`. Difera pe pagina unei categorii, unde
+   * paginarea trebuie sa ramana in categorie, iar `catalogRoot` arata mai departe
+   * catre catalogul intreg (footer, cautarea din header, „Toate produsele").
+   */
+  radacinaPaginare?: string;
   /** Galeria foto poate aparea pe orice pagina, deci lightbox-ul sta aici. */
   openLightbox: (url: string) => void;
   /**

@@ -150,3 +150,25 @@ test("ce se scrie in adresa se poate citi inapoi identic", () => {
   assert.equal(citit.sortare, "price_asc");
   assert.deepEqual(citit.fatete, stare.fatete);
 });
+
+test("fara pret in adresa, filtrul de pret NU exista", () => {
+  /*
+   * `Number("")` e zero, finit si pozitiv. Fara verificarea pe sirul gol,
+   * fiecare incarcare a paginii de catalog pornea cu „de la 0 pana la 0 lei" si
+   * arata „Niciun produs gasit" — la 1221 de produse in magazin.
+   */
+  const f = citesteFiltreDinAdresa({ cat: "Manusi" }, fatete);
+  assert.equal(f.pretMin, "");
+  assert.equal(f.pretMax, "");
+});
+
+test("un pret gol scris explicit in adresa e tot nimic", () => {
+  const f = citesteFiltreDinAdresa({ pmin: "", pmax: "   " }, fatete);
+  assert.equal(f.pretMin, "");
+  assert.equal(f.pretMax, "");
+});
+
+test("zero scris ANUME ramane zero", () => {
+  // „de la 0" e o cerinta legitima; doar absenta trebuie sa insemne absenta.
+  assert.equal(citesteFiltreDinAdresa({ pmin: "0" }, fatete).pretMin, "0");
+});

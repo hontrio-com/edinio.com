@@ -27,7 +27,7 @@ import { hrefCategorie } from "@/lib/storefront/category-href";
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
 export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
-  const { business, basePath, catalogRoot, categoriiRoot, menu, pageContent, social, hasStickyBottomBar, searchCategories } = useStoreChrome();
+  const { business, basePath, catalogRoot, categoriiRoot, categoriiPePagina, menu, pageContent, social, hasStickyBottomBar, searchCategories } = useStoreChrome();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
@@ -88,13 +88,13 @@ export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
                 un 308 la fiecare apasare, ca `${basePath}/`. */}
             <Legatura cls={legatura} href={catalogRoot}>Toate produsele</Legatura>
             {categorii.map((c) => (
-              <Legatura key={c.key} cls={legatura} href={hrefCategorie(categoriiRoot, c.name)}>{c.name}</Legatura>
+              <Legatura key={c.key} cls={legatura} href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}>{c.name}</Legatura>
             ))}
           </Coloana>
 
           <Coloana titlu="Informatii" separator={separator} marunt={marunt}>
             {pagini.map((it) => (
-              <Legatura key={it.id} cls={legatura} href={menuItemHref(it, basePath, catalogRoot)}>{it.label}</Legatura>
+              <Legatura key={it.id} cls={legatura} href={menuItemHref(it, basePath, categoriiRoot)}>{it.label}</Legatura>
             ))}
           </Coloana>
 

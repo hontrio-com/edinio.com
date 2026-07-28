@@ -25,7 +25,7 @@ const MAX_IMPLICIT = 10;
  * sterse), hero-ul ramane doar cu bannerele in loc sa arate strambatura.
  */
 export function HeroCategories({ settings }: { settings: Record<string, unknown> }) {
-  const { business, basePath, categoriiRoot, pageContent, searchCategories } = useStoreChrome();
+  const { business, basePath, categoriiRoot, categoriiPePagina, pageContent, searchCategories } = useStoreChrome();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
@@ -44,10 +44,20 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
    * rest: `searchCategories` aduce acum arborele intreg, nu doar radacinile,
    * tocmai ca panoul asta si meniul de pe telefon sa aiba ce arata.
    */
-  const [deschisa, setDeschisa] = useState<CategoryItem | null>(null);
+  /*
+   * Categoria atinsa SI inaltimea la care sta randul ei.
+   *
+   * Panoul lipit sus, cand se deschidea dintr-un rand de jos, lasa o diagonala
+   * de traversat cu mausul: pana ajungeai la subcategorii ieseai de pe rand,
+   * randul se stingea si panoul disparea. Aliniat la rand, drumul e drept si
+   * scurt. Inaltimea se citeste din elementul insusi, nu din indexul lui:
+   * randurile n-au inaltime fixa, iar un nume pe doua linii ar fi decalat tot ce
+   * urmeaza.
+   */
+  const [deschisa, setDeschisa] = useState<{ item: CategoryItem; sus: number } | null>(null);
   const arbore = catalog?.categories ?? searchCategories;
   const subcategoriiDeschise = useMemo(
-    () => subcategorii(arbore, deschisa?.id ?? null),
+    () => subcategorii(arbore, deschisa?.item.id ?? null),
     [arbore, deschisa],
   );
 
@@ -88,9 +98,9 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
                     : "flex flex-col rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] py-1.5"}>
                     {categorii.map((c) => (
                       <Rand key={c.key} nume={c.name} imagine={c.image} catalogRoot={categoriiRoot}
-                        areCopii={c.hasChildren}
-                        activ={deschisa?.key === c.key}
-                        onHover={() => setDeschisa(c)}
+                        pePagina={categoriiPePagina} areCopii={c.hasChildren}
+                        activ={deschisa?.item.key === c.key}
+                        onHover={(sus) => setDeschisa({ item: c, sus })}
                         onAlege={catalog ? () => catalog.selectCategoryItem(c) : undefined} />
                     ))}
                   </nav>
@@ -103,17 +113,19 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
                     fiecare trecere cu mausul.
                   */}
                   {deschisa && subcategoriiDeschise.length > 0 && (
-                    <div className="absolute left-full top-0 ml-2 z-30 w-72 max-h-full overflow-y-auto rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-2">
+                    <div
+                      className="absolute left-full ml-2 z-30 w-72 max-h-[22rem] overflow-y-auto rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-2"
+                      style={{ top: deschisa.sus }}>
                       <p className="px-3.5 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--st-muted)]">
-                        {deschisa.name}
+                        {deschisa.item.name}
                       </p>
-                      <a href={hrefCategorie(categoriiRoot, deschisa.name)}
+                      <a href={hrefCategorie(categoriiRoot, deschisa.item.name, categoriiPePagina)}
                         className="block px-3.5 py-1.5 text-[13px] font-semibold hover:opacity-70 transition-opacity"
                         style={{ color: "var(--st-primary)" }}>
-                        Vezi tot din {deschisa.name}
+                        Vezi tot din {deschisa.item.name}
                       </a>
                       {subcategoriiDeschise.map((sub) => (
-                        <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name)}
+                        <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name, categoriiPePagina)}
                           className="block px-3.5 py-1.5 text-[13px] text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors truncate">
                           {sub.name}
                         </a>
@@ -146,6 +158,7 @@ function Rand({
   nume,
   imagine,
   catalogRoot,
+  pePagina = false,
   areCopii = false,
   activ = false,
   onHover,
@@ -154,9 +167,10 @@ function Rand({
   nume: string;
   imagine: string | null;
   catalogRoot: string;
+  pePagina?: boolean;
   areCopii?: boolean;
   activ?: boolean;
-  onHover?: () => void;
+  onHover?: (sus: number) => void;
   onAlege?: () => void;
 }) {
   const continut = (
@@ -179,12 +193,13 @@ function Rand({
   const cls = `flex flex-1 items-center gap-2.5 min-h-11 px-3.5 transition-colors text-left ${activ ? "bg-[var(--st-primary-soft)]" : "hover:bg-[var(--st-primary-soft)]"}`;
   // Si pe focus, nu doar pe maus: altfel panoul cu subcategorii ar fi existat
   // doar pentru cine foloseste mausul.
-  const asculta = { onMouseEnter: onHover, onFocus: onHover };
+  const raporteaza = (e: { currentTarget: HTMLElement }) => onHover?.(e.currentTarget.offsetTop);
+  const asculta = { onMouseEnter: raporteaza, onFocus: raporteaza };
 
   // Pe pagina de magazin filtreaza pe loc; miniatura din galerie n-are catalog.
   return onAlege ? (
     <button type="button" onClick={onAlege} className={cls} {...asculta}>{continut}</button>
   ) : (
-    <a href={hrefCategorie(catalogRoot, nume)} className={cls} {...asculta}>{continut}</a>
+    <a href={hrefCategorie(catalogRoot, nume, pePagina)} className={cls} {...asculta}>{continut}</a>
   );
 }

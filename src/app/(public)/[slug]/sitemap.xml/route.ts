@@ -3,6 +3,7 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { PLATFORM_ORIGIN, parseStoreSeo } from "@/lib/seo";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
+import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
    */
   if (shopOnPage(designPublicat(biz.store_settings))) {
     entries.push({ loc: `${base}/${SEGMENT_MAGAZIN}`, lastmod: iso(biz.updated_at) });
+    /*
+     * Si cate o intrare pentru fiecare categorie.
+     *
+     * De cand categoriile au pagini proprii, ele sunt cele mai valoroase adrese
+     * ale magazinului dupa produse: „bocanci de protectie" e o cautare reala, iar
+     * pagina care ii raspunde exista abia acum. Fara sitemap, ar fi depins de
+     * cate linkuri interne apuca crawlerul sa urmeze prin meniuri.
+     *
+     * Categoriile fara produse intra si ele: sitemapul se genereaza dintr-o
+     * singura interogare, iar numararea produselor pe categorie ar fi insemnat
+     * citit catalogul intreg la fiecare cerere. O categorie goala e o pagina
+     * corecta, doar goala.
+     */
+    const categorii = await fetchAllRows("slugSitemap.categories", (from, to) =>
+      admin.from("categories").select("name").eq("business_id", biz.id).order("id").range(from, to),
+    );
+    const vazute = new Set<string>();
+    for (const c of categorii) {
+      const seg = slugCategorie(c.name ?? "");
+      // Doua categorii pot da acelasi segment (diferenta e doar la diacritice):
+      // in sitemap intra o singura data, fiindca e o singura pagina.
+      if (!seg || vazute.has(seg)) continue;
+      vazute.add(seg);
+      entries.push({ loc: `${base}/${SEGMENT_MAGAZIN}/${seg}`, lastmod: iso(biz.updated_at) });
+    }
   }
 
   // One Product Store: the homepage already represents the single product, so

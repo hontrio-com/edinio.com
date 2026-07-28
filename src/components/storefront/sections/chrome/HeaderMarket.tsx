@@ -33,7 +33,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
   const {
     business,
     basePath,
-    catalogRoot,
+    categoriiRoot,
     menu,
     pageContent,
     hasAnnouncementBar,
@@ -145,7 +145,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
                   return (
                     // Pagina curenta nu se marcheaza doar prin culoare: subliniere
                     // pentru cine nu o distinge, `aria-current` pentru cititoare.
-                    <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)} aria-current={activ ? "page" : undefined}
+                    <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} aria-current={activ ? "page" : undefined}
                       className={`text-sm font-medium text-[var(--st-text)] hover:opacity-70 transition-opacity whitespace-nowrap ${meniuCls}`}
                       style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
                       {it.label}
@@ -285,7 +285,7 @@ function ToateCategoriile({
 }: {
   categorii: { name: string; image: string | null }[];
 }) {
-  const { categoriiRoot } = useStoreChrome();
+  const { categoriiRoot, categoriiPePagina } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -312,7 +312,7 @@ function ToateCategoriile({
         <ul className="absolute left-0 top-full mt-2 z-50 w-72 max-h-[70vh] overflow-y-auto rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-1.5">
           {categorii.map((c) => (
             <li key={c.name}>
-              <a href={hrefCategorie(categoriiRoot, c.name)}
+              <a href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
                 className="flex items-center gap-3 px-3.5 py-2 hover:bg-[var(--st-primary-soft)] transition-colors">
                 {c.image ? (
                   <span className="relative w-7 h-7 rounded-[var(--st-radius-sm)] overflow-hidden shrink-0 bg-[var(--st-bg)]">

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   Plus, ExternalLink, Copy, Trash2, Pencil, ArrowUp, ArrowDown, X, Loader2,
-  FileText, Menu as MenuIcon, Link2, Home, Store, } from "lucide-react";
+  FileText, Menu as MenuIcon, Link2, Store, } from "lucide-react";
 import { slugify } from "@/lib/utils/slugify";
 import { createPage, deletePage, duplicatePage, updateStoreMenu } from "@/lib/actions/page.actions";
 import { newMenuItemId, type MenuItem } from "@/lib/pages/menu";
@@ -92,25 +92,26 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
     persistMenu(next);
   }
   function removeMenu(i: number) { persistMenu(menu.filter((_, k) => k !== i)); }
+  /*
+   * Intrarea „Magazin" duce la produse, oriunde ar sta ele.
+   *
+   * Tipul ramane `home`, dar adresa lui se rezolva la randare prin
+   * `menuItemHref`: prima pagina cat timp acolo e catalogul, pagina de Magazin
+   * de indata ce magazinul si-a activat-o. Un al doilea tip de intrare, doar
+   * pentru catalog, ar fi lasat comerciantii care apucasera sa adauge „Magazin"
+   * cu un link catre prima pagina si fara niciun semn ca acum exista altul mai
+   * bun.
+   */
   function addHome() {
-    if (menu.some((m) => m.type === "home")) return;
+    if (areLinkCatreMagazin) return;
     persistMenu([{ id: newMenuItemId(), type: "home", label: "Magazin" }, ...menu]);
   }
-  /*
-   * Legatura catre pagina de catalog, cand magazinul si-o alege.
-   *
-   * Tipul `home` NU se schimba pentru asta: in editor scrie de la inceput „link
-   * catre pagina principala a magazinului", iar comerciantii care l-au pus deja
-   * s-ar fi trezit ca trimite in alta parte. E o intrare de tip `page` cu tinta
-   * `magazin`, care se rezolva corect si pe domeniu propriu.
-   *
-   * Fara butonul asta, singura cale era un link scris de mana — si tocmai
-   * linkurile scrise de mana se rup pe domeniu propriu.
-   */
-  function addCatalog() {
-    if (menu.some((m) => m.type === "page" && m.target === SEGMENT_MAGAZIN)) return;
-    persistMenu([...menu, { id: newMenuItemId(), type: "page", label: "Magazin", target: SEGMENT_MAGAZIN }]);
-  }
+  // Si intrarea veche de tip `page` catre `/magazin`, adaugata cat timp catalogul
+  // avea buton propriu: duce in acelasi loc, deci butonul nu trebuie sa ofere
+  // inca unul peste ea.
+  const areLinkCatreMagazin = menu.some(
+    (m) => m.type === "home" || (m.type === "page" && m.target === SEGMENT_MAGAZIN),
+  );
   function addLink() {
     persistMenu([...menu, { id: newMenuItemId(), type: "link", label: "Link nou", target: "https://" }]);
   }
@@ -191,7 +192,7 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
           <MenuIcon className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Meniu de navigare</h2>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede in header-ul magazinului (inline pe desktop, hamburger pe mobil). Daca e gol, nu apare niciun meniu. „Magazin” = link catre pagina principala a magazinului; „link” = adresa externa.</p>
+        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede in header-ul magazinului (inline pe desktop, hamburger pe mobil). Daca e gol, nu apare niciun meniu. „Magazin” = link catre produsele magazinului (pagina de Magazin daca e activata, altfel prima pagina); „link” = adresa externa.</p>
 
         <div className="space-y-2">
           {menu.map((m, i) => (
@@ -201,7 +202,7 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
                 <button type="button" onClick={() => moveMenu(i, 1)} disabled={i === menu.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
               </div>
               <span className="w-6 h-6 rounded-md bg-muted flex items-center justify-center shrink-0">
-                {m.type === "home" ? <Home className="h-3.5 w-3.5 text-muted-foreground" /> : m.type === "link" ? <Link2 className="h-3.5 w-3.5 text-muted-foreground" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
+                {m.type === "home" ? <Store className="h-3.5 w-3.5 text-muted-foreground" /> : m.type === "link" ? <Link2 className="h-3.5 w-3.5 text-muted-foreground" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
               </span>
               <input value={m.label} onChange={(e) => editMenuItem(i, { label: e.target.value })} onBlur={() => persistMenu(menu)}
                 className={`${inputCls} flex-1`} placeholder="Eticheta" />
@@ -218,14 +219,9 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
         </div>
 
         <div className="flex items-center gap-2 mt-4">
-          {!menu.some((m) => m.type === "home") && (
-            <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adauga in meniu un link catre pagina principala a magazinului">
-              <Home className="h-3.5 w-3.5" /> Adauga link catre magazin
-            </button>
-          )}
-          {catalogPePagina && !menu.some((m) => m.type === "page" && m.target === SEGMENT_MAGAZIN) && (
-            <button type="button" onClick={addCatalog} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adauga in meniu un link catre pagina cu toate produsele">
-              <Store className="h-3.5 w-3.5" /> Adauga link catre Magazin
+          {!areLinkCatreMagazin && (
+            <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title={catalogPePagina ? "Adauga in meniu un link catre pagina cu toate produsele" : "Adauga in meniu un link catre pagina principala a magazinului"}>
+              <Store className="h-3.5 w-3.5" /> Adauga link catre magazin
             </button>
           )}
           <button type="button" onClick={addLink} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">

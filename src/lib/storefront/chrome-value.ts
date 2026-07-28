@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
-import { cartHref, cartOnPage, radacinaCatalog } from "@/lib/storefront/design/commerce";
+import { cartHref, cartOnPage, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { CartMode, StoreChromeValue } from "@/components/storefront/StorefrontProvider";
 import type {
@@ -84,6 +84,9 @@ export function buildChromeData({
     // Pe paginile fara catalog, cele doua coincid: nu exista o grila locala
     // catre care sa arate.
     categoriiRoot: design ? radacinaCatalog(basePath, design) : radacinaMagazin(basePath),
+    // Categoriile devin pagini exact odata cu catalogul. Fara design — miniaturile
+    // din editor — ramane forma cu interogare, adica exact ce era inainte.
+    categoriiPePagina: !!design && shopOnPage(design),
     isHome,
     color: business.primary_color ?? "#1AB554",
     pageContent,

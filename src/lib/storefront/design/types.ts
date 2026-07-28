@@ -62,19 +62,32 @@ export const HOME_KINDS = [
  */
 export const PRODUCT_KINDS = ["product_page"] as const;
 
+/**
+ * Pagina de catalog, cand magazinul si-o alege separata de pagina principala.
+ *
+ * O singura sectiune, ca la pagina de produs si din acelasi motiv: bara de
+ * filtre, arborele de categorii si grila impart toata starea paginii — ce s-a
+ * cautat, ce fatete sunt bifate, la ce pagina s-a ajuns — deci taiate in trei
+ * n-ar putea exista una fara alta. Un design de pagina de magazin le schimba
+ * oricum impreuna.
+ */
+export const SHOP_KINDS = ["shop_page"] as const;
+
 /** „Sectiuni" care sunt de fapt componente reutilizate peste tot in comert. */
 export const COMMERCE_KINDS = ["product_card", "cart_drawer", "checkout"] as const;
 
 export type ChromeKind = (typeof CHROME_KINDS)[number];
 export type HomeKind = (typeof HOME_KINDS)[number];
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
+export type ShopKind = (typeof SHOP_KINDS)[number];
 export type CommerceKind = (typeof COMMERCE_KINDS)[number];
-export type SectionKind = ChromeKind | HomeKind | ProductKind | CommerceKind;
+export type SectionKind = ChromeKind | HomeKind | ProductKind | ShopKind | CommerceKind;
 
 export const ALL_SECTION_KINDS: readonly SectionKind[] = [
   ...CHROME_KINDS,
   ...HOME_KINDS,
   ...PRODUCT_KINDS,
+  ...SHOP_KINDS,
   ...COMMERCE_KINDS,
 ];
 
@@ -194,6 +207,17 @@ export interface StoreDesign {
   };
   home: SectionInstance[];
   product: {
+    page: SectionInstance;
+  };
+  /**
+   * Pagina de catalog. Slot propriu, nu o intrare in `home`.
+   *
+   * In `home` ar fi schimbat ordinea paginii principale pentru toate magazinele
+   * si ar fi aparut in paleta „Adauga sectiune", desi nu e o sectiune a paginii
+   * principale. Aici e o alegere ca oricare alta din catalogul de design-uri, cu
+   * un implicit care nu face nimic.
+   */
+  shop: {
     page: SectionInstance;
   };
   commerce: {

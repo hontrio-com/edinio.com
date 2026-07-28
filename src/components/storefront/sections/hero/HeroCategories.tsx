@@ -23,7 +23,7 @@ const MAX_IMPLICIT = 10;
  * sterse), hero-ul ramane doar cu bannerele in loc sa arate strambatura.
  */
 export function HeroCategories({ settings }: { settings: Record<string, unknown> }) {
-  const { business, basePath, pageContent } = useStoreChrome();
+  const { business, basePath, catalogRoot, pageContent } = useStoreChrome();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
@@ -66,7 +66,7 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
                     ? "absolute inset-0 flex flex-col rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] overflow-y-auto py-1.5"
                     : "flex flex-col rounded-2xl border border-[var(--st-border)] bg-[var(--st-surface)] overflow-hidden py-1.5"}>
                     {categorii.map((c) => (
-                      <Rand key={c.key} nume={c.name} imagine={c.image} basePath={basePath}
+                      <Rand key={c.key} nume={c.name} imagine={c.image} catalogRoot={catalogRoot}
                         onAlege={catalog ? () => catalog.selectCategoryItem(c) : undefined} />
                     ))}
                   </nav>
@@ -95,12 +95,12 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
 function Rand({
   nume,
   imagine,
-  basePath,
+  catalogRoot,
   onAlege,
 }: {
   nume: string;
   imagine: string | null;
-  basePath: string;
+  catalogRoot: string;
   onAlege?: () => void;
 }) {
   const continut = (
@@ -126,6 +126,6 @@ function Rand({
   return onAlege ? (
     <button type="button" onClick={onAlege} className={cls}>{continut}</button>
   ) : (
-    <a href={hrefCategorie(basePath, nume)} className={cls}>{continut}</a>
+    <a href={hrefCategorie(catalogRoot, nume)} className={cls}>{continut}</a>
   );
 }

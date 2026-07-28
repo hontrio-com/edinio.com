@@ -5,9 +5,10 @@ import { Mail, Phone, Search, ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
 import { menuItemHref } from "@/lib/pages/menu";
+import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shared/Marquee";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
@@ -32,18 +33,19 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
   const {
     business,
     basePath,
+    catalogRoot,
     menu,
     pageContent,
     social,
     cartMode,
     currentPageSlug,
+    isHome,
   } = useStoreChrome();
   const { count } = useCart();
-  const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const acasa = catalog ? "#" : `${basePath}/`;
+  const acasa = isHome ? "#" : `${basePath}/`;
 
   const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.editorial);
 
@@ -103,13 +105,13 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
             )}
 
             {cauta ? (
-              <CampCautare basePath={basePath} onInchide={() => setCauta(false)} />
+              <CampCautare onInchide={() => setCauta(false)} />
             ) : (
               <nav className="hidden lg:flex items-center gap-9 mx-auto min-w-0">
                 {menu.map((it) => {
                   const activ = it.type === "page" && it.target === currentPageSlug;
                   return (
-                    <a key={it.id} href={menuItemHref(it, basePath)}
+                    <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)}
                       className={`text-[15px] font-semibold text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`}
                       style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)" } : {}) }}>
                       {it.label}
@@ -161,15 +163,14 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
  * loc de banda plina de culoare.
  */
 function BandaAnunt() {
-  const { pageContent, announcementOn } = useStoreChrome();
-  const peMagazin = useStorefrontOptional() !== null;
+  const { pageContent, announcementOn, isHome } = useStoreChrome();
   const bar = pageContent.announcement_bar;
   // `announcementOn` e sectiunea din editorul de design: stinsa sau stearsa,
   // banda dinauntrul header-ului trebuie sa dispara si ea. Fara asta, singurul
   // efect al comutatorului era asupra barei separate, pe care varianta asta
   // n-o randeaza oricum.
   if (announcementOn === false) return null;
-  if (peMagazin && pageContent.show_announcement_on_store === false) return null;
+  if (isHome && pageContent.show_announcement_on_store === false) return null;
   if (bar?.enabled !== true) return null;
 
   return (
@@ -189,8 +190,9 @@ function BandaAnunt() {
  * Pe magazin filtreaza pe loc, la fiecare tasta; de pe alte pagini duce la
  * magazin cu termenul in adresa.
  */
-function CampCautare({ basePath, onInchide }: { basePath: string; onInchide: () => void }) {
-  const catalog = useStorefrontOptional();
+function CampCautare({ onInchide }: { onInchide: () => void }) {
+  const { catalogRoot } = useStoreChrome();
+  const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const camp = useRef<HTMLInputElement>(null);
   const valoare = catalog ? catalog.search : local;
@@ -218,7 +220,7 @@ function CampCautare({ basePath, onInchide }: { basePath: string; onInchide: () 
       return;
     }
     const q = valoare.trim();
-    window.location.href = `${basePath}/${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+    window.location.href = hrefCatalog(catalogRoot, q ? `q=${encodeURIComponent(q)}` : "");
   }
 
   return (

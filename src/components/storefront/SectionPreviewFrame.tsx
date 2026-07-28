@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { CartDemoProvider, CartProvider } from "@/components/storefront/cart/CartProvider";
+import type { Fateta } from "@/lib/storefront/catalog/facets";
+import { citesteSetariMagazinDinSectiune } from "@/lib/storefront/catalog/shop-settings";
 import { PreviewSection } from "@/components/storefront/SectionRenderer";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { CHECKOUT_DEMO } from "@/components/storefront/sections/checkout/checkout-preview";
@@ -42,6 +44,10 @@ const ProductPageSection = dynamic(
   () => import("@/components/storefront/sections/product/ProductPageSection").then((m) => m.ProductPageSection),
   { ssr: true },
 );
+const ShopPageSection = dynamic(
+  () => import("@/components/storefront/sections/shop/ShopPageSection").then((m) => m.ShopPageSection),
+  { ssr: true },
+);
 
 /** Produsul demonstrativ al paginii de produs, construit pe server si trimis intreg. */
 export interface DemoProductPage {
@@ -69,12 +75,22 @@ export function SectionPreviewFrame({
   section,
   products,
   categories,
+  fatete,
   produsDemo,
 }: {
   chrome: StoreChromeData;
   section: SectionInstance;
   products: StorefrontProduct[];
   categories: CategoryRow[];
+  /**
+   * Fatetele produselor demonstrative, calculate in ruta.
+   *
+   * NU aici: `slimCatalogProduct` reconstruieste `page_sections` si pastreaza
+   * doar variantele si pachetul, deci brandul si specificatiile nu mai exista
+   * pe produsele care ajung pana aici. Calculate dupa slimuire, jumatate din
+   * filtrele miniaturii ar fi fost mereu goale.
+   */
+  fatete: Fateta[];
   produsDemo?: DemoProductPage;
 }) {
   const value = useMemo<StorefrontContextValue>(() => {
@@ -87,6 +103,9 @@ export function SectionPreviewFrame({
       openCart: nimic,
       openLightbox: nimic,
       isPreview: false,
+      // Miniatura arata sectiunea asa cum apare pe pagina principala: acolo
+      // logoul e o ancora goala, nu un link care ar scoate iframe-ul din cadru.
+      isHome: true,
 
       products,
       visibleProducts: products,
@@ -118,6 +137,17 @@ export function SectionPreviewFrame({
       activeFilterCount: 0,
       resetFilters: nimic,
       facets: { options: [], priceMin: 0, priceMax: 0 },
+      // Fatetele miniaturii se calculeaza din produsele demonstrative, nu sunt
+      // goale: pagina de catalog se alege tocmai dupa cum arata filtrele, iar o
+      // coloana goala langa o grila ar fi facut cele trei modele sa para
+      // identice. Bifarea ramane inerta — intr-o miniatura nu se filtreaza.
+      fatete,
+      selectieFatete: {},
+      comutaFateta: nimic,
+      interogareFiltre: "",
+      // Miniatura arata varianta cu setarile ei implicite, exact ca restul
+      // galeriei: sectiunea sintetica de la ruta poarta deja `defaults`.
+      setariMagazin: citesteSetariMagazinDinSectiune(section),
       priceMin: "",
       setPriceMin: nimic,
       priceMax: "",
@@ -155,7 +185,9 @@ export function SectionPreviewFrame({
       viewAllCategory: nimic,
 
       currentPage: 1,
-      totalPages: 1,
+      // Derivat, nu fixat la 1: pagina de catalog se alege si dupa cum arata
+      // bara de paginare, iar fixata acolo n-ar fi aparut in nicio miniatura.
+      totalPages: Math.max(1, Math.ceil(products.length / 8)),
       goToPage: nimic,
 
       addToCart: nimic,
@@ -168,7 +200,7 @@ export function SectionPreviewFrame({
       priceLowestOnly: false,
       freeShippingThreshold: 200,
     };
-  }, [chrome, section.id, products, categories]);
+  }, [chrome, section, products, categories, fatete]);
 
   // Cosul si formularul de comanda: acelasi cod ca in magazin, dar in fluxul
   // paginii, cu un cos demonstrativ tinut in memorie si fara niciun apel pe
@@ -228,6 +260,33 @@ export function SectionPreviewFrame({
       <CartDemoProvider items={demoCartItems()}>
         {caPagina ? <CheckoutPageSection variant={section.variant} {...comune} /> : <CheckoutClassic {...comune} />}
       </CartDemoProvider>
+    );
+  }
+
+  /*
+   * Pagina de catalog trece prin dispecerul ei, nu prin `PreviewSection`.
+   *
+   * Acelasi motiv ca la cos si la comanda: un `kind` de pagina strecurat in
+   * lista paginii principale ar fi randat un catalog intreg peste magazinul
+   * public. Varianta „none" nu are ce arata — produsele raman pe pagina
+   * principala — deci miniatura ei spune exact asta.
+   */
+  if (section.kind === "shop_page") {
+    if (variantMeta("shop_page", section.variant)?.surface !== "page") {
+      return (
+        <div className="flex items-center justify-center min-h-[220px] px-8 py-12 text-center">
+          <p className="text-sm text-[var(--st-muted)]">
+            Produsele raman pe pagina principala, sub celelalte sectiuni. Magazinul nu are o pagina separata de catalog.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <CartProvider slug={chrome.business.slug}>
+        <StorefrontProvider value={value}>
+          <ShopPageSection variant={section.variant} setari={section.settings} />
+        </StorefrontProvider>
+      </CartProvider>
     );
   }
 

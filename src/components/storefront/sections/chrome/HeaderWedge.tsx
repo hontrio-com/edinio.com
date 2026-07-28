@@ -5,9 +5,10 @@ import { Phone, Search, ShoppingBag, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
 import { menuItemHref } from "@/lib/pages/menu";
+import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -28,18 +29,19 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
   const {
     business,
     basePath,
+    catalogRoot,
     menu,
     pageContent,
     hasAnnouncementBar,
     cartMode,
     currentPageSlug,
+    isHome,
   } = useStoreChrome();
   const { count } = useCart();
-  const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const acasa = catalog ? "#" : `${basePath}/`;
+  const acasa = isHome ? "#" : `${basePath}/`;
 
   const { actiuni, are, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.wedge);
   const meniuStanga = settings.menuAlign === "stanga";
@@ -86,7 +88,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               {menu.map((it) => {
                 const activ = it.type === "page" && it.target === currentPageSlug;
                 return (
-                  <a key={it.id} href={menuItemHref(it, basePath)}
+                  <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)}
                     className={`text-[15px] truncate transition-opacity hover:opacity-100 ${meniuCls} ${activ ? "font-bold opacity-100" : "font-medium opacity-55"}`}
                     style={meniuStyle}>
                     {it.label}
@@ -130,7 +132,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
       </div>
 
       {are("cautare") && cautareDeschisa && (
-        <PanouCautare basePath={basePath} onInchide={() => setCautareDeschisa(false)} />
+        <PanouCautare onInchide={() => setCautareDeschisa(false)} />
       )}
     </header>
   );
@@ -142,8 +144,9 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
  * Pe magazin filtreaza pe loc, la fiecare tasta; de pe alte pagini duce la
  * magazin cu termenul in adresa.
  */
-function PanouCautare({ basePath, onInchide }: { basePath: string; onInchide: () => void }) {
-  const catalog = useStorefrontOptional();
+function PanouCautare({ onInchide }: { onInchide: () => void }) {
+  const { catalogRoot } = useStoreChrome();
+  const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const camp = useRef<HTMLInputElement>(null);
 
@@ -172,7 +175,7 @@ function PanouCautare({ basePath, onInchide }: { basePath: string; onInchide: ()
       return;
     }
     const q = valoare.trim();
-    window.location.href = `${basePath}/${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+    window.location.href = hrefCatalog(catalogRoot, q ? `q=${encodeURIComponent(q)}` : "");
   }
 
   return (

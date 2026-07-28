@@ -35,4 +35,14 @@ export type StorefrontProduct = Pick<
   | "weight_grams"
 > & {
   price_range?: PriceRange;
+  /**
+   * Indicii jetoanelor de fateta ale produsului, in dictionarul trimis alaturi.
+   *
+   * Prezenti doar pe pagina de catalog, care le cere explicit: brandul si
+   * specificatiile nu supravietuiesc slimuirii payload-ului, deci se calculeaza
+   * pe server. Pagina principala nu ii cere si ramane cu payload-ul de azi.
+   * Indici, nu siruri: la 1221 de produse fiecare sir repetat se inmulteste cu
+   * numarul de produse care il poarta.
+   */
+  f?: number[];
 };

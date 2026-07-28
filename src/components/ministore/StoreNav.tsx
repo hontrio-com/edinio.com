@@ -4,12 +4,19 @@ import { useState, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { menuItemHref, isExternalLink, type MenuItem } from "@/lib/pages/menu";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import { cdnImage } from "@/lib/cdn-image";
 
 /** Desktop inline navigation links (hidden on mobile). */
 export function StoreNavLinks({ items, basePath, color, currentSlug, className }: {
   items: MenuItem[]; basePath: string; color: string; currentSlug?: string | null; className?: string;
 }) {
+  // Radacina catalogului vine din chrome, nu ca prop: meniul se randeaza in
+  // toate cele opt headere si in doua footere, iar un prop in plus ar fi trebuit
+  // adaugat in zece locuri si tinut in sincron la fiecare varianta noua. Optional
+  // fiindca `useStoreChrome` arunca fara provider, iar aici o lipsa nu merita o
+  // pagina alba — se cade pe `basePath`, adica pe comportamentul de dinainte.
+  const catalogRoot = useStoreChromeOptional()?.catalogRoot ?? basePath;
   if (items.length === 0) return null;
   // `overflow-x-auto` duce dimensiunea minima automata la zero — cu `visible`, un
   // meniu de opt intrari `whitespace-nowrap` nu se poate stramta sub suma lor si
@@ -24,7 +31,7 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
     <nav className={`hidden md:flex items-center min-w-0 overflow-x-auto ${className ?? ""}`}>
       <span className="flex items-center gap-0.5 mx-auto">
       {items.map((it) => {
-        const href = menuItemHref(it, basePath);
+        const href = menuItemHref(it, basePath, catalogRoot);
         const ext = isExternalLink(it);
         const active = !!currentSlug && it.type === "page" && it.target === currentSlug;
         return (
@@ -71,6 +78,8 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
   stil?: keyof typeof STIL_BUTON;
 }) {
   const bp = PANA_LA[panaLa];
+  // Aceeasi sursa ca la meniul de desktop, din acelasi motiv: vezi StoreNavLinks.
+  const catalogRoot = useStoreChromeOptional()?.catalogRoot ?? basePath;
   const [open, setOpen] = useState(false);
   const idPanou = useId();
   const declansator = useRef<HTMLButtonElement>(null);
@@ -164,7 +173,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
             </div>
             <nav className="flex-1 overflow-y-auto p-3 space-y-1">
               {items.map((it) => {
-                const href = menuItemHref(it, basePath);
+                const href = menuItemHref(it, basePath, catalogRoot);
                 const ext = isExternalLink(it);
                 const active = !!currentSlug && it.type === "page" && it.target === currentSlug;
                 return (

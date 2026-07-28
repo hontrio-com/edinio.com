@@ -58,7 +58,7 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
   /** Stins cand varianta isi arata deja paginile in coloanele ei. */
   cuPagini?: boolean;
 } = {}) {
-  const { business, basePath, menu } = useStoreChrome();
+  const { business, basePath, catalogRoot, menu } = useStoreChrome();
   const t = TON[ton];
   // Paginile proprii ale magazinului. Erau in footerul paginilor custom, dar nu
   // si in cel al paginii de magazin; acum apar peste tot, ca navigarea din
@@ -79,7 +79,7 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
           <p className={t.titlu}>Pagini</p>
           <div className="flex flex-wrap gap-x-5 gap-y-1.5">
             {pagini.map((it) => (
-              <a key={it.id} href={menuItemHref(it, basePath)}
+              <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)}
                 className={t.link}>
                 {it.label}
               </a>

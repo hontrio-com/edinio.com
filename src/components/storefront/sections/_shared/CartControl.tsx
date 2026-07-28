@@ -22,7 +22,7 @@ export type TintaCos =
   | { fel: "link"; href: string; eticheta: string; textFaraProduse: string };
 
 export function useCartTarget(): TintaCos {
-  const { cartMode, cartHref, basePath, openCart } = useStoreChrome();
+  const { cartMode, cartHref, basePath, catalogRoot, openCart } = useStoreChrome();
 
   if (cartMode === "hidden") return { fel: "ascuns" };
   if (cartMode === "drawer") {
@@ -36,14 +36,17 @@ export function useCartTarget(): TintaCos {
   /*
    * „link": paginile fara catalog ale magazinelor ramase pe sertar.
    *
-   * Sertarul traieste pe pagina de magazin, deci de aici nu are unde sa se
-   * deschida. Butonul duce acolo CU SERTARUL DESCHIS (`?cos=1`), nu pur si
+   * Sertarul traieste acolo unde traieste catalogul, deci de aici nu are unde sa
+   * se deschida. Butonul duce acolo CU SERTARUL DESCHIS (`?cos=1`), nu pur si
    * simplu „la magazin": de cand pagina de produs are „Adauga in cos", clientul
    * adauga, apasa cosul si ateriza in prima pagina, fara sa vada ce a adaugat.
+   *
+   * Tinta e `catalogRoot`, nu radacina magazinului: sertarul se monteaza langa
+   * catalog, iar `?cos=1` e citit de pagina care il gazduieste.
    */
   return {
     fel: "link",
-    href: `${radacinaMagazin(basePath)}?cos=1`,
+    href: `${radacinaMagazin(catalogRoot)}?cos=1`,
     eticheta: "Mergi la cos",
     textFaraProduse: "Cos",
   };

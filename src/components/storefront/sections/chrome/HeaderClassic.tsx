@@ -5,7 +5,7 @@ import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { CartControl, useCartTarget } from "@/components/storefront/sections/_shared/CartControl";
 
 /**
@@ -22,7 +22,7 @@ import { CartControl, useCartTarget } from "@/components/storefront/sections/_sh
  * asta, designul ales de comerciant s-ar opri la primul click pe un produs.
  */
 export function HeaderClassic() {
-  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, currentPageSlug } =
+  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, currentPageSlug, isHome } =
     useStoreChrome();
   const { count } = useCart();
 
@@ -30,12 +30,13 @@ export function HeaderClassic() {
   const logoSize = pageContent.logo_size ?? 36;
   const showCall = features.floating_call === true && !!business.phone;
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
-  // Pe pagina de magazin ancora goala duce in capul paginii fara navigare.
-  // Semnul ca suntem acolo e existenta catalogului, nu modul cosului: cu cosul
-  // pe pagina, `cartMode` e „page" si pe pagina de magazin, iar un link adevarat
-  // ar reincarca pagina si ar sterge filtrele din adresa.
-  const peMagazin = useStorefrontOptional() !== null;
-  const acasa = peMagazin ? "#" : `${basePath}/`;
+  // Pe pagina principala ancora goala duce in capul paginii fara navigare.
+  // Semnul vine din chrome, nu din modul cosului: cu cosul pe pagina, `cartMode`
+  // e „page" si acasa, iar un link adevarat ar reincarca pagina si ar sterge
+  // filtrele din adresa. Nici prezenta catalogului nu e semnul potrivit — o
+  // pagina de catalog separata are catalog fara sa fie acasa, si atunci logoul
+  // ar ramane o ancora moarta, fara drum inapoi.
+  const acasa = isHome ? "#" : `${basePath}/`;
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>

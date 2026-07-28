@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, Lock } from "lucide-react";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCheckoutOrder, type CheckoutOrderInput } from "./checkout-core";
 import { CheckoutForm } from "./CheckoutForm";
@@ -21,6 +22,16 @@ import { CheckoutCartLines, CheckoutTotals } from "./CheckoutSummary";
  */
 export function CheckoutPageTwoCol(props: CheckoutOrderInput) {
   const { color, basePath, businessId, freeShippingThreshold, preview = null } = props;
+  /*
+   * Iesirea din palnie duce la PRODUSE, nu la radacina magazinului.
+   *
+   * Cand catalogul si-a luat pagina lui, pagina principala nu mai are grila:
+   * clientul care apasa „continua cumparaturile" ajungea intr-o pagina de
+   * prezentare fara niciun produs. Optional fiindca miniatura din editor
+   * randeaza fara chrome.
+   */
+  const chromeCatalog = useStoreChromeOptional();
+  const catreProduse = chromeCatalog?.catalogRoot ?? `${basePath}/`;
   const motor = useCheckoutOrder({ ...props, suprafata: "pagina" });
   const { items } = motor;
   const { hydrated } = useCart();
@@ -46,7 +57,7 @@ export function CheckoutPageTwoCol(props: CheckoutOrderInput) {
       </div>
 
       {hydrated && items.length === 0 && !preview ? (
-        <CosGolLaComanda basePath={basePath} color={color} />
+        <CosGolLaComanda catreProduse={catreProduse} color={color} />
       ) : (
         <div className="lg:grid lg:grid-cols-[1fr_380px] lg:gap-10 lg:items-start">
           {/* Pe telefon rezumatul e primul; pe desktop trece in coloana lipita. */}
@@ -75,7 +86,7 @@ export function CheckoutPageTwoCol(props: CheckoutOrderInput) {
         </div>
       )}
 
-      <a href={`${basePath}/`}
+      <a href={catreProduse}
         className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />
         Inapoi la magazin
@@ -91,12 +102,12 @@ export function CheckoutPageTwoCol(props: CheckoutOrderInput) {
  * si pentru o clipa la fiecare incarcare. De aceea nu redirectionam: un salt
  * automat ar arunca afara pe oricine, inclusiv pe cel care are cosul plin.
  */
-function CosGolLaComanda({ basePath, color }: { basePath: string; color: string }) {
+function CosGolLaComanda({ catreProduse, color }: { catreProduse: string; color: string }) {
   return (
     <div className="rounded-2xl border border-border bg-surface py-16 text-center">
       <p className="text-base font-semibold text-foreground mb-1">Nu ai produse in cos</p>
       <p className="text-sm text-muted-foreground mb-6">Adauga produse ca sa poti comanda</p>
-      <a href={`${basePath}/`}
+      <a href={catreProduse}
         className="inline-flex items-center justify-center h-11 px-5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
         style={{ backgroundColor: color }}>
         Vezi produsele

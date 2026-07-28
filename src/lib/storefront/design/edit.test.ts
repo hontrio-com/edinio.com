@@ -130,3 +130,21 @@ test("pagina de produs, cosul si comanda nu se pot sterge", () => {
   assert.equal(removeSection(d, d.commerce.cartDrawer.id), d);
   assert.equal(removeSection(d, d.commerce.checkout.id), d);
 });
+
+test("alegerea unui design de pagina de magazin chiar se aplica", () => {
+  /*
+   * `findSection` enumera manual scope-urile. Un scope necautat face
+   * `updateSection` sa returneze designul NESCHIMBAT, iar editorul afiseaza
+   * oricum „Design ales": comerciantul crede ca a ales si nu s-a intamplat
+   * nimic. Tipul nu prinde asta — cautarea intoarce `undefined` fara eroare.
+   */
+  const d = design();
+  const dupa = updateSection(d, d.shop.page.id, { enabled: false });
+  assert.equal(dupa.shop.page.enabled, false);
+  assert.notEqual(dupa, d);
+});
+
+test("pagina de magazin nu poate fi adaugata in pagina principala", () => {
+  // Scope-ul „shop" o tine in afara paletei „Adauga sectiune".
+  assert.ok(!addableKinds(design()).includes("shop_page"));
+});

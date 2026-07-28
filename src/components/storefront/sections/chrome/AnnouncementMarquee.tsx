@@ -1,6 +1,6 @@
 "use client";
 
-import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shared/Marquee";
 
 /**
@@ -11,14 +11,14 @@ import { Marquee, marqueeDuration } from "@/components/storefront/sections/_shar
  * cand exista — vezi `hasAnnouncementBar` din context.
  */
 export function AnnouncementMarquee() {
-  const { pageContent, color } = useStoreChrome();
-  // Contextul de catalog exista DOAR pe pagina magazinului.
-  const peMagazin = useStorefrontOptional() !== null;
+  const { pageContent, color, isHome } = useStoreChrome();
   const bar = pageContent.announcement_bar;
   // „Arata pe pagina magazinului" e o regula de PAGINA: in productie, pagina de
   // produs arata bara doar pe `enabled`, ignorand flagul. Bagat in sectiunea de
   // chrome — comuna tuturor paginilor — stingea bara si acolo unde apărea.
-  const ascunsaPeMagazin = peMagazin && pageContent.show_announcement_on_store === false;
+  // Pagina vizata e cea principala, semnalata explicit din chrome; pana acum se
+  // ghicea din prezenta catalogului, care azi coincide cu ea.
+  const ascunsaPeMagazin = isHome === true && pageContent.show_announcement_on_store === false;
   if (ascunsaPeMagazin || bar?.enabled !== true) return null;
 
   return (

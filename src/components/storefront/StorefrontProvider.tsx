@@ -2,6 +2,8 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import type { ProductSection } from "@/lib/store-sections";
+import type { Fateta, SelectieFatete } from "@/lib/storefront/catalog/facets";
+import type { SetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type {
@@ -57,6 +59,26 @@ export interface CatalogFacets {
 export interface StoreChromeValue {
   business: Business;
   basePath: string;
+  /**
+   * Unde traieste catalogul de produse.
+   *
+   * Azi e mereu radacina magazinului, deci `radacinaMagazin(basePath)`. Exista ca
+   * un camp separat fiindca „radacina magazinului" si „pagina cu produsele" sunt
+   * doua intrebari diferite, iar toate cele ~12 locuri care leaga o categorie, o
+   * pagina de catalog sau sertarul de cos raspund la a doua. Scrise cu `basePath`,
+   * ar fi trebuit corectate una cate una in ziua in care catalogul se muta.
+   */
+  catalogRoot: string;
+  /**
+   * Pagina curenta ESTE pagina principala a magazinului.
+   *
+   * Se foloseste pentru linkul de pe logo: acolo ancora goala duce in capul
+   * paginii, fara navigare. Pana acum raspunsul se ghicea din prezenta
+   * contextului de catalog, care azi coincide cu pagina principala; sunt insa
+   * doua intrebari diferite — o pagina de catalog separata ar avea catalog fara
+   * sa fie acasa, si toate cele opt headere ar fi ramas cu logoul mort.
+   */
+  isHome?: boolean;
   /** Culoarea principala. Variantele noi folosesc `var(--st-primary)`. */
   color: string;
   pageContent: StorePageContent;
@@ -133,12 +155,53 @@ export interface StorefrontContextValue extends StoreChromeValue {
   /** Varianta de header aleasa are deja o caseta de cautare. */
   headerHasSearch: boolean;
 
+  /**
+   * Pagina asta filtreaza pe loc, adica are o lista care raspunde la cautare.
+   *
+   * Pagina principala o pierde in clipa in care catalogul se muta pe pagina lui:
+   * ramane cu randuri de produse si cu categorii, dar fara grila, deci o cautare
+   * scrisa in header n-ar mai avea unde sa arate rezultate. Casetele de cautare
+   * din headere citesc semnalul prin `useCatalogCautabil` si navigheaza in loc sa
+   * filtreze. Implicit `true`, ca sa insemne exact ce insemna pana acum.
+   */
+  filtreazaPeLoc?: boolean;
+
   // --- Filtre --------------------------------------------------------------
   filtersOpen: boolean;
   setFiltersOpen: (v: boolean) => void;
   activeFilterCount: number;
   resetFilters: () => void;
   facets: CatalogFacets;
+  /**
+   * Fatetele bogate ale catalogului — brand, etichete, specificatii, atribute.
+   *
+   * Goale pe pagina principala: se calculeaza pe server, din randuri nesliuite,
+   * si sunt cerute doar de pagina de catalog. Filtrele de azi (`facets` +
+   * `selectedOptions`) raman neatinse langa ele, ca pagina principala sa se
+   * comporte identic.
+   */
+  fatete: Fateta[];
+  selectieFatete: SelectieFatete;
+  comutaFateta: (cheie: string, valoare: string) => void;
+  /**
+   * Filtrele curente scrise ca interogare, fara numarul paginii.
+   *
+   * Exista ca sa fie o SINGURA sursa pentru doi consumatori care trebuie sa
+   * spuna acelasi lucru: linkurile de paginare, care se randeaza si pe server,
+   * si rescrierea barei de adrese, care se intampla pe client. Compusa separat
+   * in fiecare, prima nepotrivire ar fi fost o pagina 2 care pierde filtrele —
+   * si nimic n-ar fi semnalat-o.
+   */
+  interogareFiltre: string;
+  /**
+   * Reglajele paginii de catalog, cu implicitele deja aplicate.
+   *
+   * Le citesc si `MiniStoreRenderer` (cate produse pe pagina, felul paginarii) si
+   * modelele de pagina (antet, filtre, sortari, text). Normalizate intr-un
+   * singur loc, ca cele doua sa nu aplice implicite diferite pentru acelasi camp
+   * lipsa. Pe pagina principala sunt implicitele si nu le citeste nimeni.
+   */
+  setariMagazin: SetariMagazin;
   priceMin: string;
   setPriceMin: (v: string) => void;
   priceMax: string;
@@ -226,6 +289,21 @@ export function useStoreChromeOptional(): StoreChromeValue | null {
 
 export function useStorefrontOptional(): StorefrontContextValue | null {
   return useContext(CatalogContext);
+}
+
+/**
+ * Catalogul, dar numai daca pagina chiar filtreaza pe loc.
+ *
+ * Casetele de cautare din headere aveau o singura intrebare — „exista catalog?"
+ * — si doua raspunsuri legate de ea: filtreaza la fiecare tasta, sau navigheaza
+ * la magazin cu `?q=`. Cu catalogul mutat pe pagina lui, pagina principala
+ * pastreaza contextul (ii trebuie pentru randuri si categorii) dar pierde grila,
+ * deci filtrarea pe loc ar fi scris intr-o lista pe care nimeni n-o vede. Aici
+ * cele doua intrebari se despart.
+ */
+export function useCatalogCautabil(): StorefrontContextValue | null {
+  const ctx = useContext(CatalogContext);
+  return ctx && ctx.filtreazaPeLoc !== false ? ctx : null;
 }
 
 /** Doar identitatea magazinului: pagina de produs, pagini custom, politici. */

@@ -4,9 +4,10 @@ import { Fragment, useRef, useState } from "react";
 import { ChevronDown, Search, ShoppingBag } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
+import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -32,13 +33,14 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
     cartMode,
     currentPageSlug,
     searchCategories,
+    isHome,
   } = useStoreChrome();
   const { count, total } = useCart();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const acasa = catalog ? "#" : `${basePath}/`;
+  const acasa = isHome ? "#" : `${basePath}/`;
 
   const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.search);
 
@@ -75,7 +77,7 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
 
           {/* Cautarea, pe randul principal doar de la lg in sus. */}
           <div className="hidden lg:block flex-1 min-w-0">
-            <SearchBar basePath={basePath} categorii={categorii} />
+            <SearchBar categorii={categorii} />
           </div>
 
           <div className="flex items-center gap-2 shrink-0 ml-auto lg:ml-0">
@@ -116,7 +118,7 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
 
       {/* Pe mobil cautarea are randul ei: intr-o bara de 16 unitati n-ar mai incapea nimic. */}
       <div className="lg:hidden px-4 pb-3">
-        <SearchBar basePath={basePath} categorii={categorii} compact />
+        <SearchBar categorii={categorii} compact />
       </div>
     </header>
   );
@@ -130,15 +132,14 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
  * cu termenul in adresa.
  */
 function SearchBar({
-  basePath,
   categorii,
   compact = false,
 }: {
-  basePath: string;
   categorii: string[];
   compact?: boolean;
 }) {
-  const catalog = useStorefrontOptional();
+  const { catalogRoot } = useStoreChrome();
+  const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const [catLocal, setCatLocal] = useState("toate");
   const [deschis, setDeschis] = useState(false);
@@ -173,7 +174,7 @@ function SearchBar({
     const p = new URLSearchParams();
     if (valoare.trim()) p.set("q", valoare.trim());
     if (categorie !== "toate") p.set("cat", categorie);
-    window.location.href = `${basePath}/${p.toString() ? `?${p}` : ""}`;
+    window.location.href = hrefCatalog(catalogRoot, p.toString());
   }
 
   const eticheta = categorie === "toate" ? "Toate categoriile" : categorie;

@@ -177,7 +177,15 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
   if ("error" in result) return result;
 
   revalidatePath("/dashboard/editor");
-  if (owned.slug) revalidatePath(`/${owned.slug}`);
+  if (owned.slug) {
+    revalidatePath(`/${owned.slug}`);
+    // Si rutele care depind de acelasi design. Azi sunt dinamice prin
+    // `headers()`, deci revalidarea n-are ce invalida, dar publicarea nu trebuie
+    // sa devina jumatate corecta in ziua in care una dintre ele capata cache.
+    revalidatePath(`/${owned.slug}/magazin`);
+    revalidatePath(`/${owned.slug}/cos`);
+    revalidatePath(`/${owned.slug}/checkout`);
+  }
   return { success: true };
 }
 

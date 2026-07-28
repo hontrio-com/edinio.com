@@ -305,6 +305,7 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
   const seenIds = new Set<string>();
   const chromeRaw = obj(r.chrome);
   const productRaw = obj(r.product);
+  const shopRaw = obj(r.shop);
   const commerceRaw = obj(r.commerce);
 
   const home = parseSectionList(r.home, seenIds, MAX_HOME_SECTIONS);
@@ -377,6 +378,12 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
     home,
     product: {
       page: pickOne(productRaw.page, classic.product.page, seenIds),
+    },
+    // Fara linia asta slotul ar disparea la prima salvare: parserul nu face
+    // merge peste `raw`, construieste si returneaza un obiect literal, iar
+    // server action-ul scrie exact acel obiect in baza.
+    shop: {
+      page: pickOne(shopRaw.page, classic.shop.page, seenIds),
     },
     commerce: {
       productCard: pickOne(commerceRaw.productCard, classic.commerce.productCard, seenIds),

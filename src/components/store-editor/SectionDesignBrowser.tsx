@@ -17,6 +17,7 @@ const GRUPURI = [
   { scope: "chrome", label: "Cap si subsol" },
   { scope: "home", label: "Pagina magazinului" },
   { scope: "product", label: "Pagina de produs" },
+  { scope: "shop", label: "Pagina Magazin" },
   { scope: "commerce", label: "Cos si comanda" },
 ] as const;
 
@@ -108,6 +109,10 @@ export function SectionDesignBrowser({
       ...design.home,
       design.chrome.footer,
       design.product.page,
+      // Slotul se adauga EXPLICIT: lista e scrisa de mana, deci o sectiune noua
+      // exista in date, se salveaza, dar nu se vede nicaieri in editor daca
+      // lipseste de aici. Pare ca deployul n-a prins.
+      design.shop.page,
       design.commerce.productCard,
       design.commerce.cartDrawer,
       design.commerce.checkout,

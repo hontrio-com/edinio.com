@@ -316,3 +316,52 @@ test("header-ul si footerul nu pot ramane stinse dintr-o configuratie salvata", 
   );
   assert.equal(cuAnunt.chrome.announcement?.enabled, false);
 });
+
+/**
+ * Slotul paginii de magazin.
+ *
+ * Parserul NU face merge peste jsonb-ul salvat: construieste si returneaza un
+ * obiect literal, iar server action-ul scrie exact acel obiect in baza. Un slot
+ * uitat din acel obiect dispare la prima autosalvare din editor, iar alegerea
+ * comerciantului se pierde fara nicio eroare.
+ */
+test("designul classic da tuturor magazinelor o pagina de magazin stinsa", () => {
+  const d = parseStoreDesign(null, ctx);
+  assert.equal(d.shop.page.kind, "shop_page");
+  assert.equal(d.shop.page.variant, "none");
+  // Aprinsa, dar pe varianta care nu deschide nicio ruta: alegerea unui design
+  // de pagina trebuie sa fie o singura apasare, nu doua.
+  assert.equal(d.shop.page.enabled, true);
+});
+
+test("pagina de magazin nu intra in lista paginii principale", () => {
+  // In `home` ar fi schimbat ordinea paginii principale pentru toate magazinele
+  // si ar fi aparut in paleta „Adauga sectiune".
+  const d = parseStoreDesign(null, ctx);
+  assert.ok(!d.home.some((s) => s.kind === "shop_page"));
+});
+
+test("slotul paginii de magazin supravietuieste unui ciclu salvare-citire", () => {
+  const salvat = parseStoreDesign(null, ctx);
+  const dupa = parseStoreDesign(JSON.parse(JSON.stringify(salvat)), ctx);
+  assert.deepEqual(dupa.shop, salvat.shop);
+});
+
+test("o varianta de pagina de magazin necunoscuta cade pe cea inofensiva", () => {
+  const d = parseStoreDesign(
+    {
+      version: 1,
+      chrome: {},
+      home: [],
+      shop: { page: { id: "shop_page", kind: "shop_page", variant: "inexistenta", settings: {} } },
+    },
+    ctx,
+  );
+  assert.equal(d.shop.page.variant, "none");
+});
+
+test("o configuratie salvata inainte de slot primeste implicitul, nu o gaura", () => {
+  // Cele doua magazine cu design materializat au fost salvate fara cheia `shop`.
+  const d = parseStoreDesign({ version: 1, chrome: {}, home: [] }, ctx);
+  assert.equal(d.shop.page.variant, "none");
+});

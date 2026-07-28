@@ -61,19 +61,45 @@ export const DEMO_MENU: MenuItem[] = [
 /**
  * Produse demonstrative.
  *
- * Sase, nu patru cate fotografii avem: randurile si grilele arata patru carduri
- * deodata si ar ramane subtiri cu mai putine. Doua fotografii se repeta cu alta
- * configuratie, cum se intampla si in magazinele reale.
+ * Douasprezece, nu patru cate fotografii avem: randurile si grilele arata patru
+ * carduri deodata si ar ramane subtiri cu mai putine, iar pagina de catalog se
+ * alege tocmai dupa cum arata filtrele si bara de paginare — cu sase produse
+ * dintr-o singura categorie si fara atribute, cele trei modele ar fi aratat
+ * identic si exact ce le deosebeste ar fi lipsit din cardul din care alege
+ * comerciantul. Fotografiile se repeta cu alta configuratie, cum se intampla si
+ * in magazinele reale.
  *
  * Cateva au pret taiat, ca sa se vada si eticheta de reducere.
+ *
+ * Atributele sunt alese ca sa TREACA regula de calitate a fatetelor: fiecare
+ * valoare apare la cel putin doua produse, altfel fateta ei cade si miniatura ar
+ * ramane iar goala. Vezi `lib/storefront/catalog/facets.ts`.
  */
-const DEMO_PRODUSE: [string, number, number | null, string][] = [
-  ["Laptop 15.6 inch, Intel, Windows 11", 2499, 2999, "/demo/produs-laptop.webp"],
-  ["Telefon 6.9 inch, 256 GB, portocaliu", 5799, null, "/demo/produs-telefon.webp"],
-  ["Televizor Smart 4K, 55 inch", 1899, 2349, "/demo/produs-televizor.webp"],
-  ["Consola de jocuri, editie digitala", 2299, null, "/demo/produs-consola.webp"],
-  ["Telefon 6.9 inch, 512 GB, portocaliu", 6499, 6999, "/demo/produs-telefon.webp"],
-  ["Laptop 15.6 inch, 32 GB RAM", 3199, null, "/demo/produs-laptop.webp"],
+interface DemoProdus {
+  nume: string;
+  pret: number;
+  vechi: number | null;
+  imagine: string;
+  categorie: number;
+  brand: string;
+  material: string;
+  garantie: string;
+  culoare: string;
+}
+
+const DEMO_PRODUSE: DemoProdus[] = [
+  { nume: "Laptop 15.6 inch, Intel, Windows 11", pret: 2499, vechi: 2999, imagine: "/demo/produs-laptop.webp", categorie: 0, brand: "Nordic", material: "Aluminiu", garantie: "24 luni", culoare: "Gri" },
+  { nume: "Telefon 6.9 inch, 256 GB, portocaliu", pret: 5799, vechi: null, imagine: "/demo/produs-telefon.webp", categorie: 0, brand: "Aurora", material: "Sticla", garantie: "24 luni", culoare: "Portocaliu" },
+  { nume: "Televizor Smart 4K, 55 inch", pret: 1899, vechi: 2349, imagine: "/demo/produs-televizor.webp", categorie: 1, brand: "Vela", material: "Plastic", garantie: "24 luni", culoare: "Negru" },
+  { nume: "Consola de jocuri, editie digitala", pret: 2299, vechi: null, imagine: "/demo/produs-consola.webp", categorie: 4, brand: "Nordic", material: "Plastic", garantie: "12 luni", culoare: "Alb" },
+  { nume: "Telefon 6.9 inch, 512 GB, portocaliu", pret: 6499, vechi: 6999, imagine: "/demo/produs-telefon.webp", categorie: 0, brand: "Aurora", material: "Sticla", garantie: "24 luni", culoare: "Portocaliu" },
+  { nume: "Laptop 15.6 inch, 32 GB RAM", pret: 3199, vechi: null, imagine: "/demo/produs-laptop.webp", categorie: 0, brand: "Nordic", material: "Aluminiu", garantie: "24 luni", culoare: "Gri" },
+  { nume: "Televizor Smart 4K, 43 inch", pret: 1499, vechi: 1799, imagine: "/demo/produs-televizor.webp", categorie: 1, brand: "Vela", material: "Plastic", garantie: "12 luni", culoare: "Negru" },
+  { nume: "Consola de jocuri, editie completa", pret: 2899, vechi: null, imagine: "/demo/produs-consola.webp", categorie: 4, brand: "Vela", material: "Plastic", garantie: "12 luni", culoare: "Alb" },
+  { nume: "Laptop 14 inch, ultraportabil", pret: 4299, vechi: 4799, imagine: "/demo/produs-laptop.webp", categorie: 0, brand: "Aurora", material: "Aluminiu", garantie: "24 luni", culoare: "Argintiu" },
+  { nume: "Telefon 6.1 inch, 128 GB", pret: 3499, vechi: null, imagine: "/demo/produs-telefon.webp", categorie: 0, brand: "Nordic", material: "Sticla", garantie: "12 luni", culoare: "Negru" },
+  { nume: "Televizor Smart 4K, 65 inch", pret: 3299, vechi: 3899, imagine: "/demo/produs-televizor.webp", categorie: 1, brand: "Aurora", material: "Aluminiu", garantie: "24 luni", culoare: "Argintiu" },
+  { nume: "Consola portabila, 512 GB", pret: 1999, vechi: null, imagine: "/demo/produs-consola.webp", categorie: 4, brand: "Vela", material: "Plastic", garantie: "12 luni", culoare: "Alb" },
 ];
 
 /**
@@ -89,9 +115,9 @@ const DEMO_PRODUSE: [string, number, number | null, string][] = [
  */
 export function demoCartItems(): CartItem[] {
   return [
-    { productId: "demo_prod_0", slug: "exemplu-0", name: DEMO_PRODUSE[0][0], price: DEMO_PRODUSE[0][1], imageUrl: DEMO_PRODUSE[0][3], quantity: 1 },
-    { productId: "demo_prod_1", slug: "exemplu-1", name: DEMO_PRODUSE[1][0], price: DEMO_PRODUSE[1][1], imageUrl: DEMO_PRODUSE[1][3], quantity: 1, variantTitle: "256 GB / Portocaliu" },
-    { productId: "demo_prod_3", slug: "exemplu-3", name: DEMO_PRODUSE[3][0], price: DEMO_PRODUSE[3][1], imageUrl: DEMO_PRODUSE[3][3], quantity: 2 },
+    { productId: "demo_prod_0", slug: "exemplu-0", name: DEMO_PRODUSE[0].nume, price: DEMO_PRODUSE[0].pret, imageUrl: DEMO_PRODUSE[0].imagine, quantity: 1 },
+    { productId: "demo_prod_1", slug: "exemplu-1", name: DEMO_PRODUSE[1].nume, price: DEMO_PRODUSE[1].pret, imageUrl: DEMO_PRODUSE[1].imagine, quantity: 1, variantTitle: "256 GB / Portocaliu" },
+    { productId: "demo_prod_3", slug: "exemplu-3", name: DEMO_PRODUSE[3].nume, price: DEMO_PRODUSE[3].pret, imageUrl: DEMO_PRODUSE[3].imagine, quantity: 2 },
   ];
 }
 
@@ -214,16 +240,16 @@ export function demoProductPage(businessId: string) {
 }
 
 export function demoProducts(businessId: string) {
-  return DEMO_PRODUSE.map(([name, price, vechi, imagine], i) => ({
+  return DEMO_PRODUSE.map((p, i) => ({
     id: `demo_prod_${i}`,
     business_id: businessId,
-    name,
+    name: p.nume,
     slug: `exemplu-${i}`,
     description: "Descriere scurta a produsului, asa cum va aparea in magazinul tau.",
-    price,
-    compare_at_price: vechi,
-    images: [imagine],
-    category: DEMO_CATEGORY_NAMES[0],
+    price: p.pret,
+    compare_at_price: p.vechi,
+    images: [p.imagine],
+    category: DEMO_CATEGORY_NAMES[p.categorie],
     is_featured: true,
     is_active: true,
     is_bundle: false,
@@ -231,7 +257,23 @@ export function demoProducts(businessId: string) {
     stock_quantity: null,
     sort_order: i,
     created_at: new Date(0).toISOString(),
-    page_sections: null,
+    /*
+     * Atributele care alimenteaza fatetele din miniatura paginii de catalog.
+     *
+     * Aceleasi trei surse ca in magazinele reale: optiunile de varianta,
+     * brandul din atributele de marketplace si specificatiile. Fara ele,
+     * miniatura ar fi aratat o coloana de filtre goala langa o grila, adica
+     * exact ce deosebeste cele trei modele ar fi lipsit din cardul din care
+     * alege comerciantul.
+     */
+    page_sections: {
+      variants: { enabled: true, options: [{ id: "culoare", name: "Culoare", values: [p.culoare] }] },
+      google: { brand: p.brand },
+      specifications: [
+        { label: "Material", value: p.material },
+        { label: "Garantie", value: p.garantie },
+      ],
+    },
     weight_grams: null,
   }));
 }

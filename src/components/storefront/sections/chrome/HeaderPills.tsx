@@ -9,11 +9,11 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
-import { hrefCategorie } from "@/lib/storefront/category-href";
+import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 
 const STROKE = 1.7;
 
@@ -31,19 +31,21 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
   const {
     business,
     basePath,
+    catalogRoot,
     menu,
     pageContent,
     hasAnnouncementBar,
     cartMode,
     currentPageSlug,
     searchCategories,
+    isHome,
   } = useStoreChrome();
   const { count } = useCart();
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const acasa = catalog ? "#" : `${basePath}/`;
+  const acasa = isHome ? "#" : `${basePath}/`;
 
   const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.pills);
 
@@ -62,7 +64,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
     : "Reduceri";
   const actiuneLink = typeof settings.actionHref === "string" && settings.actionHref.trim()
     ? resolveHref(settings.actionHref, basePath)
-    : `${basePath}/?sale=1`;
+    : hrefCatalog(catalogRoot, "sale=1");
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-bg)]/95 backdrop-blur-md`}>
@@ -74,7 +76,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
             {menu.map((it) => {
               const activ = it.type === "page" && it.target === currentPageSlug;
               return (
-                <a key={it.id} href={menuItemHref(it, basePath)}
+                <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)}
                   className={`text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors whitespace-nowrap ${meniuCls}`}
                   aria-current={activ ? "page" : undefined}
                   style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
@@ -101,10 +103,10 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
             )}
           </a>
 
-          {categorii.length > 0 && <PastilaCategorii categorii={categorii} basePath={basePath} />}
+          {categorii.length > 0 && <PastilaCategorii categorii={categorii} />}
 
           <div className="hidden lg:block flex-1 min-w-0">
-            <CautareRotunjita basePath={basePath} />
+            <CautareRotunjita />
           </div>
 
           {actiuneVizibila && (
@@ -138,7 +140,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
 
         {/* Pe mobil cautarea coboara pe randul ei: in banda de sus n-ar incapea. */}
         <div className="lg:hidden pb-3">
-          <CautareRotunjita basePath={basePath} compact />
+          <CautareRotunjita compact />
         </div>
       </div>
     </header>
@@ -152,11 +154,10 @@ const CERC =
 /** Pastila inchisa „Categorii", cu panoul de categorii dedesubt. */
 function PastilaCategorii({
   categorii,
-  basePath,
 }: {
   categorii: { name: string; image: string | null }[];
-  basePath: string;
 }) {
+  const { catalogRoot } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -183,7 +184,7 @@ function PastilaCategorii({
         <div className="absolute left-0 top-full mt-2 z-50 w-[min(34rem,80vw)] rounded-[var(--st-radius-lg)] bg-[var(--st-surface)] shadow-xl border border-[var(--st-border)] p-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
             {categorii.slice(0, 12).map((c) => (
-              <a key={c.name} href={hrefCategorie(basePath, c.name)}
+              <a key={c.name} href={hrefCategorie(catalogRoot, c.name)}
                 className="flex items-center gap-2.5 p-2 rounded-full hover:bg-[var(--st-primary-soft)] transition-colors">
                 {c.image ? (
                   <span className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 bg-[var(--st-bg)]">
@@ -211,8 +212,9 @@ function PastilaCategorii({
  * Pe magazin filtreaza pe loc, la fiecare tasta; de pe alte pagini duce la
  * magazin cu termenul in adresa.
  */
-function CautareRotunjita({ basePath, compact = false }: { basePath: string; compact?: boolean }) {
-  const catalog = useStorefrontOptional();
+function CautareRotunjita({ compact = false }: { compact?: boolean }) {
+  const { catalogRoot } = useStoreChrome();
+  const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const valoare = catalog ? catalog.search : local;
 
@@ -229,7 +231,7 @@ function CautareRotunjita({ basePath, compact = false }: { basePath: string; com
     e.preventDefault();
     if (catalog) return;
     const q = valoare.trim();
-    window.location.href = `${basePath}/${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+    window.location.href = hrefCatalog(catalogRoot, q ? `q=${encodeURIComponent(q)}` : "");
   }
 
   return (

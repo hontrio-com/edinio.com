@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -12,6 +12,9 @@ import { resolveProductOffers } from "@/lib/offers/offers";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { isNonProductionHost } from "@/lib/storefront/host";
+import { hrefCatalog } from "@/lib/storefront/category-href";
+import { scrieFiltre } from "@/lib/storefront/catalog/url";
+import { radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
@@ -356,6 +359,35 @@ export default async function SlugPage({ params, searchParams }: Props) {
       tagline: business.tagline,
     },
   );
+
+  /*
+   * Catalogul s-a mutat: adresele lui vechi il urmeaza.
+   *
+   * `?cat=`, `?sale=1` si `?page=N` erau adrese crawlabile ale grilei de aici, si
+   * la magazinele mari sunt zeci sau sute deja indexate. Din clipa in care grila
+   * nu se mai randeaza pe pagina principala, ele ar fi ramas sa arate o pagina de
+   * prezentare cu un parametru fara efect: nici 404, nici continutul promis,
+   * adica exact felul de pagina pe care Google il scoate din index in tacere.
+   *
+   * Permanent, nu temporar: mutarea e o alegere de design, nu un accident, iar
+   * un 307 ar fi lasat semnalul de link pe adresa veche.
+   */
+  // Sarit in previzualizare: acolo designul poate fi ciorna, iar o navigare ar
+  // scoate iframe-ul editorului din pagina si ar rupe legatura postMessage.
+  if (!isPreview && shopOnPage(resolved.design) && (catParam || saleParam === "1" || pageParam || qParam)) {
+    // `scrieFiltre` codifica spatiile cu %20, la fel ca linkurile de categorie si
+    // ca toate canonicalele. `URLSearchParams` le-ar fi scris cu `+`, deci
+    // redirectul ar fi produs o A DOUA adresa pentru exact acelasi continut.
+    permanentRedirect(hrefCatalog(
+      radacinaCatalog(basePath, resolved.design),
+      scrieFiltre({
+        categorie: catParam,
+        cautare: qParam,
+        reduceri: saleParam === "1",
+        pagina: pageParam ? Number(pageParam) : undefined,
+      }),
+    ));
+  }
 
   // `?cat=` poate veni cu numele categoriei (din header) sau cu id-ul ei
   // (linkurile de meniu de tip categorie trimit `target`, care e un id). Filtrul

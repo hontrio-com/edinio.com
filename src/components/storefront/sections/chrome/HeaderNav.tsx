@@ -9,11 +9,11 @@ import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
-import { hrefCategorie } from "@/lib/storefront/category-href";
+import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -39,6 +39,7 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
     cartMode,
     currentPageSlug,
     searchCategories,
+    isHome,
   } = useStoreChrome();
   const { count, total } = useCart();
   const catalog = useStorefrontOptional();
@@ -46,7 +47,7 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const acasa = catalog ? "#" : `${basePath}/`;
+  const acasa = isHome ? "#" : `${basePath}/`;
 
   const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.nav);
 
@@ -163,6 +164,7 @@ function MeniuInline({
   meniuCls: string;
   meniuStyle: { fontFamily: string };
 }) {
+  const { catalogRoot } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -195,7 +197,7 @@ function MeniuInline({
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                 {categorii.slice(0, 12).map((c) => (
-                  <a key={c.key} href={hrefCategorie(basePath, c.name)}
+                  <a key={c.key} href={hrefCategorie(catalogRoot, c.name)}
                     className="flex items-center gap-2.5 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
                     {c.image ? (
                       <span className="relative w-9 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
@@ -211,7 +213,7 @@ function MeniuInline({
                   </a>
                 ))}
               </div>
-              <a href={`${basePath}/`}
+              <a href={catalogRoot}
                 className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold"
                 style={{ color: "var(--st-primary)" }}>
                 Toate produsele
@@ -225,7 +227,7 @@ function MeniuInline({
       {menu.map((it) => {
         const activ = it.type === "page" && it.target === currentPageSlug;
         return (
-          <a key={it.id} href={menuItemHref(it, basePath)} className={link}
+          <a key={it.id} href={menuItemHref(it, basePath, catalogRoot)} className={link}
             aria-current={activ ? "page" : undefined}
             style={activ ? { color: "var(--st-primary)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: "6px" } : undefined}>
             {it.label}
@@ -244,7 +246,8 @@ function MeniuInline({
  * custom) e doar un camp care trimite la magazin.
  */
 function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => void }) {
-  const catalog = useStorefrontOptional();
+  const { catalogRoot } = useStoreChrome();
+  const catalog = useCatalogCautabil();
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const panou = useRef<HTMLDivElement>(null);
@@ -313,7 +316,7 @@ function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => 
       document.getElementById("produse")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    window.location.href = `${basePath}/${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+    window.location.href = hrefCatalog(catalogRoot, q ? `q=${encodeURIComponent(q)}` : "");
   }
 
   return (

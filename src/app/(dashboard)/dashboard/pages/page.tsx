@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { PagesListClient } from "@/components/pages/PagesListClient";
 import type { MenuItem } from "@/lib/pages/menu";
-import { cartOnPage, checkoutOnPage } from "@/lib/storefront/design/commerce";
+import { cartOnPage, checkoutOnPage, shopOnPage } from "@/lib/storefront/design/commerce";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 
 export default async function PagesPage() {
@@ -36,8 +36,9 @@ export default async function PagesPage() {
 
   const menu = ((ss?.page_content as { menu?: MenuItem[] } | null)?.menu) ?? [];
 
-  // Cosul si finalizarea comenzii apar in lista ca pagini de sistem, dar numai
-  // designul publicat spune daca sunt pagini adevarate sau panouri peste magazin.
+  // Catalogul, cosul si finalizarea comenzii apar in lista ca pagini de sistem,
+  // dar numai designul PUBLICAT spune daca sunt pagini adevarate sau raman pe
+  // pagina principala, respectiv panouri peste magazin.
   const design = parseStoreDesign(ss?.storefront_design, {
     primaryColor: "#1AB554",
     pageContent: (ss?.page_content as Record<string, unknown>) ?? {},
@@ -49,6 +50,7 @@ export default async function PagesPage() {
       business={business}
       pages={pages ?? []}
       initialMenu={menu}
+      catalogPePagina={shopOnPage(design)}
       cosPePagina={cartOnPage(design)}
       comandaPePagina={checkoutOnPage(design)}
     />

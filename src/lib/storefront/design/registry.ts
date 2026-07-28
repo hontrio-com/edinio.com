@@ -139,7 +139,7 @@ export interface SectionMeta {
   label: string;
   /** Nume de iconita Lucide, rezolvat in editor. */
   icon: string;
-  scope: "chrome" | "home" | "product" | "commerce";
+  scope: "chrome" | "home" | "product" | "shop" | "commerce";
   /** Poate exista o singura instanta (header, footer, grila principala). */
   singleton: boolean;
   /** Poate fi stearsa din lista de sectiuni. */
@@ -289,6 +289,161 @@ const CART_PAGE_FIELDS: Field[] = [
 ];
 
 const CART_PAGE_DEFAULTS = { showProgress: true, showRecommendations: true };
+
+/**
+ * Grupurile de filtre ale paginii de catalog.
+ *
+ * Sunt STATICE, desi valorile dinauntru vin din produsele fiecarui magazin:
+ * comerciantul alege ce FELURI de filtre se vad si in ce ordine, nu ce valori.
+ * Asa reglajul incape in campul de tip `actions`, care stie deja sa pastreze
+ * ordinea si sa adauge la coada un grup aparut mai tarziu — fara un tip de camp
+ * nou, cu optiuni venite din date.
+ */
+export const GRUPURI_FILTRE = [
+  { value: "categorii", label: "Categorii" },
+  { value: "pret", label: "Pret, reduceri si stoc" },
+  { value: "atribute", label: "Atribute (marime, culoare)" },
+  { value: "brand", label: "Brand" },
+  { value: "etichete", label: "Etichete" },
+  { value: "specificatii", label: "Specificatii" },
+];
+
+/**
+ * Ce trebuie sa stie comerciantul dupa ce alege un design de pagina de catalog.
+ *
+ * Alegerea nu schimba doar aspectul: muta produsele de pe pagina principala,
+ * deci merita spus raspicat, inainte de a fi publicata.
+ */
+const SHOP_NOTA =
+  "Produsele se muta pe o pagina proprie, cu adresa ei. Pagina principala ramane cu hero, randurile de produse si restul sectiunilor, iar linkurile de categorie duc la pagina noua.";
+
+/**
+ * Reglajele comune celor trei modele.
+ *
+ * Doar ce tine de PAGINA. Ce produse se vad — ascunde-le pe cele fara imagini
+ * sau fara stoc — ramane in „Editeaza magazinul", unde era: aceeasi decizie in
+ * doua locuri inseamna, mai devreme sau mai tarziu, un comerciant care stinge
+ * unul si nu intelege de ce lucrul ramane aprins.
+ */
+/**
+ * Sortarile pe care le stie catalogul.
+ *
+ * „Relevanta" lipseste deliberat: nu e o alegere a comerciantului, exista doar
+ * cat timp vizitatorul are o cautare activa.
+ */
+export const SORTARI_CATALOG = [
+  { value: "newest", label: "Cele mai noi" },
+  { value: "price_asc", label: "Pret crescator" },
+  { value: "price_desc", label: "Pret descrescator" },
+  { value: "name_asc", label: "Nume A-Z" },
+  { value: "popular", label: "Recomandate" },
+];
+
+const SHOP_FIELDS: Field[] = [
+  // --- Antet ---------------------------------------------------------------
+  { key: "titlu", type: "text", label: "Titlul paginii", placeholder: "Toate produsele", maxLength: 60 },
+  {
+    key: "arataTitlu", type: "toggle", label: "Arata titlul",
+    help: "Stins, titlul ramane doar pentru cititoarele de ecran si pentru Google.",
+  },
+  {
+    key: "subtitlu", type: "textarea", label: "Text sub titlu",
+    placeholder: "Echipamente de protectie pentru santier, birou si atelier.",
+    maxLength: 300,
+    help: "Un rand-doua despre ce gaseste vizitatorul aici. Ajuta si la cautari.",
+  },
+  {
+    key: "imagineAntet", type: "image", label: "Imagine de antet",
+    help: "Se intinde pe toata latimea, deasupra titlului. Fara ea, pagina incepe direct cu titlul.",
+  },
+  { key: "arataFirimituri", type: "toggle", label: "Arata firimiturile de navigare" },
+  { key: "arataNumarul", type: "toggle", label: "Arata cate produse s-au gasit" },
+
+  // --- Grila ---------------------------------------------------------------
+  {
+    key: "coloane", type: "select", label: "Produse pe rand, pe calculator",
+    options: [
+      { value: "2", label: "2" },
+      { value: "3", label: "3" },
+      { value: "4", label: "4" },
+      { value: "5", label: "5" },
+      { value: "6", label: "6" },
+    ],
+  },
+  {
+    key: "coloaneMobil", type: "select", label: "Produse pe rand, pe telefon",
+    options: [
+      { value: "1", label: "1, cu carduri mari" },
+      { value: "2", label: "2" },
+    ],
+  },
+  {
+    key: "perPage", type: "range", label: "Produse pe pagina",
+    min: 8, max: 96, step: 4, unit: " produse",
+    help: "Mai multe inseamna mai putine apasari, dar o pagina mai grea pe telefon.",
+  },
+  {
+    key: "modPaginare", type: "select", label: "Cum se vad urmatoarele produse",
+    options: [
+      { value: "pagini", label: "Pagini numerotate" },
+      { value: "buton", label: "Buton „Incarca mai multe”" },
+      { value: "infinit", label: "Se incarca la derulare" },
+    ],
+    help: "Paginile numerotate raman scrise in adresa la toate trei, deci Google le gaseste oricum.",
+  },
+
+  // --- Filtre --------------------------------------------------------------
+  {
+    key: "grupuriFiltre", type: "actions", label: "Filtre",
+    help: "Ordinea si care se vad. Cele fara date in produse lipsesc oricum.",
+    options: GRUPURI_FILTRE,
+  },
+  {
+    key: "valoriVizibile", type: "range", label: "Cate valori se vad per filtru",
+    min: 3, max: 20, step: 1, unit: " valori",
+    help: "Restul se deschid cu o apasare. Valorile bifate raman mereu la vedere.",
+  },
+  { key: "arataNumaratori", type: "toggle", label: "Arata cate produse are fiecare valoare" },
+  {
+    key: "filtrePliate", type: "toggle", label: "Filtrele pornesc pliate",
+    help: "Util cand ai multe atribute: vizitatorul vede lista de filtre dintr-o privire si deschide doar ce il intereseaza.",
+  },
+
+  // --- Sortare -------------------------------------------------------------
+  {
+    key: "sortareImplicita", type: "select", label: "Sortarea implicita a paginii",
+    options: [
+      { value: "", label: "Ca in Editeaza magazinul" },
+      ...SORTARI_CATALOG,
+    ],
+    help: "Gol = ramane sortarea aleasa pentru tot magazinul. Aici o poti schimba doar pentru pagina asta.",
+  },
+  {
+    key: "sortariOferite", type: "actions", label: "Sortari oferite vizitatorului",
+    options: SORTARI_CATALOG,
+  },
+
+  // --- Sub grila -----------------------------------------------------------
+  {
+    key: "textSubGrila", type: "textarea", label: "Text sub produse",
+    maxLength: 2000,
+    help: "Apare sub grila, dupa paginare. Locul obisnuit pentru un text de prezentare a gamei.",
+  },
+];
+
+const SHOP_DEFAULTS = {
+  titlu: "Toate produsele",
+  arataTitlu: true,
+  arataFirimituri: true,
+  arataNumarul: true,
+  coloaneMobil: "2",
+  perPage: 20,
+  modPaginare: "pagini",
+  valoriVizibile: 6,
+  arataNumaratori: true,
+  filtrePliate: false,
+  sortareImplicita: "",
+};
 
 export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   // --- Chrome -------------------------------------------------------------
@@ -679,6 +834,71 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           showTiers: true,
           showContact: true,
         },
+      },
+    },
+  },
+
+  // --- Pagina de catalog --------------------------------------------------
+  /**
+   * Unde stau produsele: pe pagina principala, ca pana acum, sau pe o pagina a
+   * lor, cu adresa proprie.
+   *
+   * ATENTIE: `none` trebuie sa ramana PRIMA cheie, si trebuie sa ramana fara
+   * `surface`. Parserul cade pe prima varianta declarata pentru orice
+   * configuratie pe care n-o recunoaste, iar slotul ajunge prin designul classic
+   * la absolut toate magazinele. O varianta de tip pagina pusa prima ar fi
+   * deschis, in ziua deployului, o ruta publica si crawlabila pe fiecare magazin
+   * publicat — inclusiv pe cele fara niciun produs, unde ar fi aratat un catalog
+   * gol. Nimeni n-ar fi apasat nimic. Acelasi avertisment ca la `cart_drawer`,
+   * cu o miza mai mare: acolo exista un panou ca alternativa, aici nu.
+   */
+  shop_page: {
+    label: "Pagina Magazin",
+    icon: "Store",
+    scope: "shop",
+    singleton: true,
+    removable: false,
+    inCatalog: true,
+    variants: {
+      none: {
+        label: "Produsele stau pe pagina principala",
+        tags: ["clasic"],
+        layout: "contained",
+        previewHeight: 420,
+        fields: [],
+      },
+      sidebar: {
+        label: "Filtre in bara laterala",
+        tags: ["clasic", "detaliat"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        providesH1: true,
+        note: SHOP_NOTA,
+        fields: SHOP_FIELDS,
+        defaults: { ...SHOP_DEFAULTS, coloane: "4" },
+      },
+      toolbar: {
+        label: "Filtre in capul paginii",
+        tags: ["simplu", "elegant"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        providesH1: true,
+        note: SHOP_NOTA,
+        fields: SHOP_FIELDS,
+        defaults: { ...SHOP_DEFAULTS, coloane: "4" },
+      },
+      compact: {
+        label: "Compact, pentru cataloage mari",
+        tags: ["compact", "indraznet"],
+        layout: "full",
+        surface: "page",
+        previewHeight: 900,
+        providesH1: true,
+        note: SHOP_NOTA,
+        fields: SHOP_FIELDS,
+        defaults: { ...SHOP_DEFAULTS, coloane: "5" },
       },
     },
   },

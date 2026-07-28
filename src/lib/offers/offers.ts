@@ -176,11 +176,12 @@ async function fetchOfferProducts(
 
 // Auto cross-sell: products from the anchor's category (active, non-bundle), newest first.
 async function fetchCategoryProducts(
-  admin: Client, businessId: string, category: string, excludeIds: Set<string>, limit: number,
+  admin: Client, businessId: string, categorii: Set<string>, excludeIds: Set<string>, limit: number,
 ): Promise<OfferProduct[]> {
+  if (categorii.size === 0) return [];
   const { data } = await admin
     .from("products").select(OFFER_PRODUCT_COLS)
-    .eq("business_id", businessId).eq("category", category)
+    .eq("business_id", businessId).in("category", [...categorii])
     .eq("is_active", true).eq("is_bundle", false)
     .order("created_at", { ascending: false })
     .limit(limit + excludeIds.size);
@@ -238,8 +239,18 @@ export async function resolveProductOffers(
   const exclude = new Set([anchor.id]);
   const resolved: ResolvedOffer[] = [];
   for (const o of applicable) {
-    const products = o.type === "cross_sell" && o.config.autoByCategory && anchor.category
-      ? await fetchCategoryProducts(admin, businessId, anchor.category, exclude, o.config.maxProducts)
+    /*
+     * Bazinul de recomandare: ce a ales COMERCIANTUL, nu categoria-frunza a
+     * produsului. Un magazin care declanseaza pe „Imbracaminte Femei" si are o
+     * singura rochie n-avea ce recomanda — chiar rochia din care se pornea era
+     * exclusa, deci oferta disparea. Cu declansator pe categorii se cauta in tot
+     * subarborele ales; la „toate" sau pe produse ramane categoria produsului.
+     */
+    const bazin = o.trigger.scope === "categories"
+      ? (extinse ?? new Set(o.trigger.categories))
+      : new Set(anchor.category ? [anchor.category] : []);
+    const products = o.type === "cross_sell" && o.config.autoByCategory
+      ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts)
       : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
     if (products.length === 0) continue;
 
@@ -301,11 +312,15 @@ export async function resolveCartOffers(
     // produs: in cos se cerea lista de id-uri, care la ofertele automate e
     // goala, deci oferta disparea tacut din toate cele patru variante de cos.
     // Categoria se ia din primul produs din cos care declanseaza oferta.
-    const categorieAuto = o.type === "cross_sell" && o.config.autoByCategory
-      ? cartProducts.find((p) => triggerMatchesProduct(o.trigger, p, extinse) && p.category)?.category ?? null
-      : null;
-    const products = categorieAuto
-      ? await fetchCategoryProducts(admin, businessId, categorieAuto, exclude, o.config.maxProducts)
+    // Acelasi bazin ca pe pagina de produs: alegerea comerciantului, cu tot
+    // subarborele ei. Cu categoria-frunza a produsului din cos, un magazin cu un
+    // singur produs pe categorie nu putea recomanda niciodata nimic.
+    const declansator = cartProducts.find((p) => triggerMatchesProduct(o.trigger, p, extinse) && p.category);
+    const bazin = o.trigger.scope === "categories"
+      ? (extinse ?? new Set(o.trigger.categories))
+      : new Set(declansator?.category ? [declansator.category] : []);
+    const products = o.type === "cross_sell" && o.config.autoByCategory
+      ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts)
       : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
     if (products.length === 0) continue;
 

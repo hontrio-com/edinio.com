@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
-import { formatPrice } from "@/lib/utils/format";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing } from "@/lib/storefront/cart/pricing";
@@ -96,17 +95,13 @@ export function CartPageSplit({
         <RezumatCos total={total} pricing={pricing} color={color} minOrderAmount={minOrderAmount} onCheckout={onCheckout} />
       </div>
 
-      {!preview && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 py-3"
-          style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
-          <button type="button" onClick={onCheckout} disabled={pricing.belowMinOrder}
-            className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl text-white font-bold text-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:pointer-events-none"
-            style={{ backgroundColor: color }}>
-            <span>Finalizeaza comanda</span>
-            <span className="tabular-nums">{formatPrice(pricing.grandTotal)}</span>
-          </button>
-        </div>
-      )}
+      {/*
+        Fara bara lipita jos.
+        Pe telefon rezumatul coboara chiar sub lista si isi poarta propriul buton
+        de finalizare, deci bara insemna acelasi buton de doua ori pe acelasi
+        ecran — clientul se intreba care e „cel adevarat". Pe pagina de produs
+        bara are sens: acolo actiunea e departe de degetul care deruleaza.
+      */}
     </div>
   );
 }

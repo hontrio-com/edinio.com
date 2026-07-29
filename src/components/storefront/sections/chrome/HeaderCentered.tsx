@@ -5,13 +5,13 @@ import { Mail, Phone, Search, ShoppingBag, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
 import { esteActiv, menuItemHref } from "@/lib/pages/menu";
-import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useCatalogCautabil, useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
+import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 
 const STROKE = 1.5;
 
@@ -168,11 +168,8 @@ function Contact({
  * magazin cu termenul in adresa.
  */
 function PanouCautare({ onInchide }: { onInchide: () => void }) {
-  const { catalogRoot } = useStoreChrome();
-  const catalog = useCatalogCautabil();
-  const [local, setLocal] = useState("");
   const camp = useRef<HTMLInputElement>(null);
-  const valoare = catalog ? catalog.search : local;
+  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ laAplicare: onInchide });
 
   useEffect(() => {
     camp.current?.focus();
@@ -181,29 +178,10 @@ function PanouCautare({ onInchide }: { onInchide: () => void }) {
     return () => document.removeEventListener("keydown", onEsc);
   }, [onInchide]);
 
-  function scrie(v: string) {
-    if (!catalog) {
-      setLocal(v);
-      return;
-    }
-    if (catalog.search === "" && v !== "") catalog.setSortTouched(false);
-    catalog.setSearch(v);
-  }
-
-  function trimite(e: React.FormEvent) {
-    e.preventDefault();
-    if (catalog) {
-      onInchide();
-      return;
-    }
-    const q = valoare.trim();
-    window.location.href = hrefCatalog(catalogRoot, q ? `q=${encodeURIComponent(q)}` : "");
-  }
-
   return (
     <div className="border-t border-[var(--st-border)] bg-[var(--st-surface)]">
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
-        <form role="search" onSubmit={trimite} className="h-14 flex items-center gap-3 text-[var(--st-text)]">
+        <form {...propsForm} className="relative h-14 flex items-center gap-3 text-[var(--st-text)]">
           <Search className="h-5 w-5 shrink-0 text-[var(--st-muted)]" strokeWidth={STROKE} />
           <input
             ref={camp}
@@ -218,6 +196,8 @@ function PanouCautare({ onInchide }: { onInchide: () => void }) {
             className="w-8 h-8 shrink-0 flex items-center justify-center text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
             <X className="h-5 w-5" strokeWidth={STROKE} />
           </button>
+          {/* Produsele gasite, chiar sub bara. Vezi `useCautareHeader`. */}
+          {rezultate}
         </form>
       </div>
     </div>

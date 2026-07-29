@@ -10,11 +10,12 @@ import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
+import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 
 const STROKE = 1.7;
 
@@ -215,32 +216,13 @@ function PastilaCategorii({
  * magazin cu termenul in adresa.
  */
 function CautareRotunjita({ compact = false }: { compact?: boolean }) {
-  const { catalogRoot } = useStoreChrome();
-  const catalog = useCatalogCautabil();
-  const [local, setLocal] = useState("");
-  const valoare = catalog ? catalog.search : local;
-
-  function scrie(v: string) {
-    if (!catalog) {
-      setLocal(v);
-      return;
-    }
-    if (catalog.search === "" && v !== "") catalog.setSortTouched(false);
-    catalog.setSearch(v);
-  }
-
-  function trimite(e: React.FormEvent) {
-    e.preventDefault();
-    if (catalog) return;
-    const q = valoare.trim();
-    window.location.href = hrefCatalog(catalogRoot, q ? `q=${encodeURIComponent(q)}` : "");
-  }
+  const { valoare, scrie, propsForm, rezultate } = useCautareHeader();
 
   return (
     // Campul stinge conturul implicit al browserului, deci pastila primeste ea
     // semnul de focus: fara el, navigarea cu tastatura n-ar avea niciun reper.
-    <form role="search" onSubmit={trimite}
-      className={`flex items-center gap-1 rounded-full bg-[var(--st-surface)] pl-5 pr-1 focus-within:ring-2 focus-within:ring-[var(--st-text)] ${compact ? "h-11" : "h-12"}`}>
+    <form {...propsForm}
+      className={`relative flex items-center gap-1 rounded-full bg-[var(--st-surface)] pl-5 pr-1 focus-within:ring-2 focus-within:ring-[var(--st-text)] ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"
         value={valoare}
@@ -254,6 +236,8 @@ function CautareRotunjita({ compact = false }: { compact?: boolean }) {
         style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
         <Search className="h-[18px] w-[18px]" strokeWidth={STROKE} />
       </button>
+      {/* Produsele gasite, chiar sub bara. Vezi `useCautareHeader`. */}
+      {rezultate}
     </form>
   );
 }

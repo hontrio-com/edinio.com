@@ -1,20 +1,20 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import Image from "next/image";
 import { ChevronDown, Search, ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
-import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { esteActiv, menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
-import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
+import { hrefCategorie } from "@/lib/storefront/category-href";
+import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -137,7 +137,7 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
       </header>
 
       {cautareDeschisa && (
-        <PanouCautare basePath={basePath} onClose={() => setCautareDeschisa(false)} />
+        <PanouCautare onClose={() => setCautareDeschisa(false)} />
       )}
     </>
   );
@@ -246,10 +246,15 @@ function MeniuInline({
  * ca bara de cautare a catalogului. Fara catalog (pagina de produs, pagini
  * custom) e doar un camp care trimite la magazin.
  */
-function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => void }) {
-  const { catalogRoot } = useStoreChrome();
-  const catalog = useCatalogCautabil();
-  const [text, setText] = useState("");
+function PanouCautare({ onClose }: { onClose: () => void }) {
+  const { valoare, scrie, propsForm, rezultateInFlux } = useCautareHeader({
+    laAplicare: () => {
+      onClose();
+      // Grila e mai jos in pagina: filtrata fara derulare, vizitatorul ar fi
+      // ramas cu ochii pe hero si ar fi crezut ca nu s-a intamplat nimic.
+      document.getElementById("produse")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+  });
   const input = useRef<HTMLInputElement>(null);
   const panou = useRef<HTMLDivElement>(null);
   // Panoul traieste doar cat e deschis, iar parintele ii da un `onClose` nou la
@@ -290,45 +295,15 @@ function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => 
     };
   }, []);
 
-  // Sugestiile trec prin acelasi motor ca bara de cautare a catalogului: altfel
-  // „rosu" nu gaseste nimic aici, dar da rezultate la confirmare.
-  const produse = catalog?.visibleProducts;
-  const index = useMemo(
-    () => buildProductSearchIndex((produse ?? []).map((p) => ({ id: p.id, name: p.name, category: p.category }))),
-    [produse],
-  );
-  const sugestii = useMemo(() => {
-    if (!produse || text.trim().length < 2) return [];
-    const scoruri = queryProductSearchIndex(index, text);
-    if (!scoruri) return [];
-    return produse
-      .filter((p) => scoruri.has(p.id))
-      .sort((a, b) => (scoruri.get(b.id) ?? 0) - (scoruri.get(a.id) ?? 0))
-      .slice(0, 6);
-  }, [produse, index, text]);
-
-  function confirma(e: React.FormEvent) {
-    e.preventDefault();
-    const q = text.trim();
-    if (catalog) {
-      catalog.setSortTouched(false);
-      catalog.setSearch(q);
-      onClose();
-      document.getElementById("produse")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    window.location.href = hrefCatalog(catalogRoot, q ? `q=${encodeURIComponent(q)}` : "");
-  }
-
   return (
     <div ref={panou} className="fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Cauta produse">
       <div aria-hidden="true" className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-[var(--st-surface)] shadow-xl">
         <div className="mx-auto px-4 py-5" style={{ maxWidth: "var(--st-container)" }}>
           <div className="flex items-center gap-3">
-            <form onSubmit={confirma} className="flex-1 flex items-center gap-3 border-b-2 border-[var(--st-text)] pb-2">
+            <form {...propsForm} className="flex-1 flex items-center gap-3 border-b-2 border-[var(--st-text)] pb-2">
               <Search className="h-5 w-5 text-[var(--st-muted)] shrink-0" strokeWidth={STROKE} />
-              <input ref={input} type="search" value={text} onChange={(e) => setText(e.target.value)}
+              <input ref={input} type="search" value={valoare} onChange={(e) => scrie(e.target.value)}
                 placeholder="Cauta produse..."
                 aria-label="Cauta produse"
                 className="flex-1 min-w-0 bg-transparent text-lg text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none" />
@@ -339,30 +314,13 @@ function PanouCautare({ basePath, onClose }: { basePath: string; onClose: () => 
             </button>
           </div>
 
-          {sugestii.length > 0 && (
-            <ul className="mt-4 space-y-1">
-              {sugestii.map((p) => {
-                const img = Array.isArray(p.images) && p.images[0] ? String(p.images[0]) : null;
-                return (
-                  <li key={p.id}>
-                    {/* `slug` e nullable: produsele importate fara el ar da o
-                        adresa care se termina in „null". Ruta citeste dupa id
-                        cand argumentul e un UUID, deci refugiul duce la produs. */}
-                    <a href={`${basePath}/product/${p.slug ?? p.id}`}
-                      className="flex items-center gap-3 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
-                      <span className="relative w-11 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
-                        {img && <Image src={img} alt="" fill sizes="44px" className="object-contain p-1" />}
-                      </span>
-                      <span className="flex-1 min-w-0 text-sm text-[var(--st-text)] truncate">{p.name}</span>
-                      <span className="text-sm font-semibold shrink-0" style={{ color: "var(--st-primary)" }}>
-                        {formatPrice(Number(p.price))}
-                      </span>
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          {/*
+            Aceeasi lista ca la celelalte headere, nu una scrisa aici.
+            Avea una proprie — nume si pret — iar cea comuna arata si stocul, si
+            categoria, si cate rezultate mai sunt. Doua liste inseamna doua
+            comportamente pentru acelasi gest, la acelasi magazin.
+          */}
+          {rezultateInFlux}
         </div>
       </div>
     </div>

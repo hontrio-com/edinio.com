@@ -5,14 +5,13 @@ import { numeRadacini } from "@/lib/storefront/categories-chrome";
 import { ChevronDown, Search, ShoppingBag } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
-import { hrefCatalog } from "@/lib/storefront/category-href";
-import { RezultateCautare } from "@/components/storefront/sections/_shared/RezultateCautare";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
+import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 
 /**
  * Header cu bara de cautare, varianta „search".
@@ -140,26 +139,13 @@ function SearchBar({
   categorii: string[];
   compact?: boolean;
 }) {
-  const { catalogRoot, basePath } = useStoreChrome();
   const catalog = useCatalogCautabil();
-  const [local, setLocal] = useState("");
   const [catLocal, setCatLocal] = useState("toate");
   const [deschis, setDeschis] = useState(false);
-  const [rezultateDeschise, setRezultateDeschise] = useState(false);
   const inchide = useRef<number | null>(null);
 
-  const valoare = catalog ? catalog.search : local;
   const categorie = catalog ? catalog.categoryFilter : catLocal;
-
-  function scrie(v: string) {
-    setRezultateDeschise(v.trim().length > 0);
-    if (catalog) {
-      if (catalog.search === "" && v !== "") catalog.setSortTouched(false);
-      catalog.setSearch(v);
-    } else {
-      setLocal(v);
-    }
-  }
+  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ categorie });
 
   function alegeCategorie(nume: string) {
     setDeschis(false);
@@ -171,26 +157,10 @@ function SearchBar({
     }
   }
 
-  function trimite(e: React.FormEvent) {
-    e.preventDefault();
-    // Pe pagina de magazin filtrarea s-a intamplat deja la fiecare tasta.
-    if (catalog) return;
-    const p = new URLSearchParams();
-    if (valoare.trim()) p.set("q", valoare.trim());
-    if (categorie !== "toate") p.set("cat", categorie);
-    window.location.href = hrefCatalog(catalogRoot, p.toString());
-  }
-
   const eticheta = categorie === "toate" ? "Toate categoriile" : categorie;
 
   return (
-    <form role="search" onSubmit={trimite}
-      onKeyDown={(e) => { if (e.key === "Escape") setRezultateDeschise(false); }}
-      onBlur={(e) => {
-        // Doar cand focusul chiar pleaca din bara: altfel trecerea de la camp la
-        // butonul de cautare ar fi inchis panoul sub degetul vizitatorului.
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setRezultateDeschise(false);
-      }}
+    <form {...propsForm}
       className={`relative flex items-stretch rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] transition-colors ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"
@@ -238,9 +208,7 @@ function SearchBar({
 
       {/* Rezultatele apar sub bara, nu dupa o navigare. Se inchid la Escape si
           la parasirea barei, ca orice panou care acopera pagina. */}
-      {rezultateDeschise && (
-        <RezultateCautare text={valoare} basePath={basePath} onAlege={() => setRezultateDeschise(false)} />
-      )}
+      {rezultate}
     </form>
   );
 }

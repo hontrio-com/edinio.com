@@ -29,11 +29,20 @@ export function RezultateCautare({
   text,
   basePath,
   onAlege,
+  inFlux = false,
 }: {
   text: string;
   basePath: string;
   /** Se cheama la apasarea unui rezultat, ca panoul care il contine sa se inchida. */
   onAlege?: () => void;
+  /**
+   * Panoul sta in flux, nu absolut sub bara.
+   *
+   * Pentru cautarea care se deschide ca fereastra peste pagina: acolo exista loc
+   * dedesubt, iar un panou absolut ar fi iesit din fereastra si ar fi acoperit
+   * pagina de dincolo de ea.
+   */
+  inFlux?: boolean;
 }) {
   const catalog = useStorefrontOptional();
   const produse = catalog?.visibleProducts;
@@ -62,7 +71,9 @@ export function RezultateCautare({
   const total = queryProductSearchIndex(index, text)?.size ?? 0;
 
   return (
-    <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl overflow-hidden">
+    <div className={inFlux
+      ? "mt-4 rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] overflow-hidden"
+      : "absolute left-0 right-0 top-full mt-1.5 z-50 rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl overflow-hidden"}>
       <div className="flex items-center justify-between px-3.5 py-2 border-b border-[var(--st-border)] bg-[var(--st-bg)]">
         <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--st-muted)]">Produse</span>
         <span className="text-[11px] text-[var(--st-muted)]">

@@ -13,7 +13,8 @@ import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMod
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
-import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
+import { hrefCategorie } from "@/lib/storefront/category-href";
+import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 
 const STROKE = 1.6;
 
@@ -190,24 +191,13 @@ function BaraCautare({
   categorii: string[];
   compact?: boolean;
 }) {
-  const { catalogRoot } = useStoreChrome();
   const catalog = useCatalogCautabil();
-  const [local, setLocal] = useState("");
   const [catLocal, setCatLocal] = useState("toate");
   const [deschis, setDeschis] = useState(false);
   const inchide = useRef<number | null>(null);
 
-  const valoare = catalog ? catalog.search : local;
   const categorie = catalog ? catalog.categoryFilter : catLocal;
-
-  function scrie(v: string) {
-    if (!catalog) {
-      setLocal(v);
-      return;
-    }
-    if (catalog.search === "" && v !== "") catalog.setSortTouched(false);
-    catalog.setSearch(v);
-  }
+  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ categorie });
 
   function alegeCategorie(nume: string) {
     setDeschis(false);
@@ -219,20 +209,11 @@ function BaraCautare({
     else catalog.selectCategoryItem({ key: nume, id: null, name: nume, image: null, hasChildren: false });
   }
 
-  function trimite(e: React.FormEvent) {
-    e.preventDefault();
-    if (catalog) return;
-    const p = new URLSearchParams();
-    if (valoare.trim()) p.set("q", valoare.trim());
-    if (categorie !== "toate") p.set("cat", categorie);
-    window.location.href = hrefCatalog(catalogRoot, p.toString());
-  }
-
   return (
     // Chenarul e permanent colorat, deci focusul are nevoie de un semn propriu:
     // campul stinge conturul implicit al browserului si fara inelul asta
     // navigarea cu tastatura n-ar avea niciun reper aici.
-    <form role="search" onSubmit={trimite}
+    <form {...propsForm}
       className={`relative flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] focus-within:ring-2 focus-within:ring-[var(--st-text)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
       style={{ borderColor: "var(--st-primary)" }}>
       {categorii.length > 0 && (
@@ -275,6 +256,8 @@ function BaraCautare({
         style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
         {compact ? <Search className="h-5 w-5" strokeWidth={2} /> : "Cauta"}
       </button>
+      {/* Produsele gasite, chiar sub bara. Vezi `useCautareHeader`. */}
+      {rezultate}
     </form>
   );
 }

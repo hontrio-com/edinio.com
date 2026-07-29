@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { Children, useId, useState } from "react";
 import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import { ChevronDown, Mail, MapPin, Phone } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -26,7 +26,7 @@ import { hrefCategorie } from "@/lib/storefront/category-href";
  * `FooterLegal` si `FooterCredit` sunt compuse obligatoriu — vezi comentariul de
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
-export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
+export function FooterColumns({ ton = "deschis", settings }: { ton?: TonFooter; settings?: Record<string, unknown> }) {
   const { business, basePath, catalogRoot, categoriiRoot, categoriiPePagina, menu, pageContent, social, hasStickyBottomBar, searchCategories } = useStoreChrome();
   const catalog = useStorefrontOptional();
 
@@ -56,6 +56,7 @@ export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
     ? "w-9 h-9 rounded-full border border-[var(--st-footer-text)]/15 flex items-center justify-center hover:bg-[var(--st-footer-text)]/10 transition-colors"
     : "w-9 h-9 rounded-full border border-[var(--st-border)] flex items-center justify-center text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors";
   const pagini = menu.filter((m) => m.type === "page" || m.type === "link");
+  const arataSlogan = settings?.showTagline === true;
 
   return (
     <footer className={fundal}>
@@ -72,7 +73,14 @@ export function FooterColumns({ ton = "deschis" }: { ton?: TonFooter }) {
                 <span className="text-lg font-black tracking-tight truncate">{nume}</span>
               )}
             </div>
-            {business.tagline && (
+            {/*
+              Sloganul apare doar daca il cere comerciantul.
+              Se lua automat din datele magazinului si ateriza sub logo la orice
+              footer, fara ca nimeni sa-l fi pus acolo — un rand de text mic,
+              scris pentru alta parte a magazinului, sub singurul element care
+              trebuia sa se vada in coloana aia.
+            */}
+            {arataSlogan && business.tagline && (
               <p className={`mt-3 text-[13px] leading-relaxed max-w-xs ${marunt}`}>{business.tagline}</p>
             )}
             {areSocialLinks(social) && (
@@ -145,6 +153,18 @@ function Coloana({ titlu, children, separator, marunt }: {
 }) {
   const [deschisa, setDeschisa] = useState(false);
   const idLista = useId();
+
+  /*
+   * O coloana fara niciun rand nu se randeaza deloc.
+   *
+   * „Informatii" isi ia randurile din meniu, iar „Contact" din datele
+   * magazinului: la un magazin fara pagini proprii, ori fara telefon si email,
+   * ramanea in subsol un titlu cu nimic sub el, plus separatorul lui pe telefon.
+   * `Children.toArray` arunca `null`, `undefined` si `false`, adica exact ce
+   * lasa in urma conditiile de tipul `{business.phone && (...)}` — o simpla
+   * verificare de lungime pe `children` le-ar fi numarat drept randuri.
+   */
+  if (Children.toArray(children).length === 0) return null;
 
   return (
     <div className={`min-w-0 border-t md:border-0 pt-3 md:pt-0 ${separator}`}>

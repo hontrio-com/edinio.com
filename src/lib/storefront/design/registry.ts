@@ -606,21 +606,52 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: false,
     inCatalog: true,
     variants: {
-      dark: { label: "Inchis, pe coloane", tags: ["clasic", "indraznet"], layout: "full", previewHeight: 560, needsCategories: true, fields: [] },
+      dark: {
+        label: "Inchis, pe coloane",
+        tags: ["clasic", "indraznet"],
+        layout: "full",
+        previewHeight: 560,
+        needsCategories: true,
+        fields: [
+          {
+            key: "showTagline",
+            type: "toggle",
+            label: "Arata sloganul sub logo",
+            help: "Sloganul din datele magazinului. Stins, in coloana ramane doar logo-ul.",
+          },
+        ],
+        defaults: { showTagline: false },
+      },
       columns: {
         label: "Deschis, pe coloane",
         tags: ["simplu", "cu imagine"],
         layout: "full",
         previewHeight: 560,
         needsCategories: true,
-        fields: [],
+        fields: [
+          {
+            key: "showTagline",
+            type: "toggle",
+            label: "Arata sloganul sub logo",
+            help: "Sloganul din datele magazinului. Stins, in coloana ramane doar logo-ul.",
+          },
+        ],
+        defaults: { showTagline: false },
       },
       centered: {
         label: "Centrat, aerisit",
         tags: ["elegant", "simplu"],
         layout: "full",
         previewHeight: 620,
-        fields: [],
+        fields: [
+          {
+            key: "showTagline",
+            type: "toggle",
+            label: "Arata sloganul sub logo",
+            help: "Sloganul din datele magazinului. Stins, in coloana ramane doar logo-ul.",
+          },
+        ],
+        defaults: { showTagline: false },
       },
     },
   },

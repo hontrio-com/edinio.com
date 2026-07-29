@@ -10,6 +10,6 @@ import { FooterColumns } from "./FooterColumns";
  * dovedit mai buna decat blocul de dinainte, iar doua asezari diferite pentru
  * acelasi lucru ar fi insemnat doua locuri de intretinut.
  */
-export function FooterDark() {
-  return <FooterColumns ton="inchis" />;
+export function FooterDark({ settings }: { settings?: Record<string, unknown> }) {
+  return <FooterColumns ton="inchis" settings={settings} />;
 }

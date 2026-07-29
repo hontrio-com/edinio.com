@@ -21,13 +21,15 @@ import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_s
  * `FooterLegal` si `FooterCredit` sunt compuse obligatoriu — vezi comentariul de
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
-export function FooterCentered() {
+export function FooterCentered({ settings }: { settings?: Record<string, unknown> }) {
   const { business, basePath, categoriiRoot, menu, pageContent, social, hasStickyBottomBar } = useStoreChrome();
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = (pageContent.footer_logo_size ?? 36) * 1.4;
   const spatiuJos = hasStickyBottomBar ? "pb-24 lg:pb-8" : "pb-8";
   const pagini = menu.filter((m) => m.type === "page" || m.type === "link");
+  // Sloganul apare doar daca il cere comerciantul. Vezi `FooterColumns`.
+  const arataSlogan = settings?.showTagline === true;
 
   const contact = "inline-flex items-center gap-2 text-sm text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors";
 
@@ -46,7 +48,7 @@ export function FooterCentered() {
             )}
           </a>
 
-          {business.tagline && (
+          {arataSlogan && business.tagline && (
             <p className="text-sm leading-relaxed text-[var(--st-muted)] max-w-md">{business.tagline}</p>
           )}
 

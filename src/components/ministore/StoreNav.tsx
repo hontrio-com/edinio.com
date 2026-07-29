@@ -70,16 +70,74 @@ const PANA_LA = {
  * la 44px prin padding anulat de marginea negativa: butonul n-are fundal, deci
  * cresterea nu se vede, iar pe telefon el e singura navigare a paginii.
  */
+/**
+ * Cum arata PANOUL de pe telefon, nu doar butonul.
+ *
+ * Panoul se randa cu paleta aplicatiei — alb, chenare gri, colturi rotunjite —
+ * indiferent de header-ul de deasupra lui. La un header pe fundal inchis,
+ * apasarea hamburgerului deschidea o foaie alba care nu semana cu nimic din
+ * pagina; iar la restul, culorile, fontul si rotunjimea magazinului se opreau
+ * exact la marginea panoului.
+ *
+ * `clasic` ramane neatins fiindca il foloseste header-ul clasic, adica
+ * majoritatea magazinelor de azi. Variantele noi cer `vitrina`, iar cele pe
+ * fundal inchis `inchisa`.
+ */
+const TEME_PANOU = {
+  clasic: {
+    panou: "bg-background",
+    antet: "border-b border-border",
+    nume: "font-bold text-foreground truncate",
+    inchide: "rounded-lg border border-border hover:bg-muted",
+    link: "rounded-xl text-foreground hover:bg-muted",
+    linkMic: "rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground",
+    sageata: "rounded-xl text-muted-foreground hover:bg-muted",
+    separator: "border-t border-border",
+    eticheta: "text-muted-foreground",
+  },
+  vitrina: {
+    panou: "bg-[var(--st-surface)] text-[var(--st-text)]",
+    antet: "border-b border-[var(--st-border)]",
+    nume: "font-bold text-[var(--st-text)] truncate",
+    inchide: "rounded-[var(--st-radius-sm)] border border-[var(--st-border)] hover:bg-[var(--st-primary-soft)]",
+    link: "rounded-[var(--st-radius-sm)] text-[var(--st-text)] hover:bg-[var(--st-primary-soft)]",
+    linkMic: "rounded-[var(--st-radius-sm)] text-[var(--st-muted)] hover:bg-[var(--st-primary-soft)] hover:text-[var(--st-text)]",
+    sageata: "rounded-[var(--st-radius-sm)] text-[var(--st-muted)] hover:bg-[var(--st-primary-soft)]",
+    separator: "border-t border-[var(--st-border)]",
+    eticheta: "text-[var(--st-muted)]",
+  },
+  /*
+   * Aceeasi paleta ca banda inchisa a header-ului, adica a footerului. Chenarele
+   * si starile de hover se scriu ca straturi transparente peste ea: un gri fix ar
+   * fi disparut la magazinele cu footer aproape negru si ar fi tipat la cele cu
+   * footer doar putin mai inchis decat fundalul.
+   */
+  inchisa: {
+    panou: "bg-[var(--st-footer-bg)] text-[var(--st-footer-text)]",
+    antet: "border-b border-white/15",
+    nume: "font-bold truncate",
+    inchide: "rounded-[var(--st-radius-sm)] border border-white/20 hover:bg-white/10",
+    link: "rounded-[var(--st-radius-sm)] hover:bg-white/10",
+    linkMic: "rounded-[var(--st-radius-sm)] opacity-70 hover:bg-white/10 hover:opacity-100",
+    sageata: "rounded-[var(--st-radius-sm)] opacity-70 hover:bg-white/10 hover:opacity-100",
+    separator: "border-t border-white/15",
+    eticheta: "opacity-60",
+  },
+} as const;
+
 const STIL_BUTON = {
   incadrat: "w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center hover:bg-muted transition-colors shrink-0",
   simplu: "w-11 h-11 -m-1.5 flex items-center justify-center text-current hover:opacity-70 transition-opacity shrink-0",
 } as const;
 
-export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName, panaLa = "md", stil = "incadrat" }: {
+export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl, storeName, panaLa = "md", stil = "incadrat", tema = "clasic" }: {
   items: MenuItem[]; basePath: string; color: string; currentSlug?: string | null;
   logoUrl?: string | null; storeName: string; panaLa?: keyof typeof PANA_LA;
   stil?: keyof typeof STIL_BUTON;
+  /** Cum arata panoul. Vezi `TEME_PANOU`. */
+  tema?: keyof typeof TEME_PANOU;
 }) {
+  const t = TEME_PANOU[tema];
   const bp = PANA_LA[panaLa];
   // Aceeasi sursa ca la meniul de desktop, din acelasi motiv: vezi StoreNavLinks.
   const chromeMeniu = useStoreChromeOptional();
@@ -161,8 +219,8 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
         <>
           <div aria-hidden="true" className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] ${bp.panou}`} onClick={() => setOpen(false)} />
           <div ref={panou} id={idPanou} role="dialog" aria-modal="true" aria-label="Meniu"
-            className={`fixed inset-y-0 left-0 w-72 max-w-[82vw] bg-background z-[70] ${bp.panou} flex flex-col shadow-2xl`}>
-            <div className="flex items-center justify-between px-4 h-16 border-b border-border">
+            className={`fixed inset-y-0 left-0 w-72 max-w-[82vw] z-[70] ${t.panou} ${bp.panou} flex flex-col shadow-2xl`}>
+            <div className={`flex items-center justify-between px-4 h-16 ${t.antet}`}>
               <div className="flex items-center gap-2 min-w-0">
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -171,11 +229,11 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                   // Fara logo, panoul arata NUMELE, ca header-ul de deasupra lui.
                   // Patratul cu initiala era a doua cadere de rezerva pentru
                   // acelasi lucru, si comerciantul o citea drept „logo gresit".
-                  <span className="font-bold text-foreground truncate">{storeName}</span>
+                  <span className={t.nume}>{storeName}</span>
                 )}
               </div>
               <button ref={inchidere} type="button" aria-label="Inchide meniul" onClick={() => setOpen(false)}
-                className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
+                className={`w-8 h-8 flex items-center justify-center transition-colors ${t.inchide}`}>
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -187,7 +245,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                 return (
                   <a key={it.id} href={href} {...(ext ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                     onClick={() => setOpen(false)}
-                    className="block px-3 py-3 rounded-xl text-base font-medium text-foreground hover:bg-muted transition-colors"
+                    className={`block px-3 py-3 text-base font-medium transition-colors ${t.link}`}
                     style={active ? { color, backgroundColor: fundalActiv } : undefined}>
                     {it.label}
                   </a>
@@ -201,7 +259,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                 ajunge la cele douazeci si doua de subcategorii ale magazinului.
                 Fara ele, meniul arata patru linkuri de pagini si atat.
               */}
-              <CategoriiInMeniu categoriiRoot={categoriiRoot} pePagina={categoriiPePagina} color={color} onNaviga={() => setOpen(false)} />
+              <CategoriiInMeniu categoriiRoot={categoriiRoot} pePagina={categoriiPePagina} color={color} tema={t} onNaviga={() => setOpen(false)} />
             </nav>
           </div>
         </>,
@@ -223,11 +281,13 @@ function CategoriiInMeniu({
   categoriiRoot,
   pePagina,
   color,
+  tema,
   onNaviga,
 }: {
   categoriiRoot: string;
   pePagina: boolean;
   color: string;
+  tema: (typeof TEME_PANOU)[keyof typeof TEME_PANOU];
   onNaviga: () => void;
 }) {
   const chrome = useStoreChromeOptional();
@@ -240,8 +300,8 @@ function CategoriiInMeniu({
   if (radacini.length === 0) return null;
 
   return (
-    <div className="pt-2 mt-2 border-t border-border">
-      <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+    <div className={`pt-2 mt-2 ${tema.separator}`}>
+      <p className={`px-3 pb-1 text-[11px] font-bold uppercase tracking-wider ${tema.eticheta}`}>
         Categorii
       </p>
       {radacini.map((c) => {
@@ -250,7 +310,7 @@ function CategoriiInMeniu({
           <div key={c.key}>
             <div className="flex items-stretch">
               <a href={hrefCategorie(categoriiRoot, c.name, pePagina)} onClick={onNaviga}
-                className="flex-1 min-w-0 px-3 py-3 rounded-xl text-base font-medium text-foreground hover:bg-muted transition-colors truncate">
+                className={`flex-1 min-w-0 px-3 py-3 text-base font-medium transition-colors truncate ${tema.link}`}>
                 {c.name}
               </a>
               {/*
@@ -262,7 +322,7 @@ function CategoriiInMeniu({
                 <button type="button" aria-expanded={desfasurata}
                   aria-label={desfasurata ? `Ascunde subcategoriile din ${c.name}` : `Arata subcategoriile din ${c.name}`}
                   onClick={() => setDeschisa(desfasurata ? null : c.id)}
-                  className="w-11 shrink-0 flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted transition-colors">
+                  className={`w-11 shrink-0 flex items-center justify-center transition-colors ${tema.sageata}`}>
                   <ChevronDown className={`h-4 w-4 transition-transform ${desfasurata ? "rotate-180" : ""}`} />
                 </button>
               )}
@@ -271,7 +331,7 @@ function CategoriiInMeniu({
               <div className="pl-3 pb-1">
                 {copii.map((sub) => (
                   <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name, pePagina)} onClick={onNaviga}
-                    className="block px-3 py-2.5 rounded-xl text-[15px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors truncate">
+                    className={`block px-3 py-2.5 text-[15px] transition-colors truncate ${tema.linkMic}`}>
                     {sub.name}
                   </a>
                 ))}

@@ -58,7 +58,7 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
         {/* Randul principal */}
         <div className="h-16 flex items-center gap-3 lg:gap-6">
           <div className="lg:hidden">
-            <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
+            <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" />
           </div>
 
           {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`

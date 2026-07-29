@@ -168,7 +168,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
 
       {/* Pe mobil cautarea sta langa hamburger: in randul cu logo n-ar incapea. */}
       <div className="lg:hidden px-4 pb-3 flex items-center gap-3">
-        <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
+        <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" />
         <div className="flex-1 min-w-0">
           <BaraCautare categorii={categorii.map((c) => c.name)} compact />
         </div>

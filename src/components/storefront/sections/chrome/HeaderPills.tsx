@@ -92,7 +92,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
 
         <div className="h-16 lg:h-[76px] flex items-center gap-3">
           <div className="lg:hidden">
-            <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
+            <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" />
           </div>
 
           <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity" aria-label={nume}>

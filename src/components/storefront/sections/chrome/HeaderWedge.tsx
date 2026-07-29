@@ -61,7 +61,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
         <div className="relative mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
           <div className="h-14 lg:h-[88px] flex items-center gap-3 lg:gap-8">
             <div className="lg:hidden flex items-center gap-1 shrink-0">
-              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
+              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="inchisa" panaLa="lg" stil="simplu" />
               {are("cautare") && (
                 <button type="button" onClick={() => setCautareDeschisa((v) => !v)} aria-label="Cauta produse"
                   className="w-11 h-11 -m-1.5 flex items-center justify-center hover:opacity-70 transition-opacity">

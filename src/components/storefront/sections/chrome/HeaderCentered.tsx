@@ -58,7 +58,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
         <div className="h-16 lg:h-24 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex items-center gap-6 min-w-0">
             <div className="lg:hidden flex items-center gap-1">
-              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
+              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" stil="simplu" />
               {are("cautare") && (
                 <button type="button" onClick={() => setCauta(true)} aria-label="Cauta produse"
                   className="w-11 h-11 -m-1.5 flex items-center justify-center text-[var(--st-text)] hover:opacity-60 transition-opacity">

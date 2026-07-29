@@ -69,7 +69,7 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
         <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
           <div className="h-16 lg:h-[72px] flex items-center gap-3">
             <div className="lg:hidden">
-              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" />
+              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" />
             </div>
 
             {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`

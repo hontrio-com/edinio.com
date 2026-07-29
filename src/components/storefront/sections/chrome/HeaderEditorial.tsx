@@ -82,7 +82,7 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
         <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
           <div className="h-16 flex items-center gap-4">
             <div className="lg:hidden shrink-0">
-              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} panaLa="lg" stil="simplu" />
+              <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" stil="simplu" />
             </div>
 
             {/* Fara logo, ancora trebuie sa se poata stramta: intr-un `shrink-0`

@@ -118,15 +118,17 @@ export interface VariantMeta {
    * o data deasupra header-ului si o data inauntru.
    */
   hostsAnnouncement?: boolean;
-  /*
-   * Aici a stat `requires`, o conditie pe care magazinul trebuia sa o
-   * indeplineasca pentru ca varianta sa poata fi aleasa. Singura ei intrebuintare
-   * era pragul de categorii al hero-ului cu bara laterala, iar acela s-a dovedit
-   * o piedica, nu un ajutor: un magazin la inceput de drum, cu trei categorii
-   * inca goale, era oprit sa aleaga tocmai designul pentru care isi facea
-   * categoriile. Alegerea designului e a comerciantului; codul ii arata cum va
-   * arata, nu ii interzice.
+  /**
+   * Ce trebuie sa AIBA magazinul ca varianta sa poata fi aleasa.
+   *
+   * Aici intra doar lipsuri care lasa o jumatate de design GOALA, nu preferinte.
+   * Pragul de categorii a stat candva tot aici si a fost o greseala — oprea
+   * magazinul cu trei categorii inca goale sa aleaga tocmai designul pentru care
+   * si le facea, desi bara aceea arata bine si cu trei randuri. Bannerul e alt
+   * caz: fara el, jumatatea din dreapta a hero-ului e o suprafata alba, si nu
+   * exista reglaj care sa o umple.
    */
+  requires?: { minBanners?: number };
   /**
    * Ce trebuie sa stie comerciantul dupa ce alege varianta.
    *
@@ -634,6 +636,9 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         layout: "full",
         previewHeight: 515,
         providesH1: true,
+        // Bara de categorii tine partea stanga; dreapta o tine bannerul. Fara el
+        // ramane un gol de doua treimi din latime, pe care nimic nu il acopera.
+        requires: { minBanners: 1 },
         fields: [
           {
             key: "maxCategories",

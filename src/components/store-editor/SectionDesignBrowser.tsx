@@ -39,12 +39,14 @@ export function SectionDesignBrowser({
   slug,
   designInitial,
   designPublicat,
+  numarBannere,
 }: {
   businessId: string;
   slug: string;
   designInitial: StoreDesign;
   designPublicat: StoreDesign;
-  /** Cate categorii de nivel intai are magazinul; unele design-uri cer un minim. */
+  /** Cate bannere de hero are magazinul; unele design-uri au nevoie de cel putin unul. */
+  numarBannere: number;
 }) {
   const router = useRouter();
   const [design, setDesign] = useState<StoreDesign>(designInitial);
@@ -137,6 +139,22 @@ export function SectionDesignBrowser({
   const areSetari = (variantaActiva?.fields.length ?? 0) > 0;
 
   const aplica = useCallback((next: StoreDesign) => setDesign(next), []);
+
+  /**
+   * De ce nu poate fi ales un design, daca e cazul.
+   *
+   * Verificarea sta aici, langa alegere: comerciantul afla motivul inainte sa
+   * aplice ceva ce la el ar arata cu o jumatate goala.
+   */
+  function motivIndisponibil(v: { requires?: { minBanners?: number } }): string | null {
+    const min = v.requires?.minBanners;
+    if (min && numarBannere < min) {
+      return numarBannere === 0
+        ? "Ai nevoie de cel putin un banner. Designul asta tine categoriile in stanga si bannerul in dreapta, iar fara el jumatatea din dreapta ramane goala. Adauga unul din Editor > Aspect, la sectiunea Bannere magazin."
+        : `Ai nevoie de cel putin ${min} bannere (acum ai ${numarBannere}).`;
+    }
+    return null;
+  }
 
   function alegeVarianta(variant: string, label: string) {
     if (!intrare) return;
@@ -313,6 +331,7 @@ export function SectionDesignBrowser({
               latimeFixa={v.previewWidth}
                     activ={id === sectiune.variant}
                     peMobil={peMobil}
+                    motivIndisponibil={motivIndisponibil(v)}
                     onPick={() => alegeVarianta(id, v.label)}
                   />
                 ))}

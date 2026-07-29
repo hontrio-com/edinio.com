@@ -58,6 +58,7 @@ export function StoreDesignEditor({
   designInitial,
   designPublicat,
   ctx,
+  numarBannere,
 }: {
   businessId: string;
   slug: string;
@@ -66,7 +67,8 @@ export function StoreDesignEditor({
   /** Ce vad clientii acum. Diferenta fata de el inseamna modificari nepublicate. */
   designPublicat: StoreDesign;
   ctx: DesignContext;
-  /** Cate categorii de nivel intai vede vizitatorul; unele design-uri cer un minim. */
+  /** Cate bannere de hero are magazinul; unele design-uri au nevoie de cel putin unul. */
+  numarBannere: number;
 }) {
   const [design, setDesign] = useState<StoreDesign>(designInitial);
   const [publicat, setPublicat] = useState<StoreDesign>(designPublicat);
@@ -173,6 +175,22 @@ export function StoreDesignEditor({
     },
     [trimite],
   );
+
+  /**
+   * De ce nu poate fi ales un design, daca e cazul.
+   *
+   * Aceeasi regula ca in catalogul de sectiuni, si scrisa la fel: comerciantul
+   * afla motivul inainte sa aplice ceva ce la el ar arata cu o jumatate goala.
+   */
+  function motivIndisponibil(v: { requires?: { minBanners?: number } }): string | null {
+    const min = v.requires?.minBanners;
+    if (min && numarBannere < min) {
+      return numarBannere === 0
+        ? "Ai nevoie de cel putin un banner. Designul asta tine categoriile in stanga si bannerul in dreapta, iar fara el jumatatea din dreapta ramane goala. Adauga unul din Editor > Aspect, la sectiunea Bannere magazin."
+        : `Ai nevoie de cel putin ${min} bannere (acum ai ${numarBannere}).`;
+    }
+    return null;
+  }
 
   function selecteaza(id: string) {
     setSelectat(id);
@@ -320,6 +338,7 @@ export function StoreDesignEditor({
               setGalerie(null);
             }}
             onClose={() => setGalerie(null)}
+            motivIndisponibil={motivIndisponibil}
           />
         )}
         <div className="px-4 py-2.5 border-b border-border bg-surface flex items-center gap-2">

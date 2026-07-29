@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StoreDesignEditor } from "@/components/store-editor/StoreDesignEditor";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import type { DesignContext } from "@/lib/storefront/design/types";
 
 /**
@@ -45,6 +46,16 @@ export default async function DesignEditorPage() {
     ? parseStoreDesign(settings.storefront_design_draft, ctx)
     : publicat;
 
+  /*
+   * Cate bannere de hero are magazinul.
+   *
+   * Se citeste din ACELASI loc din care le citeste storefront-ul
+   * (`resolveHeroBanners`, cu tot cu caderea pe vechiul `cover_url`): scris
+   * altfel, catalogul ar fi spus ca nu exista banner exact la magazinele care au
+   * unul mostenit, si le-ar fi interzis un design pe care il pot folosi.
+   */
+  const numarBannere = resolveHeroBanners(ctx.pageContent, ctx.coverUrl).banners.length;
+
   return (
     <StoreDesignEditor
       businessId={business.id}
@@ -52,6 +63,7 @@ export default async function DesignEditorPage() {
       designInitial={design}
       designPublicat={publicat}
       ctx={ctx}
+      numarBannere={numarBannere}
     />
   );
 }

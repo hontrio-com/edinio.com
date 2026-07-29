@@ -88,7 +88,14 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
         {business.tagline ? ` - ${business.tagline}` : ""}
       </h1>
 
-      {(areBanner || areBara) && (
+      {/*
+        Fara banner nu se randeaza NIMIC, nici macar bara de categorii singura.
+        Asezarea e de doua coloane, iar bara tine 236 de pixeli din ele: singura,
+        lasa doua treimi de latime goale — exact ce se vedea inainte de poarta din
+        editor. Cazul ramane posibil doar prin stergerea bannerelor DUPA alegerea
+        designului, iar atunci hero-ul dispare in loc sa arate un gol.
+      */}
+      {areBanner && (
         <section className="pt-4 md:pt-6">
           <div className="mx-auto max-w-6xl px-0 md:px-4">
             <div className={areBara ? "lg:grid lg:grid-cols-[236px_1fr] lg:gap-4" : ""}>

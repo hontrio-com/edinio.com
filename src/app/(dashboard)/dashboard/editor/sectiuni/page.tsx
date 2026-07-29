@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SectionDesignBrowser } from "@/components/store-editor/SectionDesignBrowser";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import type { DesignContext } from "@/lib/storefront/design/types";
 
 export const metadata = { title: "Design sectiuni" };
@@ -43,12 +44,23 @@ export default async function SectionDesignPage() {
     ? parseStoreDesign(settings.storefront_design_draft, ctx)
     : publicat;
 
+  /*
+   * Cate bannere de hero are magazinul.
+   *
+   * Se citeste din ACELASI loc din care le citeste storefront-ul
+   * (`resolveHeroBanners`, cu tot cu caderea pe vechiul `cover_url`): scris
+   * altfel, catalogul ar fi spus ca nu exista banner exact la magazinele care au
+   * unul mostenit, si le-ar fi interzis un design pe care il pot folosi.
+   */
+  const numarBannere = resolveHeroBanners(ctx.pageContent, ctx.coverUrl).banners.length;
+
   return (
     <SectionDesignBrowser
       businessId={business.id}
       slug={business.slug}
       designInitial={design}
       designPublicat={publicat}
+      numarBannere={numarBannere}
     />
   );
 }

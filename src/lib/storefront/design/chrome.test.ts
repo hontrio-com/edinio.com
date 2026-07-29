@@ -56,13 +56,20 @@ test("catalogul de design-uri contine exact zonele pentru care facem variante", 
   assert.deepEqual(inCatalog, ["cart_drawer", "checkout", "footer", "header", "hero", "product_page", "shop_page"]);
 });
 
-test("hero-ul cu bara de categorii nu cere niciun prag", () => {
-  // A cerut, si a fost o greseala: magazinul la inceput de drum, cu categorii
-  // inca goale, era oprit sa aleaga tocmai designul pentru care si le facea.
-  // Testul ramane ca pragul sa nu se intoarca din reflex.
+test("hero-ul cu bara de categorii cere un banner, si NU un numar de categorii", () => {
+  /*
+   * Cele doua praguri arata la fel in cod si sunt lucruri opuse.
+   *
+   * Cel pe categorii a existat si a fost o greseala: oprea magazinul cu trei
+   * categorii inca goale sa aleaga tocmai designul pentru care si le facea, desi
+   * bara arata bine si cu trei randuri. Cel pe bannere apara altceva: fara banner,
+   * jumatatea din dreapta a hero-ului e o suprafata alba, si nu exista reglaj
+   * care sa o umple.
+   */
   const v = SECTION_REGISTRY.hero?.variants.categories;
   assert.ok(v, "varianta cu bara de categorii exista");
-  assert.equal((v as { requires?: unknown }).requires, undefined);
+  assert.equal(v?.requires?.minBanners, 1);
+  assert.equal((v?.requires as { minCategories?: number } | undefined)?.minCategories, undefined);
 });
 
 test("continutul demo are cel putin doua bannere", () => {

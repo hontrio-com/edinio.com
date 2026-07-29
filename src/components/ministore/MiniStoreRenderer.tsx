@@ -378,6 +378,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     : null;
 
   const pageContent = (storeSettings?.page_content as StorePageContent) ?? {};
+  // Cate bannere are hero-ul, din aceeasi sursa ca randarea lui.
+  const bannereHero = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url).banners.length;
   const menu = pageContent.menu ?? [];
   const social = (business.social as StoreSocial) ?? {};
   const gallery = Array.isArray(business.gallery) ? (business.gallery as string[]) : [];
@@ -974,12 +976,18 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     isDrilled: drillParentId !== null,
     drillParentName: drillParent?.name ?? null,
     hasCategories,
-    // Bara de categorii din hero se randeaza doar pe ecran mare si doar cand
-    // magazinul are destule categorii; sectiunea de sub ea se da la o parte
-    // acolo, nu peste tot.
+    /*
+     * Bara de categorii din hero se randeaza doar pe ecran mare, doar cu cel
+     * putin o categorie SI doar cu cel putin un banner — hero-ul acela e
+     * jumatate categorii, jumatate banner, si fara banner nu se randeaza deloc.
+     *
+     * Conditia trebuie sa fie exact aceeasi ca in componenta: mai larga aici,
+     * sectiunea de categorii de dedesubt s-ar da la o parte pentru un hero care
+     * nu exista, si magazinul ar ramane fara nicio lista de categorii.
+     */
     heroAreCategorii: sectiuniDeAcasa.some(
       (s) => s.kind === "hero" && s.enabled && s.variant === "categories",
-    ) && catTree.toateRadacinile.length > 0,
+    ) && catTree.toateRadacinile.length > 0 && bannereHero > 0,
     hasAnyCategoryImage,
     selectCategoryItem,
     resetCategory,

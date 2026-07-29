@@ -52,7 +52,9 @@ export const DEMO_CATEGORIES: StoreCategoryNode[] = DEMO_CATEGORII.map(([name, i
 
 /** Meniu demonstrativ, ca header-ele si footerele sa nu apara fara navigare. */
 export const DEMO_MENU: MenuItem[] = [
-  { id: "demo_m1", label: "Acasa", type: "home" },
+  // Tipul `home` inseamna PRODUSE, iar „Acasa" e acum o intrare implicita in
+  // orice meniu: etichetat tot „Acasa", randul din miniatura arata doua.
+  { id: "demo_m1", label: "Magazin", type: "home" },
   { id: "demo_m2", label: "Despre noi", type: "link", target: "#" },
   { id: "demo_m3", label: "Livrare", type: "link", target: "#" },
   { id: "demo_m4", label: "Contact", type: "link", target: "#" },

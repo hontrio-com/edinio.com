@@ -77,7 +77,17 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
                   style={{ height: logoSize, maxWidth: logoSize * 5 }}
                   className="w-auto max-w-full object-contain" />
               ) : (
-                <span className="text-xl lg:text-2xl font-black italic tracking-tight truncate">{nume}</span>
+                /*
+                  `pr-1 -mr-1`: numele e ITALIC, deci ultima litera se apleaca in
+                  dreapta cu ~0,1em peste latimea ei de asezare — la 24px, doi
+                  pixeli si jumatate. `truncate` aduce `overflow: hidden`, care
+                  taie exact la marginea interioara, iar coada literei se pierdea.
+                  Spatiul de dedesubt intra in zona care se taie, iar marginea
+                  negativa il scoate din asezare, deci nimic nu se misca.
+
+                  Singurul header cu nume inclinat, deci singurul care avea nevoie.
+                */
+                <span className="text-xl lg:text-2xl font-black italic tracking-tight truncate pr-1 -mr-1">{nume}</span>
               )}
             </a>
 

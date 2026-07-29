@@ -560,9 +560,9 @@ export function ProductPageDetailed({
 
       {/* ─── Galerie + coloana de cumparare ─────────────────────────────── */}
       <div className="max-w-6xl mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
-        {/* Doua randuri pe desktop: sus galeria si coloana de cumparare, jos
-            datele produsului pe toata latimea. Pe telefon grila are o singura
-            coloana si totul curge in ordinea din marcaj. */}
+        {/* Doua randuri pe desktop: galeria sus-stanga, datele sub ea, iar
+            coloana de cumparare intinsa peste amandoua. Pe telefon grila are o
+            singura coloana si totul curge in ordinea din marcaj. */}
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start">
           <div className="lg:col-start-1 lg:row-start-1">
             <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
@@ -570,7 +570,7 @@ export function ProductPageDetailed({
               miniaturiInStanga={miniaturiInStanga} />
           </div>
 
-          <div className="lg:col-start-2 lg:row-start-1 flex flex-col gap-4">
+          <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 flex flex-col gap-4">
             <h1 className="text-[26px] lg:text-[32px] font-normal text-foreground leading-tight tracking-tight">
               {product.name}
             </h1>
@@ -772,20 +772,14 @@ export function ProductPageDetailed({
           </div>
 
           {/*
-            Datele produsului tin TOATA latimea, sub galerie si sub coloana de
-            cumparare, nu doar coloana din stanga.
-            Sub galerie, ele lasau in dreapta o suprafata alba cat un sfert de
-            pagina la orice produs a carui coloana de cumparare e mai scurta
-            decat imaginea — adica la orice produs cu putine optiuni. Pe toata
-            latimea, golul acela nu mai exista, iar randul se aseaza langa fila
-            de descriere de dedesubt, care e si ea pe toata latimea.
-            Chenarele se impart randul, nu se intind fiecare cat pagina: doua
-            tabele de o mie de pixeli cu valori de trei cuvinte ar fi inlocuit un
-            gol cu altul. `flex-1` cu o latime minima le pune trei pe rand cand
-            exista trei, doua cand exista doua, si le lasa sa se intinda cand a
-            ramas unul singur.
+            Datele produsului stau SUB galerie pe desktop, nu in coloana de
+            cumparare: coloana aceea e de doua ori mai inalta decat o imagine
+            patrata, deci sub galerie ramanea un gol cat jumatate din ecran.
+            Aici e un singur bloc, asezat din grila (`row-start-2`), nu doua
+            copii ascunse pe rand — pe telefon coloana e una singura si blocul
+            cade oricum dupa butoane, unde ii e locul.
           */}
-          <div className="lg:col-span-2 lg:row-start-2 flex flex-col lg:flex-row lg:flex-wrap lg:items-start gap-4 [&>*]:lg:flex-1 [&>*]:lg:min-w-[20rem]">
+          <div className="lg:col-start-1 lg:row-start-2 flex flex-col gap-4">
             {/* Un magazin poate sa nu fi completat niciunul dintre randuri: un
                 chenar cu titlu si nimic sub el arata a eroare, nu a informatie. */}
             {arataDetalii && areDetalii && (

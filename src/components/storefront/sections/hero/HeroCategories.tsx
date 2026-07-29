@@ -4,7 +4,6 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { MIN_CATEGORII_HERO_SIDEBAR } from "@/lib/storefront/design/registry";
 import { useStoreChrome, useStorefrontOptional, type CategoryItem } from "@/components/storefront/StorefrontProvider";
 import { BannerSlider } from "./HeroBanners";
 import { hrefCategorie } from "@/lib/storefront/category-href";
@@ -17,12 +16,13 @@ const MAX_IMPLICIT = 10;
  * Hero cu bara de categorii la stanga si bannere la dreapta.
  *
  * Asezarea marilor magazine: vizitatorul are dintr-o privire si intreg raftul,
- * si oferta zilei. Inaltimea o da lista de categorii, iar bannerele o umplu —
- * de aceea varianta cere un numar minim de categorii: cu doua-trei, bara ar fi
- * un ciot langa o imagine mare.
+ * si oferta zilei. Inaltimea o da lista de categorii, iar bannerele o umplu.
  *
- * Daca magazinul scade sub prag dupa ce varianta a fost aleasa (categorii
- * sterse), hero-ul ramane doar cu bannerele in loc sa arate strambatura.
+ * A cerut candva sase categorii CU PRODUSE, si pragul acela oprea exact
+ * magazinele care aveau nevoie de el: cel care isi face intai categoriile si
+ * abia apoi produsele nu putea alege designul pentru care si le facea. Acum se
+ * arata cu oricate, goale sau nu; fara nicio categorie ramane doar cu bannerele,
+ * fiindca o bara fara randuri nu e o alegere, e o cutie goala.
  */
 export function HeroCategories({ settings }: { settings: Record<string, unknown> }) {
   const { business, basePath, categoriiRoot, categoriiPePagina, pageContent, searchCategories } = useStoreChrome();
@@ -32,9 +32,10 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
   const { banners, links } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
 
   const maxim = typeof settings.maxCategories === "number" ? settings.maxCategories : MAX_IMPLICIT;
-  const toate = catalog?.rootCategoryItems ?? [];
+  // Si categoriile inca goale: vezi `rootCategoryItemsToate`.
+  const toate = catalog?.rootCategoryItemsToate ?? catalog?.rootCategoryItems ?? [];
   const categorii = toate.slice(0, maxim);
-  const areBara = toate.length >= MIN_CATEGORII_HERO_SIDEBAR;
+  const areBara = toate.length > 0;
   const areBanner = banners.length > 0;
 
   /*

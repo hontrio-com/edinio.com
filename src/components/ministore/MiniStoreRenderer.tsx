@@ -29,7 +29,7 @@ import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { scrieFiltre } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { MIN_CATEGORII_HERO_SIDEBAR, variantMeta } from "@/lib/storefront/design/registry";
+import { variantMeta } from "@/lib/storefront/design/registry";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
@@ -509,8 +509,26 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       .map(n => ({ key: `orphan:${n}`, id: null, name: n, image: null, hasChildren: false }));
     const topItems: Item[] = [...topCats.map(toItem), ...orphanItems];
 
+    /*
+     * Aceeasi lista, dar cu categoriile goale la locul lor.
+     *
+     * Navigarea de catalog le lasa deoparte: acolo o categorie fara produse e un
+     * drum infundat printre altele care duc undeva. Bara de categorii din hero e
+     * insa structura magazinului, aleasa anume de comerciant — iar un magazin la
+     * inceput de drum isi face intai categoriile si abia apoi produsele. Ascunse
+     * si acolo, designul pe care tocmai l-a ales i-ar fi aratat gol.
+     */
+    const toateRadacinile: Item[] = [
+      ...list.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order)
+        .map((c) => ({
+          key: c.id, id: c.id, name: c.name, image: c.image_url,
+          hasChildren: (childrenOf.get(c.id) ?? []).length > 0,
+        })),
+      ...orphanItems,
+    ];
+
     const hasAnyImage = topItems.some(i => i.image) || Object.values(childItemsById).some(arr => arr.some(i => i.image));
-    return { topItems, childItemsById, subtreeByName, byId, hasAnyImage };
+    return { topItems, toateRadacinile, childItemsById, subtreeByName, byId, hasAnyImage };
   }, [categories, visibleProducts]);
 
   const [drillParentId, setDrillParentId] = useState<string | null>(initialDrillParentId);
@@ -952,6 +970,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     categoryFilter,
     currentCategoryItems: currentItems,
     rootCategoryItems: catTree.topItems,
+    rootCategoryItemsToate: catTree.toateRadacinile,
     isDrilled: drillParentId !== null,
     drillParentName: drillParent?.name ?? null,
     hasCategories,
@@ -960,7 +979,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // acolo, nu peste tot.
     heroAreCategorii: sectiuniDeAcasa.some(
       (s) => s.kind === "hero" && s.enabled && s.variant === "categories",
-    ) && catTree.topItems.length >= MIN_CATEGORII_HERO_SIDEBAR,
+    ) && catTree.toateRadacinile.length > 0,
     hasAnyCategoryImage,
     selectCategoryItem,
     resetCategory,

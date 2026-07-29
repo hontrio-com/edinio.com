@@ -268,6 +268,14 @@ export interface StorefrontContextValue extends StoreChromeValue {
    * laterala fixa are nevoie de o lista care nu-i fuge de sub ochi.
    */
   rootCategoryItems: CategoryItem[];
+  /**
+   * Radacinile TOATE, cu cele goale cu tot.
+   *
+   * O foloseste doar bara de categorii din hero. In rest, o categorie fara
+   * produse ramane ascunsa: intr-un meniu e un drum infundat. Acolo insa e
+   * structura magazinului, pusa in pagina la cererea comerciantului.
+   */
+  rootCategoryItemsToate?: CategoryItem[];
   /** Suntem intr-o subcategorie: controlul din fata devine „Inapoi", nu „Toate". */
   isDrilled: boolean;
   drillParentName: string | null;

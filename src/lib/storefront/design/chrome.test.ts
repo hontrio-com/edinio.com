@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { headerHostsAnnouncement, standaloneAnnouncement } from "./chrome";
 import { buildClassicDesign } from "./defaults";
 import { DEMO_BANNERS } from "./demo-content";
-import { MIN_CATEGORII_HERO_SIDEBAR, SECTION_REGISTRY } from "./registry";
+import { SECTION_REGISTRY } from "./registry";
 import type { StoreDesign } from "./types";
 
 function design(variant: string, enabled = true): StoreDesign {
@@ -56,13 +56,13 @@ test("catalogul de design-uri contine exact zonele pentru care facem variante", 
   assert.deepEqual(inCatalog, ["cart_drawer", "checkout", "footer", "header", "hero", "product_page", "shop_page"]);
 });
 
-test("hero-ul cu bara de categorii isi declara pragul minim", () => {
-  // Pragul e citit si de catalog (ca sa stinga varianta) si de componenta (ca sa
-  // cada inapoi pe bannere daca magazinul scade sub el). Daca dispare de aici,
-  // varianta devine alegibila la orice magazin si arata strambatura.
+test("hero-ul cu bara de categorii nu cere niciun prag", () => {
+  // A cerut, si a fost o greseala: magazinul la inceput de drum, cu categorii
+  // inca goale, era oprit sa aleaga tocmai designul pentru care si le facea.
+  // Testul ramane ca pragul sa nu se intoarca din reflex.
   const v = SECTION_REGISTRY.hero?.variants.categories;
-  assert.equal(v?.requires?.minCategories, MIN_CATEGORII_HERO_SIDEBAR);
-  assert.ok(MIN_CATEGORII_HERO_SIDEBAR >= 4);
+  assert.ok(v, "varianta cu bara de categorii exista");
+  assert.equal((v as { requires?: unknown }).requires, undefined);
 });
 
 test("continutul demo are cel putin doua bannere", () => {

@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { numaraCategoriiVizibile } from "@/lib/categories/visible-count";
 import { StoreDesignEditor } from "@/components/store-editor/StoreDesignEditor";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import type { DesignContext } from "@/lib/storefront/design/types";
@@ -47,18 +45,6 @@ export default async function DesignEditorPage() {
     ? parseStoreDesign(settings.storefront_design_draft, ctx)
     : publicat;
 
-  // Aceeasi regula ca in catalogul de sectiuni: unele design-uri cer un minim
-  // de categorii, iar aici galeria le lasa alese si magazinul iesea prost.
-  const [randuriCategorii, randuriProduse] = await Promise.all([
-    fetchAllRows("editor.design.categories", (from, to) =>
-      supabase.from("categories").select("id, name, parent_id").eq("business_id", business.id).order("id").range(from, to)),
-    fetchAllRows("editor.design.product-categories", (from, to) =>
-      supabase.from("products").select("category").eq("business_id", business.id).eq("is_active", true).order("id").range(from, to)),
-  ]);
-  const numeDePeProduse = new Set<string>();
-  for (const r of randuriProduse) if (r.category) numeDePeProduse.add(r.category);
-  const numarCategorii = numaraCategoriiVizibile(randuriCategorii, numeDePeProduse);
-
   return (
     <StoreDesignEditor
       businessId={business.id}
@@ -66,7 +52,6 @@ export default async function DesignEditorPage() {
       designInitial={design}
       designPublicat={publicat}
       ctx={ctx}
-      numarCategorii={numarCategorii}
     />
   );
 }

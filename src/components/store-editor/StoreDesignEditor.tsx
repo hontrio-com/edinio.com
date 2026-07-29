@@ -58,7 +58,6 @@ export function StoreDesignEditor({
   designInitial,
   designPublicat,
   ctx,
-  numarCategorii,
 }: {
   businessId: string;
   slug: string;
@@ -68,7 +67,6 @@ export function StoreDesignEditor({
   designPublicat: StoreDesign;
   ctx: DesignContext;
   /** Cate categorii de nivel intai vede vizitatorul; unele design-uri cer un minim. */
-  numarCategorii: number;
 }) {
   const [design, setDesign] = useState<StoreDesign>(designInitial);
   const [publicat, setPublicat] = useState<StoreDesign>(designPublicat);
@@ -175,21 +173,6 @@ export function StoreDesignEditor({
     },
     [trimite],
   );
-
-  /**
-   * De ce nu poate fi ales un design, daca e cazul.
-   *
-   * Aceeasi regula ca in catalogul de sectiuni: acolo variantele care cer un
-   * minim de categorii apar stinse, aici se puteau alege oricum, iar magazinul
-   * ramanea cu un design pe care datele lui nu-l sustin.
-   */
-  function motivIndisponibil(v: { requires?: { minCategories?: number } }): string | null {
-    const min = v.requires?.minCategories;
-    if (min && numarCategorii < min) {
-      return `Ai nevoie de cel putin ${min} categorii CU PRODUSE (acum ai ${numarCategorii}). O categorie goala ar duce clientul intr-un catalog gol, deci nu se pune la socoteala.`;
-    }
-    return null;
-  }
 
   function selecteaza(id: string) {
     setSelectat(id);
@@ -337,7 +320,6 @@ export function StoreDesignEditor({
               setGalerie(null);
             }}
             onClose={() => setGalerie(null)}
-            motivIndisponibil={motivIndisponibil}
           />
         )}
         <div className="px-4 py-2.5 border-b border-border bg-surface flex items-center gap-2">

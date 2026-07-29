@@ -118,12 +118,15 @@ export interface VariantMeta {
    * o data deasupra header-ului si o data inauntru.
    */
   hostsAnnouncement?: boolean;
-  /**
-   * Conditii pe care magazinul trebuie sa le indeplineasca pentru ca varianta sa
-   * poata fi aleasa. Catalogul o arata stinsa, cu motivul scris, in loc sa lase
-   * comerciantul sa aleaga un design care la el ar arata prost.
+  /*
+   * Aici a stat `requires`, o conditie pe care magazinul trebuia sa o
+   * indeplineasca pentru ca varianta sa poata fi aleasa. Singura ei intrebuintare
+   * era pragul de categorii al hero-ului cu bara laterala, iar acela s-a dovedit
+   * o piedica, nu un ajutor: un magazin la inceput de drum, cu trei categorii
+   * inca goale, era oprit sa aleaga tocmai designul pentru care isi facea
+   * categoriile. Alegerea designului e a comerciantului; codul ii arata cum va
+   * arata, nu ii interzice.
    */
-  requires?: { minCategories?: number };
   /**
    * Ce trebuie sa stie comerciantul dupa ce alege varianta.
    *
@@ -235,16 +238,6 @@ function headerFields(suportate: readonly HeaderAction[]): Field[] {
 }
 
 const HEADER_DEFAULTS = { menuFont: "body", menuCase: "normal" };
-
-/**
- * Cate categorii de nivel intai cere hero-ul cu bara laterala.
- *
- * Aceeasi valoare e folosita si de catalog (ca sa stinga varianta) si de
- * componenta (ca sa cada inapoi pe bannere daca magazinul scade sub prag dupa
- * ce a fost aleasa). Doua numere scrise separat s-ar fi despartit la prima
- * ajustare.
- */
-export const MIN_CATEGORII_HERO_SIDEBAR = 6;
 
 /**
  * Reglajele pe care le au TOATE variantele de pagina de produs.
@@ -641,14 +634,14 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         layout: "full",
         previewHeight: 515,
         providesH1: true,
-        // Cu doua-trei categorii bara ar fi un ciot langa o imagine mare.
-        requires: { minCategories: MIN_CATEGORII_HERO_SIDEBAR },
         fields: [
           {
             key: "maxCategories",
             type: "range",
             label: "Cate categorii se vad",
-            min: 6,
+            // De la doua: magazinul cu putine categorii alege oricum varianta, iar
+            // un prag mai mare decat cate are ar fi fost un reglaj fara efect.
+            min: 2,
             // Bara are loc fizic pentru zece randuri; peste, reglajul promitea
             // ceva ce nu se vedea, iar comerciantul il urca degeaba.
             max: 10,

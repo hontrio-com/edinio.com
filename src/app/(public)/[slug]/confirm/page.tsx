@@ -97,7 +97,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("marketing_config, page_content, storefront_design")
+    .select("marketing_config, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
     .eq("business_id", business.id)
     .single();
   const marketingConfig = (storeSettings?.marketing_config as MarketingConfig | null) ?? null;
@@ -124,7 +124,16 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const catreProduse = radacinaCatalog(basePath, resolved.design);
 
   const chrome = buildChromeData({
-    searchCategories, business: business as never, pageContent, basePath, design: resolved.design });
+    searchCategories, business: business as never, pageContent, basePath, design: resolved.design,
+    // Transportul, pragul de livrare gratuita si comanda minima: sertarul de cos
+    // se deschide acum si pe paginile fara catalog, iar fara ele n-ar putea arata
+    // un total. Vezi `StoreCartPanels`.
+    comert: {
+      shippingCost: Number(storeSettings?.default_shipping_cost ?? 0),
+      freeShippingThreshold: storeSettings?.free_shipping_threshold ?? null,
+      minOrderAmount: storeSettings?.min_order_amount ?? null,
+    },
+  });
 
   // Payment failure screen (used by iPay declines, where the reason is shown to the customer).
   if (status === "esuat") {

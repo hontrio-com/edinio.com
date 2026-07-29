@@ -34,12 +34,13 @@ export function useCartTarget(): TintaCos {
     return { fel: "link", href: cartHref ?? `${basePath}/cos`, eticheta: "Mergi la cos", textFaraProduse: "Cos" };
   }
   /*
-   * „link": paginile fara catalog ale magazinelor ramase pe sertar.
+   * „link": ultimul refugiu, cand sertarul nu se poate monta pe pagina asta.
    *
-   * Sertarul traieste acolo unde traieste catalogul, deci de aici nu are unde sa
-   * se deschida. Butonul duce acolo CU SERTARUL DESCHIS (`?cos=1`), nu pur si
-   * simplu „la magazin": de cand pagina de produs are „Adauga in cos", clientul
-   * adauga, apasa cosul si ateriza in prima pagina, fara sa vada ce a adaugat.
+   * De cand `StoreCartPanels` monteaza sertarul si pe paginile fara catalog,
+   * cazul ramane doar acolo unde lipsesc datele lui — transportul si pragurile —
+   * adica in miniaturile din editor. Butonul duce la catalog CU SERTARUL DESCHIS
+   * (`?cos=1`), nu pur si simplu „la magazin": clientul care a adaugat un produs
+   * si apasa pe cos trebuie sa vada ce a adaugat, nu prima pagina.
    *
    * Tinta e `catalogRoot`, nu radacina magazinului: sertarul se monteaza langa
    * catalog, iar `?cos=1` e citit de pagina care il gazduieste.

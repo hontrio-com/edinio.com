@@ -112,6 +112,15 @@ export interface StoreChromeValue {
   cartMode: CartMode;
   /** Unde duce butonul de cos in modul `page`. Absent in celelalte moduri. */
   cartHref?: string;
+  /**
+   * Numerele fara de care un cos nu poate arata un total: transportul, pragul de
+   * livrare gratuita si comanda minima.
+   *
+   * Ajung aici fiindca sertarul se deschide acum si pe paginile fara catalog, iar
+   * el le cere. Optionale: unde lipsesc, butonul de cos ramane un link catre
+   * magazin, ca inainte — mai bine un drum in plus decat un total gresit.
+   */
+  comert?: { shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null };
   openCart: () => void;
   /** Slug-ul paginii curente, pentru starea activa din meniu. */
   currentPageSlug?: string | null;

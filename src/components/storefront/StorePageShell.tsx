@@ -5,6 +5,7 @@ import { CartProvider } from "@/components/storefront/cart/CartProvider";
 import { ChromeSection } from "@/components/storefront/SectionRenderer";
 import { StoreChromeProvider } from "@/components/storefront/StorefrontProvider";
 import { cdnImage } from "@/lib/cdn-image";
+import { StoreCartPanels } from "@/components/storefront/StoreCartPanels";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import type { StoreDesign } from "@/lib/storefront/design/types";
@@ -36,6 +37,9 @@ export function StorePageShell({
   // Galeria foto poate aparea in orice sectiune de continut, deci lightbox-ul
   // trebuie sa existe si aici, nu doar pe pagina de magazin.
   const [lightbox, setLightbox] = useState<string | null>(null);
+  // Sertarul de cos si fereastra de comanda, montate mai jos. Vezi `StoreCartPanels`.
+  const [cosDeschis, setCosDeschis] = useState(false);
+  const [comandaDeschisa, setComandaDeschisa] = useState(false);
   const value = useMemo(
     () => ({
       ...chrome,
@@ -43,7 +47,9 @@ export function StorePageShell({
       // editor, ori banda purtata in interiorul header-ului, nu lasa nimic de
       // ocolit deasupra lui.
       hasAnnouncementBar: chrome.hasAnnouncementBar && standaloneAnnouncement(design)?.enabled === true,
-      openCart: () => {},
+      // Butonul de cos deschide sertarul CHIAR AICI cand magazinul are sertar.
+      // Era o functie goala, iar header-ul cadea pe linkul catre magazin.
+      openCart: () => setCosDeschis(true),
       openLightbox: setLightbox,
     }),
     [chrome, design],
@@ -58,6 +64,15 @@ export function StorePageShell({
           {children}
           <ChromeSection section={design.chrome.footer} />
         </div>
+        <StoreCartPanels
+          chrome={chrome}
+          design={design}
+          cosDeschis={cosDeschis}
+          inchideCos={() => setCosDeschis(false)}
+          comandaDeschisa={comandaDeschisa}
+          deschideComanda={() => setComandaDeschisa(true)}
+          inchideComanda={() => setComandaDeschisa(false)}
+        />
         {lightbox && (
           <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
             onClick={() => setLightbox(null)}>

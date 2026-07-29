@@ -78,7 +78,7 @@ export default async function PolicyPage({ params }: Props) {
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("store_policies, page_content, storefront_design")
+    .select("store_policies, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
     .eq("business_id", business.id)
     .single();
 
@@ -132,7 +132,16 @@ export default async function PolicyPage({ params }: Props) {
   });
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({
-    searchCategories, business: business as never, pageContent, basePath, design: resolved.design });
+    searchCategories, business: business as never, pageContent, basePath, design: resolved.design,
+    // Transportul, pragul de livrare gratuita si comanda minima: sertarul de cos
+    // se deschide acum si pe paginile fara catalog, iar fara ele n-ar putea arata
+    // un total. Vezi `StoreCartPanels`.
+    comert: {
+      shippingCost: Number(storeSettings?.default_shipping_cost ?? 0),
+      freeShippingThreshold: storeSettings?.free_shipping_threshold ?? null,
+      minOrderAmount: storeSettings?.min_order_amount ?? null,
+    },
+  });
 
   return (
     <StorefrontThemeScope style={resolved.style}>

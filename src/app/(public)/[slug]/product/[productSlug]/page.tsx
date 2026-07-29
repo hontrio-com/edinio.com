@@ -198,6 +198,14 @@ export default async function ProductDetailPage({ params }: Props) {
     design: resolved.design,
     // Bara de cumparare lipita jos acopera subsolul pe mobil.
     hasStickyBottomBar: true,
+    // Transportul, pragul de livrare gratuita si comanda minima: sertarul de cos
+    // se deschide acum si pe paginile fara catalog, iar fara ele n-ar putea arata
+    // un total. Vezi `StoreCartPanels`.
+    comert: {
+      shippingCost: Number(storeSettings?.default_shipping_cost ?? 0),
+      freeShippingThreshold: storeSettings?.free_shipping_threshold ?? null,
+      minOrderAmount: storeSettings?.min_order_amount ?? null,
+    },
   });
 
   return (

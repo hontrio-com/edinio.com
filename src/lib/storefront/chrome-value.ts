@@ -43,6 +43,7 @@ export function buildChromeData({
   hasStickyBottomBar = false,
   isHome = false,
   searchCategories,
+  comert,
 }: {
   business: Business;
   pageContent: StorePageContent;
@@ -67,12 +68,30 @@ export function buildChromeData({
    */
   isHome?: boolean;
   searchCategories?: StoreCategoryNode[];
+  /**
+   * Transportul, pragul de livrare gratuita si comanda minima, din
+   * `store_settings`. Fara ele sertarul nu poate arata un total, deci butonul de
+   * cos ramane link catre magazin.
+   */
+  comert?: { shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null };
 }): StoreChromeData {
   // Un magazin cu cosul pe pagina il are pe pagina PESTE TOT: si in header-ul
   // paginii de produs, si in cel al paginilor custom. Modul „hidden" (magazinul
   // cu un singur produs) ramane insa deasupra: acolo nu exista catalog, deci
   // nici cos.
   const cosPePagina = !!design && cartMode !== "hidden" && cartOnPage(design);
+  /*
+   * Sertarul se deschide ACUM si pe paginile fara catalog.
+   *
+   * Pana acum, butonul de cos de pe pagina de produs sau de pe o pagina proprie
+   * era un link catre magazin: clientul care adauga in cos si apasa pe cos era
+   * dus pe prima pagina, si abia acolo se deschidea sertarul. Panoul cerea date
+   * pe care paginile astea nu le aveau; acum le au, prin `comert`.
+   *
+   * Fara `comert` ramane linkul de dinainte: un sertar cu transportul zero ar
+   * arata alt total decat pagina de magazin, pentru acelasi cos.
+   */
+  const cosSertar = !!design && cartMode === "link" && !cosPePagina && !!comert;
 
   return {
     business,
@@ -105,8 +124,9 @@ export function buildChromeData({
       pageContent.show_announcement_on_store !== false
       && pageContent.announcement_bar?.enabled === true
       && (!design || standaloneAnnouncement(design)?.enabled === true),
-    cartMode: cosPePagina ? "page" : cartMode,
+    cartMode: cosPePagina ? "page" : cosSertar ? "drawer" : cartMode,
     cartHref: cosPePagina ? cartHref(basePath) : undefined,
+    comert,
     currentPageSlug,
     hasStickyBottomBar,
     searchCategories,

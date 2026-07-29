@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
-import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { grupuriCategorii, radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import Image from "next/image";
 import { ChevronDown, Menu, Phone, Search, ShoppingBag, Undo2 } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -9,7 +9,7 @@ import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode, type CategoryItem } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -262,15 +262,35 @@ function BaraCautare({
   );
 }
 
-/** Panoul cu toate categoriile, deschis din randul de jos. */
+/**
+ * Panoul cu toate categoriile, deschis din randul de jos.
+ *
+ * Cu SUBCATEGORIILE dedesubt, nu doar radacinile: la un magazin cu opt categorii
+ * si douazeci si doua de subcategorii, „Toate categoriile" arata altfel doua
+ * treimi din raft. Meniul de pe telefon le avea de ieri; asta era singurul loc de
+ * pe ecran lat care nu le avea.
+ */
 function ToateCategoriile({
   categorii,
 }: {
   categorii: { name: string; image: string | null }[];
 }) {
-  const { categoriiRoot, categoriiPePagina } = useStoreChrome();
+  const { categoriiRoot, categoriiPePagina, searchCategories } = useStoreChrome();
+  const catalog = useStorefrontOptional();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
+
+  // Arborele vine din catalog cand pagina il are, si din chrome in rest. Fara
+  // niciunul raman radacinile primite ca prop, adica exact ce se vedea inainte.
+  const grupuri = useMemo(() => {
+    const din = grupuriCategorii(catalog?.categories ?? searchCategories);
+    return din.length
+      ? din
+      : categorii.map((c) => ({
+        radacina: { key: c.name, id: null, name: c.name, image: c.image, hasChildren: false },
+        copii: [] as CategoryItem[],
+      }));
+  }, [catalog?.categories, searchCategories, categorii]);
 
   useEffect(() => {
     if (!deschis) return;
@@ -292,9 +312,9 @@ function ToateCategoriile({
       </button>
 
       {deschis && (
-        <ul className="absolute left-0 top-full mt-2 z-50 w-72 max-h-[70vh] overflow-y-auto rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-1.5">
-          {categorii.map((c) => (
-            <li key={c.name}>
+        <ul className="absolute left-0 top-full mt-2 z-50 w-80 max-h-[70vh] overflow-y-auto rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-xl py-1.5">
+          {grupuri.map(({ radacina: c, copii }) => (
+            <li key={c.key}>
               <a href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
                 className="flex items-center gap-3 px-3.5 py-2 hover:bg-[var(--st-primary-soft)] transition-colors">
                 {c.image ? (
@@ -307,8 +327,22 @@ function ToateCategoriile({
                     {c.name[0]?.toUpperCase()}
                   </span>
                 )}
-                <span className="text-sm text-[var(--st-text)] truncate">{c.name}</span>
+                <span className="text-sm font-medium text-[var(--st-text)] truncate">{c.name}</span>
               </a>
+              {/* Subcategoriile, aliniate sub numele parintelui, nu sub imaginea
+                  lui: retragerea e semnul ca tin de el. */}
+              {copii.length > 0 && (
+                <ul className="pb-1">
+                  {copii.map((sub) => (
+                    <li key={sub.key}>
+                      <a href={hrefCategorie(categoriiRoot, sub.name, categoriiPePagina)}
+                        className="block pl-[3.75rem] pr-3.5 py-1.5 text-[13px] text-[var(--st-muted)] hover:bg-[var(--st-primary-soft)] hover:text-[var(--st-text)] transition-colors truncate">
+                        {sub.name}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>

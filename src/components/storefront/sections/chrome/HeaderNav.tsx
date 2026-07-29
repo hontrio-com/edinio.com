@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
-import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { grupuriCategorii, radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import Image from "next/image";
 import { ChevronDown, Search, ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -9,7 +9,7 @@ import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { esteActiv, menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode, type CategoryItem } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -165,9 +165,23 @@ function MeniuInline({
   meniuCls: string;
   meniuStyle: { fontFamily: string };
 }) {
-  const { categoriiRoot, categoriiPePagina, catalogRoot, isHome } = useStoreChrome();
+  const { categoriiRoot, categoriiPePagina, catalogRoot, isHome, searchCategories } = useStoreChrome();
+  const catalog = useStorefrontOptional();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
+
+  // Arborele vine din catalog cand pagina il are, si din chrome in rest. Fara
+  // niciunul raman radacinile primite ca prop, adica exact ce se vedea inainte.
+  const grupuri = useMemo(() => {
+    const din = grupuriCategorii(catalog?.categories ?? searchCategories);
+    return din.length
+      ? din
+      : categorii.map((c) => ({
+        radacina: { key: c.name, id: null, name: c.name, image: c.image, hasChildren: false },
+        copii: [] as CategoryItem[],
+      }));
+  }, [catalog?.categories, searchCategories, categorii]);
+
 
   // Click in afara inchide panoul; altfel ar ramane agatat dupa navigare.
   useEffect(() => {
@@ -196,22 +210,33 @@ function MeniuInline({
               <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--st-muted)] mb-3">
                 Pe categorii
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-                {categorii.slice(0, 12).map((c) => (
-                  <a key={c.key} href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
-                    className="flex items-center gap-2.5 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
-                    {c.image ? (
-                      <span className="relative w-9 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
-                        <Image src={c.image} alt="" fill sizes="36px" className="object-cover" />
-                      </span>
-                    ) : (
-                      <span className="w-9 h-11 rounded-md shrink-0 flex items-center justify-center text-sm font-bold"
-                        style={{ backgroundColor: "var(--st-primary-soft)", color: "var(--st-primary)" }}>
-                        {c.name[0]?.toUpperCase()}
-                      </span>
-                    )}
-                    <span className="text-sm text-[var(--st-text)] truncate">{c.name}</span>
-                  </a>
+              {/* Cate o coloana per categorie, cu subcategoriile ei dedesubt.
+                  Doar radacinile insemnau ca la un magazin cu douazeci si doua de
+                  subcategorii nu se vedea niciuna de pe desktop. */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-4 max-h-[60vh] overflow-y-auto">
+                {grupuri.map(({ radacina: c, copii }) => (
+                  <div key={c.key} className="min-w-0">
+                    <a href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
+                      className="flex items-center gap-2.5 p-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors">
+                      {c.image ? (
+                        <span className="relative w-9 h-11 rounded-md overflow-hidden shrink-0 bg-[var(--st-bg)]">
+                          <Image src={c.image} alt="" fill sizes="36px" className="object-cover" />
+                        </span>
+                      ) : (
+                        <span className="w-9 h-11 rounded-md shrink-0 flex items-center justify-center text-sm font-bold"
+                          style={{ backgroundColor: "var(--st-primary-soft)", color: "var(--st-primary)" }}>
+                          {c.name[0]?.toUpperCase()}
+                        </span>
+                      )}
+                      <span className="text-sm font-semibold text-[var(--st-text)] truncate">{c.name}</span>
+                    </a>
+                    {copii.map((sub) => (
+                      <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name, categoriiPePagina)}
+                        className="block pl-[3.4rem] pr-2 py-1 text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors truncate">
+                        {sub.name}
+                      </a>
+                    ))}
+                  </div>
                 ))}
               </div>
               <a href={catalogRoot}

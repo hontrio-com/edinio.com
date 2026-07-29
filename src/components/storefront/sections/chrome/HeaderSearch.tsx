@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useRef, useState } from "react";
-import { numeRadacini } from "@/lib/storefront/categories-chrome";
+import { Fragment, useRef, useMemo, useState } from "react";
+import { optiuniCategorii, numeRadacini } from "@/lib/storefront/categories-chrome";
 import { ChevronDown, Search, ShoppingBag } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
@@ -45,12 +45,19 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
 
   const { actiuni, meniuCls, meniuStyle } = useHeaderSettings(settings, HEADER_VARIANT_ACTIONS.search);
 
-  // Radacinile, nu categoria curenta: selectorul de langa cautare nu are cale de
-  // intoarcere, deci o lista care se schimba la fiecare drill lasa vizitatorul
-  // blocat in subarbore. Pe paginile fara catalog sunt oricum radacinile.
-  const categorii = catalog
-    ? catalog.rootCategoryItems.map((c) => c.name)
-    : numeRadacini(searchCategories);
+  /*
+   * Arborele intreg, nu doar radacinile.
+   *
+   * Lista NU se schimba la fiecare alegere — selectorul de langa cautare n-are
+   * cale de intoarcere, iar una care se rescrie ar lasa vizitatorul blocat intr-un
+   * subarbore. De aceea subcategoriile stau retrase sub parintii lor, toate
+   * odata: cine stie ca bocancii sunt la „Incaltaminte de protectie" poate
+   * restrange acolo, fara sa piarda restul raftului.
+   */
+  const categorii = useMemo(() => {
+    const din = optiuniCategorii(catalog?.categories ?? searchCategories);
+    return din.length ? din : numeRadacini(searchCategories).map((nume) => ({ nume, nivel: 0 as const }));
+  }, [catalog?.categories, searchCategories]);
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)]/95 backdrop-blur-md border-b border-[var(--st-border)]`}>
@@ -136,7 +143,7 @@ function SearchBar({
   categorii,
   compact = false,
 }: {
-  categorii: string[];
+  categorii: { nume: string; nivel: 0 | 1 }[];
   compact?: boolean;
 }) {
   const catalog = useCatalogCautabil();
@@ -187,12 +194,12 @@ function SearchBar({
                implementeaza si cititorul de ecran ar anunta o lista goala. */
             <ul aria-label="Categorii"
               className="absolute right-0 top-full mt-1 z-50 min-w-[14rem] max-h-72 overflow-y-auto rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-lg py-1">
-              {["toate", ...categorii].map((c, i) => (
-                <li key={`${i}-${c}`}>
-                  <button type="button" onClick={() => alegeCategorie(c)}
-                    className="w-full text-left px-3.5 py-2 text-sm text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors"
-                    style={c === categorie ? { color: "var(--st-primary)", fontWeight: 600 } : undefined}>
-                    {c === "toate" ? "Toate categoriile" : c}
+              {[{ nume: "toate", nivel: 0 as const }, ...categorii].map((c, i) => (
+                <li key={`${i}-${c.nume}`}>
+                  <button type="button" onClick={() => alegeCategorie(c.nume)}
+                    className={`w-full text-left py-2 pr-3.5 text-sm text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors ${c.nivel === 1 ? "pl-7 text-[13px] text-[var(--st-muted)]" : "pl-3.5"}`}
+                    style={c.nume === categorie ? { color: "var(--st-primary)", fontWeight: 600 } : undefined}>
+                    {c.nume === "toate" ? "Toate categoriile" : c.nume}
                   </button>
                 </li>
               ))}

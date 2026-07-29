@@ -42,3 +42,39 @@ export function subcategorii(arbore: StoreCategoryNode[] | undefined, parintId: 
 export function numeRadacini(arbore: StoreCategoryNode[] | undefined): string[] {
   return radaciniCategorii(arbore).map((c) => c.name);
 }
+
+/**
+ * Categoriile de nivel intai, fiecare cu subcategoriile ei.
+ *
+ * Panourile de categorii din headere aratau doar radacinile, iar la un magazin
+ * cu opt categorii si douazeci si doua de subcategorii asta inseamna ca doua
+ * treimi din raft nu se vedeau de nicaieri pe ecran lat — pe telefon meniul le
+ * are, pe desktop nu le avea. Arborele e deja incarcat pentru meniul de pe
+ * telefon (`loadSearchCategories`), deci nu costa nicio interogare in plus.
+ */
+export function grupuriCategorii(
+  arbore: StoreCategoryNode[] | undefined,
+): { radacina: CategoryItem; copii: CategoryItem[] }[] {
+  return radaciniCategorii(arbore).map((radacina) => ({
+    radacina,
+    copii: radacina.id ? subcategorii(arbore, radacina.id) : [],
+  }));
+}
+
+/**
+ * Numele categoriilor, cu subcategoriile dupa parintele lor.
+ *
+ * Pentru selectorul de langa cautare, care lucreaza pe NUME, nu pe elemente:
+ * `nivel` spune doar cat de mult se retrag in lista. Fara subcategorii, cine
+ * cauta „bocanci" nu putea restrange la subcategoria in care stia ca sunt.
+ */
+export function optiuniCategorii(
+  arbore: StoreCategoryNode[] | undefined,
+): { nume: string; nivel: 0 | 1 }[] {
+  const out: { nume: string; nivel: 0 | 1 }[] = [];
+  for (const { radacina, copii } of grupuriCategorii(arbore)) {
+    out.push({ nume: radacina.name, nivel: 0 });
+    for (const c of copii) out.push({ nume: c.name, nivel: 1 });
+  }
+  return out;
+}

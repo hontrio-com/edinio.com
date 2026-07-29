@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
-import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { grupuriCategorii, radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import Image from "next/image";
 import { ChevronDown, LayoutGrid, Phone, Search, ShoppingCart } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -10,7 +10,7 @@ import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
-import { useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useStoreChrome, useStorefrontOptional, type CartMode, type CategoryItem } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -59,9 +59,14 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
     ? catalog.rootCategoryItems.map((c) => ({ name: c.name, image: c.image }))
     : radaciniCategorii(searchCategories).map((c) => ({ name: c.name, image: c.image }));
 
-  // Butonul de actiune: implicit duce la produsele cu reducere, dar comerciantul
-  // poate pune orice text si orice link.
-  const actiuneVizibila = settings.showAction !== false;
+  /*
+   * Butonul de actiune e STINS pana il cere comerciantul.
+   *
+   * Aparea din start ca „Reduceri" si ducea la produsele cu pret taiat — la un
+   * magazin fara nicio reducere, un buton evidentiat in header care duce la o
+   * lista goala. Aprins din setari, isi ia si textul, si adresa de acolo.
+   */
+  const actiuneVizibila = settings.showAction === true;
   const actiuneText = typeof settings.actionLabel === "string" && settings.actionLabel.trim()
     ? settings.actionLabel
     : "Reduceri";
@@ -160,9 +165,23 @@ function PastilaCategorii({
 }: {
   categorii: { name: string; image: string | null }[];
 }) {
-  const { categoriiRoot, categoriiPePagina } = useStoreChrome();
+  const { categoriiRoot, categoriiPePagina, searchCategories } = useStoreChrome();
+  const catalog = useStorefrontOptional();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
+
+  // Arborele vine din catalog cand pagina il are, si din chrome in rest. Fara
+  // niciunul raman radacinile primite ca prop, adica exact ce se vedea inainte.
+  const grupuri = useMemo(() => {
+    const din = grupuriCategorii(catalog?.categories ?? searchCategories);
+    return din.length
+      ? din
+      : categorii.map((c) => ({
+        radacina: { key: c.name, id: null, name: c.name, image: c.image, hasChildren: false },
+        copii: [] as CategoryItem[],
+      }));
+  }, [catalog?.categories, searchCategories, categorii]);
+
 
   useEffect(() => {
     if (!deschis) return;
@@ -185,22 +204,31 @@ function PastilaCategorii({
 
       {deschis && (
         <div className="absolute left-0 top-full mt-2 z-50 w-[min(34rem,80vw)] rounded-[var(--st-radius-lg)] bg-[var(--st-surface)] shadow-xl border border-[var(--st-border)] p-3">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-            {categorii.slice(0, 12).map((c) => (
-              <a key={c.name} href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
-                className="flex items-center gap-2.5 p-2 rounded-full hover:bg-[var(--st-primary-soft)] transition-colors">
-                {c.image ? (
-                  <span className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 bg-[var(--st-bg)]">
-                    <Image src={c.image} alt="" fill sizes="32px" className="object-cover" />
-                  </span>
-                ) : (
-                  <span className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold"
-                    style={{ backgroundColor: "var(--st-primary-soft)", color: "var(--st-primary)" }}>
-                    {c.name[0]?.toUpperCase()}
-                  </span>
-                )}
-                <span className="text-sm text-[var(--st-text)] truncate">{c.name}</span>
-              </a>
+          {/* Cate o coloana per categorie, cu subcategoriile ei dedesubt. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-3 max-h-[60vh] overflow-y-auto">
+            {grupuri.map(({ radacina: c, copii }) => (
+              <div key={c.key} className="min-w-0">
+                <a href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
+                  className="flex items-center gap-2.5 p-2 rounded-full hover:bg-[var(--st-primary-soft)] transition-colors">
+                  {c.image ? (
+                    <span className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 bg-[var(--st-bg)]">
+                      <Image src={c.image} alt="" fill sizes="32px" className="object-cover" />
+                    </span>
+                  ) : (
+                    <span className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold"
+                      style={{ backgroundColor: "var(--st-primary-soft)", color: "var(--st-primary)" }}>
+                      {c.name[0]?.toUpperCase()}
+                    </span>
+                  )}
+                  <span className="text-sm font-semibold text-[var(--st-text)] truncate">{c.name}</span>
+                </a>
+                {copii.map((sub) => (
+                  <a key={sub.key} href={hrefCategorie(categoriiRoot, sub.name, categoriiPePagina)}
+                    className="block pl-[3.1rem] pr-2 py-1 text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors truncate">
+                    {sub.name}
+                  </a>
+                ))}
+              </div>
             ))}
           </div>
         </div>

@@ -559,7 +559,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [
           ...headerFields(HEADER_VARIANT_ACTIONS.pills),
-          { key: "showAction", type: "toggle", label: "Arata butonul de actiune" },
+          {
+            key: "showAction",
+            type: "toggle",
+            label: "Arata butonul de actiune",
+            help: "Stins, header-ul ramane cu categoriile, cautarea si iconitele.",
+          },
           {
             key: "actionLabel",
             type: "text",
@@ -572,11 +577,13 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
             key: "actionHref",
             type: "link",
             label: "Link buton",
-            help: "Gol = produsele cu reducere din magazin",
+            help: "Gol = produsele cu reducere din magazin. Poti pune o pagina proprie sau o adresa externa.",
             showIf: { key: "showAction", equals: true },
           },
         ],
-        defaults: { ...HEADER_DEFAULTS, showAction: true, actionLabel: "Reduceri" },
+        // Stins implicit: vezi comentariul din `HeaderPills`. Eticheta ramane
+        // completata, ca aprinderea butonului sa dea imediat ceva cu sens.
+        defaults: { ...HEADER_DEFAULTS, showAction: false, actionLabel: "Reduceri" },
       },
       nav: {
         label: "Meniu langa logo",

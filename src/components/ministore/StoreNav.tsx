@@ -3,7 +3,7 @@
 import { useState, useEffect, useId, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Menu, X } from "lucide-react";
-import { menuItemHref, isExternalLink, type MenuItem } from "@/lib/pages/menu";
+import { esteActiv, menuItemHref, isExternalLink, type MenuItem } from "@/lib/pages/menu";
 import { useStoreChromeOptional, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
 import { hrefCategorie } from "@/lib/storefront/category-href";
 import { radaciniCategorii, subcategorii } from "@/lib/storefront/categories-chrome";
@@ -36,7 +36,7 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
       {items.map((it) => {
         const href = menuItemHref(it, basePath, categoriiRoot);
         const ext = isExternalLink(it);
-        const active = !!currentSlug && it.type === "page" && it.target === currentSlug;
+        const active = esteActiv(it, { currentPageSlug: currentSlug, isHome: chrome?.isHome });
         return (
           <a key={it.id} href={href} {...(ext ? { target: "_blank", rel: "noopener noreferrer" } : {})}
             className="px-3 py-2 rounded-lg text-sm font-medium text-foreground/70 hover:text-foreground hover:bg-muted transition-colors whitespace-nowrap"
@@ -183,7 +183,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
               {items.map((it) => {
                 const href = menuItemHref(it, basePath, categoriiRoot);
                 const ext = isExternalLink(it);
-                const active = !!currentSlug && it.type === "page" && it.target === currentSlug;
+                const active = esteActiv(it, { currentPageSlug: currentSlug, isHome: chromeMeniu?.isHome });
                 return (
                   <a key={it.id} href={href} {...(ext ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                     onClick={() => setOpen(false)}

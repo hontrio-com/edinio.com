@@ -30,6 +30,7 @@ import { scrieFiltre } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { variantMeta } from "@/lib/storefront/design/registry";
+import { meniuCuAcasa } from "@/lib/pages/menu";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
@@ -380,7 +381,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const pageContent = (storeSettings?.page_content as StorePageContent) ?? {};
   // Cate bannere are hero-ul, din aceeasi sursa ca randarea lui.
   const bannereHero = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url).banners.length;
-  const menu = pageContent.menu ?? [];
+  // Cu „Acasa" in fata, ca pe toate celelalte pagini. Vezi `meniuCuAcasa`.
+  const menu = meniuCuAcasa(pageContent.menu ?? [], pageContent.menu_fara_acasa);
   const social = (business.social as StoreSocial) ?? {};
   const gallery = Array.isArray(business.gallery) ? (business.gallery as string[]) : [];
   const features = (business.features as StoreFeatures) ?? {};

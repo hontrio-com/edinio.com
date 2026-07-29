@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { meniuCuAcasa } from "@/lib/pages/menu";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { cartHref, cartOnPage, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { variantMeta } from "@/lib/storefront/design/registry";
@@ -93,7 +94,8 @@ export function buildChromeData({
     features: (business.features as StoreFeatures) ?? {},
     social: (business.social as StoreSocial) ?? {},
     gallery: Array.isArray(business.gallery) ? (business.gallery as string[]) : [],
-    menu: pageContent.menu ?? [],
+    // Cu „Acasa" in fata, cand comerciantul n-a scos-o. Vezi `meniuCuAcasa`.
+    menu: meniuCuAcasa(pageContent.menu ?? [], pageContent.menu_fara_acasa),
     // Offsetul de sub bara de anunt trebuie sa vina din sectiunea care CHIAR se
     // randeaza: stinsa sau stearsa din editor, `page_content` ramane pe „enabled"
     // si header-ul lipit la `top-9` ar lasa o fasie goala in capul ecranului.

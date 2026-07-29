@@ -57,6 +57,8 @@ export interface StorePageContent {
   hide_out_of_stock_products?: boolean;
   product_sections?: ProductSection[];
   menu?: MenuItem[];
+  /** Comerciantul a sters intrarea „Acasa"; vezi `meniuCuAcasa`. */
+  menu_fara_acasa?: boolean;
 }
 
 /** `businesses.social` */

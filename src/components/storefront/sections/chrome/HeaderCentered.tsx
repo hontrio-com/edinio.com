@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Mail, Phone, Search, ShoppingBag, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
-import { menuItemHref } from "@/lib/pages/menu";
+import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -116,7 +116,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
         <div className="hidden lg:block border-t border-[var(--st-border)]">
           <nav className="mx-auto px-4 h-12 flex items-center justify-center gap-8" style={{ maxWidth: "var(--st-container)" }}>
             {menu.map((it) => {
-              const activ = it.type === "page" && it.target === currentPageSlug;
+              const activ = esteActiv(it, { currentPageSlug, isHome });
               return (
                 // Pagina curenta nu se marcheaza doar prin culoare: subliniere
                 // pentru cine nu o distinge, `aria-current` pentru cititoare.

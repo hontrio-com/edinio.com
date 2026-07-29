@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Phone, Search, ShoppingBag, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
-import { menuItemHref } from "@/lib/pages/menu";
+import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -86,7 +86,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
                 ilizibil, iar ultimele intrari ar trece si peste iconite. */}
             <nav className={`hidden lg:flex items-center gap-8 min-w-0 ${meniuStanga ? "" : "mx-auto"}`}>
               {menu.map((it) => {
-                const activ = it.type === "page" && it.target === currentPageSlug;
+                const activ = esteActiv(it, { currentPageSlug, isHome });
                 return (
                   <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)}
                     className={`text-[15px] truncate transition-opacity hover:opacity-100 ${meniuCls} ${activ ? "font-bold opacity-100" : "font-medium opacity-55"}`}

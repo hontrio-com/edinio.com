@@ -6,10 +6,10 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   Plus, ExternalLink, Copy, Trash2, Pencil, ArrowUp, ArrowDown, X, Loader2,
-  FileText, Menu as MenuIcon, Link2, Store, } from "lucide-react";
+  FileText, Menu as MenuIcon, Link2, Store, Home, } from "lucide-react";
 import { slugify } from "@/lib/utils/slugify";
 import { createPage, deletePage, duplicatePage, updateStoreMenu } from "@/lib/actions/page.actions";
-import { newMenuItemId, type MenuItem } from "@/lib/pages/menu";
+import { meniuCuAcasa, newMenuItemId, type MenuItem } from "@/lib/pages/menu";
 import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
 
 interface PageRow { id: string; slug: string; title: string; is_published: boolean; updated_at: string }
@@ -21,17 +21,34 @@ function publicBase(b: Business): string {
   return b.custom_domain ? `https://${b.custom_domain}` : `https://edinio.com/${b.slug}`;
 }
 
-export function PagesListClient({ business, pages, initialMenu, catalogPePagina, cosPePagina, comandaPePagina }: {
+/** Adresa unei pagini de sistem. Slug gol = prima pagina, si atunci fara slash final. */
+function adresa(b: Business, slug: string): string {
+  return slug ? `${publicBase(b)}/${slug}` : publicBase(b);
+}
+
+export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial, catalogPePagina, cosPePagina, comandaPePagina }: {
   business: Business;
   pages: PageRow[];
   initialMenu: MenuItem[];
+  /** Comerciantul a scos intrarea implicita „Acasa"; vezi `meniuCuAcasa`. */
+  faraAcasaInitial: boolean;
   /** Magazinul si-a ales cosul, respectiv finalizarea comenzii, ca pagini proprii. */
   catalogPePagina: boolean;
   cosPePagina: boolean;
   comandaPePagina: boolean;
 }) {
   const router = useRouter();
-  const [menu, setMenu] = useState<MenuItem[]>(initialMenu);
+  const [menuSalvat, setMenu] = useState<MenuItem[]>(initialMenu);
+  const [faraAcasa, setFaraAcasa] = useState(faraAcasaInitial);
+  /*
+   * Lista pe care o vede comerciantul e cea pe care o vede si clientul.
+   *
+   * „Acasa" e implicita, deci nu se afla in datele salvate pana cand cineva
+   * atinge meniul. Editorul lucreaza pe lista COMPLETA si salveaza tot ce e in
+   * ea, asa ca intrarea se materializeaza singura la prima modificare; pana
+   * atunci nu ocupa niciun rand in baza.
+   */
+  const menu = meniuCuAcasa(menuSalvat, faraAcasa);
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -39,10 +56,11 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
 
   const isInMenu = (s: string) => menu.some((m) => m.type === "page" && m.target === s);
 
-  function persistMenu(next: MenuItem[]) {
+  function persistMenu(next: MenuItem[], faraAcasaNou = faraAcasa) {
     setMenu(next);
+    setFaraAcasa(faraAcasaNou);
     startTransition(async () => {
-      const res = await updateStoreMenu(business.id, next);
+      const res = await updateStoreMenu(business.id, next, faraAcasaNou);
       if ("error" in res) toast.error(res.error);
     });
   }
@@ -91,7 +109,15 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
     [next[i], next[j]] = [next[j], next[i]];
     persistMenu(next);
   }
-  function removeMenu(i: number) { persistMenu(menu.filter((_, k) => k !== i)); }
+  function removeMenu(i: number) {
+    // Stearsa, „Acasa" ramane stearsa: fara steag, `meniuCuAcasa` ar fi pus-o la
+    // loc la urmatoarea incarcare si butonul de stergere n-ar fi facut nimic.
+    const scoasa = menu[i]?.type === "acasa";
+    persistMenu(menu.filter((_, k) => k !== i), scoasa ? true : faraAcasa);
+  }
+  function addAcasa() {
+    persistMenu([{ id: newMenuItemId(), type: "acasa", label: "Acasa" }, ...menu], false);
+  }
   /*
    * Intrarea „Magazin" duce la produse, oriunde ar sta ele.
    *
@@ -116,8 +142,7 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
     persistMenu([...menu, { id: newMenuItemId(), type: "link", label: "Link nou", target: "https://" }]);
   }
   function editMenuItem(i: number, patch: Partial<MenuItem>) {
-    const next = menu.map((m, k) => (k === i ? { ...m, ...patch } : m));
-    setMenu(next);
+    setMenu(menu.map((m, k) => (k === i ? { ...m, ...patch } : m)));
   }
 
   return (
@@ -192,7 +217,7 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
           <MenuIcon className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Meniu de navigare</h2>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede in header-ul magazinului (inline pe desktop, hamburger pe mobil). Daca e gol, nu apare niciun meniu. „Magazin” = link catre produsele magazinului (pagina de Magazin daca e activata, altfel prima pagina); „link” = adresa externa.</p>
+        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede in header-ul magazinului (inline pe desktop, hamburger pe mobil). „Acasa” vine din start la orice magazin si duce la prima pagina; o poti sterge daca nu o vrei. „Magazin” = link catre produsele magazinului (pagina de Magazin daca e activata, altfel prima pagina); „link” = adresa externa.</p>
 
         <div className="space-y-2">
           {menu.map((m, i) => (
@@ -202,7 +227,7 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
                 <button type="button" onClick={() => moveMenu(i, 1)} disabled={i === menu.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
               </div>
               <span className="w-6 h-6 rounded-md bg-muted flex items-center justify-center shrink-0">
-                {m.type === "home" ? <Store className="h-3.5 w-3.5 text-muted-foreground" /> : m.type === "link" ? <Link2 className="h-3.5 w-3.5 text-muted-foreground" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
+                {m.type === "acasa" ? <Home className="h-3.5 w-3.5 text-muted-foreground" /> : m.type === "home" ? <Store className="h-3.5 w-3.5 text-muted-foreground" /> : m.type === "link" ? <Link2 className="h-3.5 w-3.5 text-muted-foreground" /> : <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
               </span>
               <input value={m.label} onChange={(e) => editMenuItem(i, { label: e.target.value })} onBlur={() => persistMenu(menu)}
                 className={`${inputCls} flex-1`} placeholder="Eticheta" />
@@ -219,6 +244,11 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
         </div>
 
         <div className="flex items-center gap-2 mt-4">
+          {!menu.some((m) => m.type === "acasa") && (
+            <button type="button" onClick={addAcasa} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adauga in meniu un link catre prima pagina a magazinului">
+              <Home className="h-3.5 w-3.5" /> Adauga link catre Acasa
+            </button>
+          )}
           {!areLinkCatreMagazin && (
             <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title={catalogPePagina ? "Adauga in meniu un link catre pagina cu toate produsele" : "Adauga in meniu un link catre pagina principala a magazinului"}>
               <Store className="h-3.5 w-3.5" /> Adauga link catre magazin
@@ -268,7 +298,7 @@ export function PagesListClient({ business, pages, initialMenu, catalogPePagina,
 }
 
 /**
- * Paginile de sistem: catalogul, cosul si finalizarea comenzii.
+ * Paginile de sistem: prima pagina, catalogul, cosul si finalizarea comenzii.
  *
  * Nu sunt randuri in tabelul de pagini si nu se pot sterge, duplica sau
  * redenumi — sunt pasi ai cumpararii, nu continut. Apar totusi aici pentru ca
@@ -290,6 +320,21 @@ function PaginiDeSistem({
   comandaPePagina: boolean;
 }) {
   const randuri = [
+    {
+      /*
+       * Prima pagina e singura care exista la orice magazin, mereu.
+       *
+       * N-are ce sa o stinga si nu are alternativa de tip panou, deci nu are nici
+       * insigna de „inactiv". Apare aici din acelasi motiv ca celelalte: e locul
+       * unde comerciantul cauta paginile magazinului, iar lipsa ei de aici o
+       * facea sa para ceva ce nu se poate atinge.
+       */
+      titlu: "Acasa",
+      slug: "",
+      activa: true,
+      inactivInsigna: "",
+      inactivExplicatie: "",
+    },
     {
       titlu: "Magazin",
       slug: "magazin",
@@ -327,12 +372,12 @@ function PaginiDeSistem({
                 </span>
               </div>
               <p className="text-xs text-muted-foreground truncate mt-0.5">
-                {r.activa ? `${publicBase(business)}/${r.slug}` : r.inactivExplicatie}
+                {r.activa ? adresa(business, r.slug) : r.inactivExplicatie}
               </p>
             </div>
 
             {r.activa && (
-              <a href={`${publicBase(business)}/${r.slug}`} target="_blank" rel="noopener noreferrer" title="Vezi pagina"
+              <a href={adresa(business, r.slug)} target="_blank" rel="noopener noreferrer" title="Vezi pagina"
                 className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0">
                 <ExternalLink className="h-4 w-4" />
               </a>

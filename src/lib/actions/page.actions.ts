@@ -234,6 +234,14 @@ export async function duplicatePage(pageId: string): Promise<{ error: string } |
 export async function updateStoreMenu(
   businessId: string,
   items: MenuItem[],
+  /**
+   * Comerciantul a scos intrarea „Acasa" din meniu.
+   *
+   * Se salveaza ca steag, nu prin absenta ei din lista: intrarea e implicita, iar
+   * fara steag `meniuCuAcasa` ar fi pus-o la loc la urmatoarea randare si
+   * stergerea n-ar fi tinut niciodata.
+   */
+  faraAcasa?: boolean,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const ctx = await getUserAndBusiness(supabase, businessId);
@@ -249,13 +257,13 @@ export async function updateStoreMenu(
 
   let error;
   if (existing) {
-    const pc = { ...(existing.page_content as Record<string, unknown> | null ?? {}), menu: clean };
+    const pc = { ...(existing.page_content as Record<string, unknown> | null ?? {}), menu: clean, menu_fara_acasa: faraAcasa === true };
     ({ error } = await supabase.from("store_settings")
       .update({ page_content: pc as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId));
   } else {
     ({ error } = await supabase.from("store_settings")
-      .insert({ business_id: businessId, page_content: { menu: clean } as never }));
+      .insert({ business_id: businessId, page_content: { menu: clean, menu_fara_acasa: faraAcasa === true } as never }));
   }
   if (error) {
     logError({ action: "updateStoreMenu", message: error.message, details: { businessId }, userId: ctx.userId });

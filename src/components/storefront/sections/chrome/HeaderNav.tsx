@@ -7,7 +7,7 @@ import { ChevronDown, Search, ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
-import { menuItemHref, type MenuItem } from "@/lib/pages/menu";
+import { esteActiv, menuItemHref, type MenuItem } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
@@ -165,7 +165,7 @@ function MeniuInline({
   meniuCls: string;
   meniuStyle: { fontFamily: string };
 }) {
-  const { categoriiRoot, categoriiPePagina, catalogRoot } = useStoreChrome();
+  const { categoriiRoot, categoriiPePagina, catalogRoot, isHome } = useStoreChrome();
   const [deschis, setDeschis] = useState(false);
   const zona = useRef<HTMLDivElement>(null);
 
@@ -226,7 +226,7 @@ function MeniuInline({
       )}
 
       {menu.map((it) => {
-        const activ = it.type === "page" && it.target === currentPageSlug;
+        const activ = esteActiv(it, { currentPageSlug, isHome });
         return (
           <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} className={link}
             aria-current={activ ? "page" : undefined}

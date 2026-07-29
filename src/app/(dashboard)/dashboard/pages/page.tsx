@@ -34,7 +34,8 @@ export default async function PagesPage() {
       .single(),
   ]);
 
-  const menu = ((ss?.page_content as { menu?: MenuItem[] } | null)?.menu) ?? [];
+  const pc = ss?.page_content as { menu?: MenuItem[]; menu_fara_acasa?: boolean } | null;
+  const menu = pc?.menu ?? [];
 
   // Catalogul, cosul si finalizarea comenzii apar in lista ca pagini de sistem,
   // dar numai designul PUBLICAT spune daca sunt pagini adevarate sau raman pe
@@ -50,6 +51,7 @@ export default async function PagesPage() {
       business={business}
       pages={pages ?? []}
       initialMenu={menu}
+      faraAcasaInitial={pc?.menu_fara_acasa === true}
       catalogPePagina={shopOnPage(design)}
       cosPePagina={cartOnPage(design)}
       comandaPePagina={checkoutOnPage(design)}

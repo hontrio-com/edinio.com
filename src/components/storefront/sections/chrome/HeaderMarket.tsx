@@ -6,7 +6,7 @@ import Image from "next/image";
 import { ChevronDown, Menu, Phone, Search, ShoppingBag, Undo2 } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
-import { menuItemHref } from "@/lib/pages/menu";
+import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
@@ -141,7 +141,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
             {menu.length > 0 && (
               <div className="flex items-center gap-7 min-w-0 overflow-x-auto scrollbar-hide">
                 {menu.map((it) => {
-                  const activ = it.type === "page" && it.target === currentPageSlug;
+                  const activ = esteActiv(it, { currentPageSlug, isHome });
                   return (
                     // Pagina curenta nu se marcheaza doar prin culoare: subliniere
                     // pentru cine nu o distinge, `aria-current` pentru cititoare.

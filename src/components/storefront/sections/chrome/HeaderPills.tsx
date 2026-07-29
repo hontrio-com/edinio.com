@@ -6,7 +6,7 @@ import Image from "next/image";
 import { ChevronDown, LayoutGrid, Phone, Search, ShoppingCart } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { whatsappLink } from "@/lib/utils/format";
-import { menuItemHref } from "@/lib/pages/menu";
+import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { resolveHref } from "@/lib/pages/href";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -76,7 +76,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
         {menu.length > 0 && (
           <div className="hidden lg:flex items-center justify-end gap-5 h-9 border-b border-[var(--st-border)]">
             {menu.map((it) => {
-              const activ = it.type === "page" && it.target === currentPageSlug;
+              const activ = esteActiv(it, { currentPageSlug, isHome });
               return (
                 <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)}
                   className={`text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors whitespace-nowrap ${meniuCls}`}

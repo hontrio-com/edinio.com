@@ -7,6 +7,7 @@ import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNa
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { CartControl, useCartTarget } from "@/components/storefront/sections/_shared/CartControl";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 
 /**
  * Header-ul magazinului, varianta classic: hamburger + logo la stanga, meniu la
@@ -22,7 +23,7 @@ import { CartControl, useCartTarget } from "@/components/storefront/sections/_sh
  * asta, designul ales de comerciant s-ar opri la primul click pe un produs.
  */
 export function HeaderClassic() {
-  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, currentPageSlug, isHome } =
+  const { business, basePath, color, menu, pageContent, features, hasAnnouncementBar, currentPageSlug } =
     useStoreChrome();
   const { count } = useCart();
 
@@ -36,7 +37,16 @@ export function HeaderClassic() {
   // filtrele din adresa. Nici prezenta catalogului nu e semnul potrivit — o
   // pagina de catalog separata are catalog fara sa fie acasa, si atunci logoul
   // ar ramane o ancora moarta, fara drum inapoi.
-  const acasa = isHome ? "#" : `${basePath}/`;
+  /*
+   * Logo-ul duce ACASA, mereu.
+   *
+   * Statea pe `#` cand erai deja pe prima pagina — o ancora goala, care doar sare
+   * in capul paginii. Dar prima pagina filtrata („?cat=", „?q=", pagina 3) e tot
+   * prima pagina, deci logo-ul nu facea nimic tocmai cand vizitatorul voia sa
+   * scape de filtre si sa o ia de la capat. Iar `${basePath}/` cu slash final
+   * costa un 308 la fiecare apasare pe adresa cu slug; `radacinaMagazin` il scoate.
+   */
+  const acasa = radacinaMagazin(basePath);
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>

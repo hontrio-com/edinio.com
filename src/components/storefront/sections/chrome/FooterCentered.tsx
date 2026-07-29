@@ -7,6 +7,7 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { FooterCredit, FooterLegal } from "@/components/storefront/sections/_shared/FooterLegal";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 
 /**
  * Footer centrat, varianta „centered".
@@ -37,7 +38,7 @@ export function FooterCentered({ settings }: { settings?: Record<string, unknown
     <footer className="bg-[var(--st-surface)] text-[var(--st-text)] border-t border-[var(--st-border)]">
       <div className={`max-w-6xl mx-auto px-5 pt-12 sm:pt-14 ${spatiuJos}`}>
         <div className="flex flex-col items-center text-center gap-5">
-          <a href={`${basePath}/`} className="hover:opacity-80 transition-opacity" aria-label={nume}>
+          <a href={radacinaMagazin(basePath)} className="hover:opacity-80 transition-opacity" aria-label={nume}>
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}

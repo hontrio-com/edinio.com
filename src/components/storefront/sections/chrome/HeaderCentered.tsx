@@ -12,6 +12,7 @@ import { useHeaderSettings } from "@/components/storefront/sections/_shared/head
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 
 const STROKE = 1.5;
 
@@ -41,7 +42,16 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
 
   const nume = business.store_name ?? business.business_name;
   const logoSize = pageContent.logo_size ?? 36;
-  const acasa = isHome ? "#" : `${basePath}/`;
+  /*
+   * Logo-ul duce ACASA, mereu.
+   *
+   * Statea pe `#` cand erai deja pe prima pagina — o ancora goala, care doar sare
+   * in capul paginii. Dar prima pagina filtrata („?cat=", „?q=", pagina 3) e tot
+   * prima pagina, deci logo-ul nu facea nimic tocmai cand vizitatorul voia sa
+   * scape de filtre si sa o ia de la capat. Iar `${basePath}/` cu slash final
+   * costa un 308 la fiecare apasare pe adresa cu slug; `radacinaMagazin` il scoate.
+   */
+  const acasa = radacinaMagazin(basePath);
 
   // Fara „telefon": aici numarul se arata prin „Arata contactul langa logo", nu
   // ca iconita. Lista trebuie sa ramana cea din `HEADER_VARIANT_ACTIONS.centered`,

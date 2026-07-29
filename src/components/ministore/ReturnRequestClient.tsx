@@ -4,6 +4,7 @@ import { useState, type CSSProperties } from "react";
 import { CheckCircle, Loader2, Package, ShieldCheck } from "lucide-react";
 import { lookupReturnableOrder, submitReturnRequest, type ReturnableItem } from "@/lib/actions/return.actions";
 import { formatPrice } from "@/lib/utils/format";
+import { radacinaMagazin } from "@/lib/storefront/category-href";
 
 interface Props {
   businessId: string;
@@ -120,7 +121,7 @@ export function ReturnRequestClient({ businessId, basePath, color, storeName, pr
             ? " Ti-am trimis pe email confirmarea pe suport durabil, cu data si ora inregistrarii."
             : ` ${storeName} te va contacta cu pasii urmatori pentru returnare si rambursare.`}
         </p>
-        <a href={`${basePath}/`} className="mt-6 inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90" style={{ backgroundColor: color }}>
+        <a href={radacinaMagazin(basePath)} className="mt-6 inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90" style={{ backgroundColor: color }}>
           Inapoi la magazin
         </a>
       </div>

@@ -172,3 +172,70 @@ export function comboStockMap(pageSections: unknown): Map<string, number> {
   }
   return map;
 }
+
+/**
+ * Optiunea asta e o marime?
+ *
+ * Se citeste din NUME, fara diacritice si fara majuscule, fiindca alta sursa nu
+ * exista: optiunile sunt text liber, scris de comerciant sau venit din import.
+ * Raspunsul conteaza intr-un singur loc — o marime nu primeste zaruri cu
+ * fotografii, fiindca fotografia aceluiasi obiect nu poate arata un numar sau o
+ * litera. Lista e scurta si acopera formele intalnite in importuri; un nume
+ * nerecunoscut se comporta ca inainte, deci greseala posibila e cea blanda.
+ */
+const NUME_DE_MARIME = ["marime", "marimi", "size", "sizes", "talie", "masura", "numar", "pointura"];
+
+export function esteMarime(numeOptiune: string): boolean {
+  const curat = numeOptiune
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .trim();
+  return NUME_DE_MARIME.some((n) => curat === n || curat.startsWith(`${n} `));
+}
+
+/**
+ * Fotografia fiecarei valori de optiune, cand fotografia chiar spune ceva.
+ *
+ * Trei conditii, toate necesare, si a doua a lipsit multa vreme:
+ *
+ * 1. TOATE valorile optiunii duc la cate o singura fotografie — cu doar o parte,
+ *    randul ar iesi un amestec de patrate si cuvinte;
+ * 2. fotografiile sunt DIFERITE intre ele. Un import care pune aceeasi poza de
+ *    produs pe fiecare varianta trecea de prima conditie si dadea sase patrate
+ *    identice in locul marimilor S…3XL: vizitatorul avea de ales intre sase poze
+ *    cu acelasi tricou, fara sa afle care e care;
+ * 3. optiunea nu e o marime. O marime e un numar sau o litera, iar fotografia
+ *    aceluiasi obiect n-are cum sa o arate, oricat de diferite ar fi pozele.
+ *
+ * `imaginiGalerie` sunt fotografiile produsului: o imagine de varianta care nu se
+ * mai afla printre ele e invechita si nu se arata.
+ */
+export function pozePeValoare(
+  variants: VariantsData | null,
+  imaginiGalerie: string[],
+): Map<string, Map<string, string>> {
+  const harta = new Map<string, Map<string, string>>();
+  if (!variants) return harta;
+
+  for (const optiune of variants.options) {
+    if (esteMarime(optiune.name)) continue;
+
+    const perValoare = new Map<string, string>();
+    for (const valoare of optiune.values) {
+      const gasite = new Set<string>();
+      for (const c of variants.combinations) {
+        if (!c.enabled || !c.image) continue;
+        if (!c.title.split(VARIANT_TITLE_SEP).includes(valoare)) continue;
+        if (imaginiGalerie.includes(c.image)) gasite.add(c.image);
+      }
+      if (gasite.size === 1) perValoare.set(valoare, [...gasite][0]);
+    }
+
+    const distincte = new Set(perValoare.values()).size;
+    if (perValoare.size === optiune.values.length && distincte === perValoare.size) {
+      harta.set(optiune.name, perValoare);
+    }
+  }
+  return harta;
+}

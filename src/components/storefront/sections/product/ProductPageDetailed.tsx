@@ -11,7 +11,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
-  VARIANT_TITLE_SEP,
+  pozePeValoare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
@@ -317,32 +317,10 @@ export function ProductPageDetailed({
     [variantImage, images],
   );
 
-  /**
-   * Fotografia fiecarei valori, cand valoarea o determina singura.
-   *
-   * O optiune primeste zaruri de imagine doar daca TOATE valorile ei duc la
-   * cate o singura fotografie: la „Culoare" merge, la „Marime" nu, fiindca
-   * aceeasi marime apare in toate culorile. Cu doar o parte din valori avand
-   * poze, randul ar iesi un amestec de patrate si cuvinte.
-   */
-  const pozeOptiuni = useMemo(() => {
-    const harta = new Map<string, Map<string, string>>();
-    if (!variantsData) return harta;
-    for (const optiune of variantsData.options) {
-      const perValoare = new Map<string, string>();
-      for (const valoare of optiune.values) {
-        const gasite = new Set<string>();
-        for (const c of variantsData.combinations) {
-          if (!c.enabled || !c.image) continue;
-          if (!c.title.split(VARIANT_TITLE_SEP).includes(valoare)) continue;
-          if (images.includes(c.image)) gasite.add(c.image);
-        }
-        if (gasite.size === 1) perValoare.set(valoare, [...gasite][0]);
-      }
-      if (perValoare.size === optiune.values.length) harta.set(optiune.name, perValoare);
-    }
-    return harta;
-  }, [variantsData, images]);
+  // Cand o valoare de optiune se alege din fotografie si cand din cuvant: vezi
+  // `pozePeValoare`. Regula sta acolo fiindca e o decizie, nu o randare, si are
+  // teste.
+  const pozeOptiuni = useMemo(() => pozePeValoare(variantsData, images), [variantsData, images]);
 
   const basePrice = Number(product.price);
   const displayPrice = comboUnitPrice(selectedCombo, basePrice);

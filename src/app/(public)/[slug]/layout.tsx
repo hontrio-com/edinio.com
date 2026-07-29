@@ -56,15 +56,19 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const meta: Metadata = {
     /*
-     * `default` + `template`, amandoua ale magazinului.
+     * `absolute`, nu `default`, si iata de ce.
      *
-     * `default` e titlul folosit cand nimeni mai jos nu spune nimic — cazul
-     * 404-ului. `template` inlocuieste sablonul „%s | Edinio" al radacinii
-     * pentru orice pagina care si-ar declara titlul ca sir simplu; azi toate il
-     * declara `absolute`, deci nu se schimba nimic, dar daca vreuna uita, ii
-     * apare numele magazinului la coada, nu numele platformei.
+     * `default` e tot un titlu, deci sablonul radacinii („%s | Edinio") se
+     * aplica peste el: pe 404-ul de la caian-textile.ro a iesit „Caian Textile |
+     * Prosoape Hotel & HoReCa Romania | Edinio" — numele platformei se
+     * intorsese pe alta usa. `absolute` opreste sablonul de deasupra, iar
+     * paginile de dedesubt care nu-si declara titlul il mostenesc ca atare.
+     *
+     * `template` ramane, pentru copiii care si-ar declara titlul ca sir simplu:
+     * acolo se lipeste numele magazinului, nu al platformei. Azi toate il declara
+     * `absolute`, deci e doar plasa de siguranta.
      */
-    title: { default: titlu, template: `%s | ${numeAfisat}` },
+    title: { absolute: titlu, template: `%s | ${numeAfisat}` },
     description: descriere,
     openGraph: { type: "website", locale: "ro_RO", siteName: numeAfisat, title: titlu, description: descriere, images: imagini },
     twitter: { card: imagini.length ? "summary_large_image" : "summary", title: titlu, description: descriere, ...(imagini.length ? { images: imagini } : {}) },

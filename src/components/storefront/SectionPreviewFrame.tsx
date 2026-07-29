@@ -270,14 +270,25 @@ export function SectionPreviewFrame({
    * lista paginii principale ar fi randat un catalog intreg peste magazinul
    * public. Varianta „none" nu are ce arata — produsele raman pe pagina
    * principala — deci miniatura ei spune exact asta.
+   *
+   * Si spune si ce URMEAZA daca alegi altceva, fiindca altfel textul se citea ca
+   * o alegere intre doua lucruri care se exclud: „magazinul nu are o pagina
+   * separata" suna ca si cum pagina separata ar goli prima pagina. Nu o goleste
+   * — produsele raman si acolo, iar mutarea completa e un comutator, stins
+   * implicit.
    */
   if (section.kind === "shop_page") {
     if (variantMeta("shop_page", section.variant)?.surface !== "page") {
       return (
         <div className="flex items-center justify-center min-h-[220px] px-8 py-12 text-center">
-          <p className="text-sm text-[var(--st-muted)]">
-            Produsele raman pe pagina principala, sub celelalte sectiuni. Magazinul nu are o pagina separata de catalog.
-          </p>
+          <div className="max-w-md space-y-2">
+            <p className="text-sm text-[var(--st-muted)]">
+              Produsele raman pe pagina principala, sub celelalte sectiuni. Magazinul nu are o pagina separata de catalog.
+            </p>
+            <p className="text-[13px] text-[var(--st-muted)]">
+              Alege un model de mai jos ca sa ai si pagina Magazin, cu toate filtrele. Produsele raman si pe prima pagina; se muta complet acolo doar daca stingi tu comutatorul.
+            </p>
+          </div>
         </div>
       );
     }

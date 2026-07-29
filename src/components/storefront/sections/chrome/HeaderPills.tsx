@@ -216,12 +216,12 @@ function PastilaCategorii({
  * magazin cu termenul in adresa.
  */
 function CautareRotunjita({ compact = false }: { compact?: boolean }) {
-  const { valoare, scrie, propsForm, rezultate } = useCautareHeader();
+  const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader();
 
   return (
     // Campul stinge conturul implicit al browserului, deci pastila primeste ea
     // semnul de focus: fara el, navigarea cu tastatura n-ar avea niciun reper.
-    <form {...propsForm}
+    <form {...propsForm} {...propsZona}
       className={`relative flex items-center gap-1 rounded-full bg-[var(--st-surface)] pl-5 pr-1 focus-within:ring-2 focus-within:ring-[var(--st-text)] ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"

@@ -145,7 +145,7 @@ function SearchBar({
   const inchide = useRef<number | null>(null);
 
   const categorie = catalog ? catalog.categoryFilter : catLocal;
-  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ categorie });
+  const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ categorie });
 
   function alegeCategorie(nume: string) {
     setDeschis(false);
@@ -160,7 +160,7 @@ function SearchBar({
   const eticheta = categorie === "toate" ? "Toate categoriile" : categorie;
 
   return (
-    <form {...propsForm}
+    <form {...propsForm} {...propsZona}
       className={`relative flex items-stretch rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] transition-colors ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"

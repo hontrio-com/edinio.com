@@ -192,7 +192,7 @@ function BandaAnunt() {
  */
 function CampCautare({ onInchide }: { onInchide: () => void }) {
   const camp = useRef<HTMLInputElement>(null);
-  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ laAplicare: onInchide });
+  const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ laAplicare: onInchide });
 
   useEffect(() => {
     camp.current?.focus();
@@ -202,7 +202,7 @@ function CampCautare({ onInchide }: { onInchide: () => void }) {
   }, [onInchide]);
 
   return (
-    <form {...propsForm} className="relative flex-1 min-w-0 mx-auto flex items-center gap-3 border-b border-[var(--st-text)]">
+    <form {...propsForm} {...propsZona} className="relative flex-1 min-w-0 mx-auto flex items-center gap-3 border-b border-[var(--st-text)]">
       <Search className="h-[18px] w-[18px] shrink-0 text-[var(--st-muted)]" strokeWidth={STROKE} />
       <input
         ref={camp}

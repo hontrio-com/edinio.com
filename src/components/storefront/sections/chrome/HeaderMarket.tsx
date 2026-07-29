@@ -197,7 +197,7 @@ function BaraCautare({
   const inchide = useRef<number | null>(null);
 
   const categorie = catalog ? catalog.categoryFilter : catLocal;
-  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ categorie });
+  const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ categorie });
 
   function alegeCategorie(nume: string) {
     setDeschis(false);
@@ -213,7 +213,7 @@ function BaraCautare({
     // Chenarul e permanent colorat, deci focusul are nevoie de un semn propriu:
     // campul stinge conturul implicit al browserului si fara inelul asta
     // navigarea cu tastatura n-ar avea niciun reper aici.
-    <form {...propsForm}
+    <form {...propsForm} {...propsZona}
       className={`relative flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] focus-within:ring-2 focus-within:ring-[var(--st-text)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
       style={{ borderColor: "var(--st-primary)" }}>
       {categorii.length > 0 && (

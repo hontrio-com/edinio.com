@@ -61,14 +61,19 @@ export function useCautareHeader(optiuni?: {
     window.location.href = hrefCatalog(catalogRoot, p.toString());
   }
 
+  const propsForm = { role: "search", onSubmit: trimite } as const;
+
   /**
-   * Se pun pe FORMULAR, nu pe camp: panoul se inchide cand focusul paraseste
-   * bara intreaga. Pe camp, trecerea la butonul de cautare sau la selectorul de
-   * categorie l-ar fi inchis sub degetul vizitatorului.
+   * Se pun pe elementul care contine SI campul, SI panoul.
+   *
+   * Nu pe camp: trecerea la butonul de cautare sau la selectorul de categorie
+   * l-ar fi inchis sub degetul vizitatorului. Si nu pe un element care lasa
+   * panoul afara: apasarea unui rezultat muta focusul pe legatura, deci panoul
+   * s-ar fi inchis intre apasare si ridicarea degetului, iar clicul ar fi cazut
+   * in gol. De aceea sunt separate de `propsForm` — la headerele unde panoul sta
+   * inauntrul formularului merg amandoua pe el, iar unde nu, pe invelis.
    */
-  const propsForm = {
-    role: "search",
-    onSubmit: trimite,
+  const propsZona = {
     onKeyDown: (e: React.KeyboardEvent) => {
       if (e.key === "Escape") setDeschise(false);
     },
@@ -82,6 +87,7 @@ export function useCautareHeader(optiuni?: {
     scrie,
     trimite,
     propsForm,
+    propsZona,
     /**
      * Panoul cu produse gasite. Se randeaza INTR-UN element pozitionat — de obicei
      * chiar formularul — fiindca se aseaza absolut sub el.

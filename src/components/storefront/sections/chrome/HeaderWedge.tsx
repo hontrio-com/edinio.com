@@ -146,7 +146,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
  */
 function PanouCautare({ onInchide }: { onInchide: () => void }) {
   const camp = useRef<HTMLInputElement>(null);
-  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ laAplicare: onInchide });
+  const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ laAplicare: onInchide });
 
   useEffect(() => {
     camp.current?.focus();
@@ -158,7 +158,7 @@ function PanouCautare({ onInchide }: { onInchide: () => void }) {
   return (
     <div className="border-t" style={{ borderColor: "color-mix(in srgb, var(--st-footer-text) 15%, transparent)" }}>
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
-        <form {...propsForm} className="relative h-16 flex items-center gap-3">
+        <form {...propsForm} {...propsZona} className="relative h-16 flex items-center gap-3">
           <Search className="h-5 w-5 shrink-0 opacity-60" strokeWidth={STROKE} />
           <input
             ref={camp}

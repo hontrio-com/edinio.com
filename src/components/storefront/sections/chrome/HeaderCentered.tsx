@@ -169,7 +169,7 @@ function Contact({
  */
 function PanouCautare({ onInchide }: { onInchide: () => void }) {
   const camp = useRef<HTMLInputElement>(null);
-  const { valoare, scrie, propsForm, rezultate } = useCautareHeader({ laAplicare: onInchide });
+  const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ laAplicare: onInchide });
 
   useEffect(() => {
     camp.current?.focus();
@@ -181,7 +181,7 @@ function PanouCautare({ onInchide }: { onInchide: () => void }) {
   return (
     <div className="border-t border-[var(--st-border)] bg-[var(--st-surface)]">
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
-        <form {...propsForm} className="relative h-14 flex items-center gap-3 text-[var(--st-text)]">
+        <form {...propsForm} {...propsZona} className="relative h-14 flex items-center gap-3 text-[var(--st-text)]">
           <Search className="h-5 w-5 shrink-0 text-[var(--st-muted)]" strokeWidth={STROKE} />
           <input
             ref={camp}

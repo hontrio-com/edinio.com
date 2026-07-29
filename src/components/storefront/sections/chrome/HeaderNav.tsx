@@ -247,7 +247,7 @@ function MeniuInline({
  * custom) e doar un camp care trimite la magazin.
  */
 function PanouCautare({ onClose }: { onClose: () => void }) {
-  const { valoare, scrie, propsForm, rezultateInFlux } = useCautareHeader({
+  const { valoare, scrie, propsForm, propsZona, rezultateInFlux } = useCautareHeader({
     laAplicare: () => {
       onClose();
       // Grila e mai jos in pagina: filtrata fara derulare, vizitatorul ar fi
@@ -299,7 +299,10 @@ function PanouCautare({ onClose }: { onClose: () => void }) {
     <div ref={panou} className="fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Cauta produse">
       <div aria-hidden="true" className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-[var(--st-surface)] shadow-xl">
-        <div className="mx-auto px-4 py-5" style={{ maxWidth: "var(--st-container)" }}>
+        {/* Invelisul poarta inchiderea panoului, fiindca rezultatele stau in
+            afara formularului: pe formular, apasarea unui rezultat l-ar fi
+            inchis intre apasare si ridicarea degetului. */}
+        <div {...propsZona} className="mx-auto px-4 py-5" style={{ maxWidth: "var(--st-container)" }}>
           <div className="flex items-center gap-3">
             <form {...propsForm} className="flex-1 flex items-center gap-3 border-b-2 border-[var(--st-text)] pb-2">
               <Search className="h-5 w-5 text-[var(--st-muted)] shrink-0" strokeWidth={STROKE} />

@@ -93,8 +93,8 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
     setHydrated(true);
   }, [STORAGE_KEY, slug]);
 
-  // Alta fila a aceluiasi magazin poate scrie in cos (o pagina custom cu „In cos"
-  // scrie direct in `cart_<slug>`). Fara ascultatorul asta, fila de fata ramane cu
+  // Alta fila a aceluiasi magazin poate scrie in cos (o pagina custom deschisa
+  // fara provider scrie direct in `cart_<slug>`). Fara ascultatorul asta, fila de fata ramane cu
   // vectorul ei vechi si prima apasare pe „+" il scrie peste cel din localStorage:
   // produsul adaugat in cealalta fila dispare, fara niciun semn. Evenimentul
   // `storage` nu se declanseaza in fila care a scris, deci nu se poate face bucla.

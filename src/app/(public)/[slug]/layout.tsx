@@ -9,7 +9,7 @@ import { AttributionCapture } from "@/components/public/AttributionCapture";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
-import { parseStoreSeo } from "@/lib/seo";
+import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo } from "@/lib/seo";
 import type { Metadata } from "next";
 
 interface Props {
@@ -17,12 +17,25 @@ interface Props {
   params: Promise<{ slug: string }>;
 }
 
-/** Per-store favicon: the merchant's logo overrides the default Edinio favicon. */
+/**
+ * Identitatea magazinului, pusa pe TOT ce se randeaza sub `/[slug]`.
+ *
+ * Favicon si verificarea Search Console au stat aici de la inceput. Titlul,
+ * descrierea si OpenGraph sunt noi, si sunt aici dintr-un motiv precis: paginile
+ * si le pun singure, dar 404-ul NU poate. `not-found.tsx` nu accepta
+ * `generateMetadata` — antetul lui vine de la cel mai apropiat layout — asa ca
+ * orice adresa gresita de pe domeniul unui comerciant servea titlul, descrierea
+ * si og:title ale platformei: „Creare magazin online rapid | Edinio", pe
+ * caian-textile.ro.
+ *
+ * Sunt IMPLICITE, nu impuse: orice pagina care isi declara titlul sau OpenGraph
+ * il pastreaza, fiindca segmentul mai adanc castiga. Umplu doar golul.
+ */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const { data } = await createAdminClient()
     .from("businesses")
-    .select("logo_url, store_settings(page_content)")
+    .select("logo_url, business_name, store_name, store_city, description, tagline, cover_url, store_settings(page_content)")
     .eq("slug", slug)
     .single();
   if (!data) return {};
@@ -30,10 +43,34 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
   const favicon = ((settings?.page_content ?? null) as { favicon_url?: string | null } | null)?.favicon_url || data.logo_url;
   // Google Search Console "HTML tag" verification, set in Settings > SEO.
-  const gsc = parseStoreSeo(settings?.page_content ?? null).googleVerification;
-  const meta: Metadata = {};
+  const seo = parseStoreSeo(settings?.page_content ?? null);
+
+  const numeAfisat = data.store_name ?? data.business_name;
+  const titlu = seo.title || deriveStoreTitle(numeAfisat, data.store_city);
+  const descriere = seo.description || deriveStoreDescription({
+    tagline: data.tagline,
+    description: data.description,
+    displayName: numeAfisat,
+  });
+  const imagini = seo.ogImage || data.cover_url ? [seo.ogImage || data.cover_url!] : [];
+
+  const meta: Metadata = {
+    /*
+     * `default` + `template`, amandoua ale magazinului.
+     *
+     * `default` e titlul folosit cand nimeni mai jos nu spune nimic — cazul
+     * 404-ului. `template` inlocuieste sablonul „%s | Edinio" al radacinii
+     * pentru orice pagina care si-ar declara titlul ca sir simplu; azi toate il
+     * declara `absolute`, deci nu se schimba nimic, dar daca vreuna uita, ii
+     * apare numele magazinului la coada, nu numele platformei.
+     */
+    title: { default: titlu, template: `%s | ${numeAfisat}` },
+    description: descriere,
+    openGraph: { type: "website", locale: "ro_RO", siteName: numeAfisat, title: titlu, description: descriere, images: imagini },
+    twitter: { card: imagini.length ? "summary_large_image" : "summary", title: titlu, description: descriere, ...(imagini.length ? { images: imagini } : {}) },
+  };
   if (favicon) meta.icons = { icon: favicon };
-  if (gsc) meta.verification = { google: gsc };
+  if (seo.googleVerification) meta.verification = { google: seo.googleVerification };
   return meta;
 }
 

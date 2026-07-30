@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN, isPlatformHost, parseStoreSeo } from "@/lib/seo";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
+import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -29,6 +30,18 @@ function designPublicat(storeSettings: unknown) {
   return parseStoreDesign(brut, { primaryColor: "#1AB554", pageContent: {}, features: {} });
 }
 
+function pcDinRand(row: { store_settings?: unknown }): unknown {
+  const ss = row.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null | undefined;
+  if (!ss) return null;
+  return (Array.isArray(ss) ? ss[0] : ss)?.page_content ?? null;
+}
+
+function politiciDinRand(row: { store_settings?: unknown }): unknown {
+  const ss = row.store_settings as { store_policies?: unknown } | { store_policies?: unknown }[] | null | undefined;
+  if (!ss) return null;
+  return (Array.isArray(ss) ? ss[0] : ss)?.store_policies ?? null;
+}
+
 function homepageNoindex(row: { store_settings?: unknown }): boolean {
   const ss = row.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null | undefined;
   if (!ss) return false;
@@ -50,7 +63,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!isPlatformHost(host)) {
     const { data: biz } = await createAdminClient()
       .from("businesses")
-      .select("id, updated_at, store_settings(page_content, storefront_design)")
+      .select("id, updated_at, store_settings(page_content, storefront_design, store_policies)")
       .eq("custom_domain", host)
       .eq("is_published", true)
       .single();
@@ -116,6 +129,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           priority: 0.7,
         });
       }
+    }
+
+    // Paginile de politici indexabile. Vezi `politiciIndexabile`: aceeasi functie
+    // decide si eticheta `robots` a paginii, ca sitemapul si pagina sa nu spuna
+    // lucruri diferite.
+    for (const tip of politiciIndexabile(pcDinRand(biz), politiciDinRand(biz))) {
+      entries.push({
+        url: `${base}/politici/${tip}`,
+        lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(),
+        changeFrequency: "yearly",
+        priority: 0.3,
+      });
     }
 
     const pages = await fetchAllRows("sitemap.store.pages", (from, to) =>

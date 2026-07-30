@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
+import { politicaIndexabila } from "@/lib/storefront/policy-index";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -31,9 +32,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!meta) return {};
   const supabase = await createClient();
   const { data: business } = await supabase
-    .from("businesses").select("slug, business_name, store_name, custom_domain, cover_url").eq("slug", slug).single();
+    .from("businesses").select("id, slug, business_name, store_name, custom_domain, cover_url").eq("slug", slug).single();
   if (!business) return {};
   const numeMagazin = business.store_name ?? business.business_name;
+
+  /*
+   * Politicile sunt INDEXABILE, cu conditiile din `politicaIndexabila`.
+   *
+   * Erau toate pe `noindex`, iar Google Merchant Center cere retur si termeni
+   * indexabili ca sa valideze contul: o regula de igiena SEO bloca vanzarea.
+   * Interogarea in plus se face doar pe paginile de politici si citeste exact
+   * ce citeste si sitemapul, ca sa nu ajungem la o pagina `noindex` listata in
+   * sitemap — contradictia pe care Search Console o raporteaza ca eroare.
+   */
+  const { data: setari } = await createAdminClient()
+    .from("store_settings").select("page_content, store_policies").eq("business_id", business.id).single();
+  const indexabila = politicaIndexabila(setari?.page_content ?? null, setari?.store_policies ?? null, type);
   const titlu = `${meta.label} | ${numeMagazin}`;
   const url = `${storeBaseUrl(business)}/politici/${type}`;
   const imagine = business.cover_url ?? undefined;
@@ -43,7 +57,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     // `absolute` strips the root layout's "%s | Edinio" template.
     title: { absolute: titlu },
-    robots: { index: false },
+    robots: indexabila ? { index: true, follow: true } : { index: false, follow: true },
     alternates: { canonical: url },
     openGraph: {
       type: "website",

@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
 import { type StoreSeo, SEO_TITLE_MAX, SEO_DESCRIPTION_MAX, SEO_TITLE_IDEAL_MIN, SEO_DESCRIPTION_IDEAL_MIN } from "@/lib/seo";
+import { TIPURI_POLITICI } from "@/lib/storefront/policy-index";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { type StoreMode } from "@/lib/storefront/store-mode";
 
@@ -677,6 +678,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     if (d) cleaned.description = d;
     if (og) cleaned.ogImage = og;
     if (seo.noindex) cleaned.noindex = true;
+    // Doar excluderile se scriu: lista goala inseamna „toate indexabile", adica
+    // implicitul, si n-are rost pastrata in baza.
+    if (seo.politiciNoindex?.length) cleaned.politiciNoindex = seo.politiciNoindex;
     // Google Search Console: accept either the raw token or the full
     // <meta ... content="TOKEN"> tag the merchant copied; store the sanitized token.
     const gv = seo.googleVerification?.trim();
@@ -1990,6 +1994,44 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <span className="block text-xs text-muted-foreground mt-0.5">Optiune avansata. Activeaza doar daca NU vrei ca pagina principala sa apara in motoarele de cautare. Lasa dezactivat pentru SEO normal.</span>
                   </span>
                 </label>
+              </div>
+
+              {/* Paginile de politici in Google */}
+              <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Paginile de politici in Google</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Bifate, apar in Google si in sitemap. Google Merchant Center cere politica de retur si termenii
+                    indexabili ca sa valideze contul, deci lasa-le bifate daca faci reclama la produse.
+                  </p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
+                  {TIPURI_POLITICI.map(({ tip, eticheta }) => {
+                    const scoase = seo.politiciNoindex ?? [];
+                    const bifat = !scoase.includes(tip);
+                    return (
+                      <label key={tip} className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input type="checkbox" checked={bifat} disabled={!businessId}
+                          onChange={(e) => setSeo((s) => ({
+                            ...s,
+                            politiciNoindex: e.target.checked
+                              ? (s.politiciNoindex ?? []).filter((t) => t !== tip)
+                              : [...(s.politiciNoindex ?? []), tip],
+                          }))}
+                          className="w-4 h-4 rounded accent-green-600 shrink-0" />
+                        <span className="text-sm text-foreground">{eticheta}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {seo.noindex && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Cat timp magazinul e ascuns din Google (mai sus), politicile nu apar nici ele, oricat ar fi bifate aici.
+                  </p>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  O politica stinsa din Editeaza magazinul nu apare in Google chiar daca e bifata: pagina ei nu are ce arata.
+                </p>
               </div>
 
               {/* Google Search Console */}

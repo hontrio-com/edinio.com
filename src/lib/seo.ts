@@ -40,6 +40,15 @@ export interface StoreSeo {
   noindex?: boolean;
   /** Google Search Console "HTML tag" verification token (injected into <head>). */
   googleVerification?: string;
+  /**
+   * Paginile de politici scoase ANUME din Google, dupa segmentul din adresa
+   * („retur", „termeni"...).
+   *
+   * Lista de EXCLUDERI, nu de includeri: politicile sunt indexabile implicit,
+   * fiindca Google Merchant Center cere retur si termeni indexabili ca sa valideze
+   * contul. O lista de includeri ar fi lasat toate magazinele existente pe dinafara.
+   */
+  politiciNoindex?: string[];
 }
 
 /** Recommended lengths — counters turn green inside [ideal_min, max], red past max. */
@@ -59,6 +68,9 @@ export function parseStoreSeo(pageContent: unknown): StoreSeo {
   if (typeof s.ogImage === "string" && s.ogImage.trim()) out.ogImage = s.ogImage.trim();
   if (s.noindex === true) out.noindex = true;
   if (typeof s.googleVerification === "string" && s.googleVerification.trim()) out.googleVerification = s.googleVerification.trim();
+  if (Array.isArray(s.politiciNoindex)) {
+    out.politiciNoindex = s.politiciNoindex.filter((v): v is string => typeof v === "string" && !!v.trim());
+  }
   return out;
 }
 

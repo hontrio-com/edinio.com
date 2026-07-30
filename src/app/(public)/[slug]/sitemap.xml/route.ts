@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { PLATFORM_ORIGIN, parseStoreSeo } from "@/lib/seo";
+import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
 import { slugCategorie } from "@/lib/storefront/category-href";
@@ -22,7 +23,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
 
   const { data: biz } = await admin
     .from("businesses")
-    .select("id, slug, updated_at, is_published, store_settings(page_content, storefront_design)")
+    .select("id, slug, updated_at, is_published, store_settings(page_content, storefront_design, store_policies)")
     .eq("slug", slug)
     .maybeSingle();
   if (!biz || !biz.is_published) {
@@ -86,6 +87,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     }
   }
 
+  /*
+   * Paginile de politici indexabile.
+   *
+   * Lipseau din sitemap fiindca erau `noindex`. Google Merchant Center cere retur
+   * si termeni indexabili ca sa valideze contul, deci lipsa lor bloca reclama la
+   * produse. Aceeasi functie decide si eticheta `robots` a paginii: doua reguli
+   * scrise separat ar fi produs o pagina `noindex` listata in sitemap.
+   */
+  for (const tip of politiciIndexabile(pageContent(biz.store_settings), politici(biz.store_settings))) {
+    entries.push({ loc: `${base}/politici/${tip}`, lastmod: iso(biz.updated_at) });
+  }
+
   const pages = await fetchAllRows("slugSitemap.pages", (from, to) =>
     admin.from("custom_pages").select("slug, updated_at, seo").eq("business_id", biz.id).eq("is_published", true).order("id").range(from, to),
   );
@@ -126,6 +139,12 @@ function designPublicat(storeSettings: unknown) {
   const ss = storeSettings as { storefront_design?: unknown } | { storefront_design?: unknown }[] | null;
   const brut = ss ? (Array.isArray(ss) ? ss[0] : ss)?.storefront_design : null;
   return parseStoreDesign(brut, { primaryColor: "#1AB554", pageContent: {}, features: {} });
+}
+
+function politici(storeSettings: unknown): unknown {
+  const ss = storeSettings as { store_policies?: unknown } | { store_policies?: unknown }[] | null;
+  if (!ss) return null;
+  return (Array.isArray(ss) ? ss[0] : ss)?.store_policies ?? null;
 }
 
 function pageContent(storeSettings: unknown): unknown {

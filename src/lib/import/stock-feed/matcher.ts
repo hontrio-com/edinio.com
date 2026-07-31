@@ -156,18 +156,31 @@ export function buildStockPlan(
   let unchanged = 0;
 
   /*
-   * Acelasi identificator de doua ori in ACELASI fisier. Nu alegem noi care e
-   * bun: daca furnizorul trimite doua cantitati pentru acelasi cod, singurul
-   * raspuns cinstit e sa spunem ca fisierul se contrazice.
+   * Acelasi identificator de mai multe ori in ACELASI fisier.
+   *
+   * Se resping doar cand se CONTRAZIC. Daca furnizorul trimite doua cantitati
+   * diferite pentru acelasi cod, singurul raspuns cinstit e sa spunem ca fisierul
+   * se bate cap in cap.
+   *
+   * Dar de multe ori nu se contrazic: un export listeaza acelasi cod de doua ori
+   * cu ACEEASI cantitate, sub statusuri diferite ("STOC" si "LICHIDARE STOC").
+   * Acolo nu e nimic de ales. Respinse, asemenea randuri ar lasa varianta
+   * neactualizata la fiecare rulare, la nesfarsit, pentru o problema inchipuita.
    */
-  const seen = new Map<string, number>();
-  const repeated = new Set<string>();
+  const firstRow = new Map<string, StockFeedRow>();
+  const conflicting = new Set<string>();
+  /** Randuri care repeta, identic, un cod deja luat mai sus. */
+  const redundant = new Set<number>();
   for (const row of rows) {
     const key = norm(row.identifier);
     if (!key) continue;
-    const before = seen.get(key);
-    if (before === undefined) seen.set(key, row.rowIndex);
-    else repeated.add(key);
+    const first = firstRow.get(key);
+    if (!first) {
+      firstRow.set(key, row);
+      continue;
+    }
+    if (first.stock !== row.stock || first.price !== row.price) conflicting.add(key);
+    else redundant.add(row.rowIndex);
   }
 
   for (const row of rows) {
@@ -183,12 +196,22 @@ export function buildStockPlan(
       continue;
     }
 
-    if (repeated.has(key)) {
+    if (conflicting.has(key)) {
       issues.push({
         rowIndex: row.rowIndex,
         identifier: row.identifier,
         problem: "duplicate",
-        detail: "Acelasi identificator apare de mai multe ori in fisier, cu valori care se pot bate cap in cap.",
+        detail: "Acelasi identificator apare de mai multe ori in fisier, cu cantitati diferite. Nu putem alege noi care e cea buna.",
+      });
+      continue;
+    }
+
+    if (redundant.has(row.rowIndex)) {
+      issues.push({
+        rowIndex: row.rowIndex,
+        identifier: row.identifier,
+        problem: "duplicate",
+        detail: "Randul repeta un cod de mai sus, cu aceeasi valoare. S-a folosit primul.",
       });
       continue;
     }

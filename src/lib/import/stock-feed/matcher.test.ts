@@ -324,3 +324,67 @@ test("fiecare combinatie cu acelasi id isi primeste propria modificare", () => {
     [["HS70553", 1, 3], ["HS70554", 2, 7]],
   );
 });
+
+// ── Acelasi cod de doua ori in fisier ──────────────────────────────────────
+//
+// Exportul furnizorului listeaza uneori acelasi cod de doua ori cu ACEEASI
+// cantitate, sub statusuri diferite ("STOC" si "LICHIDARE STOC"). Respins ca
+// pana acum, randul acela ar fi ramas neactualizat la fiecare rulare, la
+// nesfarsit, pentru o contradictie care nu exista.
+
+function unProdus(sku: string, stoc: number): CatalogEntry {
+  return {
+    id: "p1", name: "Produs", sku: null, external_id: null, gtin: null,
+    price: 100, stock_quantity: null, track_inventory: true,
+    variants: [{ id: "v1", title: "Unic", sku, stock_quantity: stoc, price: 100 }],
+  };
+}
+
+test("acelasi cod de doua ori, cu aceeasi cantitate: se aplica o data", () => {
+  const plan = buildStockPlan(
+    [
+      { rowIndex: 1, identifier: "A2080", stock: 2834, price: null },
+      { rowIndex: 2, identifier: "A2080", stock: 2834, price: null },
+    ],
+    [unProdus("A2080", 2882)],
+    { matchKey: "variant_sku", updatePrice: false },
+  );
+
+  assert.equal(plan.changes.length, 1, "o singura scriere, nu doua");
+  assert.equal(plan.changes[0].rowIndex, 1, "se foloseste primul rand");
+  assert.equal(plan.changes[0].stockTo, 2834);
+  /* Repetitia se spune totusi: e o problema de igiena a fisierului. */
+  assert.equal(plan.issues.length, 1);
+  assert.equal(plan.issues[0].rowIndex, 2);
+  assert.equal(plan.issues[0].problem, "duplicate");
+});
+
+test("acelasi cod cu cantitati DIFERITE se respinge in intregime", () => {
+  const plan = buildStockPlan(
+    [
+      { rowIndex: 1, identifier: "A2080", stock: 10, price: null },
+      { rowIndex: 2, identifier: "A2080", stock: 99, price: null },
+    ],
+    [unProdus("A2080", 5)],
+    { matchKey: "variant_sku", updatePrice: false },
+  );
+
+  assert.equal(plan.changes.length, 0, "nu ghicim care cantitate e buna");
+  assert.equal(plan.issues.length, 2);
+  assert.ok(plan.issues.every((i) => i.problem === "duplicate"));
+});
+
+test("trei aparitii, dintre care una diferita: se respinge tot", () => {
+  const plan = buildStockPlan(
+    [
+      { rowIndex: 1, identifier: "A2080", stock: 10, price: null },
+      { rowIndex: 2, identifier: "A2080", stock: 10, price: null },
+      { rowIndex: 3, identifier: "A2080", stock: 77, price: null },
+    ],
+    [unProdus("A2080", 5)],
+    { matchKey: "variant_sku", updatePrice: false },
+  );
+
+  assert.equal(plan.changes.length, 0);
+  assert.equal(plan.issues.length, 3);
+});

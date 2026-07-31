@@ -31,14 +31,35 @@ interface PageSectionsShape {
       id?: string;
       title?: string;
       sku?: string;
-      stock_quantity?: number;
-      price?: number;
+      /* Poate fi si sir: vezi `readNumber`. */
+      stock_quantity?: number | string;
+      price?: number | string;
     }[];
   };
   google?: { gtin?: string };
 }
 
-function readVariants(raw: unknown): CatalogVariant[] {
+/**
+ * Un numar dintr-un JSON scris de mai multe generatii de cod.
+ *
+ * In baza reala, 696 din 14.326 de combinatii tin `stock_quantity` si `price` ca
+ * SIR de caractere, nu ca numar. `Number.isFinite("5")` e `false`, deci varianta
+ * scurta le-ar fi citit pe toate ca 0. Nu s-ar fi stricat date, dar
+ * previzualizarea ar fi aratat sute de modificari inchipuite, de la 0 la valoarea
+ * adevarata, si ar fi ascuns exact schimbarile care conteaza.
+ *
+ * Sirul gol devine `fallback`: `Number("")` da 0, si asta si inseamna acolo.
+ */
+function readNumber(value: unknown, fallback: number): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  const text = String(value ?? "").trim();
+  if (text === "") return fallback;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** Exportata pentru teste: aici a fost bug-ul cu numerele scrise ca sir. */
+export function readVariants(raw: unknown): CatalogVariant[] {
   const ps = raw as PageSectionsShape | null;
   const combos = ps?.variants?.combinations;
   if (!Array.isArray(combos)) return [];
@@ -51,8 +72,8 @@ function readVariants(raw: unknown): CatalogVariant[] {
       id: c.id,
       title: typeof c.title === "string" ? c.title : c.id,
       sku: typeof c.sku === "string" && c.sku.trim() !== "" ? c.sku : null,
-      stock_quantity: Number.isFinite(c.stock_quantity) ? Number(c.stock_quantity) : 0,
-      price: Number.isFinite(c.price) ? Number(c.price) : 0,
+      stock_quantity: readNumber(c.stock_quantity, 0),
+      price: readNumber(c.price, 0),
     });
   }
   return out;
@@ -74,6 +95,28 @@ export async function loadCatalog(
     ? "id, name, sku, external_id, price, stock_quantity, track_inventory, page_sections"
     : "id, name, sku, external_id, price, stock_quantity, track_inventory";
 
+  /*
+   * Cate produse ar TREBUI sa fie. Comparatia de mai jos nu e paranoia.
+   *
+   * `fetchAllRows` e scris sa fie iertator: daca o fereastra eșueaza la mijlocul
+   * paginarii, scrie in consola si intoarce cate randuri a strans pana atunci. E
+   * potrivit pentru un sitemap sau un export, unde un rezultat incomplet e mai
+   * bun decat nimic.
+   *
+   * Aici nu e. Un catalog incomplet inseamna produse care EXISTA, dar nu apar in
+   * index, deci randurile lor din feed ar fi raportate drept negasite. Nu s-ar
+   * scrie nimic greșit, dar omul ar primi un ecran plin de probleme inchipuite si
+   * ar crede ca fisierul lui e de vina.
+   *
+   * Mai bine o eroare limpede decat un plan calculat pe jumatate de catalog.
+   */
+  const { count, error: countError } = await client
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+
+  if (countError) throw new Error(`Nu am putut numara produsele: ${countError.message}`);
+
   const rows = await fetchAllRows("stock-feed.catalog", (from, to) =>
     client
       .from("products")
@@ -83,6 +126,13 @@ export async function loadCatalog(
       .order("id")
       .range(from, to),
   );
+
+  const expected = count ?? 0;
+  if (rows.length < expected) {
+    throw new Error(
+      `Catalogul s-a citit doar pe jumatate (${rows.length} din ${expected} produse). Incearca din nou.`,
+    );
+  }
 
   return (rows as unknown as Record<string, unknown>[]).map((r) => ({
     id: String(r.id),

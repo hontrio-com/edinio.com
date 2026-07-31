@@ -17,6 +17,7 @@ import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
+import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
@@ -32,11 +33,7 @@ const JUDETE = [
   "Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea",
 ];
 
-export interface QuantityTier {
-  qty: number;
-  price: number;   // total bundle price
-  badge?: string;
-}
+export type { QuantityTier };
 
 export interface CustomizationFieldDef {
   id: string;
@@ -101,6 +98,17 @@ interface Props {
    * cos cand s-a deschis modalul.
    */
   onCartConsumed?: (liniiComandate: { productId: string; variantTitle?: string }[]) => void;
+  /**
+   * Clientul a schimbat o linie de cos din formular: `qty` zero inseamna stearsa.
+   *
+   * Sectiunea „Din cosul tau" arata cosul REAL al magazinului, deci si editarea
+   * trebuie sa ajunga acolo. Cat timp raminea doar in starea locala, stergerea
+   * disparea la prima reinchidere a formularului, fiindca modalul isi reciteste
+   * liniile din `cartItems` la fiecare deschidere.
+   *
+   * Cheia are forma din `lineKey` (produs, sau produs::varianta).
+   */
+  onCartLineChange?: (key: string, qty: number) => void;
   /** Pre-accepted "frequently bought together" set — companions at FBT-distributed prices. */
   fbtOffer?: { id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] };
 }
@@ -120,7 +128,7 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, customizationFields, cartItems, onCartConsumed, fbtOffer }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, customizationFields, cartItems, onCartConsumed, onCartLineChange, fbtOffer }: Props) {
   const color = business.primary_color;
   // Upsell-ul de cantitate se suprima in fluxul "Cumpara impreuna" (FBT): setul FBT
   // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
@@ -147,7 +155,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const inchide = useRef(onClose);
   useEffect(() => { inchide.current = onClose; }, [onClose]);
 
-  const [selectedTierIdx, setSelectedTierIdx] = useState(0);
+  // Treapta aleasa NU are stare proprie: se deduce din `quantity` (vezi
+  // `pretPeTrepte`). Cat timp a avut, butonul de treapta scria cantitatea iar
+  // bifa citea starea, deci apasarea pe „2 bucati" nu misca nimic pe ecran, iar
+  // comanda pleca cu pretul treptei ramase in stare — cea de o bucata.
   const [quantity, setQuantity] = useState(1);
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -198,16 +209,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // leave to hunt for codes). Revealed on demand via "Ai un cod?".
   const [showDiscountField, setShowDiscountField] = useState(false);
 
-  // Derive effective qty and raw subtotal (before discount)
-  //
-  // Treptele se aplica doar cand cantitatea ceruta CHIAR e o treapta. Paginile
-  // de produs cu selector de bucati pot cere orice numar, iar lista de trepte
-  // contine mereu si intrarea de o bucata: fara verificarea asta, cine alegea 7
-  // bucati pe pagina ajungea in formular cu una singura, fara niciun semn.
-  const treaptaPotrivita = hasTiers ? tiers!.findIndex((t) => t.qty === quantity) : -1;
-  const peTrepte = treaptaPotrivita >= 0;
-  const effectiveQty = peTrepte ? tiers![treaptaPotrivita].qty : quantity;
-  const productSubtotal = peTrepte ? tiers![treaptaPotrivita].price : product.price * quantity;
+  // Cantitatea, totalul afisat si pretul unitar trimis serverului ies TOATE din
+  // acelasi calcul, ca sa nu mai poata spune lucruri diferite (vezi
+  // `pretPeTrepte`). Bifa de pe butonul de treapta citeste tot de acolo.
+  const treapta = pretPeTrepte(hasTiers ? tiers : undefined, quantity, product.price);
+  const productSubtotal = treapta.subtotal;
   // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
@@ -231,9 +237,17 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
   const fbtSubtotal = fbtOffer ? fbtOffer.items.reduce((s, i) => s + i.price * i.quantity, 0) : 0;
   const subtotal = Math.round((productSubtotal + cartSubtotal + bumpSubtotal + fbtSubtotal) * 100) / 100;
-  const setCartQty = (key: string, qty: number) =>
+  // Editarea scrie in DOUA locuri: starea locala, ca formularul sa se actualizeze
+  // pe loc, si cosul magazinului prin `onCartLineChange`, ca modificarea sa
+  // supravietuiasca inchiderii formularului.
+  const setCartQty = (key: string, qty: number) => {
     setCartLines((lines) => qty <= 0 ? lines.filter((l) => cartLineKey(l) !== key) : lines.map((l) => cartLineKey(l) === key ? { ...l, quantity: qty } : l));
-  const removeCartLine = (key: string) => setCartLines((lines) => lines.filter((l) => cartLineKey(l) !== key));
+    onCartLineChange?.(key, Math.max(0, qty));
+  };
+  const removeCartLine = (key: string) => {
+    setCartLines((lines) => lines.filter((l) => cartLineKey(l) !== key));
+    onCartLineChange?.(key, 0);
+  };
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
 
   // Apply discount to subtotal
@@ -274,7 +288,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!open || !sessionId) return;
     const phoneDigits = form.phone.replace(/\D/g, "");
     if (!form.email.includes("@") && phoneDigits.length < 6) return;
-    const unit = effectiveQty > 0 ? Math.round((productSubtotal / effectiveQty) * 100) / 100 : product.price;
+    const unit = quantity > 0 ? Math.round((productSubtotal / quantity) * 100) / 100 : product.price;
     if (trackTimer.current) clearTimeout(trackTimer.current);
     trackTimer.current = setTimeout(() => {
       void trackAbandonedCart({
@@ -284,11 +298,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         name: form.name.trim() || undefined,
         email: form.email.trim() || undefined,
         phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
-        items: [{ product_id: product.id, name: product.name, price: unit, quantity: effectiveQty, image_url: product.images?.[0] ?? null }],
+        items: [{ product_id: product.id, name: product.name, price: unit, quantity, image_url: product.images?.[0] ?? null }],
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
-  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, effectiveQty, product.id, product.name, product.price, product.images]);
+  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, quantity, product.id, product.name, product.price, product.images]);
 
   // Funnel event: opening the order form = InitiateCheckout / begin_checkout.
   // The single-product buy-now flow has no cart step, so this is where the
@@ -304,11 +318,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Reset on open
   useEffect(() => {
     if (!open) return;
-    // Cantitatea aleasa pe pagina, cand pagina are selector. Cu trepte de
-    // cantitate, se preselecteaza treapta cu exact atatea bucati, daca exista.
+    // Cantitatea aleasa pe pagina, cand pagina are selector. Treapta se bifeaza
+    // singura daca exista una cu exact atatea bucati.
     const cerute = Math.max(1, Math.floor(Number(initialQuantity) || 1));
-    const treapta = tiers ? tiers.findIndex((t) => t.qty === cerute) : -1;
-    setSelectedTierIdx(treapta >= 0 ? treapta : 0);
     setQuantity(cerute);
     setErrors({});
     setDiscountInput("");
@@ -510,7 +522,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
-    const unitPrice = hasTiers ? tiers![selectedTierIdx].price / tiers![selectedTierIdx].qty : product.price;
+    const unitPrice = treapta.unitPrice;
     startTransition(async () => {
       // Build customization payload
       const customizationPayload = hasCustomization
@@ -534,7 +546,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         product_id: product.id,
         product_name: product.name,
         product_price: unitPrice,
-        quantity: effectiveQty,
+        quantity,
         shipping_cost: shipping,
         customer_name: form.name,
         customer_phone: form.phone.replace(/[\s\-().]/g, ""),
@@ -658,7 +670,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Alege cantitatea</p>
                   {tiers!.map((tier, i) => {
-                    const selected = selectedTierIdx === i;
+                    const selected = treapta.index === i;
                     const unitPrice = tier.price / tier.qty;
                     const baseTotal = product.price * tier.qty;
                     const savings = baseTotal - tier.price;
@@ -1030,10 +1042,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   color={color}
                   country={isIntl ? form.country : undefined}
                   postCode={isIntl ? form.postCode : undefined}
-                  weightKg={isIntl && dpdUseWeight && product.weight_grams ? (product.weight_grams * effectiveQty) / 1000 : undefined}
+                  weightKg={isIntl && dpdUseWeight && product.weight_grams ? (product.weight_grams * quantity) / 1000 : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
                   cart={[
-                    { productId: product.id, quantity: effectiveQty },
+                    { productId: product.id, quantity },
                     ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
                     ...(fbtOffer ? fbtOffer.items.map((i) => ({ productId: i.product_id, quantity: i.quantity })) : []),
                     ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
@@ -1195,7 +1207,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {/* Order summary */}
               <div className="rounded-xl p-3 space-y-1.5 text-sm bg-muted/40 border border-border">
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Produs ({effectiveQty} buc)</span>
+                  <span>Produs ({quantity} buc)</span>
                   <span className="font-medium text-foreground">{formatPrice(productSubtotal)}</span>
                 </div>
                 {cart.map((ci) => (

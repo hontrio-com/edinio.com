@@ -1021,6 +1021,13 @@ export function ProductPageDetailed({
               if (!cos) return;
               cos.restoreCart(cosDupaComanda(cos.items, liniiComandate));
             }}
+            onCartLineChange={(key, qty) => {
+              // Sectiunea „Din cosul tau" arata cosul real, deci editarea din
+              // formular il modifica pe el, nu doar afisajul.
+              if (demo || !cos) return;
+              if (qty <= 0) cos.removeItem(key);
+              else cos.updateQty(key, qty);
+            }}
             fbtOffer={fbtOffer}
           />
         </>

@@ -53,7 +53,7 @@ export type SheetCell = string | number | boolean | Date | null | undefined;
  * numerele si datele se interpreteaza mai incolo, de parserele care stiu ce
  * inseamna fiecare coloana.
  */
-export function sheetToRecords(rows: SheetCell[][]): ParsedCsv {
+export function sheetToRecords(rows: SheetCell[][], maxRows: number = MAX_CSV_ROWS): ParsedCsv {
   const headerIndex = rows.findIndex((r) => r.some((c) => cellToText(c) !== ""));
   if (headerIndex === -1) return { headers: [], rows: [] };
 
@@ -74,7 +74,15 @@ export function sheetToRecords(rows: SheetCell[][]): ParsedCsv {
   });
 
   const out: Record<string, string>[] = [];
-  for (let r = headerIndex + 1; r < rows.length && out.length < MAX_CSV_ROWS; r++) {
+  let truncated = false;
+  for (let r = headerIndex + 1; r < rows.length; r++) {
+    if (out.length >= maxRows) {
+      /* Mai exista randuri cu ceva in ele dincolo de plafon? Doar atunci taiem. */
+      truncated = rows
+        .slice(r)
+        .some((rest) => (rest ?? []).some((c) => cellToText(c) !== ""));
+      break;
+    }
     const row = rows[r] ?? [];
     const record: Record<string, string> = {};
     let hasValue = false;
@@ -89,7 +97,7 @@ export function sheetToRecords(rows: SheetCell[][]): ParsedCsv {
     if (hasValue) out.push(record);
   }
 
-  return { headers, rows: out };
+  return { headers, rows: out, truncated };
 }
 
 /**
@@ -127,7 +135,11 @@ export type ParseTabularResult = { parsed: ParsedCsv; format: TabularFormat } | 
  * foaie; daca apare nevoia de a alege, se adauga un pas in interfata, dar pana
  * atunci o intrebare in plus doar incurca.
  */
-export async function parseTabular(buffer: Buffer, fileName: string): Promise<ParseTabularResult> {
+export async function parseTabular(
+  buffer: Buffer,
+  fileName: string,
+  maxRows: number = MAX_CSV_ROWS,
+): Promise<ParseTabularResult> {
   const byContent = detectTabularFormat(buffer);
 
   if (byContent === "xls_vechi") {
@@ -147,7 +159,7 @@ export async function parseTabular(buffer: Buffer, fileName: string): Promise<Pa
       const first = sheets[0];
       if (!first) return { error: "Fisierul nu are nicio foaie de calcul" };
 
-      const parsed = sheetToRecords(first.data as SheetCell[][]);
+      const parsed = sheetToRecords(first.data as SheetCell[][], maxRows);
       if (parsed.headers.length === 0) return { error: "Foaia de calcul nu are un antet valid" };
       if (parsed.rows.length === 0) return { error: "Foaia de calcul nu contine randuri" };
       return { parsed, format: "xlsx" };
@@ -159,7 +171,7 @@ export async function parseTabular(buffer: Buffer, fileName: string): Promise<Pa
   /* CSV. Extensia nu conteaza: daca nu e ZIP, incercam text. */
   void fileName;
   try {
-    const parsed = parseCsv(buffer.toString("utf-8"));
+    const parsed = parseCsv(buffer.toString("utf-8"), maxRows);
     if (parsed.headers.length === 0) return { error: "Fisierul nu are un antet valid" };
     if (parsed.rows.length === 0) return { error: "Fisierul nu contine randuri" };
     return { parsed, format: "csv" };

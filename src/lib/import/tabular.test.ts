@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { detectTabularFormat, recordsToCsv, sheetToRecords, type SheetCell } from "./tabular";
-import { parseCsv } from "./csv";
+import { MAX_STOCK_ROWS, parseCsv } from "./csv";
 
 /**
  * Citirea fisierelor tabelare.
@@ -101,6 +101,49 @@ test("numarul de randuri e plafonat", () => {
   const rows: SheetCell[][] = [["sku"]];
   for (let i = 0; i < 5200; i++) rows.push([`SKU-${i}`]);
   assert.equal(sheetToRecords(rows).rows.length, 5000);
+});
+
+// ── Plafonul, si faptul ca taierea se SPUNE ────────────────────────────────
+//
+// Plafonul implicit e pentru importul de produse. Feedul de stoc are un rand
+// per varianta, deci cere unul mult mai mare: un magazin real cu 1221 de
+// produse are 12.048 de variante, si plafonul de 5000 taia doua treimi.
+
+test("taierea la plafon e raportata, nu tacuta", () => {
+  const rows: SheetCell[][] = [["sku"]];
+  for (let i = 0; i < 12; i++) rows.push([`SKU-${i}`]);
+
+  const taiat = sheetToRecords(rows, 10);
+  assert.equal(taiat.rows.length, 10);
+  assert.equal(taiat.truncated, true, "trebuie sa spuna ca a taiat");
+
+  const intreg = sheetToRecords(rows, 100);
+  assert.equal(intreg.rows.length, 12);
+  assert.equal(intreg.truncated, false);
+});
+
+test("randurile goale de dupa plafon nu trec drept taiere", () => {
+  // Multe exporturi au zeci de randuri goale la coada. Daca acelea ar marca
+  // fisierul ca taiat, feedul ar fi respins degeaba.
+  const rows: SheetCell[][] = [["sku"], ["A"], ["B"], [null, null], ["", ""], []];
+  const p = sheetToRecords(rows, 2);
+  assert.equal(p.rows.length, 2);
+  assert.equal(p.truncated, false);
+});
+
+test("un feed cat cel real de la un magazin cu variante incape", () => {
+  // 12.178 de randuri, exact marimea feedului care a scos plafonul la iveala.
+  const linii = ["Cod;stoc"];
+  for (let i = 0; i < 12178; i++) linii.push(`H${i}-M;${i % 40}`);
+
+  const implicit = parseCsv(linii.join("\n"));
+  assert.equal(implicit.rows.length, 5000, "plafonul de produse taie");
+  assert.equal(implicit.truncated, true);
+
+  const caFeedDeStoc = parseCsv(linii.join("\n"), MAX_STOCK_ROWS);
+  assert.equal(caFeedDeStoc.rows.length, 12178, "feedul de stoc trebuie sa il ia intreg");
+  assert.equal(caFeedDeStoc.truncated, false);
+  assert.equal(caFeedDeStoc.rows[12177].Cod, "H12177-M");
 });
 
 // ── Dus si intors prin CSV ─────────────────────────────────────────────────

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { MAX_STOCK_ROWS } from "@/lib/import/csv";
 import { safeFetchFile } from "@/lib/import/ssrf";
 import { parseTabular } from "@/lib/import/tabular";
 import { autoMapStockColumns } from "@/lib/import/stock-feed/mapping";
@@ -106,8 +107,11 @@ export async function probeStockFeedUrl(url: string): Promise<ProbeResult | { er
   const fetched = await safeFetchFile(url);
   if ("error" in fetched) return { error: fetched.error };
 
-  const read = await parseTabular(fetched.buffer, url);
+  const read = await parseTabular(fetched.buffer, url, MAX_STOCK_ROWS);
   if ("error" in read) return { error: read.error };
+  if (read.parsed.truncated) {
+    return { error: `Feedul are peste ${MAX_STOCK_ROWS.toLocaleString("ro-RO")} de randuri.` };
+  }
 
   return {
     headers: read.parsed.headers,

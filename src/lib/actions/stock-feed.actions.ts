@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadToR2, deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
-import { parseCsv } from "@/lib/import/csv";
+import { parseCsv, MAX_STOCK_ROWS } from "@/lib/import/csv";
 import { parseTabular, recordsToCsv } from "@/lib/import/tabular";
 import { hasAcceptedExtension } from "@/lib/import/tabular-formats";
 import { autoMapStockColumns, readFeedRows } from "@/lib/import/stock-feed/mapping";
@@ -143,9 +143,21 @@ export async function createStockFeedJob(
    * Pasii de mai departe (previzualizare, pornire) il recitesc de acolo si nu
    * trebuie sa stie nimic despre XLSX.
    */
-  const read = await parseTabular(buffer, file.name);
+  const read = await parseTabular(buffer, file.name, MAX_STOCK_ROWS);
   if ("error" in read) return { error: read.error };
   const parsed = read.parsed;
+
+  /*
+   * Taierea se spune, nu se trece cu vederea. Un feed taiat la jumatate arata pe
+   * ecran exact ca unul intreg: acelasi verde, aceleasi cifre, doar ca jumatate
+   * din stocuri raman vechi si nimeni nu afla de ce.
+   */
+  if (parsed.truncated) {
+    return {
+      error: `Fisierul are peste ${MAX_STOCK_ROWS.toLocaleString("ro-RO")} de randuri. Imparte-l in mai multe fisiere.`,
+    };
+  }
+
   const text = read.format === "csv" ? buffer.toString("utf-8") : recordsToCsv(parsed);
 
   const mapping = autoMapStockColumns(parsed.headers);
@@ -225,7 +237,7 @@ export async function previewStockFeed(
   if (!job.file_url) return { error: "Fisierul nu mai este disponibil. Incarca-l din nou." };
 
   try {
-    const parsed = parseCsv(await fetchRawCsv(job.file_url));
+    const parsed = parseCsv(await fetchRawCsv(job.file_url), MAX_STOCK_ROWS);
     const rows = readFeedRows(parsed, mapping, { updatePrice: options.update_price });
     const catalog = await loadCatalog(admin, businessId, options.match_key);
     const plan = buildStockPlan(rows, catalog, {
@@ -264,7 +276,7 @@ export async function startStockFeed(
      * doua ecrane catalogul poate fi editat, iar ce se scrie trebuie sa fie
      * calculat pe starea de ACUM, nu pe una de acum cinci minute.
      */
-    const parsed = parseCsv(await fetchRawCsv(job.file_url));
+    const parsed = parseCsv(await fetchRawCsv(job.file_url), MAX_STOCK_ROWS);
     const rows = readFeedRows(parsed, mapping, { updatePrice: options.update_price });
     const catalog = await loadCatalog(admin, businessId, options.match_key);
     const plan = buildStockPlan(rows, catalog, {

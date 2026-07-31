@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { MAX_STOCK_ROWS } from "@/lib/import/csv";
 import { safeFetchFile } from "@/lib/import/ssrf";
 import { parseTabular } from "@/lib/import/tabular";
 import { loadCatalog } from "./catalog";
@@ -49,10 +50,20 @@ export async function runSource(
     return { ok: false, error: fetched.error };
   }
 
-  const read = await parseTabular(fetched.buffer, source.url);
+  const read = await parseTabular(fetched.buffer, source.url, MAX_STOCK_ROWS);
   if ("error" in read) {
     await markRun(admin, source, { ok: false, error: read.error });
     return { ok: false, error: read.error };
+  }
+  /*
+   * Un feed taiat NU se scrie. Aici nu e nimeni care sa se uite la ecran: cronul
+   * ar actualiza o parte, ar raporta reusita, iar restul stocurilor ar ramane
+   * vechi la nesfarsit, fara ca nimic sa arate a problema.
+   */
+  if (read.parsed.truncated) {
+    const error = `Feedul are peste ${MAX_STOCK_ROWS.toLocaleString("ro-RO")} de randuri.`;
+    await markRun(admin, source, { ok: false, error });
+    return { ok: false, error };
   }
   const parsed = read.parsed;
 

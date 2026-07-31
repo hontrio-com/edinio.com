@@ -186,7 +186,19 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
 
   home.push(section("gallery", "gallery", "grid", notFalse(features.show_gallery)));
   home.push(section("about", "about", "classic", notFalse(features.show_about)));
-  home.push(section("contact", "contact", "classic", notFalse(features.show_contact)));
+
+  /*
+   * Contactul e OPRIT implicit, singurul dintre cele trei care e asa.
+   *
+   * Nu se pierde nimic: footerul are deja o coloana Contact cu telefon, WhatsApp,
+   * email si oras, iar blocul legal de sub el arata identitatea firmei cu tot cu
+   * sediile — si acela nu se poate ascunde. Repetat si in corpul paginii
+   * principale, doar lungea pagina cu date pe care clientul le are oricum jos.
+   *
+   * `bool`, nu `notFalse`: apare doar cand comerciantul o cere explicit, din
+   * Integrari → „Informatii de contact".
+   */
+  home.push(section("contact", "contact", "classic", bool(features.show_contact)));
 
   // Sectiunea poarta comutatorul REAL al barei. „Arata pe pagina magazinului"
   // ramane o regula de PAGINA, aplicata la randare: bagata aici, ar fi stins

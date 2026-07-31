@@ -10,7 +10,16 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 export function ContactClassic() {
   const { business, features, color } = useStoreChrome();
   const areDate = !!(business.phone || business.email || business.store_address);
-  if (features.show_contact === false || !areDate) return null;
+  /*
+   * `!== true`, nu `=== false`: sectiunea e OPRITA implicit si apare doar cand
+   * comerciantul o cere. Datele de contact sunt oricum in footer, la fel si
+   * identitatea firmei, care nici nu se poate ascunde.
+   *
+   * A doua poarta pe acelasi comutator: `SectionRenderer` verifica deja `enabled`
+   * din design. Se tin la fel dinadins, ca sectiunea sa nu reapara pe vreo cale
+   * care ar randa-o direct.
+   */
+  if (features.show_contact !== true || !areDate) return null;
 
   const iconBox = { backgroundColor: `${color}20`, color };
 

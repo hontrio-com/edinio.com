@@ -4,6 +4,7 @@ import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
 import { deliverStoreEmail } from "@/lib/email/deliver";
 import { renderTemplate } from "@/lib/email/templates";
+import type { BillingCompany } from "@/lib/billing/company";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -730,6 +731,7 @@ export async function sendNewOrderEmail(
     delivery_type?: string | null;
     locker_name?: string | null;
     custom_fields?: Record<string, string> | null;
+    billing_company?: BillingCompany | null;
   },
   sender?: StoreEmailSender,
 ) {
@@ -776,10 +778,30 @@ export async function sendNewOrderEmail(
     ? "Se incaseaza la livrare"
     : "In asteptarea confirmarii platii";
 
+  // Comanda pe firma: comerciantul trebuie sa vada datele de facturare inca din
+  // notificare, ca sa nu deschida panoul doar ca sa afle daca emite pe persoana
+  // fizica sau pe firma. Numele de mai sus ramane persoana de contact.
+  const firma = order.billing_company ?? null;
   const customerRows = [
     infoRow("Nume", esc(order.customer_name)),
     infoRow("Telefon", esc(order.customer_phone)),
     order.customer_email ? infoRow("Email", esc(order.customer_email)) : "",
+    firma ? infoRow("Firma", esc(firma.company_name)) : "",
+    firma
+      ? infoRow(
+          "CUI",
+          esc(firma.vat_payer ? `RO${firma.cui}` : firma.cui) +
+            // Fara confirmare, denumirea si statutul de TVA sunt cele scrise de
+            // client. Se spune AICI, in notificare, nu doar in panou: emailul e
+            // ce citeste comerciantul inainte sa emita factura.
+            (firma.verified ? "" : ' <span style="color:#b45309;">(date neconfirmate la ANAF)</span>') +
+            (firma.inactive ? ' <span style="color:#b45309;">(firma inactiva fiscal)</span>' : "")
+        )
+      : "",
+    firma && firma.reg_com ? infoRow("Reg. com.", esc(firma.reg_com)) : "",
+    firma && (firma.address || firma.city || firma.county)
+      ? infoRow("Sediu", esc([firma.address, firma.city, firma.county].filter(Boolean).join(", ")))
+      : "",
   ].join("");
 
   const customRows = order.custom_fields && Object.keys(order.custom_fields).length

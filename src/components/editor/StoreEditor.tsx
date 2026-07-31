@@ -40,6 +40,7 @@ interface PageContent {
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
     hidden_fields?: string[];
     email_field?: { enabled: boolean; required: boolean };
+    company_fields?: { enabled: boolean };
   };
   how_it_works_section?: { enabled: boolean; title: string; steps: Array<{ title: string; desc: string; }>; };
   faq_section?: { enabled: boolean; title: string; items: Array<{ q: string; a: string; }>; };
@@ -1504,6 +1505,31 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
                         <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", emailField.required ? "translate-x-4" : "translate-x-0")} />
                       </button>
                     </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Comenzi pe firma */}
+            {(() => {
+              const companyFields = pageContent.checkout_config?.company_fields ?? { enabled: false };
+              return (
+                <div className="border border-border rounded-xl p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Comenzi pe firma</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Clientul alege persoana fizica sau juridica; pentru firma completeaza CUI-ul si datele se preiau automat din ANAF</p>
+                    </div>
+                    <button type="button"
+                      onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, company_fields: { enabled: !companyFields.enabled } } }))}
+                      className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", companyFields.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+                      <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", companyFields.enabled ? "translate-x-4" : "translate-x-0")} />
+                    </button>
+                  </div>
+                  {companyFields.enabled && (
+                    <p className="text-[10px] text-muted-foreground pt-2 border-t border-border">
+                      Datele firmei ajung pe factura. Adresa de livrare ramane cea completata de client, separat de sediul fiscal.
+                    </p>
                   )}
                 </div>
               );

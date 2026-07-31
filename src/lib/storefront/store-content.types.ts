@@ -40,6 +40,14 @@ export interface StorePageContent {
     extras?: Array<{ id: string; label: string; price: number; description?: string }>;
     hidden_fields?: string[];
     email_field?: { enabled: boolean; required: boolean };
+    /**
+     * Comenzi pe firma: selectorul „persoana fizica / persoana juridica" plus
+     * campul de CUI cu preluare din ANAF. Implicit OPRIT — pentru un magazin
+     * obisnuit nu se schimba nimic. Serverul recitesc comutatorul si ignora
+     * datele de firma daca e stins, fiindca actiunile de comanda sunt
+     * endpointuri publice si nu se pot baza pe ce arata interfata.
+     */
+    company_fields?: { enabled: boolean };
   };
   show_announcement_on_store?: boolean;
   sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };

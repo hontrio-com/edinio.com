@@ -21,18 +21,13 @@ import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
+import { CompanyFields, useCompanyBilling } from "./CompanyFields";
+import { JUDETE } from "@/lib/ro/judete";
 import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 
-const JUDETE = [
-  "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
-  "Braila","Brasov","Buzau","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj",
-  "Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Ilfov","Maramures",
-  "Mehedinti","Mures","Neamt","Olt","Prahova","Salaj","Satu Mare","Sibiu","Suceava",
-  "Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea",
-];
 
 export type { QuantityTier };
 
@@ -55,6 +50,7 @@ interface CheckoutConfig {
   extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
   hidden_fields?: string[];
   email_field?: { enabled: boolean; required: boolean };
+  company_fields?: { enabled: boolean };
 }
 
 interface Props {
@@ -159,6 +155,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Discount code is OFF by default (hidden unless the merchant enabled it in the editor).
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? ["discount"];
   const emailField = liveCheckoutConfig?.email_field ?? { enabled: true, required: false };
+  // Comenzi pe firma — acelasi reglaj si acelasi carlig ca in formularul pe cos,
+  // ca validarea CUI-ului sa nu poata diverge intre cele doua cai de comanda.
+  const companyFieldsOn = liveCheckoutConfig?.company_fields?.enabled === true;
 
   // `onClose` vine ca functie noua la fiecare randare a paginii gazda. Citita
   // direct in efectul de resetare, il re-declansa si golea formularul sub
@@ -192,6 +191,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [intlEnabled, setIntlEnabled] = useState(false);
   const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
+  // In afara tarii, blocul de firma nu se arata: cifra de control a CUI-ului e
+  // romaneasca, deci un cod de TVA european ar fi respins si ar bloca comanda.
+  const companyEnabled = companyFieldsOn && !isIntl;
+  const companyBilling = useCompanyBilling(companyEnabled);
   // DPD international services don't support cash-on-delivery — EU orders pay online.
   // Klarna is hardcoded to RO/RON (the store currency); Klarna requires the consumer
   // country to match the currency, so it can't serve non-RO orders — exclude it abroad.
@@ -508,6 +511,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
+    Object.assign(e, companyBilling.validateCompany());
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
     if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
     for (const field of customFields) {
@@ -576,6 +580,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
+        // Datele de pe factura pentru comenzile pe firma. Separate de adresa de
+        // livrare de mai sus, care ramane cea pe care s-a cotat transportul.
+        billing_company: companyBilling.billingPayload() ?? undefined,
         discount_id: appliedDiscount?.id,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
@@ -1052,6 +1059,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </IconInput>
                 {errors.address && <p className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
               </div>
+
+              {/* Persoana fizica / juridica + datele de facturare */}
+              {companyEnabled && (
+                <CompanyFields motor={companyBilling} color={color} errors={errors} fieldCls={inputCls} Wrap={IconInput} />
+              )}
 
               {/* Courier selection */}
               {hasCouriers && (

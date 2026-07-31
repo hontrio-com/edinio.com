@@ -55,8 +55,19 @@ export default async function OrdersPage({
   if (status !== "all") listQuery = listQuery.eq("status", status);
   const term = orSafeTerm(q);
   if (term) {
+    // Denumirea firmei si CUI-ul intra si ele in cautare: lista le AFISEAZA pe
+    // comenzile pe persoana juridica, iar un camp care se vede pe ecran dar nu se
+    // poate cauta arata ca o comanda disparuta.
+    //
+    // In baza, CUI-ul e numai cifre; panoul, emailul si factura il scriu insa cu
+    // „RO" in fata la platitorii de TVA. Comerciantul copiaza fix ce vede, deci
+    // prefixul se taie pentru ramura de CUI — si NUMAI pentru ea: o firma se poate
+    // numi „Rodbun", iar cautarea dupa nume n-are de ce sa piarda primele doua
+    // litere.
+    const termCui = term.replace(/^ro(?=\d)/i, "");
     listQuery = listQuery.or(
-      `order_number.ilike.%${term}%,customer_name.ilike.%${term}%,customer_phone.ilike.%${term}%`
+      `order_number.ilike.%${term}%,customer_name.ilike.%${term}%,customer_phone.ilike.%${term}%,` +
+      `billing_company->>company_name.ilike.%${term}%,billing_company->>cui.ilike.%${termCui}%`
     );
   }
   const fromIdx = (page - 1) * ORDERS_PAGE_SIZE;

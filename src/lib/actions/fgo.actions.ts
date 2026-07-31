@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
+import { invoiceParty } from "@/lib/billing/invoice-party";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
   createFgoInvoice,
@@ -266,16 +267,21 @@ export async function generateFgoInvoice(
       ? new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString().split("T")[0]
       : undefined;
 
+    // fGO avea de la inceput `tip` si `codUnic` in tip; doar nu i se trimitea
+    // nimic pe ele.
+    const parte = invoiceParty(order, { ...addr, address: addr?.address ?? addr?.street ?? null });
+
     const result = await createFgoInvoice(
       config,
-      order.customer_name,
+      parte.name,
       {
-        judet: addr?.county ?? undefined,
-        localitate: addr?.city ?? undefined,
-        adresa: addr?.address ?? addr?.street ?? undefined,
+        judet: parte.county ?? undefined,
+        localitate: parte.city ?? undefined,
+        adresa: parte.address ?? undefined,
         email: order.customer_email ?? undefined,
         telefon: order.customer_phone,
-        tip: "PF",
+        tip: parte.isCompany ? "PJ" : "PF",
+        codUnic: parte.vatCode ?? undefined,
       },
       items,
       { dueDate, idExtern: order.order_number ? String(order.order_number) : undefined },

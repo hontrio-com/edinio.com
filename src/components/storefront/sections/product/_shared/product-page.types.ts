@@ -39,6 +39,7 @@ export interface PageContent {
   checkout_config?: {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
+    company_fields?: { enabled: boolean };
   };
 }
 

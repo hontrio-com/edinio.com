@@ -246,6 +246,8 @@ export interface MerchantInvoiceParams {
     name: string;
     // CIF firma sau CNP persoana fizica; ANAF accepta "-", 0 sau sir de 0 la PF.
     vatCode?: string;
+    /** Numarul de la registrul comertului. Doar la persoane juridice. */
+    regCom?: string;
     country?: string;
     address?: string;
     city?: string;

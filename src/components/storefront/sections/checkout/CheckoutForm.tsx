@@ -9,7 +9,9 @@ import {
 import { formatPrice } from "@/lib/utils/format";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { CourierSelector } from "@/components/ministore/CourierSelector";
+import { CompanyFields } from "@/components/ministore/CompanyFields";
 import { OrderBump } from "@/components/ministore/OrderBump";
+import { JUDETE } from "@/lib/ro/judete";
 import type { CheckoutEngine } from "./checkout-core";
 import type { CheckoutPreview } from "./checkout-preview";
 import { CheckoutCartLines, CheckoutTotals } from "./CheckoutSummary";
@@ -26,14 +28,6 @@ import { CheckoutCartLines, CheckoutTotals } from "./CheckoutSummary";
  * el isi gaseste motorul primul camp gresit) si `autoComplete`: pe telefon, unde
  * se dau majoritatea comenzilor, fara el nu se completeaza nimic automat.
  */
-const JUDETE = [
-  "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
-  "Braila","Brasov","Buzau","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj",
-  "Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Ilfov","Maramures",
-  "Mehedinti","Mures","Neamt","Olt","Prahova","Salaj","Satu Mare","Sibiu","Suceava",
-  "Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea",
-];
-
 const fieldCls = "flex-1 px-3 py-2.5 text-sm text-foreground bg-surface placeholder:text-muted-foreground focus:outline-none";
 
 function FieldWrap({ icon: Icon, error, children }: { icon: React.ElementType; error?: boolean; children: React.ReactNode }) {
@@ -69,6 +63,8 @@ export function CheckoutForm({
     belowMinOrder,
     bumps,
     acceptedBumpOffers,
+    companyBilling,
+    companyEnabled,
     customFields,
     customValues,
     discountAmount,
@@ -202,6 +198,11 @@ export function CheckoutForm({
             </FieldWrap>
             {errors.address && <p id={`${uid}-address-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
           </div>
+          {/* Persoana fizica / juridica + datele de facturare. Asezate dupa adresa
+              de livrare, ca sa fie limpede ca sunt doua lucruri diferite. */}
+          {companyEnabled && (
+            <CompanyFields motor={companyBilling} color={color} errors={errors} fieldCls={fieldCls} Wrap={FieldWrap} />
+          )}
           {/* Courier selection */}
           {hasCouriers && (
             <CourierSelector

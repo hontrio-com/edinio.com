@@ -14,6 +14,7 @@ import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
+import { useCompanyBilling } from "@/components/ministore/CompanyFields";
 import { type CheckoutPreview } from "./checkout-preview";
 
 /**
@@ -74,6 +75,9 @@ export function useCheckoutOrder({
   // Discount code is OFF by default — same semantics as the editor toggle and OrderModal.
   const hiddenFields = checkoutConfig?.hidden_fields ?? ["discount"];
   const emailField = checkoutConfig?.email_field ?? emailFieldConfig;
+  // Comenzi pe firma. Implicit oprit: un magazin care nu a pornit reglajul arata
+  // exact formularul de pana acum, fara niciun camp in plus.
+  const companyFieldsOn = checkoutConfig?.company_fields?.enabled === true;
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
@@ -131,6 +135,15 @@ export function useCheckoutOrder({
   const [intlEnabled, setIntlEnabled] = useState(preview?.intlEnabled ?? false);
   const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
+  // Comenzile din afara tarii NU primesc blocul de firma: cifra de control a
+  // CUI-ului e un algoritm strict romanesc, deci orice cod de TVA european ar fi
+  // respins ca „invalid" si ar bloca trimiterea formularului. Facturarea B2B
+  // intracomunitara e alta discutie, cu taxare inversa cu tot.
+  const companyEnabled = companyFieldsOn && !isIntl;
+  // Starea si cautarea ANAF stau in acelasi carlig si pentru modalul „cumpara
+  // acum", ca regulile de validare a CUI-ului sa nu poata diverge intre cele doua
+  // formulare. Chemat neconditionat: pornit sau nu, e acelasi numar de carlige.
+  const companyBilling = useCompanyBilling(companyEnabled);
   // Total cart weight (kg) from per-product weights; used for the live intl quote.
   const totalWeightKg = items.reduce((s, i) => s + ((productWeights?.[i.productId] ?? 0) * i.quantity), 0) / 1000;
   // DPD international services don't support cash-on-delivery — EU orders pay online.
@@ -309,6 +322,10 @@ export function useCheckoutOrder({
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
+    // Campurile de firma stau in formular imediat dupa adresa, deci si erorile
+    // lor intra aici: `Object.keys` pastreaza ordinea, iar dupa prima cheie se
+    // muta focusul.
+    Object.assign(e, companyBilling.validateCompany());
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
     if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
     for (const field of customFields) {
@@ -364,6 +381,10 @@ export function useCheckoutOrder({
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
+        // Datele de pe factura, cand clientul a ales persoana juridica. `undefined`
+        // altfel — comanda ramane exact ce era. NU atinge adresa de livrare de mai
+        // sus: pretul transportului e semnat pe destinatia aceea.
+        billing_company: companyBilling.billingPayload() ?? undefined,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
         vat_amount: vatAmount,
@@ -449,6 +470,8 @@ export function useCheckoutOrder({
     bumps,
     cardDiscountAmount,
     codDiscountAmount,
+    companyBilling,
+    companyEnabled,
     customFields,
     customValues,
     discountAmount,

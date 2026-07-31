@@ -16,6 +16,8 @@ import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap } from "@/lib/storefront/variants";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { verifyShippingQuote } from "@/lib/shipping/quote-token";
+import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
+import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
@@ -171,6 +173,53 @@ function validateExtras(
     .map((e) => ({ id: e.id, label: e.label, price: round2(Number(e.price)) }));
 }
 
+/**
+ * Datele de facturare pe firma, hotarate de SERVER.
+ *
+ * Trei filtre, in ordinea asta, si toate trei sunt necesare:
+ *
+ *   1. COMUTATORUL. Se citeste din `page_content`, nu din ce a trimis browserul.
+ *      Actiunile astea sunt exporturi dintr-un modul `"use server"`, adica
+ *      endpointuri publice: pe un magazin cu reglajul stins, oricine ar putea
+ *      atasa oricarei comenzi date de firma pe care comerciantul nu le-a cerut
+ *      niciodata. Acelasi principiu ca la `validateExtras`, care nu crede
+ *      preturile venite de la client.
+ *   2. FORMA. `parseBillingCompany` taie sirurile, verifica cifra de control a
+ *      CUI-ului si respinge blocul daca lipseste denumirea — o factura fara ele
+ *      e mai rea decat lipsa facturii.
+ *   3. ADEVARUL. `verifyBillingCompany` reintreaba ANAF, cu doua secunde de
+ *      rabdare, si ia de acolo denumirea, numarul de la registrul comertului si
+ *      statutul de platitor de TVA. Cifra de control prinde greselile de tastare,
+ *      nu si un CUI real trimis cu o denumire inventata.
+ *
+ * CAND ANAF SPUNE CA ACEL CUI NU EXISTA, comanda nu trece. Alternativa — sa o
+ * salvam tacut ca persoana fizica — ar fi fost mai rea decat pare: clientul a
+ * cerut explicit factura pe firma, ar fi apasat „Trimite comanda", ar fi vazut
+ * pagina de confirmare si ar fi aflat abia peste cateva zile, de pe factura, ca
+ * datele lui n-au ajuns nicaieri. Un mesaj sub campul de CUI se repara in zece
+ * secunde. Filtrul 1 si 2 intorc insa `null`, nu eroare: acolo nu e nimic de
+ * reparat de catre client.
+ */
+type BillingResolution = { company: BillingCompany | null } | { error: string };
+
+async function resolveBillingCompany(
+  pageContent: unknown,
+  input: unknown,
+): Promise<BillingResolution> {
+  const pornit = (pageContent as { checkout_config?: { company_fields?: { enabled?: boolean } } } | null)
+    ?.checkout_config?.company_fields?.enabled === true;
+  if (!pornit) return { company: null };
+
+  const curatat = parseBillingCompany(input);
+  if (!curatat) return { company: null };
+
+  const confirmat = await verifyBillingCompany(curatat);
+  if (!confirmat) {
+    return { error: "CUI-ul introdus nu exista in registrul ANAF. Verifica-l si incearca din nou." };
+  }
+  return { company: confirmat };
+}
+
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
     .from("store_settings")
@@ -238,6 +287,8 @@ export async function placeOrder(data: {
   customer_address: string;
   customer_country?: string;
   customer_postal_code?: string;
+  /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
+  billing_company?: BillingCompanyInput;
   discount_id?: string;
   discount_code?: string;
   discount_amount?: number;
@@ -364,6 +415,9 @@ export async function placeOrder(data: {
   }
 
   const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
+  const billingResolution = await resolveBillingCompany(cfgRow?.page_content, data.billing_company);
+  if ("error" in billingResolution) return { error: billingResolution.error };
+  const billingCompany = billingResolution.company;
   const extrasTotal = validatedExtras.reduce((s, e) => s + e.price, 0);
 
   // Re-validate the discount server-side against the authoritative subtotal.
@@ -509,6 +563,7 @@ export async function placeOrder(data: {
     payment_status: "unpaid",
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
+    billing_company: (billingCompany ?? null) as never,
   }).select("id, order_number").single();
 
   if (error) {
@@ -585,6 +640,7 @@ export async function placeOrder(data: {
         delivery_type: data.delivery_type,
         locker_name: data.locker_name,
         custom_fields: data.custom_fields,
+        billing_company: billingCompany,
       };
       const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([
@@ -1168,6 +1224,8 @@ export async function placeCartOrder(data: {
   customer_address: string;
   customer_country?: string;
   customer_postal_code?: string;
+  /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
+  billing_company?: BillingCompanyInput;
   discount_id?: string;
   discount_code?: string;
   discount_amount?: number;
@@ -1308,6 +1366,9 @@ export async function placeCartOrder(data: {
   }
 
   const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
+  const billingResolution = await resolveBillingCompany(cfgRow?.page_content, data.billing_company);
+  if ("error" in billingResolution) return { error: billingResolution.error };
+  const billingCompany = billingResolution.company;
   const extrasTotal = validatedExtras.reduce((s, e) => s + e.price, 0);
 
   // Re-validate discount server-side (guard even though cart has no discount UI today).
@@ -1438,6 +1499,7 @@ export async function placeCartOrder(data: {
     payment_status: "unpaid",
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
+    billing_company: (billingCompany ?? null) as never,
   }).select("id, order_number, total").single();
 
   if (error) {
@@ -1514,6 +1576,7 @@ export async function placeCartOrder(data: {
         delivery_type: data.delivery_type,
         locker_name: data.locker_name,
         custom_fields: data.custom_fields,
+        billing_company: billingCompany,
       };
       const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([

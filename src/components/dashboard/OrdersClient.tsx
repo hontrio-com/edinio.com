@@ -25,6 +25,7 @@ import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
 import { ORDERS_PAGE_SIZE } from "@/lib/orders/pagination";
+import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -669,6 +670,18 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                         <td className="px-5 py-3.5 font-mono text-sm font-semibold text-foreground">{order.order_number}</td>
                         <td className="px-5 py-3.5 text-muted-foreground hidden sm:table-cell">
                           <div className="font-medium text-foreground">{order.customer_name}</div>
+                          {/* Numele ramane al persoanei de contact; denumirea firmei
+                              e pe randul de sub el, ca sa se vada dintr-o privire
+                              pe ce se emite factura. */}
+                          {(() => {
+                            const firma = readBillingCompany(order.billing_company);
+                            return firma ? (
+                              <div className="text-xs text-foreground/80">
+                                {firma.company_name}
+                                <span className="ml-1.5 px-1 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary align-middle">PJ</span>
+                              </div>
+                            ) : null;
+                          })()}
                           <div className="text-xs">{order.customer_phone}</div>
                         </td>
                         <td className="px-5 py-3.5 font-medium text-foreground">{formatPrice(Number(order.total))}</td>

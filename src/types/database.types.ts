@@ -1642,6 +1642,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          billing_company: Json | null
           business_id: string
           card_discount_amount: number
           cargus_awb_number: string | null
@@ -1710,6 +1711,7 @@ export type Database = {
           woot_service_name: string | null
         }
         Insert: {
+          billing_company?: Json | null
           business_id: string
           card_discount_amount?: number
           cargus_awb_number?: string | null
@@ -1778,6 +1780,7 @@ export type Database = {
           woot_service_name?: string | null
         }
         Update: {
+          billing_company?: Json | null
           business_id?: string
           card_discount_amount?: number
           cargus_awb_number?: string | null

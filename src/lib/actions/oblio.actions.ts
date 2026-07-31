@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
+import { invoiceParty } from "@/lib/billing/invoice-party";
 import {
   getOblioToken,
   getCompanies,
@@ -207,6 +208,7 @@ async function buildInvoiceData(
   const addr = order.shipping_address as ShippingAddress | null;
   const today = new Date().toISOString().split("T")[0];
   const products = await buildProducts(order, config, pricesIncludeVat, vatEnabled);
+  const parte = invoiceParty(order, addr);
   const collect = buildCollect(order.payment_method, order.payment_status, order.order_number);
 
   const dueDays = Math.floor(Number(config.due_days) || 0);
@@ -217,13 +219,18 @@ async function buildInvoiceData(
   return {
     cif: config.cif,
     client: {
-      name: order.customer_name,
-      address: addr?.address ?? undefined,
-      state: addr?.county ?? undefined,
-      city: addr?.city ?? undefined,
+      // `cif` de aici e al CLIENTULUI; `cif`-ul de la nivelul de sus, din
+      // `OblioInvoiceData`, e al firmei care emite. Doua campuri cu acelasi nume
+      // in acelasi obiect — usor de incurcat, imposibil de reparat dupa.
+      name: parte.name,
+      ...(parte.vatCode ? { cif: parte.vatCode } : {}),
+      ...(parte.regCom ? { rc: parte.regCom } : {}),
+      address: parte.address ?? undefined,
+      state: parte.county ?? undefined,
+      city: parte.city ?? undefined,
       email: order.customer_email ?? undefined,
       phone: order.customer_phone,
-      vatPayer: false,
+      vatPayer: parte.vatPayer,
       save: 0,
     },
     issueDate: today,
@@ -453,9 +460,20 @@ export async function stornoOblioInvoice(
 
     // Create storno invoice via referenceDocument
     const today = new Date().toISOString().split("T")[0];
+    // Stornul trebuie sa poarte ACELASI titular ca factura pe care o anuleaza.
+    // Cu `order.customer_name`, o factura emisa pe „SC Exemplu SRL" primea o nota
+    // de credit pe „Ion Popescu", persoana de contact — doua documente care nu se
+    // inchid unul pe altul in contabilitate si nici in SPV.
+    const parteStorno = invoiceParty(order, order.shipping_address as ShippingAddress | null);
     const stornoData: OblioInvoiceData = {
       cif: config.cif,
-      client: { name: order.customer_name, save: 0 },
+      client: {
+        name: parteStorno.name,
+        ...(parteStorno.vatCode ? { cif: parteStorno.vatCode } : {}),
+        ...(parteStorno.regCom ? { rc: parteStorno.regCom } : {}),
+        vatPayer: parteStorno.vatPayer,
+        save: 0,
+      },
       issueDate: today,
       seriesName: config.series_invoice,
       language: "RO",

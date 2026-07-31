@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
+import { invoiceParty } from "@/lib/billing/invoice-party";
 import { isCardPaymentMethod, PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodType } from "@/lib/payment-methods";
 import {
   getMerchantSeries,
@@ -62,7 +63,7 @@ async function fetchSkuMap(items: OrderItem[]): Promise<Map<string, string>> {
 
 // Numele complet al tarii pentru factura (shipping_address.country e cod ISO-2,
 // setat doar la comenzile internationale; lipsa = Romania).
-function countryNameFor(code: string | undefined): string {
+function countryNameFor(code: string | null | undefined): string {
   if (!code?.trim()) return "Romania";
   const c = code.trim();
   if (c.length !== 2) return c;
@@ -233,6 +234,7 @@ async function buildInvoiceParams(
 ): Promise<MerchantInvoiceParams> {
   const address = order.shipping_address as ShippingAddress | null;
   const products = await buildInvoiceProducts(config, order, pricesIncludeVat, vatEnabled, storeVatRate);
+  const parte = invoiceParty(order, address);
   const today = new Date().toISOString().split("T")[0];
 
   // Scadenta optionala (zile de la emitere); fara ea SmartBill pune data emiterii.
@@ -247,18 +249,22 @@ async function buildInvoiceParams(
   return {
     companyVatCode: config.company_vat_code,
     client: {
-      name: order.customer_name,
-      // Conditii ANAF/e-Factura pentru persoane fizice: CNP valid sau sir de 0
-      // (nu colectam CNP la checkout — modulul oficial trimite acelasi fallback);
-      // adresa si localitatea sunt obligatorii, "-" e acceptat.
-      vatCode: "0000000000000",
-      country: countryNameFor(address?.country),
-      address: address?.address?.trim() || "-",
-      city: address?.city?.trim() || "-",
-      county: address?.county ?? undefined,
+      name: parte.name,
+      // La firma, codul fiscal real (cu „RO" doar daca e platitor de TVA).
+      // La persoana fizica raman conditiile ANAF/e-Factura: CNP valid sau sir de
+      // 0 — nu colectam CNP la checkout, iar modulul oficial trimite acelasi
+      // fallback. Adresa si localitatea sunt obligatorii, "-" e acceptat.
+      vatCode: parte.vatCode ?? "0000000000000",
+      ...(parte.regCom ? { regCom: parte.regCom } : {}),
+      // Tara vine din aceeasi sursa ca restul adresei: la firma, sediul fiscal
+      // (romanesc, din registrul ANAF); la persoana fizica, adresa de livrare.
+      country: countryNameFor(parte.country),
+      address: parte.address || "-",
+      city: parte.city || "-",
+      county: parte.county ?? undefined,
       email: order.customer_email ?? undefined,
       phone: order.customer_phone ?? undefined,
-      isTaxPayer: false,
+      isTaxPayer: parte.vatPayer,
       saveToDb: false,
     },
     seriesName,

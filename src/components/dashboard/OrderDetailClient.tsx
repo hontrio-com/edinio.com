@@ -9,8 +9,9 @@ import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
-  ExternalLink, Pencil, Compass,
+  ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
+import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
@@ -243,6 +244,7 @@ export function OrderDetailClient({
 
   const items = (order.items as unknown as OrderItem[]) ?? [];
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
+  const firma = readBillingCompany(order.billing_company);
   const notes = order.notes as Record<string, string> | null;
   const ord = order as unknown as Record<string, unknown>;
   // Trendyol ships with its own cargo (no courier AWB) — swap the shipping panel.
@@ -804,6 +806,49 @@ export function OrderDetailClient({
                     {address.country && address.country !== "RO" && (
                       <div className="font-semibold text-foreground">
                         {euCountryByIso2(address.country)?.name ?? address.country}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Comanda pe firma. Numele de mai sus ramane persoana de contact;
+                  aici sunt datele care ajung pe factura. */}
+              {firma && (
+                <div className="flex items-start gap-2.5 text-sm pt-2.5 border-t border-border">
+                  <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <div className="leading-relaxed min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-foreground">{firma.company_name}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary">
+                        Persoana juridica
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      CUI {firma.vat_payer ? `RO${firma.cui}` : firma.cui}
+                      {firma.reg_com ? ` | ${firma.reg_com}` : ""}
+                    </div>
+                    {(firma.address || firma.city || firma.county) && (
+                      <div className="text-muted-foreground">
+                        Sediu: {[firma.address, firma.city, firma.county].filter(Boolean).join(", ")}
+                      </div>
+                    )}
+                    {/* Statutul de TVA se afirma doar cand ANAF l-a confirmat.
+                        Cand serviciul n-a raspuns la plasarea comenzii, datele
+                        sunt cele scrise de client si comerciantul trebuie sa le
+                        verifice inainte de a emite factura. */}
+                    {firma.verified && !firma.vat_payer && (
+                      <div className="text-muted-foreground">Neplatitor de TVA</div>
+                    )}
+                    {!firma.verified && (
+                      <div className="flex items-start gap-1 text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>Date neconfirmate la ANAF. Verifica-le inainte de a emite factura.</span>
+                      </div>
+                    )}
+                    {firma.inactive && (
+                      <div className="flex items-start gap-1 text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>Firma figureaza ca inactiva fiscal in registrul ANAF.</span>
                       </div>
                     )}
                   </div>

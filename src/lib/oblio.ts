@@ -71,6 +71,8 @@ export type OblioInvoiceData = {
   client: {
     name: string;
     cif?: string;
+    /** Numarul de la registrul comertului. Doar la persoane juridice. */
+    rc?: string;
     address?: string;
     state?: string;
     city?: string;

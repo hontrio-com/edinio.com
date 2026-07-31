@@ -253,3 +253,74 @@ test("sumarul numara pe categorii, inclusiv trecerile pe zero", () => {
   assert.equal(s.not_found, 1);
   assert.equal(s.inventoryOff, 1);
 });
+
+// ── Combinatii care impart acelasi id ──────────────────────────────────────
+//
+// `id`-ul unei combinatii e un slug din optiuni ("galben-unic"), deci NU e unic
+// in produs: la un magazin real, 52 de produse au combinatii care se calca pe id,
+// cu SKU-uri diferite. Un `find` pe id o intoarce mereu pe PRIMA, deci stocul
+// curent se citea de la sora ei. Efectul e insidios: randul iese "neschimbat" si
+// stocul lui ramane vechi la nesfarsit, fara sa apara nicaieri ca problema.
+
+function produsCuIdDublat(): CatalogEntry {
+  return {
+    id: "p1",
+    name: "JACHETA HI WAY BL",
+    sku: null,
+    external_id: null,
+    gtin: null,
+    price: 90,
+    stock_quantity: null,
+    track_inventory: true,
+    variants: [
+      { id: "galben-unic", title: "Galben", sku: "HS70553", stock_quantity: 1, price: 90 },
+      { id: "galben-unic", title: "Galben", sku: "HS70554", stock_quantity: 2, price: 95 },
+    ],
+  };
+}
+
+test("stocul curent se citeste de la combinatia potrivita, nu de la prima cu acel id", () => {
+  // HS70554 are 2. Feedul cere tot 2, deci NU e nimic de schimbat.
+  // Citit de la prima combinatie (care are 1), ar parea o modificare inchipuita.
+  const plan = buildStockPlan(
+    [{ rowIndex: 1, identifier: "HS70554", stock: 2, price: null }],
+    [produsCuIdDublat()],
+    { matchKey: "variant_sku", updatePrice: false },
+  );
+
+  assert.equal(plan.changes.length, 0, "nu are ce sa schimbe");
+  assert.equal(plan.unchanged, 1);
+});
+
+test("o modificare adevarata pe a doua combinatie nu se pierde", () => {
+  // Reversul, si cel periculos: HS70554 are 2, feedul cere 1. Citit de la prima
+  // combinatie (care are chiar 1), randul ar fi iesit "neschimbat" si stocul
+  // adevarat ar fi ramas 2 pe veci.
+  const plan = buildStockPlan(
+    [{ rowIndex: 1, identifier: "HS70554", stock: 1, price: null }],
+    [produsCuIdDublat()],
+    { matchKey: "variant_sku", updatePrice: false },
+  );
+
+  assert.equal(plan.changes.length, 1);
+  assert.equal(plan.changes[0].stockFrom, 2, "pornim de la stocul lui HS70554");
+  assert.equal(plan.changes[0].stockTo, 1);
+  assert.equal(plan.changes[0].variantSku, "HS70554", "scrierea trebuie sa stie pe care o atinge");
+});
+
+test("fiecare combinatie cu acelasi id isi primeste propria modificare", () => {
+  const plan = buildStockPlan(
+    [
+      { rowIndex: 1, identifier: "HS70553", stock: 3, price: null },
+      { rowIndex: 2, identifier: "HS70554", stock: 7, price: null },
+    ],
+    [produsCuIdDublat()],
+    { matchKey: "variant_sku", updatePrice: false },
+  );
+
+  assert.equal(plan.changes.length, 2);
+  assert.deepEqual(
+    plan.changes.map((c) => [c.variantSku, c.stockFrom, c.stockTo]),
+    [["HS70553", 1, 3], ["HS70554", 2, 7]],
+  );
+});

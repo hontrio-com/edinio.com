@@ -17,7 +17,7 @@ import { logError } from "@/lib/error-logger";
  *   2. Porneste sursele care au ajuns la rand.
  *
  * Tot ce se face aici e limitat de un TERMEN. Functia are un minut; ce nu incape
- * rimane pentru tura urmatoare, iar randurile ramase sunt tot in baza, cu status
+ * ramane pentru tura urmatoare, iar randurile ramase sunt tot in baza, cu status
  * `pending`.
  */
 

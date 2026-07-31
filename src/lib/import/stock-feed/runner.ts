@@ -22,7 +22,7 @@ import { markRun, type StockFeedSource } from "./sources";
  * foloseste acelasi raport de erori descarcabil, fara cod in plus.
  *
  * Rularea are un TERMEN. Cronul are un minut, iar un feed mare nu incape.
- * Ce nu apuca sa scrie rimane in `importing`, iar tura urmatoare a cronului
+ * Ce nu apuca sa scrie ramane in `importing`, iar tura urmatoare a cronului
  * continua exact de unde s-a oprit: randurile ramase sunt tot acolo, cu status
  * `pending`.
  */

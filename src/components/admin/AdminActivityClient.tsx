@@ -14,7 +14,7 @@ interface AuditLog {
   /**
    * Poate fi null: adminul care a facut actiunea poate fi sters ulterior, iar
    * cheia strina e ON DELETE SET NULL. Coloana a fost facuta nullabila in baza
-   * pe 23 iulie, cand s-a reparat stergerea adminilor, dar tipul de aici a rimas
+   * pe 23 iulie, cand s-a reparat stergerea adminilor, dar tipul de aici a ramas
    * pe `string` pana la regenerarea fisierului de tipuri.
    */
   admin_id: string | null;

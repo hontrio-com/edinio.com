@@ -336,7 +336,7 @@ TRIC-001-L;8`}
 
         <div className="grid gap-3 sm:grid-cols-4">
           <Stat label="Se actualizeaza" value={s.willWrite} tone="primary" />
-          <Stat label="Rimane la fel" value={s.unchanged} />
+          <Stat label="Ramane la fel" value={s.unchanged} />
           <Stat label="Nu s-au gasit" value={s.not_found} tone={s.not_found > 0 ? "warning" : undefined} />
           <Stat label="Probleme" value={problems - s.not_found} tone={problems - s.not_found > 0 ? "warning" : undefined} />
         </div>

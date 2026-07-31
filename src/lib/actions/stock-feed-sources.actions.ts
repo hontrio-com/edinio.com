@@ -164,7 +164,7 @@ export async function saveStockFeedSource(
       const res = await patchSource(owner.admin, input.id, {
         ...payload,
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
-        /* O sursa reparata de om porneste de la zero: altfel ar rimane aproape
+        /* O sursa reparata de om porneste de la zero: altfel ar ramane aproape
            de dezactivarea automata din cauza eșecurilor de dinainte. */
         consecutive_failures: 0,
       });
@@ -211,7 +211,7 @@ export async function deleteStockFeedSource(id: string): Promise<{ ok: true } | 
  * Ruleaza sursa acum.
  *
  * Are un termen mai scurt decat cronul, ca actiunea sa nu depaseasca limita de
- * timp a serverului. Ce nu apuca sa scrie rimane pentru tura urmatoare a cronului.
+ * timp a serverului. Ce nu apuca sa scrie ramane pentru tura urmatoare a cronului.
  */
 export async function runStockFeedSourceNow(
   id: string,

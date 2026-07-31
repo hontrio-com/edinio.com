@@ -72,7 +72,7 @@ export async function stageStockPlan(
   businessId: string,
   plan: StockPlan,
 ): Promise<{ pending: number }> {
-  /* Reluare curata: stergem ce a rimas de la o incercare anterioara. */
+  /* Reluare curata: stergem ce a ramas de la o incercare anterioara. */
   await admin.from("product_import_rows").delete().eq("import_id", importId);
 
   const rows: Record<string, unknown>[] = [];
@@ -156,7 +156,7 @@ async function countTotals(
  *
  * Bucatile merg una dupa alta, niciodata deodata: asa doua bucati nu pot scrie in
  * acelasi produs in acelasi timp, iar citirea si rescrierea JSON-ului de variante
- * rimane in siguranta.
+ * ramane in siguranta.
  */
 export async function processStockChunk(
   admin: Client,
@@ -195,7 +195,7 @@ export async function processStockChunk(
      * Legatura rand-din-tabel <-> schimbare se face pe `row_index`, NU pe
      * identitatea obiectului. Un `Map` cu chei obiect ar merge azi, pentru ca
      * scriitorul intoarce exact referintele primite, dar ar ceda in ziua in care
-     * ar intoarce copii: randurile ar rimane la nesfarsit "in asteptare", iar
+     * ar intoarce copii: randurile ar ramane la nesfarsit "in asteptare", iar
      * bucla clientului s-ar inverti degeaba.
      */
     const rowIdByIndex = new Map<number, string>();
@@ -225,7 +225,7 @@ export async function processStockChunk(
 
     /*
      * Plasa de siguranta contra buclei infinite. Daca un rand nu primeste nici
-     * reusita, nici eroare, ar rimane "in asteptare" pe veci si bucla ar cere
+     * reusita, nici eroare, ar ramane "in asteptare" pe veci si bucla ar cere
      * mereu aceeasi bucata. Mai bine il inchidem ca eroare, cu un mesaj cinstit.
      */
     for (const [rowIndex, id] of rowIdByIndex) {

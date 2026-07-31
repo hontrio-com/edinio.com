@@ -148,7 +148,7 @@ test("un feed cat cel real de la un magazin cu variante incape", () => {
 
 // ── Dus si intors prin CSV ─────────────────────────────────────────────────
 
-test("ce iese din foaie si trece prin CSV rimane la fel", () => {
+test("ce iese din foaie si trece prin CSV ramane la fel", () => {
   // Asta e drumul adevarat: XLSX -> randuri -> CSV pastrat in R2 -> recitit.
   const original = sheetToRecords([
     ["cod produs", "stoc", "pret"],

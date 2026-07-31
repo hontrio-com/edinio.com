@@ -74,7 +74,7 @@ test("combinatia fara id se sare: n-am unde sa scriem inapoi", () => {
   assert.equal(v[0].id, "b");
 });
 
-test("titlul lipsa cade pe id, ca sa nu rimana gol in previzualizare", () => {
+test("titlul lipsa cade pe id, ca sa nu ramana gol in previzualizare", () => {
   const v = readVariants(sectiuni([{ id: "m", sku: "T-M", stock_quantity: 1, price: 1 }]));
   assert.equal(v[0].title, "m");
 });

@@ -8,7 +8,7 @@ import type { StockTotals } from "./committer";
  *
  * Tabelul e creat de `migrations/2026-07-31-stock-feed-sources.sql`, aplicata pe
  * 31 iulie, iar `database.types.ts` a fost regenerat dupa, deci clientul tipizat
- * cunoaste tabelul. Formele de mai jos rimane scrise de mana pentru `mapping` si
+ * cunoaste tabelul. Formele de mai jos ramane scrise de mana pentru `mapping` si
  * `options`, care in baza sunt `jsonb`: tipurile generate le dau ca `Json`, iar
  * aici ne trebuie forma lor adevarata.
  */

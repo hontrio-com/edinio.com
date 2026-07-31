@@ -1,5 +1,6 @@
 import type {
   CatalogEntry,
+  CatalogVariant,
   StockChange,
   StockFeedRow,
   StockMatchKey,
@@ -32,6 +33,24 @@ function norm(value: string | null | undefined): string {
 interface Target {
   product: CatalogEntry;
   variantId: string | null;
+  /**
+   * SKU-ul combinatiei tintite.
+   *
+   * Fara el nu se poate ajunge inapoi la combinatia potrivita: `id`-ul unei
+   * combinatii e un slug din optiuni ("galben-unic") si NU e unic in produs. Un
+   * `find` pe id o intoarce pe PRIMA, deci stocul curent s-ar citi de la sora ei.
+   */
+  variantSku: string | null;
+}
+
+/** Combinatia tintita, cautata pe id SI pe SKU. */
+function findVariant(target: Target): CatalogVariant | null {
+  if (target.variantId === null) return null;
+  const sameId = target.product.variants.filter((v) => v.id === target.variantId);
+  if (sameId.length <= 1) return sameId[0] ?? null;
+
+  const sku = norm(target.variantSku);
+  return (sku && sameId.find((v) => norm(v.sku) === sku)) || sameId[0] || null;
 }
 
 /**
@@ -68,7 +87,7 @@ function buildIndex(catalog: CatalogEntry[], matchKey: StockMatchKey): TargetInd
   const index = new TargetIndex();
 
   for (const product of catalog) {
-    const productTarget: Target = { product, variantId: null };
+    const productTarget: Target = { product, variantId: null, variantSku: null };
 
     switch (matchKey) {
       case "product_id":
@@ -85,7 +104,7 @@ function buildIndex(catalog: CatalogEntry[], matchKey: StockMatchKey): TargetInd
         break;
       case "variant_sku":
         for (const variant of product.variants) {
-          index.add(norm(variant.sku), { product, variantId: variant.id });
+          index.add(norm(variant.sku), { product, variantId: variant.id, variantSku: variant.sku });
         }
         break;
       case "sku_auto":
@@ -93,7 +112,7 @@ function buildIndex(catalog: CatalogEntry[], matchKey: StockMatchKey): TargetInd
            arata si exemplul cerut: TRIC-001 pe produs, TRIC-001-M pe marime. */
         index.add(norm(product.sku), productTarget);
         for (const variant of product.variants) {
-          index.add(norm(variant.sku), { product, variantId: variant.id });
+          index.add(norm(variant.sku), { product, variantId: variant.id, variantSku: variant.sku });
         }
         break;
     }
@@ -111,7 +130,7 @@ function currentValues(target: Target): { stock: number | null; price: number; i
       inventoryOff: !target.product.track_inventory,
     };
   }
-  const variant = target.product.variants.find((v) => v.id === target.variantId);
+  const variant = findVariant(target);
   return {
     stock: variant?.stock_quantity ?? null,
     price: variant?.price ?? target.product.price,
@@ -236,10 +255,7 @@ export function buildStockPlan(
       continue;
     }
 
-    const variant =
-      target.variantId === null
-        ? null
-        : target.product.variants.find((v) => v.id === target.variantId) ?? null;
+    const variant = findVariant(target);
 
     changes.push({
       rowIndex: row.rowIndex,

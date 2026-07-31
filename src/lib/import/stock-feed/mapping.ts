@@ -16,7 +16,7 @@ import type { StockFeedMapping, StockFeedRow } from "./types";
  *
  * - `parseIntOrNull` sterge separatorii si abia apoi taie, deci "12.5" devine
  *   125. Intr-un feed de pret o asemenea greseala se vede; intr-unul de stoc,
- *   cineva rimane cu de zece ori mai multa marfa pe hartie.
+ *   cineva ramane cu de zece ori mai multa marfa pe hartie.
  * - `parsePrice` citeste "1.200" ca 1,2, ceea ce e corect la un pret ambiguu.
  *   La un stoc nu e: nimeni nu are 1,2 bucati, deci acolo separatorul urmat de
  *   exact trei cifre inseamna mii.

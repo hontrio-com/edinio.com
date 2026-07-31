@@ -65,6 +65,8 @@ export interface CatalogEntry {
 /** O scriere care chiar are ce schimba. */
 export interface StockChange {
   rowIndex: number;
+  /** Codul din fisier. Ajunge in raportul de erori, ca omul sa stie ce rand. */
+  identifier: string;
   productId: string;
   productName: string;
   /** `null` cand se schimba stocul produsului, nu al unei variante. */

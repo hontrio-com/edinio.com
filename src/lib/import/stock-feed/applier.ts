@@ -72,9 +72,16 @@ export function patchVariants(
   return { next: root, applied, missing };
 }
 
-export interface ApplyResult {
-  written: number;
-  failed: { productId: string; message: string }[];
+/**
+ * Rezultatul, pe RAND, nu pe produs.
+ *
+ * Un produs cu cinci marimi schimbate primeste o singura scriere, dar cele cinci
+ * randuri din fisier trebuie sa-si primeasca fiecare verdictul: altfel raportul
+ * de erori nu poate spune omului care linie din fisierul lui n-a intrat.
+ */
+export interface ApplyOutcome {
+  written: StockChange[];
+  failed: { change: StockChange; message: string }[];
 }
 
 /** Cate produse se scriu deodata. Mic dinadins: nu vrem sa inecam baza. */
@@ -94,9 +101,9 @@ export async function applyStockPlan(
   businessId: string,
   changes: StockChange[],
   onProgress?: (done: number) => void,
-): Promise<ApplyResult> {
-  const failed: ApplyResult["failed"] = [];
-  let written = 0;
+): Promise<ApplyOutcome> {
+  const failed: ApplyOutcome["failed"] = [];
+  const written: StockChange[] = [];
   let done = 0;
 
   /* ── Produse simple ── */
@@ -131,8 +138,8 @@ export async function applyStockPlan(
       .eq("id", change.productId)
       .eq("business_id", businessId);
 
-    if (error) failed.push({ productId: change.productId, message: error.message });
-    else written++;
+    if (error) failed.push({ change, message: error.message });
+    else written.push(change);
   });
 
   await runBatches([...byProduct.entries()], async ([productId, productChanges]) => {
@@ -145,7 +152,8 @@ export async function applyStockPlan(
       .single();
 
     if (readErr || !row) {
-      failed.push({ productId, message: readErr?.message ?? "Produsul nu mai exista" });
+      const message = readErr?.message ?? "Produsul nu mai exista";
+      for (const c of productChanges) failed.push({ change: c, message });
       return;
     }
 
@@ -155,15 +163,19 @@ export async function applyStockPlan(
       price: c.priceTo,
     }));
 
-    const { next, applied, missing } = patchVariants(row.page_sections, edits);
+    const { next, missing } = patchVariants(row.page_sections, edits);
 
-    if (missing.length > 0) {
-      failed.push({
-        productId,
-        message: `Variante disparute intre previzualizare si scriere: ${missing.join(", ")}`,
-      });
+    /* Varianta disparuta intre previzualizare si scriere: randul ei e eroare, dar
+       restul variantelor aceluiasi produs se scriu normal. */
+    const missingSet = new Set(missing);
+    for (const c of productChanges) {
+      if (missingSet.has(c.variantId as string)) {
+        failed.push({ change: c, message: "Varianta nu mai exista in produs" });
+      }
     }
-    if (applied.length === 0) return;
+
+    const appliedChanges = productChanges.filter((c) => !missingSet.has(c.variantId as string));
+    if (appliedChanges.length === 0) return;
 
     const { error: writeErr } = await admin
       .from("products")
@@ -171,8 +183,11 @@ export async function applyStockPlan(
       .eq("id", productId)
       .eq("business_id", businessId);
 
-    if (writeErr) failed.push({ productId, message: writeErr.message });
-    else written += applied.length;
+    if (writeErr) {
+      for (const c of appliedChanges) failed.push({ change: c, message: writeErr.message });
+    } else {
+      written.push(...appliedChanges);
+    }
   });
 
   return { written, failed };

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { getProductLimit } from "@/lib/plan-limits";
-import { ImportWizard } from "@/components/dashboard/import/ImportWizard";
+import { ImportEntry } from "@/components/dashboard/import/ImportEntry";
 
 export default async function ImportProductsPage() {
   const supabase = await createClient();
@@ -27,7 +27,7 @@ export default async function ImportProductsPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <ImportWizard plan={plan} productLimit={getProductLimit(plan)} productCount={count ?? 0} />
+      <ImportEntry plan={plan} productLimit={getProductLimit(plan)} productCount={count ?? 0} />
     </div>
   );
 }

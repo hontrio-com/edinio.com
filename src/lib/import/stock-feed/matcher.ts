@@ -243,6 +243,7 @@ export function buildStockPlan(
 
     changes.push({
       rowIndex: row.rowIndex,
+      identifier: row.identifier,
       productId: target.product.id,
       productName: target.product.name,
       variantId: target.variantId,

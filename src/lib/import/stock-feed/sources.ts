@@ -6,11 +6,11 @@ import type { StockTotals } from "./committer";
 /**
  * Sursele de feed citite automat de la o adresa.
  *
- * TIPURI LOCALE, nu cele generate. Tabelul `stock_feed_sources` e adaugat de
- * migratia `migrations/2026-07-31-stock-feed-sources.sql`, iar
- * `src/types/database.types.ts` se genereaza din baza, deci nu il cunoaste inca.
- * Dupa aplicarea migratiei, tipurile ar trebui regenerate si castul de mai jos
- * poate dispărea.
+ * Tabelul e creat de `migrations/2026-07-31-stock-feed-sources.sql`, aplicata pe
+ * 31 iulie, iar `database.types.ts` a fost regenerat dupa, deci clientul tipizat
+ * cunoaste tabelul. Formele de mai jos rimane scrise de mana pentru `mapping` si
+ * `options`, care in baza sunt `jsonb`: tipurile generate le dau ca `Json`, iar
+ * aici ne trebuie forma lor adevarata.
  */
 
 export const TABLE = "stock_feed_sources";
@@ -44,14 +44,25 @@ export const MAX_FAILURES = 5;
 
 type AnyClient = SupabaseClient<Database>;
 
-/**
- * Clientul, fara tipuri, doar pentru acest tabel.
- *
- * Izolat intr-o singura functie ca sa existe UN loc de curatat cand se
- * regenereaza tipurile, nu caste risipite prin tot fisierul.
- */
+/** Tabelul, dintr-un singur loc. */
 function table(client: AnyClient) {
-  return (client as unknown as SupabaseClient).from(TABLE);
+  return client.from(TABLE);
+}
+
+/*
+ * Conversia la granita, si de ce e nevoie de ea.
+ *
+ * `mapping`, `options` si `last_totals` sunt `jsonb` in baza, iar tipurile
+ * generate le dau ca `Json`, adica "orice". Formele adevarate le stim doar noi,
+ * din cod. Deci la citire spunem ce e, iar la scriere trecem prin `never`, exact
+ * tiparul folosit deja pentru `jsonb` in restul importului.
+ *
+ * Nu e o gaura de siguranta: valorile scrise vin din tipuri stricte, iar la
+ * citire orice forma neasteptata ar fi tot un `jsonb` valid, care oricum trebuie
+ * tratat defensiv de apelant.
+ */
+function asSource(row: unknown): StockFeedSource {
+  return row as StockFeedSource;
 }
 
 export async function listSources(
@@ -68,7 +79,7 @@ export async function listSources(
      nimeni nicaieri. */
   if (error) throw new Error(error.message);
 
-  return (data ?? []) as StockFeedSource[];
+  return (data ?? []).map(asSource);
 }
 
 export async function getSource(
@@ -76,14 +87,14 @@ export async function getSource(
   id: string,
 ): Promise<StockFeedSource | null> {
   const { data } = await table(client).select("*").eq("id", id).maybeSingle();
-  return (data as StockFeedSource | null) ?? null;
+  return data ? asSource(data) : null;
 }
 
 export async function insertSource(
   client: AnyClient,
   row: Pick<StockFeedSource, "business_id" | "user_id" | "name" | "url" | "mapping" | "options" | "frequency" | "run_hour">,
 ): Promise<{ id: string } | { error: string }> {
-  const { data, error } = await table(client).insert(row).select("id").single();
+  const { data, error } = await table(client).insert(row as never).select("id").single();
   if (error) return { error: error.message };
   return { id: (data as { id: string }).id };
 }
@@ -93,7 +104,7 @@ export async function patchSource(
   id: string,
   patch: Partial<Omit<StockFeedSource, "id" | "business_id" | "user_id" | "created_at" | "updated_at">>,
 ): Promise<{ error?: string }> {
-  const { error } = await table(client).update(patch).eq("id", id);
+  const { error } = await table(client).update(patch as never).eq("id", id);
   return error ? { error: error.message } : {};
 }
 
@@ -174,5 +185,5 @@ export async function dueSources(
     .order("last_run_at", { ascending: true, nullsFirst: true })
     .limit(200);
 
-  return ((data ?? []) as StockFeedSource[]).filter((s) => isDue(s, now)).slice(0, limit);
+  return (data ?? []).map(asSource).filter((s) => isDue(s, now)).slice(0, limit);
 }

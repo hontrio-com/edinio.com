@@ -4,6 +4,7 @@ import { getStripe } from "@/lib/stripe";
 import { poateAvansaLaConfirmat } from "@/lib/order-progress";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 
 export type StripeFinalizeResult =
   | { status: "paid" }
@@ -26,7 +27,7 @@ export type StripeFinalizeResult =
 export async function finalizeStripeOrder(
   admin: SupabaseClient,
   accountId: string,
-  order: { id: string; total: number; status?: string | null },
+  order: { id: string; businessId: string; total: number; status?: string | null },
   sessionId: string,
 ): Promise<StripeFinalizeResult> {
   let session: Stripe.Checkout.Session;
@@ -64,19 +65,25 @@ export async function finalizeStripeOrder(
   };
   if (poateAvansaLaConfirmat(order.status)) patch.status = "confirmed";
 
-  const { error } = await admin
+  // `select` ne spune daca linia CHIAR s-a schimbat acum. Fara el, o re-livrare
+  // de webhook ar retrimite sincronizarile si ar reincerca factura pentru o
+  // comanda deja platita.
+  const { data: schimbate, error } = await admin
     .from("orders")
     .update(patch)
     .eq("id", order.id)
-    .neq("payment_status", "paid");
+    .neq("payment_status", "paid")
+    .select("id");
 
   if (error) {
     console.error("[stripe] mark paid failed:", { orderId: order.id, error });
     return { status: "failed", error: "Plata a reusit dar nu am putut actualiza comanda." };
   }
+  if (!schimbate || schimbate.length === 0) return { status: "paid" };
 
   void maybeMarkMailchimpOrderPaid(order.id);
   void maybeMarkBrevoOrderPaid(order.id);
+  factureazaDupaPlata(order.businessId, order.id, (patch.status as string) ?? order.status ?? "", "paid");
   return { status: "paid" };
 }
 

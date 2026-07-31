@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { getOrder, toMinor, type RevolutConfig } from "@/lib/revolut";
 
 export type RevolutFinalizeResult =
@@ -19,7 +20,7 @@ export type RevolutFinalizeResult =
 export async function finalizeRevolutOrder(
   admin: SupabaseClient,
   cfg: RevolutConfig,
-  order: { id: string; total: number },
+  order: { id: string; businessId: string; total: number },
   revolutOrderId: string,
 ): Promise<RevolutFinalizeResult> {
   const rev = await getOrder(cfg, revolutOrderId);
@@ -59,6 +60,9 @@ export async function finalizeRevolutOrder(
   if (!error) {
     void maybeMarkMailchimpOrderPaid(order.id);
     void maybeMarkBrevoOrderPaid(order.id);
+    // Plata confirmata declanseaza si facturarea automata, daca magazinul o are
+    // pe „Platita" sau pe „Comanda confirmata". Vezi `invoice-on-payment.ts`.
+    factureazaDupaPlata(order.businessId, order.id, "confirmed", "paid");
   }
   return { status: "paid" };
 }

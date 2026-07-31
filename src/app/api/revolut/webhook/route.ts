@@ -70,6 +70,6 @@ export async function POST(request: NextRequest) {
 
   if (!order || order.payment_status === "paid") return ok();
 
-  await finalizeRevolutOrder(admin, cfg, { id: order.id, total: Number(order.total) || 0 }, event.order_id);
+  await finalizeRevolutOrder(admin, cfg, { id: order.id, businessId, total: Number(order.total) || 0 }, event.order_id);
   return ok();
 }

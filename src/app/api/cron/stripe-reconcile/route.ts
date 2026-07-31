@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
       const result = await finalizeStripeOrder(
         admin,
         accountId,
-        { id: o.id, total: Number(o.total) || 0, status: o.status as string | null },
+        { id: o.id, businessId: o.business_id, total: Number(o.total) || 0, status: o.status as string | null },
         o.stripe_session_id,
       );
       if (result.status === "paid") {

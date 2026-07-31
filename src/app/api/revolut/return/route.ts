@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   const result = await finalizeRevolutOrder(
     admin,
     cfg!,
-    { id: order.id, total: Number(order.total) || 0 },
+    { id: order.id, businessId, total: Number(order.total) || 0 },
     revolutOrderId,
   );
 

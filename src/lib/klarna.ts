@@ -111,6 +111,7 @@ async function klarnaCall<T = Record<string, unknown>>(
 /** The subset of an `orders` row (+ store VAT flags) needed to build the Klarna order. */
 export type KlarnaOrderInput = {
   id: string;
+  business_id: string;
   order_number: string;
   total: number;
   shipping_cost: number;
@@ -407,6 +408,7 @@ export function refundOrder(c: KlarnaConfig, klarnaOrderId: string, refundedAmou
 export function toKlarnaOrderInput(order: Record<string, unknown>, pricesIncludeVat: boolean): KlarnaOrderInput {
   return {
     id: String(order.id ?? ""),
+    business_id: String(order.business_id ?? ""),
     order_number: String(order.order_number ?? ""),
     total: Number(order.total) || 0,
     shipping_cost: Number(order.shipping_cost) || 0,

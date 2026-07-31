@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 
 /**
  * Central auto-invoicing dispatcher. On an order status/payment change it issues
@@ -18,9 +18,10 @@ export async function maybeAutoInvoice(
   orderId: string,
   newStatus: string,
   newPaymentStatus: string,
+  sistem?: SistemClient,
 ): Promise<void> {
   try {
-    const supabase = await createClient();
+    const supabase = await clientFacturare(sistem);
     const { data: order } = await supabase
       .from("orders")
       .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, payment_method, order_source")
@@ -38,13 +39,13 @@ export async function maybeAutoInvoice(
     if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number) return;
 
     const smartbill = await import("@/lib/actions/smartbill.actions");
-    if (await smartbill.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus)) return;
+    if (await smartbill.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
 
     const oblio = await import("@/lib/actions/oblio.actions");
-    if (await oblio.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus)) return;
+    if (await oblio.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
 
     const fgo = await import("@/lib/actions/fgo.actions");
-    if (await fgo.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus)) return;
+    if (await fgo.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
   } catch {
     // best-effort; auto-invoicing must never block an order update
   }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
   getOblioToken,
@@ -37,14 +38,19 @@ async function fetchSkuMap(items: OrderItem[]): Promise<Map<string, string>> {
   }
 }
 
-async function getConfigAndOrder(businessId: string, orderId: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Neautorizat" as const };
+async function getConfigAndOrder(businessId: string, orderId: string, sistem?: SistemClient) {
+  const supabase = await clientFacturare(sistem);
+  // Apelul de sistem sare peste verificarea de proprietar fiindca apelantul e
+  // server-ul insusi, dupa ce a confirmat plata la furnizor. Vezi
+  // `invoicing-context.ts` pentru ce face argumentul asta nefalsificabil.
+  if (!eSistem(sistem)) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Neautorizat" as const };
 
-  const { data: biz } = await supabase
-    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
-  if (!biz) return { error: "Acces interzis" as const };
+    const { data: biz } = await supabase
+      .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+    if (!biz) return { error: "Acces interzis" as const };
+  }
 
   const [{ data: settings }, { data: order }] = await Promise.all([
     supabase.from("store_settings")
@@ -336,8 +342,9 @@ export async function loadOblioSeriesForCif(
 export async function generateOblioInvoice(
   businessId: string,
   orderId: string,
+  sistem?: SistemClient,
 ): Promise<{ number: string; series: string } | { error: string }> {
-  const ctx = await getConfigAndOrder(businessId, orderId);
+  const ctx = await getConfigAndOrder(businessId, orderId, sistem);
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config, order, pricesIncludeVat, vatEnabled } = ctx;
 
@@ -372,16 +379,17 @@ export async function maybeAutoGenerateInvoice(
   orderId: string,
   newStatus: string,
   newPaymentStatus: string,
+  sistem?: SistemClient,
 ): Promise<boolean> {
   try {
-    const supabase = await createClient();
+    const supabase = await clientFacturare(sistem);
     const { data: settings } = await supabase
       .from("store_settings").select("oblio_config").eq("business_id", businessId).single();
     const config = settings?.oblio_config as OblioConfig | null;
     if (!config?.enabled || !config.auto_invoice) return false;
     if (!autoInvoiceTriggerMatches(config.auto_invoice_trigger, newStatus, newPaymentStatus)) return false;
 
-    const result = await generateOblioInvoice(businessId, orderId);
+    const result = await generateOblioInvoice(businessId, orderId, sistem);
     return !("error" in result);
   } catch {
     return false;

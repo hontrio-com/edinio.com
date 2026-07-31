@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import {
   placeOrder, captureOrder, getOmOrder, toMinor,
   type KlarnaConfig, type KlarnaOrderInput,
@@ -71,6 +72,9 @@ export async function finalizeKlarnaOrder(
   if (!error) {
     void maybeMarkMailchimpOrderPaid(order.id);
     void maybeMarkBrevoOrderPaid(order.id);
+    // Plata confirmata declanseaza si facturarea automata, daca magazinul o are
+    // pe „Platita" sau pe „Comanda confirmata". Vezi `invoice-on-payment.ts`.
+    factureazaDupaPlata(order.business_id, order.id, "confirmed", "paid");
   }
   return { status: "paid" };
 }

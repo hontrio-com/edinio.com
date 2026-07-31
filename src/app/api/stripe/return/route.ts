@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   const result = await finalizeStripeOrder(
     admin,
     accountId,
-    { id: order.id, total: Number(order.total) || 0, status: order.status as string | null },
+    { id: order.id, businessId, total: Number(order.total) || 0, status: order.status as string | null },
     sessionId,
   );
 

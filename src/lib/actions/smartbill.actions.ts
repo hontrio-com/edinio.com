@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { isCardPaymentMethod, PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodType } from "@/lib/payment-methods";
 import {
@@ -606,10 +607,14 @@ export async function maybeAutoGenerateInvoice(
   businessId: string,
   orderId: string,
   newStatus: string,
-  newPaymentStatus: string
+  newPaymentStatus: string,
+  sistem?: SistemClient,
 ): Promise<boolean> {
   try {
-    const supabase = await createClient();
+    // Cu `sistem` dat de un apelant server (confirmare de plata), citirile trec
+    // peste RLS; fara el ramane clientul cu sesiune, ca pana acum. Vezi
+    // `invoicing-context.ts`.
+    const supabase = await clientFacturare(sistem);
     const { data: settings } = await supabase
       .from("store_settings").select("smartbill_config").eq("business_id", businessId).single();
 

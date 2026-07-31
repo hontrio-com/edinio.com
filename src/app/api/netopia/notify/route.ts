@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
+import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { resolveNetopiaStatus, type NetopiaIpnPayload } from "@/lib/netopia";
 import { verifyNetopiaIpn } from "@/lib/netopia-ipn";
@@ -58,7 +59,13 @@ export async function POST(request: NextRequest) {
     if (newPaymentStatus) update.payment_status = newPaymentStatus;
 
     await admin.from("orders").update(update).eq("id", orderId);
-    if (newPaymentStatus === "paid") { void maybeMarkMailchimpOrderPaid(orderId); void maybeMarkBrevoOrderPaid(orderId); }
+    if (newPaymentStatus === "paid") {
+      void maybeMarkMailchimpOrderPaid(orderId);
+      void maybeMarkBrevoOrderPaid(orderId);
+      // Facturarea automata, daca magazinul o are pe „Platita" sau pe starea in
+      // care tocmai a intrat comanda. Vezi `invoice-on-payment.ts`.
+      factureazaDupaPlata(order.business_id, orderId, orderStatus || (order.status as string) || "", "paid");
+    }
     console.log("[netopia/notify] Order updated:", { orderId, orderStatus, newPaymentStatus });
   }
 

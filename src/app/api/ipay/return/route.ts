@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import {
   ipayGetOrderStatus, resolveIpayStatus, ipayActionMessage, ipayReady, toBani, IPAY_CURRENCY, type IPayConfig,
 } from "@/lib/ipay";
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
         .neq("payment_status", "paid");
       void maybeMarkMailchimpOrderPaid(order.id);
       void maybeMarkBrevoOrderPaid(order.id);
+      factureazaDupaPlata(order.business_id as string, order.id, "confirmed", "paid");
       return NextResponse.redirect(successUrl);
     }
     console.error("[ipay/return] amount/currency mismatch:", { orderId: order.id, expected, got: status.amount, currency: status.currency });

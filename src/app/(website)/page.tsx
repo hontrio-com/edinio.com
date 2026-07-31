@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Shield, Headset, Wrench } from "lucide-react";
-import { HeroSection } from "@/components/website/HeroSection";
-import { FeaturesSection } from "@/components/website/FeaturesSection";
+import { Hero } from "@/components/website/sections/Hero";
+import { Features } from "@/components/website/sections/Features";
 import { HowItWorksSection } from "@/components/website/HowItWorksSection";
 import { DemoSection } from "@/components/website/DemoSection";
 import { PricingSection } from "@/components/website/PricingSection";
@@ -147,8 +147,8 @@ export default function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
-      <HeroSection />
-      <FeaturesSection />
+      <Hero />
+      <Features />
       <HowItWorksSection />
       <DemoSection />
       <PricingSection />

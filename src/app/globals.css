@@ -103,6 +103,88 @@
   --sidebar-width: 240px;
 }
 
+/* ─── Hero: raze de lumina ───────────────────────────────────────────────────
+   Fiecare raza isi tine unghiul si opacitatea in variabile proprii, ca sa poata
+   respira fara sa-si piarda rotatia. Sunt lente si decalate intre ele: doua raze
+   care pulseaza la fel arata a banner, nu a lumina.
+   La `prefers-reduced-motion` stau pe loc — desenul rimane, miscarea nu. */
+@keyframes hero-ray {
+  0%,
+  100% {
+    opacity: var(--ray-opacity);
+    transform: translateX(-50%) rotate(var(--ray-angle)) scaleY(1);
+  }
+  50% {
+    opacity: calc(var(--ray-opacity) * 1.4);
+    transform: translateX(-50%) rotate(var(--ray-angle)) scaleY(1.07);
+  }
+}
+
+.hero-ray {
+  animation: hero-ray var(--ray-duration) ease-in-out var(--ray-delay) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-ray {
+    animation: none;
+  }
+}
+
+/* ─── Cardurile de functii: teanc la derulare ────────────────────────────────
+   Cardurile sunt `sticky`, deci fiecare se opreste sub bara si urmatorul urca
+   peste el. Partea de aici e doar ce nu poate face `sticky` singur: cel care
+   ramane dedesubt se micsoreaza si se stinge, ca sa se vada ca e in spate.
+
+   `animation-timeline: view()` leaga animatia de pozitia cardului in fereastra,
+   fara JavaScript si fara ascultator de scroll. Unde nu e sustinuta (Firefox,
+   Safari mai vechi), regula pica in intregime si raman doar cardurile in teanc,
+   care arata oricum intentionat. De asta e in `@supports`: nu vreau ca lipsa
+   suportului sa lase cardurile pe jumatate stinse. */
+/* `--covered` merge de la 0 la 1 pe masura ce cardul urmator il acopera. Il scrie
+   `FeatureStack`, o data pe cadru. Aici doar il traducem in marime si opacitate.
+
+   Doua incercari pur-CSS au picat inainte, si merita stiut de ce:
+   1. `animation-timeline: view()` pus pe card nu porneste niciodata. Cardul e
+      `sticky`, iar cat sta pinat pozitia lui in fereastra nu se schimba, deci
+      cronologia ramane inghetata.
+   2. Mutarea cronologiei pe un locas din jurul cardului rupe lipirea: un element
+      `sticky` se poate misca doar in cutia parintelui, iar locasul era exact cat
+      cardul, deci cursa devenea zero si cardurile pluteau pur si simplu in sus.
+   De aceea progresul se calculeaza acum in JavaScript, dar doar atat: scrierea
+   unei variabile. Desenul rimane tot al motorului CSS. */
+/* Adancimea. Perspectiva sta pe parintele direct al cardului, altfel `rotateX`
+   iese o turtire, nu o inclinare. */
+.feature-slot {
+  perspective: 1600px;
+  perspective-origin: 50% 0%;
+}
+
+.feature-card {
+  --covered: 0;
+  transform-origin: 50% 0%;
+  /* Se duce in spate si se inclina, in loc sa se micsoreze pe loc. Micsorarea
+     vine din perspectiva, deci e cea corecta optic, nu una aleasa de mana. */
+  transform: translateZ(calc(var(--covered) * -130px))
+    rotateX(calc(var(--covered) * 5deg));
+  opacity: calc(1 - 0.3 * var(--covered));
+}
+
+/* Umbra pe trei straturi: contactul apropiat, corpul, si patarea larga de
+   dedesubt. Una singura arata lipita pe fundal; trei dau volum. */
+.feature-card-shadow {
+  box-shadow:
+    0 1px 1px rgba(10, 10, 10, 0.04),
+    0 8px 20px -8px rgba(10, 10, 10, 0.1),
+    0 34px 64px -28px rgba(10, 10, 10, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-card {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
@@ -157,6 +239,20 @@
   --color-warning-foreground: #FFFFFF;
   --color-info: #1D4ED8;
   --color-info-foreground: #FFFFFF;
+
+  /* Site de prezentare (edinio.com) — paleta monocroma.
+     Nume NOI, adaugate strict aditiv: nu ating tokenii shadcn (--primary,
+     --foreground, --border) folositi de dashboard si de magazine, deci
+     randarea lor rimane neatinsa. Verdele de brand rimane --color-brand si
+     se foloseste cu masura: badge-uri, iconite la hover, detalii.
+     Titlurile sunt --color-ink (mai inchis decat --foreground, care bate in
+     violet); textul curent --color-ink-2. */
+  --color-ink: #0A0A0A;
+  --color-ink-2: #52525B;
+  --color-ink-3: #8A8A94;
+  --color-hairline: #EAEAEE;
+  --color-tint: #FAFAFB;
+  --color-tint-2: #F5F5F7;
 }
 
 @theme inline {

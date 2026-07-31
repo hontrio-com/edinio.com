@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { parseCsv } from "@/lib/import/csv";
-import { safeFetchText } from "@/lib/import/ssrf";
+import { safeFetchFile } from "@/lib/import/ssrf";
+import { parseTabular } from "@/lib/import/tabular";
 import { loadCatalog } from "./catalog";
 import { buildStockPlan } from "./matcher";
 import { readFeedRows } from "./mapping";
@@ -43,26 +43,18 @@ export async function runSource(
   deadline: number,
 ): Promise<RunResult> {
   /* ── Citirea adresei ── */
-  const fetched = await safeFetchText(source.url);
+  const fetched = await safeFetchFile(source.url);
   if ("error" in fetched) {
     await markRun(admin, source, { ok: false, error: fetched.error });
     return { ok: false, error: fetched.error };
   }
 
-  let parsed: ReturnType<typeof parseCsv>;
-  try {
-    parsed = parseCsv(fetched.text);
-  } catch {
-    const error = "Fisierul de la adresa nu poate fi citit ca CSV";
-    await markRun(admin, source, { ok: false, error });
-    return { ok: false, error };
+  const read = await parseTabular(fetched.buffer, source.url);
+  if ("error" in read) {
+    await markRun(admin, source, { ok: false, error: read.error });
+    return { ok: false, error: read.error };
   }
-
-  if (parsed.headers.length === 0 || parsed.rows.length === 0) {
-    const error = "Fisierul de la adresa e gol sau nu are antet";
-    await markRun(admin, source, { ok: false, error });
-    return { ok: false, error };
-  }
+  const parsed = read.parsed;
 
   if (!source.mapping.identifier) {
     const error = "Sursa nu are aleasa coloana cu identificatorul";

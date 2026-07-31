@@ -299,7 +299,7 @@ export function StockFeedSources({
                 className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
               />
             </Field>
-            <Field label="Adresa fisierului CSV" required>
+            <Field label="Adresa fisierului (CSV sau Excel)" required>
               <input
                 value={draft.url}
                 onChange={(e) => { setDraft({ ...draft, url: e.target.value }); setProbe(null); }}

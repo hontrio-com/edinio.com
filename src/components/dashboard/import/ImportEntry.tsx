@@ -86,14 +86,14 @@ export function ImportEntry({
           icon={PackagePlus}
           title="Import produse"
           description="Adauga produse noi sau actualizeaza tot: nume, preturi, descrieri, imagini, categorii si variante."
-          note="Fisier complet, de la Shopify, WooCommerce sau al tau."
+          note="CSV sau Excel, de la Shopify, WooCommerce sau al tau."
           onClick={() => setMode("products")}
         />
         <Choice
           icon={Boxes}
           title="Actualizare stocuri"
           description="Schimba doar cantitatile. Nu atinge nume, descrieri, imagini sau categorii."
-          note="Doua coloane sunt de ajuns: un cod si cantitatea."
+          note="CSV sau Excel. Doua coloane sunt de ajuns: un cod si cantitatea."
           onClick={() => setMode("stock")}
         />
       </div>

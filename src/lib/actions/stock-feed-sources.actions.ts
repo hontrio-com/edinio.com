@@ -3,8 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
-import { parseCsv } from "@/lib/import/csv";
-import { safeFetchText } from "@/lib/import/ssrf";
+import { safeFetchFile } from "@/lib/import/ssrf";
+import { parseTabular } from "@/lib/import/tabular";
 import { autoMapStockColumns } from "@/lib/import/stock-feed/mapping";
 import { runSource } from "@/lib/import/stock-feed/runner";
 import {
@@ -95,30 +95,26 @@ export interface ProbeResult {
  * Citeste adresa o singura data, ca omul sa poata alege coloanele.
  *
  * Nu salveaza nimic si nu atinge catalogul. Descarcarea trece prin
- * `safeFetchText`, deci o adresa care duce in reteaua interna e refuzata.
+ * `safeFetchFile`, deci o adresa care duce in reteaua interna e refuzata. Se
+ * accepta si XLSX: formatul se recunoaste din continut.
  */
 export async function probeStockFeedUrl(url: string): Promise<ProbeResult | { error: string }> {
   const owner = await requireOwner();
   if (!owner.ok) return { error: owner.error };
   if (!validUrl(url)) return { error: "Adresa trebuie sa inceapa cu http sau https" };
 
-  const fetched = await safeFetchText(url);
+  const fetched = await safeFetchFile(url);
   if ("error" in fetched) return { error: fetched.error };
 
-  try {
-    const parsed = parseCsv(fetched.text);
-    if (parsed.headers.length === 0) return { error: "Fisierul nu are un antet valid" };
-    if (parsed.rows.length === 0) return { error: "Fisierul nu contine randuri" };
+  const read = await parseTabular(fetched.buffer, url);
+  if ("error" in read) return { error: read.error };
 
-    return {
-      headers: parsed.headers,
-      mapping: autoMapStockColumns(parsed.headers),
-      sampleRows: parsed.rows.slice(0, 8),
-      totalRows: parsed.rows.length,
-    };
-  } catch {
-    return { error: "Fisierul de la adresa nu poate fi citit ca CSV" };
-  }
+  return {
+    headers: read.parsed.headers,
+    mapping: autoMapStockColumns(read.parsed.headers),
+    sampleRows: read.parsed.rows.slice(0, 8),
+    totalRows: read.parsed.rows.length,
+  };
 }
 
 export interface SaveSourceInput {

@@ -16,6 +16,7 @@ import {
   type StockFeedMapping, type StockFeedOptions, type StockMatchKey,
 } from "@/lib/import/stock-feed/types";
 import { EMPTY_STOCK_TOTALS, type StockTotals } from "@/lib/import/stock-feed/committer";
+import { ACCEPT_ATTRIBUTE, hasAcceptedExtension } from "@/lib/import/tabular-formats";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -64,8 +65,8 @@ export function StockFeedWizard({ onBack }: { onBack: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      toast.error("Te rugam incarca un fisier CSV");
+    if (!hasAcceptedExtension(file.name)) {
+      toast.error("Te rugam incarca un fisier CSV sau Excel");
       return;
     }
     setUploading(true);
@@ -179,16 +180,16 @@ export function StockFeedWizard({ onBack }: { onBack: () => void }) {
             <Upload className="h-8 w-8 text-muted-foreground" />
           )}
           <p className="text-sm font-medium text-foreground">
-            Trage fisierul CSV aici sau alege-l de pe calculator
+            Trage fisierul aici sau alege-l de pe calculator
           </p>
           <p className="max-w-md text-xs text-muted-foreground">
-            Ai nevoie de doua coloane: un cod care identifica produsul si cantitatea.
-            Opțional, si o coloana de pret.
+            CSV sau Excel (.xlsx). Ai nevoie de doua coloane: un cod care identifica
+            produsul si cantitatea. Opțional, si o coloana de pret.
           </p>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept={ACCEPT_ATTRIBUTE}
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -216,7 +217,8 @@ TRIC-001-M;4
 TRIC-001-L;8`}
           </pre>
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Codurile de produs si cele de varianta pot sta in acelasi fisier.
+            Codurile de produs si cele de varianta pot sta in acelasi fisier. La un
+            Excel citim prima foaie.
           </p>
         </div>
       </div>

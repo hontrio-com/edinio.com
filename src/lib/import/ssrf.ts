@@ -59,21 +59,16 @@ async function assertPublicHost(hostname: string): Promise<void> {
 
 const MAX_TEXT_BYTES = 8 * 1024 * 1024; // 8MB / feed, cat si incarcarea manuala
 
-export type FetchTextResult = { text: string } | { error: string };
+export type FetchFileResult = { buffer: Buffer } | { error: string };
 
 /**
- * Descarca un fisier text (feed de stocuri) cu aceleasi garantii ca imaginile.
+ * Descarca un fisier tabelar (CSV sau XLSX) ca octeti bruti.
  *
- * Sta aici, langa `safeFetchImage`, ca sa foloseasca ACELASI `assertPublicHost`.
- * O adresa data de comerciant si citita de serverul nostru e o cale directa spre
- * reteaua interna, iar apararea nu trebuie sa existe in doua copii care pot
- * ajunge sa nu mai semene.
- *
- * Tipul de continut nu se verifica strict: furnizorii servesc CSV-uri drept
- * `text/plain`, `application/octet-stream` sau chiar `text/html`. Refuzam doar
- * ce e clar binar, iar decizia finala o ia parserul de CSV.
+ * Intoarce octeti, nu text, si asta e esential: un XLSX e o arhiva ZIP, iar citit
+ * ca text UTF-8 se strica ireversibil. Cine primeste octetii decide apoi ce e,
+ * din semnatura fisierului, nu din extensie.
  */
-export async function safeFetchText(rawUrl: string): Promise<FetchTextResult> {
+export async function safeFetchFile(rawUrl: string): Promise<FetchFileResult> {
   try {
     const u = new URL(rawUrl);
     if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "Protocol invalid" };
@@ -86,7 +81,11 @@ export async function safeFetchText(rawUrl: string): Promise<FetchTextResult> {
       res = await fetch(u, {
         redirect: "error",
         signal: controller.signal,
-        headers: { "User-Agent": USER_AGENT, Accept: "text/csv, text/plain, */*" },
+        headers: {
+          "User-Agent": USER_AGENT,
+          Accept:
+            "text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/plain, */*",
+        },
         cache: "no-store",
       });
     } finally {
@@ -97,7 +96,7 @@ export async function safeFetchText(rawUrl: string): Promise<FetchTextResult> {
 
     const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     if (contentType.startsWith("image/") || contentType.startsWith("video/")) {
-      return { error: "Adresa nu returneaza un fisier text" };
+      return { error: "Adresa nu returneaza un fisier tabelar" };
     }
 
     const declared = res.headers.get("content-length");
@@ -107,7 +106,7 @@ export async function safeFetchText(rawUrl: string): Promise<FetchTextResult> {
     if (buffer.byteLength === 0) return { error: "Fisier gol" };
     if (buffer.byteLength > MAX_TEXT_BYTES) return { error: "Fisier prea mare" };
 
-    return { text: buffer.toString("utf-8") };
+    return { buffer };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("blocked:")) return { error: "Adresa interzisa" };
     if (e instanceof Error && e.name === "AbortError") return { error: "Timeout" };

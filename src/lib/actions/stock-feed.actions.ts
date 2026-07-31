@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadToR2, deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
 import { parseCsv } from "@/lib/import/csv";
+import { parseTabular, recordsToCsv } from "@/lib/import/tabular";
+import { hasAcceptedExtension } from "@/lib/import/tabular-formats";
 import { autoMapStockColumns, readFeedRows } from "@/lib/import/stock-feed/mapping";
 import { buildStockPlan, summarizePlan } from "@/lib/import/stock-feed/matcher";
 import { loadCatalog } from "@/lib/import/stock-feed/catalog";
@@ -125,23 +127,26 @@ export async function createStockFeedJob(
   if (!(file instanceof File)) return { error: "Niciun fisier incarcat" };
   if (file.size === 0) return { error: "Fisierul este gol" };
   if (file.size > MAX_FILE_BYTES) return { error: "Fisierul este prea mare (maximum 8MB)" };
-  if (!file.name.toLowerCase().endsWith(".csv")) return { error: "Momentan acceptam doar fisiere CSV" };
+  if (!hasAcceptedExtension(file.name)) {
+    return { error: "Acceptam fisiere CSV, XLSX sau XLSM" };
+  }
 
-  let text: string;
+  let buffer: Buffer;
   try {
-    text = await file.text();
+    buffer = Buffer.from(await file.arrayBuffer());
   } catch {
     return { error: "Nu am putut citi fisierul" };
   }
 
-  let parsed: ReturnType<typeof parseCsv>;
-  try {
-    parsed = parseCsv(text);
-  } catch {
-    return { error: "Nu am putut citi fisierul CSV. Verifica formatul." };
-  }
-  if (parsed.headers.length === 0) return { error: "Fisierul nu are un antet valid" };
-  if (parsed.rows.length === 0) return { error: "Fisierul nu contine randuri" };
+  /*
+   * Fisierul se aduce la CSV AICI, o singura data, si asa se pastreaza in R2.
+   * Pasii de mai departe (previzualizare, pornire) il recitesc de acolo si nu
+   * trebuie sa stie nimic despre XLSX.
+   */
+  const read = await parseTabular(buffer, file.name);
+  if ("error" in read) return { error: read.error };
+  const parsed = read.parsed;
+  const text = read.format === "csv" ? buffer.toString("utf-8") : recordsToCsv(parsed);
 
   const mapping = autoMapStockColumns(parsed.headers);
 

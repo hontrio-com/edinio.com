@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
-import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
 import type Stripe from "stripe";
 
 export async function POST(request: NextRequest) {
@@ -49,17 +48,44 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // checkout.session.completed — mark order as paid
-  if (event.type === "checkout.session.completed") {
+  // checkout.session.completed — marcheaza comanda platita.
+  //
+  // `async_payment_succeeded` acopera metodele care se deconteaza mai tarziu:
+  // acolo sesiunea se „completeaza" cu payment_status `unpaid`, iar plata
+  // confirma abia la al doilea eveniment.
+  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     const session = event.data.object as Stripe.Checkout.Session;
     const orderId = session.metadata?.orderId;
-    if (orderId && session.payment_status === "paid") {
-      await admin
+    const businessId = session.metadata?.businessId;
+    const accountId = event.account ?? null;
+
+    if (orderId && businessId && accountId) {
+      const { data: order } = await admin
         .from("orders")
-        .update({ payment_status: "paid", status: "confirmed" })
-        .eq("id", orderId);
-      void maybeMarkMailchimpOrderPaid(orderId);
-      void maybeMarkBrevoOrderPaid(orderId);
+        .select("id, total, status, payment_status")
+        .eq("id", orderId)
+        .eq("business_id", businessId)
+        .single();
+
+      // Contul din eveniment trebuie sa fie chiar contul conectat al magazinului:
+      // altfel un cont conectat oarecare ar putea marca platita comanda altuia
+      // doar trimitand acelasi `orderId` in metadata.
+      const { data: settings } = await admin
+        .from("store_settings")
+        .select("stripe_config")
+        .eq("business_id", businessId)
+        .single();
+
+      if (order && stripeAccountId(settings?.stripe_config) === accountId) {
+        await finalizeStripeOrder(
+          admin,
+          accountId,
+          { id: order.id, total: Number(order.total) || 0, status: order.status as string | null },
+          session.id,
+        );
+      } else {
+        console.error("[stripe/webhook] comanda sau contul nu corespund:", { orderId, businessId, accountId });
+      }
     }
   }
 

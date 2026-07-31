@@ -59,7 +59,11 @@ export async function POST(request: NextRequest) {
         },
       ],
       customer_email: order.customer_email ?? undefined,
-      success_url: `${origin}/${slug}/confirm?orderId=${orderId}&name=${encodeURIComponent(order.customer_name)}&total=${order.total}`,
+      // Intoarcerea trece prin `/api/stripe/return`, care verifica sesiunea si
+      // marcheaza comanda platita inainte de a duce clientul la confirmare. Fara
+      // ea, marcarea atarna doar de webhook-ul Connect — si cand acela nu ajunge,
+      // comanda ramane „Neplatit" cu banii incasati.
+      success_url: `${origin}/api/stripe/return?orderId=${orderId}&businessId=${businessId}`,
       cancel_url: `${origin}/${slug}`,
       metadata: { orderId, businessId },
     },

@@ -980,6 +980,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           compare_at_price: displayComparePrice,
           images: slides,
           weight_grams: product.weight_grams,
+          variantTitle: selectedComboTitle ?? undefined,
         }}
         business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
         shippingCost={shippingCost}

@@ -350,6 +350,7 @@ export function useCheckoutOrder({
         items: allItems,
         accepted_offer_ids: acceptedBumpOffers.length > 0 ? acceptedBumpOffers.map((o) => o.id) : undefined,
         shipping_cost: shipping,
+        shipping_token: courierSelection?.token,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
         customer_name: form.name,

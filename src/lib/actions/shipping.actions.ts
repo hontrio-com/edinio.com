@@ -10,6 +10,7 @@ import { getCOToken, getPrices as fetchCOPrices, type COConfig } from "@/lib/col
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
+import { signShippingQuote } from "@/lib/shipping/quote-token";
 
 /**
  * Diacritics-insensitive locality match ("București"/"Sector 3" find
@@ -45,6 +46,8 @@ export type ShippingOption = {
   // Colete Online is a broker too — same mechanism.
   coleteServiceId?: number;
   coleteServiceName?: string;
+  /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
+  token?: string;
 };
 
 export type LockerItem = {
@@ -532,8 +535,16 @@ export async function getShippingOptions(
     if (finalOptions.length === 0) return [];
   }
 
+  // Fiecare optiune pleaca semnata. Tokenul se intoarce cu comanda si e singurul
+  // fel in care serverul poate sti ca pretul livrarii chiar a fost cotat de el.
+  // Vezi `quote-token.ts`.
+  const semnate = finalOptions.map((o) => ({
+    ...o,
+    token: signShippingQuote(businessId, destination, o.price),
+  }));
+
   // Sort: address first, then lockers, by price
-  return finalOptions.sort((a, b) => {
+  return semnate.sort((a, b) => {
     if (a.deliveryType !== b.deliveryType) return a.deliveryType === "address" ? -1 : 1;
     return a.price - b.price;
   });

@@ -15,6 +15,7 @@ import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap } from "@/lib/storefront/variants";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
+import { verifyShippingQuote } from "@/lib/shipping/quote-token";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
@@ -52,8 +53,22 @@ type OrderProduct = {
   page_sections: unknown;
 };
 
-// All legitimate per-unit prices: base price + every enabled variant combination.
-function legitUnitPrices(product: OrderProduct): number[] {
+/**
+ * Preturile unitare legitime pentru produsul principal.
+ *
+ * Cand comanda numeste o varianta, singurul pret legitim e AL EI. Fara ingustarea
+ * asta, orice pret de varianta activa trecea pentru orice varianta: se putea
+ * comanda marimea scumpa la pretul celei ieftine, iar comerciantul vedea in
+ * comanda numele corect si suma mica. Liniile din cos n-au avut niciodata
+ * problema — acolo varianta se trimite explicit si se pretuieste din combinatii.
+ */
+function legitUnitPrices(product: OrderProduct, variantTitle?: string | null): number[] {
+  if (variantTitle) {
+    const pret = enabledComboPriceMap(product.page_sections, round2(product.price)).get(variantTitle);
+    // Varianta necunoscuta sau dezactivata intre timp: nu cadem pe pretul de baza,
+    // fiindca ar fi exact portita pe care o inchidem. Comanda e respinsa.
+    return pret != null ? [round2(pret)] : [];
+  }
   const set = new Set<number>([round2(product.price)]);
   const ps = (product.page_sections ?? {}) as {
     variants?: { enabled?: boolean; combinations?: Array<{ enabled?: boolean; price?: number | null }> };
@@ -83,12 +98,17 @@ function legitBundleTotals(product: OrderProduct, unit: number, quantity: number
 
 // Returns the authoritative pre-discount subtotal, or null if the claimed unit
 // price cannot be reconciled with any legitimate configuration.
-function authoritativeSubtotal(product: OrderProduct, claimedUnit: number, quantity: number): number | null {
+function authoritativeSubtotal(
+  product: OrderProduct,
+  claimedUnit: number,
+  quantity: number,
+  variantTitle?: string | null,
+): number | null {
   if (!Number.isFinite(claimedUnit) || quantity < 1) return null;
   const claimed = round2(claimedUnit * quantity);
   let best: number | null = null;
   let bestDiff = Infinity;
-  for (const unit of legitUnitPrices(product)) {
+  for (const unit of legitUnitPrices(product, variantTitle)) {
     for (const candidate of legitBundleTotals(product, unit, quantity)) {
       const d = Math.abs(candidate - claimed);
       if (d < bestDiff) { bestDiff = d; best = candidate; }
@@ -96,6 +116,44 @@ function authoritativeSubtotal(product: OrderProduct, claimedUnit: number, quant
   }
   // Tolerance absorbs rounding only; real tampering is orders of magnitude away.
   return best !== null && bestDiff <= 0.5 ? best : null;
+}
+
+/**
+ * Costul de livrare pe care il acceptam, nu cel pe care il cere clientul.
+ *
+ * Transportul era singurul numar din comanda scris asa cum venea din browser:
+ * cine trimitea zero primea livrare gratuita, iar comerciantul platea oricum
+ * curierul. Acum se accepta doar doua lucruri: un pret pe care l-am cotat chiar
+ * noi, dovedit cu semnatura de la `getShippingOptions`, sau tariful implicit al
+ * magazinului, pentru cazul in care nu exista niciun curier de ales.
+ *
+ * Orice altceva cade pe tariful implicit. NU refuzam comanda: o cotatie pierduta
+ * nu are voie sa coste o vanzare, iar tariful implicit e valoarea pe care
+ * comerciantul a declarat-o oricum.
+ *
+ * Livrarea gratuita ramane unde era, dupa apelul asta: pragul de comanda si
+ * codul de reducere se evalueaza server-side si pun transportul pe zero.
+ */
+function autoritativeShipping(
+  businessId: string,
+  cerut: number,
+  token: string | null | undefined,
+  dest: { county?: string | null; city?: string | null; country?: string | null; postCode?: string | null },
+  tarifImplicit: number | null,
+): number {
+  const claimed = Math.max(0, round2(Number(cerut) || 0));
+  if (verifyShippingQuote(businessId, dest, claimed, token)) return claimed;
+  // Magazin fara tarif implicit configurat: n-avem cu ce compara, deci nu-i
+  // taiem comerciantului transportul pe baza unei banuieli.
+  if (tarifImplicit == null) return claimed;
+  if (claimed === round2(tarifImplicit)) return claimed;
+  logError({
+    action: "placeOrder.shippingRejected",
+    message: "Shipping cost not covered by a signed quote",
+    details: { businessId, claimed, tarifImplicit, hasToken: !!token },
+    severity: "warning",
+  });
+  return Math.max(0, round2(tarifImplicit));
 }
 
 type CheckoutExtra = { id: string; label: string; price: number };
@@ -165,8 +223,12 @@ export async function placeOrder(data: {
   product_id: string;
   product_name: string;
   product_price: number;
+  /** Combinatia de varianta aleasa, cand produsul are variante. */
+  variant_title?: string;
   quantity: number;
   shipping_cost: number;
+  /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
+  shipping_token?: string;
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
@@ -226,7 +288,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, vat_enabled, vat_rate, prices_include_vat")
+      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -235,7 +297,7 @@ export async function placeOrder(data: {
     return { error: "Produsul nu mai este disponibil. Reincarca pagina." };
   }
 
-  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, data.quantity);
+  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, data.quantity, data.variant_title);
   if (mainSubtotal === null) {
     logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity }, severity: "warning" });
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
@@ -335,7 +397,13 @@ export async function placeOrder(data: {
 
   // Shipping clamped non-negative; zeroed when free-shipping rules apply.
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
-  let shipping = Math.max(0, round2(data.shipping_cost));
+  let shipping = autoritativeShipping(
+    data.business_id,
+    data.shipping_cost,
+    data.shipping_token,
+    { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
+    cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
+  );
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
   // VAT: recomputed server-side (mirrors placeCartOrder + the storefront) so single-
@@ -484,7 +552,7 @@ export async function placeOrder(data: {
         total,
         subtotal,
         items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
-        shipping_cost: data.shipping_cost,
+        shipping_cost: shipping,
         discount_code: data.discount_code,
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
@@ -820,7 +888,7 @@ export async function updateOrderDetails(orderId: string, data: {
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, business_id, status, items, subtotal, total, shipping_address")
+    .select("id, business_id, status, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -878,7 +946,52 @@ export async function updateOrderDetails(orderId: string, data: {
 
   const addedSum = round2(newItems.reduce((s, i) => s + i.price * i.quantity, 0));
   const newSubtotal = round2(Number(order.subtotal) + addedSum);
-  const newTotal = round2(Number(order.total) + addedSum);
+
+  /*
+   * Totalul se RECALCULEAZA din componente, nu se aduna peste cel vechi.
+   *
+   * Adunarea simpla lasa TVA-ul in urma: la magazinele cu preturi fara TVA,
+   * liniile adaugate de comerciant plecau nefacturate cu TVA, deci se incasa mai
+   * putin decat trebuia. Iar `vat_amount` ramanea cel vechi la TOATE magazinele,
+   * si el se vede in panou si in emailul comenzii.
+   *
+   * Reducerea promotionala si cea de card raman cele stabilite la plasare: au
+   * fost convenite pe cosul de atunci, iar comerciantul adauga produse ulterior.
+   * Pragul de livrare gratuita se reevalueaza, fiindca adaugarea poate sa il
+   * treaca. Cu zero linii adaugate, formula da exact totalul dinainte.
+   */
+  const { data: cfgRow } = await supabase
+    .from("store_settings")
+    .select("vat_enabled, vat_rate, prices_include_vat, free_shipping_threshold")
+    .eq("business_id", order.business_id)
+    .single();
+
+  // Extraoptiunile stau in `items` ca linii `extra_*` si NU intra in `subtotal`.
+  const extrasTotal = round2(
+    (order.items as { product_id?: string; price?: number; quantity?: number }[] | null ?? [])
+      .filter((i) => typeof i?.product_id === "string" && i.product_id.startsWith("extra_"))
+      .reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
+  );
+
+  const { vatAmount, vatAddOn } = computeVat(newSubtotal + extrasTotal, {
+    vat_enabled: cfgRow?.vat_enabled ?? false,
+    vat_rate: Number(cfgRow?.vat_rate ?? 19),
+    prices_include_vat: cfgRow?.prices_include_vat ?? false,
+  });
+
+  const pragTransport = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
+  let newShipping = Math.max(0, round2(Number(order.shipping_cost) || 0));
+  if (pragTransport !== null && newSubtotal >= pragTransport) newShipping = 0;
+
+  const newTotal = Math.max(0, round2(
+    newSubtotal
+    + extrasTotal
+    - (Number(order.discount_amount) || 0)
+    - (Number(order.card_discount_amount) || 0)
+    - (Number(order.cod_discount_amount) || 0)
+    + newShipping
+    + vatAddOn,
+  ));
 
   // Merge the address into shipping_address WITHOUT touching courier/locker/
   // service keys — those belong to the checkout choice and the AWB flow.
@@ -906,6 +1019,8 @@ export async function updateOrderDetails(orderId: string, data: {
     shipping_address: newShip,
     items: [...prevItems, ...newItems],
     subtotal: newSubtotal,
+    shipping_cost: newShipping,
+    vat_amount: vatAmount,
     total: newTotal,
     updated_at: new Date().toISOString(),
   } as never).eq("id", orderId);
@@ -1025,6 +1140,8 @@ export async function placeCartOrder(data: {
   cart_session_id?: string;
   items: { product_id: string; name: string; price: number; quantity: number; variant_title?: string }[];
   shipping_cost: number;
+  /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
+  shipping_token?: string;
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
@@ -1082,7 +1199,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config")
+      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, default_shipping_cost")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1211,7 +1328,13 @@ export async function placeCartOrder(data: {
   );
 
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
-  let shipping = Math.max(0, round2(data.shipping_cost));
+  let shipping = autoritativeShipping(
+    data.business_id,
+    data.shipping_cost,
+    data.shipping_token,
+    { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
+    cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
+  );
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping + vatAddOn));
@@ -1341,7 +1464,7 @@ export async function placeCartOrder(data: {
         total,
         subtotal,
         items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
-        shipping_cost: data.shipping_cost,
+        shipping_cost: shipping,
         discount_code: data.discount_code,
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,

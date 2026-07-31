@@ -32,6 +32,8 @@ export interface CourierSelection {
   wootServiceName?: string;
   coleteServiceId?: number;
   coleteServiceName?: string;
+  /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
+  token?: string;
 }
 
 interface Props {
@@ -123,6 +125,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             wootServiceName: first.wootServiceName,
             coleteServiceId: first.coleteServiceId,
             coleteServiceName: first.coleteServiceName,
+            token: first.token,
           });
         }
       })
@@ -174,6 +177,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         wootServiceName: opt.wootServiceName,
         coleteServiceId: opt.coleteServiceId,
         coleteServiceName: opt.coleteServiceName,
+        token: opt.token,
       });
     }
   }
@@ -193,6 +197,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         lockerAddress: locker.address,
         lockerCity: locker.city,
         lockerCounty: locker.county,
+        token: opt.token,
       });
     }
   }

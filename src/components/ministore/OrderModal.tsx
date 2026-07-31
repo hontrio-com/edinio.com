@@ -67,6 +67,12 @@ interface Props {
     compare_at_price?: number | null;
     images: string[];
     weight_grams?: number | null;
+    /**
+     * Combinatia aleasa, separat de nume. Serverul o foloseste ca sa pretuiasca
+     * produsul din combinatia LUI: fara ea, orice pret de varianta activa trecea
+     * pentru orice varianta.
+     */
+    variantTitle?: string | null;
   };
   business: {
     id: string;
@@ -554,9 +560,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         cart_session_id: sessionId || undefined,
         product_id: product.id,
         product_name: product.name,
+        variant_title: product.variantTitle ?? undefined,
         product_price: unitPrice,
         quantity,
         shipping_cost: shipping,
+        shipping_token: courierSelection?.token,
         customer_name: form.name,
         customer_phone: form.phone.replace(/[\s\-().]/g, ""),
         customer_email: form.email.trim() || undefined,

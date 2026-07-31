@@ -735,6 +735,63 @@ export type Database = {
           },
         ]
       }
+      customers: {
+        Row: {
+          address: string | null
+          business_id: string
+          city: string | null
+          county: string | null
+          created_at: string
+          email: string | null
+          external_id: string | null
+          id: string
+          key: string
+          name: string
+          phone: string | null
+          postcode: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          business_id: string
+          city?: string | null
+          county?: string | null
+          created_at?: string
+          email?: string | null
+          external_id?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          postcode?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          business_id?: string
+          city?: string | null
+          county?: string | null
+          created_at?: string
+          email?: string | null
+          external_id?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          postcode?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       discounts: {
         Row: {
           business_id: string
@@ -3069,15 +3126,15 @@ export type Database = {
           sort_key?: string
         }
         Returns: {
-          address: string
+          address: string | null
           aov: number
-          city: string
-          county: string
-          email: string
-          first_order_at: string
+          city: string | null
+          county: string | null
+          email: string | null
+          first_order_at: string | null
           key: string
-          last_order_at: string
-          last_status: string
+          last_order_at: string | null
+          last_status: string | null
           name: string
           order_count: number
           paid_order_count: number

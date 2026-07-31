@@ -1,4 +1,5 @@
 import { cell, type ParsedCsv } from "@/lib/import/csv";
+import { pick } from "@/lib/import/header-match";
 import { parsePrice } from "@/lib/import/normalize";
 import type { StockFeedMapping, StockFeedRow } from "./types";
 
@@ -65,31 +66,6 @@ const STOCK_HINTS = [
   "disponibil", "available", "inventory", "in stoc", "on hand",
 ];
 const PRICE_HINTS = ["pret", "price", "pret vanzare", "pret_vanzare", "pvp", "retail"];
-
-function normHeader(h: string): string {
-  return h
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{M}+/gu, "");
-}
-
-/** Prima coloana al carei antet seamana cu unul din indicii. */
-function pick(headers: string[], hints: string[], taken: Set<string>): string | undefined {
-  const normalized = headers.map((h) => ({ raw: h, norm: normHeader(h) }));
-
-  /* Intai potrivire exacta, apoi una partiala: un antet "Cod produs" nu trebuie
-     furat de indiciul "cod" daca exista si o coloana numita exact "cod". */
-  for (const hint of hints) {
-    const exact = normalized.find((h) => h.norm === hint && !taken.has(h.raw));
-    if (exact) return exact.raw;
-  }
-  for (const hint of hints) {
-    const partial = normalized.find((h) => h.norm.includes(hint) && !taken.has(h.raw));
-    if (partial) return partial.raw;
-  }
-  return undefined;
-}
 
 export function autoMapStockColumns(headers: string[]): StockFeedMapping {
   const taken = new Set<string>();

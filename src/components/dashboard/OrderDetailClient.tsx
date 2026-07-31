@@ -837,11 +837,23 @@ export function OrderDetailClient({
             <div className="space-y-2">
               {items.map((item, i) => (
                 <div key={i}>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                      <span className="text-foreground truncate min-w-0">{item.name}</span>
-                      <span className="text-muted-foreground flex-shrink-0">x{item.quantity}</span>
+                  {/*
+                    Numele produsului se vede INTREG, pe cate randuri e nevoie.
+                    Avea `truncate`, iar pe telefon taia exact partea care
+                    deosebeste produsele intre ele: din zece randuri cu "Tulipan
+                    Negro Gel Dus ..." nu se mai vedea care e care.
+                    Alinierea trece pe `items-start`, ca iconita, bucata si pretul
+                    sa stea in dreptul PRIMULUI rand, nu la mijlocul unui nume de
+                    trei randuri. Bucata sta lipita de nume, in aceeasi curgere,
+                    ca sa nu ramana singura pe un rand nou.
+                  */}
+                  <div className="flex items-start justify-between gap-3 text-sm">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-[3px]" />
+                      <span className="min-w-0 break-words text-foreground">
+                        {item.name}
+                        <span className="ml-1.5 whitespace-nowrap text-muted-foreground">x{item.quantity}</span>
+                      </span>
                     </div>
                     <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
                   </div>

@@ -247,6 +247,7 @@ export function buildStockPlan(
       productId: target.product.id,
       productName: target.product.name,
       variantId: target.variantId,
+      variantSku: variant?.sku ?? null,
       variantTitle: variant?.title ?? null,
       stockFrom: current.stock,
       stockTo,

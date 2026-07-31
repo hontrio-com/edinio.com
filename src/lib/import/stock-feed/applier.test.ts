@@ -30,9 +30,9 @@ function sectiuni() {
 
 test("schimba stocul unei variante si nu atinge nimic altceva", () => {
   const inainte = sectiuni();
-  const { next, applied, missing } = patchVariants(inainte, [{ variantId: "m", stock: 42, price: null }]);
+  const { next, applied, missing } = patchVariants(inainte, [{ key: 1, variantId: "m", sku: null, stock: 42, price: null }]);
 
-  assert.deepEqual(applied, ["m"]);
+  assert.deepEqual(applied, [1]);
   assert.deepEqual(missing, []);
 
   const n = next as ReturnType<typeof sectiuni>;
@@ -48,7 +48,7 @@ test("schimba stocul unei variante si nu atinge nimic altceva", () => {
 });
 
 test("campurile celorlalte combinatii raman intacte", () => {
-  const { next } = patchVariants(sectiuni(), [{ variantId: "m", stock: 42, price: null }]);
+  const { next } = patchVariants(sectiuni(), [{ key: 1, variantId: "m", sku: null, stock: 42, price: null }]);
   const n = next as ReturnType<typeof sectiuni>;
 
   // Varianta neatinsa.
@@ -64,24 +64,24 @@ test("campurile celorlalte combinatii raman intacte", () => {
 
 test("nu modifica obiectul primit", () => {
   const inainte = sectiuni();
-  patchVariants(inainte, [{ variantId: "m", stock: 42, price: null }]);
+  patchVariants(inainte, [{ key: 1, variantId: "m", sku: null, stock: 42, price: null }]);
   assert.equal(inainte.variants.combinations[1].stock_quantity, 4);
 });
 
 test("mai multe variante ale aceluiasi produs, intr-o singura trecere", () => {
   const { next, applied } = patchVariants(sectiuni(), [
-    { variantId: "s", stock: 1, price: null },
-    { variantId: "m", stock: 2, price: null },
+    { key: 1, variantId: "s", sku: null, stock: 1, price: null },
+    { key: 2, variantId: "m", sku: null, stock: 2, price: null },
   ]);
   const n = next as ReturnType<typeof sectiuni>;
 
-  assert.deepEqual(applied.sort(), ["m", "s"]);
+  assert.deepEqual(applied.sort(), [1, 2]);
   assert.equal(n.variants.combinations[0].stock_quantity, 1);
   assert.equal(n.variants.combinations[1].stock_quantity, 2);
 });
 
 test("pretul se scrie doar cand e cerut", () => {
-  const { next } = patchVariants(sectiuni(), [{ variantId: "m", stock: null, price: 77 }]);
+  const { next } = patchVariants(sectiuni(), [{ key: 1, variantId: "m", sku: null, stock: null, price: 77 }]);
   const n = next as ReturnType<typeof sectiuni>;
 
   assert.equal(n.variants.combinations[1].price, 77);
@@ -91,39 +91,106 @@ test("pretul se scrie doar cand e cerut", () => {
 
 test("varianta disparuta e raportata, nu inventata", () => {
   const { next, applied, missing } = patchVariants(sectiuni(), [
-    { variantId: "xl", stock: 5, price: null },
+    { key: 1, variantId: "xl", sku: null, stock: 5, price: null },
   ]);
   const n = next as ReturnType<typeof sectiuni>;
 
   assert.deepEqual(applied, []);
-  assert.deepEqual(missing, ["xl"]);
+  assert.deepEqual(missing, [1]);
   // Nu s-a adaugat nicio combinatie noua.
   assert.equal(n.variants.combinations.length, 2);
 });
 
 test("produs fara variante: nu se pierde restul continutului", () => {
   const fara = { descriere: "text", google: { brand: "X" } };
-  const { next, missing } = patchVariants(fara, [{ variantId: "m", stock: 1, price: null }]);
+  const { next, missing } = patchVariants(fara, [{ key: 1, variantId: "m", sku: null, stock: 1, price: null }]);
   const n = next as Record<string, unknown>;
 
-  assert.deepEqual(missing, ["m"]);
+  assert.deepEqual(missing, [1]);
   assert.equal(n.descriere, "text");
   assert.deepEqual(n.google, { brand: "X" });
 });
 
 test("page_sections null sau stricat nu arunca", () => {
   for (const intrare of [null, undefined, "text", 42, []]) {
-    const { next, missing } = patchVariants(intrare, [{ variantId: "m", stock: 1, price: null }]);
-    assert.deepEqual(missing, ["m"]);
+    const { next, missing } = patchVariants(intrare, [{ key: 1, variantId: "m", sku: null, stock: 1, price: null }]);
+    assert.deepEqual(missing, [1]);
     assert.equal(typeof next, "object");
   }
 });
 
+// ── Combinatii care impart acelasi id ──────────────────────────────────────
+//
+// Id-ul unei combinatii e un slug facut din optiuni ("galben-unic"), deci NU e
+// unic in produs. Intr-un magazin real sunt 52 de produse cu combinatii care se
+// calca pe id, cu SKU-uri diferite. Pana la departajarea pe SKU, o singura
+// valoare ajungea in toate: la o rulare adevarata, 5 stocuri gresite.
+
+function idDublat() {
+  return {
+    variants: {
+      combinations: [
+        { id: "galben-unic", title: "Galben", sku: "HS70553", stock_quantity: 1, price: 90 },
+        { id: "galben-unic", title: "Galben", sku: "HS70554", stock_quantity: 2, price: 95 },
+        { id: "galben-unic", title: "Galben", sku: "HS70555", stock_quantity: 8, price: 99 },
+      ],
+    },
+  };
+}
+
+test("doua combinatii cu acelasi id isi primesc fiecare valoarea ei", () => {
+  const { next, applied, missing } = patchVariants(idDublat(), [
+    { key: 10, variantId: "galben-unic", sku: "HS70553", stock: 3, price: null },
+    { key: 11, variantId: "galben-unic", sku: "HS70554", stock: 7, price: null },
+  ]);
+  const n = next as ReturnType<typeof idDublat>;
+
+  assert.deepEqual(applied.sort(), [10, 11]);
+  assert.deepEqual(missing, []);
+  assert.equal(n.variants.combinations[0].stock_quantity, 3, "HS70553 isi ia 3");
+  assert.equal(n.variants.combinations[1].stock_quantity, 7, "HS70554 isi ia 7");
+  assert.equal(n.variants.combinations[2].stock_quantity, 8, "a treia nu e in feed, ramane 8");
+});
+
+test("SKU-ul se compara fara sa conteze spatiile sau majusculele", () => {
+  const { next } = patchVariants(idDublat(), [
+    { key: 1, variantId: "galben-unic", sku: " hs70554 ", stock: 7, price: null },
+  ]);
+  const n = next as ReturnType<typeof idDublat>;
+  assert.equal(n.variants.combinations[1].stock_quantity, 7);
+  assert.equal(n.variants.combinations[0].stock_quantity, 1, "prima ramane neatinsa");
+});
+
+test("un SKU care nu exista in produs e raportat, nu scris aiurea", () => {
+  const { next, missing } = patchVariants(idDublat(), [
+    { key: 1, variantId: "galben-unic", sku: "ALTCEVA", stock: 99, price: null },
+  ]);
+  const n = next as ReturnType<typeof idDublat>;
+
+  assert.deepEqual(missing, [1]);
+  assert.deepEqual(
+    n.variants.combinations.map((c) => c.stock_quantity),
+    [1, 2, 8],
+    "niciun stoc nu are voie sa se schimbe",
+  );
+});
+
+test("fara SKU se pastreaza purtarea veche: toate combinatiile cu acel id", () => {
+  // Randurile puse la coada inainte de aceasta schimbare nu au SKU in ele.
+  const { next, applied } = patchVariants(idDublat(), [
+    { key: 1, variantId: "galben-unic", sku: null, stock: 5, price: null },
+  ]);
+  const n = next as ReturnType<typeof idDublat>;
+
+  assert.deepEqual(applied, [1]);
+  assert.deepEqual(n.variants.combinations.map((c) => c.stock_quantity), [5, 5, 5]);
+});
+
 test("combinatiile fara id sunt lasate in pace", () => {
   const stricat = { variants: { combinations: [{ title: "fara id", stock_quantity: 9 }] } };
-  const { next, missing } = patchVariants(stricat, [{ variantId: "m", stock: 1, price: null }]);
+  const { next, missing } = patchVariants(stricat, [{ key: 1, variantId: "m", sku: null, stock: 1, price: null }]);
   const n = next as typeof stricat;
 
-  assert.deepEqual(missing, ["m"]);
+  assert.deepEqual(missing, [1]);
   assert.equal(n.variants.combinations[0].stock_quantity, 9);
 });

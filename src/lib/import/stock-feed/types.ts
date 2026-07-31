@@ -71,6 +71,15 @@ export interface StockChange {
   productName: string;
   /** `null` cand se schimba stocul produsului, nu al unei variante. */
   variantId: string | null;
+  /**
+   * SKU-ul combinatiei tintite.
+   *
+   * Exista pentru ca `id`-ul unei combinatii NU e unic in produs: e un slug facut
+   * din optiuni ("galben-unic"), deci doua combinatii diferite pot ajunge cu
+   * acelasi id. Intr-un magazin real sunt 52 de produse asa. Fara SKU aici,
+   * scrierea nimereste toate combinatiile cu acel id, cu aceeasi valoare.
+   */
+  variantSku: string | null;
   variantTitle: string | null;
   stockFrom: number | null;
   /** `null` cand randul schimba doar pretul. */

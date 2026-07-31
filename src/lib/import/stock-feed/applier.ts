@@ -15,22 +15,45 @@ import type { StockChange } from "./types";
 type Client = SupabaseClient<Database>;
 
 export interface VariantEdit {
+  /**
+   * Cheia randului care a cerut modificarea; se intoarce in `applied`/`missing`.
+   * Nu folosim `variantId` pentru raportare tocmai pentru ca nu e unic.
+   */
+  key: number;
   variantId: string;
+  /**
+   * SKU-ul combinatiei tintite, cand se stie.
+   *
+   * ASTA departajeaza combinatiile care impart acelasi `id`. Id-ul combinatiei e
+   * un slug din optiuni ("galben-unic"), nu ceva unic: intr-un magazin real sunt
+   * 52 de produse cu combinatii care se calca pe id. Cand SKU-ul e cunoscut,
+   * scrierea merge DOAR in combinatia lui.
+   *
+   * `null` inseamna "nu stiu": atunci se pastreaza purtarea veche, adica se scrie
+   * in toate combinatiile cu acel id. Asa raman valabile si randurile puse la
+   * coada inainte de aceasta schimbare.
+   */
+  sku: string | null;
   stock: number | null;
   price: number | null;
+}
+
+function sameSku(a: unknown, b: string): boolean {
+  return typeof a === "string" && a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 /**
  * Schimba stocul si pretul unor combinatii dintr-un `page_sections`, pastrand
  * absolut tot restul. Functie pura, ca sa poata fi testata fara baza de date.
  *
- * Intoarce si cate combinatii a gasit: daca o varianta a disparut intre
- * previzualizare si scriere, vrem sa stim, nu sa raportam succes.
+ * Intoarce cheile randurilor care si-au gasit combinatia si pe cele care nu:
+ * daca o varianta a disparut intre previzualizare si scriere, vrem sa stim, nu
+ * sa raportam succes.
  */
 export function patchVariants(
   pageSections: unknown,
   edits: VariantEdit[],
-): { next: Record<string, unknown>; applied: string[]; missing: string[] } {
+): { next: Record<string, unknown>; applied: number[]; missing: number[] } {
   const root: Record<string, unknown> =
     pageSections && typeof pageSections === "object" && !Array.isArray(pageSections)
       ? { ...(pageSections as Record<string, unknown>) }
@@ -47,16 +70,23 @@ export function patchVariants(
     ? (combosRaw as Record<string, unknown>[])
     : [];
 
-  const byId = new Map(edits.map((e) => [e.variantId, e]));
-  const applied: string[] = [];
+  const applied = new Set<number>();
 
   const nextCombos = combos.map((combo) => {
     const id = typeof combo?.id === "string" ? combo.id : null;
     if (!id) return combo;
-    const edit = byId.get(id);
+
+    /*
+     * Intai potrivirea pe SKU, apoi cea doar pe id. Ordinea conteaza: cand doua
+     * combinatii impart un id, fiecare trebuie sa-si ia modificarea ei, nu pe a
+     * vecinei. Un `Map` cheiat pe id le contopea, si castiga ultima.
+     */
+    const edit =
+      edits.find((e) => e.variantId === id && e.sku !== null && sameSku(combo.sku, e.sku)) ??
+      edits.find((e) => e.variantId === id && e.sku === null);
     if (!edit) return combo;
 
-    applied.push(id);
+    applied.add(edit.key);
     /* Copie: pastram toate celelalte campuri ale combinatiei neatinse. */
     const next = { ...combo };
     if (edit.stock !== null) next.stock_quantity = edit.stock;
@@ -64,12 +94,12 @@ export function patchVariants(
     return next;
   });
 
-  const missing = edits.map((e) => e.variantId).filter((id) => !applied.includes(id));
+  const missing = edits.filter((e) => !applied.has(e.key)).map((e) => e.key);
 
   variants.combinations = nextCombos;
   root.variants = variants;
 
-  return { next: root, applied, missing };
+  return { next: root, applied: [...applied], missing };
 }
 
 /**
@@ -158,7 +188,9 @@ export async function applyStockPlan(
     }
 
     const edits: VariantEdit[] = productChanges.map((c) => ({
+      key: c.rowIndex,
       variantId: c.variantId as string,
+      sku: c.variantSku ?? null,
       stock: c.stockTo,
       price: c.priceTo,
     }));
@@ -169,12 +201,12 @@ export async function applyStockPlan(
        restul variantelor aceluiasi produs se scriu normal. */
     const missingSet = new Set(missing);
     for (const c of productChanges) {
-      if (missingSet.has(c.variantId as string)) {
+      if (missingSet.has(c.rowIndex)) {
         failed.push({ change: c, message: "Varianta nu mai exista in produs" });
       }
     }
 
-    const appliedChanges = productChanges.filter((c) => !missingSet.has(c.variantId as string));
+    const appliedChanges = productChanges.filter((c) => !missingSet.has(c.rowIndex));
     if (appliedChanges.length === 0) return;
 
     const { error: writeErr } = await admin

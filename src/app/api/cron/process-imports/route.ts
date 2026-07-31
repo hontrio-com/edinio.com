@@ -14,6 +14,21 @@ const MAX_JOBS = 5;
 const MAX_TICKS = 8;
 const TERMINAL = ["completed", "completed_with_errors", "failed", "cancelled"];
 
+/**
+ * Sursele pe care acest cron are voie sa le duca la capat.
+ *
+ * Lista PERMISA, nu lista interzisa, si asta conteaza. `product_imports` tine si
+ * joburi care nu importa produse, de exemplu feedul de stocuri, iar randurile
+ * lor din `product_import_rows` au cu totul alta forma. Selectat doar dupa
+ * status, cronul ar da un job de stoc pe mana committer-ului de produse, care ar
+ * incerca sa CREEZE produse din el.
+ *
+ * Cu o lista permisa, orice tip de job adaugat maine e ignorat pana cand cineva
+ * il trece aici in mod explicit. Cu o lista interzisa, ar fi fost procesat gresit
+ * din prima zi.
+ */
+const PRODUCT_SOURCES = ["shopify_csv", "woo_csv", "generic_csv"];
+
 function verifyCron(req: NextRequest): boolean {
   return req.headers.get("authorization")?.replace("Bearer ", "") === process.env.CRON_SECRET;
 }
@@ -27,6 +42,7 @@ export async function GET(req: NextRequest) {
   const { data: jobs } = await admin
     .from("product_imports")
     .select("id")
+    .in("source", PRODUCT_SOURCES)
     .in("status", ["importing", "rehosting_images"])
     .lt("updated_at", staleBefore)
     .order("created_at", { ascending: true })

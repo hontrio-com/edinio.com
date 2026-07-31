@@ -321,6 +321,20 @@ export async function processImport(
 
   if (!jobRaw) return { status: "failed", totals: EMPTY_TOTALS, done: true };
   const job = jobRaw as JobRow;
+
+  /*
+   * Bariera de siguranta: acest committer CREEAZA produse din
+   * `product_import_rows.parsed`. Tabelul `product_imports` tine si joburi de alt
+   * fel, cum e feedul de stocuri, la care `parsed` are cu totul alta forma.
+   * Ajuns aici cu un astfel de job, ar incerca sa importe produse din stocuri.
+   *
+   * Apelantii filtreaza deja pe sursa, dar protectia nu trebuie sa depinda de
+   * disciplina apelantului: e prea scump daca cineva uita.
+   */
+  if (!["shopify_csv", "woo_csv", "generic_csv"].includes(job.source)) {
+    return { status: job.status as ImportStatus, totals: EMPTY_TOTALS, done: true };
+  }
+
   const options = job.options as unknown as ImportOptions;
   const totals: ImportTotals = { ...EMPTY_TOTALS, ...((job.totals as Partial<ImportTotals>) ?? {}) };
 

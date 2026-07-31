@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/trendyol-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/stock-feeds",
+      "schedule": "0 * * * *"
     }
   ]
 }

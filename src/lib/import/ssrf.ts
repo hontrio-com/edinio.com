@@ -57,6 +57,64 @@ async function assertPublicHost(hostname: string): Promise<void> {
   }
 }
 
+const MAX_TEXT_BYTES = 8 * 1024 * 1024; // 8MB / feed, cat si incarcarea manuala
+
+export type FetchTextResult = { text: string } | { error: string };
+
+/**
+ * Descarca un fisier text (feed de stocuri) cu aceleasi garantii ca imaginile.
+ *
+ * Sta aici, langa `safeFetchImage`, ca sa foloseasca ACELASI `assertPublicHost`.
+ * O adresa data de comerciant si citita de serverul nostru e o cale directa spre
+ * reteaua interna, iar apararea nu trebuie sa existe in doua copii care pot
+ * ajunge sa nu mai semene.
+ *
+ * Tipul de continut nu se verifica strict: furnizorii servesc CSV-uri drept
+ * `text/plain`, `application/octet-stream` sau chiar `text/html`. Refuzam doar
+ * ce e clar binar, iar decizia finala o ia parserul de CSV.
+ */
+export async function safeFetchText(rawUrl: string): Promise<FetchTextResult> {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "Protocol invalid" };
+    await assertPublicHost(u.hostname);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(u, {
+        redirect: "error",
+        signal: controller.signal,
+        headers: { "User-Agent": USER_AGENT, Accept: "text/csv, text/plain, */*" },
+        cache: "no-store",
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+
+    const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (contentType.startsWith("image/") || contentType.startsWith("video/")) {
+      return { error: "Adresa nu returneaza un fisier text" };
+    }
+
+    const declared = res.headers.get("content-length");
+    if (declared && Number(declared) > MAX_TEXT_BYTES) return { error: "Fisier prea mare" };
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.byteLength === 0) return { error: "Fisier gol" };
+    if (buffer.byteLength > MAX_TEXT_BYTES) return { error: "Fisier prea mare" };
+
+    return { text: buffer.toString("utf-8") };
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("blocked:")) return { error: "Adresa interzisa" };
+    if (e instanceof Error && e.name === "AbortError") return { error: "Timeout" };
+    return { error: "Descarcare esuata" };
+  }
+}
+
 /** Download a remote image with SSRF protection, size/time/content-type limits. */
 export async function safeFetchImage(rawUrl: string): Promise<FetchImageResult> {
   try {

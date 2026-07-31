@@ -4,6 +4,9 @@ import { useState } from "react";
 import { ArrowRight, Boxes, PackagePlus } from "lucide-react";
 import { ImportWizard } from "./ImportWizard";
 import { StockFeedWizard } from "./StockFeedWizard";
+import { StockFeedSources } from "./StockFeedSources";
+import type { StockFeedSource } from "@/lib/import/stock-feed/sources";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Alegerea dintre cele doua feluri de fisier.
@@ -22,19 +25,53 @@ export function ImportEntry({
   plan,
   productLimit,
   productCount,
+  stockSources,
+  stockSourcesError,
 }: {
   plan: string;
   productLimit: number;
   productCount: number;
+  stockSources: StockFeedSource[];
+  stockSourcesError: string | null;
 }) {
   const [mode, setMode] = useState<Mode>("choose");
+  const [tab, setTab] = useState<"file" | "auto">("file");
 
   if (mode === "products") {
     return <ImportWizard plan={plan} productLimit={productLimit} productCount={productCount} />;
   }
 
   if (mode === "stock") {
-    return <StockFeedWizard onBack={() => setMode("choose")} />;
+    return (
+      <div className="space-y-4">
+        {/* Aceeasi conducta, doua feluri de a o porni: un fisier acum, sau o
+            adresa citita singura, dupa program. */}
+        <div className="flex gap-1 rounded-lg border border-border bg-muted/30 p-1">
+          <Tab active={tab === "file"} onClick={() => setTab("file")}>Fisier</Tab>
+          <Tab active={tab === "auto"} onClick={() => setTab("auto")}>Sincronizare automata</Tab>
+        </div>
+
+        {tab === "file" ? (
+          <StockFeedWizard onBack={() => setMode("choose")} />
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-base font-semibold text-foreground">Sincronizare automata</h1>
+                <p className="text-xs text-muted-foreground">
+                  Salvezi adresa fisierului de la furnizor si il citim noi, dupa program.
+                </p>
+              </div>
+              <button type="button" onClick={() => setMode("choose")}
+                className="h-9 rounded-lg border border-border px-3 text-xs font-medium">
+                Inapoi
+              </button>
+            </div>
+            <StockFeedSources initialSources={stockSources} initialError={stockSourcesError} />
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -61,6 +98,21 @@ export function ImportEntry({
         />
       </div>
     </div>
+  );
+}
+
+function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+        active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

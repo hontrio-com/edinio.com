@@ -149,7 +149,7 @@ export function CartLine({
             onSchimba={(n) => { if (n <= 0) mutaFocalizarea(); onQty(key, n); }}
           />
           <button type="button" aria-label={`Sterge ${item.name} din cos`} data-sterge-linie=""
-            onClick={() => { mutaFocalizarea(); stergeCuEveniment(item); onRemove(key); }}
+            onClick={() => { mutaFocalizarea(); stergeCuEveniment(item, totalLinie); onRemove(key); }}
             className="h-9 -ml-2 px-2 rounded-lg text-xs text-muted-foreground hover:text-destructive transition-colors inline-flex items-center gap-1">
             <X className="h-3.5 w-3.5" />
             Sterge
@@ -178,11 +178,16 @@ export function CartLine({
   );
 }
 
-/** Acelasi eveniment pe care il trimite si sertarul la stergerea unei linii. */
-function stergeCuEveniment(item: CartItem) {
+/**
+ * Acelasi eveniment pe care il trimite si sertarul la stergerea unei linii.
+ *
+ * Valoarea e cea REALA a liniei, cu treptele de cantitate aplicate, nu inmultirea
+ * la pret intreg: altfel rapoartele arata alti bani decat cei din comenzi.
+ */
+function stergeCuEveniment(item: CartItem, valoare: number) {
   gtagEvent("remove_from_cart", {
     currency: "RON",
-    value: item.price * item.quantity,
+    value: valoare,
     items: [{ item_id: item.productId, item_name: item.name, price: item.price, quantity: item.quantity }],
   });
 }

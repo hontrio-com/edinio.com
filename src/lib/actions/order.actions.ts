@@ -439,6 +439,25 @@ export async function placeOrder(data: {
     ...validatedExtras.map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
+  /*
+   * Utilizarea cuponului se revendica ATOMIC, chiar inainte de inserare.
+   *
+   * Pana acum limita se verifica la validare si contorul crestea dupa ce comanda
+   * era deja creata: doua comenzi simultane treceau amandoua de verificare si
+   * depaseau limita. `claim_discount_use` face verificarea si incrementul in
+   * aceeasi instructiune, deci a doua cerere nu mai gaseste randul.
+   *
+   * Revendicam aici, nu mai devreme: intre validarea cuponului si punctul asta
+   * mai exista pasi care pot iesi cu eroare, iar o utilizare arsa degeaba ar
+   * scadea din numarul pe care comerciantul l-a pus la vanzare.
+   */
+  if (validDiscountId) {
+    const { data: revendicat } = await admin.rpc("claim_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (revendicat === false) {
+      return { error: "Codul a atins limita maxima de utilizari. Reincarca pagina si incearca fara el." };
+    }
+  }
+
   const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
@@ -493,12 +512,10 @@ export async function placeOrder(data: {
   }).select("id, order_number").single();
 
   if (error) {
+    // Comanda n-a intrat, deci utilizarea revendicata se da inapoi.
+    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
     logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
-  }
-
-  if (validDiscountId) {
-    await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
   }
 
   // Atomic stock decrement — bundle components when ordering a bundle, else the product itself.
@@ -1351,6 +1368,25 @@ export async function placeCartOrder(data: {
     ...validatedExtras.map((e) => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
+  /*
+   * Utilizarea cuponului se revendica ATOMIC, chiar inainte de inserare.
+   *
+   * Pana acum limita se verifica la validare si contorul crestea dupa ce comanda
+   * era deja creata: doua comenzi simultane treceau amandoua de verificare si
+   * depaseau limita. `claim_discount_use` face verificarea si incrementul in
+   * aceeasi instructiune, deci a doua cerere nu mai gaseste randul.
+   *
+   * Revendicam aici, nu mai devreme: intre validarea cuponului si punctul asta
+   * mai exista pasi care pot iesi cu eroare, iar o utilizare arsa degeaba ar
+   * scadea din numarul pe care comerciantul l-a pus la vanzare.
+   */
+  if (validDiscountId) {
+    const { data: revendicat } = await admin.rpc("claim_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (revendicat === false) {
+      return { error: "Codul a atins limita maxima de utilizari. Reincarca pagina si incearca fara el." };
+    }
+  }
+
   const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
@@ -1405,12 +1441,10 @@ export async function placeCartOrder(data: {
   }).select("id, order_number, total").single();
 
   if (error) {
+    // Comanda n-a intrat, deci utilizarea revendicata se da inapoi.
+    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
     logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
-  }
-
-  if (validDiscountId) {
-    await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
   }
 
   // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.

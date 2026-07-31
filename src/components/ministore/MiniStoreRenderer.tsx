@@ -1162,7 +1162,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
 export function MiniStoreRenderer(props: Props) {
   return (
-    <CartProvider slug={props.business.slug}>
+    <CartProvider slug={props.business.slug} businessId={props.business.id}>
       <StoreContent {...props} />
     </CartProvider>
   );

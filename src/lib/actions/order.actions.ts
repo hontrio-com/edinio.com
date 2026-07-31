@@ -14,6 +14,7 @@ import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap } from "@/lib/storefront/variants";
+import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
@@ -70,25 +71,14 @@ function legitUnitPrices(product: OrderProduct): number[] {
   return [...set];
 }
 
-// Legitimate bundle totals for a given unit price and quantity (mirrors ProductPage
-// quantity-tier math: plain qty*unit is always valid; tiers 2/3 add bundle prices).
+// Totalurile legitime pentru un pret unitar si o cantitate: pretul intreg si cel
+// calculat de motorul de trepte. Amandoua raman valide — pretul intreg acopera
+// clientii cu pagina veche in cache, care inca trimit `cantitate x pret`.
 function legitBundleTotals(product: OrderProduct, unit: number, quantity: number): number[] {
-  const totals = [round2(unit * quantity)];
-  const ps = (product.page_sections ?? {}) as {
-    quantity_tiers?: { enabled?: boolean; mode?: string; tier2_price?: number; tier3_price?: number; tier2_percent?: number; tier3_percent?: number };
-  };
-  const t = ps.quantity_tiers;
-  if (t?.enabled) {
-    const isPercent = t.mode === "percent";
-    if (quantity === 2) {
-      const p = isPercent ? unit * 2 * (1 - (t.tier2_percent ?? 0) / 100) : Number(t.tier2_price ?? 0);
-      if (p > 0) totals.push(round2(p));
-    } else if (quantity === 3) {
-      const p = isPercent ? unit * 3 * (1 - (t.tier3_percent ?? 0) / 100) : Number(t.tier3_price ?? 0);
-      if (p > 0) totals.push(round2(p));
-    }
-  }
-  return totals;
+  const intreg = round2(unit * quantity);
+  const trepte = construiesteTrepte((product.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers, unit);
+  const cuPachete = round2(pretPeTrepte(trepte, quantity, unit).subtotal);
+  return cuPachete === intreg ? [intreg] : [intreg, cuPachete];
 }
 
 // Returns the authoritative pre-discount subtotal, or null if the claimed unit
@@ -262,7 +252,12 @@ export async function placeOrder(data: {
       const { data: extraProducts } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
       const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => {
         const base = round2(Number(p.price));
-        return [p.id, { name: String(p.name), price: base, combos: enabledComboPriceMap(p.page_sections, base) }];
+        return [p.id, {
+          name: String(p.name),
+          price: base,
+          combos: enabledComboPriceMap(p.page_sections, base),
+          tiers: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers,
+        }];
       }));
       cartItems = data.additional_items
         .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0)
@@ -271,11 +266,17 @@ export async function placeOrder(data: {
           // Named variant priced from its enabled combination; unknown/disabled
           // variants and simple products fall back to the product's base price.
           const variantPrice = i.variant_title ? meta.combos.get(i.variant_title) : undefined;
+          const unitPrice = variantPrice != null ? round2(variantPrice) : meta.price;
+          // Treptele se aplica si liniilor purtate din cos in comanda directa,
+          // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
+          // plecata din formularul de produs il pierde pe drum.
+          const cantitate = Math.floor(i.quantity);
+          const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), cantitate, unitPrice);
           return {
             product_id: i.product_id,
             name: i.variant_title ? `${meta.name} (${i.variant_title})` : meta.name,
-            price: variantPrice != null ? round2(variantPrice) : meta.price,
-            quantity: Math.floor(i.quantity),
+            price: linie.unitPrice,
+            quantity: cantitate,
           };
         });
     }
@@ -1132,12 +1133,29 @@ export async function placeCartOrder(data: {
     }
   }
 
+  // Configuratia de trepte a fiecarui produs. `page_sections` e deja incarcat mai
+  // sus pentru variante si stoc, deci treptele nu costa nicio interogare in plus.
+  const trepteMap = new Map(
+    activeProducts.map((p) => [p.id, (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers]),
+  );
+
   let validatedItems = data.items.map((i) => {
     const variantPrice = i.variant_title ? comboMap.get(i.product_id)!.get(i.variant_title) : undefined;
+    const unitPrice = variantPrice != null ? round2(variantPrice) : priceMap.get(i.product_id)!;
+    // Treptele de cantitate se aplica si pe calea cosului, cu ACELASI motor pe
+    // care il foloseste pagina de produs. Pana acum le onora doar comanda
+    // directa: pagina promitea „3 bucati 250 lei", iar clientul care punea 3 in
+    // cos platea 269,97.
+    //
+    // Pretul unitar ramane NEROTUNJIT (250 / 3 = 83,3333...), ca `pret x cantitate`
+    // sa dea exact totalul pachetului. Rotunjit la ban, linia ar iesi 249,99 si
+    // clientul ar plati alt total decat cel din cos. E acelasi lucru pe care il
+    // trimite deja calea comenzii directe.
+    const linie = pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
     return {
       product_id: i.product_id,
       name: i.variant_title ? `${i.name} (${i.variant_title})` : i.name,
-      price: variantPrice != null ? round2(variantPrice) : priceMap.get(i.product_id)!,
+      price: linie.unitPrice,
       quantity: i.quantity,
     };
   });

@@ -34,7 +34,7 @@ export function CartDrawerClassic({
    */
   inline?: boolean;
 }) {
-  const { items, addItem, removeItem, updateQty, total, count } = useCart();
+  const { items, addItem, removeItem, updateQty, lineTotal, lineSavings, total, count } = useCart();
 
   /**
    * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
@@ -216,7 +216,10 @@ export function CartDrawerClassic({
                     {item.quantity > 1 && (
                       <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(item.price)} bucata</p>
                     )}
-                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(item.price * item.quantity)}</p>
+                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(lineTotal(item))}</p>
+                    {lineSavings(item) > 0 && (
+                      <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(item.price * item.quantity)}</p>
+                    )}
                     {/* Etichetele poarta numele produsului: altfel un cititor de
                         ecran anunta cate un „Scade cantitatea" identic pentru
                         fiecare linie, fara sa se poata sti la care e cursorul. */}

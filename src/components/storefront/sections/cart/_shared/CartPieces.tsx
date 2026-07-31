@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Check, Minus, Package, Plus, ShoppingCart, Truck, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { gtagEvent } from "@/lib/marketing";
-import { lineKey, type CartItem } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCart, type CartItem } from "@/components/storefront/cart/CartProvider";
 import type { CartPricing } from "@/lib/storefront/cart/pricing";
 
 /**
@@ -88,6 +88,9 @@ export function CartLine({
   dens?: "rand" | "compact";
 }) {
   const key = lineKey(item);
+  const cos = useCart();
+  const totalLinie = cos.lineTotal(item);
+  const economie = cos.lineSavings(item);
   const rand = useRef<HTMLDivElement>(null);
   const href = item.slug ? `${basePath}/product/${item.slug}` : null;
   const latime = dens === "compact" ? "w-16 h-16" : "w-20 h-20 sm:w-24 sm:h-24";
@@ -154,9 +157,23 @@ export function CartLine({
         </div>
       </div>
 
-      <p className="text-sm sm:text-base font-bold shrink-0 tabular-nums" style={{ color }}>
-        {formatPrice(item.price * item.quantity)}
-      </p>
+      {/* Totalul liniei vine de la cos, nu din inmultire locala: doar acolo se
+          aplica treptele de cantitate, si tot acolo se uita si serverul. */}
+      <div className="shrink-0 text-right">
+        <p className="text-sm sm:text-base font-bold tabular-nums" style={{ color }}>
+          {formatPrice(totalLinie)}
+        </p>
+        {economie > 0 && (
+          <>
+            <p className="text-xs text-muted-foreground line-through tabular-nums">
+              {formatPrice(item.price * item.quantity)}
+            </p>
+            <p className="text-[11px] font-semibold" style={{ color }}>
+              -{formatPrice(economie)}
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

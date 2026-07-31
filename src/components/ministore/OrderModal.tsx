@@ -18,6 +18,7 @@ import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
 import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
+import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
@@ -130,6 +131,10 @@ function IconInput({ icon: Icon, error, children }: {
 
 export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, customizationFields, cartItems, onCartConsumed, onCartLineChange, fbtOffer }: Props) {
   const color = business.primary_color;
+  // Cosul magazinului, cand exista: de acolo vin preturile autoritare ale liniilor
+  // purtate. Lipseste in miniatura din catalogul de design-uri, care randeaza
+  // formularul fara provider.
+  const cosMagazin = useCartOptional();
   // Upsell-ul de cantitate se suprima in fluxul "Cumpara impreuna" (FBT): setul FBT
   // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
   // discount FBT), fara ca discountul de cantitate sa se cumuleze peste cel de set.
@@ -221,7 +226,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // A carried line is identified by product + variant, so two variants of the same
   // product stay distinct when editing quantity / removing / rendering.
   const cartLineKey = (l: { productId: string; variantTitle?: string }) => l.variantTitle ? `${l.productId}::${l.variantTitle}` : l.productId;
-  const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  // Liniile purtate din cos se socotesc prin cos, ca sa poarte cu ele treptele de
+  // cantitate: acelasi numar in sertar, pe pagina de cos, aici si la server.
+  const totalLinieCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
+    cosMagazin ? cosMagazin.lineTotal({ ...i, name: "", imageUrl: null } as never) : i.price * i.quantity;
+  const cartSubtotal = cart.reduce((s, i) => s + totalLinieCos(i), 0);
   // Accepted order bumps add their discounted product to the goods subtotal, so it
   // flows through discount, free-shipping, card-discount and total automatically.
   // Hide a bump when its product is already in the order (carried cart or FBT set) — it
@@ -765,7 +774,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-foreground truncate">{ci.name}</p>
                         {ci.variantTitle && <p className="text-xs text-muted-foreground truncate">{ci.variantTitle}</p>}
-                        <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(ci.price)}</p>
+                        <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(totalLinieCos(ci))}</p>
+                        {ci.quantity > 1 && (
+                          <p className="text-[11px] text-muted-foreground">{formatPrice(ci.price)} bucata</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button type="button" aria-label="Scade cantitatea" onClick={() => setCartQty(key, ci.quantity - 1)}
@@ -1213,7 +1225,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 {cart.map((ci) => (
                   <div key={ci.productId} className="flex justify-between text-muted-foreground">
                     <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
-                    <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Math.round(ci.price * ci.quantity * 100) / 100)}</span>
+                    <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Math.round(totalLinieCos(ci) * 100) / 100)}</span>
                   </div>
                 ))}
                 {acceptedBumpOffers.map((o) => (

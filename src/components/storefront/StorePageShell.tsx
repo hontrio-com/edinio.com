@@ -56,7 +56,7 @@ export function StorePageShell({
   );
 
   return (
-    <CartProvider slug={chrome.business.slug}>
+    <CartProvider slug={chrome.business.slug} businessId={chrome.business.id}>
       <StoreChromeProvider value={value}>
         <div className={className}>
           <ChromeSection section={standaloneAnnouncement(design)} />

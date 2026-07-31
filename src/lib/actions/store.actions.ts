@@ -540,3 +540,43 @@ export async function updateProfileName(
   revalidatePath("/dashboard", "layout");
   return { success: true };
 }
+
+/**
+ * Preturile autoritare ale produselor dintr-un cos: pretul de baza, preturile
+ * variantelor si configuratia de trepte.
+ *
+ * Cosul din browser tine identitati si cantitati, nu preturi de incredere: ce s-a
+ * salvat in localStorage la adaugare poate fi vechi de zile. Serverul recalculeaza
+ * oricum totul la plasarea comenzii, deci fara pasul asta cosul afiseaza un pret
+ * si comanda pleaca cu altul. Aceleasi date alimenteaza si motorul de trepte, ca
+ * pretul de pachet sa se vada in cos, nu doar la finalizare.
+ *
+ * Public si fara secrete: doar produse active ale magazinului cerut.
+ */
+export async function getCartPricing(
+  businessId: string,
+  productIds: string[],
+): Promise<Record<string, { price: number; combos: Record<string, number>; tiers: Json | null }>> {
+  const ids = [...new Set((productIds ?? []).filter((id) => typeof id === "string" && id))].slice(0, 200);
+  if (!businessId || ids.length === 0) return {};
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("products")
+    .select("id, price, page_sections")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .in("id", ids);
+
+  const { enabledComboPriceMap } = await import("@/lib/storefront/variants");
+  const out: Record<string, { price: number; combos: Record<string, number>; tiers: Json | null }> = {};
+  for (const p of data ?? []) {
+    const base = Math.round((Number(p.price) || 0) * 100) / 100;
+    out[p.id] = {
+      price: base,
+      combos: Object.fromEntries(enabledComboPriceMap(p.page_sections, base)),
+      tiers: ((p.page_sections ?? {}) as { quantity_tiers?: Json }).quantity_tiers ?? null,
+    };
+  }
+  return out;
+}

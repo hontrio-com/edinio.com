@@ -1,7 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCartSessionId } from "@/lib/cart-session";
+import { getCartPricing } from "@/lib/actions/store.actions";
+import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 
 /**
  * Cosul storefrontului: stare in memorie oglindita in localStorage, per magazin.
@@ -38,6 +40,16 @@ export interface CartContextValue {
   addItem: (item: Omit<CartItem, "quantity">, cantitate?: number) => void;
   removeItem: (key: string) => void;
   updateQty: (key: string, qty: number) => void;
+  /**
+   * Cat costa o linie, cu treptele de cantitate aplicate.
+   *
+   * TOATE suprafetele cosului trec pe aici in loc sa inmulteasca ele
+   * `pret x cantitate`: altfel fiecare ar putea ajunge la alt numar, iar unul
+   * dintre ele ar fi diferit de cel pe care il incaseaza serverul.
+   */
+  lineTotal: (item: CartItem) => number;
+  /** Cat economiseste linia fata de pretul intreg (0 cand nu se aplica nimic). */
+  lineSavings: (item: CartItem) => number;
   total: number;
   count: number;
   clear: () => void;
@@ -73,7 +85,7 @@ export function useCartOptional(): CartContextValue | null {
   return useContext(CartContext);
 }
 
-export function CartProvider({ children, slug }: { children: ReactNode; slug: string }) {
+export function CartProvider({ children, slug, businessId }: { children: ReactNode; slug: string; businessId?: string }) {
   const STORAGE_KEY = `cart_${slug}`;
   const [items, setItems] = useState<CartItem[]>([]);
   const [sessionId, setSessionId] = useState("");
@@ -160,12 +172,50 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
     save(() => next);
   }
 
-  const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  /**
+   * Preturile autoritare ale produselor din cos, citite de la server.
+   *
+   * Cosul din localStorage tine ce s-a salvat la adaugare, deci un pret vechi de
+   * zile daca intre timp comerciantul l-a schimbat. Serverul recalculeaza oricum
+   * la plasarea comenzii, deci fara pasul asta cosul arata un numar si comanda
+   * pleaca cu altul. Tot de aici vin si treptele de cantitate.
+   *
+   * Cade pe preturile salvate cand cererea esueaza: un cos care afiseaza ceva
+   * usor vechi e mai bun decat unul care nu afiseaza nimic.
+   */
+  const [preturi, setPreturi] = useState<Awaited<ReturnType<typeof getCartPricing>>>({});
+  const cheieProduse = items.map((i) => i.productId).sort().join(",");
+  useEffect(() => {
+    if (!hydrated || !businessId || !cheieProduse) return;
+    let activ = true;
+    getCartPricing(businessId, cheieProduse.split(","))
+      .then((r) => { if (activ) setPreturi(r); })
+      .catch(() => {});
+    return () => { activ = false; };
+  }, [hydrated, businessId, cheieProduse]);
+
+  const pretUnitar = useMemo(() => (item: CartItem): number => {
+    const reguli = preturi[item.productId];
+    if (!reguli) return item.price;
+    const varianta = item.variantTitle ? reguli.combos[item.variantTitle] : undefined;
+    return varianta != null ? varianta : reguli.price;
+  }, [preturi]);
+
+  const linie = useMemo(() => (item: CartItem) => {
+    const unitar = pretUnitar(item);
+    const trepte = construiesteTrepte(preturi[item.productId]?.tiers, unitar);
+    return pretPeTrepte(trepte, item.quantity, unitar);
+  }, [preturi, pretUnitar]);
+
+  const lineTotal = (item: CartItem) => linie(item).subtotal;
+  const lineSavings = (item: CartItem) => linie(item).savings;
+
+  const total = items.reduce((s, i) => s + linie(i).subtotal, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, removeItem, updateQty, lineTotal, lineSavings, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -201,6 +251,10 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
               : [...prev, { ...item, quantity: n }],
           );
         },
+        // Miniatura nu citeste nimic de la server, deci nu are trepte: pretul de
+        // linie ramane inmultirea simpla.
+        lineTotal: (item) => item.price * item.quantity,
+        lineSavings: () => 0,
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>
           setItems((prev) =>

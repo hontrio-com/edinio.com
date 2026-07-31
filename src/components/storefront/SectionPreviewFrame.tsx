@@ -293,7 +293,7 @@ export function SectionPreviewFrame({
       );
     }
     return (
-      <CartProvider slug={chrome.business.slug}>
+      <CartProvider slug={chrome.business.slug} businessId={chrome.business.id}>
         <StorefrontProvider value={value}>
           <ShopPageSection variant={section.variant} setari={section.settings} />
         </StorefrontProvider>
@@ -315,7 +315,7 @@ export function SectionPreviewFrame({
   }
 
   return (
-    <CartProvider slug={chrome.business.slug}>
+    <CartProvider slug={chrome.business.slug} businessId={chrome.business.id}>
       <StorefrontProvider value={value}>
         <PreviewSection section={section} />
       </StorefrontProvider>

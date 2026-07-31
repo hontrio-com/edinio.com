@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { formatPrice } from "@/lib/utils/format";
-import { lineKey } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import type { CheckoutEngine } from "./checkout-core";
 
 /**
@@ -20,6 +20,9 @@ import type { CheckoutEngine } from "./checkout-core";
 /** Liniile de cos, asa cum apar in formularul de comanda. */
 export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; color: string }) {
   const { items } = motor;
+  // Totalul liniei vine tot de la cos, ca sa fie acelasi numar aici, in sertar,
+  // pe pagina de cos si la server.
+  const { lineTotal, lineSavings } = useCart();
   return (
       <div className="space-y-2">
         {items.map((item) => (
@@ -32,7 +35,12 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
               {item.variantTitle && <p className="text-xs text-muted-foreground truncate">{item.variantTitle}</p>}
               <p className="text-xs text-muted-foreground mt-0.5">{item.quantity} buc &times; {formatPrice(item.price)}</p>
             </div>
-            <p className="text-sm font-bold shrink-0" style={{ color }}>{formatPrice(item.price * item.quantity)}</p>
+            <div className="shrink-0 text-right">
+              <p className="text-sm font-bold" style={{ color }}>{formatPrice(lineTotal(item))}</p>
+              {lineSavings(item) > 0 && (
+                <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(item.price * item.quantity)}</p>
+              )}
+            </div>
           </div>
         ))}
       </div>

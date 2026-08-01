@@ -23,7 +23,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { CompanyFields, useCompanyBilling } from "./CompanyFields";
 import { JUDETE } from "@/lib/ro/judete";
-import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
@@ -149,6 +149,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
+  const [codFeeConfig, setCodFeeConfig] = useState<CodFeeConfig>(DEFAULT_COD_FEE);
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
@@ -286,12 +287,15 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
   // Ramburs discount (mirrors the server): only when the customer picks cash on delivery.
   const codDiscountAmount = computeCodDiscount(codDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
+  // Taxa de ramburs (oglinda serverului): calculata INAINTEA TVA-ului, fiindca
+  // intra in baza lui alaturi de marfa si extraoptiuni.
+  const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, discountedSubtotal + extrasTotal, vatConfig);
   // VAT (shared helper — identical formula on server + CartCheckoutModal). Base is
   // the PRE-discount goods+extras so the add-on matches the server grand total.
-  const vatBase = subtotal + extrasTotal;
+  const vatBase = subtotal + extrasTotal + codFeeAmount;
   const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
   // Round to 2 decimals (cents): float math would otherwise show e.g. 179.35999999999999.
-  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount + vatAddOn) * 100) / 100);
+  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount + codFeeAmount + vatAddOn) * 100) / 100);
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
@@ -408,6 +412,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
       setCodDiscountConfig(data.cod_discount);
+      setCodFeeConfig(data.cod_fee);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
@@ -1282,6 +1287,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <div className="flex justify-between" style={{ color }}>
                     <span>Reducere plata ramburs</span>
                     <span className="font-semibold">-{formatPrice(codDiscountAmount)}</span>
+                  </div>
+                )}
+                {/* Taxa se aduna, deci fara culoarea magazinului: aia e pentru
+                    sumele in favoarea clientului. */}
+                {codFeeAmount > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Taxa plata ramburs</span>
+                    <span className="font-semibold">{formatPrice(codFeeAmount)}</span>
                   </div>
                 )}
                 {appliedDiscount?.type === "free_shipping" && (

@@ -1648,6 +1648,7 @@ export type Database = {
           cargus_awb_number: string | null
           cargus_service_name: string | null
           cod_discount_amount: number
+          cod_fee_amount: number
           colete_awb_number: string | null
           colete_order_id: string | null
           colete_service_name: string | null
@@ -1717,6 +1718,7 @@ export type Database = {
           cargus_awb_number?: string | null
           cargus_service_name?: string | null
           cod_discount_amount?: number
+          cod_fee_amount?: number
           colete_awb_number?: string | null
           colete_order_id?: string | null
           colete_service_name?: string | null
@@ -1786,6 +1788,7 @@ export type Database = {
           cargus_awb_number?: string | null
           cargus_service_name?: string | null
           cod_discount_amount?: number
+          cod_fee_amount?: number
           colete_awb_number?: string | null
           colete_order_id?: string | null
           colete_service_name?: string | null
@@ -2458,6 +2461,7 @@ export type Database = {
           card_discount_config: Json
           cargus_config: Json | null
           cod_discount_config: Json
+          cod_fee_config: Json | null
           colete_config: Json | null
           cookie_banner_config: Json | null
           created_at: string
@@ -2517,6 +2521,7 @@ export type Database = {
           card_discount_config?: Json
           cargus_config?: Json | null
           cod_discount_config?: Json
+          cod_fee_config?: Json | null
           colete_config?: Json | null
           cookie_banner_config?: Json | null
           created_at?: string
@@ -2576,6 +2581,7 @@ export type Database = {
           card_discount_config?: Json
           cargus_config?: Json | null
           cod_discount_config?: Json
+          cod_fee_config?: Json | null
           colete_config?: Json | null
           cookie_banner_config?: Json | null
           created_at?: string

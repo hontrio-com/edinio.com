@@ -118,6 +118,7 @@ export async function sendOrderConfirmationToCustomer(
     discount_amount?: number;
     card_discount_amount?: number;
     cod_discount_amount?: number;
+    cod_fee_amount?: number;
     payment_method?: string;
     store_url?: string;
   },
@@ -153,6 +154,14 @@ export async function sendOrderConfirmationToCustomer(
     ? `<tr>
         <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere plata ramburs</td>
         <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.cod_discount_amount)}</td>
+      </tr>`
+    : "";
+
+  // Taxa se aduna, deci nu poarta verdele reducerilor.
+  const codFeeRow = order.cod_fee_amount && order.cod_fee_amount > 0
+    ? `<tr>
+        <td style="padding-top:10px;font-size:14px;color:#71717a;">Taxa plata ramburs</td>
+        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${formatPrice(order.cod_fee_amount)}</td>
       </tr>`
     : "";
 
@@ -194,6 +203,7 @@ export async function sendOrderConfirmationToCustomer(
       ${discountRow}
       ${cardDiscountRow}
       ${codDiscountRow}
+      ${codFeeRow}
       <tr>
         <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
         <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
@@ -720,6 +730,7 @@ export async function sendNewOrderEmail(
     discount_amount?: number;
     card_discount_amount?: number;
     cod_discount_amount?: number;
+    cod_fee_amount?: number;
     vat_amount?: number;
     payment_method?: string;
     business_name: string;
@@ -847,6 +858,7 @@ export async function sendNewOrderEmail(
       ${order.discount_amount && order.discount_amount > 0 ? totalRow(`Reducere${order.discount_code ? ` (${esc(order.discount_code)})` : ""}`, `- ${formatPrice(order.discount_amount)}`, { color: "#16a34a" }) : ""}
       ${order.card_discount_amount && order.card_discount_amount > 0 ? totalRow("Reducere plata cu cardul", `- ${formatPrice(order.card_discount_amount)}`, { color: "#16a34a" }) : ""}
       ${order.cod_discount_amount && order.cod_discount_amount > 0 ? totalRow("Reducere plata ramburs", `- ${formatPrice(order.cod_discount_amount)}`, { color: "#16a34a" }) : ""}
+      ${order.cod_fee_amount && order.cod_fee_amount > 0 ? totalRow("Taxa plata ramburs", formatPrice(order.cod_fee_amount)) : ""}
       ${totalRow("Transport", order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost))}
       ${totalRow("Total", formatPrice(order.total), { bold: true, color: "#1AB554", border: true })}
       ${order.vat_amount && order.vat_amount > 0 ? `<tr><td colspan="2" style="padding-top:6px;font-size:12px;color:#a1a1aa;text-align:right;">din care TVA: ${formatPrice(order.vat_amount)}</td></tr>` : ""}

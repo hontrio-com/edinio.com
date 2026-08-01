@@ -942,6 +942,27 @@ export function OrderDetailClient({
                   <span className="font-medium">-{formatPrice(Number(order.discount_amount))}</span>
                 </div>
               )}
+              {/* Reducerile si taxa de plata lipseau din caseta asta, desi sunt
+                  in `total`: subtotal + transport + TVA nu dadeau totalul, iar
+                  diferenta nu avea nicio explicatie pe ecran. */}
+              {Number(order.card_discount_amount) > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Reducere plata cu cardul</span>
+                  <span className="font-medium">-{formatPrice(Number(order.card_discount_amount))}</span>
+                </div>
+              )}
+              {Number(order.cod_discount_amount) > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Reducere plata ramburs</span>
+                  <span className="font-medium">-{formatPrice(Number(order.cod_discount_amount))}</span>
+                </div>
+              )}
+              {Number(order.cod_fee_amount) > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Taxa plata ramburs</span>
+                  <span className="font-medium">{formatPrice(Number(order.cod_fee_amount))}</span>
+                </div>
+              )}
               <div className="flex justify-between text-muted-foreground">
                 <span>Transport</span>
                 <span>{Number(order.shipping_cost) === 0 ? "Gratuit" : formatPrice(Number(order.shipping_cost))}</span>

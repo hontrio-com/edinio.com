@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
-import { checkoutPaymentMethods, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { checkoutPaymentMethods, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, parseCodFeeConfig, sanitizeCodFeeConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
 
@@ -27,6 +27,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   payment_methods: { type: PaymentMethodType; label: string }[];
   card_discount: CardDiscountConfig;
   cod_discount: CardDiscountConfig;
+  cod_fee: CodFeeConfig;
   international_shipping: boolean;
   dpd_use_weight: boolean;
   mailchimp_newsletter: boolean;
@@ -36,7 +37,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, mailchimp_config, brevo_config, klaviyo_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, cod_fee_config, mailchimp_config, brevo_config, klaviyo_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -79,6 +80,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
     card_discount: parseCardDiscountConfig(data.card_discount_config),
     cod_discount: parseCardDiscountConfig(data.cod_discount_config),
+    cod_fee: parseCodFeeConfig(data.cod_fee_config),
     international_shipping: internationalShipping,
     dpd_use_weight: dpdUseWeight,
     mailchimp_newsletter: !!(mc?.enabled && mc?.audience_id && mc?.sources?.checkout !== false),
@@ -144,6 +146,38 @@ export async function updateCodDiscount(
   if (error) {
     logError({ action: "updateCodDiscount", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea discountului la plata ramburs." };
+  }
+
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+/**
+ * Salveaza taxa la plata ramburs. Aceeasi forma ca cele doua reduceri de mai sus,
+ * dar cu un camp in plus: daca suma fixa scrisa de comerciant contine deja TVA.
+ */
+export async function updateCodFee(
+  businessId: string,
+  config: CodFeeConfig,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const sanitized = sanitizeCodFeeConfig(config);
+  const { error } = await supabase
+    .from("store_settings")
+    .update({ cod_fee_config: sanitized as never })
+    .eq("business_id", businessId);
+
+  if (error) {
+    logError({ action: "updateCodFee", message: error.message, details: { code: error.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea taxei la plata ramburs." };
   }
 
   if (biz.slug) revalidatePath(`/${biz.slug}`);

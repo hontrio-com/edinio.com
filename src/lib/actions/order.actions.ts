@@ -26,7 +26,7 @@ import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
-import { computeCardDiscount, computeCodDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, normalizePaymentMethod, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
@@ -339,7 +339,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost")
+      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -436,17 +436,36 @@ export async function placeOrder(data: {
   // Card-payment discount: applies only to online card methods, on the goods
   // value (subtotal + extras, after any promo), never on shipping. Computed
   // server-side and baked into total so the card processor charges the right sum.
+  // O SINGURA citire a metodei de plata, folosita si la calcule, si la inserare.
+  // Vezi `normalizePaymentMethod` pentru ce se rupea cand erau doua implicite.
+  const metodaPlata = normalizePaymentMethod(data.payment_method);
+
   const cardDiscount = computeCardDiscount(
     parseCardDiscountConfig(cfgRow?.card_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
   );
   // Ramburs (cash-on-delivery) discount — mutually exclusive with the card discount
   // (an order has a single payment method), computed on the same goods base.
   const codDiscount = computeCodDiscount(
     parseCardDiscountConfig(cfgRow?.cod_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
+  );
+
+  // Taxa de ramburs — acelasi declansator ca reducerea de mai sus, semn invers.
+  // Se calculeaza AICI, inaintea TVA-ului, fiindca intra in baza lui: e o suma
+  // purtatoare de TVA, ca extraoptiunile, nu ca transportul.
+  const vatCfgTaxa = {
+    vat_enabled: cfgRow?.vat_enabled ?? false,
+    vat_rate: Number(cfgRow?.vat_rate ?? 19),
+    prices_include_vat: cfgRow?.prices_include_vat ?? true,
+  };
+  const codFee = computeCodFee(
+    parseCodFeeConfig(cfgRow?.cod_fee_config),
+    metodaPlata,
+    subtotal + extrasTotal - discountAmount,
+    vatCfgTaxa,
   );
 
   // Shipping clamped non-negative; zeroed when free-shipping rules apply.
@@ -466,9 +485,11 @@ export async function placeOrder(data: {
   const vatEnabled = cfgRow?.vat_enabled ?? false;
   const vatRate = Number(cfgRow?.vat_rate ?? 19);
   const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
-  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
+  // Taxa de ramburs intra in baza de TVA, ca extraoptiunile: e un serviciu
+  // facturabil. Transportul ramane in afara ei, ca pana acum.
+  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal + codFee, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping + vatAddOn));
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
 
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -555,11 +576,12 @@ export async function placeOrder(data: {
     discount_amount: discountAmount,
     card_discount_amount: cardDiscount,
     cod_discount_amount: codDiscount,
+    cod_fee_amount: codFee,
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
-    payment_method: data.payment_method ?? "cash_on_delivery",
+    payment_method: metodaPlata,
     payment_status: "unpaid",
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
@@ -629,7 +651,8 @@ export async function placeOrder(data: {
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
-        payment_method: data.payment_method ?? "cash_on_delivery",
+        cod_fee_amount: codFee > 0 ? codFee : undefined,
+        payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order_id: order.id,
@@ -663,7 +686,7 @@ export async function placeOrder(data: {
           awb: "", store: businessName,
           phone: data.customer_phone, email: data.customer_email ?? "",
           address: data.customer_address, city: data.customer_city, region: data.customer_county,
-          payment_method: data.payment_method ?? "cash_on_delivery",
+          payment_method: metodaPlata,
           shipping_method: data.courier_label ?? "",
           store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
           date_added: formatDate(new Date()),
@@ -961,7 +984,7 @@ export async function updateOrderDetails(orderId: string, data: {
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, business_id, status, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount")
+    .select("id, business_id, status, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -1046,7 +1069,9 @@ export async function updateOrderDetails(orderId: string, data: {
       .reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
   );
 
-  const { vatAmount, vatAddOn } = computeVat(newSubtotal + extrasTotal, {
+  // Taxa de ramburs a intrat in baza de TVA la plasarea comenzii; scoasa de aici
+  // la editare, TVA-ul recalculat ar fi iesit mai mic decat cel incasat.
+  const { vatAmount, vatAddOn } = computeVat(newSubtotal + extrasTotal + (Number(order.cod_fee_amount) || 0), {
     vat_enabled: cfgRow?.vat_enabled ?? false,
     vat_rate: Number(cfgRow?.vat_rate ?? 19),
     prices_include_vat: cfgRow?.prices_include_vat ?? false,
@@ -1062,6 +1087,9 @@ export async function updateOrderDetails(orderId: string, data: {
     - (Number(order.discount_amount) || 0)
     - (Number(order.card_discount_amount) || 0)
     - (Number(order.cod_discount_amount) || 0)
+    // Taxa de ramburs se pastreaza asa cum a fost incasata: editarea comenzii
+    // schimba marfa, nu metoda de plata, deci nici motivul taxei.
+    + (Number(order.cod_fee_amount) || 0)
     + newShipping
     + vatAddOn,
   ));
@@ -1274,7 +1302,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, default_shipping_cost")
+      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1388,22 +1416,44 @@ export async function placeCartOrder(data: {
   const vatEnabled = cfgRow?.vat_enabled ?? false;
   const vatRate = Number(cfgRow?.vat_rate ?? 19);
   const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
-  // Shared helper — identical formula on placeOrder + both storefront modals.
-  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
 
   // Card-payment discount: only for online card methods, on the goods value
   // (subtotal + extras, after promo), never on shipping/VAT. Baked into total.
+  // O SINGURA citire a metodei de plata, folosita si la calcule, si la inserare.
+  // Vezi `normalizePaymentMethod` pentru ce se rupea cand erau doua implicite.
+  const metodaPlata = normalizePaymentMethod(data.payment_method);
+
   const cardDiscount = computeCardDiscount(
     parseCardDiscountConfig(cfgRow?.card_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
   );
   // Ramburs (cash-on-delivery) discount — mutually exclusive with the card discount.
   const codDiscount = computeCodDiscount(
     parseCardDiscountConfig(cfgRow?.cod_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
   );
+
+  // Taxa de ramburs — acelasi declansator ca reducerea de mai sus, semn invers.
+  // Se calculeaza AICI, inaintea TVA-ului, fiindca intra in baza lui: e o suma
+  // purtatoare de TVA, ca extraoptiunile, nu ca transportul.
+  const vatCfgTaxa = {
+    vat_enabled: cfgRow?.vat_enabled ?? false,
+    vat_rate: Number(cfgRow?.vat_rate ?? 19),
+    prices_include_vat: cfgRow?.prices_include_vat ?? true,
+  };
+  const codFee = computeCodFee(
+    parseCodFeeConfig(cfgRow?.cod_fee_config),
+    metodaPlata,
+    subtotal + extrasTotal - discountAmount,
+    vatCfgTaxa,
+  );
+
+  // Shared helper — identical formula on placeOrder + both storefront modals.
+  // Se calculeaza DUPA taxa de ramburs, fiindca taxa intra in baza lui: e un
+  // serviciu purtator de TVA, ca extraoptiunile. Transportul ramane in afara.
+  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal + codFee, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
 
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   let shipping = autoritativeShipping(
@@ -1415,7 +1465,7 @@ export async function placeCartOrder(data: {
   );
   if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping + vatAddOn));
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
 
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -1491,11 +1541,12 @@ export async function placeCartOrder(data: {
     discount_amount: discountAmount,
     card_discount_amount: cardDiscount,
     cod_discount_amount: codDiscount,
+    cod_fee_amount: codFee,
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
-    payment_method: data.payment_method ?? "cash_on_delivery",
+    payment_method: metodaPlata,
     payment_status: "unpaid",
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
@@ -1565,7 +1616,8 @@ export async function placeCartOrder(data: {
         discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
-        payment_method: data.payment_method ?? "cash_on_delivery",
+        cod_fee_amount: codFee > 0 ? codFee : undefined,
+        payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order_id: order.id,
@@ -1599,7 +1651,7 @@ export async function placeCartOrder(data: {
           awb: "", store: businessName,
           phone: data.customer_phone, email: data.customer_email ?? "",
           address: data.customer_address, city: data.customer_city, region: data.customer_county,
-          payment_method: data.payment_method ?? "cash_on_delivery",
+          payment_method: metodaPlata,
           shipping_method: data.courier_label ?? "",
           store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
           date_added: formatDate(new Date()),

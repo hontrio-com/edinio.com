@@ -9,7 +9,7 @@ import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { gtagEvent } from "@/lib/marketing";
 import type { CourierSelection } from "@/components/ministore/CourierSelector";
-import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -70,6 +70,7 @@ export function useCheckoutOrder({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>(preview?.paymentMethods[0]?.type ?? "cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>(preview?.cardDiscount ?? { enabled: false, type: "percent", value: 0 });
   const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>(preview?.codDiscount ?? { enabled: false, type: "percent", value: 0 });
+  const [codFeeConfig, setCodFeeConfig] = useState<CodFeeConfig>(preview?.codFee ?? DEFAULT_COD_FEE);
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   // Discount code is OFF by default — same semantics as the editor toggle and OrderModal.
@@ -113,17 +114,20 @@ export function useCheckoutOrder({
   const isFreeShippingDiscount = appliedDiscount?.type === "free_shipping";
   const shipping = (isFreeShippingDiscount || (freeShippingThreshold && goodsTotal >= freeShippingThreshold)) ? 0 : baseShippingCost;
 
-  // VAT (shared helper — identical formula on server + OrderModal).
-  const vatBase = goodsTotal + extrasTotal;
-  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Shown live as the customer switches payment method.
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);
   // Ramburs discount (mirrors the server): only when the customer picks cash on delivery.
   const codDiscountAmount = computeCodDiscount(codDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);
+  // Taxa de ramburs (oglinda serverului): se calculeaza INAINTEA TVA-ului, fiindca
+  // intra in baza lui alaturi de marfa si extraoptiuni.
+  const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount, vatConfig);
+  // VAT (shared helper — identical formula on server + OrderModal).
+  const vatBase = goodsTotal + extrasTotal + codFeeAmount;
+  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
   // Round to 2 decimals (cents): float subtraction like 199.29 - 19.93 would
   // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
-  const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount - codDiscountAmount + shipping + vatAddOn) * 100) / 100);
+  const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount - codDiscountAmount + codFeeAmount + shipping + vatAddOn) * 100) / 100);
 
   const [form, setForm] = useState(preview?.form ?? { name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -258,6 +262,7 @@ export function useCheckoutOrder({
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
       setCodDiscountConfig(data.cod_discount);
+      setCodFeeConfig(data.cod_fee);
       setMinOrderAmount(data.min_order_amount);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
@@ -470,6 +475,7 @@ export function useCheckoutOrder({
     bumps,
     cardDiscountAmount,
     codDiscountAmount,
+    codFeeAmount,
     companyBilling,
     companyEnabled,
     customFields,

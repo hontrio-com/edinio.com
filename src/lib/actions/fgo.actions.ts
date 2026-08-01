@@ -85,6 +85,7 @@ async function buildItems(
     discount_code: string | null;
     card_discount_amount?: unknown;
     cod_discount_amount?: unknown;
+    cod_fee_amount?: unknown;
     total: unknown;
     subtotal: unknown;
   },
@@ -160,6 +161,17 @@ async function buildItems(
       vatRate: effectiveVat,
       unit: "BUC",
       isDiscount: true,
+    });
+  }
+  // Taxa de ramburs e adunata in total: articol obisnuit, nu discount.
+  const codFee = Number(order.cod_fee_amount);
+  if (codFee > 0) {
+    lineItems.push({
+      name: "Taxa plata ramburs",
+      quantity: 1,
+      unitPrice: toNet(codFee),
+      vatRate: effectiveVat,
+      unit: "BUC",
     });
   }
 

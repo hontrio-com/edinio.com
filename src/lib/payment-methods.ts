@@ -229,6 +229,27 @@ export function isCodPaymentMethod(method: string | null | undefined): boolean {
 }
 
 /**
+ * Metoda de plata primita de la client, adusa la una din valorile cunoscute.
+ *
+ * Serverul trebuie sa o citeasca O SINGURA DATA si sa foloseasca de acolo incolo
+ * doar rezultatul. Pana la taxa de ramburs, calculele primeau valoarea bruta iar
+ * coloana din baza primea `?? "cash_on_delivery"` — doua implicite diferite
+ * pentru acelasi camp. Cat timp toate parghiile erau REDUCERI, nepotrivirea
+ * costa clientul (isi pierdea reducerea) si nu se vedea. Taxa inverseaza semnul:
+ * o cerere fara campul `payment_method` — actiunile de comanda sunt exporturi
+ * `"use server"`, adica endpointuri publice — producea o comanda ramburs perfect
+ * obisnuita, dar cu taxa zero. Comerciantul platea comisionul curierului si nu
+ * incasa taxa, fara nimic vizibil in panou, pe AWB sau pe factura.
+ *
+ * Necunoscutul devine ramburs, nu o valoare inventata: e acelasi implicit pe care
+ * il avea deja inserarea, deci nu schimba nimic pentru comenzile de azi.
+ */
+export function normalizePaymentMethod(raw: unknown): PaymentMethodType {
+  const s = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return LEGACY_CODE_MAP[s] ?? "cash_on_delivery";
+}
+
+/**
  * Ramburs (cash-on-delivery) discount amount for a goods base (subtotal + extras,
  * AFTER any promo discount — never including shipping). Returns 0 when disabled or
  * when the method isn't ramburs. Capped at the base so total never goes negative.
@@ -244,4 +265,112 @@ export function computeCodDiscount(
   if (base <= 0) return 0;
   const raw = config.type === "percent" ? base * (config.value / 100) : config.value;
   return Math.round(Math.min(raw, base) * 100) / 100;
+}
+
+// ── Taxa la plata ramburs ────────────────────────────────────────────────────
+// Oglinda reducerii de mai sus, cu semnul schimbat: rambursul costa comerciantul
+// bani reali (comisionul curierului la incasare), iar taxa ii trece mai departe.
+// Se aplica DOAR la ramburs, deci nu se poate intalni niciodata cu reducerea la
+// plata online. Se poate insa intalni cu REDUCEREA la ramburs, daca cineva le
+// porneste pe amandoua — se scad una din alta, si e o alegere a comerciantului,
+// nu o eroare de care sa-l aparam.
+
+export type CodFeeType = "percent" | "fixed";
+
+export type CodFeeConfig = {
+  enabled: boolean;
+  type: CodFeeType;
+  /** percent => 0..100 din valoarea marfii ; fixed => lei */
+  value: number;
+  /**
+   * Doar pentru `fixed`: suma scrisa de comerciant contine deja TVA.
+   *
+   * Exista pentru ca „5 lei" nu spune si daca cei 5 lei sunt cu sau fara TVA, iar
+   * diferenta ajunge direct in ce plateste clientul. La `percent` intrebarea nu se
+   * pune: procentul se aplica peste o baza care e deja in regimul magazinului.
+   */
+  amount_includes_vat: boolean;
+};
+
+export const DEFAULT_COD_FEE: CodFeeConfig = {
+  enabled: false,
+  type: "fixed",
+  value: 0,
+  amount_includes_vat: true,
+};
+
+/** Parseaza/normalizeaza jsonb-ul stocat. Orice e necunoscut sau invalid => oprita. */
+export function parseCodFeeConfig(raw: unknown): CodFeeConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_COD_FEE };
+  const o = raw as Record<string, unknown>;
+  const type: CodFeeType = o.type === "percent" ? "percent" : "fixed";
+  let value = Number(o.value);
+  if (!Number.isFinite(value) || value < 0) value = 0;
+  if (type === "percent") value = Math.min(value, 100);
+  return {
+    enabled: o.enabled === true,
+    type,
+    value: Math.round(value * 100) / 100,
+    // Implicit „contine TVA": e felul in care se gandeste un comerciant la o suma
+    // pe care o vede clientul. Ales explicit, nu lasat la voia lui `undefined`.
+    amount_includes_vat: o.amount_includes_vat !== false,
+  };
+}
+
+/** Verificare inainte de salvare: o taxa de zero nu e o taxa. */
+export function sanitizeCodFeeConfig(raw: unknown): CodFeeConfig {
+  const c = parseCodFeeConfig(raw);
+  if (c.value <= 0) return { ...c, enabled: false, value: 0 };
+  return c;
+}
+
+/**
+ * Suma fixa a comerciantului, adusa in REGIMUL DE PRETURI AL MAGAZINULUI.
+ *
+ * Tot restul socotelii (preturi, extraoptiuni, `computeVat`) lucreaza intr-un
+ * singur regim: ori totul cu TVA inclus, ori totul fara. Taxa trebuie adusa acolo
+ * INAINTE de a intra in calcul, altfel ar fi singura suma din comanda care
+ * inseamna altceva decat vecinele ei.
+ *
+ * Cand comerciantul si magazinul spun acelasi lucru, nu se converteste nimic.
+ * Cand TVA-ul e oprit pe magazin, comutatorul n-are niciun inteles si suma trece
+ * neatinsa.
+ */
+export function codFeeInStoreMode(
+  value: number,
+  amountIncludesVat: boolean,
+  vat: { vat_enabled: boolean; vat_rate: number; prices_include_vat: boolean },
+): number {
+  if (!vat.vat_enabled) return value;
+  if (amountIncludesVat === vat.prices_include_vat) return value;
+  const rate = (Number(vat.vat_rate) || 0) / 100;
+  return amountIncludesVat
+    ? value / (1 + rate) // comerciantul a dat brut, magazinul lucreaza in net
+    : value * (1 + rate); // comerciantul a dat net, magazinul lucreaza in brut
+}
+
+/**
+ * Taxa de ramburs pentru o baza de marfa (subtotal + extraoptiuni, DUPA promotie
+ * — niciodata transportul). Zero cand e oprita sau cand metoda nu e ramburs.
+ *
+ * Rezultatul e in regimul de preturi al magazinului, deci intra in baza de TVA
+ * alaturi de marfa, exact ca extraoptiunile.
+ *
+ * Nu se plafoneaza la nimic: o taxa aduna, deci nu poate duce totalul sub zero —
+ * spre deosebire de reduceri, care se plafoneaza tocmai ca sa nu-l duca.
+ */
+export function computeCodFee(
+  config: CodFeeConfig,
+  paymentMethod: string | null | undefined,
+  goodsBase: number,
+  vat: { vat_enabled: boolean; vat_rate: number; prices_include_vat: boolean },
+): number {
+  if (!config.enabled || config.value <= 0) return 0;
+  if (!isCodPaymentMethod(paymentMethod)) return 0;
+  if (config.type === "percent") {
+    const base = Math.max(0, goodsBase);
+    if (base <= 0) return 0;
+    return Math.round(base * (config.value / 100) * 100) / 100;
+  }
+  return Math.round(codFeeInStoreMode(config.value, config.amount_includes_vat, vat) * 100) / 100;
 }

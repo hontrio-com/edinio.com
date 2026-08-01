@@ -1,5 +1,5 @@
 import type { ShippingOption } from "@/lib/actions/shipping.actions";
-import type { CardDiscountConfig, PaymentMethodType } from "@/lib/payment-methods";
+import { DEFAULT_COD_FEE, type CardDiscountConfig, type CodFeeConfig, type PaymentMethodType } from "@/lib/payment-methods";
 import type { VatConfig } from "@/lib/utils/vat";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 
@@ -23,6 +23,7 @@ export interface CheckoutPreview {
   paymentMethods: { type: PaymentMethodType; label: string }[];
   cardDiscount: CardDiscountConfig;
   codDiscount: CardDiscountConfig;
+  codFee: CodFeeConfig;
   newsletterOffer: boolean;
   intlEnabled: boolean;
   /** Optiunile de livrare, randate de `CourierSelector` cu marcajul lui real. */
@@ -65,6 +66,7 @@ export const CHECKOUT_DEMO: CheckoutPreview = {
   ],
   cardDiscount: { enabled: false, type: "percent", value: 0 },
   codDiscount: { enabled: false, type: "percent", value: 0 },
+  codFee: DEFAULT_COD_FEE,
   newsletterOffer: true,
   intlEnabled: false,
   courierOptions: [

@@ -78,6 +78,7 @@ async function buildProducts(
     discount_code: string | null;
     card_discount_amount?: unknown;
     cod_discount_amount?: unknown;
+    cod_fee_amount?: unknown;
   },
   config: OblioConfig,
   pricesIncludeVat: boolean,
@@ -156,6 +157,18 @@ async function buildProducts(
       ...vatFields,
     });
   }
+  // Taxa de ramburs e adunata in total: linie de serviciu cu pret POZITIV.
+  if (Number(order.cod_fee_amount) > 0) {
+    products.push({
+      name: "Taxa plata ramburs",
+      price: Math.abs(Number(order.cod_fee_amount)),
+      measuringUnit: "buc",
+      quantity: 1,
+      productType: "Serviciu",
+      save: 0,
+      ...vatFields,
+    });
+  }
 
   return products;
 }
@@ -195,6 +208,7 @@ async function buildInvoiceData(
     discount_code: string | null;
     card_discount_amount?: unknown;
     cod_discount_amount?: unknown;
+    cod_fee_amount?: unknown;
     payment_method: string;
     payment_status: string;
     total: unknown;

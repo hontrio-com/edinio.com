@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
-import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { formatPrice } from "@/lib/utils/format";
 import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
 import type { ShippingClass, ShippingRule } from "@/lib/shipping/rules";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
@@ -260,6 +261,7 @@ interface Props {
   paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean; klarna: boolean; revolut: boolean };
   cardDiscount: CardDiscountConfig;
   codDiscount: CardDiscountConfig;
+  codFee: CodFeeConfig;
   cookieBanner: CookieBannerConfig;
   cookieCategories: ConsentCategory[];
   storeSeo: StoreSeo;
@@ -287,7 +289,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -515,6 +517,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateCodDiscount(businessId, codDisc);
       if ("error" in result) toast.error(result.error);
       else toast.success("Discountul la plata ramburs a fost salvat.");
+    });
+  }
+
+  // Taxa la plata ramburs — oglinda discountului de mai sus, cu semn invers.
+  const [codTaxa, setCodTaxa] = useState<CodFeeConfig>(codFee);
+  const [savingCodTaxa, startCodTaxaTransition] = useTransition();
+  function saveCodFee() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    if (codTaxa.enabled && (!Number.isFinite(codTaxa.value) || codTaxa.value <= 0)) {
+      toast.error("Introdu o valoare mai mare ca 0 pentru taxa.");
+      return;
+    }
+    if (codTaxa.enabled && codTaxa.type === "percent" && codTaxa.value > 100) {
+      toast.error("Procentul nu poate depasi 100%.");
+      return;
+    }
+    startCodTaxaTransition(async () => {
+      const result = await updateCodFee(businessId, codTaxa);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Taxa la plata ramburs a fost salvata.");
     });
   }
 
@@ -1896,6 +1918,103 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div className="px-5 py-4 border-t border-border">
                   <Button onClick={saveCodDiscount} disabled={savingCodDisc}>
                     {savingCodDisc ? <Loader2 className="animate-spin" /> : <Save />}
+                    Salveaza
+                  </Button>
+                </div>
+              </div>
+
+              {/* Taxa la plata ramburs */}
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Taxa la plata ramburs</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Adauga automat o suma la comenzile platite ramburs, ca sa acoperi comisionul curierului. Nu se aplica la plata cu cardul.
+                    </p>
+                  </div>
+                  <Switch checked={codTaxa.enabled} onCheckedChange={(v) => setCodTaxa(c => ({ ...c, enabled: v }))} className="mt-1 shrink-0" aria-label={codTaxa.enabled ? "Dezactiveaza" : "Activeaza"} />
+                </div>
+                {codTaxa.enabled && (
+                  <div className="px-5 py-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tip taxa</label>
+                      <div className="grid grid-cols-2 gap-2 max-w-sm">
+                        <button type="button" onClick={() => setCodTaxa(c => ({ ...c, type: "percent" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codTaxa.type === "percent" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Procent (%)
+                        </button>
+                        <button type="button" onClick={() => setCodTaxa(c => ({ ...c, type: "fixed" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codTaxa.type === "fixed" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Suma fixa (lei)
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                        {codTaxa.type === "percent" ? "Valoare taxa (%)" : "Valoare taxa (lei)"}
+                      </label>
+                      <input
+                        type="number" min={0} max={codTaxa.type === "percent" ? 100 : undefined} step="0.01"
+                        value={codTaxa.value || ""}
+                        onChange={e => setCodTaxa(c => ({ ...c, value: Math.max(0, Number(e.target.value) || 0) }))}
+                        className={`${inputCls} max-w-[200px]`}
+                        placeholder={codTaxa.type === "percent" ? "ex: 2" : "ex: 10"}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        {codTaxa.type === "percent"
+                          ? "Se calculeaza la valoarea produselor (fara transport), dupa eventualul cod de reducere."
+                          : "Se adauga la total, indiferent de valoarea comenzii."}
+                      </p>
+                    </div>
+
+                    {/* Intrebarea de TVA are rost DOAR pentru o suma fixa: un procent
+                        se aplica peste o baza care e deja in regimul magazinului. */}
+                    {codTaxa.type === "fixed" && vatSettings.vat_enabled && (
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Suma introdusa</label>
+                        <div className="grid grid-cols-2 gap-2 max-w-sm">
+                          <button type="button" onClick={() => setCodTaxa(c => ({ ...c, amount_includes_vat: true }))}
+                            className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codTaxa.amount_includes_vat ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                            Contine TVA
+                          </button>
+                          <button type="button" onClick={() => setCodTaxa(c => ({ ...c, amount_includes_vat: false }))}
+                            className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${!codTaxa.amount_includes_vat ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                            Fara TVA
+                          </button>
+                        </div>
+                        {/* Suma pe care o vede clientul, calculata cu aceeasi functie
+                            ca la checkout si pe server. Fara ea, alegerea de mai sus
+                            ramane o abstractie pe care comerciantul o afla abia din
+                            prima comanda.
+
+                            Se citeste `vatSettings` (prop-ul SALVAT), nu starea
+                            `vat`/`vatRateInput` din editorul de TVA de alaturi: aceea
+                            se schimba la fiecare tasta si poate sta intr-o forma pe
+                            care aplicatia refuza sa o salveze (camp de cota golit =>
+                            cota 0). Serverul foloseste cota salvata, deci si
+                            previzualizarea trebuie sa o foloseasca pe aceeasi, altfel
+                            arata un numar pe care nu-l va incasa nimeni. */}
+                        {codTaxa.value > 0 && (
+                          <p className="text-[11px] text-muted-foreground mt-2">
+                            Clientul va vedea <strong className="text-foreground">
+                              {formatPrice(
+                                Math.round(
+                                  codFeeInStoreMode(codTaxa.value, codTaxa.amount_includes_vat, vatSettings)
+                                    * (vatSettings.prices_include_vat ? 1 : 1 + vatSettings.vat_rate / 100)
+                                    * 100,
+                                ) / 100,
+                              )}
+                            </strong>{" "}
+                            adaugat la comanda, cu TVA inclus.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="px-5 py-4 border-t border-border">
+                  <Button onClick={saveCodFee} disabled={savingCodTaxa}>
+                    {savingCodTaxa ? <Loader2 className="animate-spin" /> : <Save />}
                     Salveaza
                   </Button>
                 </div>

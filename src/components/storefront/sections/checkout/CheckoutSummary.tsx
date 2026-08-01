@@ -58,7 +58,7 @@ export function CheckoutTotals({
   freeShippingThreshold: number | null;
 }) {
   const {
-    acceptedBumpOffers, appliedDiscount, cardDiscountAmount, codDiscountAmount, discountAmount,
+    acceptedBumpOffers, appliedDiscount, cardDiscountAmount, codDiscountAmount, codFeeAmount, discountAmount,
     extrasTotal, goodsTotal, grandTotal, isFreeShippingDiscount, shipping,
     total, vatAmount, vatConfig,
   } = motor;
@@ -108,6 +108,14 @@ export function CheckoutTotals({
           <div className="flex justify-between" style={{ color }}>
             <span>Reducere plata ramburs</span>
             <span className="font-medium">-{formatPrice(codDiscountAmount)}</span>
+          </div>
+        )}
+        {/* Taxa de ramburs se aduna, deci NU poarta culoarea magazinului: aia e
+            rezervata sumelor in favoarea clientului. */}
+        {codFeeAmount > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>Taxa plata ramburs</span>
+            <span className="font-medium">{formatPrice(codFeeAmount)}</span>
           </div>
         )}
         {freeShippingThreshold && goodsTotal < freeShippingThreshold && (

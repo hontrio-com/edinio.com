@@ -83,6 +83,7 @@ async function buildInvoiceProducts(
     discount_code: string | null;
     card_discount_amount?: unknown;
     cod_discount_amount?: unknown;
+    cod_fee_amount?: unknown;
     vat_rate: unknown;
   },
   pricesIncludeVat: boolean,
@@ -203,6 +204,27 @@ async function buildInvoiceProducts(
       ...taxFields,
     });
   }
+  // Taxa de ramburs e ADUNATA in orders.total, deci pe factura e o linie de
+  // serviciu obisnuita, cu pret pozitiv — nu un discount. Trecuta ca discount cu
+  // valoare negativa, ar fi aparut pe factura drept reducere de suma negativa.
+  if (Number(order.cod_fee_amount) > 0) {
+    products.push({
+      name: "Taxa plata ramburs",
+      // `code` si `isService` copiaza linia de Transport de mai sus, si nu din
+      // simetrie: pe conturile SmartBill cu gestiune si „Foloseste cod produs"
+      // activ, un rand de MARFA fara cod produs nu exista in gestiune si emiterea
+      // esueaza. Pe calea automata esecul e mut (`maybeAutoGenerateInvoice`
+      // intoarce false), deci comenzile cu taxa ar fi ramas tacut nefacturate.
+      code: "taxa-ramburs",
+      measuringUnitName: "buc",
+      currency: "RON",
+      quantity: 1,
+      price: Math.abs(Number(order.cod_fee_amount)),
+      isTaxIncluded: taxIncluded,
+      isService: true,
+      ...taxFields,
+    });
+  }
 
   return products;
 }
@@ -220,6 +242,7 @@ type InvoiceableOrder = {
   discount_code: string | null;
   card_discount_amount?: unknown;
   cod_discount_amount?: unknown;
+  cod_fee_amount?: unknown;
   vat_rate: unknown;
 };
 

@@ -116,6 +116,12 @@ test("orice nu e o metoda cunoscuta devine ramburs, nu altceva", () => {
   assert.equal(normalizePaymentMethod("bitcoin"), "cash_on_delivery");
   assert.equal(normalizePaymentMethod(42), "cash_on_delivery");
   assert.equal(normalizePaymentMethod({}), "cash_on_delivery");
+  // Cele doua siruri care gasesc ceva pe lantul de prototip al obiectului. Cu o
+  // citire simpla urmata de `??`, de aici ieseau functia `Object`, respectiv
+  // `Object.prototype`, si mai departe o comanda cu o metoda de plata inexistenta.
+  assert.equal(normalizePaymentMethod("constructor"), "cash_on_delivery");
+  assert.equal(normalizePaymentMethod("__proto__"), "cash_on_delivery");
+  assert.equal(normalizePaymentMethod("toString"), "cash_on_delivery");
 });
 
 test("codurile vechi si scrierea cu majuscule ajung la aceeasi metoda", () => {

@@ -225,8 +225,14 @@ export function CompanyFields({
             <label htmlFor={`${uid}-cui`} className="block text-sm font-semibold text-foreground mb-1">
               CUI <span className="text-red-500">*</span>
             </label>
+            {/* `min-w-0` NU e cosmetica. Intr-un rand flex, elementul are implicit
+                `min-width: auto`, adica nu coboara sub latimea intrinseca a
+                input-ului din el (un <input> are o latime proprie de ~20 de
+                caractere). Butonul de alaturi e `shrink-0`, deci pe coloana
+                ingusta a formularului de comanda randul iesea din card si butonul
+                aparea taiat. Cu `min-w-0` campul cedeaza latime, nu butonul. */}
             <div className="flex gap-2">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <Wrap icon={Building2} error={!!errors.cui}>
                   <input
                     id={`${uid}-cui`}
@@ -246,7 +252,9 @@ export function CompanyFields({
                     inputMode="numeric"
                     aria-invalid={errors.cui ? true : undefined}
                     aria-describedby={errors.cui ? `${uid}-cui-err` : undefined}
-                    className={fieldCls}
+                    // Acelasi motiv o treapta mai jos: input-ul e la randul lui
+                    // element flex in interiorul invelisului cu iconita.
+                    className={`${fieldCls} min-w-0`}
                   />
                 </Wrap>
               </div>
@@ -257,8 +265,9 @@ export function CompanyFields({
                 className="flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold text-white transition-opacity disabled:opacity-50 whitespace-nowrap shrink-0"
                 style={{ backgroundColor: color }}
               >
-                {anafLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                {anafLoading ? "Se cauta..." : "Completeaza automat"}
+                {anafLoading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Search className="h-3.5 w-3.5 shrink-0" />}
+                <span className="hidden min-[380px]:inline">{anafLoading ? "Se cauta..." : "Completeaza automat"}</span>
+                <span className="sr-only min-[380px]:hidden">Completeaza automat din ANAF</span>
               </button>
             </div>
             {errors.cui && <p id={`${uid}-cui-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.cui}</p>}
@@ -269,9 +278,14 @@ export function CompanyFields({
                 Date preluate din ANAF{company.vatPayer ? ", platitor de TVA" : ", neplatitor de TVA"}.
               </p>
             )}
+            {/* Sub 380px butonul ramane doar cu lupa, deci indrumarea nu are voie
+                sa-l numeasca: clientul ar cauta pe ecran un text care nu exista. */}
             {!anafError && !company.verified && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Apasa &bdquo;Completeaza automat&rdquo; ca sa preiei datele firmei din ANAF.
+                Apasa{" "}
+                <span className="hidden min-[380px]:inline">&bdquo;Completeaza automat&rdquo;</span>
+                <span className="min-[380px]:hidden">butonul cu lupa de langa camp</span>{" "}
+                ca sa preiei datele firmei din ANAF.
               </p>
             )}
             {company.inactive && (

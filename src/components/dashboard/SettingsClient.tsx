@@ -1996,7 +1996,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                             arata un numar pe care nu-l va incasa nimeni. */}
                         {codTaxa.value > 0 && (
                           <p className="text-[11px] text-muted-foreground mt-2">
-                            Clientul va vedea <strong className="text-foreground">
+                            Comanda va creste cu <strong className="text-foreground">
                               {formatPrice(
                                 Math.round(
                                   codFeeInStoreMode(codTaxa.value, codTaxa.amount_includes_vat, vatSettings)
@@ -2005,7 +2005,10 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                                 ) / 100,
                               )}
                             </strong>{" "}
-                            adaugat la comanda, cu TVA inclus.
+                            , cu TVA inclus.
+                            {!vatSettings.prices_include_vat && (
+                              <> In rezumatul comenzii apare fara TVA, ca restul preturilor din magazin.</>
+                            )}
                           </p>
                         )}
                       </div>

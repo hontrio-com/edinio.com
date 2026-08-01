@@ -246,7 +246,16 @@ export function isCodPaymentMethod(method: string | null | undefined): boolean {
  */
 export function normalizePaymentMethod(raw: unknown): PaymentMethodType {
   const s = typeof raw === "string" ? raw.trim().toLowerCase() : "";
-  return LEGACY_CODE_MAP[s] ?? "cash_on_delivery";
+  // Se verifica APARTENENTA, nu adevarul valorii. Cu o simpla citire urmata de
+  // `??`, doua siruri scapa: „constructor" si „__proto__" gasesc ceva pe lantul
+  // de prototip al obiectului — functia `Object`, respectiv `Object.prototype` —
+  // iar `??` prinde doar null si undefined, deci ar fi iesit din functie o
+  // valoare care nu e nicio metoda de plata. Aceeasi paza o are deja `coerceEntry`
+  // mai sus, prin `ALL_TYPES.includes`.
+  const gasit = Object.prototype.hasOwnProperty.call(LEGACY_CODE_MAP, s)
+    ? LEGACY_CODE_MAP[s]
+    : undefined;
+  return gasit ?? "cash_on_delivery";
 }
 
 /**

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
-import { computeVat } from "@/lib/utils/vat";
+import { computeVat, vatBase } from "@/lib/utils/vat";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -580,9 +580,13 @@ export async function placeOrder(data: {
   const vatEnabled = cfgRow?.vat_enabled ?? false;
   const vatRate = Number(cfgRow?.vat_rate ?? 19);
   const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
-  // Taxa de ramburs intra in baza de TVA, ca extraoptiunile: e un serviciu
-  // facturabil. Transportul ramane in afara ei, ca pana acum.
-  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal + codFee, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
+  // Baza: marfa si extraoptiunile DUPA toate reducerile, plus taxa de ramburs.
+  // Formula sta in `vatBase`, folosita si de cele doua formulare din magazin, ca
+  // ce vede clientul sa fie ce se incaseaza.
+  const { vatAmount, vatAddOn } = computeVat(
+    vatBase({ goods: subtotal, extras: extrasTotal, discount: discountAmount, cardDiscount, codDiscount, codFee }),
+    { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat },
+  );
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
 
@@ -1168,13 +1172,27 @@ export async function updateOrderDetails(orderId: string, data: {
       .reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0),
   );
 
-  // Taxa de ramburs a intrat in baza de TVA la plasarea comenzii; scoasa de aici
-  // la editare, TVA-ul recalculat ar fi iesit mai mic decat cel incasat.
-  const { vatAmount, vatAddOn } = computeVat(newSubtotal + extrasTotal + (Number(order.cod_fee_amount) || 0), {
-    vat_enabled: cfgRow?.vat_enabled ?? false,
-    vat_rate: Number(cfgRow?.vat_rate ?? 19),
-    prices_include_vat: cfgRow?.prices_include_vat ?? false,
-  });
+  // Aceeasi baza ca la plasare (vezi `vatBase`): reducerile convenite atunci raman
+  // cele de atunci, iar taxa de ramburs se pastreaza — scoasa de aici, TVA-ul
+  // recalculat ar iesi mai mic decat cel incasat.
+  const { vatAmount, vatAddOn } = computeVat(
+    vatBase({
+      goods: newSubtotal,
+      extras: extrasTotal,
+      discount: Number(order.discount_amount) || 0,
+      cardDiscount: Number(order.card_discount_amount) || 0,
+      codDiscount: Number(order.cod_discount_amount) || 0,
+      codFee: Number(order.cod_fee_amount) || 0,
+    }),
+    {
+      vat_enabled: cfgRow?.vat_enabled ?? false,
+      vat_rate: Number(cfgRow?.vat_rate ?? 19),
+      // `true`, ca la plasare. Nu misca nimic azi (coloana e NOT NULL si
+      // `vat_enabled` scurtcircuiteaza), dar doua rezerve diferite pentru acelasi
+      // camp sunt o capcana pusa la pastrare.
+      prices_include_vat: cfgRow?.prices_include_vat ?? true,
+    },
+  );
 
   const pragTransport = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   let newShipping = Math.max(0, round2(Number(order.shipping_cost) || 0));
@@ -1537,10 +1555,12 @@ export async function placeCartOrder(data: {
     vatCfgTaxa,
   );
 
-  // Shared helper — identical formula on placeOrder + both storefront modals.
-  // Se calculeaza DUPA taxa de ramburs, fiindca taxa intra in baza lui: e un
-  // serviciu purtator de TVA, ca extraoptiunile. Transportul ramane in afara.
-  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal + codFee, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
+  // Aceeasi baza ca la comanda directa si ca in magazin: marfa si extraoptiunile
+  // DUPA toate reducerile, plus taxa de ramburs. Vezi `vatBase`.
+  const { vatAmount, vatAddOn } = computeVat(
+    vatBase({ goods: subtotal, extras: extrasTotal, discount: discountAmount, cardDiscount, codDiscount, codFee }),
+    { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat },
+  );
 
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   let shipping = autoritativeShipping(

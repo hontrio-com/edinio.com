@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useRef } from "react";
-import { computeVat, type VatConfig } from "@/lib/utils/vat";
+import { computeVat, vatBase, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getAttribution } from "@/lib/storefront/attribution";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
@@ -122,9 +122,17 @@ export function useCheckoutOrder({
   // Taxa de ramburs (oglinda serverului): se calculeaza INAINTEA TVA-ului, fiindca
   // intra in baza lui alaturi de marfa si extraoptiuni.
   const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount, vatConfig);
-  // VAT (shared helper — identical formula on server + OrderModal).
-  const vatBase = goodsTotal + extrasTotal + codFeeAmount;
-  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
+  // VAT: aceeasi baza si acelasi helper ca serverul si ca formularul de comanda
+  // directa. Marfa si extraoptiunile DUPA toate reducerile, plus taxa de ramburs.
+  const bazaTva = vatBase({
+    goods: goodsTotal,
+    extras: extrasTotal,
+    discount: discountAmount,
+    cardDiscount: cardDiscountAmount,
+    codDiscount: codDiscountAmount,
+    codFee: codFeeAmount,
+  });
+  const { vatAmount, vatAddOn } = computeVat(bazaTva, vatConfig);
   // Round to 2 decimals (cents): float subtraction like 199.29 - 19.93 would
   // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
   const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount - codDiscountAmount + codFeeAmount + shipping + vatAddOn) * 100) / 100);

@@ -13,8 +13,41 @@ export interface VatConfig {
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
 /**
- * VAT for a goods+extras `base` (computed on the PRE-discount value, matching the
- * server). Returns:
+ * Suma pe care se calculeaza TVA-ul.
+ *
+ * Se scad TOATE reducerile. TVA-ul se datoreaza pe ce incaseaza comerciantul, nu
+ * pe pretul de raft: la marfa de 100 cu un cupon de 20, statul vrea TVA pe 80.
+ *
+ * Pana in 2026-08-02 baza era INAINTE de reducere, si iesea prost in doua feluri.
+ * La magazinele cu preturi fara TVA, clientul chiar platea mai mult: 100 - 20 + 19
+ * facea 99, in loc de 95,20. La cele cu preturi cu TVA totalul era corect, dar
+ * `vat_amount` scris pe comanda iesea umflat si se contrazicea cu factura, unde
+ * reducerea pleaca pe o linie separata si furnizorul isi face singur socoteala pe
+ * netul de dupa reducere.
+ *
+ * Taxa de ramburs INTRA in baza: e un serviciu facturabil, ca extraoptiunile.
+ * Transportul NU intra; el isi are regimul lui.
+ *
+ * Sta aici, intr-un singur loc, fiindca formula are CINCI apelanti: doua cai de
+ * comanda pe server, editarea comenzii, si cele doua formulare din magazin. Scrisa
+ * de cinci ori, ar apuca-o pe drumuri diferite — s-a mai intamplat de trei ori.
+ */
+export function vatBase(p: {
+  /** Marfa, dupa treptele de cantitate. */
+  goods: number;
+  extras: number;
+  discount: number;
+  cardDiscount: number;
+  codDiscount: number;
+  codFee: number;
+}): number {
+  const net = p.goods + p.extras - p.discount - p.cardDiscount - p.codDiscount + p.codFee;
+  return Math.max(0, round2(net));
+}
+
+/**
+ * VAT for a goods+extras `base` (see `vatBase` — computed on the post-discount
+ * value). Returns:
  *  - `vatAmount`: the VAT figure shown to the customer.
  *  - `vatAddOn`: what actually gets added to the grand total.
  *

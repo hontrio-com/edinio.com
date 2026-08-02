@@ -12,7 +12,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
-import { computeVat, type VatConfig } from "@/lib/utils/vat";
+import { computeVat, vatBase, type VatConfig } from "@/lib/utils/vat";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
@@ -290,10 +290,17 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Taxa de ramburs (oglinda serverului): calculata INAINTEA TVA-ului, fiindca
   // intra in baza lui alaturi de marfa si extraoptiuni.
   const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, discountedSubtotal + extrasTotal, vatConfig);
-  // VAT (shared helper — identical formula on server + CartCheckoutModal). Base is
-  // the PRE-discount goods+extras so the add-on matches the server grand total.
-  const vatBase = subtotal + extrasTotal + codFeeAmount;
-  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
+  // VAT: aceeasi baza si acelasi helper ca serverul si ca finalizarea cosului.
+  // Marfa si extraoptiunile DUPA toate reducerile, plus taxa de ramburs.
+  const bazaTva = vatBase({
+    goods: subtotal,
+    extras: extrasTotal,
+    discount: discountAmount,
+    cardDiscount: cardDiscountAmount,
+    codDiscount: codDiscountAmount,
+    codFee: codFeeAmount,
+  });
+  const { vatAmount, vatAddOn } = computeVat(bazaTva, vatConfig);
   // Round to 2 decimals (cents): float math would otherwise show e.g. 179.35999999999999.
   const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount + codFeeAmount + vatAddOn) * 100) / 100);
 

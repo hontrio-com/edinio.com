@@ -1,8 +1,9 @@
 import Image from "next/image";
-import { ImageIcon } from "lucide-react";
+import { Check, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { FEATURE_CARDS, type FeatureCard } from "@/lib/website/features";
 import { FeatureStack } from "./FeatureStack";
+import { SectionEyebrow } from "./SectionEyebrow";
 
 /**
  * Secțiunea de funcții: carduri late, care se strâng în teanc la derulare.
@@ -29,10 +30,14 @@ export function Features() {
     <section className="bg-tint">
       <div className="mx-auto max-w-[1200px] px-5 pt-20 pb-24 sm:px-6 lg:px-8 lg:pt-28 lg:pb-36">
         <div className="mx-auto max-w-[720px] text-center">
-          <span className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-            Ce face platforma
-          </span>
-          <h2 className="mt-4 text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
+          {/*
+            Perechea etichetei rosii de mai sus. Acelasi desen, alt ton: asa se
+            citeste ca sectiunea asta raspunde la cea dinainte, nu ca incepe alt
+            subiect. De aceea nu mai scrie „Ce face platforma".
+          */}
+          <SectionEyebrow tone="brand" icon={Check} label="Soluția" />
+
+          <h2 className="mt-6 text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
             Tot ce ține un magazin în picioare, la locul lui
           </h2>
           <p className="mt-5 text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">

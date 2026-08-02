@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Shield, Headset, Wrench } from "lucide-react";
 import { Hero } from "@/components/website/sections/Hero";
+import { Problem } from "@/components/website/sections/Problem";
 import { Features } from "@/components/website/sections/Features";
 import { HowItWorksSection } from "@/components/website/HowItWorksSection";
 import { DemoSection } from "@/components/website/DemoSection";
@@ -148,6 +149,7 @@ export default function LandingPage() {
       />
       <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
       <Hero />
+      <Problem />
       <Features />
       <HowItWorksSection />
       <DemoSection />

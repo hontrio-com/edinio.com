@@ -22,6 +22,8 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   vat_rate: number;
   prices_include_vat: boolean;
   show_vat_breakdown: boolean;
+  /** Eticheta „(TVA inclus)" / „(fara TVA)" de langa pret. */
+  show_vat_label: boolean;
   shipping_zones: Json | null;
   min_order_amount: number | null;
   payment_methods: { type: PaymentMethodType; label: string }[];
@@ -37,7 +39,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, cod_fee_config, mailchimp_config, brevo_config, klaviyo_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, show_vat_label, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, cod_fee_config, mailchimp_config, brevo_config, klaviyo_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -75,6 +77,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     vat_rate: Number(data.vat_rate ?? 19),
     prices_include_vat: data.prices_include_vat ?? true,
     show_vat_breakdown: data.show_vat_breakdown ?? true,
+    show_vat_label: data.show_vat_label ?? true,
     shipping_zones: (data.shipping_zones as Json) ?? null,
     min_order_amount: data.min_order_amount != null ? Number(data.min_order_amount) : null,
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
@@ -371,7 +374,7 @@ export async function updateNotificationsSettings(
 
 export async function updateVatSettings(
   businessId: string,
-  settings: { vat_enabled: boolean; vat_rate: number; prices_include_vat: boolean; show_vat_breakdown: boolean },
+  settings: { vat_enabled: boolean; vat_rate: number; prices_include_vat: boolean; show_vat_breakdown: boolean; show_vat_label: boolean },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

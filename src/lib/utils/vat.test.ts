@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { computeVat, vatBase } from "./vat";
+import { computeVat, vatBase, vatLabel } from "./vat";
 
 /**
  * TVA-ul se datoreaza pe ce INCASEAZA comerciantul, nu pe pretul de raft.
@@ -75,6 +75,24 @@ test("cota de 9% si de 5% se aplica la fel", () => {
   const baza = vatBase({ ...gol, goods: 200, discount: 50 });
   assert.equal(computeVat(baza, { ...FARA_TVA, vat_rate: 9 }).vatAmount, 13.5);
   assert.equal(computeVat(baza, { ...FARA_TVA, vat_rate: 5 }).vatAmount, 7.5);
+});
+
+/* ── Eticheta de langa pret ── */
+
+test("eticheta spune ce zice setarea de preturi, nu altceva", () => {
+  assert.equal(vatLabel({ vat_enabled: true, prices_include_vat: true }), "TVA inclus");
+  assert.equal(vatLabel({ vat_enabled: true, prices_include_vat: false }), "fără TVA");
+});
+
+test("magazinul neplatitor de TVA nu arata nicio eticheta", () => {
+  assert.equal(vatLabel({ vat_enabled: false, prices_include_vat: true }), null);
+});
+
+test("comerciantul o poate stinge, dar implicit ramane pornita", () => {
+  assert.equal(vatLabel({ vat_enabled: true, prices_include_vat: true, show_vat_label: false }), null);
+  // Nedefinit inseamna pornita: la magazinele vechi eticheta se afisa deja, si
+  // n-are de ce sa dispara peste noapte.
+  assert.equal(vatLabel({ vat_enabled: true, prices_include_vat: false, show_vat_label: undefined }), "fără TVA");
 });
 
 /**

@@ -10,6 +10,7 @@ import {
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
+import { vatLabel } from "@/lib/utils/vat";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
   comboEpuizat, comboStock, toateCombinatiileEpuizate, VARIANT_TITLE_SEP,
@@ -190,9 +191,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
     ? Number(storeSettings.free_shipping_threshold) : null;
   const minOrderAmount = storeSettings?.min_order_amount
     ? Number(storeSettings.min_order_amount) : null;
-  // VAT note shown under the price (only for VAT-registered stores).
-  const vatEnabled = storeSettings?.vat_enabled ?? false;
-  const pricesIncludeVat = storeSettings?.prices_include_vat ?? true;
+  // Eticheta de langa pret: „(TVA inclus)" sau „(fara TVA)". Textul se deduce din
+  // setarea de preturi, nu se scrie separat nicaieri; `null` cand magazinul nu e
+  // platitor de TVA sau comerciantul a stins-o din Setari > Taxe.
+  const eticheta = vatLabel({
+    vat_enabled: storeSettings?.vat_enabled ?? false,
+    prices_include_vat: storeSettings?.prices_include_vat ?? true,
+    show_vat_label: storeSettings?.show_vat_label ?? true,
+  });
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
   const pageSections = (product.page_sections as PageSections) ?? {};
@@ -543,15 +549,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
               <span className="text-white text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: color }}>-{discountPct}%</span>
             </>
           )}
+          {eticheta && (
+            <span className="text-sm text-muted-foreground">({eticheta})</span>
+          )}
           {pageSections.customization?.enabled && pageSections.customization.fields.length > 0 && (
             <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: `${color}1a`, color }}>Personalizabil</span>
           )}
         </div>
-        {vatEnabled && (
-          <p className="text-xs text-muted-foreground">
-            {pricesIncludeVat ? "Prețul include TVA" : "Preț fără TVA (TVA se adaugă la finalizare)"}
-          </p>
-        )}
+        {/* Eticheta sta acum LANGA pret, in randul lui, nu ca nota dedesubt. */}
 
         {/* Bundle contents — shown prominently in the buy box */}
         {product.is_bundle && bundleComponents.length > 0 && (

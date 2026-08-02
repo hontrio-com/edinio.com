@@ -9,6 +9,26 @@ export interface VatConfig {
   show_vat_breakdown: boolean;
 }
 
+/**
+ * Eticheta de langa pret: „TVA inclus" sau „fara TVA".
+ *
+ * Textul se DEDUCE din setarea de preturi, nu se scrie de mana nicaieri. Lasat
+ * la alegere, un magazin ar fi putut ajunge sa scrie „TVA inclus" langa preturi
+ * pe care serverul le taxeaza pe deasupra — adica exact promisiunea pe care n-o
+ * poate tine la finalul comenzii.
+ *
+ * `null` cand nu e nimic de spus: magazin neplatitor de TVA, sau comerciantul a
+ * stins eticheta.
+ */
+export function vatLabel(cfg: {
+  vat_enabled: boolean;
+  prices_include_vat: boolean;
+  show_vat_label?: boolean;
+}): string | null {
+  if (!cfg.vat_enabled || cfg.show_vat_label === false) return null;
+  return cfg.prices_include_vat ? "TVA inclus" : "fără TVA";
+}
+
 // Round to 2 decimals (cents) — mirrors order.actions.ts `round2`.
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 

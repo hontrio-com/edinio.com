@@ -184,6 +184,8 @@ interface VatSettings {
   vat_rate: number;
   prices_include_vat: boolean;
   show_vat_breakdown: boolean;
+  /** Eticheta „(TVA inclus)" / „(fara TVA)" de langa pret. */
+  show_vat_label: boolean;
 }
 
 interface NotificationsConfig {
@@ -1623,6 +1625,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           Nu, preturile sunt fara TVA
                         </button>
                       </div>
+                    </div>
+
+                    {/* Eticheta de langa pret */}
+                    <div className="flex items-center justify-between gap-4 pt-4 border-t border-border">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">Afiseaza eticheta langa pret</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Pe pagina produsului, langa pret, va scrie{" "}
+                          <span className="font-medium text-foreground">
+                            ({vat.prices_include_vat ? "TVA inclus" : "fara TVA"})
+                          </span>
+                          . Textul se ia din setarea de mai sus, ca sa nu poata scrie una si sa se incaseze alta.
+                        </p>
+                      </div>
+                      <Switch checked={vat.show_vat_label} onCheckedChange={(v) => setVat(prev => ({ ...prev, show_vat_label: v }))} />
                     </div>
 
                     {/* Arata defalcarea TVA */}

@@ -9,6 +9,7 @@ import {
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
+import { vatLabel } from "@/lib/utils/vat";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
   comboEpuizat, comboStock, toateCombinatiileEpuizate, pozePeValoare, VARIANT_TITLE_SEP,
@@ -253,8 +254,14 @@ export function ProductPageDetailed({
     ? Number(storeSettings.free_shipping_threshold) : null;
   const minOrderAmount = storeSettings?.min_order_amount
     ? Number(storeSettings.min_order_amount) : null;
-  const vatEnabled = storeSettings?.vat_enabled ?? false;
-  const pricesIncludeVat = storeSettings?.prices_include_vat ?? true;
+  // Eticheta de langa pret: „(TVA inclus)" sau „(fara TVA)". Textul se deduce din
+  // setarea de preturi, nu se scrie separat nicaieri; `null` cand magazinul nu e
+  // platitor de TVA sau comerciantul a stins-o din Setari > Taxe.
+  const eticheta = vatLabel({
+    vat_enabled: storeSettings?.vat_enabled ?? false,
+    prices_include_vat: storeSettings?.prices_include_vat ?? true,
+    show_vat_label: storeSettings?.show_vat_label ?? true,
+  });
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
   const pageSections = (product.page_sections as PageSections) ?? {};
@@ -630,13 +637,16 @@ export function ProductPageDetailed({
                   )}
                 </>
               )}
+              {eticheta && (
+                <span className="text-sm text-muted-foreground mb-0.5">({eticheta})</span>
+              )}
             </div>
 
-            {vatEnabled && (
-              <p className="text-xs text-muted-foreground -mt-2">
-                {pricesIncludeVat ? "Prețul include TVA" : "Prețul nu include TVA"}
-              </p>
-            )}
+            {/*
+              Eticheta a fost mutata LANGA pret (mai sus, in randul pretului):
+              ca rand separat sub el, se citea ca o nota de subsol si se pierdea.
+              Aici a ramas doar comutatorul care o stinge.
+            */}
 
             {/* Variante */}
             {variantsData && (

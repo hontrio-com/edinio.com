@@ -145,6 +145,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         vat_rate: storeSettings?.vat_rate ?? 19,
         prices_include_vat: storeSettings?.prices_include_vat ?? true,
         show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+        show_vat_label: storeSettings?.show_vat_label ?? true,
       }}
       notificationsConfig={{
         notification_email: (storeSettings?.notifications_config as Record<string, unknown>)?.notification_email as string ?? "",

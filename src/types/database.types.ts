@@ -2499,6 +2499,7 @@ export type Database = {
           shipping_rules: Json
           shipping_zones: Json
           show_vat_breakdown: boolean
+          show_vat_label: boolean
           smartbill_config: Json | null
           smso_config: Json | null
           store_policies: Json
@@ -2559,6 +2560,7 @@ export type Database = {
           shipping_rules?: Json
           shipping_zones?: Json
           show_vat_breakdown?: boolean
+          show_vat_label?: boolean
           smartbill_config?: Json | null
           smso_config?: Json | null
           store_policies?: Json
@@ -2619,6 +2621,7 @@ export type Database = {
           shipping_rules?: Json
           shipping_zones?: Json
           show_vat_breakdown?: boolean
+          show_vat_label?: boolean
           smartbill_config?: Json | null
           smso_config?: Json | null
           store_policies?: Json

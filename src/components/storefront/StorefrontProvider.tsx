@@ -120,7 +120,18 @@ export interface StoreChromeValue {
    * el le cere. Optionale: unde lipsesc, butonul de cos ramane un link catre
    * magazin, ca inainte — mai bine un drum in plus decat un total gresit.
    */
-  comert?: { shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null };
+  comert?: {
+    shippingCost: number;
+    freeShippingThreshold: number | null;
+    minOrderAmount: number | null;
+    /**
+     * Regimul de TVA al magazinului, pentru totalul din sertarul de cos.
+     *
+     * Fara el, sertarul arata marfa plus transport, atat: la magazinele cu
+     * preturi FARA TVA totalul iesea mai mic decat cel cerut la finalizare.
+     */
+    vat?: import("@/lib/storefront/cart/pricing").CartPricingInput["vat"];
+  };
   openCart: () => void;
   /** Slug-ul paginii curente, pentru starea activa din meniu. */
   currentPageSlug?: string | null;

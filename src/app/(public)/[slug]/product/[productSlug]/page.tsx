@@ -146,7 +146,7 @@ export default async function ProductDetailPage({ params }: Props) {
     // „(fara TVA)" de langa pret nu s-a afisat NICIODATA, la niciun magazin,
     // fiindca `vat_enabled` venea `undefined` si cadea pe rezerva `false`.
     // Sunt sigure public — se dau oricum prin `getPublicStoreConfig`.
-    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, prices_include_vat, show_vat_label")
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, vat_rate, prices_include_vat, show_vat_label, show_vat_breakdown")
     .eq("business_id", business.id)
     .single();
 
@@ -209,6 +209,12 @@ export default async function ProductDetailPage({ params }: Props) {
       shippingCost: Number(storeSettings?.default_shipping_cost ?? 0),
       freeShippingThreshold: storeSettings?.free_shipping_threshold ?? null,
       minOrderAmount: storeSettings?.min_order_amount ?? null,
+      vat: {
+        vat_enabled: storeSettings?.vat_enabled ?? false,
+        vat_rate: Number(storeSettings?.vat_rate ?? 19),
+        prices_include_vat: storeSettings?.prices_include_vat ?? true,
+        show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+      },
     },
   });
 

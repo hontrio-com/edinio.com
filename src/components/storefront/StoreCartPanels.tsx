@@ -65,6 +65,7 @@ export function StoreCartPanels({
         shippingCost={comert.shippingCost}
         freeShippingThreshold={comert.freeShippingThreshold}
         minOrderAmount={comert.minOrderAmount}
+        vat={comert.vat}
       />
 
       {!comandaPePagina && (

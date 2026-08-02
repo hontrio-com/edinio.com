@@ -73,7 +73,17 @@ export function buildChromeData({
    * `store_settings`. Fara ele sertarul nu poate arata un total, deci butonul de
    * cos ramane link catre magazin.
    */
-  comert?: { shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null };
+  comert?: {
+    shippingCost: number;
+    freeShippingThreshold: number | null;
+    minOrderAmount: number | null;
+    /**
+     * Regimul de TVA. Fara el sertarul arata marfa plus transport, atat: la
+     * magazinele cu preturi FARA TVA totalul iesea mai mic decat cel cerut la
+     * finalizare.
+     */
+    vat?: import("@/lib/storefront/cart/pricing").CartPricingInput["vat"];
+  };
 }): StoreChromeData {
   // Un magazin cu cosul pe pagina il are pe pagina PESTE TOT: si in header-ul
   // paginii de produs, si in cel al paginilor custom. Modul „hidden" (magazinul

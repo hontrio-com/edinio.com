@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildStoreSender, fromLine } from "./config";
+import { buildStoreSender, fromLine, looksLikeEmail } from "./config";
 import { storeEmailShell } from "./store-shell";
 
 /**
@@ -47,7 +47,9 @@ test("un nume cu linie noua NU poate adauga anteturi in email", () => {
   const linie = fromLine("Magazin\r\nBcc: spion@exemplu.ro", ADRESA);
   assert.equal(linie.includes("\r"), false);
   assert.equal(linie.includes("\n"), false);
-  assert.equal(linie, `"Magazin Bcc: spion@exemplu.ro" <${ADRESA}>`);
+  // `@` cade si el, din alt motiv (vezi testul cu numele care pare adresa), deci
+  // ce ramane e text inofensiv pe un singur rand.
+  assert.equal(linie, `"Magazin Bcc: spionexemplu.ro" <${ADRESA}>`);
 });
 
 test("ghilimelele si parantezele unghiulare se scot, ca sa nu rupa adresa", () => {
@@ -68,6 +70,37 @@ test("raspunsurile clientului merg la comerciant, nu in no-reply", () => {
 test("fara email de contact nu se pune Reply-To gol", () => {
   assert.equal(buildStoreSender({}, magazin({ email: "  " })).replyTo, undefined);
   assert.equal(buildStoreSender({}, magazin({ email: null })).replyTo, undefined);
+});
+
+test("un email de contact stricat NU ajunge in antet", () => {
+  // Nimic nu valideaza campul la scriere. Trecut mai departe, Resend ar RESPINGE
+  // mesajul, deci un singur camp completat gresit ar taia toate emailurile catre
+  // clientii magazinului aceluia.
+  for (const stricat of ["nu-i email", "a@b", "a b@c.ro", "x@y.ro, z@w.ro", "<a@b.ro>", "a@b.ro\r\nBcc: x@y.ro"]) {
+    assert.equal(looksLikeEmail(stricat), false, stricat);
+    assert.equal(buildStoreSender({}, magazin({ email: stricat })).replyTo, undefined, stricat);
+  }
+});
+
+test("emailurile bune trec", () => {
+  for (const bun of ["contact@bricosmart.ro", " a.b-c+d@sub.exemplu.co.uk "]) {
+    assert.equal(looksLikeEmail(bun), true, bun);
+  }
+});
+
+test("un nume cu @ nu mai pare adresa de email", () => {
+  // Un nume afisat care arata a adresa, dar nu se potriveste cu adresa reala,
+  // e tratat de Gmail ca imitare de expeditor: avertisment sau direct spam.
+  assert.equal(fromLine("@Fp smart@", ADRESA), `"Fp smart" <${ADRESA}>`);
+  assert.equal(fromLine("Cafe@Home", ADRESA), `"CafeHome" <${ADRESA}>`);
+});
+
+test("brandurile cu .ro in nume raman NEATINSE", () => {
+  // eSAFE.ro, Ralls.ro, Suporti-Numar.ro sunt nume reale de magazine. Un punct
+  // si un TLD nu inseamna adresa de email, deci nu e nimic de curatat.
+  assert.equal(fromLine("eSAFE.ro - Echipamente protectia muncii", ADRESA),
+    `"eSAFE.ro - Echipamente protectia muncii" <${ADRESA}>`);
+  assert.equal(fromLine("Ralls.ro", ADRESA), `"Ralls.ro" <${ADRESA}>`);
 });
 
 /* ── Invelisul ── */

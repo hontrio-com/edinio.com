@@ -83,9 +83,30 @@ export function fromLine(storeName: string | null | undefined, address: string):
   const nume = (storeName ?? "")
     .replace(/[\r\n]+/g, " ")
     .replace(/["\\<>]/g, "")
+    // `@` iese si el, desi nu strica sintaxa. Un nume afisat care contine `@`
+    // arata a adresa de email, iar cand acea „adresa" nu se potriveste cu cea
+    // reala, Gmail o trateaza ca imitare de expeditor si pune avertisment sau
+    // duce mesajul la spam. Un singur magazin are asa ceva azi („@Fp smart@"),
+    // dar pretul unei greseli aici e sa nu mai ajunga emailurile deloc.
+    .replace(/@/g, "")
+    .replace(/\s{2,}/g, " ")
     .trim()
     .slice(0, 78);
   return nume ? `"${nume}" <${address}>` : `Edinio.com <${address}>`;
+}
+
+/**
+ * Adresa arata a adresa?
+ *
+ * Conservator dinadins. Ajunge in antetul `Reply-To`, iar o valoare pe care
+ * Resend o respinge nu strica doar antetul: mesajul NU mai pleaca deloc. Nimic
+ * nu valideaza `businesses.email` la scriere, deci un singur camp completat
+ * gresit ar taia toate emailurile catre clientii magazinului aceluia. Azi nu
+ * exista niciunul invalid, dar asta e o stare, nu o garantie.
+ */
+export function looksLikeEmail(raw: string | null | undefined): boolean {
+  const s = (raw ?? "").trim();
+  return s.length <= 254 && /^[^\s@<>",;:\\]+@[^\s@<>",;:\\]+\.[a-zA-Z]{2,}$/.test(s);
 }
 
 export function parseEmailConfig(raw: unknown): EmailConfig {
@@ -122,7 +143,7 @@ export function buildStoreSender(emailConfig: EmailConfig, business: SenderBusin
       storeUrl: storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain }),
     },
     templates: emailConfig.templates ?? {},
-    replyTo: business.email?.trim() || undefined,
+    replyTo: looksLikeEmail(business.email) ? business.email!.trim() : undefined,
   };
 }
 

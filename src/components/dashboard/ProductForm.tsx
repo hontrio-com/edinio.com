@@ -571,6 +571,30 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
     setForm(prev => ({ ...prev, [key]: val }));
   }
 
+  /**
+   * Totalul adunat din variante, sau `null` cand produsul nu-si tine stocul asa.
+   *
+   * Aceeasi regula ca in baza de date (declansatorul `products_sync_variant_stock`):
+   * se aduna numai cand TOATE combinatiile active isi declara stocul. Una singura
+   * lasata goala inseamna „nelimitata", iar o suma partiala ar plafona produsul
+   * intreg la cat au celelalte. Scrisa si aici ca omul sa vada in formular exact
+   * numarul care se va salva, nu altul.
+   */
+  const stocDinVariante = useMemo<number | null>(() => {
+    if (!form.variants.enabled) return null;
+    const active = form.variants.combinations.filter((c) => c.enabled);
+    if (active.length === 0) return null;
+    let total = 0;
+    for (const c of active) {
+      const brut = String(c.stock_quantity ?? "").trim();
+      if (brut === "") return null;
+      const n = Number(brut);
+      if (!Number.isFinite(n) || n < 0) return null;
+      total += Math.floor(n);
+    }
+    return total;
+  }, [form.variants]);
+
   function handleNameChange(name: string) {
     setForm(prev => ({
       ...prev,
@@ -683,7 +707,12 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
       sku: form.sku,
       images: form.images,
       track_inventory: form.track_inventory,
-      stock_quantity: form.track_inventory ? (parseInt(form.stock_quantity) || 0) : null,
+      // Cand stocul se tine pe variante, totalul e suma lor. Baza de date il
+      // recalculeaza oricum la scriere, dar il trimitem corect de aici ca sa nu
+      // existe nicio clipa in care randul poarta alt numar decat cel adevarat.
+      stock_quantity: form.track_inventory
+        ? (stocDinVariante ?? (parseInt(form.stock_quantity) || 0))
+        : null,
       is_featured: form.is_featured,
       is_active: form.is_active,
       weight_grams: form.weight_grams ? parseInt(form.weight_grams) : null,
@@ -1702,9 +1731,27 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   <>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Cantitate in stoc</label>
-                      <input type="number" value={form.stock_quantity}
-                        onChange={(e) => set("stock_quantity", e.target.value)}
-                        placeholder="0" min="0" className={inputCls} />
+                      {stocDinVariante !== null ? (
+                        /*
+                         * Produsul isi tine stocul pe variante, deci totalul e suma lor,
+                         * nu un al doilea numar scris de mana. Campul ramane vizibil ca
+                         * omul sa vada cat are, dar nu se mai poate scrie in el: pana
+                         * acum se puteau tine doua socoteli care se departau una de alta,
+                         * iar cand cea de aici ajungea sub suma, produsul se declara
+                         * epuizat desi marimile lui aveau marfa.
+                         */
+                        <>
+                          <input type="number" value={stocDinVariante} readOnly disabled
+                            className={inputCls + " opacity-60 cursor-not-allowed"} />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Se aduna singur din stocul variantelor. Modifica-l la fiecare varianta, in sectiunea Variante.
+                          </p>
+                        </>
+                      ) : (
+                        <input type="number" value={form.stock_quantity}
+                          onChange={(e) => set("stock_quantity", e.target.value)}
+                          placeholder="0" min="0" className={inputCls} />
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Notifica la stoc mic</label>

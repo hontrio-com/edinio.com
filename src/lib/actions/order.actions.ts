@@ -7,6 +7,7 @@ import { computeVat } from "@/lib/utils/vat";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
@@ -304,6 +305,37 @@ function eroareStocPeVarianta(
       : `Din varianta „${titlu}" au mai ramas ${disponibil} bucati.`;
   }
   return null;
+}
+
+/**
+ * Scade stocul declarat al fiecarei variante vandute.
+ *
+ * Pana acum se scadea numai `products.stock_quantity`, adica stocul produsului
+ * intreg. Numarul de pe fiecare marime era o declaratie pe care comerciantul o
+ * tinea de mana: oprea vanzarea cand scria el zero, dar o marime cu cinci bucati
+ * ramanea cinci oricat s-ar fi vandut din ea, iar verificarea de mai sus n-avea
+ * ce sa apere.
+ *
+ * Toata socoteala se face in baza de date, sub lock (`decrement_variant_stock_batch`).
+ * Citita aici, modificata si scrisa inapoi, doua comenzi in aceeasi clipa ar
+ * citi amandoua cinci si ar scrie amandoua patru, iar o bucata s-ar pierde.
+ *
+ * Se cheama DUPA ce comanda a intrat, la fel ca scaderea stocului de produs: o
+ * comanda respinsa n-are voie sa consume stoc.
+ */
+async function scadeStoculVariantelor(
+  admin: SupabaseClient<Database>,
+  linii: { product_id: string; variant_title?: string | null; quantity: number }[],
+): Promise<void> {
+  const items = linii
+    .filter((l) => l.variant_title)
+    .map((l) => ({
+      product_id: l.product_id,
+      variant_title: l.variant_title as string,
+      quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+    }));
+  if (items.length === 0) return;
+  await admin.rpc("decrement_variant_stock_batch" as never, { p_items: items } as never);
 }
 
 export async function placeOrder(data: {
@@ -660,6 +692,10 @@ export async function placeOrder(data: {
 
   // Atomic stock decrement — bundle components when ordering a bundle, else the product itself.
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+  // Si stocul marimii vandute, nu doar al produsului intreg. `liniiCuVarianta`
+  // e aceeasi lista pe care a verificat-o `eroareStocPeVarianta` mai sus, deci
+  // ce s-a masurat se si scade.
+  await scadeStoculVariantelor(admin, liniiCuVarianta);
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
   void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
@@ -1613,6 +1649,9 @@ export async function placeCartOrder(data: {
 
   // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+  // Si stocul marimii vandute, pe aceleasi linii pe care le-a verificat
+  // `eroareStocPeVarianta` la intrare.
+  await scadeStoculVariantelor(admin, data.items);
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
   void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);

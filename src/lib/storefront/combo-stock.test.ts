@@ -55,6 +55,22 @@ test("zecimalele se rotunjesc in jos", () => {
   assert.equal(m.get("S"), 2);
 });
 
+test("la titluri duplicate conteaza PRIMA combinatie, ca la pret", () => {
+  // In productie sunt 129 de perechi (produs, titlu) duplicate. Pretul platit
+  // vine de la prima (`findCombo`), si tot din prima scade baza de date dupa
+  // comanda. Citind-o pe ultima, verificarea putea aproba din stocul altei
+  // combinatii decat cea vanduta.
+  const m = comboStockMap(sectiuni([c("S", "0"), c("S", "9")]));
+  assert.equal(m.get("S"), 0);
+});
+
+test("prima combinatie fara stoc completat nu blocheaza citirea urmatoarei", () => {
+  // Cea fara numar nu declara nimic, deci nu are ce sa ascunda. Baza de date
+  // face la fel: sare peste ea si scade tot din prima care are numar.
+  const m = comboStockMap(sectiuni([c("S", ""), c("S", "4")]));
+  assert.equal(m.get("S"), 4);
+});
+
 test("un produs fara variante da o harta goala", () => {
   assert.equal(comboStockMap({}).size, 0);
   assert.equal(comboStockMap(null).size, 0);

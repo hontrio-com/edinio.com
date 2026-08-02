@@ -11,7 +11,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
-  comboEpuizat, toateCombinatiileEpuizate, pozePeValoare, VARIANT_TITLE_SEP,
+  comboEpuizat, comboStock, toateCombinatiileEpuizate, pozePeValoare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
@@ -349,7 +349,16 @@ export function ProductPageDetailed({
   // linia intra in cos cu pretul de baza, iar serverul o respinge la comanda.
   const needsVariant = !!variantsData && !selectedCombo;
   const combinatieIndisponibila = !!variantsData && !!selectedComboTitle && !selectedCombo;
-  const stocRamas = product.track_inventory ? product.stock_quantity : null;
+  /*
+   * Cate bucati mai sunt: din varianta aleasa daca ea isi tine socoteala,
+   * altfel din produs.
+   *
+   * Pana acum scria mereu stocul produsului INTREG. Pe un produs cu 40 de bucati
+   * in total, marimea cu 2 ramase spunea linistit „In stoc", iar pasul de
+   * cantitate lasa sa se puna 40 in cos din ea.
+   */
+  const stocRamas = comboStock(selectedCombo)
+    ?? (product.track_inventory ? product.stock_quantity : null);
 
   const dimensions = pageSections.dimensions;
   const specRows = useMemo(() => pageSections.specifications ?? [], [pageSections.specifications]);
@@ -409,6 +418,18 @@ export function ProductPageDetailed({
   }
   const [modalOpen, setModalOpen] = useState(false);
   const [cantitate, setCantitate] = useState(1);
+  /*
+   * Cantitatea coboara singura cand treci pe o marime cu mai putine bucati.
+   *
+   * Alegi 8 dintr-o marime care are 10, treci pe una care are 3: butonul „+" se
+   * blocheaza, dar 8 ramanea scris si comanda pleca doar ca sa fie respinsa de
+   * server. Ajustarea se face IN TIMPUL randarii, nu intr-un efect, ca sa nu
+   * existe niciun cadru in care scrie 8 langa „Doar 3 bucati ramase" (vezi
+   * regula `set-state-in-effect` din proiect).
+   */
+  if (stocRamas !== null && stocRamas > 0 && cantitate > stocRamas) {
+    setCantitate(stocRamas);
+  }
   const [fila, setFila] = useState<FilaActiva>(hasLongDesc ? "descriere" : "specificatii");
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
   const fileRef = useRef<HTMLDivElement | null>(null);

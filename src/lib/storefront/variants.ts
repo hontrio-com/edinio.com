@@ -195,13 +195,19 @@ export function enabledComboPriceMap(pageSections: unknown, basePrice: number): 
  * total 40 lasa sa se comande marimea S si cand marimea S avea 0 bucati, iar
  * comerciantul afla din comanda pe care n-o putea onora. Combinatiile fara
  * numar completat lipsesc din harta — pentru ele ramane stocul produsului.
+ *
+ * Cand doua combinatii au ACELASI titlu, conteaza prima, nu ultima. Nu e o
+ * subtilitate teoretica: in productie sunt 129 de perechi asa. Pretul platit de
+ * client vine de la prima (`findCombo`), si tot din prima scade baza de date
+ * dupa comanda, deci verificarea trebuie sa se uite la aceeasi. Pana acum se
+ * uita la ultima si putea aproba o comanda din stocul altei combinatii.
  */
 export function comboStockMap(pageSections: unknown): Map<string, number> {
   const variants = parseVariants(pageSections);
   const map = new Map<string, number>();
   if (!variants) return map;
   for (const c of variants.combinations) {
-    if (!c?.enabled || !c.title) continue;
+    if (!c?.enabled || !c.title || map.has(c.title)) continue;
     const stoc = comboStock(c);
     if (stoc !== null) map.set(c.title, stoc);
   }

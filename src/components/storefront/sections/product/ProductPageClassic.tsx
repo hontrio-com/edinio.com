@@ -12,7 +12,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
-  comboEpuizat, toateCombinatiileEpuizate, VARIANT_TITLE_SEP,
+  comboEpuizat, comboStock, toateCombinatiileEpuizate, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
@@ -328,6 +328,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
     || comboEpuizat(selectedCombo)
     || toateCombinatiileEpuizate(variantsData);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
+  /*
+   * Cate bucati mai sunt: din varianta aleasa daca ea isi tine socoteala,
+   * altfel din produs. Pana acum se citea mereu stocul produsului INTREG, deci
+   * pe un produs cu 40 de bucati marimea cu 2 ramase nu spunea nimic.
+   */
+  const stocRamas = comboStock(selectedCombo)
+    ?? (product.track_inventory ? product.stock_quantity : null);
   // Combinatia trebuie sa EXISTE si sa fie activa, nu doar sa aiba titlul
   // complet: altfel linia intra in cos cu pretul de baza, iar serverul respinge
   // comanda intreaga la trimitere.
@@ -646,12 +653,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
             <span className="text-sm font-semibold text-foreground">Produs in precomanda</span>
           </div>
         )}
-        {!isOutOfStock && !isPreorder && product.track_inventory && product.stock_quantity !== null && product.stock_quantity > 0 && product.stock_quantity <= 10 && (
+        {!isOutOfStock && !isPreorder && stocRamas !== null && stocRamas > 0 && stocRamas <= 10 && (
           <motion.div className="flex items-center gap-2"
             animate={demo || reduceMotion ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
             <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
             <span className="text-sm font-semibold text-red-600">
-              Doar {product.stock_quantity} {product.stock_quantity === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
+              Doar {stocRamas} {stocRamas === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
             </span>
           </motion.div>
         )}

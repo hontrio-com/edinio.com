@@ -1,6 +1,9 @@
 // Maps an Edinio product to a Merchant API productInput payload.
 
 import { storeBaseUrl } from "@/lib/seo";
+// Un GTIN invalid duce la respingerea produsului, deci se lasa afara, nu se
+// trimite. Verificarea e comuna cu feedul Facebook si cu datele structurate.
+import { isValidGtin, normalizeGtin } from "@/lib/gtin";
 import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice } from "@/lib/storefront/variants";
 import { CURRENCY, DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "./types";
 
@@ -65,17 +68,6 @@ function plainText(html: string | null, fallback: string): string {
   return (text || fallback).slice(0, 4900);
 }
 
-// A GTIN must be 8/12/13/14 digits with a valid mod-10 check digit; sending an
-// invalid one gets the product disapproved, so we drop it rather than submit it.
-function isValidGtin(raw: string | undefined): boolean {
-  const s = (raw ?? "").replace(/\s/g, "");
-  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
-  const d = s.split("").map(Number);
-  const check = d.pop()!;
-  const sum = d.reverse().reduce((acc, n, i) => acc + n * (i % 2 === 0 ? 3 : 1), 0);
-  return (10 - (sum % 10)) % 10 === check;
-}
-
 export function toGoogleProductInput(
   business: MappableBusiness,
   product: MappableProduct,
@@ -114,7 +106,7 @@ export function toGoogleProductInput(
   if (googleCat) attributes.googleProductCategory = googleCat;
   // v1 renamed the single `gtin` attribute to a `gtins` array. Only valid GTINs
   // are submitted; an invalid one would disapprove the product.
-  if (validGtin) attributes.gtins = [g.gtin!.replace(/\s/g, "")];
+  if (validGtin) attributes.gtins = [normalizeGtin(g.gtin)];
   if (g.mpn) attributes.mpn = g.mpn;
   const gender = toEnum(g.gender, GENDERS);
   if (gender) attributes.gender = gender;

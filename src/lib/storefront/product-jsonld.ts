@@ -1,3 +1,4 @@
+import { isValidGtin, normalizeGtin } from "@/lib/gtin";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 
 // Computed once at module load (not during render — keeps callers pure).
@@ -52,6 +53,24 @@ export function buildProductJsonLd(
   // un Offer cu pretul de baza ar contrazice pretul vizibil (si pretul de baza
   // poate sa nici nu fie cumparabil). Acelasi calcul ca pagina, ca sa nu poata
   // diverge.
+  /*
+   * Identificatorii de produs: codul de bare si codul de fabricant.
+   *
+   * Comerciantul le scrie in formularul de produs, la Organizare, si ajung in
+   * `page_sections.google`. De acolo le citeau feedul Google Merchant si feedul
+   * Facebook, dar NU si pagina publica: produsul se afisa fara niciun
+   * identificator in datele structurate, iar Merchant nu avea cu ce sa confirme
+   * ce trimite feedul. De asta erau probleme la aprobare.
+   *
+   * Un GTIN gresit e mai rau decat lipsa lui — duce la respingere, nu la
+   * ignorarea campului — deci se verifica cifra de control inainte, cu aceeasi
+   * functie ca feedurile. Cel care nu trece nu se scrie, iar comerciantul vede
+   * ca lipseste si il corecteaza.
+   */
+  const google = (product.page_sections as { google?: { gtin?: string; mpn?: string } } | null)?.google;
+  const gtin = isValidGtin(google?.gtin) ? normalizeGtin(google?.gtin) : null;
+  const mpn = (google?.mpn ?? "").trim();
+
   const priceRange = getProductPriceRange(Number(product.price) || 0, product.page_sections ?? null);
   const combos = (product.page_sections as { variants?: { combinations?: { enabled?: boolean }[] } } | null)
     ?.variants?.combinations;
@@ -91,6 +110,8 @@ export function buildProductJsonLd(
     description: desc,
     url: productUrl,
     ...(product.sku ? { sku: product.sku } : {}),
+    ...(gtin ? { gtin } : {}),
+    ...(mpn ? { mpn } : {}),
     brand: { "@type": "Brand", name: brand },
     ...(images?.length ? { image: images } : {}),
     offers: priceRange.hasRange

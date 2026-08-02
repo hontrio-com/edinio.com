@@ -7,6 +7,9 @@
 // what makes Advantage+ dynamic ads work.
 
 import { storeBaseUrl } from "@/lib/seo";
+// GTIN invalid = produs respins, deci se lasa afara. Aceeasi verificare pe care
+// o folosesc feedul Google Merchant si datele structurate ale paginii.
+import { isValidGtin } from "@/lib/gtin";
 import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice } from "@/lib/storefront/variants";
 
 const CURRENCY = "RON";
@@ -74,16 +77,6 @@ function money(value: number): string {
 function plainText(html: string | null, fallback: string): string {
   const text = (html ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
   return (text || fallback).slice(0, 5000);
-}
-
-// GTIN: 8/12/13/14 digits with a valid mod-10 check digit (invalid -> dropped).
-function isValidGtin(raw: string | undefined): boolean {
-  const s = (raw ?? "").replace(/\s/g, "");
-  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
-  const d = s.split("").map(Number);
-  const check = d.pop()!;
-  const sum = d.reverse().reduce((acc, n, i) => acc + n * (i % 2 === 0 ? 3 : 1), 0);
-  return (10 - (sum % 10)) % 10 === check;
 }
 
 const CONDITIONS = new Set(["new", "refurbished", "used"]);

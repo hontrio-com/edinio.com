@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import type { StoreEmailSender } from "./config";
+import { fromLine, type StoreEmailSender } from "./config";
 import { sendViaSmtp } from "./smtp";
 import { logError } from "@/lib/error-logger";
 
@@ -8,7 +8,7 @@ function getResend(): Resend {
   if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
   return _resend;
 }
-const EDINIO_FROM = `Edinio.com <${process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev"}>`;
+const EDINIO_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 
 /**
  * Deliver a store-facing email: via the merchant's SMTP when they've opted in
@@ -32,5 +32,13 @@ export async function deliverStoreEmail(
     }
   }
   if (!process.env.RESEND_API_KEY) return;
-  await getResend().emails.send({ from: EDINIO_FROM, to: msg.to, subject: msg.subject, html: msg.html, replyTo: msg.replyTo });
+  // Numele magazinului la expeditor, si cand pleaca prin Resend-ul nostru: pana
+  // acum scria „Edinio.com" in casuta clientului unui magazin care n-avea SMTP.
+  await getResend().emails.send({
+    from: fromLine(sender?.branding.storeName, EDINIO_ADDRESS),
+    to: msg.to,
+    subject: msg.subject,
+    html: msg.html,
+    replyTo: sender?.replyTo ?? msg.replyTo,
+  });
 }

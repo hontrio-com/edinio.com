@@ -50,6 +50,42 @@ export interface StoreEmailSender {
   smtp?: SmtpConfig;      // present only when SMTP is enabled + complete -> custom send
   branding: EmailBranding;
   templates: Partial<Record<EmailTemplateKind, EmailTemplateOverride>>;
+  /**
+   * Unde ajung raspunsurile clientului.
+   *
+   * Adresa de expediere ramane a Edinio cand magazinul n-are SMTP propriu, si nu
+   * are cum sa fie altfel: trimisa de pe domeniul lor prin serverul nostru, n-ar
+   * trece de SPF si DKIM si ar ajunge la spam. Dar clientul care apasa
+   * „Raspunde" trebuie sa scrie COMERCIANTULUI, nu intr-o cutie no-reply.
+   */
+  replyTo?: string;
+}
+
+/**
+ * Ce scrie la expeditor: numele magazinului, adresa data.
+ *
+ * NUMELE e al magazinului, adresa ramane a Edinio cand comerciantul n-are server
+ * propriu de email. Adresa nu are cum sa fie a lui: trimisa de pe domeniul lui
+ * prin serverul nostru, n-ar trece de SPF si DKIM si ar ajunge la spam. Numele,
+ * in schimb, e liber, si el e ce vede omul in lista de mesaje — adresa apare
+ * abia daca deschide detaliile.
+ *
+ * Fiindca domeniul din `From` ramane acelasi cu cel semnat DKIM, Gmail NU pune
+ * eticheta „via edinio.com". Fortand domeniul comerciantului, ar pune-o, si ar
+ * arata mai rau decat adresa noastra.
+ *
+ * Numele vine de la comerciant si ajunge intr-un ANTET de email, deci se curata
+ * inainte: o linie noua in el ar putea adauga anteturi de la sine (un `Bcc`
+ * catre altcineva), iar ghilimelele si parantezele unghiulare rup sintaxa
+ * adresei si mesajul nu mai pleaca deloc.
+ */
+export function fromLine(storeName: string | null | undefined, address: string): string {
+  const nume = (storeName ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/["\\<>]/g, "")
+    .trim()
+    .slice(0, 78);
+  return nume ? `"${nume}" <${address}>` : `Edinio.com <${address}>`;
 }
 
 export function parseEmailConfig(raw: unknown): EmailConfig {
@@ -69,6 +105,8 @@ export interface SenderBusiness {
   primary_color: string | null;
   slug: string;
   custom_domain: string | null;
+  /** Emailul de contact al comerciantului, folosit ca Reply-To. */
+  email?: string | null;
 }
 
 export function buildStoreSender(emailConfig: EmailConfig, business: SenderBusiness): StoreEmailSender {
@@ -84,6 +122,7 @@ export function buildStoreSender(emailConfig: EmailConfig, business: SenderBusin
       storeUrl: storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain }),
     },
     templates: emailConfig.templates ?? {},
+    replyTo: business.email?.trim() || undefined,
   };
 }
 

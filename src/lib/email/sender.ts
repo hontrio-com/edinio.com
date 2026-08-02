@@ -13,7 +13,7 @@ export async function getStoreEmailSender(
 ): Promise<StoreEmailSender | undefined> {
   const { data } = await admin
     .from("businesses")
-    .select("store_name, business_name, logo_url, primary_color, slug, custom_domain, store_settings(email_config)")
+    .select("store_name, business_name, logo_url, primary_color, slug, custom_domain, email, store_settings(email_config)")
     .eq("id", businessId)
     .single();
   if (!data) return undefined;

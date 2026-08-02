@@ -71,10 +71,24 @@ function baseTemplate(content: string): string {
 </html>`;
 }
 
-// Send a store-facing email: when the store opted in (sender.smtp present) use its
-// own branding + SMTP; otherwise the Edinio sender + Edinio shell (unchanged default).
+/**
+ * Trimite un email care vine DIN PARTEA MAGAZINULUI.
+ *
+ * Invelisul cu marca magazinului era legat de SMTP, nu de magazin: cine nu-si
+ * conectase server propriu de email isi trimitea clientii cu logo Edinio, subsol
+ * Edinio si expeditor „Edinio.com". Adica exact comerciantii care n-aveau cum sa
+ * repare asta. Acum conteaza doar sa existe un magazin.
+ *
+ * SMTP-ul rimane ce a fost mereu: alegerea DRUMULUI pe care pleaca mesajul, si
+ * singurul fel in care adresa poate fi chiar a lor. Marca, insa, e a lor
+ * oricum.
+ *
+ * Fara magazin (emailuri ale Edinio catre comerciant: bun venit, cod de
+ * verificare, abonament) ramane invelisul Edinio, fiindca acolo chiar Edinio
+ * scrie.
+ */
 async function sendStoreOrEdinio(sender: StoreEmailSender | undefined, to: string, subject: string, content: string): Promise<void> {
-  if (sender?.smtp) {
+  if (sender) {
     await deliverStoreEmail(sender, { to, subject, html: storeEmailShell(sender.branding, content) });
     return;
   }
@@ -1177,6 +1191,13 @@ function returnItemsRows(items: { name: string; quantity: number }[]): string {
 }
 
 /** Durable-medium confirmation of a withdrawal request, sent to the customer. */
+/**
+ * Confirmarea de retragere catre CLIENT, ceruta de lege pe suport durabil.
+ *
+ * Mergea direct la Resend, cu invelisul si expeditorul Edinio, si nici macar nu
+ * primea magazinul: era singurul email de client care ramanea Edinio chiar si la
+ * comerciantii cu SMTP propriu. Acum trece pe acelasi drum ca restul.
+ */
 export async function sendReturnConfirmationToCustomer(
   to: string,
   data: {
@@ -1186,9 +1207,9 @@ export async function sendReturnConfirmationToCustomer(
     items: { name: string; quantity: number }[];
     reason?: string | null;
     receivedAt: string;
-  }
+  },
+  sender?: StoreEmailSender,
 ) {
-  if (!process.env.RESEND_API_KEY) return;
   const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const first = data.customer_name?.trim().split(/\s+/)[0];
   const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
@@ -1213,12 +1234,7 @@ export async function sendReturnConfirmationToCustomer(
     <p style="margin:0;font-size:14px;color:#71717a;line-height:1.6;">Vom analiza cererea si te vom contacta cu pasii urmatori (instructiuni de returnare si rambursare). Ai la dispozitie 14 zile de la primirea produsului pentru a-l returna. Rambursarea se face in maximum 14 zile de la primirea cererii.</p>
   `;
 
-  await getResend().emails.send({
-    from: FROM,
-    to,
-    subject: `Cerere de retragere inregistrata - ${data.order_number}`,
-    html: baseTemplate(content),
-  });
+  await sendStoreOrEdinio(sender, to, `Cerere de retragere inregistrata - ${data.order_number}`, content);
 }
 
 /** Notify the merchant about a new withdrawal (return) request. */

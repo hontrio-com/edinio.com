@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone, normalizeEmail } from "@/lib/customers";
 import { parseNotificationsConfig, sendReturnConfirmationToCustomer, sendReturnRequestToMerchant } from "@/lib/email";
+import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
 
 // Fereastra self-service: dreptul legal e 14 zile de la primire, dar data primirii nu
@@ -227,8 +228,11 @@ export async function submitReturnRequest(input: {
     const businessName = biz?.store_name || biz?.business_name || "Magazin";
     const emailItems = selected.map((i) => ({ name: i.name, quantity: i.quantity }));
 
-    // Durable-medium confirmation to the customer (required by law).
+    // Durable-medium confirmation to the customer (required by law). Poarta marca
+    // MAGAZINULUI, ca orice email care ajunge la cumparator: pana acum era
+    // singurul care ramanea Edinio chiar si la magazinele cu SMTP propriu.
     if (order.customer_email) {
+      const sender = await getStoreEmailSender(admin, input.businessId);
       void sendReturnConfirmationToCustomer(order.customer_email, {
         order_number: order.order_number,
         customer_name: order.customer_name,
@@ -236,7 +240,7 @@ export async function submitReturnRequest(input: {
         items: emailItems,
         reason,
         receivedAt,
-      });
+      }, sender);
     }
 
     // Merchant notification: returns_config.notify_email > notifications_config > owner email.

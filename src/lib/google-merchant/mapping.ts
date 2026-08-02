@@ -4,7 +4,7 @@ import { storeBaseUrl } from "@/lib/seo";
 // Un GTIN invalid duce la respingerea produsului, deci se lasa afara, nu se
 // trimite. Verificarea e comuna cu feedul Facebook si cu datele structurate.
 import { isValidGtin, normalizeGtin } from "@/lib/gtin";
-import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice } from "@/lib/storefront/variants";
+import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, combinatiiActiveUnice } from "@/lib/storefront/variants";
 import { CURRENCY, DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "./types";
 
 export interface MappableBusiness {
@@ -159,7 +159,10 @@ export function expandProductOffers(
   config: GoogleMerchantConfig,
 ): OfferInput[] {
   const variants = parseVariants(product.page_sections);
-  const enabled = variants?.combinations.filter((c) => c.enabled && c.title) ?? [];
+  // Cate o oferta pe TITLU, nu pe rand: titlurile duplicate au si `id` duplicat,
+  // deci a doua oferta o suprascria pe prima la Google (acelasi `offerId`) si
+  // feedul publica alt pret decat pagina. Prima castiga, ca peste tot.
+  const enabled = combinatiiActiveUnice(variants);
   const base = toGoogleProductInput(business, product, config);
   if (!variants || enabled.length === 0) {
     return [{ offerId: product.id, input: base }];

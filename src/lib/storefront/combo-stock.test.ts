@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  combinatiiActiveUnice,
   comboEpuizat,
   comboStock,
   comboStockMap,
+  enabledComboPriceMap,
+  findCombo,
   isValueAvailable,
   parseVariants,
   toateCombinatiileEpuizate,
@@ -69,6 +72,46 @@ test("prima combinatie fara stoc completat nu blocheaza citirea urmatoarei", () 
   // face la fel: sare peste ea si scade tot din prima care are numar.
   const m = comboStockMap(sectiuni([c("S", ""), c("S", "4")]));
   assert.equal(m.get("S"), 4);
+});
+
+/**
+ * Titlurile duplicate: TOATE partile trebuie sa se uite la ACEEASI combinatie.
+ *
+ * In productie sunt 31 de titluri duplicate pe 7 produse. Pe GEACA VISION de la
+ * eSAFE, „NEGRU / L" apare de doua ori, cu 203 si cu 231 de lei. Pretul, stocul
+ * si oferta din feed veneau din randuri diferite ale aceluiasi titlu: pagina
+ * arata 203 si comanda intra cu 231, iar din pagina produsului verificarea de
+ * pret respingea diferenta, deci produsul nu se putea comanda deloc.
+ */
+const dublat = () => sectiuni([
+  { id: "negru-l", title: "NEGRU / L", price: "203", compare_at_price: "", sku: "", stock_quantity: "36", image: "", enabled: true },
+  { id: "negru-l", title: "NEGRU / L", price: "231", compare_at_price: "", sku: "", stock_quantity: "13", image: "", enabled: true },
+]);
+
+test("pretul vine din PRIMA combinatie, ca si combinatia aleasa de client", () => {
+  const v = parseVariants(dublat())!;
+  assert.equal(findCombo(v, "NEGRU / L")?.price, "203", "clientul vede prima");
+  assert.equal(enabledComboPriceMap(dublat(), 100).get("NEGRU / L"), 203, "si tot prima se incaseaza");
+});
+
+test("pretul, stocul si oferta din feed se uita la acelasi rand", () => {
+  assert.equal(enabledComboPriceMap(dublat(), 100).get("NEGRU / L"), 203);
+  assert.equal(comboStockMap(dublat()).get("NEGRU / L"), 36);
+  assert.deepEqual(
+    combinatiiActiveUnice(parseVariants(dublat())).map((c) => c.price),
+    ["203"],
+    "o singura oferta pe titlu, altfel a doua o suprascrie pe prima la Google",
+  );
+});
+
+test("fara duplicate, nimic nu se schimba", () => {
+  const v = parseVariants(sectiuni([c("S", "5"), c("M", "12")]))!;
+  assert.deepEqual(combinatiiActiveUnice(v).map((x) => x.title), ["S", "M"]);
+});
+
+test("combinatiile dezactivate nu ies in lista unica", () => {
+  const v = parseVariants(sectiuni([c("S", "5", false), c("M", "12")]))!;
+  assert.deepEqual(combinatiiActiveUnice(v).map((x) => x.title), ["M"]);
 });
 
 test("un produs fara variante da o harta goala", () => {

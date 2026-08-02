@@ -10,7 +10,7 @@ import { storeBaseUrl } from "@/lib/seo";
 // GTIN invalid = produs respins, deci se lasa afara. Aceeasi verificare pe care
 // o folosesc feedul Google Merchant si datele structurate ale paginii.
 import { isValidGtin } from "@/lib/gtin";
-import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice } from "@/lib/storefront/variants";
+import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, combinatiiActiveUnice } from "@/lib/storefront/variants";
 
 const CURRENCY = "RON";
 
@@ -121,7 +121,10 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
   const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
 
   const variants = parseVariants(product.page_sections);
-  const enabled = variants?.combinations.filter((c) => c.enabled && c.title) ?? [];
+  // Cate o oferta pe TITLU, nu pe rand: titlurile duplicate au si `id` duplicat,
+  // deci a doua oferta o suprascria pe prima la Google (acelasi `offerId`) si
+  // feedul publica alt pret decat pagina. Prima castiga, ca peste tot.
+  const enabled = combinatiiActiveUnice(variants);
 
   if (!variants || enabled.length === 0) {
     const hasSale = baseCompare != null && baseCompare > basePrice;

@@ -78,6 +78,28 @@ export function parseVariants(pageSections: unknown): VariantsData | null {
   };
 }
 
+/**
+ * Combinatiile active, cate una pe titlu, in ordinea din date.
+ *
+ * Titlurile duplicate NU sunt teoretice: in productie sunt 31 pe 7 produse. Cand
+ * apar, TOATE partile trebuie sa se uite la aceeasi combinatie, altfel pretul
+ * afisat, pretul incasat, stocul verificat si oferta trimisa la Google ajung sa
+ * vina din randuri diferite ale aceluiasi titlu. Peste tot castiga PRIMA,
+ * fiindca asta alege si `findCombo`, adica exact combinatia pe care o vede
+ * clientul cand isi alege marimea.
+ */
+export function combinatiiActiveUnice(variants: VariantsData | null): VariantCombo[] {
+  if (!variants) return [];
+  const vazute = new Set<string>();
+  const out: VariantCombo[] = [];
+  for (const c of variants.combinations) {
+    if (!c?.enabled || !c.title || vazute.has(c.title)) continue;
+    vazute.add(c.title);
+    out.push(c);
+  }
+  return out;
+}
+
 /** Quick predicate for cards: does this product need a variant chosen? */
 export function hasVariants(pageSections: unknown): boolean {
   return parseVariants(pageSections) !== null;
@@ -189,13 +211,21 @@ export function comboCompareAtPrice(combo: VariantCombo | null, baseCompareAt: n
  * Server helper: map of enabled combination title -> resolved unit price (base
  * fallback). Used to re-price cart items authoritatively from the live product,
  * so a browser can never forge a variant price.
+ *
+ * La titluri duplicate conteaza PRIMA, ca la `findCombo` si la `comboStockMap`.
+ * Pana acum castiga ULTIMA, iar cele trei se uitau la combinatii diferite ale
+ * aceluiasi titlu. Pe GEACA VISION de la eSAFE, „NEGRU / L" apare de doua ori,
+ * cu 203 si cu 231 de lei: pagina arata 203 si comanda intra cu 231 pe calea
+ * cosului, iar pe calea directa verificarea de pret respingea diferenta, deci
+ * produsul nu se putea comanda deloc din pagina lui. Verificarea de stoc se uita
+ * intre timp la stocul primei.
  */
 export function enabledComboPriceMap(pageSections: unknown, basePrice: number): Map<string, number> {
   const variants = parseVariants(pageSections);
   const map = new Map<string, number>();
   if (!variants) return map;
   for (const c of variants.combinations) {
-    if (!c?.enabled || !c.title) continue;
+    if (!c?.enabled || !c.title || map.has(c.title)) continue;
     map.set(c.title, comboUnitPrice(c, basePrice));
   }
   return map;

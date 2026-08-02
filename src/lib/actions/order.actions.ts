@@ -521,11 +521,19 @@ export async function placeOrder(data: {
   let isFreeShipping = false;
   if (data.discount_code) {
     const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
-    if (dres.valid) {
+    /*
+     * Cuponul respins OPRESTE comanda, nu se scoate in tacere.
+     *
+     * Fara ramura asta, un cupon devenit invalid intre completarea formularului
+     * si trimitere (si-a atins limita, a expirat, l-a stins comerciantul, sau
+     * marfa repretuita a cazut sub pragul lui) lasa `discountAmount` pe zero si
+     * comanda intra cu totalul INTREG. Ecranul scria 350, curierul incasa 500.
+     * Aceeasi situatie prinsa mai jos, la revendicare, intoarce deja eroare.
+     */
+    if (!dres.valid) return { error: dres.error };
       discountAmount = Math.min(dres.discount.discountAmount, subtotal);
       validDiscountId = dres.discount.id;
       isFreeShipping = dres.discount.type === "free_shipping";
-    }
   }
 
   // Card-payment discount: applies only to online card methods, on the goods
@@ -1510,11 +1518,19 @@ export async function placeCartOrder(data: {
   let isFreeShipping = false;
   if (data.discount_code) {
     const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
-    if (dres.valid) {
+    /*
+     * Cuponul respins OPRESTE comanda, nu se scoate in tacere.
+     *
+     * Fara ramura asta, un cupon devenit invalid intre completarea formularului
+     * si trimitere (si-a atins limita, a expirat, l-a stins comerciantul, sau
+     * marfa repretuita a cazut sub pragul lui) lasa `discountAmount` pe zero si
+     * comanda intra cu totalul INTREG. Ecranul scria 350, curierul incasa 500.
+     * Aceeasi situatie prinsa mai jos, la revendicare, intoarce deja eroare.
+     */
+    if (!dres.valid) return { error: dres.error };
       discountAmount = Math.min(dres.discount.discountAmount, subtotal);
       validDiscountId = dres.discount.id;
       isFreeShipping = dres.discount.type === "free_shipping";
-    }
   }
 
   // Recompute VAT from store config (mirrors MiniStoreRenderer) so it cannot be forged.

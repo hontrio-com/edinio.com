@@ -151,20 +151,77 @@ function autoritativeShipping(
   token: string | null | undefined,
   dest: { county?: string | null; city?: string | null; country?: string | null; postCode?: string | null },
   tarifImplicit: number | null,
+  /** Optiunea aleasa de client. Semnatura o acopera, deci trebuie confruntata. */
+  optiune: { courier?: string | null; deliveryType?: string | null; courierLabel?: string | null },
+  /** `shipping_zones` al magazinului: spune doar DACA are curieri de ales. */
+  zone: Record<string, { enabled?: boolean; price?: number }> | null,
+  /**
+   * Serverul a hotarat deja ca livrarea e gratuita (prag atins sau cupon).
+   *
+   * Atunci nu e nimic de verificat: browserul trimite zero, dar tokenul lui e
+   * semnat pe pretul COTAT al curierului, deci nicio semnatura n-are cum sa
+   * bata. Fara scurtatura asta, clientul care tocmai a trecut pragul de livrare
+   * gratuita nu putea comanda deloc — si zece din cincisprezece magazine cu
+   * curieri activi au prag, deci ar fi cazut exact comenzile mari.
+   */
+  esteGratuit: boolean,
 ): number {
+  if (esteGratuit) return 0;
+
   const claimed = Math.max(0, round2(Number(cerut) || 0));
-  if (verifyShippingQuote(businessId, dest, claimed, token)) return claimed;
-  // Magazin fara tarif implicit configurat: n-avem cu ce compara, deci nu-i
-  // taiem comerciantului transportul pe baza unei banuieli.
+  if (verifyShippingQuote(businessId, dest, claimed, token, optiune)) return claimed;
+
+  /*
+   * REZERVA e tariful implicit al magazinului, si NIMIC ales de client.
+   *
+   * Am incercat sa o leg de curierul ales, citind `shipping_zones[courier].price`.
+   * Era gresit din radacina: `selected_courier` vine din browser, deci clientul
+   * isi alegea singur rezerva. Trimitand `pickup` fara niciun token se obtinea
+   * zero — inclusiv pe o comanda internationala, unde „Ridicare personala" nici
+   * macar nu e o optiune ofertabila. Rezerva trebuie sa fie un numar pe care
+   * l-a scris comerciantul si pe care clientul nu-l poate misca.
+   */
   if (tarifImplicit == null) return claimed;
-  if (claimed === round2(tarifImplicit)) return claimed;
+
+  /*
+   * Magazin fara niciun curier de ales, care cere exact tariful implicit: e
+   * cazul normal, nu unul de semnalat.
+   *
+   * Ramura asta NU strange nimic si nu trebuie citita ca o intarire: numeric da
+   * acelasi rezultat ca ramura de mai jos, fiindca `max(claimed, tarifImplicit)`
+   * e chiar `claimed` cand cele doua sunt egale. Singurul ei rost e sa nu umple
+   * jurnalul cu avertismente pentru magazinele care n-au curieri configurati.
+   *
+   * Cine chiar apara banii e `max`-ul de mai jos. Si nici el nu acopera tot:
+   * magazinul okxi are si `default_shipping_cost` 0,00 si pretul zonei Sameday
+   * 0, cu tarif live, deci acolo nu exista niciun numar declarat sub care sa nu
+   * se poata cobori. Se inchide abia cu re-evaluarea cotatiei pe server
+   * (constatarea 23).
+   */
+  const areCurieri = Object.values(zone ?? {}).some((z) => z?.enabled);
+  if (!areCurieri && claimed === round2(tarifImplicit)) return claimed;
+
   logError({
     action: "placeOrder.shippingRejected",
     message: "Shipping cost not covered by a signed quote",
-    details: { businessId, claimed, tarifImplicit, hasToken: !!token },
+    details: { businessId, claimed, tarifImplicit, courier: optiune.courier, deliveryType: optiune.deliveryType, hasToken: !!token },
     severity: "warning",
   });
-  return Math.max(0, round2(tarifImplicit));
+
+  /*
+   * Cel mai MARE dintre suma ceruta si tariful implicit — niciodata comanda
+   * oprita.
+   *
+   * Oprirea ar fi fost curata pe hartie, dar cade pe capul clientilor cinstiti
+   * la fiecare deploy care schimba amprenta si la fiecare rotire a cheii, cand
+   * toate cotatiile aflate in circulatie devin invalide deodata.
+   *
+   * `max` scoate insa castigul din stricarea semnaturii: mai jos de tariful
+   * implicit nu se poate cobori oricum. Iar clientul caruia i-a expirat cotatia
+   * plateste ce a vazut pe ecran, nu un tarif mai mic — asa comerciantul nu mai
+   * ramane dator, cum ramanea cand se cadea sec pe tariful implicit.
+   */
+  return Math.max(claimed, Math.max(0, round2(tarifImplicit)));
 }
 
 type CheckoutExtra = { id: string; label: string; price: number };
@@ -419,7 +476,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost")
+      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -581,14 +638,19 @@ export async function placeOrder(data: {
 
   // Shipping clamped non-negative; zeroed when free-shipping rules apply.
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
-  let shipping = autoritativeShipping(
+  // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
+  // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
+  const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
+  const shipping = autoritativeShipping(
     data.business_id,
     data.shipping_cost,
     data.shipping_token,
     { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
     cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
+    { courier: data.selected_courier, deliveryType: data.delivery_type, courierLabel: data.courier_label },
+    (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
+    esteGratuit,
   );
-  if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
   // VAT: recomputed server-side (mirrors placeCartOrder + the storefront) so single-
   // product / One-Product-Store orders collect VAT too. Base is the PRE-discount
@@ -1162,6 +1224,8 @@ export async function updateOrderDetails(orderId: string, data: {
    */
   shipping_cost?: number;
   shipping_token?: string;
+  /** Eticheta cotatiei re-cerute. Face parte din semnatura, deci se confrunta. */
+  courier_label?: string;
 }): Promise<{ success: true; newTotal: number } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -1380,9 +1444,29 @@ export async function updateOrderDetails(orderId: string, data: {
   const areAwb = !!(order.woot_awb_number || order.sameday_awb_number || order.cargus_awb_number
     || order.dpd_awb_number || order.fan_courier_awb_number || order.colete_awb_number);
   let shippingDeBaza = Math.max(0, round2(Number(order.shipping_cost) || 0));
+  let etichetaNoua: string | null = null;
   if (data.shipping_cost != null) {
     const cerut = Math.max(0, round2(Number(data.shipping_cost)));
-    const semnaturaBuna = verifyShippingQuote(order.business_id, { county, city }, cerut, data.shipping_token);
+    /*
+     * Semnatura acopera optiunea INTREAGA, deci se confrunta cu ea intreaga.
+     *
+     * Eticheta face parte din amprenta, si ea nu e niciodata goala la semnare
+     * („Livrare prin Cargus", „Sameday EasyBox (locker)", „DPD International
+     * (Germania)"). Verificata fara ea, partea a noua a amprentei iesea sir gol
+     * si semnatura nu batea NICIODATA: re-cotarea din panou se arunca tacit la
+     * fiecare incercare, iar comerciantul vedea „Comanda a fost actualizata"
+     * peste transportul vechi.
+     *
+     * Vine de la client fara grija: fiind semnata, o eticheta nepotrivita nu
+     * poate decat sa strice verificarea. NU se deduce din comanda — eticheta
+     * salvata e a destinatiei VECHI, iar o mutare in alta tara ar compara
+     * „Livrare prin DPD" cu „DPD International (Germania)".
+     */
+    const semnaturaBuna = verifyShippingQuote(order.business_id, { county, city }, cerut, data.shipping_token, {
+      courier: typeof prevShip.courier === "string" ? prevShip.courier : undefined,
+      deliveryType: prevShip.delivery_type === "locker" ? "locker" : "address",
+      courierLabel: data.courier_label,
+    });
     const sePoateAplica = semnaturaBuna
       && order.payment_status !== "paid"
       && !areAwb
@@ -1392,6 +1476,9 @@ export async function updateOrderDetails(orderId: string, data: {
       && shippingDeBaza > 0;
     if (sePoateAplica) {
       shippingDeBaza = cerut;
+      // Eticheta insoteste pretul: mutata in alta tara, comanda ar fi ramas cu
+      // „Livrare prin DPD" peste o expediere „DPD International (Germania)".
+      etichetaNoua = data.courier_label?.trim() || null;
     } else {
       logError({
         action: "updateOrderDetails.shippingRejected",
@@ -1424,6 +1511,7 @@ export async function updateOrderDetails(orderId: string, data: {
     city,
     address,
     ...(data.postal_code?.trim() ? { postal_code: data.postal_code.trim() } : {}),
+    ...(etichetaNoua ? { courier_label: etichetaNoua } : {}),
   };
 
   const { error } = await supabase.from("orders").update({
@@ -1629,7 +1717,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost")
+      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1781,14 +1869,19 @@ export async function placeCartOrder(data: {
   );
 
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
-  let shipping = autoritativeShipping(
+  // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
+  // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
+  const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
+  const shipping = autoritativeShipping(
     data.business_id,
     data.shipping_cost,
     data.shipping_token,
     { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
     cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
+    { courier: data.selected_courier, deliveryType: data.delivery_type, courierLabel: data.courier_label },
+    (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
+    esteGratuit,
   );
-  if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
 

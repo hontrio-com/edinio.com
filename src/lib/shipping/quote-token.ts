@@ -34,8 +34,39 @@ export interface QuoteDestination {
   postCode?: string | null;
 }
 
-/** Destinatia, normalizata, ca sa semneze la fel si la cotare, si la comanda. */
-function amprenta(businessId: string, dest: QuoteDestination, price: number): string {
+/**
+ * Optiunea careia ii apartine pretul.
+ *
+ * Fara ea, semnatura spunea doar „am cotat noi suma asta pentru destinatia asta",
+ * si toate optiunile aceleiasi destinatii se legitimau reciproc. „Ridicare
+ * personala" produce mereu o optiune de 0 lei, semnata valid: cu tokenul ei si
+ * `shipping_cost: 0` se putea comanda livrare la domiciliu. Cinci magazine
+ * publicate au pickup pornit langa curieri platiti — tonel-beauty (0 langa
+ * Cargus 17 si DPD 18), ciprian-piese-auto-brasov, esafero (0 langa 45),
+ * yulmis-sound, medclean — deci comerciantul platea toata cursa.
+ */
+export interface QuoteOption {
+  courier?: string | null;
+  deliveryType?: string | null;
+  /**
+   * Eticheta, semnata si ea.
+   *
+   * E textul pe care il citeste OMUL: in panou, in emailul de comanda noua si pe
+   * randul de transport al facturii. Lasat sir liber de la client, legarea
+   * curierului nu ajungea: se trimitea tokenul valid de „Ridicare personala"
+   * (0 lei) cu eticheta „Livrare prin Cargus", si comerciantul citea Cargus
+   * langa un transport de 0,00.
+   *
+   * Se SEMNEAZA in loc sa se deduca fiindca eticheta poarta lucruri pe care
+   * comanda nu le mai stie: sufixul de locker („Sameday EasyBox (locker)"),
+   * numele transportatorului real al unui broker si tara la international
+   * („DPD International (Germania)"). Dedusa, toate astea se pierdeau.
+   */
+  courierLabel?: string | null;
+}
+
+/** Cotatia, normalizata, ca sa semneze la fel si la cotare, si la comanda. */
+function amprenta(businessId: string, dest: QuoteDestination, price: number, optiune: QuoteOption): string {
   const parte = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
   return [
     businessId,
@@ -45,6 +76,9 @@ function amprenta(businessId: string, dest: QuoteDestination, price: number): st
     parte(dest.postCode),
     // Doi bani sunt doi bani: semnam in bani, nu in lei cu virgula mobila.
     String(Math.round((Number(price) || 0) * 100)),
+    parte(optiune.courier),
+    parte(optiune.deliveryType),
+    parte(optiune.courierLabel),
   ].join("|");
 }
 
@@ -53,11 +87,12 @@ export function signShippingQuote(
   businessId: string,
   dest: QuoteDestination,
   price: number,
+  optiune: QuoteOption,
   expiraLa?: number,
 ): string {
   const expira = expiraLa ?? Date.now() + VALABILITATE_MS;
   const mac = createHmac("sha256", secret())
-    .update(`${amprenta(businessId, dest, price)}|${expira}`)
+    .update(`${amprenta(businessId, dest, price, optiune)}|${expira}`)
     .digest("base64url");
   return `${expira}.${mac}`;
 }
@@ -74,20 +109,28 @@ export function signShippingQuote(
  * Trecute amandoua prin ajutorul asta, o optiune nesemnata nu mai poate pleca
  * dintr-o iesire noua fara ca cineva sa scrie explicit alt drum.
  */
-export function semneazaOptiuni<T extends { price: number }>(
+export function semneazaOptiuni<T extends { price: number; courier?: string; deliveryType?: string; courierLabel?: string }>(
   businessId: string,
   dest: QuoteDestination,
   optiuni: T[],
 ): (T & { token: string })[] {
-  return optiuni.map((o) => ({ ...o, token: signShippingQuote(businessId, dest, o.price) }));
+  return optiuni.map((o) => ({
+    ...o,
+    token: signShippingQuote(businessId, dest, o.price, {
+      courier: o.courier, deliveryType: o.deliveryType, courierLabel: o.courierLabel,
+    }),
+  }));
 }
 
-/** Chiar am cotat noi pretul asta, pentru magazinul si destinatia astea? */
+/**
+ * Chiar am cotat noi pretul asta, pentru magazinul, destinatia SI optiunea astea?
+ */
 export function verifyShippingQuote(
   businessId: string,
   dest: QuoteDestination,
   price: number,
   token: string | null | undefined,
+  optiune: QuoteOption,
 ): boolean {
   if (!token || !businessId) return false;
   const taiat = token.indexOf(".");
@@ -96,7 +139,7 @@ export function verifyShippingQuote(
   const expira = Number(token.slice(0, taiat));
   if (!Number.isFinite(expira) || expira < Date.now()) return false;
 
-  const asteptat = Buffer.from(signShippingQuote(businessId, dest, price, expira));
+  const asteptat = Buffer.from(signShippingQuote(businessId, dest, price, optiune, expira));
   const primit = Buffer.from(token);
   if (asteptat.length !== primit.length) return false;
   try {

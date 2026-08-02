@@ -356,7 +356,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         county,
         postal_code: postal,
         added_items: added.map((l) => ({ product_id: l.id, variant_title: l.variantTitle, quantity: l.quantity })),
-        ...(cotatieAplicata && quote ? { shipping_cost: quote.price, shipping_token: quote.token } : {}),
+        // Eticheta pleaca odata cu pretul si cu tokenul: e semnata, deci fara ea
+        // verificarea de pe server nu are cum sa bata.
+        ...(cotatieAplicata && quote
+          ? { shipping_cost: quote.price, shipping_token: quote.token, courier_label: quote.label }
+          : {}),
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Comanda a fost actualizata.");

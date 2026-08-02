@@ -62,7 +62,9 @@ export default async function CosPage({ params }: Props) {
   const [{ data: storeSettings }] = await Promise.all([
     admin
       .from("store_settings")
-      .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
+      // Coloanele de TVA: fara ele, cosul arata un total din care lipsea taxa la
+      // magazinele cu preturi fara TVA, iar la finalizare aparea alt numar.
+      .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
       .eq("business_id", business.id)
       .single(),
   ]);
@@ -132,6 +134,12 @@ export default async function CosPage({ params }: Props) {
             shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
             freeShippingThreshold={storeSettings?.free_shipping_threshold ? Number(storeSettings.free_shipping_threshold) : null}
             minOrderAmount={storeSettings?.min_order_amount ? Number(storeSettings.min_order_amount) : null}
+            vat={{
+              vat_enabled: storeSettings?.vat_enabled ?? false,
+              vat_rate: Number(storeSettings?.vat_rate ?? 19),
+              prices_include_vat: storeSettings?.prices_include_vat ?? true,
+              show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+            }}
             comandaPePagina={checkoutOnPage(resolved.design)}
             emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
           />

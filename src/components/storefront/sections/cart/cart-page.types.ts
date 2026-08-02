@@ -6,6 +6,8 @@
  * citite pe server: pe pagina de cos nu exista contextul de catalog al paginii
  * de magazin.
  */
+import type { CartPricingInput } from "@/lib/storefront/cart/pricing";
+
 export interface CartPageProps {
   color: string;
   basePath: string;
@@ -13,6 +15,13 @@ export interface CartPageProps {
   shippingCost: number;
   freeShippingThreshold: number | null;
   minOrderAmount: number | null;
+  /**
+   * Regimul de TVA al magazinului. Lipsa = fara TVA in socoteala.
+   *
+   * Fara el, la magazinele cu preturi fara TVA cosul arata un total din care
+   * lipsea taxa, iar la finalizare aparea alt numar, mai mare.
+   */
+  vat?: CartPricingInput["vat"];
   /** Ce se intampla la „Finalizeaza comanda": navigare sau deschiderea modalului. */
   onCheckout: () => void;
   /** Setarile variantei, din registry. */

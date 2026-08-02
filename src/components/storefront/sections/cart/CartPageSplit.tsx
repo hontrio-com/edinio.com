@@ -26,6 +26,7 @@ export function CartPageSplit({
   shippingCost,
   freeShippingThreshold,
   minOrderAmount,
+  vat,
   onCheckout,
   settings,
   preview = false,
@@ -41,7 +42,7 @@ export function CartPageSplit({
   const chromeCatalog = useStoreChromeOptional();
   const catreProduse = chromeCatalog?.catalogRoot ?? `${basePath}/`;
   const { items, addItem, updateQty, removeItem, total, hydrated } = useCart();
-  const pricing = computeCartPricing({ total, shippingCost, freeShippingThreshold, minOrderAmount });
+  const pricing = computeCartPricing({ total, shippingCost, freeShippingThreshold, minOrderAmount, vat });
   const areRecomandari = settings.showRecommendations !== false && !preview;
   const arePrag = settings.showProgress !== false;
 

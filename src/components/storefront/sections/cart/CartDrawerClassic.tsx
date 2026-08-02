@@ -7,7 +7,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { gtagEvent } from "@/lib/marketing";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
-import { computeCartPricing } from "@/lib/storefront/cart/pricing";
+import { computeCartPricing, type CartPricingInput } from "@/lib/storefront/cart/pricing";
 
 /**
  * Sertarul de cos, varianta classic.
@@ -22,10 +22,13 @@ import { computeCartPricing } from "@/lib/storefront/cart/pricing";
  */
 export function CartDrawerClassic({
   open, onClose, color, basePath, businessId, onCheckout, shippingCost, freeShippingThreshold, minOrderAmount,
+  vat,
   inline = false,
 }: {
   open: boolean; onClose: () => void; color: string; basePath: string; businessId: string; onCheckout: () => void;
   shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null;
+  /** Regimul de TVA al magazinului. Lipsa = fara TVA in socoteala, ca inainte. */
+  vat?: CartPricingInput["vat"];
   /**
    * Randare in fluxul paginii, pentru miniatura din catalogul de design-uri:
    * fara fundalul negru si fara pozitionare fixa. Un panou fix ar innegri tot
@@ -81,9 +84,9 @@ export function CartDrawerClassic({
   // 199.89999999999998, adica sub un prag de 199,90 desi se afiseaza egal).
   const {
     shipping, grandTotal, belowMinOrder, freeShippingPct: progressPct,
-    areaPrag, shippingIsFree, freeShippingRemaining, minOrderRemaining,
+    areaPrag, shippingIsFree, freeShippingRemaining, minOrderRemaining, vatAmount,
   } = computeCartPricing({
-    total, shippingCost, freeShippingThreshold, minOrderAmount,
+    total, shippingCost, freeShippingThreshold, minOrderAmount, vat,
   });
 
   // GA4 view_cart when the drawer opens with items.
@@ -270,6 +273,12 @@ export function CartDrawerClassic({
                   {shipping === 0 ? "Gratuita" : formatPrice(shipping)}
                 </span>
               </div>
+              {vatAmount !== null && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>TVA</span>
+                  <span className="font-medium text-foreground">{formatPrice(vatAmount)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-base text-foreground pt-2 border-t border-border">
                 <span>Total</span>
                 <span style={{ color }}>{formatPrice(grandTotal)}</span>

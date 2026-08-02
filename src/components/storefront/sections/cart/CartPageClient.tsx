@@ -28,6 +28,7 @@ export function CartPageClient({
   shippingCost,
   freeShippingThreshold,
   minOrderAmount,
+  vat,
   comandaPePagina,
   emailFieldConfig,
   productWeights,
@@ -40,6 +41,8 @@ export function CartPageClient({
   shippingCost: number;
   freeShippingThreshold: number | null;
   minOrderAmount: number | null;
+  /** Regimul de TVA al magazinului, pentru totalul din cos. */
+  vat?: import("@/lib/storefront/cart/pricing").CartPricingInput["vat"];
   comandaPePagina: boolean;
   emailFieldConfig: { enabled: boolean; required: boolean };
   /**
@@ -91,6 +94,7 @@ export function CartPageClient({
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
         minOrderAmount={minOrderAmount}
+        vat={vat}
         onCheckout={laComanda}
       />
 

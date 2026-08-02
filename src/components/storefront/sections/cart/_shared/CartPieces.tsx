@@ -259,6 +259,12 @@ export function RezumatCos({
             {pricing.shipping === 0 ? "Gratuita" : formatPrice(pricing.shipping)}
           </span>
         </div>
+        {pricing.vatAmount !== null && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>TVA</span>
+            <span className="font-medium text-foreground tabular-nums">{formatPrice(pricing.vatAmount)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold text-base text-foreground pt-2 border-t border-border">
           <span>Total</span>
           <span className="tabular-nums" style={{ color }}>{formatPrice(pricing.grandTotal)}</span>

@@ -120,15 +120,18 @@ export function CartDrawerClassic({
 
   return (
     <>
-      {!inline && <div className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={onClose} />}
+      {!inline && <div className="cart-backdrop-enter fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={onClose} />}
       {/* Sirul de clase e scris intreg pe fiecare ramura, nu compus din parte
           fixa si parte variabila: reordonarea claselor ar aparea ca diferenta la
           compararea marcajului cu productia, desi CSS-ul e acelasi. */}
       {/* Rolul de dialog se declara doar pe ramura fixa: in miniatura panoul e
           continut obisnuit de pagina, nu o suprapunere. */}
+      {/* Miniatura din catalogul de design-uri NU aluneca: acolo panoul e
+          continut de pagina, iar o animatie de intrare ar porni la fiecare
+          derulare prin galerie. */}
       <div className={inline
         ? "relative mx-auto h-[620px] w-full max-w-sm bg-background flex flex-col shadow-2xl"
-        : "fixed inset-y-0 right-0 w-full max-w-sm bg-background z-50 flex flex-col shadow-2xl"}
+        : "cart-drawer-enter fixed inset-y-0 right-0 w-full max-w-sm bg-background z-50 flex flex-col shadow-2xl"}
         ref={panou}
         role={inline ? undefined : "dialog"}
         aria-modal={inline ? undefined : true}

@@ -313,6 +313,38 @@
   .migrare-btn-glow { animation: none; }
 }
 
+/* ─── Sertarul de cos: intrarea dinspre marginea din dreapta ─────────────────
+   Panoul exista de mult si sta unde trebuie, dar aparea DINTR-O DATA, ca o
+   fereastra, nu ca un sertar. Diferenta dintre „a aparut ceva peste pagina" si
+   „s-a deschis cosul din marginea aia" e chiar drumul de 260ms: ochiul vede de
+   unde vine si intelege singur ca se inchide tot acolo.
+
+   Numai INTRAREA e animata. Pentru iesire ar trebui tinut in pagina si dupa ce
+   s-a inchis, cu o mica masina de stari, iar castigul e mic: la deschidere te
+   uiti la el, la inchidere te uiti deja in alta parte.
+
+   Curba pleaca repede si se aseaza lin, cum se misca un sertar adevarat.
+   `ease-out` simplu pare ca frineaza prea devreme si iese lipicios. */
+@keyframes cart-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes cart-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.cart-drawer-enter {
+  animation: cart-drawer-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.cart-backdrop-enter {
+  animation: cart-backdrop-in 220ms ease-out;
+}
+/* Fara miscare, sertarul apare pe loc — adica exact cum era pana acum. */
+@media (prefers-reduced-motion: reduce) {
+  .cart-drawer-enter,
+  .cart-backdrop-enter { animation: none; }
+}
+
 /* ─── Custom-page button effects (CSS-only so blocks stay server-rendered) ─── */
 @keyframes edinio-fx-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 @keyframes edinio-fx-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }

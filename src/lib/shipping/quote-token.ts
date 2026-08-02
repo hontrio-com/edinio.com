@@ -62,6 +62,26 @@ export function signShippingQuote(
   return `${expira}.${mac}`;
 }
 
+/**
+ * Semneaza TOATE optiunile unei liste, intr-un singur loc.
+ *
+ * `getShippingOptions` are mai multe iesiri: una pentru international, care taie
+ * scurt inainte de bucla de curieri interni, si una la final. Cat timp semnarea
+ * statea doar pe cea de la final, ramura internationala pleca fara token — si
+ * atunci comanda cadea pe tariful implicit intern al magazinului, 18 lei in loc
+ * de 95,84 pentru un colet in Germania.
+ *
+ * Trecute amandoua prin ajutorul asta, o optiune nesemnata nu mai poate pleca
+ * dintr-o iesire noua fara ca cineva sa scrie explicit alt drum.
+ */
+export function semneazaOptiuni<T extends { price: number }>(
+  businessId: string,
+  dest: QuoteDestination,
+  optiuni: T[],
+): (T & { token: string })[] {
+  return optiuni.map((o) => ({ ...o, token: signShippingQuote(businessId, dest, o.price) }));
+}
+
 /** Chiar am cotat noi pretul asta, pentru magazinul si destinatia astea? */
 export function verifyShippingQuote(
   businessId: string,

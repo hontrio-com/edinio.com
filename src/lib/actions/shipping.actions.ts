@@ -10,7 +10,7 @@ import { getCOToken, getPrices as fetchCOPrices, type COConfig } from "@/lib/col
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
-import { signShippingQuote } from "@/lib/shipping/quote-token";
+import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 
 /**
  * Diacritics-insensitive locality match ("București"/"Sector 3" find
@@ -49,6 +49,21 @@ export type ShippingOption = {
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
+
+/**
+ * O optiune care a trecut PRIN semnare.
+ *
+ * `getShippingOptions` intoarce numai asa ceva, si asta e o garantie de
+ * compilare, nu o conventie: ramura internationala iesea din functie inainte de
+ * pasul de semnare si pleca fara token, iar comanda cadea apoi pe tariful
+ * implicit intern — 18 lei in loc de 95,84 pentru Germania. Cu `token`
+ * obligatoriu pe tipul de retur, un `return` nou fara semnatura nu mai trece de
+ * `tsc`, deci defectul nu se mai poate reintroduce in tacere.
+ *
+ * `token` ramane optional pe `ShippingOption` fiindca acolo calatoreste mai
+ * departe prin componente si prin comanda, unde poate lipsi legitim.
+ */
+export type ShippingOptionSemnata = ShippingOption & { token: string };
 
 export type LockerItem = {
   id: string;
@@ -100,7 +115,7 @@ export async function getShippingOptions(
     cart?: { productId: string; quantity: number }[];
     subtotal?: number;
   },
-): Promise<ShippingOption[]> {
+): Promise<ShippingOptionSemnata[]> {
   // Service role: anonymous customers trigger this; courier secrets are read
   // server-side only and never returned to the client (only computed prices are).
   const supabase = createAdminClient();
@@ -136,7 +151,11 @@ export async function getShippingOptions(
   const cerGreutatea = settings?.dpd_config
     ? (settings.dpd_config as { use_product_weight?: boolean } | null)?.use_product_weight === true
     : false;
-  if ((rules.length > 0 || cerGreutatea) && destination.cart && destination.cart.length > 0) {
+  const iso2 = destination.country?.toUpperCase();
+  const esteIntl = !!iso2 && iso2 !== "RO";
+  // Pe international greutatea se incarca INTOTDEAUNA din baza: acolo ea e
+  // singurul lucru din care iese pretul, iar pretul pleaca semnat. Vezi mai jos.
+  if ((rules.length > 0 || cerGreutatea || esteIntl) && destination.cart && destination.cart.length > 0) {
     cartProductIds.push(...new Set(destination.cart.map((c) => c.productId)));
     const { data: cartProducts } = await supabase
       .from("products")
@@ -157,8 +176,9 @@ export async function getShippingOptions(
     cartWeightKg = totalWeightG / 1000;
   }
 
-  // Domestic weight now reflects the real cart (when products carry weights); the
-  // intl override (destination.weightKg) still wins for the DPD international quote.
+  // Domestic weight now reflects the real cart (when products carry weights).
+  // Internationalul NU mai foloseste numarul asta: acolo pretul iese exclusiv din
+  // greutate si pleaca semnat, deci se ia din baza (vezi `greutateIntl`).
   const weight = destination.weightKg && destination.weightKg > 0
     ? destination.weightKg
     : (cartWeightKg > 0 ? cartWeightKg : 1);
@@ -166,8 +186,7 @@ export async function getShippingOptions(
 
   // International (EU): only DPD international applies. Short-circuit here so the
   // domestic courier loop below stays completely unchanged for RO orders.
-  const iso2 = destination.country?.toUpperCase();
-  if (iso2 && iso2 !== "RO") {
+  if (esteIntl) {
     const eu = euCountryByIso2(iso2);
     const dpdCfg = settings.dpd_config as DpdConfig | null;
     const ready = !!(
@@ -175,20 +194,41 @@ export async function getShippingOptions(
       dpdCfg?.enabled && dpdCfg.international_enabled && dpdCfg.username && dpdCfg.password && dpdCfg.client_id
     );
     if (!ready) return [];
+    /*
+     * Greutatea NU se ia de la client aici.
+     *
+     * Pretul international iese EXCLUSIV din ea, iar optiunea pleaca acum
+     * semnata, deci pretul semnat ar fi fost pretul unei greutati declarate de
+     * browser: se cerea o cotatie pentru un kilogram, se primea tokenul de
+     * 95,84 lei si se comandau apoi cincisprezece kilograme la acelasi pret.
+     * Amprenta leaga destinatia si suma, nu si datele din care a iesit suma.
+     *
+     * Cand exista un cos, greutatea vine din baza (`cartWeightKg`, incarcat mai
+     * sus tocmai pentru asta). Asta repara si subestimarea sistematica: modalul
+     * trimitea doar greutatea produsului principal, iar pagina de checkout o
+     * uita pe cea a bump-urilor, desi amandoua le treceau in comanda.
+     */
+    const greutateIntl = cartWeightKg > 0
+      ? cartWeightKg
+      : (destination.weightKg && destination.weightKg > 0 ? destination.weightKg : 1);
     try {
       const quote = await calculateDpdIntlPrice(dpdCfg!, {
         countryId: eu!.dpdCountryId,
         postCode: destination.postCode!,
-        weightKg: weight,
+        weightKg: greutateIntl,
       });
       if (!quote) return [];
-      return [{
+      // Semnata prin ACELASI ajutor ca optiunile interne: ramura asta iese din
+      // functie inainte de pasul de la final, si tocmai de aceea pleca fara
+      // token. Cu `semneazaOptiuni` in amandoua iesirile, o optiune nesemnata
+      // nu mai poate scapa dintr-un `return` nou.
+      return semneazaOptiuni(businessId, destination, [{
         courier: "dpd",
         courierLabel: `DPD International (${eu!.name})`,
-        deliveryType: "address",
+        deliveryType: "address" as const,
         price: quote.price,
         estimatedDays: "3-6 zile",
-      }];
+      }]);
     } catch {
       return [];
     }
@@ -538,10 +578,7 @@ export async function getShippingOptions(
   // Fiecare optiune pleaca semnata. Tokenul se intoarce cu comanda si e singurul
   // fel in care serverul poate sti ca pretul livrarii chiar a fost cotat de el.
   // Vezi `quote-token.ts`.
-  const semnate = finalOptions.map((o) => ({
-    ...o,
-    token: signShippingQuote(businessId, destination, o.price),
-  }));
+  const semnate = semneazaOptiuni(businessId, destination, finalOptions);
 
   // Sort: address first, then lockers, by price
   return semnate.sort((a, b) => {

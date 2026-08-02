@@ -12,7 +12,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
-  VARIANT_TITLE_SEP,
+  comboEpuizat, toateCombinatiileEpuizate, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
@@ -321,7 +321,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // Stock status
   const stockStatus = pageSections.stock_status ?? "in_stock";
   const isOutOfStock = stockStatus === "out_of_stock"
-    || (product.track_inventory && product.stock_quantity !== null && product.stock_quantity === 0);
+    || (product.track_inventory && product.stock_quantity !== null && product.stock_quantity === 0)
+    // Varianta aleasa si-a terminat stocul declarat, sau toate s-au terminat.
+    // Prima nu s-ar putea alege din interfata, fiindca optiunile epuizate sunt
+    // taiate, dar o selectie ramasa de dinainte tot ajunge aici.
+    || comboEpuizat(selectedCombo)
+    || toateCombinatiileEpuizate(variantsData);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
   // Combinatia trebuie sa EXISTE si sa fie activa, nu doar sa aiba titlul
   // complet: altfel linia intra in cos cu pretul de baza, iar serverul respinge

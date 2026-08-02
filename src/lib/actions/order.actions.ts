@@ -266,6 +266,46 @@ async function ga4OrderEvent(
   }
 }
 
+/**
+ * Prima linie care cere mai mult decat stocul declarat al variantei ei, spusa
+ * pe romaneste. `null` cand totul e in regula.
+ *
+ * Sta aici, intr-un singur loc, fiindca sunt DOUA cai de comanda: formularul de
+ * comanda directa din pagina de produs (`placeOrder`) si finalizarea cosului
+ * (`placeCartOrder`). Verificarea exista doar pe a doua, asa ca o marime pusa pe
+ * zero se putea totusi comanda din formular, care e chiar calea cea mai
+ * folosita. Doua copii ale regulii ar fi apucat-o iar pe drumuri diferite.
+ *
+ * Combinatiile fara stoc completat nu sunt in harta: pentru ele nu se schimba
+ * nimic, ramane stocul produsului intreg. Acelasi produs poate aparea pe mai
+ * multe linii, deci cantitatile se aduna inainte de comparatie.
+ */
+function eroareStocPeVarianta(
+  stocPeProdus: Map<string, Map<string, number>>,
+  linii: { product_id: string; variant_title?: string | null; quantity: number }[],
+): string | null {
+  const cerut = new Map<string, { titlu: string; productId: string; cantitate: number }>();
+  for (const l of linii) {
+    if (!l.variant_title) continue;
+    const cheie = `${l.product_id}::${l.variant_title}`;
+    const dejaCerut = cerut.get(cheie)?.cantitate ?? 0;
+    const cantitate = Math.max(1, Math.floor(Number(l.quantity) || 1));
+    cerut.set(cheie, {
+      titlu: l.variant_title,
+      productId: l.product_id,
+      cantitate: dejaCerut + cantitate,
+    });
+  }
+  for (const { titlu, productId, cantitate } of cerut.values()) {
+    const disponibil = stocPeProdus.get(productId)?.get(titlu);
+    if (disponibil === undefined || cantitate <= disponibil) continue;
+    return disponibil <= 0
+      ? `Varianta „${titlu}" nu mai este in stoc. Alege alta optiune.`
+      : `Din varianta „${titlu}" au mai ramas ${disponibil} bucati.`;
+  }
+  return null;
+}
+
 export async function placeOrder(data: {
   business_id: string;
   cart_session_id?: string;
@@ -359,12 +399,21 @@ export async function placeOrder(data: {
   // client (same model as placeCartOrder). The current product is excluded to avoid
   // double-counting, and unavailable/inactive items are dropped.
   let cartItems: { product_id: string; name: string; price: number; quantity: number }[] = [];
+  // Stocul declarat pe fiecare combinatie, pentru produsul comandat si pentru
+  // tot ce vine din cos odata cu el. Se verifica dupa ce se stiu toate liniile.
+  const stocPeVarianta = new Map<string, Map<string, number>>([
+    [product.id, comboStockMap(product.page_sections)],
+  ]);
+  const liniiCuVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [
+    { product_id: data.product_id, variant_title: data.variant_title, quantity: data.quantity },
+  ];
   if (data.additional_items?.length) {
     const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
     if (ids.length > 0) {
       const { data: extraProducts } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
       const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => {
         const base = round2(Number(p.price));
+        stocPeVarianta.set(p.id, comboStockMap(p.page_sections));
         return [p.id, {
           name: String(p.name),
           price: base,
@@ -372,8 +421,12 @@ export async function placeOrder(data: {
           tiers: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers,
         }];
       }));
-      cartItems = data.additional_items
-        .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0)
+      // Lista filtrata se tine intr-o variabila, ca stocul si preturile sa se uite
+      // la EXACT aceleasi linii. Repetat, filtrul ar putea ajunge sa difere.
+      const liniiDinCos = data.additional_items
+        .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0);
+      liniiCuVarianta.push(...liniiDinCos);
+      cartItems = liniiDinCos
         .map((i) => {
           const meta = extraMap.get(i.product_id)!;
           // Named variant priced from its enabled combination; unknown/disabled
@@ -394,6 +447,16 @@ export async function placeOrder(data: {
         });
     }
   }
+  /*
+   * Stocul declarat al fiecarei variante cerute, inainte sa se scrie ceva.
+   *
+   * Calea asta n-avea verificarea deloc, desi finalizarea cosului o are de mult:
+   * o marime pusa pe zero de comerciant se putea comanda linistit din formularul
+   * de pe pagina de produs, iar el afla din comanda pe care n-o putea onora.
+   */
+  const eroareStoc = eroareStocPeVarianta(stocPeVarianta, liniiCuVarianta);
+  if (eroareStoc) return { error: eroareStoc };
+
   // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
   // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
   if (data.accepted_offer_ids?.length) {
@@ -1331,27 +1394,15 @@ export async function placeCartOrder(data: {
    * in total lasa sa se comande marimea S si cand marimea S avea zero, iar
    * comerciantul afla din comanda pe care n-o putea onora. Combinatiile fara
    * numar completat nu intra in harta, deci pentru ele nu se schimba nimic.
+   *
+   * Aceeasi regula, acelasi ajutor ca la comanda directa. Scrisa de doua ori, a
+   * si apucat-o pe drumuri diferite: calea cealalta n-a avut-o niciodata.
    */
-  const stocCombo = new Map(activeProducts.map((p) => [p.id, comboStockMap(p.page_sections)]));
-  const cerutPeCombo = new Map<string, number>();
-  for (const i of data.items) {
-    if (!i.variant_title) continue;
-    const cheie = `${i.product_id}::${i.variant_title}`;
-    cerutPeCombo.set(cheie, (cerutPeCombo.get(cheie) ?? 0) + Math.max(1, Math.floor(Number(i.quantity) || 1)));
-  }
-  for (const [cheie, cerut] of cerutPeCombo) {
-    const taiat = cheie.indexOf("::");
-    const productId = cheie.slice(0, taiat);
-    const titlu = cheie.slice(taiat + 2);
-    const disponibil = stocCombo.get(productId)?.get(titlu);
-    if (disponibil !== undefined && cerut > disponibil) {
-      return {
-        error: disponibil <= 0
-          ? `Varianta „${titlu}" nu mai este in stoc. Alege alta optiune.`
-          : `Din varianta „${titlu}" au mai ramas ${disponibil} bucati.`,
-      };
-    }
-  }
+  const eroareStoc = eroareStocPeVarianta(
+    new Map(activeProducts.map((p) => [p.id, comboStockMap(p.page_sections)])),
+    data.items,
+  );
+  if (eroareStoc) return { error: eroareStoc };
 
   // Configuratia de trepte a fiecarui produs. `page_sections` e deja incarcat mai
   // sus pentru variante si stoc, deci treptele nu costa nicio interogare in plus.

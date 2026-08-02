@@ -87,9 +87,33 @@ export function findCombo(variants: VariantsData, title: string | null): Variant
 }
 
 /**
+ * Stocul declarat al unei combinatii, sau `null` cand nu e declarat.
+ *
+ * `null` NU inseamna zero: campul lasat gol inseamna „nu tin socoteala pe
+ * varianta asta", iar atunci ramane valabil stocul produsului intreg. Numai un
+ * numar scris de comerciant vorbeste despre varianta. Un text sau un numar
+ * negativ nu inseamna nimic, deci se poarta tot ca un camp gol.
+ */
+export function comboStock(combo: VariantCombo | null | undefined): number | null {
+  const brut = String(combo?.stock_quantity ?? "").trim();
+  if (brut === "") return null;
+  const n = Number(brut);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+}
+
+/** Combinatia are stoc declarat si acel stoc s-a terminat. */
+export function comboEpuizat(combo: VariantCombo | null | undefined): boolean {
+  return comboStock(combo) === 0;
+}
+
+/**
  * Whether choosing `value` for `optionName` still leads to at least one enabled
  * combination given the other current selections. Drives the strike-through /
  * disabled state on option buttons.
+ *
+ * Se uita si la STOC, nu doar la steagul `enabled`. Pana acum nu se uita: o
+ * marime cu zero bucati arata la fel ca una plina, se alegea, intra in cos si
+ * ajungea comanda. Comerciantul scrisese zero tocmai ca sa n-o mai vanda.
  */
 export function isValueAvailable(
   variants: VariantsData,
@@ -101,10 +125,23 @@ export function isValueAvailable(
     .filter(([k, v]) => k !== optionName && v)
     .map(([, v]) => v);
   return variants.combinations.some((c) => {
-    if (!c.enabled) return false;
+    if (!c.enabled || comboEpuizat(c)) return false;
     const parts = c.title.split(VARIANT_TITLE_SEP);
     return parts.includes(value) && otherSels.every((s) => parts.includes(s));
   });
+}
+
+/**
+ * Produsul are variante, dar TOATE s-au terminat.
+ *
+ * Altfel pagina ar ramane cu toate optiunile taiate si cu butonul stins, fara
+ * sa scrie nicaieri de ce. Asa poate spune „Stoc epuizat", ca la un produs
+ * simplu.
+ */
+export function toateCombinatiileEpuizate(variants: VariantsData | null): boolean {
+  if (!variants) return false;
+  const active = variants.combinations.filter((c) => c?.enabled && c.title);
+  return active.length > 0 && active.every(comboEpuizat);
 }
 
 /**
@@ -165,14 +202,12 @@ export function comboStockMap(pageSections: unknown): Map<string, number> {
   if (!variants) return map;
   for (const c of variants.combinations) {
     if (!c?.enabled || !c.title) continue;
-    const brut = String(c.stock_quantity ?? "").trim();
-    if (brut === "") continue;
-    const n = Number(brut);
-    if (Number.isFinite(n) && n >= 0) map.set(c.title, Math.floor(n));
+    const stoc = comboStock(c);
+    if (stoc !== null) map.set(c.title, stoc);
   }
   return map;
 }
-
+
 /**
  * Optiunea asta e o marime?
  *

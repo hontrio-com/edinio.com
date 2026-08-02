@@ -4,9 +4,9 @@ import { Fragment, useEffect, useMemo, useRef, useState, useTransition, type Rea
 import Image from "next/image";
 import { toast } from "sonner";
 import {
-  Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, Tag, ImagePlus, Loader2, Search,
+  Plus, Pencil, Trash2, Check, X, ChevronRight, CornerUpRight, FolderOpen, Folder, Tag, ImagePlus, Loader2, Search,
 } from "lucide-react";
-import { createCategory, updateCategory, deleteCategory } from "@/lib/actions/category.actions";
+import { createCategory, updateCategory, deleteCategory, moveCategory } from "@/lib/actions/category.actions";
 import { uploadImage } from "@/lib/actions/upload.actions";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,9 @@ export function CategoriesClient({ initialCategories }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Confirm delete
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // Care categorie se muta acum, si unde a ales omul sa o duca
+  const [moving, setMoving] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<string>("");
   // Name filter (diacritics/case-insensitive); while active the tree is
   // filtered to matches + their ancestors/descendants, all forced open.
   const [search, setSearch] = useState("");
@@ -190,6 +193,29 @@ export function CategoriesClient({ initialCategories }: Props) {
 
   // ── Delete (optimistic; DB cascades over the whole subtree, so remove it
   // here too and restore rows at their original positions on error)
+  /**
+   * Mutarea, optimist ca restul: rândul sare pe loc sub noul părinte, iar dacă
+   * serverul refuză, se pune la loc de unde a plecat.
+   */
+  function handleMove(id: string, newParentId: string | null) {
+    const inainte = categories;
+    setCategories(prev => prev.map(c => (c.id === id ? { ...c, parent_id: newParentId } : c)));
+    setMoving(null);
+    setMoveTarget("");
+    // Noul parinte se deschide, altfel categoria pare ca a disparut.
+    if (newParentId) setExpanded(prev => new Set([...prev, newParentId]));
+
+    startTransition(async () => {
+      const result = await moveCategory(id, newParentId);
+      if ("error" in result) {
+        setCategories(inainte);
+        toast.error(result.error);
+      } else {
+        toast.success("Categoria a fost mutata.");
+      }
+    });
+  }
+
   function handleDelete(id: string) {
     const subtree = collectSubtreeIds(categories, id);
     const backup = categories
@@ -292,9 +318,68 @@ export function CategoriesClient({ initialCategories }: Props) {
           className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40">
           <Pencil className="h-3.5 w-3.5" />
         </button>
+        <button
+          type="button"
+          onClick={() => { setMoveTarget(cat.parent_id ?? ""); setMoving(cat.id); }}
+          disabled={isTemp}
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+          title="Muta in alta categorie"
+        >
+          <CornerUpRight className="h-3.5 w-3.5" />
+        </button>
         <button type="button" onClick={() => setConfirmDelete(cat.id)} disabled={isTemp}
           className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40">
           <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  /**
+   * Rândul de mutare: alegi unde duci categoria, cu tot ce are sub ea.
+   *
+   * Din listă lipsesc categoria însăși și tot ce atârnă sub ea. Nu e o
+   * curățenie de fațadă: mutată acolo, ramura s-ar închide într-un cerc și ar
+   * ieși cu totul din arbore, adică nu s-ar mai vedea nicăieri și n-ar mai
+   * putea fi nici adusă înapoi, nici ștearsă. Serverul verifică din nou același
+   * lucru, fiindcă lista din pagină nu e o barieră.
+   */
+  function moveForm(cat: Category) {
+    const interzise = collectSubtreeIds(categories, cat.id);
+    const destinatii: { id: string; name: string; depth: number }[] = [];
+    const strange = (nod: Category, depth: number) => {
+      if (interzise.has(nod.id) || nod.id.startsWith("temp-")) return;
+      destinatii.push({ id: nod.id, name: nod.name, depth });
+      for (const k of rawChildren(nod.id)) strange(k, depth + 1);
+    };
+    for (const r of forest.roots) strange(r, 0);
+
+    const acasa = cat.parent_id === null;
+    return (
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <select
+          value={moveTarget}
+          onChange={(e) => setMoveTarget(e.target.value)}
+          aria-label={`Muta ${cat.name} in`}
+          className="flex-1 min-w-0 px-2 py-1 text-sm bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="" disabled={acasa}>
+            {acasa ? "Este deja la nivelul principal" : "Nivel principal (fara parinte)"}
+          </option>
+          {destinatii.map((d) => (
+            <option key={d.id} value={d.id}>
+              {`${"  ".repeat(d.depth)}${d.depth > 0 ? "└ " : ""}${d.name}`}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={() => handleMove(cat.id, moveTarget || null)}
+          disabled={isPending || (acasa && !moveTarget)}
+          className="px-2.5 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-40 flex-shrink-0">
+          Muta
+        </button>
+        <button type="button" onClick={() => setMoving(null)}
+          className="px-2.5 py-1 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors flex-shrink-0">
+          Anuleaza
         </button>
       </div>
     );
@@ -344,6 +429,7 @@ export function CategoriesClient({ initialCategories }: Props) {
     const isTemp = cat.id.startsWith("temp-");
     const isEditing = editing === cat.id;
     const isConfirmingDelete = confirmDelete === cat.id;
+    const isMoving = moving === cat.id;
     const isAddingSub = editing === `new-sub-${cat.id}`;
     const isOpen = searchActive ? (kids.length > 0 || isAddingSub) : (expanded.has(cat.id) || isAddingSub);
 
@@ -374,6 +460,8 @@ export function CategoriesClient({ initialCategories }: Props) {
             />
           ) : isConfirmingDelete ? (
             deleteConfirm(cat)
+          ) : isMoving ? (
+            moveForm(cat)
           ) : (
             <>
               <span className="flex-1 text-sm text-foreground truncate">{cat.name}</span>
@@ -471,6 +559,7 @@ export function CategoriesClient({ initialCategories }: Props) {
             const isTemp = cat.id.startsWith("temp-");
             const isEditing = editing === cat.id;
             const isConfirmingDelete = confirmDelete === cat.id;
+            const isMoving = moving === cat.id;
             const isAddingSub = editing === `new-sub-${cat.id}`;
             const isOpen = searchActive ? (kids.length > 0 || isAddingSub) : (expanded.has(cat.id) || isAddingSub);
 
@@ -501,6 +590,8 @@ export function CategoriesClient({ initialCategories }: Props) {
                     />
                   ) : isConfirmingDelete ? (
                     deleteConfirm(cat)
+                  ) : isMoving ? (
+                    moveForm(cat)
                   ) : (
                     <>
                       <span className="flex-1 text-sm font-semibold text-foreground truncate">{cat.name}</span>

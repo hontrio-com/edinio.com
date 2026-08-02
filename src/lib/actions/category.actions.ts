@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { collectSubtreeIds } from "@/lib/categories/tree";
 
 async function getBusinessId(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<string | null> {
   const { data } = await supabase
@@ -133,6 +134,89 @@ export async function updateCategory(
   if (error) {
     if (error.code === "23505") return { error: "Exista deja o categorie cu acest nume la acelasi nivel." };
     return { error: "Eroare la actualizare." };
+  }
+
+  revalidatePath("/dashboard/products/categories");
+  revalidatePath("/dashboard/products");
+  return { success: true };
+}
+
+/**
+ * Muta o categorie sub alt parinte, cu tot ce are sub ea.
+ *
+ * Pana acum nu se putea: greseala la adaugare se repara stergand ramura si
+ * refacand-o de mana, subcategorie cu subcategorie.
+ *
+ * Produsele NU se ating. Ele isi tin categoria dupa NUME (`products.category` e
+ * text, nu cheie straina), iar mutarea nu schimba niciun nume — deci nu se rupe
+ * nicio legatura si nu e nimic de migrat.
+ *
+ * `newParentId` null inseamna „scoate-o la nivelul principal".
+ */
+export async function moveCategory(
+  id: string,
+  newParentId: string | null,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const businessId = await getBusinessId(supabase, user.id);
+  if (!businessId) return { error: "Magazin negasit" };
+
+  const { data: cat } = await supabase
+    .from("categories")
+    .select("id, name, parent_id")
+    .eq("id", id)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!cat) return { error: "Categoria nu exista." };
+  if ((cat.parent_id ?? null) === newParentId) return { success: true };
+
+  if (newParentId) {
+    // Parintele trebuie sa fie tot al lui: altfel o cerere mestesugita ar agata
+    // ramura sub alt magazin.
+    const { data: parent } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("id", newParentId)
+      .eq("business_id", businessId)
+      .maybeSingle();
+    if (!parent) return { error: "Categoria in care muti nu exista." };
+
+    /*
+     * Cea mai importanta oprire: nu poti muta o categorie in ea insasi sau in
+     * ceva de sub ea.
+     *
+     * Ramura s-ar inchide intr-un cerc si ar iesi cu totul din arbore: n-ar mai
+     * atarna de nicio radacina, deci n-ar mai aparea nicaieri in interfata si
+     * n-ar mai putea fi nici mutata inapoi, nici stearsa din ecran. Se citesc
+     * TOATE categoriile magazinului, ca sa se poata calcula subarborele.
+     */
+    const { data: toate } = await supabase
+      .from("categories")
+      .select("id, parent_id")
+      .eq("business_id", businessId);
+    if (collectSubtreeIds(toate ?? [], id).has(newParentId)) {
+      return { error: "Nu poti muta o categorie in ea insasi sau intr-una dintre subcategoriile ei." };
+    }
+  }
+
+  // Acelasi nume, doi frati: verificat in aplicatie fiindca la nivelul principal
+  // regula din baza de date nu se declanseaza niciodata (vezi `siblingNameExists`).
+  if (await siblingNameExists(supabase, businessId, newParentId, cat.name, id)) {
+    return { error: "Acolo exista deja o categorie cu acest nume." };
+  }
+
+  const { error } = await supabase
+    .from("categories")
+    .update({ parent_id: newParentId, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("business_id", businessId);
+
+  if (error) {
+    if (error.code === "23505") return { error: "Acolo exista deja o categorie cu acest nume." };
+    return { error: "Eroare la mutare." };
   }
 
   revalidatePath("/dashboard/products/categories");

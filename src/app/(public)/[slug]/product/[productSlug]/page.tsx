@@ -142,7 +142,11 @@ export default async function ProductDetailPage({ params }: Props) {
   // store_settings is no longer anon-readable — fetch the public-safe columns via service role.
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design")
+    // Coloanele de TVA lipseau, iar pagina le citeste: eticheta „(TVA inclus)" /
+    // „(fara TVA)" de langa pret nu s-a afisat NICIODATA, la niciun magazin,
+    // fiindca `vat_enabled` venea `undefined` si cadea pe rezerva `false`.
+    // Sunt sigure public — se dau oricum prin `getPublicStoreConfig`.
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, prices_include_vat, show_vat_label")
     .eq("business_id", business.id)
     .single();
 

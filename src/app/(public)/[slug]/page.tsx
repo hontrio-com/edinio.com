@@ -233,7 +233,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ),
     createAdminClient()
       .from("store_settings")
-      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, storefront_design_draft")
+      // Coloanele de TVA sunt necesare pentru eticheta de langa pret: prima pagina
+      // randeaza pagina de produs cand magazinul e „un singur produs". Vezi ruta
+      // /product/[productSlug], unde lipseau la fel.
+      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, storefront_design_draft, vat_enabled, prices_include_vat, show_vat_label")
       .eq("business_id", business.id)
       .single(),
     fetchAllRows("storefront.home.categories", (from, to) =>

@@ -54,3 +54,21 @@ test("token lipsa sau stricat nu trece", () => {
   assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, "fara-punct"), false);
   assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, `${Date.now() + 10000}.gresit`), false);
 });
+
+/*
+ * Re-cotarea din panoul de comenzi (editarea comenzii) semneaza si verifica o
+ * destinatie interna DOAR cu judetul si orasul. Codul postal adaugat de o
+ * singura parte schimba amprenta si face semnatura sa cada in tacere, iar
+ * atunci comerciantul ar apasa „Aplica" si transportul ar ramane cel vechi,
+ * fara ca nimeni sa afle de ce.
+ */
+test("destinatie interna doar cu judet si oras: semneaza si verifica identic", () => {
+  const dest = { county: "Cluj", city: "Cluj-Napoca" };
+  const t = signShippingQuote(BIZ, dest, 19.99);
+  assert.equal(verifyShippingQuote(BIZ, dest, 19.99, t), true);
+});
+
+test("codul postal adaugat pe o singura parte rupe verificarea", () => {
+  const t = signShippingQuote(BIZ, { county: "Cluj", city: "Cluj-Napoca" }, 19.99);
+  assert.equal(verifyShippingQuote(BIZ, { county: "Cluj", city: "Cluj-Napoca", postCode: "400000" }, 19.99, t), false);
+});

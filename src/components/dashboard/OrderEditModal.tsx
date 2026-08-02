@@ -5,16 +5,30 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   X, Pencil, Loader2, Plus, Minus, Trash2, Search, AlertTriangle,
-  Package, Info, Truck,
+  Package, Info, Truck, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { updateOrderDetails, searchOrderProducts } from "@/lib/actions/order.actions";
+import { updateOrderDetails, searchOrderProducts, getOrderEditContext } from "@/lib/actions/order.actions";
+import { getShippingOptions } from "@/lib/actions/shipping.actions";
 import { deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { cancelWootAwb } from "@/lib/actions/woot.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
+import { VariantPicker } from "@/components/ministore/VariantPicker";
+import { comboTitle, findCombo } from "@/lib/storefront/variants";
+import {
+  cheieLinie,
+  planificaAdaugarea,
+  recalculeazaTotal,
+  sumaExtraoptiunilor,
+  variantsDinSlim,
+  type CatalogEdit,
+  type PlanEditare,
+  type VarianteSlim,
+} from "@/lib/orders/edit-pricing";
+import { parseCodFeeConfig } from "@/lib/payment-methods";
 import { formatPrice } from "@/lib/utils/format";
 import type { Database } from "@/types/database.types";
 
@@ -25,6 +39,7 @@ interface ShippingAddress {
   city?: string;
   address?: string;
   postal_code?: string;
+  country?: string;
   delivery_type?: string;
   locker_name?: string;
   courier?: string;
@@ -37,13 +52,54 @@ interface PickerProduct {
   stock_quantity: number | null;
   track_inventory: boolean;
   is_bundle: boolean;
+  /** `null` cand produsul nu are variante de ales. */
+  variante: VarianteSlim | null;
+  trepte: unknown;
 }
 
 interface AddedLine extends PickerProduct {
   quantity: number;
+  /** `null` pentru produsele simple. */
+  variantTitle: string | null;
+  /** Pretul combinatiei alese, sau cel de baza. Doar pentru afisare. */
+  unitPrice: number;
 }
 
+interface EditContext {
+  vat_enabled: boolean;
+  vat_rate: number;
+  prices_include_vat: boolean;
+  free_shipping_threshold: number | null;
+  cod_fee_config: unknown;
+}
+
+/**
+ * Starea previzualizarii, ca uniune discriminata: „gata" e singura care are
+ * cifre, deci nu se poate afisa din greseala un total pe jumatate calculat.
+ */
+type Previzualizare =
+  | { stare: "eroare"; error: string }
+  /** Reglajele magazinului inca nu s-au incarcat: nu ghicim un total. */
+  | { stare: "indisponibil"; plan: PlanEditare }
+  | {
+    stare: "gata";
+    subtotal: number;
+    extras: number;
+    codFee: number;
+    plan: PlanEditare;
+    total: number;
+    vatAmount: number;
+    shipping: number;
+    /** Cat se schimba totalul comenzii; negativ cand scade. */
+    diferenta: number;
+  };
+
 const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+/** Culoarea de brand, ceruta de `VariantPicker` ca hex (isi compune singur alfa). */
+const CULOARE_BRAND = "#1AB554";
+
+const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 
 export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   open: boolean;
@@ -71,6 +127,20 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   const [cancellingKey, setCancellingKey] = useState<string | null>(null);
   const [cancelPending, startCancel] = useTransition();
 
+  // Reglajele magazinului: fara ele previzualizarea ar ghici, deci nu ghiceste.
+  const [ctx, setCtx] = useState<EditContext | null>(null);
+
+  // Alegerea variantei pentru produsul pe care tocmai l-a apasat comerciantul.
+  const [picking, setPicking] = useState<PickerProduct | null>(null);
+  const [pickSel, setPickSel] = useState<Record<string, string>>({});
+
+  // Re-cotarea transportului dupa schimbarea destinatiei.
+  const [requoting, setRequoting] = useState(false);
+  // Cotatia isi poarta destinatia pentru care a fost ceruta, ca sa se poata
+  // sti daca mai e valabila. Vezi `cotatieValida` mai jos.
+  const [quote, setQuote] = useState<{ price: number; token: string; label: string; county: string; city: string } | null>(null);
+  const [quoteApplied, setQuoteApplied] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     setName(order.customer_name ?? "");
@@ -82,8 +152,14 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     setPostal(addr.postal_code ?? "");
     setAdded([]);
     setQuery("");
+    setPicking(null);
+    setPickSel({});
+    setQuote(null);
+    setQuoteApplied(false);
+    setCtx(null);
+    getOrderEditContext(businessId).then((res) => setCtx("error" in res ? null : res));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, order.id]);
+  }, [open, order.id, businessId]);
 
   // Debounced product search (also fires on open with an empty query → top products).
   useEffect(() => {
@@ -110,24 +186,142 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     return list;
   }, [order]);
 
-  const addedSum = added.reduce((s, l) => s + l.price * l.quantity, 0);
-  const newTotal = Math.round((Number(order.total) + addedSum) * 100) / 100;
   const isPaid = order.payment_status === "paid";
   const hasInvoice = !!(order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number);
+  const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number;
   const isLocker = addr.delivery_type === "locker";
+  const prevItems = useMemo(() => (Array.isArray(order.items) ? (order.items as unknown[]) : []), [order.items]);
 
-  function addProduct(p: PickerProduct) {
+  /*
+   * Cotatia moare odata cu destinatia pentru care a fost ceruta.
+   *
+   * Semnatura leaga pretul de judet si oras. Daca se mai schimba unul dintre ele
+   * dupa „Aplica", serverul refuza cotatia — corect, dar in TACERE — si scrie
+   * transportul vechi, in timp ce panoul ar fi continuat sa arate totalul cu cel
+   * nou si sa anunte „Comanda a fost actualizata". Se DEDUCE, nu se sterge dintr-un
+   * efect: asa nu exista nicio clipa in care starea sa fie aplicata si invalida.
+   */
+  const cotatieValida = !!quote && quote.county === county.trim() && quote.city === city.trim();
+  const cotatieAplicata = quoteApplied && cotatieValida;
+
+  /*
+   * PREVIZUALIZAREA cheama exact aceleasi doua functii pure ca serverul.
+   *
+   * Pana acum modalul aduna `order.total + suma adaugata` si numea alt numar:
+   * pe o comanda cu subtotal 108 si prag 150 arata 193,00 acolo unde serverul
+   * scria 173,00, fiindca adaugarea facea transportul gratuit. Pe cifra aia
+   * scrie „diferenta de X nu se incaseaza automat", iar rambursul de pe AWB se
+   * ia din totalul serverului.
+   */
+  const previzualizare = useMemo<Previzualizare>(() => {
+    const catalog = new Map<string, CatalogEdit>(
+      added.map((l) => [l.id, {
+        name: l.name, price: l.price, is_bundle: l.is_bundle, variante: l.variante, trepte: l.trepte,
+      }]),
+    );
+    const plan = planificaAdaugarea(
+      prevItems,
+      added.map((l) => ({ product_id: l.id, variant_title: l.variantTitle, quantity: l.quantity })),
+      catalog,
+    );
+    if ("error" in plan) return { stare: "eroare", error: plan.error };
+    if (!ctx) return { stare: "indisponibil", plan };
+
+    const subtotal = round2(Number(order.subtotal) + plan.deltaSubtotal);
+    const extras = sumaExtraoptiunilor(prevItems);
+    // Cota INGHETATA a comenzii, ca pe server: o comanda vanduta cu 19% nu
+    // capata 21% fiindca s-a schimbat setarea magazinului intre timp.
+    const vat = {
+      vat_enabled: ctx.vat_enabled,
+      vat_rate: Number(order.vat_rate) > 0 ? Number(order.vat_rate) : ctx.vat_rate,
+      prices_include_vat: ctx.prices_include_vat,
+    };
+    // Aceeasi formula ca pe server: taxa se SCALEAZA cu baza, pastrand cota
+    // convenita la plasare, si numai daca a existat de la bun inceput.
+    const cfgTaxa = parseCodFeeConfig(ctx.cod_fee_config);
+    const taxaVeche = round2(Number(order.cod_fee_amount) || 0);
+    const bazaVeche = round2(Number(order.subtotal) + extras - (Number(order.discount_amount) || 0));
+    const bazaNoua = round2(subtotal + extras - (Number(order.discount_amount) || 0));
+    const codFee = cfgTaxa.type === "percent" && plan.deltaSubtotal !== 0 && taxaVeche > 0 && bazaVeche > 0
+      ? round2(taxaVeche * (bazaNoua / bazaVeche))
+      : taxaVeche;
+
+    const r = recalculeazaTotal({
+      subtotal,
+      extras,
+      discount: Number(order.discount_amount) || 0,
+      cardDiscount: Number(order.card_discount_amount) || 0,
+      codDiscount: Number(order.cod_discount_amount) || 0,
+      codFee,
+      shipping: cotatieAplicata && quote ? quote.price : Math.max(0, round2(Number(order.shipping_cost) || 0)),
+      freeShippingThreshold: ctx.free_shipping_threshold,
+      vat,
+    });
+    return {
+      stare: "gata", subtotal, extras, codFee, plan,
+      total: r.total, vatAmount: r.vatAmount, shipping: r.shipping,
+      diferenta: round2(r.total - Number(order.total)),
+    };
+  }, [added, prevItems, ctx, order, quote, cotatieAplicata]);
+
+  const areEroarePlan = previzualizare.stare === "eroare";
+  const diferenta = previzualizare.stare === "gata" ? previzualizare.diferenta : 0;
+
+  // ── Re-cotarea transportului ──
+  const destinatieSchimbata = city.trim() !== (addr.city ?? "").trim() || county.trim() !== (addr.county ?? "").trim();
+  const eIntern = !addr.country || addr.country.toUpperCase() === "RO";
+  // Lockerele sunt excluse: pretul ar veni pentru orasul nou, dar `locker_id` ar
+  // ramane al lockerului din orasul VECHI, si coletul ar pleca spre el.
+  const potRecota = destinatieSchimbata && eIntern && !!addr.courier && !isPaid && !isLocker
+    && activeAwbs.length === 0 && !hasInvoice && Number(order.shipping_cost) > 0;
+
+  function addProduct(p: PickerProduct, variantTitle: string | null, unitPrice: number) {
     setAdded((prev) => {
-      const existing = prev.find((l) => l.id === p.id);
-      if (existing) return prev.map((l) => (l.id === p.id ? { ...l, quantity: l.quantity + 1 } : l));
-      return [...prev, { ...p, quantity: 1 }];
+      const cheie = cheieLinie(p.id, variantTitle);
+      const existing = prev.find((l) => cheieLinie(l.id, l.variantTitle) === cheie);
+      if (existing) {
+        return prev.map((l) => (cheieLinie(l.id, l.variantTitle) === cheie ? { ...l, quantity: l.quantity + 1 } : l));
+      }
+      return [...prev, { ...p, quantity: 1, variantTitle, unitPrice }];
     });
   }
 
-  function setQty(id: string, qty: number) {
+  function setQty(cheie: string, qty: number) {
     setAdded((prev) => prev
-      .map((l) => (l.id === id ? { ...l, quantity: qty } : l))
+      .map((l) => (cheieLinie(l.id, l.variantTitle) === cheie ? { ...l, quantity: qty } : l))
       .filter((l) => l.quantity > 0));
+  }
+
+  function handleRequote() {
+    setRequoting(true);
+    const marfa = (previzualizare.stare === "eroare" ? prevItems : previzualizare.plan.items)
+      .map((i) => i as { product_id?: string | null; quantity?: number })
+      .filter((i) => typeof i.product_id === "string" && !i.product_id.startsWith("extra_"));
+    getShippingOptions(businessId, {
+      county: county.trim(),
+      city: city.trim(),
+      cart: marfa.map((i) => ({ productId: i.product_id as string, quantity: Number(i.quantity) || 1 })),
+      subtotal: previzualizare.stare === "gata" ? previzualizare.subtotal : Number(order.subtotal),
+      // Rambursul cotat e cel NOU: prima curierului se calculeaza pe suma pe
+      // care o incaseaza el, iar aceea include produsele tocmai adaugate.
+      cod: order.payment_method === "cash_on_delivery"
+        ? (previzualizare.stare === "gata" ? previzualizare.total : Number(order.total))
+        : 0,
+    }).then((optiuni) => {
+      setRequoting(false);
+      const potrivita = optiuni.find((o) => o.courier === addr.courier
+        && o.deliveryType === (isLocker ? "locker" : "address") && o.token);
+      if (!potrivita?.token) {
+        setQuote(null);
+        toast.error("Nu am gasit acelasi serviciu de curierat pentru noua destinatie. Verifica transportul manual.");
+        return;
+      }
+      setQuote({ price: potrivita.price, token: potrivita.token, label: potrivita.courierLabel, county: county.trim(), city: city.trim() });
+      setQuoteApplied(false);
+    }).catch(() => {
+      setRequoting(false);
+      toast.error("Nu s-a putut cere cotatia de transport. Incearca din nou.");
+    });
   }
 
   function handleCancelAwb(key: string) {
@@ -161,7 +355,8 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         city,
         county,
         postal_code: postal,
-        added_items: added.map((l) => ({ product_id: l.id, quantity: l.quantity })),
+        added_items: added.map((l) => ({ product_id: l.id, variant_title: l.variantTitle, quantity: l.quantity })),
+        ...(cotatieAplicata && quote ? { shipping_cost: quote.price, shipping_token: quote.token } : {}),
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Comanda a fost actualizata.");
@@ -173,6 +368,13 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   }
 
   if (!open) return null;
+
+  // Combinatia aleasa in panoul de variante, cand e completa.
+  const pickVariants = picking?.variante ? variantsDinSlim(picking.variante) : null;
+  const pickTitle = pickVariants ? comboTitle(pickVariants.options, pickSel) : null;
+  const pickCombo = pickVariants ? findCombo(pickVariants, pickTitle) : null;
+  const pickSlim = picking?.variante?.combos.find((c) => c.title === pickTitle) ?? null;
+  const pickEpuizat = pickSlim?.stock === 0;
 
   return (
     <>
@@ -277,88 +479,217 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                   <input value={postal} onChange={(e) => setPostal(e.target.value)} className={inputCls} />
                 </div>
               </div>
+
+              {/* Transportul nu se muta singur cu destinatia: se cere si se aplica explicit. */}
+              {destinatieSchimbata && (
+                <div className="p-3 bg-info/5 border border-info/20 rounded-lg space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Truck className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-foreground">
+                      Ai schimbat destinatia. Transportul din comanda ({formatPrice(Number(order.shipping_cost))}) a fost
+                      cotat pentru adresa veche{potRecota ? " — poti cere o cotatie noua." : "."}
+                    </p>
+                  </div>
+                  {potRecota && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={handleRequote} disabled={requoting}>
+                        {requoting ? <Loader2 className="animate-spin" /> : <Truck />}
+                        Recoteaza transportul
+                      </Button>
+                      {quote && cotatieValida && (
+                        <>
+                          <span className="text-xs text-foreground">
+                            {quote.label}: <strong>{formatPrice(quote.price)}</strong>
+                          </span>
+                          <Button size="sm" variant={cotatieAplicata ? "secondary" : "default"}
+                            onClick={() => setQuoteApplied((v) => !v)}>
+                            {cotatieAplicata ? <><Check /> Aplicat</> : "Aplica"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {!potRecota && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {hasInvoice ? "Comanda are factura emisa, deci transportul nu se mai poate schimba din panou."
+                        : isPaid ? "Comanda e platita online, deci transportul nu se schimba automat."
+                        : activeAwbs.length > 0 ? "Anuleaza intai AWB-ul ca sa poti recota transportul."
+                        : Number(order.shipping_cost) <= 0 ? "Comanda are livrare gratuita, care se pastreaza."
+                        : "Transportul ramane cel din comanda."}
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* Add products */}
             <section className="space-y-3">
               <p className="text-sm font-semibold text-foreground">Adauga produse in comanda</p>
 
-              {added.length > 0 && (
-                <div className="space-y-2">
-                  {added.map((l) => (
-                    <div key={l.id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-                      {/* Numele intreg, ca la detaliile comenzii: taiat, nu se mai
-                          deosebeau produsele cu inceput identic. */}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm break-words text-foreground">{l.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatPrice(l.price)} / buc</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button onClick={() => setQty(l.id, l.quantity - 1)}
-                          className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-semibold tabular-nums">{l.quantity}</span>
-                        <button onClick={() => setQty(l.id, l.quantity + 1)}
-                          className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <span className="w-20 text-right text-sm font-semibold text-foreground shrink-0">{formatPrice(l.price * l.quantity)}</span>
-                    </div>
-                  ))}
+              {hasInvoice ? (
+                <div className="flex items-start gap-2 p-3 bg-muted/40 border border-border rounded-lg">
+                  <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-muted-foreground">
+                    Comanda are factura <strong>{numarFactura}</strong>. Nu se mai pot adauga produse:
+                    documentul fiscal a plecat deja cu totalul lui. Emite storno in contul de facturare,
+                    apoi fa o comanda noua pentru diferenta. Datele clientului si adresa se pot corecta si acum.
+                  </p>
                 </div>
-              )}
+              ) : (
+                <>
+                  {added.length > 0 && (
+                    <div className="space-y-2">
+                      {added.map((l) => {
+                        const cheie = cheieLinie(l.id, l.variantTitle);
+                        // Cat adauga LINIA ASTA la comanda, nu `pret x cantitate`:
+                        // la trepte si la contopire cele doua nu sunt acelasi
+                        // numar, si randul se batea cap in cap cu subtotalul de
+                        // dedesubt (342,00 langa o crestere de 273,60).
+                        const contributie = previzualizare.stare === "eroare"
+                          ? null : previzualizare.plan.contributii[cheie] ?? null;
+                        const altPret = contributie !== null
+                          && Math.abs(contributie - l.unitPrice * l.quantity) > 0.005;
+                        return (
+                          <div key={cheie} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                            {/* Numele intreg, ca la detaliile comenzii: taiat, nu se mai
+                                deosebeau produsele cu inceput identic. */}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm break-words text-foreground">
+                                {l.name}
+                                {l.variantTitle && <span className="text-muted-foreground"> ({l.variantTitle})</span>}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatPrice(l.unitPrice)} / buc
+                                {altPret && <span className="text-primary font-medium"> · pret de pachet</span>}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button onClick={() => setQty(cheie, l.quantity - 1)}
+                                className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
+                                <Minus className="h-3.5 w-3.5" />
+                              </button>
+                              <span className="w-8 text-center text-sm font-semibold tabular-nums">{l.quantity}</span>
+                              <button onClick={() => setQty(cheie, l.quantity + 1)}
+                                className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <span className="w-20 text-right text-sm font-semibold text-foreground shrink-0">
+                              {formatPrice(contributie ?? l.unitPrice * l.quantity)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cauta un produs..."
-                  className={`${inputCls} pl-9`} />
-              </div>
-              <div className="max-h-44 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-                {searching ? (
-                  <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-                ) : results.length === 0 ? (
-                  <p className="py-4 text-center text-xs text-muted-foreground">Niciun produs gasit.</p>
-                ) : (
-                  results.map((p) => {
-                    const out = p.track_inventory && (p.stock_quantity ?? 0) <= 0;
-                    return (
-                      <button key={p.id} onClick={() => !out && addProduct(p)} disabled={out}
-                        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="text-sm text-foreground truncate">{p.name}</span>
-                          {out && <span className="text-[10px] font-bold text-destructive shrink-0">STOC 0</span>}
-                          {p.track_inventory && !out && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">stoc {p.stock_quantity}</span>
-                          )}
-                        </div>
-                        <span className="text-sm font-medium text-foreground shrink-0">{formatPrice(p.price)}</span>
-                        <Plus className="h-4 w-4 text-primary shrink-0" />
-                      </button>
-                    );
-                  })
-                )}
-              </div>
+                  {/* Panoul de variante: un produs variabil nu se poate adauga fara marime. */}
+                  {picking && pickVariants && (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold text-foreground">{picking.name}</p>
+                        <button onClick={() => { setPicking(null); setPickSel({}); }}
+                          className="p-1 rounded-lg hover:bg-muted transition-colors shrink-0">
+                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </div>
+                      <VariantPicker
+                        variants={pickVariants}
+                        selected={pickSel}
+                        onSelect={(optiune, valoare) => setPickSel((prev) => ({ ...prev, [optiune]: valoare }))}
+                        color={CULOARE_BRAND}
+                        compact
+                      />
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <p className="text-xs text-muted-foreground">
+                          {!pickTitle ? "Alege toate optiunile."
+                            : !pickCombo ? "Combinatia asta nu este disponibila."
+                            : pickEpuizat ? "Varianta aleasa are stoc zero."
+                            : `Pret: ${formatPrice(pickSlim?.price ?? picking.price)}`}
+                        </p>
+                        <Button size="sm" disabled={!pickCombo || pickEpuizat}
+                          onClick={() => {
+                            if (!pickCombo || !pickTitle) return;
+                            addProduct(picking, pickTitle, pickSlim?.price ?? picking.price);
+                            setPicking(null);
+                            setPickSel({});
+                          }}>
+                          <Plus /> Adauga
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cauta un produs..."
+                      className={`${inputCls} pl-9`} />
+                  </div>
+                  <div className="max-h-44 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                    {searching ? (
+                      <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                    ) : results.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted-foreground">Niciun produs gasit.</p>
+                    ) : (
+                      results.map((p) => {
+                        const areVariante = !!p.variante;
+                        // Un produs variabil ramas fara nicio combinatie activa nu se
+                        // poate adauga deloc: pretul de baza nu e unul pe care sa il
+                        // fi pus cineva in vanzare.
+                        const faraCombinatii = areVariante && p.variante!.combos.length === 0;
+                        // Stocul de PRODUS conteaza si la produsele variabile:
+                        // combinatiile fara numar completat mostenesc stocul
+                        // produsului, iar un produs pe zero nu se poate vinde
+                        // oricat de plina ar parea marimea.
+                        const outProdus = p.track_inventory && (p.stock_quantity ?? 0) <= 0;
+                        const out = faraCombinatii || outProdus
+                          || (areVariante && p.variante!.combos.every((c) => c.stock === 0));
+                        return (
+                          <button key={p.id}
+                            onClick={() => {
+                              if (out) return;
+                              if (areVariante) { setPicking(p); setPickSel({}); return; }
+                              addProduct(p, null, p.price);
+                            }}
+                            disabled={out}
+                            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="text-sm text-foreground truncate">{p.name}</span>
+                              {faraCombinatii && <span className="text-[10px] font-bold text-destructive shrink-0">FARA VARIANTE ACTIVE</span>}
+                              {out && !faraCombinatii && <span className="text-[10px] font-bold text-destructive shrink-0">STOC 0</span>}
+                              {!out && areVariante && <span className="text-[10px] text-primary font-medium shrink-0">ALEGE OPTIUNILE</span>}
+                              {!out && !areVariante && p.track_inventory && (
+                                <span className="text-[10px] text-muted-foreground shrink-0">stoc {p.stock_quantity}</span>
+                              )}
+                            </div>
+                            <span className="text-sm font-medium text-foreground shrink-0">{formatPrice(p.price)}</span>
+                            <Plus className="h-4 w-4 text-primary shrink-0" />
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
             </section>
 
             {/* Warnings */}
-            {isPaid && addedSum > 0 && (
+            {isPaid && diferenta > 0 && (
               <div className="flex items-start gap-2 p-3 bg-warning/5 border border-warning/20 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-foreground">
-                  Comanda este deja <strong>platita online</strong>. Diferenta de {formatPrice(addedSum)} <strong>nu se incaseaza automat</strong> —
+                  Comanda este deja <strong>platita online</strong>. Diferenta de {formatPrice(diferenta)} <strong>nu se incaseaza automat</strong> —
                   trebuie recuperata separat de la client (ex. link de plata sau ramburs).
                 </p>
               </div>
             )}
-            {hasInvoice && (
+            {isPaid && diferenta < 0 && (
               <div className="flex items-start gap-2 p-3 bg-warning/5 border border-warning/20 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-foreground">
-                  Comanda are <strong>factura emisa</strong>. Dupa editare, factura nu mai corespunde —
-                  emite storno si refactureaza din sectiunea de facturare.
+                  Comanda este deja <strong>platita online</strong>, iar totalul nou este mai mic cu {formatPrice(Math.abs(diferenta))}.
+                  Diferenta trebuie returnata clientului separat.
                 </p>
               </div>
             )}
@@ -369,15 +700,45 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                 <span className="text-muted-foreground">Total actual</span>
                 <span className="font-medium text-foreground">{formatPrice(Number(order.total))}</span>
               </div>
-              {addedSum > 0 && (
+              {previzualizare.stare === "eroare" ? (
+                <p className="text-xs text-destructive pt-1">{previzualizare.error}</p>
+              ) : previzualizare.stare === "indisponibil" ? (
+                (added.length > 0 || cotatieAplicata) && (
+                  <p className="text-xs text-muted-foreground pt-1">Totalul se recalculeaza la salvare.</p>
+                )
+              ) : (added.length > 0 || cotatieAplicata) && (
                 <>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Produse adaugate</span>
-                    <span className="font-medium text-foreground">+{formatPrice(addedSum)}</span>
+                    <span className="text-muted-foreground">Produse</span>
+                    <span className="font-medium text-foreground">{formatPrice(previzualizare.subtotal)}</span>
                   </div>
+                  {previzualizare.extras > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Extraoptiuni</span>
+                      <span className="font-medium text-foreground">{formatPrice(previzualizare.extras)}</span>
+                    </div>
+                  )}
+                  {previzualizare.codFee > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Taxa ramburs</span>
+                      <span className="font-medium text-foreground">{formatPrice(previzualizare.codFee)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Transport</span>
+                    <span className="font-medium text-foreground">
+                      {previzualizare.shipping > 0 ? formatPrice(previzualizare.shipping) : "Gratuit"}
+                    </span>
+                  </div>
+                  {previzualizare.vatAmount > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">TVA ({ctx?.vat_rate}%)</span>
+                      <span className="font-medium text-foreground">{formatPrice(previzualizare.vatAmount)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-sm border-t border-border pt-1.5">
                     <span className="font-semibold text-foreground">Total nou</span>
-                    <span className="font-bold text-foreground">{formatPrice(newTotal)}</span>
+                    <span className="font-bold text-foreground">{formatPrice(previzualizare.total)}</span>
                   </div>
                 </>
               )}
@@ -386,7 +747,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
             {/* Actions */}
             <div className="flex items-center justify-end gap-2 pt-1">
               <Button variant="outline" onClick={onClose} disabled={saving}>Renunta</Button>
-              <Button onClick={handleSave} disabled={saving || !name.trim() || !phone.trim() || !address.trim() || !city.trim() || !county.trim()}>
+              <Button onClick={handleSave} disabled={saving || areEroarePlan || !name.trim() || !phone.trim() || !address.trim() || !city.trim() || !county.trim()}>
                 {saving ? <><Loader2 className="animate-spin" /> Se salveaza...</> : "Salveaza modificarile"}
               </Button>
             </div>

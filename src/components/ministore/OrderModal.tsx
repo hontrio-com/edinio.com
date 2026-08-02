@@ -958,6 +958,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               )}
 
+              {/*
+                Alegerea „persoana fizica / juridica" sta PRIMA, inaintea
+                numelui. A stat o vreme dupa adresa, dar asa omul completa tot
+                formularul si abia la sfarsit afla ca putea comanda pe firma.
+                Intrebarea „cine esti" vine inaintea datelor, nu dupa ele.
+              */}
+              {companyEnabled && (
+                <CompanyFields motor={companyBilling} color={color} errors={errors} fieldCls={inputCls} Wrap={IconInput} />
+              )}
+
               {/* Customer fields */}
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">
@@ -1064,11 +1074,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </IconInput>
                 {errors.address && <p className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
               </div>
-
-              {/* Persoana fizica / juridica + datele de facturare */}
-              {companyEnabled && (
-                <CompanyFields motor={companyBilling} color={color} errors={errors} fieldCls={inputCls} Wrap={IconInput} />
-              )}
 
               {/* Courier selection */}
               {hasCouriers && (

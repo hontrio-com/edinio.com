@@ -189,10 +189,13 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
       imageLink: combo.image || primaryImage,
       additionalImageLinks: additional,
       brand,
-      // No per-variant identifiers in the model; a shared GTIN across variants is a
-      // duplicate-GTIN error, so variants omit gtin/mpn.
-      gtin: undefined,
-      mpn: undefined,
+      // Codul de bare AL COMBINATIEI: fiecare culoare sau marime isi are codul
+      // ei. Codul de pe produs NU se foloseste aici nici ca rezerva — pus pe mai
+      // multe variante, ar fi cod duplicat, iar Meta le respinge.
+      gtin: isValidGtin(combo.gtin) ? combo.gtin!.replace(/\s/g, "") : undefined,
+      // `mpn` se poate repeta intre variantele aceluiasi model, deci ramane cel
+      // de pe produs.
+      mpn: g.mpn?.trim() || undefined,
       googleProductCategory: googleCat,
       productType,
       color: slots.color ?? (g.color?.trim() || undefined),

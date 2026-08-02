@@ -117,6 +117,16 @@ export function CheckoutForm({
           {/* Pe pagina, rezumatul comenzii si totalurile stau in coloana din
               dreapta; aici ar aparea a doua oara, cu aceleasi numere. */}
           {inFormular && <CheckoutCartLines motor={motor} color={color} />}
+          {/*
+            Alegerea „persoana fizica / juridica" sta PRIMA, inaintea numelui.
+            A stat o vreme dupa adresa, ca sa se vada ca facturarea si livrarea
+            sunt doua lucruri diferite, dar asa omul completa tot formularul si
+            abia la sfarsit afla ca putea comanda pe firma. Intrebarea „cine
+            esti" vine inaintea datelor, nu dupa ele.
+          */}
+          {companyEnabled && (
+            <CompanyFields motor={companyBilling} color={color} errors={errors} fieldCls={fieldCls} Wrap={FieldWrap} />
+          )}
           <div>
             <label htmlFor={`${uid}-name`} className="block text-sm font-semibold text-foreground mb-1">Nume complet <span className="text-red-500">*</span></label>
             <FieldWrap icon={User} error={!!errors.name}>
@@ -198,11 +208,6 @@ export function CheckoutForm({
             </FieldWrap>
             {errors.address && <p id={`${uid}-address-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
           </div>
-          {/* Persoana fizica / juridica + datele de facturare. Asezate dupa adresa
-              de livrare, ca sa fie limpede ca sunt doua lucruri diferite. */}
-          {companyEnabled && (
-            <CompanyFields motor={companyBilling} color={color} errors={errors} fieldCls={fieldCls} Wrap={FieldWrap} />
-          )}
           {/* Courier selection */}
           {hasCouriers && (
             <CourierSelector

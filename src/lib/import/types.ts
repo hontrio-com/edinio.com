@@ -31,6 +31,8 @@ export interface StagedVariantCombination {
   stock_quantity: number;
   compare_at_price?: number | null; // optional: preset adapters don't set it
   image?: string; // optional: per-variant image URL
+  /** Codul de bare al combinatiei. Fiecare culoare sau marime are codul ei. */
+  gtin?: string;
 }
 
 export interface StagedVariants {
@@ -173,7 +175,7 @@ export const OUR_FIELDS: FieldDef[] = [
   { key: "upsell_qty3", label: "Upsell 3 buc - valoare", required: false },
   { key: "upsell_qty3_badge", label: "Upsell 3 buc - eticheta", required: false },
   { key: "variant_options", label: "Optiuni variante", required: false, hint: "Ex: Marime: S, M, L | Culoare: Rosu, Negru" },
-  { key: "variants", label: "Variante (combinatii)", required: false, hint: "Cate o combinatie pe rand: Titlu | pret=.. | pret_vechi=.. | sku=.. | stoc=.. | activ=da | imagine=URL" },
+  { key: "variants", label: "Variante (combinatii)", required: false, hint: "Cate o combinatie pe rand: Titlu | pret=.. | pret_vechi=.. | sku=.. | ean=.. | stoc=.. | activ=da | imagine=URL" },
 ];
 
 // Maps an OurField key to the source column header the user picked.

@@ -27,13 +27,15 @@ function num(v: number | string | null | undefined): string {
 // number (saved from an import), so everything goes through num()/String().
 //  • "Optiuni variante": axis defs  → "Marime: S, M, L | Culoare: Rosu, Negru"
 //  • "Variante": one combination per line →
-//      "S / Rosu | pret=79.99 | pret_vechi=99 | sku=ABC | stoc=10 | activ=da | imagine=URL"
+//      "S / Rosu | pret=79.99 | pret_vechi=99 | sku=ABC | ean=594... | stoc=10 | activ=da | imagine=URL"
 type VOpt = { name?: string; values?: unknown };
 type VCombo = {
   title?: string;
   price?: number | string | null;
   compare_at_price?: number | string | null;
   sku?: string;
+  /** Codul de bare al combinatiei. Fara el, un dus-intors export-import il pierde. */
+  gtin?: string;
   stock_quantity?: number | string | null;
   image?: string;
   enabled?: boolean;
@@ -67,6 +69,8 @@ function variantCombosCell(v: VS | null | undefined): string {
     if (cmp !== "") parts.push(`pret_vechi=${cmp}`);
     const sku = (c.sku ?? "").trim();
     if (sku) parts.push(`sku=${sku}`);
+    const ean = (c.gtin ?? "").trim();
+    if (ean) parts.push(`ean=${ean}`);
     const stoc = num(c.stock_quantity);
     if (stoc !== "") parts.push(`stoc=${stoc}`);
     parts.push(`activ=${c.enabled === false ? "nu" : "da"}`);

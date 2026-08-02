@@ -25,6 +25,19 @@ export interface VariantCombo {
   price: string;
   compare_at_price: string;
   sku: string;
+  /**
+   * Codul de bare AL COMBINATIEI.
+   *
+   * Un GTIN identifica un articol anume, nu o familie: cele sapte culori ale
+   * aceleiasi huse au sapte coduri diferite. Cat exista doar codul de pe produs,
+   * feedurile nu puteau trimite niciunul — acelasi cod pe toate variantele
+   * inseamna GTIN duplicat, adica respingere — si scriau `identifierExists:
+   * false` pe fiecare ofertă.
+   *
+   * Optional: combinatiile vechi nu-l au, iar produsele care chiar au un singur
+   * cod pot ramane cu cel de pe produs.
+   */
+  gtin?: string;
   stock_quantity: string;
   image: string;
   enabled: boolean;

@@ -16,6 +16,7 @@ import { parseVariants } from "@/lib/storefront/variants";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
+import { StickyCartTab } from "@/components/storefront/cart/StickyCartTab";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import {
@@ -1064,6 +1065,21 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           </a>
         )}
       </div>
+
+      {/*
+        Manerul de cos de pe marginea din dreapta, pentru ecrane mari.
+        Perechea de calculator a barei de jos: acolo cosul nu se poate rata, aici
+        iconita din bara de sus iese din ecran la prima derulare. Acelasi comutator
+        din editor le porneste pe amandoua, ca sa nu fie doua reglaje pentru
+        acelasi lucru.
+      */}
+      {showStickyCartBar && (
+        <StickyCartTab
+          color={color}
+          onOpen={cosPePagina ? mergiLaCos : () => setCartOpen(true)}
+          hidden={cartOpen || checkoutOpen}
+        />
+      )}
 
       {/* Sticky cart bar (mobile) */}
       {showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen && (

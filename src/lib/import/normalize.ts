@@ -196,6 +196,10 @@ export function parseVariantCombos(raw: unknown): StagedVariantCombination[] {
       if (key === "pret") combo.price = parsePrice(val) ?? 0;
       else if (key === "pret_vechi") combo.compare_at_price = parsePrice(val);
       else if (key === "sku") combo.sku = val;
+      // `ean` si `gtin` inseamna acelasi lucru. Exportul scrie `ean`, dar cine
+      // isi pregateste fisierul singur scrie deseori `gtin`, iar refuzul unuia
+      // dintre ele ar pierde codurile fara sa spuna nimic.
+      else if (key === "ean" || key === "gtin") combo.gtin = val;
       else if (key === "stoc") combo.stock_quantity = parseIntOrNull(val) ?? 0;
       else if (key === "activ") combo.enabled = parseBool(val, true);
       else if (key === "imagine") combo.image = val;

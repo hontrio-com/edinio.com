@@ -195,11 +195,24 @@ export function expandProductOffers(
     const attrs: Record<string, unknown> = { ...baseAttrs };
     attrs.title = `${product.name} - ${combo.title}`.slice(0, 150);
     attrs.itemGroupId = product.id;
-    // No per-variant identifiers exist in our model; a product-level GTIN shared
-    // across variants would be a duplicate-GTIN disapproval, so strip identifiers.
-    delete attrs.gtins;
-    delete attrs.mpn;
-    attrs.identifierExists = false;
+    /*
+     * Identificatorul acestei variante.
+     *
+     * Un GTIN identifica un articol anume, nu o familie: cele sapte culori ale
+     * aceleiasi huse au sapte coduri diferite. Cat exista doar codul de pe
+     * produs, nu se putea trimite niciunul — acelasi cod pe toate variantele
+     * inseamna GTIN duplicat, adica respingere — si fiecare oferta pleca cu
+     * `identifierExists: false`. Acum fiecare combinatie isi are codul ei.
+     *
+     * Codul de pe produs NU se mai foloseste aici, nici macar ca rezerva:
+     * pus pe mai multe variante, ar face exact duplicatul de care fugim.
+     */
+    const comboGtin = isValidGtin(combo.gtin) ? normalizeGtin(combo.gtin) : null;
+    if (comboGtin) attrs.gtins = [comboGtin];
+    else delete attrs.gtins;
+    // `mpn` ramane cel de pe produs cand exista: spre deosebire de GTIN, codul de
+    // fabricant se poate repeta intre variantele aceluiasi model.
+    attrs.identifierExists = !!(comboGtin || attrs.mpn);
 
     const unit = comboUnitPrice(combo, basePrice) || basePrice;
     const compare = comboCompareAtPrice(combo, baseCompare);

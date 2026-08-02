@@ -84,6 +84,8 @@ interface VariantCombination {
   price: string;
   compare_at_price: string;
   sku: string;
+  /** Codul de bare al combinatiei. Vezi `VariantCombo` din lib/storefront/variants. */
+  gtin: string;
   stock_quantity: string;
   image: string;
   enabled: boolean;
@@ -174,6 +176,7 @@ function generateCombinations(options: VariantOption[], existing: VariantCombina
       price: "",
       compare_at_price: "",
       sku: "",
+      gtin: "",
       stock_quantity: "",
       image: "",
       enabled: true,
@@ -291,7 +294,10 @@ function productToForm(p: Product): FormState {
       ? {
           enabled: vars.enabled,
           options: vars.options.map(o => ({ ...o, inputValue: "" })),
-          combinations: vars.combinations,
+          // `gtin` e camp nou: combinatiile salvate inainte nu-l au deloc, iar
+          // `undefined` intr-un input il face necontrolat si React se plange la
+          // prima tastare. Golul explicit il tine controlat de la inceput.
+          combinations: vars.combinations.map(c => ({ ...c, gtin: c.gtin ?? "" })),
         }
       : { enabled: false, options: [], combinations: [] },
     customization: ps.customization
@@ -740,7 +746,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
         variants: {
           enabled: form.variants.enabled,
           options: form.variants.options.map(({ inputValue: _iv, ...o }) => o),
-          combinations: form.variants.combinations,
+          combinations: form.variants.combinations.map(c => ({ ...c, gtin: c.gtin.trim() })),
         },
         customization: {
           enabled: form.customization.enabled,
@@ -1163,12 +1169,25 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                                   placeholder="ex: GNT-ROS-M"
                                   className={smallInputCls} />
                               </div>
+                              {/* Cod EAN al combinatiei */}
+                              <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Cod EAN</label>
+                                <input type="text" inputMode="numeric" value={combo.gtin}
+                                  onChange={e => updateCombo(idx, "gtin", e.target.value)}
+                                  placeholder={form.google.gtin || "ex: 5941234567899"}
+                                  className={smallInputCls} />
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
                         Pret gol = foloseste pretul de baza al produsului. Stocul se gestioneaza per varianta.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Codul EAN se pune pe fiecare varianta, fiindca fiecare culoare sau marime are codul ei.
+                        Lasat gol, se foloseste cel de pe produs &mdash; dar acelasi cod pe mai multe variante
+                        inseamna cod duplicat pentru Google Shopping, iar variantele acelea sunt respinse.
                       </p>
                     </div>
                   )}

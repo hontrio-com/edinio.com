@@ -27,6 +27,11 @@ export interface MappableProduct {
   stock_quantity: number | null;
   weight_grams: number | null;
   is_bundle?: boolean;
+  /**
+   * Verdictul `disponibilitatePachet`, calculat de apelant: componentele nu sunt
+   * in randul produsului, iar aici nu exista acces la baza.
+   */
+  pachetDisponibil?: boolean;
   page_sections?: unknown;
 }
 
@@ -78,7 +83,14 @@ export function toGoogleProductInput(
 
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
   const link = `${storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain })}/product/${product.slug ?? product.id}`;
-  const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
+  /*
+   * Pachetul se scrie cu `track_inventory: false`, deci prima ramura era mereu
+   * adevarata: orice pachet pleca „IN_STOCK", inclusiv unul cu toate componentele
+   * sterse. Ironia era ca `attributes.isBundle` de mai jos stia deja ca e pachet.
+   */
+  const inStock = product.is_bundle
+    ? product.pachetDisponibil !== false
+    : (!product.track_inventory || (product.stock_quantity ?? 0) > 0);
 
   const base = Number(product.price) || 0;
   const compare = product.compare_at_price != null ? Number(product.compare_at_price) : null;

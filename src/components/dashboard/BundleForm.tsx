@@ -10,7 +10,7 @@ import {
 import { formatPrice } from "@/lib/utils/format";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { createBundle, updateBundle, type BundleFormData } from "@/lib/actions/bundle.actions";
-import { computeBundlePricing, bundleAvailability, type BundlePricingMode } from "@/lib/bundles";
+import { computeBundlePricing, disponibilitatePachet, type BundlePricingMode } from "@/lib/bundles";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
@@ -21,6 +21,8 @@ export interface EligibleProduct {
   image_url: string | null;
   track_inventory: boolean;
   stock_quantity: number | null;
+  /** Produsele DEJA din pachet raman in lista chiar dezactivate fiind. */
+  is_active: boolean;
 }
 
 interface ExistingBundle {
@@ -64,9 +66,15 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
   const [isActive, setIsActive] = useState(bundle?.is_active ?? true);
   const [isFeatured, setIsFeatured] = useState(bundle?.is_featured ?? false);
 
-  const [items, setItems] = useState<{ product_id: string; quantity: number }[]>(
-    () => (bundle?.items ?? []).filter((i) => eligibleProducts.some((p) => p.id === i.product_id)),
-  );
+  /*
+   * Nu se mai filtreaza dupa produsele eligibile.
+   *
+   * Un pachet cu componente sterse se deschidea cu ZERO produse si refuza sa se
+   * salveze („adauga cel putin 2 produse"), fara sa spuna nicaieri ca trei au
+   * disparut — deci comerciantul nu-l putea nici repara, nici intelege. „Pachet
+   * Femei" e in starea asta de o saptamana, publicat si nevandabil.
+   */
+  const [items, setItems] = useState<{ product_id: string; quantity: number }[]>(() => bundle?.items ?? []);
   const [pricingMode, setPricingMode] = useState<BundlePricingMode>(bundle?.pricing_mode ?? "discount_percent");
   const [fixedPrice, setFixedPrice] = useState(bundle?.pricing_mode === "fixed" ? "" : "");
   const [discountPercent, setDiscountPercent] = useState(bundle?.discount_percent != null ? String(bundle.discount_percent) : "10");
@@ -79,14 +87,25 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
   const byId = useMemo(() => new Map(eligibleProducts.map((p) => [p.id, p])), [eligibleProducts]);
 
   const components = useMemo(
-    () => items
-      .map((it) => {
-        const p = byId.get(it.product_id);
-        return p ? { ...p, quantity: it.quantity, product_id: p.id } : null;
-      })
-      .filter((c): c is NonNullable<typeof c> => c !== null),
+    () => items.map((it) => {
+      const p = byId.get(it.product_id);
+      return p
+        ? { ...p, quantity: it.quantity, product_id: p.id, vandabila: p.is_active, existaInCatalog: true }
+        : {
+            id: it.product_id, product_id: it.product_id, quantity: it.quantity,
+            name: "Produs sters din catalog", price: 0, image_url: null,
+            track_inventory: false, stock_quantity: null, vandabila: false, existaInCatalog: false,
+          };
+    }),
     [items, byId],
   );
+  // „Sters" si „dezactivat" sunt lucruri diferite: primul blocheaza salvarea
+  // (nu se poate pretui), al doilea doar face pachetul indisponibil pana cand
+  // comerciantul reactiveaza produsul. Confundate, o ascundere temporara ar
+  // bloca orice modificare a pachetelor care il contin — la bricosmart, trei
+  // componente stau fiecare in cate trei pachete.
+  const lipsa = components.filter((c) => !c.existaInCatalog).length;
+  const dezactivate = components.filter((c) => c.existaInCatalog && !c.vandabila).length;
 
   const pricing = useMemo(
     () => computeBundlePricing(components, pricingMode, {
@@ -97,12 +116,12 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
     [components, pricingMode, fixedPrice, discountPercent, discountAmount],
   );
 
-  const availability = useMemo(() => bundleAvailability(components), [components]);
+  const availability = useMemo(() => disponibilitatePachet(components), [components]);
 
   const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     return eligibleProducts
-      .filter((p) => !items.some((i) => i.product_id === p.id))
+      .filter((p) => p.is_active && !items.some((i) => i.product_id === p.id))
       .filter((p) => !q || p.name.toLowerCase().includes(q))
       .slice(0, 8);
   }, [eligibleProducts, items, search]);
@@ -138,6 +157,9 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
   function save() {
     if (!name.trim()) { toast.error("Pachetul are nevoie de un nume."); return; }
     if (items.length < 2) { toast.error("Adauga cel putin 2 produse in pachet."); return; }
+    // Salvat asa, pachetul si-ar recalcula pretul fara componentele disparute —
+    // adica s-ar ieftini in tacere. Se scot intai.
+    if (lipsa > 0) { toast.error(`Scoate din pachet ${lipsa === 1 ? "produsul sters" : `cele ${lipsa} produse sterse`} inainte de a salva.`); return; }
     if (pricingMode === "fixed" && !(parseFloat(fixedPrice) > 0)) { toast.error("Seteaza un pret fix valid."); return; }
 
     const payload: BundleFormData = {
@@ -263,13 +285,19 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
         ) : (
           <div className="space-y-2">
             {components.map((c) => (
-              <div key={c.product_id} className="flex items-center gap-3 p-2 rounded-xl border border-border">
+              <div key={c.product_id} className={`flex items-center gap-3 p-2 rounded-xl border ${c.vandabila ? "border-border" : "border-destructive/50 bg-destructive/5"}`}>
                 <div className="relative w-11 h-11 rounded-lg overflow-hidden bg-muted border border-border shrink-0">
                   {c.image_url ? <Image src={c.image_url} alt={c.name} fill sizes="44px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground" /></div>}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
-                  <p className="text-xs text-muted-foreground">{formatPrice(c.price)} / buc{c.track_inventory ? ` · stoc ${c.stock_quantity ?? 0}` : ""}</p>
+                  <p className={`text-xs ${c.vandabila ? "text-muted-foreground" : "text-destructive"}`}>
+                    {c.vandabila
+                      ? `${formatPrice(c.price)} / buc${c.track_inventory ? ` · stoc ${c.stock_quantity ?? 0}` : ""}`
+                      : c.existaInCatalog
+                        ? `${formatPrice(c.price)} / buc · dezactivat, pachetul nu se vinde`
+                        : "Nu mai exista in catalog — scoate-l din pachet"}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button type="button" onClick={() => setQty(c.product_id, c.quantity - 1)} className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted"><Minus className="h-3 w-3" /></button>
@@ -330,7 +358,13 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
         </div>
 
         {components.length >= 2 && !availability.inStock && (
-          <p className="text-xs text-warning">Atenție: pachetul e momentan indisponibil (un produs e epuizat).</p>
+          <p className={`text-xs ${lipsa > 0 ? "text-destructive" : "text-warning"}`}>
+            {lipsa > 0
+              ? `Pachetul nu se poate vinde: ${lipsa === 1 ? "un produs din el nu mai exista" : `${lipsa} produse din el nu mai exista`} in catalog.`
+              : dezactivate > 0
+                ? `Pachetul nu se vinde cat timp ${dezactivate === 1 ? "un produs din el e dezactivat" : `${dezactivate} produse din el sunt dezactivate`}.`
+                : "Atentie: pachetul e momentan indisponibil (un produs e epuizat)."}
+          </p>
         )}
       </div>
 

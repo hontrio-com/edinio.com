@@ -1,3 +1,4 @@
+import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
@@ -316,7 +317,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
       const opsShippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
       const opsDe = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
       const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 1, max: opsDe.max_days ?? 3 } : { min: 1, max: 3 };
-      const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max });
+      const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max },
+        product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
       // Modul „un singur produs": nu exista catalog in spate, deci butonul de
       // cos din header n-are unde sa duca.
       const opsResolved = resolveDesign(designDeRandat, {

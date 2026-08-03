@@ -33,6 +33,9 @@ export interface CatalogProduct {
   track_inventory: boolean;
   stock_quantity: number | null;
   page_sections?: unknown;
+  is_bundle?: boolean;
+  /** Verdictul `disponibilitatePachet` pentru pachete. Calculat de apelant. */
+  pachetDisponibil?: boolean;
 }
 
 // Per-product Google/Meta attribute overrides, stored in page_sections.google
@@ -118,7 +121,15 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
 
   const basePrice = Number(product.price) || 0;
   const baseCompare = product.compare_at_price != null ? Number(product.compare_at_price) : null;
-  const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
+  /*
+   * Pachetul se scrie cu `track_inventory: false`, deci prima ramura era mereu
+   * adevarata si feedul anunta „in stock" orice pachet — inclusiv unul cu toate
+   * componentele sterse. Disponibilitatea lui vine din componente, si se
+   * primeste calculata: aici nu exista acces la baza.
+   */
+  const inStock = product.is_bundle
+    ? product.pachetDisponibil !== false
+    : (!product.track_inventory || (product.stock_quantity ?? 0) > 0);
 
   const variants = parseVariants(product.page_sections);
   // Cate o oferta pe TITLU, nu pe rand: titlurile duplicate au si `id` duplicat,

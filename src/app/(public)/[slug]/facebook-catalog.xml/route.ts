@@ -1,3 +1,4 @@
+import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { buildCatalogItems, serializeCatalogFeed, type CatalogBusiness, type CatalogProduct } from "@/lib/facebook/catalog-feed";
@@ -30,14 +31,37 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   const products = await fetchAllRows("fbCatalog.products", (from, to) =>
     admin
       .from("products")
-      .select("id, name, slug, description, price, compare_at_price, images, category, track_inventory, stock_quantity, page_sections")
+      .select("id, name, slug, description, price, compare_at_price, images, category, is_bundle, track_inventory, stock_quantity, page_sections")
       .eq("business_id", biz.id)
       .eq("is_active", true)
       .order("id")
       .range(from, to),
   );
 
-  const items = products.flatMap((p) => buildCatalogItems(business, p as CatalogProduct));
+  /*
+   * Disponibilitatea pachetelor, din componentele lor.
+   *
+   * Feedul e o ruta publica permanenta, deci pana acum toate pachetele
+   * magazinului plecau spre Meta ca „in stock" — si dupa ce pagina lor a inceput
+   * sa spuna „Stoc epuizat", divergenta asta e chiar tiparul din care ies
+   * suspendarile de catalog. Componentele sunt tot in lista incarcata mai sus:
+   * nicio interogare in plus.
+   */
+  const dupaId = new Map(products.map((p) => [p.id, p]));
+  const items = products.flatMap((p) => {
+    const pachetDisponibil = p.is_bundle
+      ? disponibilitatePachet((readBundleConfig(p.page_sections)?.items ?? []).map((it) => {
+          const c = dupaId.get(it.product_id);
+          return {
+            quantity: it.quantity,
+            vandabila: !!c,
+            track_inventory: !!c?.track_inventory,
+            stock_quantity: c?.stock_quantity ?? null,
+          };
+        })).inStock
+      : undefined;
+    return buildCatalogItems(business, { ...p, pachetDisponibil } as CatalogProduct);
+  });
   const xml = serializeCatalogFeed(business, items);
 
   return new Response(xml, {

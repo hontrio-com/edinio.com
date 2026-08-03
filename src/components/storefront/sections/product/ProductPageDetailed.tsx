@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { disponibilitatePachet } from "@/lib/bundles";
+import type { BundleComponent } from "@/lib/storefront/product-data";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { vatLabel } from "@/lib/utils/vat";
 import {
@@ -222,7 +224,7 @@ export function ProductPageDetailed({
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
-  bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
+  bundleComponents?: BundleComponent[];
   altMap?: Record<string, string>;
   isHome?: boolean;
   productOffers?: ResolvedOffer[];
@@ -368,7 +370,18 @@ export function ProductPageDetailed({
     // Prima nu s-ar putea alege din interfata, fiindca optiunile epuizate sunt
     // taiate, dar o selectie ramasa de dinainte tot ajunge aici.
     || comboEpuizat(selectedCombo)
-    || toateCombinatiileEpuizate(variantsData);
+    || toateCombinatiileEpuizate(variantsData)
+    /*
+     * Pachetul e indisponibil cand oricare componenta lipseste sau s-a terminat.
+     *
+     * Pana acum pagina de produs calcula disponibilitatea din campurile
+     * produsului insusi — dar un pachet se scrie cu `track_inventory: false`,
+     * deci conditiile de deasupra sunt TOATE false pe orice pachet. Cardul din
+     * catalog stia asta si scria „Stoc epuizat"; pagina deschidea butonul
+     * Comanda, iar comanda cadea la ultimul pas. Acum amandoua trec prin aceeasi
+     * regula ca verificarea de la comanda.
+     */
+    || (product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
   // Nu doar „titlul e complet", ci si „combinatia exista si e activa": altfel
   // linia intra in cos cu pretul de baza, iar serverul o respinge la comanda.

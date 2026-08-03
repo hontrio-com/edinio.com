@@ -44,6 +44,10 @@ export function RezultateCautare({
   inFlux?: boolean;
 }) {
   const catalog = useStorefrontOptional();
+  // A sasea formulare a aceleiasi reguli. Contextul o are deja, si de acum stie
+  // si de pachete: fara ea, „Pachet Femei" apare in rezultate cu „In stoc" scris
+  // cu verde, in timp ce pagina lui are butonul stins.
+  const esteFaraStoc = catalog?.isProductOutOfStock;
   const produse = catalog?.visibleProducts;
 
   const index = useMemo(
@@ -92,7 +96,7 @@ export function RezultateCautare({
             const imagini = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
             const imagine = imagini.length > 0 ? String(imagini[0]) : "";
             const interval = p.price_range;
-            const faraStoc = !!(p.track_inventory && (p.stock_quantity ?? 0) <= 0);
+            const faraStoc = esteFaraStoc ? esteFaraStoc(p) : !!(p.track_inventory && (p.stock_quantity ?? 0) <= 0);
             return (
               <li key={p.id} className="border-b border-[var(--st-border)] last:border-0">
                 <a href={`${basePath}/product/${p.slug ?? p.id}`} onClick={onAlege}

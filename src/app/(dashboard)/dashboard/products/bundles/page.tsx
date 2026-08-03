@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { BundlesClient, type BundleListItem } from "@/components/dashboard/BundlesClient";
-import { readBundleConfig, bundleAvailability } from "@/lib/bundles";
+import { readBundleConfig, disponibilitatePachet } from "@/lib/bundles";
 
 export default async function BundlesPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const { page: pageParam } = await searchParams;
@@ -27,7 +27,7 @@ export default async function BundlesPage({ searchParams }: { searchParams: Prom
   for (const cfg of configs.values()) cfg?.items.forEach((i) => compIds.add(i.product_id));
 
   const { data: comps } = compIds.size
-    ? await supabase.from("products").select("id, track_inventory, stock_quantity").eq("business_id", biz.id).in("id", [...compIds])
+    ? await supabase.from("products").select("id, is_active, price, track_inventory, stock_quantity").eq("business_id", biz.id).in("id", [...compIds])
     : { data: [] };
   const compMap = new Map((comps ?? []).map((c) => [c.id, c]));
 
@@ -35,7 +35,10 @@ export default async function BundlesPage({ searchParams }: { searchParams: Prom
     const cfg = configs.get(b.id);
     const components = (cfg?.items ?? []).map((i) => {
       const c = compMap.get(i.product_id);
-      return { quantity: i.quantity, track_inventory: c?.track_inventory ?? false, stock_quantity: c?.stock_quantity ?? 0, missing: !c };
+      // Aici se citeste cu clientul PROPRIETARULUI, care vede si produsele
+      // dezactivate — deci `is_active` se verifica explicit. Pe magazin, clientul
+      // public nu le primeste deloc, si acolo simpla lipsa e de ajuns.
+      return { quantity: i.quantity, track_inventory: c?.track_inventory ?? false, stock_quantity: c?.stock_quantity ?? 0, vandabila: !!c && c.is_active };
     });
     const price = Number(b.price) || 0;
     const compareAt = b.compare_at_price != null ? Number(b.compare_at_price) : null;
@@ -48,7 +51,7 @@ export default async function BundlesPage({ searchParams }: { searchParams: Prom
       is_active: b.is_active,
       component_count: cfg?.items.length ?? 0,
       savings: compareAt && compareAt > price ? Math.round((compareAt - price) * 100) / 100 : 0,
-      in_stock: bundleAvailability(components).inStock,
+      in_stock: disponibilitatePachet(components).inStock,
     };
   });
 

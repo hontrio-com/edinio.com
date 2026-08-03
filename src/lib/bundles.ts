@@ -28,7 +28,19 @@ export interface BundleComponent {
   image_url: string | null;
   track_inventory: boolean;
   stock_quantity: number | null;
-  missing?: boolean;
+  /**
+   * Randul EXISTA in catalog si e activ. `false` inseamna sters sau dezactivat.
+   *
+   * Obligatoriu, nu optional ca vechiul `missing?`: taman optionalitatea aia a
+   * facut ca doar unul din patru apelanti sa-l trimita, iar celelalte trei sa
+   * arate disponibil un pachet pe care nicio comanda nu-l poate trece.
+   */
+  vandabila: boolean;
+  /**
+   * Randul mai exista in `products`. Deosebeste „sters" de „doar dezactivat":
+   * primul nu se mai poate nici pretui, al doilea doar nu se poate vinde.
+   */
+  existaInCatalog: boolean;
 }
 
 function round2(n: number): number {
@@ -60,23 +72,51 @@ export function computeBundlePricing(
   return { price, compareAt, savings };
 }
 
-// Availability derived from components: in stock only if every tracked component
-// has enough stock for at least one bundle. Returns max buildable count
-// (Infinity when no component tracks inventory).
-export function bundleAvailability(
-  components: { quantity: number; track_inventory: boolean; stock_quantity: number | null; missing?: boolean }[],
-): { inStock: boolean; max: number } {
-  if (components.length === 0) return { inStock: false, max: 0 };
+export interface StareComponenta {
+  quantity: number;
+  vandabila: boolean;
+  track_inventory: boolean;
+  stock_quantity: number | null;
+}
+
+export type MotivIndisponibil = "fara_componente" | "componenta_lipsa" | "stoc_insuficient";
+
+export type DisponibilitatePachet =
+  | { inStock: true; max: number }
+  | { inStock: false; max: 0; motiv: MotivIndisponibil; indice: number };
+
+/**
+ * Pachetul asta se poate cumpara, si daca nu, DIN CAUZA CUI.
+ *
+ * Intrebarea avea patru raspunsuri diferite: cardul din catalog stia de pachete,
+ * cele doua pagini de produs nu (calculau `isOutOfStock` din campuri pe care un
+ * pachet nu le are niciodata — el se scrie cu `track_inventory: false`), filtrul
+ * de vizibilitate din paginile proprii sarea peste pachete, iar panoul avea a
+ * patra formulare. Rezultatul, viu in productie: „Pachet Femei" (suplio,
+ * publicat, 358,40 lei) are toate cele trei componente sterse de o saptamana, se
+ * afiseaza disponibil si nicio comanda nu poate trece; „Kit Incarcare Rapida
+ * USB" are cardul „Stoc epuizat" si butonul Comanda deschis in acelasi timp.
+ *
+ * `indice` spune care componenta a picat: fara el nu se poate scrie nici un
+ * mesaj adevarat, nici un jurnal in care sa se poata uita cineva.
+ */
+export function disponibilitatePachet(componente: StareComponenta[]): DisponibilitatePachet {
+  // Zero componente inseamna si „pachet gol", si „configul a fost sters de
+  // formularul obisnuit de produs" — in amandoua cazurile nevandabil.
+  if (componente.length === 0) return { inStock: false, max: 0, motiv: "fara_componente", indice: -1 };
+
   let max = Infinity;
-  for (const c of components) {
-    if (c.missing) return { inStock: false, max: 0 };
-    if (!c.track_inventory) continue; // unlimited
+  let indiceLimita = -1;
+  for (let i = 0; i < componente.length; i++) {
+    const c = componente[i];
+    if (!c.vandabila) return { inStock: false, max: 0, motiv: "componenta_lipsa", indice: i };
+    if (!c.track_inventory) continue; // stoc nelimitat
     const per = Math.max(1, Number(c.quantity) || 1);
-    const avail = Math.floor((Number(c.stock_quantity) || 0) / per);
-    max = Math.min(max, avail);
+    const disponibile = Math.floor((Number(c.stock_quantity) || 0) / per);
+    if (disponibile < max) { max = disponibile; indiceLimita = i; }
   }
   if (max === Infinity) return { inStock: true, max: Infinity };
-  return { inStock: max > 0, max };
+  return max > 0 ? { inStock: true, max } : { inStock: false, max: 0, motiv: "stoc_insuficient", indice: indiceLimita };
 }
 
 // Order-time: turn ordered items into the actual stock decrements, expanding any
@@ -86,7 +126,10 @@ export async function expandBundleStock(
   admin: SupabaseClient<Database>,
   businessId: string,
   orderedItems: { product_id: string; quantity: number }[],
-): Promise<{ decrements: { product_id: string; quantity: number }[] } | { error: string }> {
+): Promise<
+  | { decrements: { product_id: string; quantity: number }[] }
+  | { error: string; componenta: string; motiv: MotivIndisponibil }
+> {
   const ids = [...new Set(orderedItems.map((i) => i.product_id))];
   if (ids.length === 0) return { decrements: [] };
 
@@ -114,18 +157,33 @@ export async function expandBundleStock(
 
   const compIds = [...need.keys()];
   if (compIds.length === 0) return { decrements: [] };
+  // `is_active`: o componenta dezactivata se vindea pana acum normal prin pachet,
+  // fiindca verificarea se uita doar la stoc.
   const { data: comps } = await admin
     .from("products")
-    .select("id, track_inventory, stock_quantity")
+    .select("id, name, is_active, track_inventory, stock_quantity")
     .eq("business_id", businessId)
     .in("id", compIds);
   const compMap = new Map((comps ?? []).map((c) => [c.id, c]));
 
   for (const [pid, required] of need) {
     const c = compMap.get(pid);
-    if (!c) return { error: "Un produs din pachet nu mai este disponibil. Reincarca pagina." };
+    // Mesajele spuneau „Reincarca pagina" — instructiune FALSA cand componenta e
+    // stearsa: reincarcarea redeseneaza acelasi pachet, la nesfarsit. Se spune ce
+    // se poate face, si se intoarce si id-ul, ca apelantul sa poata jurnaliza.
+    if (!c || !c.is_active) {
+      return {
+        error: "Un produs din pachet nu mai este disponibil. Scoate pachetul din cos si incearca din nou.",
+        componenta: pid,
+        motiv: "componenta_lipsa" as const,
+      };
+    }
     if (c.track_inventory && (Number(c.stock_quantity) || 0) < required) {
-      return { error: "Stoc insuficient pentru un produs din pachet. Reincarca pagina." };
+      return {
+        error: `Din „${String(c.name ?? "").slice(0, 60)}" nu mai sunt destule bucati pentru pachet. Scade cantitatea sau scoate pachetul din cos.`,
+        componenta: pid,
+        motiv: "stoc_insuficient" as const,
+      };
     }
   }
 

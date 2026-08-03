@@ -1,3 +1,4 @@
+import { disponibilitatePachet } from "@/lib/bundles";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -181,7 +182,8 @@ export default async function ProductDetailPage({ params }: Props) {
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
   const de = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
   const delivery = de?.enabled ? { min: de.min_days ?? 1, max: de.max_days ?? 3 } : { min: 1, max: 3 };
-  const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max });
+  const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max },
+    product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
 
   // Acelasi header si footer ca pe pagina de magazin, din aceeasi configuratie.

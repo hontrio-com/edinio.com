@@ -37,7 +37,13 @@ export default async function EditProductPage({ params, searchParams }: Props) {
 
   // Categories windowed past the 1000-row PostgREST cap (big imported taxonomies).
   const [{ data: product }, categories] = await Promise.all([
-    supabase.from("products").select("*").eq("id", productId).eq("business_id", business.id).single(),
+    // `is_bundle: false`: formularul obisnuit reconstruieste `page_sections` de la
+    // zero si nu cunoaste cheia `bundle`, iar `updateProduct` scrie inlocuire. O
+    // SINGURA salvare lasa `is_bundle = true` cu configul sters — pachetul
+    // continua sa se vanda la pretul lui inghetat, iar `expandBundleStock` cade pe
+    // ramura de produs simplu si scade stocul RANDULUI DE PACHET in loc de
+    // componente. Pachetele isi au formularul lor, la /dashboard/products/bundles.
+    supabase.from("products").select("*").eq("id", productId).eq("business_id", business.id).eq("is_bundle", false).single(),
     fetchAllRows("dashboard.product-edit.categories", (from, to) =>
       supabase.from("categories").select("id, name, parent_id").eq("business_id", business.id)
         .order("sort_order").order("name").order("id").range(from, to)

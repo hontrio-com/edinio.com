@@ -844,7 +844,12 @@ export async function placeOrder(data: {
     { product_id: data.product_id, quantity: cantitate },
     ...cartItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
   ]);
-  if ("error" in stockExp) return { error: stockExp.error };
+  if ("error" in stockExp) {
+    // Singurele respingeri din checkout fara jurnal: „Pachet Femei" e nevandabil
+    // de o saptamana, publicat, si nimeni n-avea de unde sti.
+    logError({ action: "placeOrder.bundleStock", message: stockExp.motiv, details: { businessId: data.business_id, productId: data.product_id, componenta: stockExp.componenta }, severity: "warning" });
+    return { error: stockExp.error };
+  }
 
   const order_number = await buildOrderNumber(admin, data.business_id);
 
@@ -1547,7 +1552,10 @@ export async function updateOrderDetails(orderId: string, data: {
     // Stocul de produs se verifica si se scade DOAR pe cantitatea adaugata, si
     // dupa contopire: altfel componentele pachetelor s-ar scadea a doua oara.
     const stockExp = await expandBundleStock(admin, order.business_id, plan.adaugate.map((a) => ({ product_id: a.product_id, quantity: a.quantity })));
-    if ("error" in stockExp) return { error: stockExp.error };
+    if ("error" in stockExp) {
+      logError({ action: "updateOrderDetails.bundleStock", message: stockExp.motiv, details: { businessId: order.business_id, componenta: stockExp.componenta }, severity: "warning" });
+      return { error: stockExp.error };
+    }
     decrements = stockExp.decrements;
   }
 
@@ -2153,7 +2161,10 @@ export async function placeCartOrder(data: {
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).
   const stockExp = await expandBundleStock(admin, data.business_id, validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })));
-  if ("error" in stockExp) return { error: stockExp.error };
+  if ("error" in stockExp) {
+    logError({ action: "placeCartOrder.bundleStock", message: stockExp.motiv, details: { businessId: data.business_id, componenta: stockExp.componenta }, severity: "warning" });
+    return { error: stockExp.error };
+  }
 
   const order_number = await buildOrderNumber(admin, data.business_id);
 

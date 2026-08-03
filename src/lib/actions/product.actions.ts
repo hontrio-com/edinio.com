@@ -9,6 +9,7 @@ import { getProductLimit } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
+import { readBundleConfig } from "@/lib/bundles";
 import { construiesteTrepte, mesajProblemaTrepte, problemaMonotonie } from "@/lib/storefront/quantity-tiers";
 import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { enqueueOlxSync, enqueueOlxSyncMany } from "@/lib/olx/queue";
@@ -217,7 +218,7 @@ export async function updateProduct(productId: string, businessId: string, data:
 
   const slug = await resolveUniqueSlug(supabase, businessId, data.slug, productId);
 
-  const { error } = await supabase.from("products").update({
+  const { data: randeAtinse, error } = await supabase.from("products").update({
     name: data.name.trim(),
     slug,
     description: data.description?.trim() || null,
@@ -234,11 +235,30 @@ export async function updateProduct(productId: string, businessId: string, data:
     weight_grams: data.weight_grams ?? null,
     page_sections: (data.page_sections ?? {}) as never,
     updated_at: new Date().toISOString(),
-  }).eq("id", productId).eq("business_id", businessId);
+  })
+    .eq("id", productId).eq("business_id", businessId)
+    /*
+     * `is_bundle: false` — pe SCRIERE, nu doar pe citire.
+     *
+     * Formularul obisnuit reconstruieste `page_sections` de la zero si nu cunoaste
+     * cheia `bundle`, iar aici se scrie inlocuire: o singura salvare lasa
+     * `is_bundle = true` cu configul sters, pachetul continua sa se vanda la
+     * pretul lui inghetat, iar `expandBundleStock` scade stocul RANDULUI DE
+     * PACHET in loc de componente. Filtrul pus doar pe pagina de editare acopera
+     * doar ce se deschide de acolo: functia asta e export dintr-un modul
+     * „use server", deci un tab ramas deschis inainte de deploy sau o cerere
+     * reluata ajung direct aici.
+     */
+    .eq("is_bundle", false)
+    .select("id");
 
   if (error) {
     logError({ action: "updateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
+  }
+  // Zero randuri inseamna ca tinta e un pachet: altfel salvarea „reuseste" mut.
+  if (!randeAtinse || randeAtinse.length === 0) {
+    return { error: "Pachetele se editeaza din sectiunea Pachete, nu din formularul de produs." };
   }
 
   // Clean up removed images from R2 — but only those no other product still
@@ -335,6 +355,43 @@ export async function duplicateProduct(productId: string, businessId: string) {
   return { success: true, id: created.id };
 }
 
+/**
+ * Pachetele care contin produsul asta si care ar ramane incomplete fara el.
+ *
+ * `deleteProduct` stergea componenta si pleca: pachetul ramanea publicat, cu
+ * pretul lui, listand randuri „Produs indisponibil" si refuzand orice comanda la
+ * ultimul pas. Asa a ajuns „Pachet Femei" nevandabil pe 2026-07-28, fara ca
+ * cineva sa afle. Sunt 12 pachete in tot sistemul, deci interogarea e gratuita.
+ */
+async function dezactiveazaPacheteleCu(
+  supabase: Awaited<ReturnType<typeof createClient>>, businessId: string, productIds: string[],
+): Promise<void> {
+  if (productIds.length === 0) return;
+  const { data: pachete } = await supabase
+    .from("products").select("id, page_sections")
+    .eq("business_id", businessId).eq("is_bundle", true).eq("is_active", true);
+  const sters = new Set(productIds);
+  const afectate = (pachete ?? [])
+    .filter((b) => (readBundleConfig(b.page_sections)?.items ?? []).some((i) => sters.has(i.product_id)))
+    .map((b) => b.id);
+  if (afectate.length === 0) return;
+  // Fail-closed: mai bine un pachet ascuns decat unul publicat pe care nimeni
+  // nu-l poate cumpara. Comerciantul il vede in lista de pachete, marcat.
+  const { error } = await supabase.from("products").update({ is_active: false }).in("id", afectate).eq("business_id", businessId);
+  if (error) {
+    logError({ action: "dezactiveazaPacheteleCu", message: error.message, details: { businessId, afectate }, severity: "error" });
+    return;
+  }
+  // Feedurile sunt cozi de PUSH: fara sincronizare, oferta ramane activa si „in
+  // stoc" in Merchant Center dupa ce magazinul tocmai a stins pachetul — adica
+  // exact divergenta pagina-vs-feed din care ies suspendarile. Toate celelalte
+  // cai de scriere din fisierul asta sincronizeaza; asta nu o facea.
+  void enqueueGmcSyncMany(businessId, afectate);
+  void enqueueOlxSyncMany(businessId, afectate);
+  void enqueueAboutYouSyncMany(businessId, afectate);
+  void enqueueTrendyolSyncMany(businessId, afectate);
+}
+
 export async function deleteProduct(productId: string, businessId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -363,6 +420,7 @@ export async function deleteProduct(productId: string, businessId: string) {
     logError({ action: "deleteProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: "Eroare la stergere." };
   }
+  await dezactiveazaPacheteleCu(supabase, businessId, [productId]);
 
   // Clean up R2 images — but only those no other product still references
   // (the deleted product's row is already gone, so it won't self-match).
@@ -453,6 +511,7 @@ export async function bulkProductAction(
       const { error } = await supabase
         .from("products").delete().eq("business_id", businessId).in("id", ids);
       if (error) throw error;
+      await dezactiveazaPacheteleCu(supabase, businessId, ids);
       // Reference-safe R2 cleanup + remove from Google Merchant.
       for (const r of rows ?? []) {
         if (Array.isArray(r.images)) void deleteOrphanImages(supabase, businessId, r.images as string[]);

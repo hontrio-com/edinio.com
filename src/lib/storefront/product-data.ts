@@ -16,6 +16,14 @@ export interface BundleComponent {
   image_url: string | null;
   quantity: number;
   out_of_stock: boolean;
+  /**
+   * Randul exista si e vandabil. Clientul RLS intoarce doar produsele active ale
+   * magazinelor publicate, deci simpla lipsa din raspuns inseamna „stearsa SAU
+   * dezactivata" — amandoua nevandabile.
+   */
+  vandabila: boolean;
+  track_inventory: boolean;
+  stock_quantity: number | null;
 }
 
 /**
@@ -101,12 +109,22 @@ export async function enrichStoreProduct(
       const c = cmap.get(it.product_id);
       return {
         id: it.product_id,
-        name: c?.name ?? "Produs",
+        // Rezerva tacuta („Produs", 0 lei) ramane ca sa nu crape randarea, dar de
+        // acum e insotita de `vandabila: false`: pana acum caseta „Ce contine
+        // pachetul" listase trei randuri „Produs · 0,00 lei" sub un buton de
+        // comanda aprins, pe un pachet de 358,40 lei pe care nimeni nu-l putea
+        // cumpara.
+        name: c?.name ?? "Produs indisponibil",
         slug: c?.slug ?? null,
         price: Number(c?.price) || 0,
         image_url: c && Array.isArray(c.images) && c.images.length ? (c.images[0] as string) : null,
         quantity: it.quantity,
-        out_of_stock: !!(c && c.track_inventory && (c.stock_quantity ?? 0) < it.quantity),
+        // `!c` intra si el in „epuizat": inainte, o componenta LIPSA raspundea
+        // `false`, adica exact invers.
+        out_of_stock: !c || !!(c.track_inventory && (c.stock_quantity ?? 0) < it.quantity),
+        vandabila: !!c,
+        track_inventory: !!c?.track_inventory,
+        stock_quantity: c?.stock_quantity ?? null,
       };
     });
   }

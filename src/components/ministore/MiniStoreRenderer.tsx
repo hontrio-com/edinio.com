@@ -6,7 +6,7 @@ import { ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
-import { readBundleConfig } from "@/lib/bundles";
+import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { parseProductSections, resolveSectionProducts } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
@@ -256,18 +256,30 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     try { sessionStorage.setItem(`store_page_${business.slug}`, String(currentPage)); } catch {}
   }, [currentPage, business.slug]);
 
-  // Bundle availability is derived from components (best-effort on the storefront;
-  // the authoritative check happens at order time). Resolve components from the
-  // loaded product list; unknown components are treated as available.
+  /*
+   * Disponibilitatea unui pachet iese din componentele lui, prin ACEEASI regula pe
+   * care o foloseste verificarea de la comanda.
+   *
+   * Reimplementarea de aici trata componentele necunoscute drept disponibile —
+   * dar payload-ul contine TOT catalogul activ al magazinului, deci un id care nu
+   * se regaseste inseamna sters sau dezactivat, adica exact invers. Asa a stat
+   * „Pachet Femei" o saptamana pe raft, la 358,40 lei, cu toate cele trei
+   * componente sterse.
+   */
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const isProductOutOfStock = useCallback((p: Product): boolean => {
     if (p.is_bundle) {
       const cfg = readBundleConfig(p.page_sections);
-      if (!cfg || cfg.items.length === 0) return false;
-      return cfg.items.some((it) => {
+      const componente = (cfg?.items ?? []).map((it) => {
         const comp = productById.get(it.product_id);
-        return !!(comp && comp.track_inventory && (comp.stock_quantity ?? 0) < it.quantity);
+        return {
+          quantity: it.quantity,
+          vandabila: !!comp,
+          track_inventory: !!comp?.track_inventory,
+          stock_quantity: comp?.stock_quantity ?? null,
+        };
       });
+      return !disponibilitatePachet(componente).inStock;
     }
     return !!(p.track_inventory && p.stock_quantity === 0);
   }, [productById]);

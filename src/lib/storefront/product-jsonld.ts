@@ -28,6 +28,15 @@ export function buildProductJsonLd(
   productUrl: string,
   brand: string,
   shipping: { cost: number; min: number; max: number },
+  /**
+   * Pachetul nu se poate cumpara (o componenta lipseste sau s-a terminat).
+   *
+   * Se PRIMESTE, nu se deduce: componentele nu sunt in `products`, iar un pachet
+   * se scrie cu `track_inventory: false`, deci toate conditiile de mai jos sunt
+   * false pe orice pachet — microdatele declarau „InStock" fix cand pagina avea
+   * butonul stins. Ambii apelanti au componentele la indemana.
+   */
+  indisponibil = false,
 ) {
   const images = product.images as string[] | null;
   const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
@@ -41,6 +50,7 @@ export function buildProductJsonLd(
     || (product.track_inventory === true && product.stock_quantity === 0)
     // Un produs variabil fara nicio combinatie de vanzare nu se poate cumpara, dar
     // declara „InStock", si Google trimite clienti pe o pagina cu butonul stins.
+    || indisponibil
     || priceRange.faraOferta
     // Stocul combinatiilor conteaza DOAR cand produsul isi urmareste stocul, ca pe
     // randul de deasupra si ca in amandoua feedurile (`facebook/catalog-feed.ts`,

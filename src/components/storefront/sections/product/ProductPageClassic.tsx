@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { disponibilitatePachet } from "@/lib/bundles";
+import type { BundleComponent } from "@/lib/storefront/product-data";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { vatLabel } from "@/lib/utils/vat";
 import {
@@ -147,7 +149,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
-  bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
+  bundleComponents?: BundleComponent[];
   altMap?: Record<string, string>;
   /** When this product page IS the store homepage (One Product Store mode):
    *  hides the "back to store" breadcrumb since there is no catalog behind it. */
@@ -350,7 +352,18 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
     // Prima nu s-ar putea alege din interfata, fiindca optiunile epuizate sunt
     // taiate, dar o selectie ramasa de dinainte tot ajunge aici.
     || comboEpuizat(selectedCombo)
-    || toateCombinatiileEpuizate(variantsData);
+    || toateCombinatiileEpuizate(variantsData)
+    /*
+     * Pachetul e indisponibil cand oricare componenta lipseste sau s-a terminat.
+     *
+     * Pana acum pagina de produs calcula disponibilitatea din campurile
+     * produsului insusi — dar un pachet se scrie cu `track_inventory: false`,
+     * deci conditiile de deasupra sunt TOATE false pe orice pachet. Cardul din
+     * catalog stia asta si scria „Stoc epuizat"; pagina deschidea butonul
+     * Comanda, iar comanda cadea la ultimul pas. Acum amandoua trec prin aceeasi
+     * regula ca verificarea de la comanda.
+     */
+    || (product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
   /*
    * Cate bucati mai sunt: din varianta aleasa daca ea isi tine socoteala,
@@ -904,7 +917,18 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                 </div>
               ))}
             </div>
-            {Number(product.compare_at_price) > Number(product.price) && (
+            {/*
+              * Randul apare doar cand afirmatia lui e ADEVARATA azi.
+              *
+              * `compare_at_price` se ingheata la salvarea pachetului, dar
+              * preturile de deasupra sunt citite LIVE. Cand comerciantul schimba
+              * pretul unei componente, cele doua se despart si aceeasi caseta
+              * spune doua lucruri: „Cumparate separat: 448,00" peste trei randuri
+              * care insumeaza altceva. Pe „Pachet Femei" insemna 448,00 lei peste
+              * trei randuri „Produs indisponibil · 0,00 lei".
+              */}
+            {Number(product.compare_at_price) > Number(product.price)
+              && Math.abs(bundleComponents.reduce((s, c) => s + c.price * c.quantity, 0) - Number(product.compare_at_price)) < 0.01 && (
               <p className="text-center text-sm text-muted-foreground mt-6">
                 Cumpărate separat: <span className="line-through">{formatPrice(Number(product.compare_at_price))}</span>
                 {" · "}în pachet plătești <span className="font-bold" style={{ color }}>{formatPrice(Number(product.price))}</span>

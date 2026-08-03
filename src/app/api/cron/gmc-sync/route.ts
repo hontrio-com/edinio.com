@@ -1,3 +1,4 @@
+import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -83,7 +84,34 @@ export async function GET(req: NextRequest) {
           // itemGroupId), then reconcile: any previously-synced offer for this
           // product that is no longer produced gets deleted from Google.
           const product = productMap.get(item.product_id!)!;
-          const offers = expandProductOffers(business, product, config);
+          /*
+           * Pachetul: disponibilitatea vine din componente, nu din randul lui.
+           *
+           * Fara asta, orice pachet pleaca „IN_STOCK" catre Merchant Center — si
+           * de cand pagina lui spune corect „Stoc epuizat", divergenta e chiar
+           * tiparul din care ies suspendarile de cont. O interogare in plus,
+           * doar cand produsul chiar e pachet: sunt 12 in tot sistemul.
+           */
+          let pachetDisponibil: boolean | undefined;
+          const cfgPachet = product.is_bundle ? readBundleConfig(product.page_sections) : null;
+          if (product.is_bundle) {
+            const ids = (cfgPachet?.items ?? []).map((i) => i.product_id);
+            const { data: comps } = ids.length
+              ? await admin.from("products").select("id, is_active, track_inventory, stock_quantity")
+                  .eq("business_id", businessId).in("id", ids)
+              : { data: [] as { id: string; is_active: boolean; track_inventory: boolean; stock_quantity: number | null }[] };
+            const dupaId = new Map((comps ?? []).map((c) => [c.id, c]));
+            pachetDisponibil = disponibilitatePachet((cfgPachet?.items ?? []).map((it) => {
+              const c = dupaId.get(it.product_id);
+              return {
+                quantity: it.quantity,
+                vandabila: !!c && c.is_active,
+                track_inventory: !!c?.track_inventory,
+                stock_quantity: c?.stock_quantity ?? null,
+              };
+            })).inStock;
+          }
+          const offers = expandProductOffers(business, { ...product, pachetDisponibil }, config);
           const desired = new Set(offers.map((o) => o.offerId));
           for (const offer of offers) {
             const res = await insertProductInput(token, config.account_id!, config.data_source_name!, offer.input);

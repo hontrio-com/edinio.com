@@ -37,8 +37,23 @@ function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
-/** Doi bani: preturile de treapta sunt NEROTUNJITE, deci nu se compara cu `===`. */
-const TOLERANTA = 0.005;
+/**
+ * Cat de departe poate sta un pret de linie de cel din catalog si sa fie tot al
+ * lui: o JUMATATE DE BAN, plus zgomotul virgulei mobile.
+ *
+ * Preturile de pachet sunt nerotunjite (10,45 pe doua bucati inseamna 5,225),
+ * deci nu se compara cu `===`. Iar comenzile scrise inainte de reparatia
+ * pretului unitar poarta valoarea ROTUNJITA — 5,23 — adica exact o jumatate de
+ * ban distanta. Cu pragul fix la 0,005, comparat strict, ele cadeau sau treceau
+ * dupa cum pica ultimul bit: la o proba, unul din zece pachete de doua bucati
+ * cadea. Iar o linie cazuta nu se mai contopeste, deci comerciantul care mai
+ * adauga o bucata primeste doua linii lipite in loc de pachetul urmator.
+ *
+ * Nu inghite nimic real: un pret stabilit ALTFEL — un bump, o oferta, catalogul
+ * de acum trei luni — e la cel putin un ban distanta, adica de doua ori mai
+ * mult.
+ */
+const TOLERANTA = 0.0051;
 
 export interface LinieComanda {
   /** `null` pe comenzile venite din marketplace, cand SKU-ul nu s-a mapat. */

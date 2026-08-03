@@ -6,7 +6,7 @@ import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
-import { liniiOblio, mesajRefuz, reconciliazaComanda } from "@/lib/billing/reconcile";
+import { liniiOblio, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -162,7 +162,7 @@ async function buildProducts(
     return {
       name: item.name,
       ...(code ? { code } : {}),
-      price: item.price,
+      price: pretDeDocument(item.price),
       measuringUnit: "buc",
       quantity: item.quantity,
       // Extraoptiunea nu e marfa din catalog: pleaca drept serviciu, ca Transportul.

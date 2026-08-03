@@ -7,7 +7,7 @@ import { invoiceParty } from "@/lib/billing/invoice-party";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
-import { liniiFgo, mesajRefuz, reconciliazaComanda } from "@/lib/billing/reconcile";
+import { liniiFgo, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -101,8 +101,10 @@ async function buildItems(
   const effectiveVat = vat.rate;
 
   // fGO cere PretUnitar FARA TVA; daca sumele comenzii contin deja TVA, se extrage netul.
+  // `pretDeDocument`: fGO taie oricum la doi bani la serializare (`fgo.ts`), dar
+  // taiat aici, garda de reconciliere compara chiar numarul care pleaca.
   const toNet = (gross: number) =>
-    vat.taxIncluded && vat.rate > 0 ? gross / (1 + vat.rate / 100) : gross;
+    pretDeDocument(vat.taxIncluded && vat.rate > 0 ? gross / (1 + vat.rate / 100) : gross);
 
   const lineItems: FgoLineItem[] = items.map(item => {
     // fGO n-are natura de linie in model (`FgoLineItem` nu are camp de tip, iar

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  liniiFgo, liniiOblio, liniiSmartbill, mesajRefuz, reconciliazaComanda, reconciliazaFactura,
+  liniiFgo, liniiOblio, liniiSmartbill, mesajRefuz, pretDeDocument, reconciliazaComanda, reconciliazaFactura,
 } from "./reconcile";
 
 /**
@@ -63,6 +63,15 @@ test("pretul unitar se rotunjeste INAINTE de inmultire, ca pe document", () => {
   const linii = [{ cantitate: 50, pretUnitar: 5.1239669 }];
   const r = reconciliazaFactura({ linii, totalComenzii: 256, regim: BRUT });
   assert.deepEqual(r, { fel: "exact" }, "50 x 5,12 = 256,00");
+});
+
+test("pretul de pachet, nerotunjit in comanda, iese pe factura cu doi bani", () => {
+  // Prosop CAIAN: doua bucati la 13,41, deci `orders.items` tine 6,705 ca
+  // `pret x cantitate` sa dea exact subtotalul. Documentul insa scrie 6,71, deci
+  // ar insuma 13,42 — un ban peste ce plateste clientul.
+  assert.equal(pretDeDocument(13.41 / 2), 6.71);
+  const linii = [{ cantitate: 2, pretUnitar: 13.41 / 2 }];
+  assert.deepEqual(reconciliazaFactura({ linii, totalComenzii: 13.41, regim: BRUT }), { fel: "ajustare", delta: -0.01 });
 });
 
 test("un ban de rotunjire se absoarbe, nu opreste factura", () => {

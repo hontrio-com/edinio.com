@@ -3,7 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { CheckCircle, Loader2, Package, ShieldCheck } from "lucide-react";
 import { lookupReturnableOrder, submitReturnRequest, type ReturnableItem } from "@/lib/actions/return.actions";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, unitarSeInchide } from "@/lib/utils/format";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 
 interface Props {
@@ -182,7 +182,13 @@ export function ReturnRequestClient({ businessId, basePath, color, storeName, pr
                         className="mt-0.5 h-4 w-4 rounded border-gray-300" style={{ accentColor: color }} />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium text-gray-900">{i.name}</span>
-                        <span className="block text-xs text-gray-400">{formatPrice(i.price)} · comandat: {i.quantity} buc.</span>
+                        {/* Pe o linie de pachet, pretul unitar e nerotunjit (250 / 3 = 83,3333)
+                            si scurtat la afisare ar arata mai putin decat s-a platit. */}
+                        <span className="block text-xs text-gray-400">
+                          {unitarSeInchide(i.price, i.quantity)
+                            ? `${formatPrice(i.price)} · comandat: ${i.quantity} buc.`
+                            : `${formatPrice(i.price * i.quantity)} pentru ${i.quantity} buc.`}
+                        </span>
                       </span>
                     </label>
                     {checked && i.quantity > 1 && (

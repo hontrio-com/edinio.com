@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, unitarSeInchide } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -234,7 +234,11 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[var(--st-text)] truncate">{item.name}</p>
                             {item.quantity > 1 && (
-                              <p className="text-xs text-[var(--st-muted)]">{item.quantity} x {formatPrice(item.price)}</p>
+                              <p className="text-xs text-[var(--st-muted)]">
+                                {unitarSeInchide(item.price, item.quantity)
+                                  ? `${item.quantity} x ${formatPrice(item.price)}`
+                                  : `${item.quantity} buc.`}
+                              </p>
                             )}
                           </div>
                           <p className="text-sm font-semibold text-[var(--st-text)] ml-4 shrink-0">

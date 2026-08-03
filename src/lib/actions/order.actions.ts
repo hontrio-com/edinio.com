@@ -664,6 +664,10 @@ export async function placeOrder(data: {
     anchor: {
       productId: data.product_id,
       basePrice: round2(Number(product.price)),
+      // Aici ROTUNJIT, spre deosebire de linia care se scrie in comanda: numarul
+      // asta nu ajunge in `items`, ci imparte economia setului intre companioni,
+      // iar cardul din pagina o imparte folosind pretul AFISAT. Nerotunjit, cele
+      // doua ar da preturi diferite pe aceiasi companioni.
       unitPrice: round2(mainSubtotal / cantitate),
     },
     // Liniile cu varianta aleasa vin sigur din cos, nu de la o oferta: ofertele
@@ -783,7 +787,21 @@ export async function placeOrder(data: {
 
   const order_number = await buildOrderNumber(admin, data.business_id);
 
-  const unitPrice = round2(mainSubtotal / cantitate);
+  // NEROTUNJIT, deliberat: `subtotal` si `total` stau pe `mainSubtotal`, deci
+  // pretul unitar trebuie sa fie exact acela care, inmultit cu cantitatea, il da
+  // inapoi. Rotunjit la ban, un pachet de 2 bucati la 13,41 pleca cu 6,71 pe
+  // linie, adica 13,42 — suma liniilor nu mai dadea totalul comenzii, si asta pe
+  // documentul dupa care se factureaza si se restituie banii.
+  //
+  // Celelalte doua cai care scriu linii faceau deja asa: cosul (`placeCartOrder`)
+  // si editarea din panou (`edit-pricing.ts`, care chiar VERIFICA pretul unitar
+  // nerotunjit — vezi `estePretAutoritar`). Rotunjirea de aici era singura
+  // exceptie, si tocmai ea rupea contopirea liniilor la editare.
+  //
+  // Documentul primeste oricum doi bani: cele trei case rotunjesc pretul unitar
+  // la trimitere, iar garda din `reconcile.ts` modeleaza exact acea rotunjire si
+  // absoarbe diferenta cu o linie de ajustare.
+  const unitPrice = mainSubtotal / cantitate;
   const allItems = [
     {
       product_id: data.product_id,
@@ -1486,10 +1504,12 @@ export async function updateOrderDetails(orderId: string, data: {
     .eq("business_id", order.business_id)
     .single();
 
-  // Subtotalul se muta cu DIFERENTA, nu se recalculeaza din linii: `placeOrder`
-  // rotunjeste pretul unitar de treapta si `placeCartOrder` nu, deci pe unele
-  // comenzi suma liniilor difera de subtotalul scris cu un ban. Cu diferenta,
-  // zero adaugari inseamna exact zero schimbare.
+  // Subtotalul se muta cu DIFERENTA, nu se recalculeaza din linii. `placeOrder`
+  // scrie acum pretul unitar nerotunjit, ca si celelalte doua cai, deci pe
+  // comenzile noi suma liniilor da chiar subtotalul — dar comenzile de dinainte
+  // poarta in continuare pretul rotunjit si difera cu un ban. Si oricum, o linie
+  // de oferta nu se poate re-deriva din catalog. Cu diferenta, zero adaugari
+  // inseamna exact zero schimbare.
   const newSubtotal = round2(Number(order.subtotal) + plan.deltaSubtotal);
 
   // Extraoptiunile stau in `items` ca linii `extra_*` si NU intra in `subtotal`.

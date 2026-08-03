@@ -8,7 +8,7 @@ import { invoiceParty } from "@/lib/billing/invoice-party";
 import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
-import { liniiSmartbill, mesajRefuz, reconciliazaComanda } from "@/lib/billing/reconcile";
+import { liniiSmartbill, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -131,7 +131,7 @@ async function buildInvoiceProducts(
       measuringUnitName: "buc",
       currency: "RON",
       quantity: item.quantity,
-      price: item.price,
+      price: pretDeDocument(item.price),
       isTaxIncluded: taxIncluded,
       ...taxFields,
     };
@@ -238,7 +238,24 @@ async function buildInvoiceProducts(
     return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
   }
   if (rec.fel === "ajustare") {
-    products.push({
+    products.push(rec.delta < 0 ? {
+      // In MINUS, ajustarea merge pe acelasi tipar ca toate celelalte scaderi din
+      // fisierul asta: `isDiscount` + `discountValue`. Un rand de marfa cu pret
+      // negativ ar fi fost singurul din tot payload-ul, adica exact calea despre
+      // care nimeni nu stie daca SmartBill o accepta — si e calea pe care cade
+      // aproape orice comanda cu pachete.
+      isDiscount: true,
+      name: "Ajustare rotunjire",
+      measuringUnitName: "buc",
+      currency: "RON",
+      quantity: 1,
+      price: 0,
+      numberOfItems: products.length,
+      discountType: 1,
+      discountValue: rec.delta,
+      isTaxIncluded: taxIncluded,
+      ...taxFields,
+    } : {
       name: "Ajustare rotunjire",
       // Cod si `isService`, ca Transportul: pe conturile cu „Foloseste cod produs"
       // activ, un rand de marfa fara cod nu exista in gestiune si emiterea esueaza.

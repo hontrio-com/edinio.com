@@ -153,6 +153,25 @@ test("CONTOPIRE: 1 pe comanda + 2 adaugate = un pachet de 3, nu 254,97", () => {
   assert.equal(r.deltaSubtotal, 165.01);
 });
 
+test("linia de pachet scrisa de comanda directa se contopeste si ea", () => {
+  // Un pachet de doua bucati la 10,45 lei inseamna 5,225 pe bucata. Rotunjit la
+  // 5,23 — cum facea `placeOrder` — sta la exact o jumatate de ban de pretul din
+  // catalog, adica taman pe pragul tolerantei: la o proba, unul din zece pachete
+  // de doua cadea dincolo, dupa cum pica ultimul bit. O linie cazuta nu se mai
+  // contopeste, deci comerciantul primea doua linii lipite in loc de pachet.
+  const cat = simplu({ name: "Prosop", price: 6, trepte: { enabled: true, mode: "fixed", tier2_price: 10.45 } });
+  assert.equal(poateContopi([linie({ name: "Prosop", price: 10.45 / 2, quantity: 2 })], "p1", cat), true);
+  assert.equal(
+    poateContopi([linie({ name: "Prosop", price: 5.23, quantity: 2 })], "p1", cat), true,
+    "comenzile scrise INAINTE de reparatie poarta pretul rotunjit si trebuie sa se contopeasca si ele",
+  );
+  // Si valoarea taiata in jos (5,22 — asa rotunjeste `toFixed`, spre deosebire
+  // de `Math.round`), fiindca sta tot la o jumatate de ban.
+  assert.equal(poateContopi([linie({ name: "Prosop", price: 5.22, quantity: 2 })], "p1", cat), true);
+  // Dar un ban intreg mai jos nu mai e pretul catalogului: acolo a fost un bump.
+  assert.equal(poateContopi([linie({ name: "Prosop", price: 5.21, quantity: 2 })], "p1", cat), false);
+});
+
 test("contopirea hraneste stocul doar cu cantitatea ADAUGATA", () => {
   const cat = simplu({ price: 84.99, trepte: trepteMokka });
   const prev = [linie({ price: 84.99, quantity: 1 })];

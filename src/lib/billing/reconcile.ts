@@ -16,14 +16,43 @@ import type { RegimTva } from "@/lib/billing/invoice-vat";
  * exact cat poate ea sa mute, si se refuza doar ce ramane neexplicat. Restul se
  * ABSOARBE printr-o linie de ajustare, ca documentul sa iasa pe fix `orders.total`.
  *
- * Cu o singura rezerva, spusa pe fata: la magazinele cu preturi FARA TVA garda
- * lucreaza pe baza NETA, iar TVA-ul il calculeaza furnizorul pe fiecare linie.
- * Diferenta de rotunjire care poate ramane atunci in partea de TVA nu se vede aici
- * si nu se poate corecta cu o linie neta.
+ * Cu doua rezerve, spuse pe fata.
+ *
+ * Una: la magazinele cu preturi FARA TVA garda lucreaza pe baza NETA, iar TVA-ul
+ * il calculeaza furnizorul pe fiecare linie. Diferenta de rotunjire care poate
+ * ramane atunci in partea de TVA nu se vede aici si nu se poate corecta cu o linie
+ * neta.
+ *
+ * A doua: cand casa cere preturi nete iar magazinul are preturi CU TVA (fGO),
+ * garda certifica baza neta, iar furnizorul reconstruieste brutul inmultind
+ * inapoi. Reconstructia PIERDE: netul se taie la doi bani inainte sa se aplice
+ * cota, deci vreo sasea parte din totalurile brute nici nu se pot scrie pe o
+ * factura fGO — 100,00 lei la 21% se desface in 82,64 + 17,35 = 99,99, si nu
+ * exista pret unitar care sa dea 100,00. Nici o linie de ajustare nu ajuta: pasul
+ * ei, dus in brut, e de 1,21 bani. E o limita a formatului, nu a garzii, si nu se
+ * inchide de aici.
  */
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/**
+ * Pretul unitar asa cum il scrie documentul: doi bani, atat.
+ *
+ * Se aplica la GRANITA, adica exact acolo unde linia pleaca spre furnizor, si e
+ * chiar rotunjirea pe care garda de mai jos o modeleaza. Fara ea, modelul ar fi
+ * o presupunere: fGO taie la doi bani (`fgo.ts`), Oblio primeste `precision: 2`
+ * si taie el, dar SmartBill primeste numarul ca atare si il rotunjeste dupa
+ * setarea CONTULUI. Pe un cont cu patru zecimale, documentul ar fi iesit pe suma
+ * exacta, iar linia noastra de ajustare l-ar fi impins cu un ban pe langa.
+ *
+ * Preturile de pachet chiar au mai mult de doi bani: `orders.items` tine pretul
+ * unitar nerotunjit, ca `pret x cantitate` sa dea fix subtotalul comenzii
+ * (13,41 pe doua bucati inseamna 6,705).
+ */
+export function pretDeDocument(n: number): number {
+  return round2(n);
 }
 
 /** O linie de document, redusa la ce conteaza pentru suma. Reducerile intra negative. */

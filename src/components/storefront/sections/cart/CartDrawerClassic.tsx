@@ -37,7 +37,7 @@ export function CartDrawerClassic({
    */
   inline?: boolean;
 }) {
-  const { items, addItem, removeItem, updateQty, lineTotal, lineSavings, total, count } = useCart();
+  const { items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, total, count } = useCart();
 
   /**
    * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
@@ -92,7 +92,10 @@ export function CartDrawerClassic({
   // GA4 view_cart when the drawer opens with items.
   useEffect(() => {
     if (inline || !open || items.length === 0) return;
-    gtagEvent("view_cart", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
+    // Pretul unitar vine de la cos, ca si `value`: `i.price` e instantaneul din
+    // localStorage, deci raportul ar fi purtat pretul de la data adaugarii langa
+    // o valoare calculata la zi.
+    gtagEvent("view_cart", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -219,12 +222,16 @@ export function CartDrawerClassic({
                         para gresit — paginile de cos arata acolo chiar totalul
                         liniei. La o singura bucata cele doua coincid, deci randul
                         ramane cum era. */}
+                    {/* Pretul pe bucata si taietura vin de la cos, nu din
+                        `item.price`: acela e instantaneul salvat in localStorage
+                        la adaugare, iar totalul de dedesubt venea deja de la
+                        server.  */}
                     {item.quantity > 1 && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(item.price)} bucata</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(lineUnit(item))} bucata</p>
                     )}
                     <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(lineTotal(item))}</p>
                     {lineSavings(item) > 0 && (
-                      <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(item.price * item.quantity)}</p>
+                      <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(lineUnit(item) * item.quantity)}</p>
                     )}
                     {/* Etichetele poarta numele produsului: altfel un cititor de
                         ecran anunta cate un „Scade cantitatea" identic pentru
@@ -241,7 +248,7 @@ export function CartDrawerClassic({
                       </button>
                     </div>
                   </div>
-                  <button type="button" aria-label={`Sterge ${item.name} din cos`} onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: lineTotal(item), items: [{ item_id: item.productId, item_name: item.name, price: item.price, quantity: item.quantity }] }); removeItem(key); }}
+                  <button type="button" aria-label={`Sterge ${item.name} din cos`} onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: lineTotal(item), items: [{ item_id: item.productId, item_name: item.name, price: lineUnit(item), quantity: item.quantity }] }); removeItem(key); }}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors mt-0.5 rounded-md hover:bg-muted">
                     <X className="h-4 w-4" />
                   </button>

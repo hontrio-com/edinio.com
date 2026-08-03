@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
-import { hasVariants } from "@/lib/storefront/variants";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
@@ -13,7 +12,7 @@ import { sendAbandonedCartRecovery } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
-import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 
 type CartRow = Database["public"]["Tables"]["abandoned_carts"]["Row"];
@@ -103,39 +102,15 @@ export async function getRecoverableCart(cartId: string): Promise<AbandonedCartI
     if (!cart || cart.status === "converted") return [];
 
     const stored = (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[];
-    const ids = stored.map((i) => i.product_id).filter(Boolean);
-    if (ids.length === 0) return [];
-
-    const { data: products } = await admin
-      .from("products").select("id, name, price, images, is_active, page_sections")
-      .eq("business_id", cart.business_id).in("id", ids);
-    const pmap = new Map((products ?? []).map((p) => [p.id, p]));
-
-    const items: AbandonedCartItem[] = [];
-    for (const it of stored) {
-      const p = pmap.get(it.product_id);
-      if (!p || !p.is_active) continue;
-      /*
-       * Produsele cu variante se SAR la recuperare.
-       *
-       * `AbandonedCartItem` n-are camp de varianta si nici nu s-a scris vreodata
-       * unul (129 de linii salvate in productie, niciuna cu marime), deci linia
-       * refacuta ar intra in cos fara marime. Pana acum asta insemna o comanda la
-       * pretul de BAZA, cu o linie pe factura fara nicio marime — chiar defectul
-       * 18b. De cand garda o refuza, ar insemna ceva mai rau: `restoreCart`
-       * SUPRASCRIE cosul, iar checkout-ul n-are buton de stergere pe linie, deci
-       * clientul ramane cu o comanda pe care n-o poate trimite si fara cale de
-       * iesire. Mai bine lipseste un produs decat sa blocheze tot cosul.
-       */
-      if (hasVariants(p.page_sections)) continue;
-      items.push({
-        product_id: p.id,
-        name: p.name,
-        price: Number(p.price) || 0,
-        quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
-        image_url: (Array.isArray(p.images) && p.images.length ? (p.images[0] as string) : it.image_url) ?? null,
-      });
-    }
+    /*
+     * Repretuirea si regula „ce se poate recupera" stau acum in `abandoned-cart.ts`,
+     * fiindca linkul asta si cele doua emailuri de recuperare trebuie sa spuna
+     * exact acelasi lucru. Acolo sta si motivul pentru care produsele cu variante
+     * se sar: linia refacuta ar intra in cos fara marime, iar `restoreCart`
+     * SUPRASCRIE cosul, deci clientul ar ramane cu o comanda pe care n-o poate
+     * trimite si fara buton de stergere pe linie.
+     */
+    const { items } = await cosRecuperabil(admin, cart.business_id, stored);
     return items;
   } catch {
     return [];
@@ -351,6 +326,16 @@ export async function sendAbandonedCartEmail(
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.email) return { error: "Clientul nu a lasat un email." };
 
+  // Preturile din `cart.items` sunt cele inghetate in localStorage la captura,
+  // deci pot fi vechi de saptamani; se aduc la zi din catalog inainte sa plece
+  // spre client, prin acelasi calcul ca linkul de recuperare. Lookup-ul merge cu
+  // client de admin: dreptul asupra magazinului s-a verificat deja mai sus, iar
+  // asa raspunsul nu depinde de politicile RLS de pe `products`.
+  const proaspat = await cosRecuperabil(createAdminClient(), businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
+  if (proaspat.items.length === 0) {
+    return { error: "Produsele din acest cos nu mai sunt in catalog, sunt dezactivate sau au variante, deci linkul de recuperare ar duce clientul la un cos gol. Sterge cosul sau reactiveaza produsele." };
+  }
+
   try {
     const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
     const emailSender = await getStoreEmailSender(supabase, businessId);
@@ -358,8 +343,8 @@ export async function sendAbandonedCartEmail(
       storeName: biz.store_name ?? biz.business_name,
       recoverUrl: buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null),
       customerName: cart.customer_name,
-      items: (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[],
-      total: Number(cart.subtotal || 0),
+      items: proaspat.items,
+      total: proaspat.total,
       color: biz.primary_color ?? "#1AB554",
       message: message?.trim() ? interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name }) : undefined,
       discountCode: discountCode?.trim() || undefined,

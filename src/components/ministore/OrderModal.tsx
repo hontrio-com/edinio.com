@@ -238,6 +238,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // cantitate: acelasi numar in sertar, pe pagina de cos, aici si la server.
   const totalLinieCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
     cosMagazin ? cosMagazin.lineTotal({ ...i, name: "", imageUrl: null } as never) : i.price * i.quantity;
+  // Si pretul pe bucata trece prin cos, din exact acelasi motiv ca totalul de mai
+  // sus: `i.price` e instantaneul salvat in localStorage la adaugare in cos, deci
+  // eticheta „X lei bucata" statea langa un total calculat la zi si cele doua nu
+  // se inmulteau. 
+  const pretBucataCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
+    cosMagazin ? cosMagazin.lineUnit({ ...i, name: "", imageUrl: null } as never) : i.price;
   const cartSubtotal = cart.reduce((s, i) => s + totalLinieCos(i), 0);
   // Accepted order bumps add their discounted product to the goods subtotal, so it
   // flows through discount, free-shipping, card-discount and total automatically.
@@ -815,7 +821,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                         {ci.variantTitle && <p className="text-xs text-muted-foreground truncate">{ci.variantTitle}</p>}
                         <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(totalLinieCos(ci))}</p>
                         {ci.quantity > 1 && (
-                          <p className="text-[11px] text-muted-foreground">{formatPrice(ci.price)} bucata</p>
+                          <p className="text-[11px] text-muted-foreground">{formatPrice(pretBucataCos(ci))} bucata</p>
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -1294,10 +1300,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <span className="font-medium text-foreground">+{formatPrice(extrasTotal)}</span>
                   </div>
                 )}
-                {appliedDiscount && discountAmount > 0 && (
+                {/* Un cupon de transport gratuit nu scade nimic din marfa, deci
+                    valoarea randului e cuvantul, nu o cifra. Pana pe 2026-08-04
+                    aici se scria „-{transportul implicit}" pe un rand separat,
+                    desi `shipping` era deja 0 si totalul aduna +0: la un curier
+                    cotat 24,99 si tarif implicit 20 coloana dadea 80, butonul
+                    spunea 100, iar economia adevarata era 24,99 — trei numere
+                    diferite. Aceeasi forma ca in `CheckoutSummary`, ca sertarul
+                    si formularul sa nu mai spuna lucruri diferite despre acelasi
+                    cupon. 4 cupoane `free_shipping` active in productie. */}
+                {appliedDiscount && (discountAmount > 0 || isFreeShipping) && (
                   <div className="flex justify-between" style={{ color }}>
                     <span>Discount ({appliedDiscount.code})</span>
-                    <span className="font-semibold">-{formatPrice(discountAmount)}</span>
+                    <span className="font-semibold">
+                      {isFreeShipping && discountAmount === 0 ? "Transport gratuit" : `-${formatPrice(discountAmount)}`}
+                    </span>
                   </div>
                 )}
                 {cardDiscountAmount > 0 && (
@@ -1318,12 +1335,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <div className="flex justify-between text-muted-foreground">
                     <span>Taxa plata ramburs</span>
                     <span className="font-semibold">{formatPrice(codFeeAmount)}</span>
-                  </div>
-                )}
-                {appliedDiscount?.type === "free_shipping" && (
-                  <div className="flex justify-between" style={{ color }}>
-                    <span>Transport gratuit ({appliedDiscount.code})</span>
-                    <span className="font-semibold">-{formatPrice(shippingCost)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-muted-foreground">

@@ -45,7 +45,7 @@ export function CartPageClient({
   comandaPePagina: boolean;
   emailFieldConfig: { enabled: boolean; required: boolean };
 }) {
-  const { items, total, count } = useCart();
+  const { items, total, count, lineUnit } = useCart();
   const [comandaDeschisa, setComandaDeschisa] = useState(false);
   // Ref, nu stare: e un semn ca evenimentul a plecat, nu ceva ce se randeaza.
   const vazut = useRef(false);
@@ -55,11 +55,18 @@ export function CartPageClient({
   useEffect(() => {
     if (vazut.current || items.length === 0) return;
     vazut.current = true;
+    // `value` vine de la cos, deci si preturile unitare trebuie sa vina tot de
+    // acolo: `i.price` e instantaneul salvat in localStorage la adaugare, iar
+    // raportul ar fi aratat pretul de atunci langa o valoare calculata la zi.
+    // 
     gtagEvent("view_cart", {
       currency: "RON",
       value: total,
-      items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })),
+      items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })),
     });
+    // `lineUnit` se schimba la fiecare randare (functie noua din `useMemo` de pe
+    // preturi), dar evenimentul pleaca o singura data, oprit de `vazut`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, total]);
 
   function laComanda() {
@@ -71,8 +78,8 @@ export function CartPageClient({
       return;
     }
     fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: items.map((i) => i.productId) });
-    ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: items.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: i.price, quantity: i.quantity })) });
-    gtagEvent("begin_checkout", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
+    ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: items.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
+    gtagEvent("begin_checkout", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     setComandaDeschisa(true);
   }
 

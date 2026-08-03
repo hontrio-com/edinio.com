@@ -58,7 +58,7 @@ export function useCheckoutOrder({
   preview = null,
   suprafata = "modal",
 }: CheckoutOrderInput) {
-  const { items, total, clear, sessionId, hydrated } = useCart();
+  const { items, total, clear, sessionId, hydrated, lineUnit } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<StorePageContent["checkout_config"]>(
     preview ? preview.checkoutConfig : ({ email_field: emailFieldConfig } as StorePageContent["checkout_config"])
   );
@@ -436,7 +436,8 @@ export function useCheckoutOrder({
       if (!orderId) {
         // GA4 funnel: shipping + payment info captured once, right before the order
         // is created (single-page checkout; retries reuse placedRef so no re-fire).
-        const gaItems = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity }));
+        // Acelasi pret ca in `value`: cel de la server, nu cel din localStorage.
+        const gaItems = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity }));
         gtagEvent("add_shipping_info", { currency: "RON", value: grandTotal, shipping_tier: courierSelection?.courierLabel, items: gaItems });
         gtagEvent("add_payment_info", { currency: "RON", value: grandTotal, payment_type: paymentMethod, items: gaItems });
         const result = await placeCartOrder(payload);

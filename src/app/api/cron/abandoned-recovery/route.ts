@@ -10,7 +10,7 @@ import { storeBaseUrl, PLATFORM_ORIGIN } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
 import {
   readAutomationConfig, isQuietHour, buildRecoverUrl, defaultRecoverySms, interpolateRecoveryMessage,
-  ABANDON_MINUTES, type AbandonedCartItem,
+  ABANDON_MINUTES, cosRecuperabil, type AbandonedCartItem,
 } from "@/lib/abandoned-cart";
 
 type Admin = SupabaseClient<Database>;
@@ -147,14 +147,23 @@ export async function GET(req: NextRequest) {
       if (step.channel === "email") {
         const optedOut = !!(cart.email && optoutSet.has(`${store.businessId}:${cart.email.toLowerCase()}`));
         if (!cart.email || optedOut) { await advance(admin, cart.id, cart, now); continue; }
+        // Preturile din `cart.items` sunt cele inghetate in localStorage la
+        // captura. Emailul e semnat de magazin, deci nu are voie sa republice un
+        // pret pe care magazinul nu-l mai onoreaza: se repretuiesc din catalog,
+        // prin acelasi calcul ca linkul de recuperare din email.
+        const proaspat = await cosRecuperabil(admin, store.businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
+        // Niciun produs recuperabil: linkul ar duce clientul la un cos gol. Se
+        // avanseaza pasul fara sa se numere o trimitere, ca secventa sa nu se
+        // blocheze pe cosul asta la fiecare rulare orara.
+        if (proaspat.items.length === 0) { await advance(admin, cart.id, cart, now); continue; }
         try {
           const emailSender = await getStoreEmailSender(admin, store.businessId);
           await sendAbandonedCartRecovery(cart.email, {
             storeName,
             recoverUrl,
             customerName: cart.customer_name,
-            items: (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[],
-            total: Number(cart.subtotal || 0),
+            items: proaspat.items,
+            total: proaspat.total,
             color: biz.primary_color ?? "#1AB554",
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,

@@ -38,7 +38,8 @@ import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
-import { computeCardDiscount, computeCodDiscount, computeCodFee, verificaMetodaPlata, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, verificaMetodaPlata, isCodPaymentMethod, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
@@ -194,8 +195,15 @@ function autoritativeShipping(
   token: string | null | undefined,
   dest: { county?: string | null; city?: string | null; country?: string | null; postCode?: string | null },
   tarifImplicit: number | null,
-  /** Optiunea aleasa de client. Semnatura o acopera, deci trebuie confruntata. */
-  optiune: { courier?: string | null; deliveryType?: string | null; courierLabel?: string | null },
+  /**
+   * Optiunea aleasa de client. Semnatura o acopera, deci trebuie confruntata.
+   *
+   * `ramburs` NU vine de la client: se pune de apelant din metoda de plata deja
+   * validata fata de ce ofera magazinul (`verificaMetodaPlata`). Asta e tot
+   * rostul lui — la cotare regimul a fost declarat de browser, aici e confruntat
+   * cu ce se intampla de fapt.
+   */
+  optiune: { courier?: string | null; deliveryType?: string | null; courierLabel?: string | null; ramburs: boolean },
   /** `shipping_zones` al magazinului: spune doar DACA are curieri de ales. */
   zone: Record<string, { enabled?: boolean; price?: number }> | null,
   /**
@@ -238,8 +246,10 @@ function autoritativeShipping(
    * Cine chiar apara banii e `max`-ul de mai jos. Si nici el nu acopera tot:
    * magazinul okxi are si `default_shipping_cost` 0,00 si pretul zonei Sameday
    * 0, cu tarif live, deci acolo nu exista niciun numar declarat sub care sa nu
-   * se poata cobori. Se inchide abia cu re-evaluarea cotatiei pe server
-   * (constatarea 23).
+   * se poata cobori. Tocmai de aceea amprenta trebuie sa lege TOT ce a produs
+   * pretul, nu doar destinatia: pe okxi, o cotatie stricata nu costa nimic.
+   * Regimul de ramburs e legat (vezi `QuoteOption.ramburs`); greutatea inca nu —
+   * ea se calculeaza server-side, dar din lista de produse DECLARATA de client.
    */
   const areCurieri = Object.values(zone ?? {}).some((z) => z?.enabled);
   if (!areCurieri && claimed === round2(tarifImplicit)) return claimed;
@@ -247,7 +257,10 @@ function autoritativeShipping(
   logError({
     action: "placeOrder.shippingRejected",
     message: "Shipping cost not covered by a signed quote",
-    details: { businessId, claimed, tarifImplicit, courier: optiune.courier, deliveryType: optiune.deliveryType, hasToken: !!token },
+    // `ramburs` e in jurnal fiindca e singura parte a amprentei pe care clientul
+    // nu o trimite: cand semnatura cade fara motiv vizibil, aici se vede daca
+    // regimul cerut la cotare a fost altul decat cel al comenzii.
+    details: { businessId, claimed, tarifImplicit, courier: optiune.courier, deliveryType: optiune.deliveryType, ramburs: optiune.ramburs, hasToken: !!token },
     severity: "warning",
   });
 
@@ -817,7 +830,16 @@ export async function placeOrder(data: {
     data.shipping_token,
     { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
     cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
-    { courier: data.selected_courier, deliveryType: data.delivery_type, courierLabel: data.courier_label },
+    {
+      courier: data.selected_courier,
+      deliveryType: data.delivery_type,
+      courierLabel: data.courier_label,
+      // Din METODA validata mai sus, nu din vreun numar trimis de browser.
+      // Formularul cere cotatia cu `cod = totalul` cand plata e ramburs si cu 0
+      // altfel, deci steagul lui e chiar asta. Egalitatea ar cadea doar pe o
+      // comanda de 0,00 lei platita ramburs; in productie sunt 0 din 96.
+      ramburs: isCodPaymentMethod(metodaPlata),
+    },
     (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
     esteGratuit,
   );
@@ -1681,6 +1703,18 @@ export async function updateOrderDetails(orderId: string, data: {
       courier: typeof prevShip.courier === "string" ? prevShip.courier : undefined,
       deliveryType: prevShip.delivery_type === "locker" ? "locker" : "address",
       courierLabel: data.courier_label,
+      /*
+       * Aceeasi intrebare ca la checkout, dar din alta sursa — si trebuie sa fie
+       * ACEEASI sursa ca la cerere, altfel re-cotarea din panou moare tacit, cum
+       * a mai murit o data cand se verifica fara eticheta.
+       *
+       * Panoul cere cotatia cu `cod: rambursDeIncasat(...)`, adica dupa BANI, nu
+       * dupa metoda: o comanda cu card ramasa neplatita pleaca oricum cu ramburs
+       * la curier. Deci si aici se raspunde cu acelasi ajutor, nu cu
+       * `isCodPaymentMethod`. `order.total` in loc de totalul nou: steagul e doar
+       * „> 0", iar `sePoateAplica` de mai jos cere oricum o comanda neplatita.
+       */
+      ramburs: rambursDeIncasat({ payment_status: order.payment_status, total: order.total }) > 0,
     });
     const sePoateAplica = semnaturaBuna
       && order.payment_status !== "paid"
@@ -2142,7 +2176,13 @@ export async function placeCartOrder(data: {
     data.shipping_token,
     { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
     cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
-    { courier: data.selected_courier, deliveryType: data.delivery_type, courierLabel: data.courier_label },
+    {
+      courier: data.selected_courier,
+      deliveryType: data.delivery_type,
+      courierLabel: data.courier_label,
+      // Ca la comanda directa: regimul iese din metoda validata, nu din `cod`.
+      ramburs: isCodPaymentMethod(metodaPlata),
+    },
     (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
     esteGratuit,
   );

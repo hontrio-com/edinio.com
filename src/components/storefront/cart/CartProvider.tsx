@@ -36,6 +36,26 @@ export interface CartContextValue {
    * dintre ele ar fi diferit de cel pe care il incaseaza serverul.
    */
   lineTotal: (item: CartItem) => number;
+  /**
+   * Cat costa O BUCATA din linie, inainte de treptele de cantitate.
+   *
+   * Are aceeasi sursa ca `lineTotal`, si tocmai de asta exista. Eticheta „N buc x
+   * P" si taietura de deasupra reducerii se scriau din `item.price`, adica din
+   * instantaneul salvat in localStorage la adaugare, in timp ce totalul de langa
+   * ele venea deja de la server: cele doua numere de pe acelasi rand nu se
+   * inmulteau. 
+   *
+   * `lineUnit(item) * item.quantity` e chiar pretul intreg al liniei, acelasi
+   * numar din care `pretPeTrepte` scade `savings`. Deci total + economie =
+   * unitar x cantitate, si nu mai poate aparea un al treilea numar pe rand.
+   *
+   * Cat timp preturile de la server nu au ajuns inca (sau produsul a fost sters
+   * ori dezactivat, si `getCartPricing` nu-l mai intoarce), intoarce pretul
+   * salvat — exact ca `lineTotal`. Randul ramane deci consistent si atunci: ori
+   * amandoua numerele sunt vechi, ori amandoua sunt de la server, niciodata unul
+   * din fiecare.
+   */
+  lineUnit: (item: CartItem) => number;
   /** Cat economiseste linia fata de pretul intreg (0 cand nu se aplica nimic). */
   lineSavings: (item: CartItem) => number;
   total: number;
@@ -209,13 +229,16 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
 
   const lineTotal = (item: CartItem) => linie(item).subtotal;
   const lineSavings = (item: CartItem) => linie(item).savings;
+  // Acelasi `pretUnitar` din care porneste si `linie`, expus ca sa nu mai fie
+  // nevoie de `item.price` nicaieri in afara.
+  const lineUnit = (item: CartItem) => pretUnitar(item);
 
   const total = items.reduce((s, i) => s + linie(i).subtotal, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, lineTotal, lineSavings, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -252,8 +275,11 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
           );
         },
         // Miniatura nu citeste nimic de la server, deci nu are trepte: pretul de
-        // linie ramane inmultirea simpla.
+        // linie ramane inmultirea simpla. Si aici cele doua numere trebuie sa
+        // vina din aceeasi sursa, altfel miniatura ar arata comerciantului chiar
+        // contradictia pe care tocmai am scos-o din cosul adevarat.
         lineTotal: (item) => item.price * item.quantity,
+        lineUnit: (item) => item.price,
         lineSavings: () => 0,
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>

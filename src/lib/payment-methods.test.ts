@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { computeCodFee, codFeeInStoreMode, normalizePaymentMethod, parseCodFeeConfig, sanitizeCodFeeConfig, type CodFeeConfig } from "./payment-methods";
+import { checkoutPaymentMethods, computeCodFee, codFeeInStoreMode, normalizePaymentMethod, parseCodFeeConfig, processorReadiness, sanitizeCodFeeConfig, verificaMetodaPlata, METODA_NEOFERITA, type CodFeeConfig } from "./payment-methods";
 import { computeVat } from "./utils/vat";
 
 /**
@@ -148,4 +148,79 @@ test("o taxa de zero nu se poate salva ca pornita", () => {
   const s = sanitizeCodFeeConfig({ enabled: true, type: "fixed", value: 0, amount_includes_vat: true });
   assert.equal(s.enabled, false);
   assert.equal(s.value, 0);
+});
+
+/* ─── Metoda de plata, verificata fata de ce ofera magazinul ──────────────── */
+
+/**
+ * Comanda accepta pana acum orice cod cunoscut, indiferent daca magazinul il
+ * ofera. De metoda atarna trei sume, deci „stripe" trimis catre un magazin care
+ * are doar ramburs lua reducerea de card si scapa de taxa.
+ *
+ * Testele astea sunt teste pe APELANT, nu doar pe modul: actiunile de comanda nu
+ * se pot incarca in harnas, de aceea decizia intreaga sta in `verificaMetodaPlata`,
+ * care primeste exact ce are actiunea (sirul brut si randul de setari) si intoarce
+ * exact ce face actiunea.
+ */
+
+const NETOPIA_GATA = { netopia_config: { enabled: true, pos_signature: "sig", api_key: "key" } };
+const STRIPE_GATA = { stripe_config: { enabled: true, charges_enabled: true, account_id: "acct_1" } };
+const DOAR_RAMBURS = { payment_methods: [{ type: "cash_on_delivery", enabled: true }] };
+
+test("procesatorul gata se decide dupa aceleasi campuri peste tot", () => {
+  assert.deepEqual(processorReadiness(null),
+    { netopia: false, stripe: false, ipay: false, klarna: false, revolut: false });
+  assert.equal(processorReadiness(NETOPIA_GATA).netopia, true);
+  assert.equal(processorReadiness(STRIPE_GATA).stripe, true);
+  // Stripe cere in plus contul activat pentru incasari: fara el, magazinul nu-l arata.
+  assert.equal(processorReadiness({ stripe_config: { enabled: true, account_id: "acct_1" } }).stripe, false);
+  // Credentialele goale nu inseamna gata.
+  assert.equal(processorReadiness({ netopia_config: { enabled: true, pos_signature: "", api_key: "key" } }).netopia, false);
+  assert.equal(processorReadiness({ ipay_config: { enabled: false, username: "u", password: "p" } }).ipay, false);
+  assert.equal(processorReadiness({ klarna_config: { enabled: true, username: "u", password: "p" } }).klarna, true);
+  assert.equal(processorReadiness({ revolut_config: { enabled: true, secret_key: "sk" } }).revolut, true);
+});
+
+test("procesatorul gata dar netrecut in lista ramane ACCEPTAT", () => {
+  // Cinci magazine din productie chiar asa functioneaza: coloana contine doar
+  // ramburs, iar netopia/stripe apar in magazin fiindca se adauga singure cand
+  // sunt configurate. O verificare scrisa pe coloana bruta le-ar fi refuzat toate
+  // comenzile online — inclusiv cinci comenzi care chiar exista.
+  assert.deepEqual(verificaMetodaPlata("netopia", { ...DOAR_RAMBURS, ...NETOPIA_GATA }), { metoda: "netopia" });
+  assert.deepEqual(verificaMetodaPlata("stripe", { ...DOAR_RAMBURS, ...STRIPE_GATA }), { metoda: "stripe" });
+});
+
+test("metoda pe care magazinul nu o ofera opreste comanda", () => {
+  const rez = verificaMetodaPlata("stripe", DOAR_RAMBURS);
+  assert.ok("error" in rez);
+  assert.equal(rez.error, METODA_NEOFERITA);
+  // Cazul din productie: comerciantul a stins Stripe dupa ce a primit comenzi.
+  assert.ok("error" in verificaMetodaPlata("stripe", {
+    payment_methods: [{ type: "cash_on_delivery", enabled: true }, { type: "stripe", enabled: false }],
+  }));
+  // Procesator listat si pornit, dar fara credentiale: magazinul nu-l arata.
+  assert.ok("error" in verificaMetodaPlata("netopia", {
+    payment_methods: [{ type: "cash_on_delivery", enabled: true }, { type: "netopia", enabled: true }],
+  }));
+});
+
+test("rambursul nu poate fi refuzat de o configuratie lipsa sau veche", () => {
+  // Toate cele 127 de magazine ofera ramburs, iar codurile vechi si campul gol
+  // devin ramburs INAINTE de verificare. Nimic din toate astea nu are voie sa
+  // produca un refuz: ar fi capcana de la constatarea 6.
+  for (const brut of [undefined, null, "", "cod", "ramburs", "cash_on_delivery", "__proto__", "constructor", 42]) {
+    assert.deepEqual(verificaMetodaPlata(brut, DOAR_RAMBURS), { metoda: "cash_on_delivery" }, `brut: ${String(brut)}`);
+  }
+  // Magazin fara niciun rand de setari, si lista in formatul vechi, de siruri.
+  assert.deepEqual(verificaMetodaPlata("cod", null), { metoda: "cash_on_delivery" });
+  assert.deepEqual(verificaMetodaPlata(undefined, { payment_methods: ["cod"] }), { metoda: "cash_on_delivery" });
+  assert.deepEqual(verificaMetodaPlata("cash_on_delivery", { payment_methods: [] }), { metoda: "cash_on_delivery" });
+});
+
+test("singurul refuz de ramburs e cel voit de comerciant", () => {
+  // Ramburs stins explicit, cu un procesator gata: magazinul chiar nu-l ofera.
+  const cfg = { payment_methods: [{ type: "cash_on_delivery", enabled: false }], ...NETOPIA_GATA };
+  assert.deepEqual(checkoutPaymentMethods(cfg.payment_methods, processorReadiness(cfg)).map((m) => m.type), ["netopia"]);
+  assert.ok("error" in verificaMetodaPlata("cash_on_delivery", cfg));
+  assert.deepEqual(verificaMetodaPlata("netopia", cfg), { metoda: "netopia" });
 });

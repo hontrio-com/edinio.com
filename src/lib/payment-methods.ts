@@ -120,6 +120,69 @@ export function checkoutPaymentMethods(
   return final.map((m) => ({ type: m.type, label: m.label || PAYMENT_METHOD_DEFAULT_LABELS[m.type] }));
 }
 
+/** Coloanele de configurare din care se vede daca un procesator e gata de plati. */
+export type ConfiguratiiProcesatoare = {
+  stripe_config?: unknown;
+  netopia_config?: unknown;
+  ipay_config?: unknown;
+  klarna_config?: unknown;
+  revolut_config?: unknown;
+};
+
+/**
+ * Ce procesator e chiar gata sa incaseze — SINGURUL loc unde se decide.
+ *
+ * Regula statea scrisa direct in `getPublicStoreConfig`, adica exact acolo unde
+ * se deseneaza lista pentru client. Cat timp nimeni altcineva n-o intreba, era
+ * in regula; din clipa in care si comanda trebuie sa verifice ce metode ofera
+ * magazinul, doua copii ar fi insemnat ca ecranul si serverul pot sa nu fie de
+ * acord — iar dezacordul ar refuza comenzi bune.
+ */
+export function processorReadiness(cfg: ConfiguratiiProcesatoare | null | undefined): ProcessorReadiness {
+  const sc = cfg?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
+  const nc = cfg?.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
+  const ic = cfg?.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
+  const kc = cfg?.klarna_config as { enabled?: boolean; username?: string; password?: string } | null;
+  const rc = cfg?.revolut_config as { enabled?: boolean; secret_key?: string } | null;
+  return {
+    netopia: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
+    stripe: !!(sc?.enabled && sc?.charges_enabled && sc?.account_id),
+    ipay: !!(ic?.enabled && ic?.username && ic?.password),
+    klarna: !!(kc?.enabled && kc?.username && kc?.password),
+    revolut: !!(rc?.enabled && rc?.secret_key),
+  };
+}
+
+export const METODA_NEOFERITA =
+  "Metoda de plata aleasa nu mai este disponibila la acest magazin. Reincarca pagina si alege din nou.";
+
+/**
+ * Metoda de plata a unei comenzi, verificata fata de ce ofera CHIAR magazinul.
+ *
+ * Pana acum, comanda doar normaliza sirul primit din browser: se verifica
+ * apartenenta la tabelul de coduri, nu la metodele magazinului. Iar de metoda
+ * atarna trei sume — reducerea de card, reducerea de ramburs si taxa de ramburs
+ * — plus baza de TVA. Cine trimitea „stripe" pe un magazin care n-are decat
+ * ramburs primea reducerea de card si scapa de taxa, iar comanda ramanea
+ * neplatita: platile online se opresc mai incolo, dar comanda exista deja.
+ *
+ * Verificarea trece prin `checkoutPaymentMethods`, NICIODATA prin coloana bruta:
+ * un procesator gata configurat se adauga singur in lista magazinului chiar daca
+ * nu e trecut in coloana, si cinci magazine din productie chiar asa functioneaza.
+ * Pe coloana bruta, toate comenzile lor online ar fi fost refuzate.
+ */
+export function verificaMetodaPlata(
+  raw: unknown,
+  cfg: (ConfiguratiiProcesatoare & { payment_methods?: unknown }) | null | undefined,
+): { metoda: PaymentMethodType } | { error: string } {
+  // Codurile vechi si campul gol devin ramburs INAINTE de verificare — ramburs
+  // e oferit de orice magazin, deci nu poate produce un refuz.
+  const metoda = normalizePaymentMethod(raw);
+  const oferite = checkoutPaymentMethods(cfg?.payment_methods, processorReadiness(cfg));
+  if (oferite.some((m) => m.type === metoda)) return { metoda };
+  return { error: METODA_NEOFERITA };
+}
+
 /**
  * Validate/normalize a payment_methods array before persisting: drop invalid or
  * duplicate entries, guarantee COD is present, ensure at least one method stays

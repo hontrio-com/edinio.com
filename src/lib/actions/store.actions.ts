@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
-import { checkoutPaymentMethods, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, parseCodFeeConfig, sanitizeCodFeeConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { checkoutPaymentMethods, processorReadiness, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, parseCodFeeConfig, sanitizeCodFeeConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
 
@@ -44,12 +44,6 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     .single();
   if (!data) return null;
 
-  const sc = data.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
-  const nc = data.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
-  const ic = data.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
-  const kc = data.klarna_config as { enabled?: boolean; username?: string; password?: string } | null;
-  const rc = data.revolut_config as { enabled?: boolean; secret_key?: string } | null;
-
   // International (EU) checkout is available only when DPD is enabled as a courier,
   // opted into international, and credentialed. Booleans only — no secrets leak.
   const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number; use_product_weight?: boolean } | null;
@@ -57,13 +51,10 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const internationalShipping = !!(dc?.enabled && dc?.international_enabled && dc?.username && dc?.client_id && zonesCfg["dpd"]?.enabled);
   const dpdUseWeight = internationalShipping && dc?.use_product_weight === true;
 
-  const ready = {
-    netopia: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
-    stripe: !!(sc?.enabled && sc?.charges_enabled && sc?.account_id),
-    ipay: !!(ic?.enabled && ic?.username && ic?.password),
-    klarna: !!(kc?.enabled && kc?.username && kc?.password),
-    revolut: !!(rc?.enabled && rc?.secret_key),
-  };
+  // Aceeasi regula pe care o foloseste si verificarea de la plasarea comenzii:
+  // daca ecranul si serverul ar decide separat ce procesator e gata, dezacordul
+  // dintre ele ar refuza comenzi bune.
+  const ready = processorReadiness(data);
 
   // Checkout newsletter opt-in is offered only when Mailchimp is connected, an
   // audience is chosen, and the checkout source is on. Booleans only — no secrets leak.

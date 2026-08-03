@@ -36,7 +36,7 @@ import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
-import { computeCardDiscount, computeCodDiscount, computeCodFee, normalizePaymentMethod, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, verificaMetodaPlata, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
@@ -505,21 +505,52 @@ export async function placeOrder(data: {
   const admin = createAdminClient();
 
   // Reload product + store config and recompute every price server-side.
-  const [{ data: product }, { data: cfgRow }] = await Promise.all([
+  const [{ data: product, error: eroareProdus }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
       .select("id, price, is_active, business_id, page_sections")
       .eq("id", data.product_id)
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones")
       .eq("business_id", data.business_id)
       .single(),
   ]);
 
+  // O interogare cazuta nu inseamna „produsul nu mai e disponibil": reincarcarea
+  // nu repara o pana, deci raspunsul corect e sa mai incerce. `.single()` fara rand
+  // intoarce tot eroare, deci se verifica intai produsul lipsa, care e altceva.
+  if (eroareProdus && product === null && eroareProdus.code !== "PGRST116") {
+    logError({ action: "placeOrder.productUnavailable", message: eroareProdus.message, details: { businessId: data.business_id, productId: data.product_id }, severity: "error" });
+    return { error: "Nu am putut verifica produsul. Te rugam incearca din nou in cateva momente." };
+  }
   if (!product || !product.is_active) {
     return { error: "Produsul nu mai este disponibil. Reincarca pagina." };
   }
+  if (eroareCfg && cfgRow === null && eroareCfg.code !== "PGRST116") {
+    logError({ action: "placeOrder.configUnavailable", message: eroareCfg.message, details: { businessId: data.business_id }, severity: "error" });
+    return { error: "Nu am putut verifica setarile magazinului. Te rugam incearca din nou in cateva momente." };
+  }
+
+  /*
+   * Metoda de plata, verificata fata de ce ofera CHIAR magazinul.
+   *
+   * Pana acum se normaliza doar sirul primit din browser, deci trecea orice cod
+   * cunoscut, indiferent daca magazinul il ofera sau nu. De metoda atarna insa
+   * trei sume — reducerea de card, reducerea de ramburs si taxa de ramburs — plus
+   * baza de TVA: cine trimitea „stripe" pe un magazin care are doar ramburs lua
+   * reducerea de card si scapa de taxa, iar comanda ramanea neplatita.
+   *
+   * Garda sta AICI, inaintea oricarei scrieri (jurnalul ofertelor scrie deja in
+   * `error_logs` mai jos), si nu corecteaza in tacere: comanda se opreste, iar
+   * formularul isi reface lista de metode la reincarcare, deci refuzul se repara.
+   */
+  const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
+  if ("error" in metoda) {
+    logError({ action: "placeOrder.paymentMethodRejected", message: "Payment method not offered by the store", details: { businessId: data.business_id, cerut: String(data.payment_method ?? "").slice(0, 40) }, severity: "warning" });
+    return { error: metoda.error };
+  }
+  const metodaPlata = metoda.metoda;
 
   /*
    * Cantitatea comandata, normalizata o singura data si folosita peste tot.
@@ -680,9 +711,6 @@ export async function placeOrder(data: {
   // Card-payment discount: applies only to online card methods, on the goods
   // value (subtotal + extras, after any promo), never on shipping. Computed
   // server-side and baked into total so the card processor charges the right sum.
-  // O SINGURA citire a metodei de plata, folosita si la calcule, si la inserare.
-  // Vezi `normalizePaymentMethod` pentru ce se rupea cand erau doua implicite.
-  const metodaPlata = normalizePaymentMethod(data.payment_method);
 
   const cardDiscount = computeCardDiscount(
     parseCardDiscountConfig(cfgRow?.card_discount_config),
@@ -1792,13 +1820,13 @@ export async function placeCartOrder(data: {
 
   // Reload every product + store config; recompute all prices server-side.
   const productIds = [...new Set(data.items.map((i) => i.product_id))];
-  const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow }] = await Promise.all([
+  const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
       .select("id, price, is_active, page_sections")
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1810,6 +1838,23 @@ export async function placeCartOrder(data: {
     logError({ action: "placeCartOrder.productsUnavailable", message: eroareProduse.message, details: { businessId: data.business_id, productIds }, severity: "error" });
     return { error: "Nu am putut verifica produsele din cos. Te rugam incearca din nou in cateva momente." };
   }
+
+  // Fara setari nu se poate spune ce metode ofera magazinul, iar garda de mai jos
+  // ar refuza tocmai platile online — deci o pana de o secunda ar arata ca „metoda
+  // nu mai e disponibila", si reincarcarea n-ar repara nimic.
+  if (eroareCfg && cfgRow === null && eroareCfg.code !== "PGRST116") {
+    logError({ action: "placeCartOrder.configUnavailable", message: eroareCfg.message, details: { businessId: data.business_id }, severity: "error" });
+    return { error: "Nu am putut verifica setarile magazinului. Te rugam incearca din nou in cateva momente." };
+  }
+
+  // Aceeasi garda ca la comanda directa: metoda de plata se verifica fata de ce
+  // ofera magazinul, nu doar fata de tabelul de coduri. Vezi `verificaMetodaPlata`.
+  const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
+  if ("error" in metoda) {
+    logError({ action: "placeCartOrder.paymentMethodRejected", message: "Payment method not offered by the store", details: { businessId: data.business_id, cerut: String(data.payment_method ?? "").slice(0, 40) }, severity: "warning" });
+    return { error: metoda.error };
+  }
+  const metodaPlata = metoda.metoda;
 
   const activeProducts = (dbProducts ?? []).filter((p) => p.is_active);
   const priceMap = new Map(activeProducts.map((p) => [p.id, round2(Number(p.price))]));
@@ -1938,9 +1983,6 @@ export async function placeCartOrder(data: {
 
   // Card-payment discount: only for online card methods, on the goods value
   // (subtotal + extras, after promo), never on shipping/VAT. Baked into total.
-  // O SINGURA citire a metodei de plata, folosita si la calcule, si la inserare.
-  // Vezi `normalizePaymentMethod` pentru ce se rupea cand erau doua implicite.
-  const metodaPlata = normalizePaymentMethod(data.payment_method);
 
   const cardDiscount = computeCardDiscount(
     parseCardDiscountConfig(cfgRow?.card_discount_config),

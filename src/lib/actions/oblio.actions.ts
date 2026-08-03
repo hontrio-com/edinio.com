@@ -6,6 +6,7 @@ import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
+import { liniiOblio, mesajRefuz, reconciliazaComanda } from "@/lib/billing/reconcile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -123,11 +124,15 @@ async function buildProducts(
     card_discount_amount?: unknown;
     cod_discount_amount?: unknown;
     cod_fee_amount?: unknown;
+    total?: unknown;
+    vat_amount?: unknown;
+    order_number?: string | number;
+    payment_status?: string | null;
   },
   config: OblioConfig,
   vat: RegimTva,
   vatName: string,
-): Promise<OblioProduct[]> {
+): Promise<OblioProduct[] | { error: string }> {
   const items = (order.items as OrderItem[]) ?? [];
   const skus = await fetchSkuMap(sursa.supabase, sursa.businessId, items, (m) =>
     logError({ action: "billing.skuMap", message: m.message, details: { ...m.details, casa: "oblio" }, severity: "warning" }));
@@ -228,6 +233,25 @@ async function buildProducts(
     });
   }
 
+  // Suma liniilor trebuie sa dea chiar `orders.total`. Rotunjirea documentului se
+  // absoarbe; ce nu se poate explica prin ea opreste emiterea. Vezi `reconcile.ts`.
+  const rec = reconciliazaComanda(liniiOblio(products), order, vat);
+  if (rec.fel === "refuz") {
+    return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
+  }
+  if (rec.fel === "ajustare") {
+    products.push({
+      name: "Ajustare rotunjire",
+      price: rec.delta,
+      measuringUnit: "buc",
+      quantity: 1,
+      // Serviciu, ca Transportul: nu e marfa si nu intra in gestiune.
+      productType: "Serviciu",
+      save: 0,
+      ...vatFields,
+    });
+  }
+
   return products;
 }
 
@@ -277,10 +301,11 @@ async function buildInvoiceData(
   vatName: string,
   sursa: SursaCoduri,
   extra?: Partial<OblioInvoiceData>,
-): Promise<OblioInvoiceData> {
+): Promise<OblioInvoiceData | { error: string }> {
   const addr = order.shipping_address as ShippingAddress | null;
   const today = new Date().toISOString().split("T")[0];
   const products = await buildProducts(sursa, order, config, vat, vatName);
+  if ("error" in products) return products;
   const parte = invoiceParty(order, addr);
   const collect = buildCollect(order.payment_method, order.payment_status, order.order_number);
 
@@ -435,6 +460,8 @@ export async function generateOblioInvoice(
     const token = await getOblioToken(config.client_id, config.client_secret);
     const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
     const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName, { supabase, businessId });
+    // Comanda care nu se reconciliaza NU se factureaza. Vezi `reconcile.ts`.
+    if ("error" in data) return { error: data.error };
     const result = await createOblioDoc(token, "invoice", data);
 
     await supabase.from("orders").update({
@@ -471,7 +498,23 @@ export async function maybeAutoGenerateInvoice(
     if (!autoInvoiceTriggerMatches(config.auto_invoice_trigger, newStatus, newPaymentStatus)) return false;
 
     const result = await generateOblioInvoice(businessId, orderId, sistem);
-    return !("error" in result);
+    /*
+     * Pe calea automata esecul e MUT (dispecerul inghite `false`), deci o comanda
+     * pe care garda de reconciliere o refuza ar ramane tacit nefacturata. Se scrie
+     * cu clientul de SISTEM: `logError` merge pe clientul de cerere, iar aici nu
+     * exista sesiune.
+     */
+    if ("error" in result) {
+      await supabase.from("error_logs").insert({
+        action: "oblio.autoInvoiceEsuat",
+        message: result.error,
+        details: { orderId } as never,
+        business_id: businessId,
+        severity: "critical",
+      });
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -494,6 +537,8 @@ export async function generateOblioProforma(
     const token = await getOblioToken(config.client_id, config.client_secret);
     const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
     const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName, { supabase, businessId });
+    // O proforma gresita e sursa unei facturi gresite, deci trece prin aceeasi garda.
+    if ("error" in data) return { error: data.error };
     // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).
     const { collect: _collect, spvExtern: _spv, ...proformaData } = data;
     const result = await createOblioDoc(token, "proforma", proformaData as OblioInvoiceData);

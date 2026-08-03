@@ -8,6 +8,7 @@ import { invoiceParty } from "@/lib/billing/invoice-party";
 import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
+import { liniiSmartbill, mesajRefuz, reconciliazaComanda } from "@/lib/billing/reconcile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -74,11 +75,15 @@ async function buildInvoiceProducts(
     cod_discount_amount?: unknown;
     cod_fee_amount?: unknown;
     vat_rate: unknown;
+    total?: unknown;
+    vat_amount?: unknown;
+    order_number?: string | number;
+    payment_status?: string | null;
   },
   pricesIncludeVat: boolean,
   vatEnabled: boolean,
   storeVatRate: number
-): Promise<MerchantInvoiceProduct[]> {
+): Promise<MerchantInvoiceProduct[] | { error: string }> {
   const items = (order.items as unknown as OrderItem[]) ?? [];
   const skus = await fetchSkuMap(sursa.supabase, sursa.businessId, items, (m) =>
     logError({ action: "billing.skuMap", message: m.message, details: { ...m.details, casa: "smartbill" }, severity: "warning" }));
@@ -86,11 +91,12 @@ async function buildInvoiceProducts(
   // Cota si regimul vin din regula COMUNA celor trei case de facturare, ca sa nu
   // mai raspunda fiecare altfel la aceeasi intrebare. Numele gol al cotei inseamna
   // „nu sunt platitor de TVA" si opreste taxarea, ca pana acum.
-  const { rate: effectiveVat, taxIncluded } = invoiceVat(
+  const regim = invoiceVat(
     order,
     { vat_enabled: vatEnabled, vat_rate: storeVatRate, prices_include_vat: pricesIncludeVat },
     !!config.tax_name,
   );
+  const { rate: effectiveVat, taxIncluded } = regim;
 
   // SmartBill cere NUMELE cotei, nu procentul, iar in configuratie sta doar numele:
   // procentul lui se afla abia din nomenclatorul contului. Numele se pastreaza cat
@@ -219,10 +225,43 @@ async function buildInvoiceProducts(
     });
   }
 
+  /*
+   * Suma liniilor trebuie sa dea chiar `orders.total`.
+   *
+   * Nimeni nu punea intrebarea asta, iar `paymentAtIssue` trimite totalul comenzii
+   * ca INCASARE: pe o comanda stricata, factura pleca cu o suma si incasarea cu
+   * alta. Rotunjirea de pe document se ABSOARBE printr-o linie de ajustare; ce nu
+   * se poate explica prin rotunjire opreste emiterea.
+   */
+  const rec = reconciliazaComanda(liniiSmartbill(products), order, regim);
+  if (rec.fel === "refuz") {
+    return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
+  }
+  if (rec.fel === "ajustare") {
+    products.push({
+      name: "Ajustare rotunjire",
+      // Cod si `isService`, ca Transportul: pe conturile cu „Foloseste cod produs"
+      // activ, un rand de marfa fara cod nu exista in gestiune si emiterea esueaza.
+      code: "ajustare",
+      measuringUnitName: "buc",
+      currency: "RON",
+      quantity: 1,
+      price: rec.delta,
+      isTaxIncluded: taxIncluded,
+      isService: true,
+      ...taxFields,
+    });
+  }
+
   return products;
 }
 
 type InvoiceableOrder = {
+  // Campurile de care depinde garda de reconciliere: declarate, nu presupuse din
+  // faptul ca toti apelantii de azi citesc comanda cu `select("*")`.
+  total: unknown;
+  vat_amount?: unknown;
+  payment_status?: string | null;
   order_number: string | number;
   customer_name: string;
   customer_email: string | null;
@@ -248,9 +287,10 @@ async function buildInvoiceParams(
   vatEnabled: boolean,
   storeVatRate: number,
   extraParams?: Partial<MerchantInvoiceParams>
-): Promise<MerchantInvoiceParams> {
+): Promise<MerchantInvoiceParams | { error: string }> {
   const address = order.shipping_address as ShippingAddress | null;
   const products = await buildInvoiceProducts(sursa, config, order, pricesIncludeVat, vatEnabled, storeVatRate);
+  if ("error" in products) return products;
   const parte = invoiceParty(order, address);
   const today = new Date().toISOString().split("T")[0];
 
@@ -424,6 +464,9 @@ export async function generateOrderInvoice(
     { supabase, businessId }, config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
     paymentAtIssue(config, order),
   );
+  // Comanda care nu se reconciliaza NU se factureaza: mesajul spune numerele si
+  // pasul urmator, si ajunge in interfata.
+  if ("error" in params) return params;
   const result = await createMerchantInvoice(config, params);
   if ("error" in result) return result;
 
@@ -458,6 +501,7 @@ export async function generateOrderEstimate(
 
   const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
   const params = await buildInvoiceParams({ supabase, businessId }, config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate);
+  if ("error" in params) return params;
   const result = await createMerchantEstimate(config, params);
   if ("error" in result) return result;
 
@@ -663,6 +707,22 @@ export async function maybeAutoGenerateInvoice(
       { supabase, businessId }, config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
       paymentAtIssue(config, order),
     );
+    /*
+     * Pe calea automata esecul e MUT (`return false`, iar dispecerul inghite), deci
+     * o comanda care nu se reconciliaza ar ramane tacit nefacturata. Se scrie in
+     * jurnal cu clientul de SISTEM — `logError` merge pe clientul de cerere, iar
+     * aici nu exista sesiune, deci RLS l-ar taia.
+     */
+    if ("error" in params) {
+      await supabase.from("error_logs").insert({
+        action: "smartbill.reconcileRefuzat",
+        message: params.error,
+        details: { orderId } as never,
+        business_id: businessId,
+        severity: "critical",
+      });
+      return false;
+    }
     const result = await createMerchantInvoice(config, params);
     if ("error" in result) return false;
 

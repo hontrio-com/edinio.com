@@ -7,6 +7,7 @@ import { invoiceParty } from "@/lib/billing/invoice-party";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
+import { liniiFgo, mesajRefuz, reconciliazaComanda } from "@/lib/billing/reconcile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -81,11 +82,14 @@ async function buildItems(
     subtotal: unknown;
     /** Cota INGHETATA la vanzare. Are prioritate fata de cea din setarile de azi. */
     vat_rate?: unknown;
+    vat_amount?: unknown;
+    order_number?: string | number;
+    payment_status?: string | null;
   },
   vatEnabled: boolean,
   vatRate: number,
   pricesIncludeVat: boolean,
-): Promise<FgoLineItem[]> {
+): Promise<FgoLineItem[] | { error: string }> {
   const items = (order.items as OrderItem[]) ?? [];
   const skus = await fetchSkuMap(sursa.supabase, sursa.businessId, items, (m) =>
     logError({ action: "billing.skuMap", message: m.message, details: { ...m.details, casa: "fgo" }, severity: "warning" }));
@@ -176,6 +180,30 @@ async function buildItems(
     });
   }
 
+  /*
+   * Suma liniilor trebuie sa dea chiar `orders.total`. La fGO preturile sunt NETE
+   * si rotunjite pe unitate, deci la cantitati mari diferenta de rotunjire urca
+   * legitim (0,24 lei la 50 de bucati): garda o modeleaza si o absoarbe, in loc
+   * sa refuze o comanda buna. Vezi `reconcile.ts`.
+   */
+  // `liniiNete`: fGO cere pretul FARA TVA si il converteste chiar el mai sus, deci
+  // liniile lui nu sunt in aceeasi unitate cu `orders.total`.
+  const rec = reconciliazaComanda(liniiFgo(lineItems), order, vat, { liniiNete: true });
+  if (rec.fel === "refuz") {
+    return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
+  }
+  if (rec.fel === "ajustare") {
+    lineItems.push({
+      name: "Ajustare rotunjire",
+      quantity: 1,
+      unitPrice: Math.abs(rec.delta),
+      vatRate: effectiveVat,
+      unit: "BUC",
+      // fGO n-are linii cu valoare negativa: o ajustare in minus e „Discount".
+      ...(rec.delta < 0 ? { isDiscount: true as const } : {}),
+    });
+  }
+
   return lineItems;
 }
 
@@ -253,7 +281,23 @@ export async function maybeAutoGenerateInvoice(
     if (!autoInvoiceTriggerMatches(config.auto_invoice_trigger, newStatus, newPaymentStatus)) return false;
 
     const result = await generateFgoInvoice(businessId, orderId, sistem);
-    return !("error" in result);
+    /*
+     * Pe calea automata esecul e MUT (dispecerul inghite `false`), deci o comanda
+     * pe care garda de reconciliere o refuza ar ramane tacit nefacturata. Se scrie
+     * cu clientul de SISTEM: `logError` merge pe clientul de cerere, iar aici nu
+     * exista sesiune.
+     */
+    if ("error" in result) {
+      await supabase.from("error_logs").insert({
+        action: "fgo.autoInvoiceEsuat",
+        message: result.error,
+        details: { orderId } as never,
+        business_id: businessId,
+        severity: "critical",
+      });
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -274,6 +318,8 @@ export async function generateFgoInvoice(
   try {
     const addr = order.shipping_address as ShippingAddress | null;
     const items = await buildItems({ supabase, businessId }, order, vatEnabled, vatRate, pricesIncludeVat);
+    // Comanda care nu se reconciliaza NU se factureaza. Vezi `reconcile.ts`.
+    if ("error" in items) return { error: items.error };
 
     const dueDays = Math.floor(Number(config.due_days) || 0);
     const dueDate = dueDays > 0

@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
+import { codSiNatura } from "@/lib/billing/invoice-lines";
+import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { cereNumeleCotei, invoiceVat, numeCota, type RegimTva } from "@/lib/billing/invoice-vat";
 import {
@@ -22,24 +27,6 @@ import {
 
 type OrderItem = { name: string; price: number; quantity: number; product_id?: string };
 type ShippingAddress = { county?: string; city?: string; address?: string };
-
-// SKU-urile produselor comandate. Oblio cere `code` pe fiecare linie la conturile
-// cu gestiune (productType obligatoriu la stoc); il trimitem cand exista.
-async function fetchSkuMap(items: OrderItem[]): Promise<Map<string, string>> {
-  const ids = [...new Set(items.map(i => i.product_id).filter((v): v is string => !!v))];
-  if (ids.length === 0) return new Map();
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("products").select("id, sku").in("id", ids);
-    const map = new Map<string, string>();
-    for (const p of data ?? []) {
-      if (p.sku) map.set(p.id as string, String(p.sku));
-    }
-    return map;
-  } catch {
-    return new Map();
-  }
-}
 
 async function getConfigAndOrder(businessId: string, orderId: string, sistem?: SistemClient) {
   const supabase = await clientFacturare(sistem);
@@ -127,6 +114,7 @@ async function regimSiNume(
 }
 
 async function buildProducts(
+  sursa: SursaCoduri,
   order: {
     items: unknown;
     shipping_cost: unknown;
@@ -141,7 +129,8 @@ async function buildProducts(
   vatName: string,
 ): Promise<OblioProduct[]> {
   const items = (order.items as OrderItem[]) ?? [];
-  const skuById = await fetchSkuMap(items);
+  const skus = await fetchSkuMap(sursa.supabase, sursa.businessId, items, (m) =>
+    logError({ action: "billing.skuMap", message: m.message, details: { ...m.details, casa: "oblio" }, severity: "warning" }));
   /*
    * Cota si regimul vin din regula COMUNA celor trei case de facturare.
    *
@@ -164,14 +153,15 @@ async function buildProducts(
   const itemType = config.product_type?.trim() || "Marfa";
 
   const products: OblioProduct[] = items.map(item => {
-    const sku = item.product_id ? skuById.get(item.product_id) : undefined;
+    const { code, esteServiciu } = codSiNatura(item, skus);
     return {
       name: item.name,
-      ...(sku ? { code: sku } : {}),
+      ...(code ? { code } : {}),
       price: item.price,
       measuringUnit: "buc",
       quantity: item.quantity,
-      productType: itemType,
+      // Extraoptiunea nu e marfa din catalog: pleaca drept serviciu, ca Transportul.
+      productType: esteServiciu ? "Serviciu" : itemType,
       save: 0,
       ...vatFields,
     };
@@ -285,11 +275,12 @@ async function buildInvoiceData(
   seriesName: string,
   vat: RegimTva,
   vatName: string,
+  sursa: SursaCoduri,
   extra?: Partial<OblioInvoiceData>,
 ): Promise<OblioInvoiceData> {
   const addr = order.shipping_address as ShippingAddress | null;
   const today = new Date().toISOString().split("T")[0];
-  const products = await buildProducts(order, config, vat, vatName);
+  const products = await buildProducts(sursa, order, config, vat, vatName);
   const parte = invoiceParty(order, addr);
   const collect = buildCollect(order.payment_method, order.payment_status, order.order_number);
 
@@ -443,7 +434,7 @@ export async function generateOblioInvoice(
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
     const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
-    const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName);
+    const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName, { supabase, businessId });
     const result = await createOblioDoc(token, "invoice", data);
 
     await supabase.from("orders").update({
@@ -502,7 +493,7 @@ export async function generateOblioProforma(
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
     const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
-    const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName);
+    const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName, { supabase, businessId });
     // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).
     const { collect: _collect, spvExtern: _spv, ...proformaData } = data;
     const result = await createOblioDoc(token, "proforma", proformaData as OblioInvoiceData);

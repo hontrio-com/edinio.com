@@ -9,11 +9,12 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { esteUuid } from "@/lib/supabase/ids";
 import { hasVariants } from "@/lib/storefront/variants";
 import { type BumpItem } from "@/lib/offers/bump-pricing";
 import { pretulSetului } from "@/lib/offers/fbt-pricing";
 import {
-  cereArboreleDeCategorii, esteUuid, expandarePeOferta, normalizeazaIds,
+  cereArboreleDeCategorii, expandarePeOferta, normalizeazaIds,
   opresteComanda, pretuiesteOfertele,
   triggerMatchesCart, triggerMatchesProduct, withinWindow,
   MAX_BUMPURI_AFISATE,

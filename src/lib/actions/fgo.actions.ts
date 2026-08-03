@@ -2,8 +2,14 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
+import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
+import { codSiNatura } from "@/lib/billing/invoice-lines";
+import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
   createFgoInvoice,
@@ -24,23 +30,6 @@ type ShippingAddress = {
   address?: string;
   street?: string;
 };
-
-// SKU-urile produselor comandate → CodArticol pe liniile facturii fGO.
-async function fetchSkuMap(items: OrderItem[]): Promise<Map<string, string>> {
-  const ids = [...new Set(items.map(i => i.product_id).filter((v): v is string => !!v))];
-  if (ids.length === 0) return new Map();
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("products").select("id, sku").in("id", ids);
-    const map = new Map<string, string>();
-    for (const p of data ?? []) {
-      if (p.sku) map.set(p.id as string, String(p.sku));
-    }
-    return map;
-  } catch {
-    return new Map();
-  }
-}
 
 /** Vezi `getConfigAndOrder` din oblio.actions.ts pentru rolul lui `sistem`. */
 async function getConfigAndOrder(businessId: string, orderId: string, sistem?: SistemClient) {
@@ -79,6 +68,7 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
 }
 
 async function buildItems(
+  sursa: SursaCoduri,
   order: {
     items: unknown;
     shipping_cost: unknown;
@@ -97,7 +87,8 @@ async function buildItems(
   pricesIncludeVat: boolean,
 ): Promise<FgoLineItem[]> {
   const items = (order.items as OrderItem[]) ?? [];
-  const skuById = await fetchSkuMap(items);
+  const skus = await fetchSkuMap(sursa.supabase, sursa.businessId, items, (m) =>
+    logError({ action: "billing.skuMap", message: m.message, details: { ...m.details, casa: "fgo" }, severity: "warning" }));
   // Cota si regimul vin din regula COMUNA celor trei case de facturare. Pana acum
   // fGO lua cota din setarile magazinului CITITE AZI si nu se uita niciodata la
   // `orders.vat_rate`: o comanda veche facturata dupa o schimbare de cota iesea cu
@@ -110,14 +101,16 @@ async function buildItems(
     vat.taxIncluded && vat.rate > 0 ? gross / (1 + vat.rate / 100) : gross;
 
   const lineItems: FgoLineItem[] = items.map(item => {
-    const sku = item.product_id ? skuById.get(item.product_id) : undefined;
+    // fGO n-are natura de linie in model (`FgoLineItem` nu are camp de tip, iar
+    // `Tip` se pune doar la „Discount"), deci de aici se foloseste doar codul.
+    const { code } = codSiNatura(item, skus);
     return {
       name: item.name,
       quantity: item.quantity,
       unitPrice: toNet(item.price),
       vatRate: effectiveVat,
       unit: "BUC",
-      ...(sku ? { code: sku } : {}),
+      ...(code ? { code } : {}),
     };
   });
 
@@ -280,7 +273,7 @@ export async function generateFgoInvoice(
 
   try {
     const addr = order.shipping_address as ShippingAddress | null;
-    const items = await buildItems(order, vatEnabled, vatRate, pricesIncludeVat);
+    const items = await buildItems({ supabase, businessId }, order, vatEnabled, vatRate, pricesIncludeVat);
 
     const dueDays = Math.floor(Number(config.due_days) || 0);
     const dueDate = dueDays > 0

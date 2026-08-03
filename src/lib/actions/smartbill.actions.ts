@@ -3,8 +3,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
+import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
+import { codSiNatura } from "@/lib/billing/invoice-lines";
+import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+
 import { isCardPaymentMethod, PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodType } from "@/lib/payment-methods";
 import {
   getMerchantSeries,
@@ -43,25 +49,6 @@ async function getConfigForBiz(businessId: string): Promise<SmartbillConfig | { 
 type OrderItem = { name: string; price: number; quantity: number; product_id?: string };
 type ShippingAddress = { county?: string; city?: string; address?: string; country?: string };
 
-// SKU-urile produselor comandate (items pastreaza product_id). SmartBill cere cod
-// produs pe fiecare linie DOAR la conturile cu "Foloseste cod produs" activ; il
-// trimitem cand exista ca emiterea sa nu esueze la acele conturi. Best-effort.
-async function fetchSkuMap(items: OrderItem[]): Promise<Map<string, string>> {
-  const ids = [...new Set(items.map(i => i.product_id).filter((v): v is string => !!v))];
-  if (ids.length === 0) return new Map();
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("products").select("id, sku").in("id", ids);
-    const map = new Map<string, string>();
-    for (const p of data ?? []) {
-      if (p.sku) map.set(p.id as string, String(p.sku));
-    }
-    return map;
-  } catch {
-    return new Map();
-  }
-}
-
 // Numele complet al tarii pentru factura (shipping_address.country e cod ISO-2,
 // setat doar la comenzile internationale; lipsa = Romania).
 function countryNameFor(code: string | null | undefined): string {
@@ -76,6 +63,7 @@ function countryNameFor(code: string | null | undefined): string {
 }
 
 async function buildInvoiceProducts(
+  sursa: SursaCoduri,
   config: SmartbillConfig,
   order: {
     items: unknown;
@@ -92,7 +80,8 @@ async function buildInvoiceProducts(
   storeVatRate: number
 ): Promise<MerchantInvoiceProduct[]> {
   const items = (order.items as unknown as OrderItem[]) ?? [];
-  const skuById = await fetchSkuMap(items);
+  const skus = await fetchSkuMap(sursa.supabase, sursa.businessId, items, (m) =>
+    logError({ action: "billing.skuMap", message: m.message, details: { ...m.details, casa: "smartbill" }, severity: "warning" }));
 
   // Cota si regimul vin din regula COMUNA celor trei case de facturare, ca sa nu
   // mai raspunda fiecare altfel la aceeasi intrebare. Numele gol al cotei inseamna
@@ -126,10 +115,13 @@ async function buildInvoiceProducts(
     : {};
 
   const products: MerchantInvoiceProduct[] = items.map(item => {
-    const sku = item.product_id ? skuById.get(item.product_id) : undefined;
+    // Extraoptiunile primesc cod si pleaca ca SERVICIU: ca linie de marfa fara cod
+    // ele sunt chiar randul care nu exista in gestiune si blocheaza emiterea.
+    const { code, esteServiciu } = codSiNatura(item, skus);
     return {
       name: item.name,
-      ...(sku ? { code: sku } : {}),
+      ...(code ? { code } : {}),
+      ...(esteServiciu ? { isService: true } : {}),
       measuringUnitName: "buc",
       currency: "RON",
       quantity: item.quantity,
@@ -248,6 +240,7 @@ type InvoiceableOrder = {
 };
 
 async function buildInvoiceParams(
+  sursa: SursaCoduri,
   config: SmartbillConfig,
   order: InvoiceableOrder,
   seriesName: string,
@@ -257,7 +250,7 @@ async function buildInvoiceParams(
   extraParams?: Partial<MerchantInvoiceParams>
 ): Promise<MerchantInvoiceParams> {
   const address = order.shipping_address as ShippingAddress | null;
-  const products = await buildInvoiceProducts(config, order, pricesIncludeVat, vatEnabled, storeVatRate);
+  const products = await buildInvoiceProducts(sursa, config, order, pricesIncludeVat, vatEnabled, storeVatRate);
   const parte = invoiceParty(order, address);
   const today = new Date().toISOString().split("T")[0];
 
@@ -428,7 +421,7 @@ export async function generateOrderInvoice(
 
   const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
   const params = await buildInvoiceParams(
-    config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
+    { supabase, businessId }, config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
     paymentAtIssue(config, order),
   );
   const result = await createMerchantInvoice(config, params);
@@ -464,7 +457,7 @@ export async function generateOrderEstimate(
   if (order.smartbill_estimate_number) return { error: "Proforma a fost deja generata pentru aceasta comanda." };
 
   const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
-  const params = await buildInvoiceParams(config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate);
+  const params = await buildInvoiceParams({ supabase, businessId }, config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate);
   const result = await createMerchantEstimate(config, params);
   if ("error" in result) return result;
 
@@ -667,7 +660,7 @@ export async function maybeAutoGenerateInvoice(
     const vatRate = Number(storeSettings?.vat_rate ?? 0);
 
     const params = await buildInvoiceParams(
-      config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
+      { supabase, businessId }, config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
       paymentAtIssue(config, order),
     );
     const result = await createMerchantInvoice(config, params);

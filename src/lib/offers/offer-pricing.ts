@@ -16,6 +16,7 @@
 
 import { aplicaBumpPeOBucata, type BumpItem } from "./bump-pricing";
 import { imparteEconomiaCompanionilor, pretulSetului } from "./fbt-pricing";
+import { esteUuid } from "@/lib/supabase/ids";
 import type { OfferConfig, OfferDisplay, OfferProduct, OfferTrigger, OfferType } from "./offer.types";
 
 function round2(n: number): number {
@@ -36,19 +37,6 @@ export const MAX_OFERTE_ACCEPTATE = 8;
 
 /** Cate bump-uri are voie sa arate o suprafata, ca sa incapa si setul FBT. */
 export const MAX_BUMPURI_AFISATE = MAX_OFERTE_ACCEPTATE - 1;
-
-const TIPAR_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Arata ca un id din baza? Coloanele sunt `uuid`, iar PostgREST intoarce EROARE
- * pe un `.in()` cu o valoare care nu se poate converti — iar o eroare inseamna
- * acum, pe drept, oprirea comenzii. Un singur sir gresit (dintr-un payload
- * inventat sau dintr-o configuratie scrisa prin API) ar fi blocat astfel fiecare
- * comanda a magazinului, cu un mesaj care n-are nicio legatura.
- */
-export function esteUuid(v: unknown): v is string {
-  return typeof v === "string" && TIPAR_UUID.test(v);
-}
 
 /** Id-urile revendicate, curatate: doar id-uri adevarate, deduplicate si numarate. */
 export function normalizeazaIds(acceptedOfferIds: string[] | undefined): { ids: string[]; preaMulte: boolean } {

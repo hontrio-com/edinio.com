@@ -31,6 +31,7 @@ import {
 } from "@/lib/storefront/variants";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { computeVat, vatBase } from "@/lib/utils/vat";
+import { esteIdExtra } from "@/lib/orders/extras";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -113,7 +114,7 @@ export interface PlanEditare {
 
 /** Linia de extraoptiune, care NU e produs si nu intra in subtotal. */
 export function esteLinieExtra(linie: LinieComanda): boolean {
-  return typeof linie.product_id === "string" && linie.product_id.startsWith("extra_");
+  return esteIdExtra(linie.product_id);
 }
 
 /**

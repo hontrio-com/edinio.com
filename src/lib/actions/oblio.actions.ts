@@ -3,7 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
+import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
+import { cereNumeleCotei, invoiceVat, numeCota, type RegimTva } from "@/lib/billing/invoice-vat";
 import {
   getOblioToken,
   getCompanies,
@@ -55,7 +57,7 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
 
   const [{ data: settings }, { data: order }] = await Promise.all([
     supabase.from("store_settings")
-      .select("oblio_config, prices_include_vat, vat_enabled")
+      .select("oblio_config, prices_include_vat, vat_enabled, vat_rate")
       .eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
   ]);
@@ -67,7 +69,61 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
     return { error: "Oblio nu este configurat complet" as const };
   }
 
-  return { supabase, config, order, pricesIncludeVat: settings?.prices_include_vat ?? false, vatEnabled: settings?.vat_enabled ?? false };
+  return {
+    supabase, config, order,
+    pricesIncludeVat: settings?.prices_include_vat ?? false,
+    vatEnabled: settings?.vat_enabled ?? false,
+    vatRate: settings?.vat_rate ?? 0,
+  };
+}
+
+/**
+ * Regimul de TVA al facturii si numele cotei, intr-un singur loc.
+ *
+ * Numele si procentul se aleg impreuna, ca pereche, din nomenclatorul contului
+ * Oblio. Cand cota facturii nu mai e cea aleasa atunci — o comanda veche la alta
+ * cota, sau magazinul trecut intre timp pe alta — numele configurat descrie alt
+ * procent decat cel trimis, si factura ar pleca cu „Normala 21%" scris peste 19.
+ * Nomenclatorul se reciteste DOAR atunci, ca sa nu adaugam un apel de retea (si un
+ * mod de esec) pe un drum care azi merge fara el.
+ */
+async function regimSiNume(
+  token: string,
+  config: OblioConfig,
+  order: { vat_rate?: unknown },
+  magazin: { vatEnabled: boolean; vatRate: unknown; pricesIncludeVat: boolean },
+): Promise<{ vat: RegimTva; vatName: string }> {
+  const vat = invoiceVat(
+    order,
+    { vat_enabled: magazin.vatEnabled, vat_rate: magazin.vatRate, prices_include_vat: magazin.pricesIncludeVat },
+    !!config.vat_name,
+  );
+  const configurat = { name: config.vat_name, percentage: Number(config.vat_percentage) || 0 };
+  if (!cereNumeleCotei(vat.rate, configurat.percentage)) return { vat, vatName: configurat.name };
+
+  // De aici incolo numele configurat NU mai descrie cota trimisa. Orice iesire pe
+  // numele vechi pleaca deci cu o pereche nepotrivita, iar la Oblio numele chiar
+  // selecteaza cota din nomenclatorul contului: daca documentul e refuzat, calea
+  // automata inghite esecul si comanda ramane nefacturata fara sa afle nimeni.
+  // De aceea se scrie in jurnal, chiar daca factura pleaca oricum.
+  const nepotrivit = (motiv: string) => {
+    logError({
+      action: "oblio.numeCota", message: "Numele cotei configurate nu descrie cota facturii",
+      details: { motiv, cotaFacturii: vat.rate, cotaConfigurata: configurat.percentage, numeConfigurat: configurat.name, cif: config.cif },
+      severity: "warning",
+    });
+    return { vat, vatName: configurat.name };
+  };
+
+  try {
+    const cote = await getVatRates(token, config.cif);
+    const nume = numeCota(vat.rate, configurat, cote.map((c) => ({ name: c.name, percentage: c.percent })));
+    // Nomenclatorul citit, dar fara nicio cota cu procentul cerut.
+    return nume === configurat.name ? nepotrivit("cota lipseste din contul Oblio") : { vat, vatName: nume };
+  } catch {
+    // Nomenclatorul necitit nu are voie sa opreasca factura: ramane numele configurat.
+    return nepotrivit("nomenclatorul de cote nu s-a putut citi");
+  }
 }
 
 async function buildProducts(
@@ -81,16 +137,28 @@ async function buildProducts(
     cod_fee_amount?: unknown;
   },
   config: OblioConfig,
-  pricesIncludeVat: boolean,
-  vatEnabled: boolean,
+  vat: RegimTva,
+  vatName: string,
 ): Promise<OblioProduct[]> {
   const items = (order.items as OrderItem[]) ?? [];
   const skuById = await fetchSkuMap(items);
-  const vatIncluded: 0 | 1 = pricesIncludeVat ? 1 : 0;
-  // Platitor de TVA: cota din contul Oblio. Neplatitor: vatName gol + 0% (Oblio
-  // aplica profilul firmei) — ca modulul oficial, NU "SFDD" (nume incert in Oblio).
-  const vatFields = vatEnabled && config.vat_name && config.vat_percentage > 0
-    ? { vatName: config.vat_name, vatPercentage: config.vat_percentage, vatIncluded }
+  /*
+   * Cota si regimul vin din regula COMUNA celor trei case de facturare.
+   *
+   * Pana acum Oblio isi lua cota exclusiv din propria configurare — un numar ales
+   * odata, in ecranul lui — si nu se uita niciodata nici la comanda, nici la
+   * setarile magazinului. Nimic nu-l tinea sincronizat: cu 19 in configurare si 21
+   * in magazin, factura declara mai putin TVA decat s-a incasat.
+   *
+   * Numele cotei ramane din configurare, dar numai cat timp descrie chiar cota
+   * trimisa: numele si procentul se aleg impreuna, ca pereche, din nomenclatorul
+   * contului Oblio, deci un nume vechi langa alt procent ar fi o minciuna.
+   */
+  const vatIncluded: 0 | 1 = vat.taxIncluded ? 1 : 0;
+  // Neplatitor: vatName gol + 0% (Oblio aplica profilul firmei) — ca modulul
+  // oficial, NU "SFDD" (nume incert in Oblio).
+  const vatFields = vat.rate > 0 && vatName
+    ? { vatName, vatPercentage: vat.rate, vatIncluded }
     : { vatName: "", vatPercentage: 0, vatIncluded: 0 as const };
 
   const itemType = config.product_type?.trim() || "Marfa";
@@ -215,13 +283,13 @@ async function buildInvoiceData(
     order_number: string;
   },
   seriesName: string,
-  pricesIncludeVat: boolean,
-  vatEnabled: boolean,
+  vat: RegimTva,
+  vatName: string,
   extra?: Partial<OblioInvoiceData>,
 ): Promise<OblioInvoiceData> {
   const addr = order.shipping_address as ShippingAddress | null;
   const today = new Date().toISOString().split("T")[0];
-  const products = await buildProducts(order, config, pricesIncludeVat, vatEnabled);
+  const products = await buildProducts(order, config, vat, vatName);
   const parte = invoiceParty(order, addr);
   const collect = buildCollect(order.payment_method, order.payment_status, order.order_number);
 
@@ -367,14 +435,15 @@ export async function generateOblioInvoice(
 ): Promise<{ number: string; series: string } | { error: string }> {
   const ctx = await getConfigAndOrder(businessId, orderId, sistem);
   if ("error" in ctx) return { error: ctx.error as string };
-  const { supabase, config, order, pricesIncludeVat, vatEnabled } = ctx;
+  const { supabase, config, order, pricesIncludeVat, vatEnabled, vatRate } = ctx;
 
   const orderData = order as typeof order & { oblio_invoice_number?: string | null };
   if (orderData.oblio_invoice_number) return { error: "Factura Oblio a fost deja generata" };
 
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
-    const data = await buildInvoiceData(config, order, config.series_invoice, pricesIncludeVat, vatEnabled);
+    const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
+    const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName);
     const result = await createOblioDoc(token, "invoice", data);
 
     await supabase.from("orders").update({
@@ -423,7 +492,7 @@ export async function generateOblioProforma(
 ): Promise<{ number: string; series: string } | { error: string }> {
   const ctx = await getConfigAndOrder(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
-  const { supabase, config, order, pricesIncludeVat, vatEnabled } = ctx;
+  const { supabase, config, order, pricesIncludeVat, vatEnabled, vatRate } = ctx;
 
   if (!config.series_proforma?.trim()) return { error: "Seria pentru proforma nu este configurata in Oblio" };
 
@@ -432,7 +501,8 @@ export async function generateOblioProforma(
 
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
-    const data = await buildInvoiceData(config, order, config.series_proforma, pricesIncludeVat, vatEnabled);
+    const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
+    const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName);
     // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).
     const { collect: _collect, spvExtern: _spv, ...proformaData } = data;
     const result = await createOblioDoc(token, "proforma", proformaData as OblioInvoiceData);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
+import { invoiceVat } from "@/lib/billing/invoice-vat";
 import {
   X, Pencil, Loader2, Plus, Minus, Trash2, Search, AlertTriangle,
   Package, Info, Truck, Check,
@@ -90,6 +91,8 @@ type Previzualizare =
     plan: PlanEditare;
     total: number;
     vatAmount: number;
+    /** Cota chiar folosita la calcul: a comenzii, nu cea de azi a magazinului. */
+    vatRate: number;
     shipping: number;
     /** Cat se schimba totalul comenzii; negativ cand scade. */
     diferenta: number;
@@ -231,10 +234,15 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     const subtotal = round2(Number(order.subtotal) + plan.deltaSubtotal);
     const extras = sumaExtraoptiunilor(prevItems);
     // Cota INGHETATA a comenzii, ca pe server: o comanda vanduta cu 19% nu
-    // capata 21% fiindca s-a schimbat setarea magazinului intre timp.
+    // capata 21% fiindca s-a schimbat setarea magazinului intre timp. Regula sta
+    // in `invoiceVat`, aceeasi pe care o cheama si serverul si cele trei case de
+    // facturare — scrisa aici a doua oara, previzualizarea si totalul salvat s-ar
+    // fi despartit la prima corectie facuta doar intr-un loc.
     const vat = {
       vat_enabled: ctx.vat_enabled,
-      vat_rate: Number(order.vat_rate) > 0 ? Number(order.vat_rate) : ctx.vat_rate,
+      vat_rate: invoiceVat(order, {
+        vat_enabled: ctx.vat_enabled, vat_rate: ctx.vat_rate, prices_include_vat: ctx.prices_include_vat,
+      }).rate,
       prices_include_vat: ctx.prices_include_vat,
     };
     // Aceeasi formula ca pe server: taxa se SCALEAZA cu baza, pastrand cota
@@ -260,7 +268,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     });
     return {
       stare: "gata", subtotal, extras, codFee, plan,
-      total: r.total, vatAmount: r.vatAmount, shipping: r.shipping,
+      total: r.total, vatAmount: r.vatAmount, vatRate: vat.vat_rate, shipping: r.shipping,
       diferenta: round2(r.total - Number(order.total)),
     };
   }, [added, prevItems, ctx, order, quote, cotatieAplicata]);
@@ -740,7 +748,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                   </div>
                   {previzualizare.vatAmount > 0 && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">TVA ({ctx?.vat_rate}%)</span>
+                      {/* Cota COMENZII, nu cea de azi a magazinului: pe o comanda
+                          vanduta la 19 intr-un magazin trecut pe 21, eticheta
+                          scria „TVA (21%)" peste o suma calculata cu 19. */}
+                      <span className="text-muted-foreground">TVA ({previzualizare.vatRate}%)</span>
                       <span className="font-medium text-foreground">{formatPrice(previzualizare.vatAmount)}</span>
                     </div>
                   )}

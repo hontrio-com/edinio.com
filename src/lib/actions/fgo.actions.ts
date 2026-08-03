@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { invoiceParty } from "@/lib/billing/invoice-party";
+import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
   createFgoInvoice,
@@ -88,6 +89,8 @@ async function buildItems(
     cod_fee_amount?: unknown;
     total: unknown;
     subtotal: unknown;
+    /** Cota INGHETATA la vanzare. Are prioritate fata de cea din setarile de azi. */
+    vat_rate?: unknown;
   },
   vatEnabled: boolean,
   vatRate: number,
@@ -95,11 +98,16 @@ async function buildItems(
 ): Promise<FgoLineItem[]> {
   const items = (order.items as OrderItem[]) ?? [];
   const skuById = await fetchSkuMap(items);
-  const effectiveVat = vatEnabled ? vatRate : 0;
+  // Cota si regimul vin din regula COMUNA celor trei case de facturare. Pana acum
+  // fGO lua cota din setarile magazinului CITITE AZI si nu se uita niciodata la
+  // `orders.vat_rate`: o comanda veche facturata dupa o schimbare de cota iesea cu
+  // cota noua, adica pe alte cifre decat cele incasate de la client.
+  const vat = invoiceVat(order, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
+  const effectiveVat = vat.rate;
 
-  // fGO cere PretUnitar FARA TVA; daca preturile includ TVA, extragem netul.
+  // fGO cere PretUnitar FARA TVA; daca sumele comenzii contin deja TVA, se extrage netul.
   const toNet = (gross: number) =>
-    pricesIncludeVat && vatEnabled ? gross / (1 + vatRate / 100) : gross;
+    vat.taxIncluded && vat.rate > 0 ? gross / (1 + vat.rate / 100) : gross;
 
   const lineItems: FgoLineItem[] = items.map(item => {
     const sku = item.product_id ? skuById.get(item.product_id) : undefined;

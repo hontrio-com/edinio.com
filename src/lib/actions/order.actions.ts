@@ -30,6 +30,7 @@ import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { MAX_CANTITATE_LINIE } from "@/lib/offers/offer-pricing";
+import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
@@ -1503,10 +1504,17 @@ export async function updateOrderDetails(orderId: string, data: {
      * din setarile de azi, o comanda vanduta cu 19% ar fi capatat 21% pentru ca
      * s-a schimbat legea sau pentru ca si-a corectat comerciantul o cifra —
      * si-ar fi capatat-o cand cineva intra doar sa repare un numar de telefon.
-     * Aceeasi rezerva pe care o are si SmartBill: cota comenzii, altfel a
-     * magazinului.
+     * Aceeasi regula ca la facturare, chemata din acelasi loc (`invoiceVat`):
+     * cota comenzii, altfel a magazinului. Scrisa aici a doua oara, ar fi apucat
+     * pe alt drum — s-a mai intamplat de trei ori in proiectul asta.
      */
-    vat_rate: Number(order.vat_rate) > 0 ? Number(order.vat_rate) : Number(cfgRow?.vat_rate ?? 19),
+    vat_rate: invoiceVat(order, {
+      vat_enabled: cfgRow?.vat_enabled ?? false,
+      vat_rate: cfgRow?.vat_rate ?? 19,
+      // Regimul comenzii, nu al facturii: aici se recalculeaza TOTALUL comenzii,
+      // deci `taxIncluded` de la `invoiceVat` NU are ce cauta mai jos.
+      prices_include_vat: cfgRow?.prices_include_vat ?? true,
+    }).rate,
     // `true`, ca la plasare. Nu misca nimic azi (coloana e NOT NULL si
     // `vat_enabled` scurtcircuiteaza), dar doua rezerve diferite pentru acelasi
     // camp sunt o capcana pusa la pastrare.

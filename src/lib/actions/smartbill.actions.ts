@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { invoiceParty } from "@/lib/billing/invoice-party";
+import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
 import { isCardPaymentMethod, PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodType } from "@/lib/payment-methods";
 import {
   getMerchantSeries,
@@ -93,32 +94,32 @@ async function buildInvoiceProducts(
   const items = (order.items as unknown as OrderItem[]) ?? [];
   const skuById = await fetchSkuMap(items);
 
-  // A non-empty tax_name means "I'm a VAT payer". (Empty = facturi fara TVA.)
-  const isVatPayer = vatEnabled && !!config.tax_name;
-  const orderVat = Number(order.vat_rate) || 0;
-  // Old orders placed before VAT was enabled carry vat_rate=0 — fall back to the
-  // store's CURRENT VAT rate so a VAT-paying merchant can still invoice them.
-  const effectiveVat = isVatPayer ? (orderVat > 0 ? orderVat : storeVatRate) : 0;
-  const usingFallback = effectiveVat > 0 && orderVat <= 0;
+  // Cota si regimul vin din regula COMUNA celor trei case de facturare, ca sa nu
+  // mai raspunda fiecare altfel la aceeasi intrebare. Numele gol al cotei inseamna
+  // „nu sunt platitor de TVA" si opreste taxarea, ca pana acum.
+  const { rate: effectiveVat, taxIncluded } = invoiceVat(
+    order,
+    { vat_enabled: vatEnabled, vat_rate: storeVatRate, prices_include_vat: pricesIncludeVat },
+    !!config.tax_name,
+  );
 
-  // SmartBill needs the exact tax NAME (not a percentage). Keep the configured name
-  // if it's valid in the account; otherwise resolve by matching percentage — so the
-  // invoice works even if the merchant typed e.g. "21". Best-effort (network).
+  // SmartBill cere NUMELE cotei, nu procentul, iar in configuratie sta doar numele:
+  // procentul lui se afla abia din nomenclatorul contului. Numele se pastreaza cat
+  // timp descrie chiar cota trimisa, altfel se cauta dupa procent. Pana acum numele
+  // configurat castiga INTOTDEAUNA, deci pe o comanda veche la alta cota factura ar
+  // fi plecat cu „Normala" scris langa procentul altei cote. Retea, best-effort.
   let taxName = config.tax_name;
   if (effectiveVat > 0) {
     const taxList = await getMerchantTaxes(config);
     if (!("error" in taxList) && taxList.length > 0) {
-      const byName = taxList.find(t => t.name === config.tax_name);
-      const byPct = taxList.find(t => Math.abs(t.percentage - effectiveVat) < 0.01);
-      taxName = byName?.name ?? byPct?.name ?? config.tax_name;
+      const configurat = taxList.find(t => t.name === config.tax_name);
+      // Un nume care nu e in cont n-are procent cunoscut, deci nu poate pretinde ca
+      // se potriveste: -1 il trimite direct la cautarea dupa procent.
+      taxName = numeCota(effectiveVat, { name: config.tax_name, percentage: configurat?.percentage ?? -1 }, taxList);
     }
   }
 
   const hasTax = effectiveVat > 0 && !!taxName;
-  // For a fallback (historical) order the stored prices are the final amounts the
-  // customer paid, so VAT is extracted FROM them (tax included) — invoice total
-  // stays equal to the order total instead of adding tax on top.
-  const taxIncluded = usingFallback ? true : pricesIncludeVat;
 
   const taxFields = hasTax
     ? { taxName, taxPercentage: effectiveVat }

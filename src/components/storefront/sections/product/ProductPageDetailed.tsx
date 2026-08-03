@@ -1028,7 +1028,6 @@ export function ProductPageDetailed({
               price: displayPrice,
               compare_at_price: displayComparePrice,
               images: slides,
-              weight_grams: product.weight_grams,
               variantTitle: selectedComboTitle ?? undefined,
             }}
             business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}

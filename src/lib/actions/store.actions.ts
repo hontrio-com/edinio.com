@@ -31,7 +31,6 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   cod_discount: CardDiscountConfig;
   cod_fee: CodFeeConfig;
   international_shipping: boolean;
-  dpd_use_weight: boolean;
   mailchimp_newsletter: boolean;
   brevo_newsletter: boolean;
   klaviyo_newsletter: boolean;
@@ -46,10 +45,11 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
 
   // International (EU) checkout is available only when DPD is enabled as a courier,
   // opted into international, and credentialed. Booleans only — no secrets leak.
-  const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number; use_product_weight?: boolean } | null;
+  // `use_product_weight` NU mai pleaca spre browser: greutatea nu se mai
+  // calculeaza acolo, ci din cosul incarcat din baza la cotare.
+  const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number } | null;
   const zonesCfg = (data.shipping_zones ?? {}) as Record<string, { enabled?: boolean }>;
   const internationalShipping = !!(dc?.enabled && dc?.international_enabled && dc?.username && dc?.client_id && zonesCfg["dpd"]?.enabled);
-  const dpdUseWeight = internationalShipping && dc?.use_product_weight === true;
 
   // Aceeasi regula pe care o foloseste si verificarea de la plasarea comenzii:
   // daca ecranul si serverul ar decide separat ce procesator e gata, dezacordul
@@ -76,7 +76,6 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     cod_discount: parseCardDiscountConfig(data.cod_discount_config),
     cod_fee: parseCodFeeConfig(data.cod_fee_config),
     international_shipping: internationalShipping,
-    dpd_use_weight: dpdUseWeight,
     mailchimp_newsletter: !!(mc?.enabled && mc?.audience_id && mc?.sources?.checkout !== false),
     brevo_newsletter: !!(bv?.enabled && bv?.list_id && bv?.sources?.checkout !== false),
     klaviyo_newsletter: !!(kv?.enabled && kv?.list_id && kv?.sources?.checkout !== false),

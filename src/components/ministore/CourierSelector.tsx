@@ -40,7 +40,6 @@ interface Props {
   businessId: string;
   county: string;
   city: string;
-  weightKg?: number;
   cod?: number;
   color: string;
   /** EU ISO alpha-2 for international; absent or "RO" = domestic. */
@@ -60,7 +59,7 @@ interface Props {
   optiuniDemo?: ShippingOption[];
 }
 
-export function CourierSelector({ businessId, county, city, weightKg, cod, color, country, postCode, cart, subtotal, onSelect, optiuniDemo }: Props) {
+export function CourierSelector({ businessId, county, city, cod, color, country, postCode, cart, subtotal, onSelect, optiuniDemo }: Props) {
   const [options, setOptions] = useState<ShippingOption[]>(optiuniDemo ?? []);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -88,7 +87,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     // cod is part of the key: COD switches FAN to "Cont Colector" (extra fee)
     // and changes Woot repayment quotes, so prices must refresh with payment.
     if (optiuniDemo) return;
-    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}::${cod ?? ""}::${subtotal ?? ""}::${cartSig}`;
+    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${cod ?? ""}::${subtotal ?? ""}::${cartSig}`;
     if (!ready) {
       setOptions([]);
       setSelectedKey(null);
@@ -106,7 +105,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     setSelectedLocker(null);
     onSelect(null);
 
-    getShippingOptions(businessId, { county, city, weightKg, cod, country, postCode, cart, subtotal })
+    getShippingOptions(businessId, { county, city, cod, country, postCode, cart, subtotal })
       .then((opts) => {
         if (thisReq !== reqId.current) return; // stale response
         setOptions(opts);
@@ -138,7 +137,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         if (thisReq === reqId.current) setLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [county, city, country, postCode, weightKg, cod, subtotal, cartSig]);
+  }, [county, city, country, postCode, cod, subtotal, cartSig]);
 
   // Fetch lockers when a locker option is selected
   useEffect(() => {

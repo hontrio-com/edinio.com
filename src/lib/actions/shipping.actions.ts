@@ -11,6 +11,7 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
+import { contextulCosului } from "@/lib/shipping/cart-weight";
 
 /**
  * Diacritics-insensitive locality match ("București"/"Sector 3" find
@@ -105,7 +106,15 @@ export async function getShippingOptions(
   destination: {
     county: string;
     city: string;
-    weightKg?: number;
+    /*
+     * `weightKg` NU mai exista aici, si asta e intentionat.
+     *
+     * Era un numar de la browser din care iesea un pret care pleaca SEMNAT: se
+     * cerea o cotatie pentru un kilogram si se comandau apoi cincisprezece la
+     * acelasi pret. Greutatea se calculeaza acum exclusiv din cosul incarcat din
+     * baza (`cartWeightKg`), pe amandoua drumurile — si intern, si international.
+     * Scos din semnatura, nu doar ignorat: asa compilatorul enumera apelantii.
+     */
     cod?: number;
     country?: string;  // EU ISO alpha-2 for international; absent or "RO" = domestic
     postCode?: string;
@@ -137,51 +146,43 @@ export async function getShippingOptions(
   // authoritative from the DB. Feeds both the domestic weight (below) and the rules
   // engine. When no cart is passed (legacy callers) everything stays as before.
   const rules = parseShippingRules(settings.shipping_rules);
-  let cartWeightKg = 0;
-  const cartClassIds = new Set<string>();
-  const cartCategories = new Set<string>();
-  let cartQuantity = 0;
-  const cartProductIds: string[] = [];
-  // Produsele cosului se incarca fie cand exista reguli de transport, fie cand
-  // cotatia are nevoie de greutatea reala (DPD pe kilograme). Inainte, greutatea
-  // venea dintr-o harta cu TOT catalogul, trimisa in pagina de cos si de
-  // finalizare la fiecare afisare — pana la zeci de mii de randuri si sute de
-  // kilobytes in HTML, pentru un cos de doua linii. O singura interogare pe
-  // id-urile din cos da acelasi numar.
-  const cerGreutatea = settings?.dpd_config
-    ? (settings.dpd_config as { use_product_weight?: boolean } | null)?.use_product_weight === true
-    : false;
+  /*
+   * Produsele cosului se incarca ori de cate ori exista un cos.
+   *
+   * Se incarcau doar cand magazinul avea reguli de transport sau DPD pe
+   * kilograme — si in productie NICIUN magazin din 127 n-are vreuna dintre ele.
+   * Deci `cartWeightKg` ramanea zero pe toate comenzile interne, iar cotatia
+   * pleca pe rezerva de un kilogram: un cos de zece kilograme cerea curierului
+   * tariful unuia singur, si comerciantul platea diferenta. Cantitatea nu atingea
+   * deloc pretul livrarii.
+   *
+   * O interogare pe id-urile din cos, nu mai mult. Inainte greutatea venea
+   * dintr-o harta cu TOT catalogul, trimisa in pagina de cos la fiecare afisare
+   * — zeci de mii de randuri in HTML pentru un cos de doua linii.
+   */
   const iso2 = destination.country?.toUpperCase();
   const esteIntl = !!iso2 && iso2 !== "RO";
-  // Pe international greutatea se incarca INTOTDEAUNA din baza: acolo ea e
-  // singurul lucru din care iese pretul, iar pretul pleaca semnat. Vezi mai jos.
-  if ((rules.length > 0 || cerGreutatea || esteIntl) && destination.cart && destination.cart.length > 0) {
-    cartProductIds.push(...new Set(destination.cart.map((c) => c.productId)));
-    const { data: cartProducts } = await supabase
+  let cos = contextulCosului([], []);
+  if (destination.cart && destination.cart.length > 0) {
+    const { data: cartProducts, error: eroareCos } = await supabase
       .from("products")
       .select("id, shipping_class, category, weight_grams")
       .eq("business_id", businessId)
-      .in("id", cartProductIds);
-    const byId = new Map((cartProducts ?? []).map((p) => [p.id, p]));
-    let totalWeightG = 0;
-    for (const line of destination.cart) {
-      const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
-      cartQuantity += qty;
-      const p = byId.get(line.productId);
-      if (!p) continue;
-      if (p.shipping_class) cartClassIds.add(p.shipping_class);
-      if (p.category) cartCategories.add(p.category);
-      totalWeightG += (Number(p.weight_grams) || 0) * qty;
-    }
-    cartWeightKg = totalWeightG / 1000;
+      .in("id", [...new Set(destination.cart.map((c) => c.productId))]);
+    // O interogare cazuta inseamna greutate zero, adica tariful unui kilogram
+    // pentru un colet de zece — tacut. Fiecare esec de curier de mai jos se
+    // jurnalizeaza; asta se jurnaliza pana acum nicaieri.
+    if (eroareCos) console.error("[shipping] cart weight lookup failed:", eroareCos.message);
+    cos = contextulCosului(destination.cart, cartProducts ?? []);
   }
+  const cartWeightKg = cos.weightKg;
 
-  // Domestic weight now reflects the real cart (when products carry weights).
-  // Internationalul NU mai foloseste numarul asta: acolo pretul iese exclusiv din
-  // greutate si pleaca semnat, deci se ia din baza (vezi `greutateIntl`).
-  const weight = destination.weightKg && destination.weightKg > 0
-    ? destination.weightKg
-    : (cartWeightKg > 0 ? cartWeightKg : 1);
+  // Greutatea cu care se cere pretul curierilor interni. Un kilogram ramane
+  // rezerva pentru cosurile ale caror produse n-au greutate completata.
+  // Reparatia NU e teoretica: 1408 produse active de pe 14 magazine sunt
+  // cantarite, iar la magazinul care coteaza live prin Cargus si DPD sapte din
+  // opt comenzi trecute ar fi primit alt pret decat cel de la un kilogram.
+  const weight = cartWeightKg > 0 ? cartWeightKg : 1;
   const options: ShippingOption[] = [];
 
   // International (EU): only DPD international applies. Short-circuit here so the
@@ -208,9 +209,11 @@ export async function getShippingOptions(
      * trimitea doar greutatea produsului principal, iar pagina de checkout o
      * uita pe cea a bump-urilor, desi amandoua le treceau in comanda.
      */
-    const greutateIntl = cartWeightKg > 0
-      ? cartWeightKg
-      : (destination.weightKg && destination.weightKg > 0 ? destination.weightKg : 1);
+    // Fara comutator: internationalul cotea deja pe greutatea reala, fiindca
+    // poarta veche incarca cosul ori de cate ori destinatia era straina. Pus
+    // inapoi in fata lui, singurul magazin cu livrare in UE — care are 253 de
+    // produse cantarite si a expediat un colet de 7,8 kg — ar fi cotat 1 kg.
+    const greutateIntl = cartWeightKg > 0 ? cartWeightKg : 1;
     try {
       const quote = await calculateDpdIntlPrice(dpdCfg!, {
         countryId: eu!.dpdCountryId,
@@ -564,11 +567,11 @@ export async function getShippingOptions(
     }
     const ctx: ShippingCartContext = {
       subtotal: Math.max(0, Number(destination.subtotal) || 0),
-      weightKg: destination.weightKg && destination.weightKg > 0 ? destination.weightKg : cartWeightKg,
-      quantity: cartQuantity,
-      classIds: [...cartClassIds],
-      categories: [...cartCategories],
-      productIds: cartProductIds,
+      weightKg: cos.weightKg,
+      quantity: cos.quantity,
+      classIds: cos.classIds,
+      categories: cos.categories,
+      productIds: cos.productIds,
       county: destination.county,
     };
     finalOptions = applyShippingRules(options, rules, ctx, flatCourierIds);

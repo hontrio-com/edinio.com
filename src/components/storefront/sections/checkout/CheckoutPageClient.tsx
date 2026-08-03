@@ -29,8 +29,6 @@ export function CheckoutPageClient({
   freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
   initialDiscountCode: string | null;
-  /** Greutatile produselor, pentru cotatia internationala pe kilograme. */
-  productWeights?: Record<string, number>;
 }) {
   const { items, total, count } = useCart();
   // Ref, nu stare: e un semn ca evenimentele au plecat, nu ceva ce se randeaza.

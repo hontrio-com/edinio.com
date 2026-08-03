@@ -15,8 +15,13 @@ export type DpdConfig = {
   client_id: number;
   /** Opt-in to international (EU) delivery — shows the country field at checkout. */
   international_enabled?: boolean;
-  /** Opt-in: price international orders by the real product weight (else a 1kg estimate). */
-  use_product_weight?: boolean;
+  /*
+   * `use_product_weight` a DISPARUT: greutatea se calculeaza acum intotdeauna din
+   * cosul incarcat din baza, si la intern, si la international. Comutatorul nu
+   * mai avea ce sa porneasca, iar in pozitia „oprit" ar fi cerut curierului
+   * tariful unui kilogram pentru un colet de zece. Campul poate exista in
+   * `dpd_config` la magazinele vechi; nimeni nu-l mai citeste.
+   */
   /** Sender IBAN — required by DPD to pay back COD (ramburs) collected from recipients. */
   iban?: string;
   /** Bank account holder (the merchant). Sent alongside the IBAN. */

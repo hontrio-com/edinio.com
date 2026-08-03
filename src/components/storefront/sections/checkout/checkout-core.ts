@@ -36,7 +36,6 @@ export interface CheckoutOrderInput {
   shippingCost: number; freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
   initialDiscountCode?: string | null;
-  productWeights?: Record<string, number>;
   /**
    * Miniatura din catalogul de design-uri: formularul se randeaza in fluxul
    * paginii, cu datele astea in loc de cele de la server, si nu iese in retea
@@ -55,7 +54,7 @@ export interface CheckoutOrderInput {
 }
 
 export function useCheckoutOrder({
-  open, onClose, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode, productWeights,
+  open, onClose, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode,
   preview = null,
   suprafata = "modal",
 }: CheckoutOrderInput) {
@@ -146,7 +145,6 @@ export function useCheckoutOrder({
   // and re-send merchant/customer notifications.
   const placedRef = useRef<{ payloadKey: string; orderId: string } | null>(null);
   const [intlEnabled, setIntlEnabled] = useState(preview?.intlEnabled ?? false);
-  const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
   // Comenzile din afara tarii NU primesc blocul de firma: cifra de control a
   // CUI-ului e un algoritm strict romanesc, deci orice cod de TVA european ar fi
@@ -157,8 +155,6 @@ export function useCheckoutOrder({
   // acum", ca regulile de validare a CUI-ului sa nu poata diverge intre cele doua
   // formulare. Chemat neconditionat: pornit sau nu, e acelasi numar de carlige.
   const companyBilling = useCompanyBilling(companyEnabled);
-  // Total cart weight (kg) from per-product weights; used for the live intl quote.
-  const totalWeightKg = items.reduce((s, i) => s + ((productWeights?.[i.productId] ?? 0) * i.quantity), 0) / 1000;
   // DPD international services don't support cash-on-delivery — EU orders pay online.
   // Klarna is hardcoded to RO/RON (the store currency); Klarna requires the consumer
   // country to match the currency, so it can't serve non-RO orders — exclude it abroad.
@@ -278,7 +274,6 @@ export function useCheckoutOrder({
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
       setHasCouriers(!!anyEnabled);
       setIntlEnabled(data.international_shipping === true);
-      setDpdUseWeight(data.dpd_use_weight === true);
     });
   }, [preview, open, businessId]);
 
@@ -497,7 +492,6 @@ export function useCheckoutOrder({
     discountAmount,
     discountError,
     discountInput,
-    dpdUseWeight,
     emailField,
     errors,
     extras,
@@ -535,7 +529,6 @@ export function useCheckoutOrder({
     showDiscountField,
     toggleBump,
     total,
-    totalWeightKg,
     vatAmount,
     vatConfig,
   };

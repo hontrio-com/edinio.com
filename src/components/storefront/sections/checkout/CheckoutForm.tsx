@@ -70,7 +70,6 @@ export function CheckoutForm({
     discountAmount,
     discountError,
     discountInput,
-    dpdUseWeight,
     emailField,
     errors,
     extras,
@@ -105,7 +104,6 @@ export function CheckoutForm({
     showDiscountField,
     toggleBump,
     total,
-    totalWeightKg,
   } = motor;
   const inFormular = suprafata === "modal";
   // Prefix propriu: acelasi formular poate fi randat de doua ori pe pagina
@@ -217,7 +215,6 @@ export function CheckoutForm({
               color={color}
               country={isIntl ? form.country : undefined}
               postCode={isIntl ? form.postCode : undefined}
-              weightKg={isIntl && dpdUseWeight && totalWeightKg > 0 ? totalWeightKg : undefined}
               cod={paymentMethod === "cash_on_delivery" ? total : 0}
               // Bump-urile acceptate intra si ele in cotatie: sunt produse
               // reale in comanda, cu greutatea si volumul lor. Modalul le

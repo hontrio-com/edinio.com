@@ -34,7 +34,6 @@ export function DpdConfigClient({
   const [clientId, setClientId] = useState<number | null>(initialConfig?.client_id ?? null);
   const [clientName, setClientName] = useState("");
   const [international, setInternational] = useState(initialConfig?.international_enabled ?? false);
-  const [useWeight, setUseWeight] = useState(initialConfig?.use_product_weight ?? false);
   const [iban, setIban] = useState(initialConfig?.iban ?? "");
   const [accountHolder, setAccountHolder] = useState(initialConfig?.account_holder ?? "");
   const [declaredValue, setDeclaredValue] = useState(initialConfig?.declared_value_enabled ?? false);
@@ -70,7 +69,6 @@ export function DpdConfigClient({
       password: password.trim(),
       client_id: clientId,
       international_enabled: international,
-      use_product_weight: useWeight,
       iban: iban.trim() || undefined,
       account_holder: accountHolder.trim() || undefined,
       declared_value_enabled: declaredValue,
@@ -195,13 +193,10 @@ export function DpdConfigClient({
             <Switch checked={international} onCheckedChange={setInternational} />
           </div>
           {international && (
-            <label className="mt-3 flex cursor-pointer items-start gap-2.5 border-t border-border pt-3">
-              <input type="checkbox" checked={useWeight} onChange={e => setUseWeight(e.target.checked)}
-                className="mt-0.5 rounded border-border accent-primary" />
-              <span className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Calculeaza dupa greutatea reala a produselor.</span> Pretul livrarii internationale se ia din greutatea setata pe fiecare produs. Daca e oprit, se foloseste o estimare de 1kg.
-              </span>
-            </label>
+            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+              Pretul livrarii se calculeaza din greutatea setata pe fiecare produs, inmultita cu
+              bucatile din cos. Produsele fara greutate completata intra cu o estimare de 1 kg pe colet.
+            </p>
           )}
         </Panel>
       )}

@@ -31,7 +31,6 @@ export function CartPageClient({
   vat,
   comandaPePagina,
   emailFieldConfig,
-  productWeights,
 }: {
   variant: string;
   settings: Record<string, unknown>;
@@ -45,12 +44,6 @@ export function CartPageClient({
   vat?: import("@/lib/storefront/cart/pricing").CartPricingInput["vat"];
   comandaPePagina: boolean;
   emailFieldConfig: { enabled: boolean; required: boolean };
-  /**
-   * Greutatile produselor, pentru cotatia internationala DPD pe kilograme.
-   * Fara ele, acelasi cos primeste alt tarif comandat de aici decat comandat de
-   * pe pagina de magazin, care le trimite.
-   */
-  productWeights?: Record<string, number>;
 }) {
   const { items, total, count } = useCart();
   const [comandaDeschisa, setComandaDeschisa] = useState(false);
@@ -110,7 +103,6 @@ export function CartPageClient({
           shippingCost={shippingCost}
           freeShippingThreshold={freeShippingThreshold}
           emailFieldConfig={emailFieldConfig}
-          productWeights={productWeights}
         />
       )}
     </>

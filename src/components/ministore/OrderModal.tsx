@@ -62,8 +62,7 @@ interface Props {
     price: number;
     compare_at_price?: number | null;
     images: string[];
-    weight_grams?: number | null;
-    /**
+      /**
      * Combinatia aleasa, separat de nume. Serverul o foloseste ca sa pretuiasca
      * produsul din combinatia LUI: fara ea, orice pret de varianta activa trecea
      * pentru orice varianta.
@@ -190,7 +189,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
   const [intlEnabled, setIntlEnabled] = useState(false);
-  const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
   // In afara tarii, blocul de firma nu se arata: cifra de control a CUI-ului e
   // romaneasca, deci un cod de TVA european ar fi respins si ar bloca comanda.
@@ -412,7 +410,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       }
       setIntlEnabled(data.international_shipping === true);
       setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true || data.klaviyo_newsletter === true);
-      setDpdUseWeight(data.dpd_use_weight === true);
       setVatConfig({
         vat_enabled: data.vat_enabled,
         vat_rate: data.vat_rate,
@@ -1106,7 +1103,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   color={color}
                   country={isIntl ? form.country : undefined}
                   postCode={isIntl ? form.postCode : undefined}
-                  weightKg={isIntl && dpdUseWeight && product.weight_grams ? (product.weight_grams * quantity) / 1000 : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
                   cart={[
                     { productId: product.id, quantity },

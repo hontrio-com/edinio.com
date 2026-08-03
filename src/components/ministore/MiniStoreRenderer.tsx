@@ -260,12 +260,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // the authoritative check happens at order time). Resolve components from the
   // loaded product list; unknown components are treated as available.
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
-  // Per-product weights (grams) for the international shipping quote (opt-in).
-  const productWeights = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const p of products) if (p.weight_grams) m[p.id] = p.weight_grams;
-    return m;
-  }, [products]);
   const isProductOutOfStock = useCallback((p: Product): boolean => {
     if (p.is_bundle) {
       const cfg = readBundleConfig(p.page_sections);
@@ -1135,7 +1129,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           freeShippingThreshold={freeShippingThreshold}
           emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
           initialDiscountCode={recoverDiscountCode}
-          productWeights={productWeights}
         />
       )}
 

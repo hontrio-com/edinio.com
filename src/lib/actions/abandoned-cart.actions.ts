@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
+import { hasVariants } from "@/lib/storefront/variants";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
@@ -106,7 +107,7 @@ export async function getRecoverableCart(cartId: string): Promise<AbandonedCartI
     if (ids.length === 0) return [];
 
     const { data: products } = await admin
-      .from("products").select("id, name, price, images, is_active")
+      .from("products").select("id, name, price, images, is_active, page_sections")
       .eq("business_id", cart.business_id).in("id", ids);
     const pmap = new Map((products ?? []).map((p) => [p.id, p]));
 
@@ -114,6 +115,19 @@ export async function getRecoverableCart(cartId: string): Promise<AbandonedCartI
     for (const it of stored) {
       const p = pmap.get(it.product_id);
       if (!p || !p.is_active) continue;
+      /*
+       * Produsele cu variante se SAR la recuperare.
+       *
+       * `AbandonedCartItem` n-are camp de varianta si nici nu s-a scris vreodata
+       * unul (129 de linii salvate in productie, niciuna cu marime), deci linia
+       * refacuta ar intra in cos fara marime. Pana acum asta insemna o comanda la
+       * pretul de BAZA, cu o linie pe factura fara nicio marime — chiar defectul
+       * 18b. De cand garda o refuza, ar insemna ceva mai rau: `restoreCart`
+       * SUPRASCRIE cosul, iar checkout-ul n-are buton de stergere pe linie, deci
+       * clientul ramane cu o comanda pe care n-o poate trimite si fara cale de
+       * iesire. Mai bine lipseste un produs decat sa blocheze tot cosul.
+       */
+      if (hasVariants(p.page_sections)) continue;
       items.push({
         product_id: p.id,
         name: p.name,

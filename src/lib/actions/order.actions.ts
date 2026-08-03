@@ -14,7 +14,7 @@ import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
-import { comboStockMap, enabledComboPriceMap } from "@/lib/storefront/variants";
+import { comboStockMap, enabledComboPriceMap, parseVariants } from "@/lib/storefront/variants";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import {
   planificaAdaugarea,
@@ -30,6 +30,7 @@ import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
+import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
@@ -91,6 +92,7 @@ async function jurnalizeazaOfertele(
 
 type OrderProduct = {
   id: string;
+  name: string;
   price: number;
   is_active: boolean;
   business_id: string;
@@ -113,6 +115,10 @@ function legitUnitPrices(product: OrderProduct, variantTitle?: string | null): n
     // fiindca ar fi exact portita pe care o inchidem. Comanda e respinsa.
     return pret != null ? [round2(pret)] : [];
   }
+  // Produsul cu variante NU are pret legitim fara o varianta aleasa. `pretulLiniei`
+  // opreste comanda inainte sa se ajunga aici; randul asta e a doua incuietoare,
+  // ca o cale noua sa nu poata reintra pe portita.
+  if (parseVariants(product.page_sections) !== null) return [];
   const set = new Set<number>([round2(product.price)]);
   const ps = (product.page_sections ?? {}) as {
     variants?: { enabled?: boolean; combinations?: Array<{ enabled?: boolean; price?: number | null }> };
@@ -508,7 +514,7 @@ export async function placeOrder(data: {
   // Reload product + store config and recompute every price server-side.
   const [{ data: product, error: eroareProdus }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
-      .select("id, price, is_active, business_id, page_sections")
+      .select("id, name, price, is_active, business_id, page_sections")
       .eq("id", data.product_id)
       .eq("business_id", data.business_id)
       .single(),
@@ -569,6 +575,26 @@ export async function placeOrder(data: {
   if (ceruta.fel !== "ok") return { error: mesajCantitate(ceruta) };
   const cantitate = ceruta.cantitate;
 
+  /*
+   * Produsul din formular trebuie sa aiba varianta aleasa, si aceea sa fie de
+   * vanzare.
+   *
+   * `legitUnitPrices` refuza deja o varianta necunoscuta, dar ramura FARA
+   * varianta intorcea pretul de baza plus toate preturile combinatiilor: adica un
+   * produs cu variante trimis fara nicio marime trecea la pretul de baza. Pe
+   * ANTIFOANE, 156,80 in loc de 438,00, si o linie pe factura fara marime, pe
+   * care comerciantul n-are cum sa o expedieze. Formularul nu lasa asta sa se
+   * intample, dar actiunea e export „use server", adica endpoint public.
+   */
+  const linieP = pretulLiniei(
+    { name: String((product as OrderProduct).name ?? ""), price: round2(Number(product.price)), page_sections: product.page_sections },
+    data.variant_title,
+  );
+  if (linieP.fel === "eroare") {
+    logError({ action: "placeOrder.variantRejected", message: linieP.error, details: { businessId: data.business_id, productId: data.product_id, variant: String(data.variant_title ?? "").slice(0, 80) }, severity: "warning" });
+    return { error: linieP.error };
+  }
+
   const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
   if (mainSubtotal === null) {
     logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity, cantitate }, severity: "warning" });
@@ -604,7 +630,7 @@ export async function placeOrder(data: {
         return [p.id, {
           name: String(p.name),
           price: base,
-          combos: enabledComboPriceMap(p.page_sections, base),
+          pageSections: p.page_sections,
           tiers: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers,
         }];
       }));
@@ -636,22 +662,40 @@ export async function placeOrder(data: {
         logError({ action: "placeOrder.cantitateRespinsa", message: r.fel, details: { businessId: data.business_id, productId: respinsa.linie.product_id, quantity: String(respinsa.linie.quantity).slice(0, 40) }, severity: "warning" });
         return { error: mesajCantitate(r, extraMap.get(respinsa.linie.product_id)?.name) };
       }
+      // Varianta ceruta trebuie sa existe, iar un produs cu variante nu poate
+      // veni fara niciuna. Pana acum calea asta cadea pe pretul de baza in
+      // amandoua cazurile, spre deosebire de calea cosului, care refuza.
+      // Aceleasi linii pe care le pretuieste blocul de mai jos, nu un filtru scris
+      // a doua oara: chiar comentariul de deasupra avertizeaza ca doua filtre
+      // repetate ajung sa difere.
+      const eroareVar = eroareVarianta(
+        new Map([...extraMap].map(([id, m]) => [id, { name: m.name, price: m.price, page_sections: m.pageSections }])),
+        cerute.map((c) => c.linie),
+      );
+      if (eroareVar) {
+        logError({ action: "placeOrder.variantUnavailable", message: eroareVar, details: { businessId: data.business_id, ids }, severity: "warning" });
+        return { error: eroareVar };
+      }
       const liniiDinCos = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
       liniiCuVarianta.push(...liniiDinCos);
       cartItems = liniiDinCos
         .map((i) => {
           const meta = extraMap.get(i.product_id)!;
-          // Named variant priced from its enabled combination; unknown/disabled
-          // variants and simple products fall back to the product's base price.
-          const variantPrice = i.variant_title ? meta.combos.get(i.variant_title) : undefined;
-          const unitPrice = variantPrice != null ? round2(variantPrice) : meta.price;
+          // Pretul si numele vin din ACEEASI functie care a dat verdictul mai sus.
+          // Aici era portita: o varianta dezactivata intre timp cadea pe pretul de
+          // BAZA si intra in comanda purtandu-i numele.
+          const rezolvata = pretulLiniei(
+            { name: meta.name, price: meta.price, page_sections: meta.pageSections },
+            i.variant_title,
+          );
+          const unitPrice = rezolvata.fel === "ok" ? rezolvata.unitPrice : meta.price;
           // Treptele se aplica si liniilor purtate din cos in comanda directa,
           // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
           // plecata din formularul de produs il pierde pe drum.
           const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
           return {
             product_id: i.product_id,
-            name: i.variant_title ? `${meta.name} (${i.variant_title})` : meta.name,
+            name: rezolvata.fel === "ok" ? rezolvata.nume : meta.name,
             price: linie.unitPrice,
             quantity: i.quantity,
           };
@@ -822,7 +866,12 @@ export async function placeOrder(data: {
   const allItems = [
     {
       product_id: data.product_id,
-      name: data.product_name,
+      // Numele din CATALOG, cu marimea coapta de noi. Venea de la client, iar
+      // `orders.items` nu retine `variant_title` nicaieri: numele e SINGURA urma
+      // a marimii vandute, si pleaca netaiat pe factura la toate trei casele. Cu
+      // `variant_title: "S"` si `product_name: "GEACA (XXL)"`, pretul era al lui S
+      // si comanda scria XXL.
+      name: linieP.nume,
       price: unitPrice,
       quantity: cantitate,
       ...(data.customization && { customization: data.customization }),
@@ -1871,7 +1920,8 @@ export async function placeCartOrder(data: {
   const productIds = [...new Set(data.items.map((i) => i.product_id))];
   const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
-      .select("id, price, is_active, page_sections")
+      // `name` se cere ca linia sa poarte numele din CATALOG, nu sirul din browser.
+      .select("id, name, price, is_active, page_sections")
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
@@ -1907,20 +1957,19 @@ export async function placeCartOrder(data: {
 
   const activeProducts = (dbProducts ?? []).filter((p) => p.is_active);
   const priceMap = new Map(activeProducts.map((p) => [p.id, round2(Number(p.price))]));
-  // Per-product map of enabled variant title -> authoritative unit price. A cart
-  // line that names a variant is re-priced from this, never from the browser.
-  const comboMap = new Map(
-    activeProducts.map((p) => [p.id, enabledComboPriceMap(p.page_sections, round2(Number(p.price)))]),
-  );
   if (data.items.some((i) => !priceMap.has(i.product_id))) {
     logError({ action: "placeCartOrder.itemUnavailable", message: "Cart item missing/inactive for business", details: { businessId: data.business_id, productIds }, severity: "warning" });
     return { error: "Unul dintre produse nu mai este disponibil. Reincarca cosul." };
   }
-  // A named variant that no longer maps to an enabled combination (merchant
-  // disabled or renamed it) must not silently fall back to the base price.
-  if (data.items.some((i) => i.variant_title && !comboMap.get(i.product_id)?.has(i.variant_title))) {
-    logError({ action: "placeCartOrder.variantUnavailable", message: "Cart variant no longer enabled", details: { businessId: data.business_id, productIds }, severity: "warning" });
-    return { error: "O varianta din cos nu mai este disponibila. Reincarca cosul." };
+  // Varianta ceruta trebuie sa existe SI produsul cu variante trebuie sa aiba una
+  // aleasa. Verificarea sta acum in `pretulLiniei`, langa pret, ca sa nu mai poata
+  // exista o cale prin care linia trece de poarta si se pretuieste altfel.
+  const catalogLinii = new Map(activeProducts.map((p) => [p.id,
+    { name: String(p.name ?? ""), price: round2(Number(p.price)), page_sections: p.page_sections }]));
+  const eroareVar = eroareVarianta(catalogLinii, data.items);
+  if (eroareVar) {
+    logError({ action: "placeCartOrder.variantUnavailable", message: eroareVar, details: { businessId: data.business_id, productIds }, severity: "warning" });
+    return { error: eroareVar };
   }
   /*
    * Stocul DECLARAT pe combinatie.
@@ -1970,8 +2019,11 @@ export async function placeCartOrder(data: {
   );
 
   let validatedItems = liniiCerute.map((i) => {
-    const variantPrice = i.variant_title ? comboMap.get(i.product_id)!.get(i.variant_title) : undefined;
-    const unitPrice = variantPrice != null ? round2(variantPrice) : priceMap.get(i.product_id)!;
+    // Acelasi ajutor care a dat verdictul mai sus da si pretul: verificat si
+    // pretuit de doua functii diferite, cele doua ajungeau sa nu mai spuna
+    // acelasi lucru — chiar asta era defectul.
+    const rezolvata = pretulLiniei(catalogLinii.get(i.product_id)!, i.variant_title);
+    const unitPrice = rezolvata.fel === "ok" ? rezolvata.unitPrice : priceMap.get(i.product_id)!;
     // Treptele de cantitate se aplica si pe calea cosului, cu ACELASI motor pe
     // care il foloseste pagina de produs. Pana acum le onora doar comanda
     // directa: pagina promitea „3 bucati 250 lei", iar clientul care punea 3 in
@@ -1984,7 +2036,10 @@ export async function placeCartOrder(data: {
     const linie = pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
     return {
       product_id: i.product_id,
-      name: i.variant_title ? `${i.name} (${i.variant_title})` : i.name,
+      // Numele din CATALOG, nu cel din browser: pana acum `orders.items[].name`
+      // era un sir liber de la client, purtat mai departe pe factura si in
+      // emailuri. Calea comenzii directe folosea de mult numele autoritar.
+      name: rezolvata.fel === "ok" ? rezolvata.nume : String(i.name ?? "").slice(0, 200),
       price: linie.unitPrice,
       quantity: i.quantity,
     };

@@ -41,6 +41,12 @@ export function FanCourierPickupModal({
   const [firstHour, setFirstHour] = useState("09:00");
   const [secondHour, setSecondHour] = useState("17:00");
   const [parcels, setParcels] = useState("1");
+  // Aici „1" ramane pe loc, intentionat, spre deosebire de formularele de AWB.
+  // Asta nu e un colet, e comanda de ridicare: ii spune soferului cate colete si
+  // cat cantaresc in total, ca sa vina cu masina potrivita. Nu se tarifeaza dupa
+  // greutate (tariful sta pe fiecare AWB in parte) si formularul nu are nicio
+  // comanda in mana din care sa se calculeze — se deschide pe magazin, nu pe
+  // comanda. Deci nu e acelasi defect, si nu se repara la fel.
   const [weight, setWeight] = useState("1");
   const [observations, setObservations] = useState("");
   const [submitting, setSubmitting] = useState(false);

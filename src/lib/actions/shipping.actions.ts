@@ -12,6 +12,7 @@ import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 import { contextulCosului } from "@/lib/shipping/cart-weight";
+import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
 
 /**
  * Diacritics-insensitive locality match ("București"/"Sector 3" find
@@ -209,7 +210,7 @@ export async function getShippingOptions(
   // Reparatia NU e teoretica: 1408 produse active de pe 14 magazine sunt
   // cantarite, iar la magazinul care coteaza live prin Cargus si DPD sapte din
   // opt comenzi trecute ar fi primit alt pret decat cel de la un kilogram.
-  const weight = cartWeightKg > 0 ? cartWeightKg : 1;
+  const weight = cartWeightKg > 0 ? cartWeightKg : GREUTATE_REZERVA_KG;
   const options: ShippingOption[] = [];
 
   // International (EU): only DPD international applies. Short-circuit here so the

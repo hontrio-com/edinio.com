@@ -13,6 +13,8 @@ import { createCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { createSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { createFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { createDpdShipmentAction } from "@/lib/actions/dpd.actions";
+import { greutateaColetului, idurileDeCantarit } from "@/lib/shipping/awb-weight";
+import type { ProdusCotat } from "@/lib/shipping/cart-weight";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
@@ -81,6 +83,57 @@ async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, size: 
 
 function isErr(res: unknown): res is { error: string } {
   return !!res && typeof res === "object" && "error" in res;
+}
+
+/**
+ * Greutatile produselor din comenzile date, intr-o singura interogare.
+ *
+ * O interogare per comanda ar fi insemnat 50 de dus-intorsuri la baza pentru o
+ * generare in masa; catalogul se cere o data si se imparte intre toate.
+ * `idurileDeCantarit` scoate liniile care nu sunt produse (optiunile de comanda
+ * au `product_id` de forma `extra_ext_...`, 3 in productie) — trimise intr-un
+ * `in()` pe o coloana uuid, ar fi rasturnat interogarea intreaga si toate
+ * coletele ar fi plecat pe rezerva.
+ */
+async function greutatileDinCatalog(
+  admin: ReturnType<typeof createAdminClient>, businessId: string, itemsPerComanda: unknown[],
+): Promise<ProdusCotat[]> {
+  const ids = [...new Set(itemsPerComanda.flatMap((items) => idurileDeCantarit(items)))];
+  if (ids.length === 0) return [];
+  const { data, error } = await admin
+    .from("products").select("id, weight_grams").eq("business_id", businessId).in("id", ids);
+  // Cade interogarea, cad toate coletele pe un kilogram — exact bug-ul reparat.
+  // Fara linia asta ar cadea tacut, ca pana acum.
+  if (error) console.error("[awb] cautarea greutatilor a esuat:", error.message);
+  return (data ?? []) as ProdusCotat[];
+}
+
+/**
+ * Greutatea propusa in formularele de AWB din panou.
+ *
+ * Formularele sunt componente de client si primesc doar randul comenzii, nu si
+ * catalogul, deci greutatea nu se poate calcula acolo. Toate sase porneau de la
+ * `useState("1")`: masurat pe 2026-08-03, 4 din cele 50 de comenzi cu AWB emis
+ * cantaresc peste un kilogram, iar eSAFE (Sameday + Woot pornite) are 267 de
+ * produse active peste un kilogram, pana la 13,1 kg.
+ *
+ * Ramane o PROPUNERE, nu o impunere: comerciantul stie ambalajul, noi stim doar
+ * marfa. De-aia se intoarce si `dinCatalog`, ca formularul sa spuna cand cifra e
+ * doar o rezerva.
+ */
+export async function greutateaComenziiPentruAwb(
+  businessId: string, orderId: string,
+): Promise<{ kg: number; dinCatalog: boolean; liniiFaraGreutate: number } | { error: string }> {
+  const g = await guardBusiness(businessId);
+  if ("error" in g) return g;
+
+  const admin = createAdminClient();
+  const { data: order } = await admin
+    .from("orders").select("items").eq("business_id", businessId).eq("id", orderId).single();
+  if (!order) return { error: "Comanda negasita." };
+
+  const produse = await greutatileDinCatalog(admin, businessId, [order.items]);
+  return greutateaColetului(order.items, produse);
 }
 
 // ── Bulk invoices ───────────────────────────────────────────────────────────────
@@ -179,6 +232,14 @@ export async function bulkGenerateAwbs(
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
 
+  // Greutatile intregii selectii, cerute o singura data. Generarea in masa nu are
+  // niciun camp de corectat, deci ce se calculeaza aici pleaca direct pe colet.
+  const produse = await greutatileDinCatalog(admin, businessId, (orders ?? []).map((o) => o.items));
+  // Comenzile care n-au avut de unde sa afle greutatea. Se jurnalizeaza la
+  // sfarsit, o singura linie: pana acum TOATE plecau pe un kilogram si nu se
+  // vedea nicaieri.
+  const peRezerva: string[] = [];
+
   // Map a stored checkout courier value to our supported set.
   const COURIER_ALIASES: Record<string, Exclude<BulkCourier, "auto">> = {
     cargus: "cargus", sameday: "sameday", fancourier: "fancourier", "fan-courier": "fancourier", "fan_courier": "fancourier", dpd: "dpd",
@@ -204,8 +265,14 @@ export async function bulkGenerateAwbs(
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
+    const greutate = greutateaColetului(o.items, produse);
+    // Si cele PARTIALE, nu doar cele fara nicio greutate: acelea sunt cazul
+    // periculos — un numar incomplet care pleaca la curier fara interventie
+    // umana. `dinCatalog` e fals in amandoua situatiile.
+    if (!greutate.dinCatalog) peRezerva.push(o.order_number);
+
     try {
-      const res = await createAwbForOrder(target, businessId, o);
+      const res = await createAwbForOrder(target, businessId, o, greutate.kg);
       if (isErr(res)) { result.failed++; result.errors.push({ order: o.order_number, message: res.error }); }
       else result.done++;
     } catch (e) {
@@ -214,6 +281,9 @@ export async function bulkGenerateAwbs(
     }
   }, AWB_CONCURRENCY);
 
+  if (peRezerva.length > 0) {
+    logError({ action: "bulkGenerateAwbs", message: `${peRezerva.length} colete au plecat pe greutatea de rezerva (produse fara weight_grams): ${peRezerva.join(", ")}`, details: { businessId }, businessId, userId: g.userId, severity: "warning" });
+  }
   logError({ action: "bulkGenerateAwbs", message: `courier=${courier} done=${result.done} skipped=${result.skipped} failed=${result.failed}`, details: { businessId }, businessId, userId: g.userId, severity: "info" });
   revalidatePath("/dashboard/orders");
   return result;
@@ -230,8 +300,12 @@ type BulkOrderRow = {
 
 // Build a courier-specific default AWB input from the order and call the existing
 // per-order action (which derives lockers / PUDO / declared value server-side).
+//
+// `weightKg` e parametru OBLIGATORIU, nu optional cu implicit 1: asa `tsc`
+// enumera apelantii daca mai apare unul, in loc sa-l lase sa mosteneasca tacut
+// kilogramul fix care era chiar defectul.
 async function createAwbForOrder(
-  courier: Exclude<BulkCourier, "auto">, businessId: string, order: unknown,
+  courier: Exclude<BulkCourier, "auto">, businessId: string, order: unknown, weightKg: number,
 ): Promise<{ error: string } | Record<string, unknown>> {
   const o = order as BulkOrderRow;
   const addr = (o.shipping_address ?? {}) as ShippingAddr;
@@ -249,7 +323,11 @@ async function createAwbForOrder(
   const addressLine = (addr.address ?? addr.street ?? "").trim();
   const zip = (addr.postal_code ?? "").trim();
   const email = o.customer_email ?? "";
-  const weight = 1; // default parcel weight; couriers auto-pick the service band
+  // Greutatea calculata din produsele comenzii (`greutateaColetului`). Pana la
+  // 2026-08-03 aici sta un `const weight = 1` fix: cotatia cerea pretul pe
+  // greutatea reala, iar coletul pleca declarat pe un kilogram, deci curierul
+  // refactura banda adevarata si diferenta o platea comerciantul, nevazuta.
+  const weight = weightKg;
 
   switch (courier) {
     case "cargus":

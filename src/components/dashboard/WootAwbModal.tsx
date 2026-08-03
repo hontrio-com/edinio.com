@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations, getWootReceiverLocations } from "@/lib/actions/woot.actions";
 import type { WootPriceResult, WootParcel, WootCounty, WootCity, WootLocation } from "@/lib/woot";
+import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -48,7 +49,6 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
 
   // Parcel state
   const [parcelType, setParcelType] = useState<"package" | "envelope">("package");
-  const [weight, setWeight] = useState("1");
   const [length, setLength] = useState("30");
   const [width, setWidth] = useState("20");
   const [height, setHeight] = useState("10");
@@ -80,6 +80,11 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [cancelling, startCancel] = useTransition();
 
   const hasAwb = !!order.woot_awb_number;
+
+  // Greutatea vine din produsele comenzii, nu de la un kilogram fix. La Woot
+  // atarna de ea si lista de preturi de mai jos, nu doar eticheta: se cereau
+  // tarife pentru un kilogram si se expedia coletul adevarat.
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
 
   // Formularul se monteaza odata cu pagina, nu la deschidere, deci suma nu are voie
   // sa ramana cea calculata la incarcare: dupa ce comerciantul marcheaza comanda
@@ -424,6 +429,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                             onChange={e => setter(e.target.value)} className={inputCls} />
                         </div>
                       ))}
+                      {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="col-span-4 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                     </div>
                   )}
 

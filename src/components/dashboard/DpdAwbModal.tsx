@@ -6,6 +6,7 @@ import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createDpdShipmentAction, cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { euCountryByIso2 } from "@/lib/eu-countries";
+import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -57,7 +58,9 @@ export function DpdAwbModal({
     addr?.delivery_type === "locker" &&
     !!addr?.locker_id;
 
-  const [weight, setWeight] = useState("1");
+  // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
+  // `useGreutateaAwb`.
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
@@ -363,6 +366,7 @@ export function DpdAwbModal({
                       onChange={e => setWeight(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />
+                    {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                   </div>
 
                   <div>

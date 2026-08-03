@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createSamedayAwbAction, deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
+import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -52,7 +53,9 @@ export function SamedayAwbModal({
   const isEasyboxDelivery =
     addr?.courier === "sameday" && addr?.delivery_type === "locker" && !!addr?.locker_id;
 
-  const [weight, setWeight] = useState("1");
+  // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
+  // `useGreutateaAwb`.
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
   const [packageNumber, setPackageNumber] = useState("1");
   const [packageType, setPackageType] = useState<0 | 1 | 2>(0);
   const [length, setLength] = useState("");
@@ -356,6 +359,7 @@ export function SamedayAwbModal({
                         onChange={e => setWeight(e.target.value)}
                         className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                       />
+                      {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Nr. colete</label>

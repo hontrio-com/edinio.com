@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getCOPrices, createCOAwb } from "@/lib/actions/colete.actions";
 import type { COReceiver, COParcel } from "@/lib/colete";
+import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -62,7 +63,9 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
 
   // Parcel state
   const [parcelType, setParcelType] = useState<"package" | "envelope">("package");
-  const [weight, setWeight] = useState("1");
+  // Greutatea vine din produsele comenzii, nu de la un kilogram fix. La Colete
+  // Online atarna de ea si lista de tarife de mai jos, nu doar eticheta.
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
   const [length, setLength] = useState("30");
   const [width, setWidth] = useState("20");
   const [height, setHeight] = useState("10");
@@ -303,6 +306,7 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
                     <label className="block text-xs text-muted-foreground mb-1">Continut *</label>
                     <input type="text" value={content} onChange={e => setContent(e.target.value)} className={inputCls} />
                   </div>
+                  {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="col-span-2 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                 </div>
                 {parcelType === "package" && (
                   <div className="grid grid-cols-3 gap-2">

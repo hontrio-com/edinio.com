@@ -440,7 +440,19 @@ export async function applyFbtPricing(
     const compLines = out.filter((i) => compIds.has(i.product_id) && i.product_id !== anchorProductId);
     if (compLines.length === 0) continue;
     const discounted = fbtCompanionPrices(anchorUnitPrice, compLines.map((l) => l.price), cfg);
-    compLines.forEach((l, idx) => { if (discounted[idx] < l.price) l.price = discounted[idx]; });
+    /*
+     * Reducerea de set se da pe O SINGURA bucata din fiecare companion.
+     *
+     * `fbtCompanionPrices` primeste si intoarce preturi UNITARE, iar pana acum
+     * pretul redus se scria peste toata linia, fara ca `l.quantity` sa fie citit
+     * nicaieri: „setul" se reducea de cate ori voia clientul. Exact capcana
+     * reparata demult pentru order bump — cardul ofera setul o data, deci si
+     * reducerea se da o data. Se refoloseste chiar ajutorul de acolo, ca cele
+     * doua cai sa nu mai poata apuca pe drumuri diferite.
+     */
+    compLines.forEach((l, idx) => {
+      if (discounted[idx] < l.price) aplicaBumpPeOBucata(out, l, discounted[idx]);
+    });
   }
   return { items: out };
 }

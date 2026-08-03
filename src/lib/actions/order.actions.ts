@@ -533,7 +533,18 @@ export async function placeOrder(data: {
           // Treptele se aplica si liniilor purtate din cos in comanda directa,
           // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
           // plecata din formularul de produs il pierde pe drum.
-          const cantitate = Math.floor(i.quantity);
+          /*
+           * Cantitatea se PLAFONEAZA, ca la editarea comenzii.
+           *
+           * `placeOrder` e export dintr-un modul „use server", adica endpoint
+           * public, iar aici nu exista nicio limita: `Math.floor` primeste ce
+           * trimite browserul. Calea de editare plafoneaza de mult la 999
+           * (`edit-pricing.ts`), asta nu. Cat timp o reducere de set se putea
+           * aplica pe fiecare bucata, lipsa plafonului transforma un defect
+           * marginit intr-unul nemarginit: la 999 de bucati, aproape 9.900 de
+           * lei pe o singura comanda.
+           */
+          const cantitate = Math.min(999, Math.max(0, Math.floor(i.quantity)));
           const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), cantitate, unitPrice);
           return {
             product_id: i.product_id,

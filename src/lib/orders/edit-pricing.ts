@@ -30,6 +30,7 @@ import {
   type VariantsData,
 } from "@/lib/storefront/variants";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
+import { MAX_CANTITATE_LINIE } from "@/lib/orders/quantity";
 import { computeVat, vatBase } from "@/lib/utils/vat";
 import { esteIdExtra } from "@/lib/orders/extras";
 
@@ -307,7 +308,7 @@ export function planificaAdaugarea(
     cerute.set(cheie, {
       product_id: a.product_id,
       variant_title: titlu,
-      quantity: Math.min(999, dejaCerut + qty),
+      quantity: Math.min(MAX_CANTITATE_LINIE, dejaCerut + qty),
     });
   }
 

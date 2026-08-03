@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
@@ -56,8 +57,13 @@ export async function trackAbandonedCart(input: {
       .eq("business_id", input.businessId).eq("session_id", input.sessionId).maybeSingle();
     if (existing?.status === "converted") return;
 
-    const subtotal = round2(items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0));
-    const itemCount = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+    // Cantitatea se normalizeaza si aici, desi cosul o normalizeaza deja: actiunea
+    // e endpoint public si scrie cu client de admin. `item_count` e coloana
+    // INTEGER, deci o cantitate fractionara ar face upsertul sa cada, iar
+    // `catch`-ul de mai jos e gol — cosul s-ar pierde in tacere.
+    const cantitati = items.map((i) => normalizeazaCantitate(i.quantity));
+    const subtotal = round2(items.reduce((s, i, idx) => s + (Number(i.price) || 0) * cantitati[idx], 0));
+    const itemCount = cantitati.reduce((s, q) => s + q, 0);
     const now = new Date().toISOString();
 
     await admin.from("abandoned_carts").upsert(
@@ -68,7 +74,9 @@ export async function trackAbandonedCart(input: {
         customer_name: input.name?.trim() || null,
         email,
         phone,
-        items: items as never,
+        // Si jsonb-ul, nu doar coloanele: altfel randul se contrazice singur, iar
+        // „Top produse abandonate" si linkul de recuperare citesc tot din brut.
+        items: items.map((i, idx) => ({ ...i, quantity: cantitati[idx] })) as never,
         item_count: itemCount,
         subtotal,
         status: "open",

@@ -44,9 +44,6 @@ export function normalizeazaIds(acceptedOfferIds: string[] | undefined): { ids: 
   return { ids, preaMulte: ids.length > MAX_OFERTE_ACCEPTATE };
 }
 
-/** Plafonul de cantitate pe o linie de comanda, acelasi ca la editare. */
-export const MAX_CANTITATE_LINIE = 999;
-
 export type MotivRefuz =
   | "inexistenta"        // id-ul nu e o oferta activa a magazinului
   | "tip"                // tip care nu are voie sa schimbe preturi la comanda

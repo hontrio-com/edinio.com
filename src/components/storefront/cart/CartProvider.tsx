@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { getCartSessionId } from "@/lib/cart-session";
 import { getCartPricing } from "@/lib/actions/store.actions";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
+import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
+import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 /**
  * Cosul storefrontului: stare in memorie oglindita in localStorage, per magazin.
@@ -13,27 +15,13 @@ import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tier
  * fisierul de 2900 de linii.
  */
 
-export interface CartItem {
-  productId: string;
-  slug?: string;
-  name: string;
-  price: number;
-  imageUrl: string | null;
-  quantity: number;
-  /** Combinatia de varianta aleasa („S / Rosu") — lipseste la produsele simple. */
-  variantTitle?: string;
-  variantSku?: string;
-}
+// Forma unei linii sta in modulul pur, langa regula care o curata; aici se
+// re-exporta, ca sa nu se schimbe niciun import existent.
+export type { CartItem };
 
-/**
- * O linie de cos e identificata prin produs + varianta aleasa, ca doua variante
- * ale aceluiasi produs (marimea S si marimea L) sa fie linii distincte, nu una
- * singura. Produsele simple cad pe id-ul produsului, ceea ce pastreaza
- * compatibilitatea cu cosurile salvate in localStorage inainte de variante.
- */
-export function lineKey(item: Pick<CartItem, "productId" | "variantTitle">): string {
-  return item.variantTitle ? `${item.productId}::${item.variantTitle}` : item.productId;
-}
+// Identitatea unei linii sta tot in modulul pur, langa forma ei; aici se
+// re-exporta, ca sa nu se schimbe niciun import existent.
+export { lineKey };
 
 export interface CartContextValue {
   items: CartItem[];
@@ -99,7 +87,7 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (stored) setItems(JSON.parse(stored));
+      if (stored) setItems(normalizeazaCos(JSON.parse(stored)));
     } catch {}
     setSessionId(getCartSessionId(slug));
     setHydrated(true);
@@ -114,7 +102,7 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
     function laStorage(e: StorageEvent) {
       if (e.key !== STORAGE_KEY) return;
       try {
-        setItems(e.newValue ? (JSON.parse(e.newValue) as CartItem[]) : []);
+        setItems(e.newValue ? normalizeazaCos(JSON.parse(e.newValue)) : []);
       } catch {}
     }
     window.addEventListener("storage", laStorage);
@@ -131,7 +119,13 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
   function save(schimba: (prev: CartItem[]) => CartItem[]) {
     setItems((prev) => {
       const next = schimba(prev);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      // `setItem` arunca la cota depasita sau in navigare privata, iar de aici ar
+      // arunca din INTERIORUL randarii: singura plasa e error boundary-ul de
+      // radacina, deci tot magazinul ar deveni pagina de eroare. Cosul degradeaza
+      // la „doar in memorie", ca in `cart-session.ts` si in `AddToCartButton`.
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {}
       return next;
     });
   }
@@ -142,12 +136,14 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    * Valorile sub 1 sau nefinite cad tot pe 1: o adaugare nu poate scadea cosul.
    */
   function addItem(item: Omit<CartItem, "quantity">, cantitate = 1) {
-    const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
+    const n = normalizeazaCantitate(cantitate);
     save((prev) => {
       const key = lineKey(item);
       const exists = prev.find((i) => lineKey(i) === key);
       return exists
-        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + n } : i))
+        // Se clemeaza SUMA, nu incrementul: altfel o mie de apasari pe „+" duc
+        // linia peste plafon, iar serverul refuza acum toata comanda.
+        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: normalizeazaCantitate(i.quantity + n) } : i))
         : [...prev, { ...item, quantity: n }];
     });
   }
@@ -161,7 +157,11 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
       removeItem(key);
       return;
     }
-    save((prev) => prev.map((i) => (lineKey(i) === key ? { ...i, quantity: qty } : i)));
+    // Butoanele „+/-" nu inventeaza o fractie, dar functia e in contextul public
+    // al cosului, deci o poate chema orice pagina custom. Fara clema, valoarea
+    // primita se si SCRIA in localStorage, de mana noastra.
+    const n = normalizeazaCantitate(qty);
+    save((prev) => prev.map((i) => (lineKey(i) === key ? { ...i, quantity: n } : i)));
   }
 
   function clear() {
@@ -169,7 +169,7 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
   }
 
   function restoreCart(next: CartItem[]) {
-    save(() => next);
+    save(() => normalizeazaCos(next));
   }
 
   /**
@@ -244,10 +244,10 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
       value={{
         items,
         addItem: (item, cantitate = 1) => {
-          const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
+          const n = normalizeazaCantitate(cantitate);
           setItems((prev) =>
             prev.some((i) => lineKey(i) === lineKey(item))
-              ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: i.quantity + n } : i))
+              ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: normalizeazaCantitate(i.quantity + n) } : i))
               : [...prev, { ...item, quantity: n }],
           );
         },

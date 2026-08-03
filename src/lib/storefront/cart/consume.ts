@@ -1,11 +1,8 @@
+import { lineKey } from "./normalize";
+
 export interface LinieCos {
   productId: string;
   variantTitle?: string;
-}
-
-/** Aceeasi identitate de linie ca in CartProvider: produs + combinatia aleasa. */
-function cheie(i: Pick<LinieCos, "productId" | "variantTitle">): string {
-  return i.variantTitle ? `${i.productId}::${i.variantTitle}` : i.productId;
 }
 
 /**
@@ -19,6 +16,6 @@ function cheie(i: Pick<LinieCos, "productId" | "variantTitle">): string {
  * Intoarce ce ramane in cos, ca apelantul sa scrie si sa anunte schimbarea.
  */
 export function cosDupaComanda<T extends LinieCos>(cosCurent: T[], liniiComandate: LinieCos[]): T[] {
-  const comandate = new Set(liniiComandate.map(cheie));
-  return cosCurent.filter((i) => !comandate.has(cheie(i)));
+  const comandate = new Set(liniiComandate.map(lineKey));
+  return cosCurent.filter((i) => !comandate.has(lineKey(i)));
 }

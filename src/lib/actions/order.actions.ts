@@ -29,7 +29,7 @@ import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } fr
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleStock } from "@/lib/bundles";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
-import { MAX_CANTITATE_LINIE } from "@/lib/offers/offer-pricing";
+import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
@@ -554,17 +554,20 @@ export async function placeOrder(data: {
   const metodaPlata = metoda.metoda;
 
   /*
-   * Cantitatea comandata, normalizata o singura data si folosita peste tot.
+   * Cantitatea comandata, judecata o singura data si folosita peste tot.
    *
    * Era singurul numar din comanda care nu trecea prin nicio plafonare: liniile
    * din cos si editarea din panou se opresc de mult la 999, formularul de produs
    * nu se oprea nicaieri. Iar `Math.floor` pe ce vine din browser nu e de ajuns,
    * fiindca `quantity` poate sosi si nenumeric.
+   *
+   * Peste plafon se REFUZA, nu se rescrie: plafonata in tacere, cantitatea intra
+   * apoi in motorul de trepte, deci cine cere 5000 primeste si TREAPTA lui 999,
+   * adica alt pret unitar decat cel de pe ecran.
    */
-  const cantitate = Math.min(MAX_CANTITATE_LINIE, Math.floor(Number(data.quantity)));
-  if (!(cantitate >= 1)) {
-    return { error: "Cantitatea comandata nu este valida. Reincarca pagina si incearca din nou." };
-  }
+  const ceruta = cantitateCeruta(data.quantity);
+  if (ceruta.fel !== "ok") return { error: mesajCantitate(ceruta) };
+  const cantitate = ceruta.cantitate;
 
   const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
   if (mainSubtotal === null) {
@@ -616,10 +619,24 @@ export async function placeOrder(data: {
        * Plafonata doar la pret, s-ar fi scazut din stoc un numar si s-ar fi
        * incasat altul.
        */
-      const liniiDinCos = data.additional_items
+      const cerute = data.additional_items
         .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id))
-        .map((i) => ({ ...i, quantity: Math.min(MAX_CANTITATE_LINIE, Math.floor(i.quantity)) }))
-        .filter((i) => i.quantity >= 1);
+        .map((i) => ({ linie: i, ceruta: cantitateCeruta(i.quantity) }));
+      // O cantitate imposibila OPRESTE comanda, nu scoate linia in tacere: scoasa,
+      // clientul plateste restul cosului fara sa afle ca a pierdut un produs — si
+      // aici pot fi si bump-uri acceptate, nu doar linii de cos.
+      const respinsa = cerute.find((c) => c.ceruta.fel !== "ok");
+      if (respinsa) {
+        const r = respinsa.ceruta as Exclude<typeof respinsa.ceruta, { fel: "ok" }>;
+        // Cantitatea bruta e valoare JSON arbitrara dintr-un endpoint public, deci
+        // se taie inainte de jurnal, ca `payment_method` cateva randuri mai sus.
+        // Iar mesajul numeste produsul cu numele din CATALOG: pe calea asta comanda
+        // foloseste oricum numele autoritar, tocmai fiindca cel de la client nu e
+        // de incredere si poate veni si gol.
+        logError({ action: "placeOrder.cantitateRespinsa", message: r.fel, details: { businessId: data.business_id, productId: respinsa.linie.product_id, quantity: String(respinsa.linie.quantity).slice(0, 40) }, severity: "warning" });
+        return { error: mesajCantitate(r, extraMap.get(respinsa.linie.product_id)?.name) };
+      }
+      const liniiDinCos = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
       liniiCuVarianta.push(...liniiDinCos);
       cartItems = liniiDinCos
         .map((i) => {
@@ -1917,18 +1934,27 @@ export async function placeCartOrder(data: {
    * si apucat-o pe drumuri diferite: calea cealalta n-a avut-o niciodata.
    */
   /*
-   * Cantitatea se plafoneaza AICI, o singura data, si de aici o iau toate cele
-   * trei locuri: verificarea de stoc, pretul si scaderea stocului pe marime.
-   * Endpointul e public, iar fara plafon orice defect de pret se inmulteste cu
-   * un numar ales de client; plafonata doar la pret, s-ar fi scazut din stoc un
+   * Cantitatea se judeca AICI, o singura data, si de aici o iau toate cele trei
+   * locuri: verificarea de stoc, pretul si scaderea stocului pe marime.
+   * Endpointul e public, iar fara plafon orice defect de pret se inmulteste cu un
+   * numar ales de client; plafonata doar la pret, s-ar fi scazut din stoc un
    * numar si s-ar fi incasat altul.
+   *
+   * Ce nu se incadreaza OPRESTE comanda. Filtrata, poarta se inchidea numai cand
+   * picau TOATE liniile: cu trei in cos si una stricata, comanda pleca cu doua,
+   * iar clientul n-avea de unde afla — pagina de confirmare randeaza ce a intrat,
+   * iar cosul e golit imediat dupa.
    */
-  const liniiCerute = data.items
-    .map((i) => ({ ...i, quantity: Math.min(MAX_CANTITATE_LINIE, Math.floor(Number(i.quantity))) }))
-    // `NaN >= 1` e fals, deci filtrul asta scoate si cantitatile nenumerice. Fara
-    // el, o cantitate NaN trecea de plafonare, `round2` o inghitea in zero la
-    // subtotal (`Number(NaN) || 0`) si comanda pleca de 0 lei, cu stocul scazut.
-    .filter((i) => i.quantity >= 1);
+  const cerute = data.items.map((i) => ({ linie: i, ceruta: cantitateCeruta(i.quantity) }));
+  const respinsa = cerute.find((c) => c.ceruta.fel !== "ok");
+  if (respinsa) {
+    const r = respinsa.ceruta as Exclude<typeof respinsa.ceruta, { fel: "ok" }>;
+    logError({ action: "placeCartOrder.cantitateRespinsa", message: r.fel, details: { businessId: data.business_id, productId: respinsa.linie.product_id, quantity: String(respinsa.linie.quantity).slice(0, 40) }, severity: "warning" });
+    // Aici numele autoritar nu e la indemana (interogarea nu cere coloana, si
+    // numele clientului ajunge oricum in `orders.items`), deci se taie doar.
+    return { error: mesajCantitate(r, String(respinsa.linie.name ?? "").slice(0, 60) || undefined) };
+  }
+  const liniiCerute = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
   if (liniiCerute.length === 0) return { error: "Cosul este gol." };
 
   const eroareStoc = eroareStocPeVarianta(

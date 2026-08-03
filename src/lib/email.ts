@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { formatPrice } from "@/lib/utils/format";
+import { escapeHtml as esc, escapeUrl } from "@/lib/utils/html-escape";
 import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
 import { deliverStoreEmail } from "@/lib/email/deliver";
@@ -26,6 +27,29 @@ export function parseNotificationsConfig(raw: Record<string, unknown>): Notifica
     new_order: raw.new_order !== false,
   };
 }
+
+/*
+ * Regula de escapare in acest fisier, ca sa nu se mai piarda (2026-08-04).
+ *
+ * Fiecare `${...}` din sabloane e de UNA din trei feluri:
+ *   1. text variabil (nume de client, de produs, de magazin, cod de reducere,
+ *      continut de tichet) -> trece prin `esc`. Fara exceptii: pana acum
+ *      `sendOrderConfirmationToCustomer` nu escapa NIMIC, iar `placeOrder` e
+ *      export „use server" cu adresa de destinatie aleasa de apelant.
+ *   2. fragment HTML compus tot aici (`itemsRows`, `discountRow`, `intro`,
+ *      `bodyHtml`, `rows`, `heading`) -> NU se escapeaza, altfel clientul
+ *      primeste marcaj brut pe ecran. Sunt vreo cincisprezece.
+ *   3. numar deja formatat (`formatPrice`, `toLocaleString`, cantitati) -> nu
+ *      poate contine caractere speciale, se lasa in pace.
+ *
+ * Adresele din `href` care CONTIN date variabile trec prin `escapeUrl`, nu prin
+ * `esc`: acolo escaparea inchide iesirea din atribut, dar nu opreste
+ * `javascript:`. Cele compuse doar din `SITE_URL` si text fix se lasa asa cum
+ * sunt — n-au ce sa poarte.
+ *
+ * SUBIECTELE nu se escapeaza niciodata — sunt anteturi de email, nu HTML, si
+ * un „&amp;" acolo se vede ca atare in casuta destinatarului.
+ */
 
 function baseTemplate(content: string): string {
   return `<!DOCTYPE html>
@@ -99,9 +123,9 @@ async function sendStoreOrEdinio(sender: StoreEmailSender | undefined, to: strin
 export function buildAdminNotifyHtml(name: string, message: string): string {
   return baseTemplate(`
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj de la echipa Edinio</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${name ? `, ${name}` : ""},</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${name ? `, ${esc(name)}` : ""},</p>
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.6;white-space:pre-wrap;">${message}</p>
+      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.6;white-space:pre-wrap;">${esc(message)}</p>
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;">Daca ai intrebari, raspunde direct la acest email.</p>
   `);
@@ -113,7 +137,7 @@ export function baseTemplateForTest(from: string): string {
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Notificarile Edinio functioneaza corect.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
       <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Configuratie activa</p>
-      <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Trimis de pe: <strong>${from}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Trimis de pe: <strong>${esc(from)}</strong></p>
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;">Cand vine o comanda noua in magazinul tau vei primi un email similar cu detaliile comenzii.</p>
   `);
@@ -147,7 +171,7 @@ export async function sendOrderConfirmationToCustomer(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${i.name} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -155,7 +179,7 @@ export async function sendOrderConfirmationToCustomer(
 
   const discountRow = order.discount_code && order.discount_amount
     ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere (${order.discount_code})</td>
+        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere (${esc(order.discount_code)})</td>
         <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.discount_amount)}</td>
       </tr>`
     : "";
@@ -213,8 +237,11 @@ export async function sendOrderConfirmationToCustomer(
   const { subject, intro, heading } = renderTemplate(sender, "order_confirmation", {
     subject: `Comanda ta ${order.order_number} a fost primita`,
     heading: "Comanda ta a fost plasata!",
-    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${order.customer_name}</strong>! Comanda ta la <strong>${order.business_name}</strong> a fost primita si va fi procesata in curand.</p>`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${esc(order.customer_name)}</strong>! Comanda ta la <strong>${esc(order.business_name)}</strong> a fost primita si va fi procesata in curand.</p>`,
   }, {
+    // Variabilele de sablon pleaca NEESCAPATE: `renderTemplate` le inlocuieste
+    // in textul comerciantului si escapeaza rezultatul. Escapate aici, ar iesi
+    // „Jack&amp;amp;Jones".
     nume_client: order.customer_name,
     nume_magazin: order.business_name,
     numar_comanda: order.order_number,
@@ -225,7 +252,7 @@ export async function sendOrderConfirmationToCustomer(
     ${intro}
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;box-sizing:border-box;overflow:hidden;">
-      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${order.order_number}</p>
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${esc(order.order_number)}</p>
     </div>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
@@ -251,7 +278,7 @@ export async function sendOrderConfirmationToCustomer(
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:20px;">
       <p style="margin:0;font-size:13px;color:#71717a;">Metoda de plata: <strong>${paymentLabel}</strong></p>
     </div>
-    ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
+    ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
 
   await sendStoreOrEdinio(sender, to, subject, content);
@@ -273,14 +300,17 @@ export async function sendAbandonedCartRecovery(
   sender?: StoreEmailSender,
 ) {
   if (!process.env.RESEND_API_KEY) return;
-  const color = data.color || "#1AB554";
+  // `primary_color` vine din setarile magazinului si intra intr-un atribut
+  // `style`. Masurat 2026-08-04: toate cele 127 de magazine au azi un hex valid,
+  // deci escaparea nu schimba nimic pe ecran, doar inchide iesirea din atribut.
+  const color = esc(data.color || "#1AB554");
   const first = data.customerName?.trim().split(/\s+/)[0];
 
   const itemsRows = data.items
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${i.name} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -289,15 +319,22 @@ export async function sendAbandonedCartRecovery(
   const { subject, intro: tplIntro, heading, button } = renderTemplate(sender, "abandoned_cart", {
     subject: `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`,
     heading: "Ti-au ramas produse in cos",
-    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${first}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${data.storeName}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${esc(first)}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${esc(data.storeName)}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`,
     button: "Finalizeaza comanda",
   }, {
     nume_client: first ?? "",
     nume_magazin: data.storeName,
   });
   // Per-campaign message (recovery automation) takes priority over the template/default.
+  //
+  // Se escapeaza, ca si textul de sablon din `renderTemplate`: e acelasi text
+  // scris de comerciant, si pana acum aceeasi valoare era escapata pe o cale si
+  // nu si pe cealalta. Masurat 2026-08-04 in `store_settings.abandoned_cart_automation`,
+  // de unde vine chiar campul asta: din 127 de magazine unul singur are
+  // automatizarea pornita si NICIUN pas n-are text propriu, deci pe ecran nu se
+  // schimba nimic.
   const intro = data.message?.trim()
-    ? `<p style="margin:0 0 24px 0;font-size:14px;color:#3f3f46;line-height:1.6;white-space:pre-wrap;">${data.message.trim()}</p>`
+    ? `<p style="margin:0 0 24px 0;font-size:14px;color:#3f3f46;line-height:1.6;white-space:pre-wrap;">${esc(data.message.trim())}</p>`
     : tplIntro;
 
   const content = `
@@ -315,18 +352,18 @@ export async function sendAbandonedCartRecovery(
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
       <tr><td align="center" style="background:#f0fdf4;border:1px dashed #86efac;border-radius:10px;padding:14px;">
         <p style="margin:0 0 2px 0;font-size:12px;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cod reducere</p>
-        <p style="margin:0;font-size:22px;font-weight:800;color:#15803d;letter-spacing:1px;">${data.discountCode}</p>
+        <p style="margin:0;font-size:22px;font-weight:800;color:#15803d;letter-spacing:1px;">${esc(data.discountCode)}</p>
         <p style="margin:4px 0 0 0;font-size:12px;color:#16a34a;">Se aplica automat la finalizare.</p>
       </td></tr>
     </table>` : ""}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
       <tr><td align="center">
-        <a href="${data.recoverUrl}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">${button}</a>
+        <a href="${escapeUrl(data.recoverUrl)}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">${button}</a>
       </td></tr>
     </table>
     ${data.unsubscribeUrl ? `
     <p style="margin:24px 0 0 0;font-size:11px;color:#a1a1aa;text-align:center;">
-      Nu mai vrei aceste mesaje? <a href="${data.unsubscribeUrl}" style="color:#a1a1aa;">Dezaboneaza-te</a>
+      Nu mai vrei aceste mesaje? <a href="${escapeUrl(data.unsubscribeUrl)}" style="color:#a1a1aa;">Dezaboneaza-te</a>
     </p>` : ""}
   `;
 
@@ -340,7 +377,7 @@ export async function sendAccountWelcomeEmail(
   if (!process.env.RESEND_API_KEY) return;
   const dashboardUrl = `${SITE_URL}/onboarding/details`;
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Bine ai venit pe Edinio${data.name ? `, ${data.name}` : ""}!</h2>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Bine ai venit pe Edinio${data.name ? `, ${esc(data.name)}` : ""}!</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Contul tau a fost creat cu succes. Esti la un pas de a-ti lansa magazinul online.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
@@ -370,13 +407,13 @@ export async function sendWelcomeEmail(
   const storeUrl = `${SITE_URL}/${data.slug}`;
   const dashboardUrl = `${SITE_URL}/dashboard`;
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Felicitari${data.name ? `, ${data.name}` : ""}!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Magazinul tau <strong>${data.business_name}</strong> a fost creat cu succes si este acum live pe Edinio.</p>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Felicitari${data.name ? `, ${esc(data.name)}` : ""}!</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Magazinul tau <strong>${esc(data.business_name)}</strong> a fost creat cu succes si este acum live pe Edinio.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Magazinul tau este online</p>
       <p style="margin:4px 0 0 0;font-size:13px;">
-        <a href="${storeUrl}" style="color:#15803d;text-decoration:none;">${storeUrl}</a>
+        <a href="${escapeUrl(storeUrl)}" style="color:#15803d;text-decoration:none;">${esc(storeUrl)}</a>
       </p>
     </div>
 
@@ -402,7 +439,7 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cod de verificare</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Foloseste codul de mai jos pentru a confirma autentificarea in contul tau Edinio.</p>
     <div style="text-align:center;margin:28px 0;padding:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
-      <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#1AB554;font-family:monospace;">${otp}</span>
+      <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#1AB554;font-family:monospace;">${esc(otp)}</span>
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;text-align:center;">Codul este valabil <strong>10 minute</strong>. Daca nu ai initiat tu aceasta autentificare, ignora acest email.</p>
   `;
@@ -420,8 +457,6 @@ export async function sendPageFormEmail(
   data: { storeName: string; pageTitle: string; pageUrl?: string; fields: { label: string; value: string }[] },
 ) {
   if (!process.env.RESEND_API_KEY) return;
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const rows = data.fields
     .map(
       (f) => `
@@ -435,7 +470,7 @@ export async function sendPageFormEmail(
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj nou de pe ${esc(data.storeName)}</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Trimis din formularul paginii "${esc(data.pageTitle)}".</p>
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:18px;">${rows}</div>
-    ${data.pageUrl ? `<p style="margin:18px 0 0 0;font-size:13px;"><a href="${data.pageUrl}" style="color:#15803d;text-decoration:none;">Vezi pagina</a></p>` : ""}
+    ${data.pageUrl ? `<p style="margin:18px 0 0 0;font-size:13px;"><a href="${escapeUrl(data.pageUrl)}" style="color:#15803d;text-decoration:none;">Vezi pagina</a></p>` : ""}
   `;
   await getResend().emails.send({
     from: FROM,
@@ -454,8 +489,6 @@ export async function sendMigrationLeadToAdmin(data: {
   productsCount: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const field = (label: string, value: string) => `
     <tr>
       <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
@@ -473,7 +506,7 @@ export async function sendMigrationLeadToAdmin(data: {
       ${field("Numar aproximativ de produse", data.productsCount)}
     </table>
     <div style="text-align:center;margin-top:24px;">
-      <a href="tel:${esc(data.phone.replace(/\s/g, ""))}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(`tel:${data.phone.replace(/\s/g, "")}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Suna clientul
       </a>
     </div>
@@ -512,7 +545,7 @@ export async function sendNewSupportTicketToAdmin(data: {
       <tr>
         <td style="padding:10px 14px;background:#f4f4f5;border-radius:8px 8px 0 0;border-bottom:1px solid #e4e4e7;">
           <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;">Subiect</span>
-          <p style="margin:2px 0 0 0;font-size:15px;font-weight:600;color:#18181b;">${data.subject}</p>
+          <p style="margin:2px 0 0 0;font-size:15px;font-weight:600;color:#18181b;">${esc(data.subject)}</p>
         </td>
       </tr>
       <tr>
@@ -521,27 +554,27 @@ export async function sendNewSupportTicketToAdmin(data: {
             <tr>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Categorie</span>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${categoryLabel[data.category] ?? data.category}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${categoryLabel[data.category] ?? esc(data.category)}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Prioritate</span>
-                <p style="margin:2px 0 0 0;font-size:13px;font-weight:600;color:${priorityColor[data.priority] ?? "#3f3f46"};">${priorityLabel[data.priority] ?? data.priority}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;font-weight:600;color:${priorityColor[data.priority] ?? "#3f3f46"};">${priorityLabel[data.priority] ?? esc(data.priority)}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Client</span>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${data.userEmail}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${esc(data.userEmail)}</p>
               </td>
             </tr>
           </table>
         </td>
       </tr>
     </table>
-    ${data.businessName ? `<p style="margin:0 0 16px 0;font-size:13px;color:#71717a;">Magazin: <strong>${data.businessName}</strong></p>` : ""}
+    ${data.businessName ? `<p style="margin:0 0 16px 0;font-size:13px;color:#71717a;">Magazin: <strong>${esc(data.businessName)}</strong></p>` : ""}
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${data.content}</p>
+      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard/suport/${data.ticketId}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi tichetul
       </a>
     </div>
@@ -563,12 +596,12 @@ export async function sendSupportReplyToAdmin(data: {
   if (!process.env.RESEND_API_KEY) return;
   const emailContent = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Raspuns nou la tichet</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;"><strong>${data.userEmail}</strong> a raspuns la tichetul <em>${data.subject}</em>.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;"><strong>${esc(data.userEmail)}</strong> a raspuns la tichetul <em>${esc(data.subject)}</em>.</p>
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${data.content}</p>
+      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard/suport/${data.ticketId}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Raspunde
       </a>
     </div>
@@ -591,12 +624,12 @@ export async function sendAgentReplyToUser(data: {
   const ticketUrl = `${SITE_URL}/dashboard/suport/${data.ticketId}`;
   const emailContent = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Raspuns la tichetul tau</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Echipa Edinio a raspuns la tichetul tau: <strong>${data.subject}</strong>.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Echipa Edinio a raspuns la tichetul tau: <strong>${esc(data.subject)}</strong>.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#15803d;white-space:pre-wrap;">${data.content}</p>
+      <p style="margin:0;font-size:13px;color:#15803d;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${ticketUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(ticketUrl)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Raspunde sau vezi conversatia
       </a>
     </div>
@@ -623,16 +656,17 @@ export async function sendDomainOrderToAdmin(data: {
   cui?: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
+  // Fragment HTML (are `&middot;`), deci se escapeaza doar CUI-ul si CNP-ul din el.
   const registrantLine = data.entityType === "pj"
-    ? `Persoana juridica${data.cui ? ` &middot; CUI ${data.cui}` : ""}`
-    : `Persoana fizica${data.cnp ? ` &middot; CNP ${data.cnp}` : ""}`;
+    ? `Persoana juridica${data.cui ? ` &middot; CUI ${esc(data.cui)}` : ""}`
+    : `Persoana fizica${data.cnp ? ` &middot; CNP ${esc(data.cnp)}` : ""}`;
   const adminUrl = `${SITE_URL}/admin/domenii`;
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda noua de domeniu</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Un client a comandat un domeniu care trebuie inregistrat manual.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:18px;font-weight:700;color:#16a34a;font-family:monospace;">${data.domain}</p>
+      <p style="margin:0;font-size:18px;font-weight:700;color:#16a34a;font-family:monospace;">${esc(data.domain)}</p>
     </div>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
@@ -642,13 +676,13 @@ export async function sendDomainOrderToAdmin(data: {
             <tr>
               <td style="width:50%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Titular</span>
-                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${data.customerName}</p>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${data.customerEmail}</p>
+                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${esc(data.customerName)}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${esc(data.customerEmail)}</p>
                 <p style="margin:2px 0 0 0;font-size:12px;color:#71717a;">${registrantLine}</p>
               </td>
               <td style="width:50%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Magazin</span>
-                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${data.businessName}</p>
+                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${esc(data.businessName)}</p>
               </td>
             </tr>
           </table>
@@ -660,7 +694,7 @@ export async function sendDomainOrderToAdmin(data: {
             <tr>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Extensie</span>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${data.tld}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${esc(data.tld)}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Perioada</span>
@@ -701,8 +735,8 @@ export async function sendAdminNewUserNotification(data: {
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cont nou creat</h2>
     <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un utilizator nou s-a inregistrat pe Edinio.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
-      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${data.name}</strong></p>
-      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${data.email}</p>
+      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${esc(data.name)}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${esc(data.email)}</p>
       <p style="margin:4px 0 0 0;font-size:12px;color:#a1a1aa;">${date}</p>
     </div>
   `;
@@ -725,10 +759,10 @@ export async function sendAdminNewStoreNotification(data: {
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Magazin nou creat</h2>
     <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un utilizator si-a creat magazinul pe Edinio.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
-      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${data.businessName}</strong></p>
-      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${data.ownerName} (${data.ownerEmail})</p>
+      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${esc(data.businessName)}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${esc(data.ownerName)} (${esc(data.ownerEmail)})</p>
       <p style="margin:6px 0 0 0;font-size:13px;">
-        <a href="${SITE_URL}/${data.slug}" style="color:#1AB554;text-decoration:none;font-weight:600;">edinio.com/${data.slug}</a>
+        <a href="${escapeUrl(`${SITE_URL}/${data.slug}`)}" style="color:#1AB554;text-decoration:none;font-weight:600;">edinio.com/${esc(data.slug)}</a>
       </p>
     </div>
   `;
@@ -782,7 +816,6 @@ export async function sendNewOrderEmail(
 ) {
   if (!process.env.RESEND_API_KEY) return;
 
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const sectionLabel = (t: string) =>
     `<tr><td colspan="2" style="font-size:13px;color:#a1a1aa;padding:18px 0 8px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid #f4f4f5;">${t}</td></tr>`;
   const infoRow = (label: string, value: string) =>
@@ -899,7 +932,7 @@ export async function sendNewOrderEmail(
     </table>
 
     <div style="text-align:center;margin-top:28px;">
-      <a href="${dashboardUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(dashboardUrl)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi comanda in dashboard
       </a>
     </div>
@@ -965,18 +998,18 @@ export async function sendOrderStatusToCustomer(
 
   // Right of withdrawal is most relevant once the parcel is on its way / received.
   const returnLink = order.store_url && (order.status === "shipped" || order.status === "delivered")
-    ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>`
+    ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>`
     : "";
 
   const awbSection = order.status === "shipped" && order.awb
     ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
-        <p style="margin:0;font-size:13px;color:#71717a;">Numar AWB: <strong style="color:#18181b;font-family:monospace;">${order.awb}</strong></p>
+        <p style="margin:0;font-size:13px;color:#71717a;">Numar AWB: <strong style="color:#18181b;font-family:monospace;">${esc(order.awb)}</strong></p>
       </div>`
     : "";
 
   const { subject, intro } = renderTemplate(sender, "order_status", {
     subject: `${cfg.subject} — ${order.order_number}`,
-    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${order.customer_name}</strong>! Iti trimitem un update despre comanda ta la <strong>${order.business_name}</strong>.</p>`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${esc(order.customer_name)}</strong>! Iti trimitem un update despre comanda ta la <strong>${esc(order.business_name)}</strong>.</p>`,
   }, {
     nume_client: order.customer_name,
     nume_magazin: order.business_name,
@@ -991,7 +1024,7 @@ export async function sendOrderStatusToCustomer(
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td>
-            <p style="margin:0;font-size:13px;color:${cfg.color};font-weight:600;">Comanda ${order.order_number}</p>
+            <p style="margin:0;font-size:13px;color:${cfg.color};font-weight:600;">Comanda ${esc(order.order_number)}</p>
             <p style="margin:4px 0 0 0;font-size:13px;color:${cfg.color};">Status: <strong>${cfg.label}</strong></p>
           </td>
           <td style="text-align:right;vertical-align:top;">
@@ -1018,7 +1051,6 @@ export async function sendCustomerMessage(
 ): Promise<{ success: true } | { error: string }> {
   if (!process.env.RESEND_API_KEY) return { error: "Serviciul de email nu este configurat." };
 
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const bodyHtml = esc(data.message).replace(/\n/g, "<br />");
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${esc(data.subject)}</h2>
@@ -1048,13 +1080,13 @@ export async function sendSubscriptionActivatedEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Abonamentul tau este activ!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Felicitari${data.name ? `, ${data.name}` : ""}! Plata a fost procesata cu succes.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Felicitari${data.name ? `, ${esc(data.name)}` : ""}! Plata a fost procesata cu succes.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td>
-            <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${data.plan}</p>
+            <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${esc(data.plan)}</p>
             <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Activ pana la: <strong>${formattedDate}</strong></p>
           </td>
         </tr>
@@ -1094,10 +1126,10 @@ export async function sendPaymentRecoveredEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Plata a reusit. Abonamentul este activ din nou!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Am procesat cu succes plata pentru abonamentul tau <strong>${data.plan}</strong>. Iti multumim!</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${esc(data.name)}` : ""}. Am procesat cu succes plata pentru abonamentul tau <strong>${esc(data.plan)}</strong>. Iti multumim!</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${data.plan}</p>
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${esc(data.plan)}</p>
       <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Activ pana la: <strong>${formattedDate}</strong></p>
     </div>
 
@@ -1128,7 +1160,7 @@ export async function sendPaymentFailedEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Plata nu a putut fi procesata</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Am incercat sa procesam plata pentru abonamentul tau <strong>${data.plan}</strong>, dar aceasta nu a reusit.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${esc(data.name)}` : ""}. Am incercat sa procesam plata pentru abonamentul tau <strong>${esc(data.plan)}</strong>, dar aceasta nu a reusit.</p>
 
     <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">Plata esuata</p>
@@ -1166,7 +1198,7 @@ export async function sendStoreSuspendedEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Magazinul tau va fi suspendat</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Abonamentul tau Edinio a fost anulat din cauza unei plati esuate.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${esc(data.name)}` : ""}. Abonamentul tau Edinio a fost anulat din cauza unei plati esuate.</p>
 
     <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">Perioada de gratie: pana la ${formattedDate}</p>
@@ -1201,7 +1233,6 @@ const REFUND_METHOD_LABELS: Record<string, string> = {
 };
 
 function returnItemsRows(items: { name: string; quantity: number }[]): string {
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return items
     .map(
       (i) =>
@@ -1230,7 +1261,6 @@ export async function sendReturnConfirmationToCustomer(
   },
   sender?: StoreEmailSender,
 ) {
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const first = data.customer_name?.trim().split(/\s+/)[0];
   const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
     day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -1274,7 +1304,6 @@ export async function sendReturnRequestToMerchant(
   }
 ) {
   if (!process.env.RESEND_API_KEY) return;
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const infoRow = (label: string, value: string) =>
     `<tr><td style="padding:3px 0;font-size:14px;color:#71717a;width:140px;vertical-align:top;">${label}</td><td style="padding:3px 0;font-size:14px;color:#18181b;font-weight:500;vertical-align:top;">${value}</td></tr>`;
   const when = new Date(data.receivedAt).toLocaleString("ro-RO", {

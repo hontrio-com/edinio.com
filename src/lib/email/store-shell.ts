@@ -1,8 +1,7 @@
+import { escapeHtml } from "@/lib/utils/html-escape";
 import type { EmailBranding } from "./config";
 
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
+const esc = escapeHtml;
 
 /**
  * Merchant-branded email shell (their logo / name / color, no "Edinio" footer) —

@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/lib/utils/html-escape";
 // Editable email preview for the WYSIWYG template editor. Renders the SAME
 // store-branded shell the customer receives (via storeEmailShell), with sample
 // order data for context, and marks the merchant-editable regions (title,
@@ -8,9 +9,9 @@
 import { storeEmailShell } from "./store-shell";
 import type { EmailBranding, EmailTemplateKind } from "./config";
 
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// Aceeasi escapare ca la emailurile trimise: previzualizarea din panou trebuie sa
+// arate exact ce primeste clientul, altfel comerciantul aproba altceva.
+const esc = escapeHtml;
 function text(s: string): string {
   return esc(s).replace(/\n/g, "<br>");
 }

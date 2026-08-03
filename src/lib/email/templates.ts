@@ -1,12 +1,13 @@
+import { escapeHtml } from "@/lib/utils/html-escape";
 import type { StoreEmailSender, EmailTemplateKind } from "./config";
 
 function subst(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (_, k) => vars[String(k).toLowerCase()] ?? "");
 }
 
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// Sablonul si previzualizarea lui trebuie sa treaca prin ACEEASI escapare ca
+// emailul trimis; mutate separat, cele doua ar diverge tacut.
+const esc = escapeHtml;
 
 /**
  * Resolve subject + heading + intro + button for an email kind: the merchant's

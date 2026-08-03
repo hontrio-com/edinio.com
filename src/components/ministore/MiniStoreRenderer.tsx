@@ -623,7 +623,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     let min = Infinity;
     let max = 0;
     for (const p of visibleProducts) {
-      const price = Number(p.price);
+      // Capetele intervalului se iau din pretul VANDABIL, ca sa nu propuna un
+      // minim pe care niciun produs nu-l are: PANTALONI P URBAN are baza 175 si
+      // toate cele 90 de marimi la 203.
+      const price = p.price_range.min;
       if (Number.isFinite(price)) {
         if (price < min) min = price;
         if (price > max) max = price;
@@ -671,7 +674,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       const matchesSearch = !searchMatches || searchMatches.has(p.id);
       const matchesCategory = categoryFilter === "toate"
         || (catTree.subtreeByName[categoryFilter] ?? [categoryFilter]).includes(p.category ?? "");
-      const price = Number(p.price);
+      // Filtrul si insigna de reducere judeca pretul AFISAT. Pe pretul de baza,
+      // „sub 200 lei" cuprindea un produs al carui card scrie 203.
+      const price = p.price_range.min;
       const matchesPrice = (pMin == null || price >= pMin) && (pMax == null || price <= pMax);
       const matchesSale = !onSaleOnly || (p.compare_at_price != null && Number(p.compare_at_price) > price);
       const matchesStock = !inStockOnly || !p.track_inventory || (p.stock_quantity ?? 0) > 0;
@@ -696,8 +701,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       return list;
     }
     switch (effectiveSort) {
-      case "price_asc": list.sort((a, b) => Number(a.price) - Number(b.price)); break;
-      case "price_desc": list.sort((a, b) => Number(b.price) - Number(a.price)); break;
+      case "price_asc": list.sort((a, b) => a.price_range.min - b.price_range.min); break;
+      case "price_desc": list.sort((a, b) => b.price_range.min - a.price_range.min); break;
       case "popular": list.sort((a, b) => (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0)); break;
       case "name_asc": list.sort((a, b) => a.name.localeCompare(b.name)); break;
       case "newest": default: list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
@@ -751,7 +756,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     gtagEvent("view_item_list", {
       item_list_id: surface === "shop" ? "pagina_magazin" : "catalog",
       item_list_name: surface === "shop" ? "Pagina Magazin" : "Produse",
-      items: paginatedProducts.map((p, i) => ({ item_id: p.id, item_name: p.name, price: Number(p.price) || 0, index: (currentPage - 1) * PRODUCTS_PER_PAGE + i, quantity: 1 })),
+      items: paginatedProducts.map((p, i) => ({ item_id: p.id, item_name: p.name, price: p.price_range.min, index: (currentPage - 1) * PRODUCTS_PER_PAGE + i, quantity: 1 })),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, filteredProducts]);
@@ -1143,6 +1148,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           compare_at_price: quickAddProduct.compare_at_price != null ? Number(quickAddProduct.compare_at_price) : null,
           images: Array.isArray(quickAddProduct.images) ? quickAddProduct.images.map(String).filter(Boolean) : [],
           page_sections: quickAddProduct.page_sections,
+          price_range: quickAddProduct.price_range,
         } : null}
         color={color}
         onClose={() => setQuickAddProduct(null)}

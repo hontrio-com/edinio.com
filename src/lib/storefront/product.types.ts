@@ -9,9 +9,9 @@ import type { Database } from "@/types/database.types";
  * sectiunile extrase (cardul de produs, randurile, grila) sa poata fi importate
  * fara sa depinda de fisierul de 2900 de linii.
  *
- * `price_range` e optional pentru ca apelantii care trimit `page_sections`
- * complet (pagina de produs, blocurile din page-builder) il pot deriva local.
- * Detalii in lib/storefront/catalog-slim.ts.
+ * `price_range` vine INTOTDEAUNA de la server: payload-ul slim arunca
+ * `combinations`, deci in browser nu se mai poate deriva. Detalii in
+ * lib/storefront/catalog-slim.ts.
  */
 export type StorefrontProduct = Pick<
   Database["public"]["Tables"]["products"]["Row"],
@@ -34,7 +34,15 @@ export type StorefrontProduct = Pick<
   | "page_sections"
   | "weight_grams"
 > & {
-  price_range?: PriceRange;
+  /**
+   * Intervalul de pret, calculat pe SERVER inainte de slimuire.
+   *
+   * Obligatoriu, nu optional: payload-ul slim arunca `combinations`
+   * (`catalog-slim.ts`), deci in browser nu se mai poate calcula — o rezerva
+   * locala ar raspunde „niciun pret de vanzare" pentru fiecare produs cu
+   * variante. Camp cerut inseamna ca `tsc` enumera producatorii.
+   */
+  price_range: PriceRange;
   /**
    * Indicii jetoanelor de fateta ale produsului, in dictionarul trimis alaturi.
    *

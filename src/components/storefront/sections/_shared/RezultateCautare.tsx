@@ -5,7 +5,6 @@ import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
-import { getProductPriceRange } from "@/lib/utils/product-price";
 
 /**
  * Produsele gasite, chiar sub caseta de cautare din header.
@@ -92,7 +91,7 @@ export function RezultateCautare({
             // `unknown` folosit direct ca fiu JSX nu trece de tipuri.
             const imagini = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
             const imagine = imagini.length > 0 ? String(imagini[0]) : "";
-            const interval = p.price_range ?? getProductPriceRange(Number(p.price), p.page_sections);
+            const interval = p.price_range;
             const faraStoc = !!(p.track_inventory && (p.stock_quantity ?? 0) <= 0);
             return (
               <li key={p.id} className="border-b border-[var(--st-border)] last:border-0">
@@ -116,9 +115,11 @@ export function RezultateCautare({
                     </span>
                   </span>
                   <span className="text-sm font-semibold text-[var(--st-text)] shrink-0 whitespace-nowrap">
+                    {/* Minimul intervalului, nu pretul de baza: pe ANTIFOANE
+                        panoul scria 156,80 pentru un produs care se vinde cu 438. */}
                     {interval.hasRange
                       ? formatPriceRange(interval.min, interval.max)
-                      : formatPrice(Number(p.price))}
+                      : formatPrice(interval.min)}
                   </span>
                 </a>
               </li>

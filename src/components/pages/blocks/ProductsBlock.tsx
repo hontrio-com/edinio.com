@@ -2,6 +2,7 @@ import { BlockShell } from "../BlockShell";
 import { PageProductCard } from "./PageProductCard";
 import { ProductCarousel } from "./ProductCarousel";
 import type { ProductsBlock } from "@/lib/pages/blocks.types";
+import type { PriceRange } from "@/lib/utils/product-price";
 
 export interface PageProduct {
   id: string;
@@ -16,6 +17,12 @@ export interface PageProduct {
    *  custom page open the option picker instead of adding at base price. Optional
    *  because the editor preview builds PageProduct from a lighter source. */
   page_sections?: unknown;
+  /**
+   * Intervalul vandabil. Obligatoriu, ca `tsc` sa enumere producatorii: cardul
+   * scria `price`, adica pretul de BAZA, si pe blocurile publicate ale eSAFE asta
+   * insemna 92,80 lei pentru o geaca de 116.
+   */
+  price_range: PriceRange;
 }
 
 /**

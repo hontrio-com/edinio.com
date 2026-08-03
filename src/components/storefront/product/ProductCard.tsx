@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import { Check, Layers, Package, ShoppingCart } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
-import { getProductPriceRange } from "@/lib/utils/product-price";
 import { parseVariants } from "@/lib/storefront/variants";
 import { gtagEvent } from "@/lib/marketing";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
@@ -59,19 +58,27 @@ export function ProductCard({
   const [reper] = useState(() => Date.now());
   const isNew = newBadgeDays > 0 && reper - new Date(product.created_at).getTime() < newBadgeDays * 86400000;
   // Produs variabil cu preturi diferite -> afiseaza interval („De la X – Y") sau doar minimul.
-  // Precalculat server-side cand payload-ul e slimuit; fallback pe derivarea
-  // locala pentru apelanti care trimit page_sections complet.
-  const priceRange = product.price_range ?? getProductPriceRange(Number(product.price), product.page_sections);
+  // Calculat pe SERVER: payload-ul slim arunca combinatiile, deci o derivare
+  // locala ar raspunde „niciun pret de vanzare" pentru fiecare produs variabil.
+  const priceRange = product.price_range;
   const showPriceRange = priceRange.hasRange && !priceLowestOnly;
-  const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > Number(product.price);
+  // Reducerea se raporteaza la pretul AFISAT, nu la cel de baza: pe un produs
+  // variabil cu baza 175 si toate marimile 203, cardul scria „203 lei" taiat cu
+  // „200 lei" si o insigna de -12% care nu exista.
+  const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > priceRange.min;
   const discountPct = hasDiscount
-    ? Math.round((1 - Number(product.price) / Number(product.compare_at_price)) * 100)
+    ? Math.round((1 - priceRange.min / Number(product.compare_at_price)) * 100)
     : 0;
+  // `faraOferta` NU intra aici: randatorul trimite mereu `outOfStock`, deci ramura
+  // n-ar rula niciodata, iar mutata in `isProductOutOfStock` ar stinge cele 12
+  // produse demonstrative din catalogul de design-uri (au `variants.enabled` fara
+  // nicio combinatie). Steagul e citit acolo unde chiar conteaza: datele
+  // structurate.
   const isOutOfStock = outOfStock ?? (product.track_inventory && product.stock_quantity === 0);
   // Produs variabil: cardul deschide selectorul de optiuni in loc sa adauge direct.
   const isVariable = parseVariants(product.page_sections) !== null;
 
-  const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
+  const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: priceRange.min, quantity: 1 }] });
   // Slug-ul poate lipsi (coloana e nullable, iar importurile o lasa goala). Ruta
   // de produs rezolva si UUID-uri, deci pe id-ul produsului linkul ramane valid
   // in loc sa duca la /product/null.

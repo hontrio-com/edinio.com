@@ -175,7 +175,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // Pixels / GA4: standard product-view event, once per product.
   const productId = product.id;
   const productName = product.name;
-  const productPrice = Number(product.price) || 0;
+  // Pretul raportat pixelilor e cel pe care il poate cumpara clientul: pe un
+  // produs variabil, pretul de baza poate sa nu existe ca oferta.
+  const priceRange = getProductPriceRange(Number(product.price) || 0, product.page_sections);
+  const productPrice = priceRange.min;
   useEffect(() => {
     if (demo) return;
     gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
@@ -316,13 +319,27 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   );
 
   // Inainte de a alege o varianta, afiseaza intervalul de pret (sau doar minimul daca e setat din editor).
-  const priceRange = getProductPriceRange(basePrice, pageSections);
   const priceLowestOnly = pageContent.price_range_display?.enabled === false;
-  const showPriceRange = !selectedCombo && priceRange.hasRange;
+  /*
+   * Pe produsele cu variante, pretul dinainte de alegere iese INTOTDEAUNA din
+   * interval, nu doar cand variantele au preturi diferite.
+   *
+   * Cu `hasRange` in conditie, un produs ale carui marimi costa toate la fel
+   * cadea pe pretul de BAZA — iar baza nu e de vanzare: ANTIFOANE INT UF REFILL
+   * are baza 156,80 si singura combinatie activa 438,00, deci pagina promitea cu
+   * 281,20 lei mai putin decat se incaseaza. `formatPriceRange` colapseaza singur
+   * cand min si max sunt egale, deci nu e nevoie de a doua ramura.
+   */
+  const showPriceRange = !selectedCombo && !!variantsData;
 
-  const hasDiscount = !showPriceRange && displayComparePrice && displayComparePrice > displayPrice;
+  // Reducerea se raporteaza la pretul de pe ecran. Pana la prima bifa acela e
+  // minimul vandabil, nu baza — altfel cardul de catalog scria „-12%" si pagina
+  // produsului nu confirma nicio reducere.
+  const pretDeComparat = selectedCombo ? displayPrice : priceRange.min;
+  const aratamInterval = showPriceRange && priceRange.hasRange;
+  const hasDiscount = !aratamInterval && !!displayComparePrice && displayComparePrice > pretDeComparat;
   const discountPct = hasDiscount
-    ? Math.round((1 - displayPrice / displayComparePrice!) * 100)
+    ? Math.round((1 - pretDeComparat / displayComparePrice!) * 100)
     : 0;
 
   // Stock status

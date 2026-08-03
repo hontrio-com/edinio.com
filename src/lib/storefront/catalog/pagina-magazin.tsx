@@ -303,14 +303,13 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    * goale.
    */
   const index = construiesteFatete(productsRaw);
-  const products = productsRaw.map((p) => {
-    const slim: Record<string, unknown> = { ...slimCatalogProduct(p) };
-    // `tags` a fost cerut doar pentru fatete, care sunt gata: in browser nu il
-    // citeste nimeni, iar la 1221 de produse ar fi zeci de kilobytes degeaba.
-    delete slim.tags;
+  // Fara niciun cast: si `as StorefrontProduct` trecea, fiindca tipul tinta e
+  // asignabil catre forma fara `price_range`. Adnotarea tabloului face verificarea
+  // reala, adica exact pe producatorul cel mai mare — 1221 de produse.
+  const products: StorefrontProduct[] = productsRaw.map((p) => {
+    const { tags: _tags, ...slim } = slimCatalogProduct(p);
     const f = index.perProdus.get(p.id);
-    if (f) slim.f = f;
-    return slim as unknown as StorefrontProduct;
+    return f ? { ...slim, f } : slim;
   });
 
   // Analitica: aterizarile directe pe pagina de catalog sunt vizite reale, la

@@ -29,11 +29,16 @@ interface CatalogRowShape {
   page_sections: unknown;
 }
 
-export function slimCatalogProduct<T extends CatalogRowShape>(p: T): T & { price_range: PriceRange } {
-  // Intervalul de pret se calculeaza INAINTE de a arunca combinatiile.
-  const price_range = getProductPriceRange(Number(p.price), p.page_sections);
-
-  const ps = (p.page_sections ?? null) as {
+/**
+ * Din `page_sections` raman doar axele de varianta si pachetul.
+ *
+ * Combinatiile sunt partea grea — pana la 91 pe un produs, in medie 3 KB pe rand
+ * — si browserul n-are ce sa faca cu ele: pretul vine gata calculat in
+ * `price_range`, iar selectorul se randeaza din axe. Se cheama si din payload-ul
+ * editorului de pagini, unde blob-ul brut insemna 183 KB.
+ */
+export function slimPageSections(pageSections: unknown): Record<string, unknown> | null {
+  const ps = (pageSections ?? null) as {
     variants?: { enabled?: boolean; options?: unknown } | null;
     bundle?: unknown;
   } | null;
@@ -45,6 +50,13 @@ export function slimCatalogProduct<T extends CatalogRowShape>(p: T): T & { price
   if (ps?.bundle) {
     slim = { ...(slim ?? {}), bundle: ps.bundle };
   }
+  return slim;
+}
+
+export function slimCatalogProduct<T extends CatalogRowShape>(p: T): T & { price_range: PriceRange } {
+  // Intervalul de pret se calculeaza INAINTE de a arunca combinatiile.
+  const price_range = getProductPriceRange(Number(p.price), p.page_sections);
+  const slim = slimPageSections(p.page_sections);
 
   const images = Array.isArray(p.images) ? (p.images as unknown[]).slice(0, 1) : p.images;
 

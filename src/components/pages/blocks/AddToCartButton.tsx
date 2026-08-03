@@ -6,6 +6,7 @@ import { parseVariants } from "@/lib/storefront/variants";
 import { VariantQuickAdd, type QuickAddLine } from "@/components/ministore/VariantQuickAdd";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
+import type { PriceRange } from "@/lib/utils/product-price";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 /**
@@ -33,6 +34,8 @@ export function AddToCartButton({ product, storeSlug, color }: {
     image: string | null;
     images?: string[];
     pageSections?: unknown;
+    /** Intervalul vandabil, de la server: sertarul il arata pana la prima bifa. */
+    priceRange: PriceRange;
   };
   storeSlug: string;
   color: string;
@@ -96,6 +99,7 @@ export function AddToCartButton({ product, storeSlug, color }: {
             compare_at_price: product.compareAtPrice ?? null,
             images: product.images ?? (product.image ? [product.image] : []),
             page_sections: product.pageSections,
+            price_range: product.priceRange,
           }}
           color={color}
           onClose={() => setPickerOpen(false)}

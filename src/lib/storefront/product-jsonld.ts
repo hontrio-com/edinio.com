@@ -1,5 +1,6 @@
 import { isValidGtin, normalizeGtin } from "@/lib/gtin";
 import { getProductPriceRange } from "@/lib/utils/product-price";
+import { combinatiiActiveUnice, parseVariants, toateCombinatiileEpuizate } from "@/lib/storefront/variants";
 
 // Computed once at module load (not during render — keeps callers pure).
 const PRICE_VALID_UNTIL = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -34,8 +35,21 @@ export function buildProductJsonLd(
   // „Precomanda" din editor bate inventarul. Fara el, o pagina cu butonul stins
   // declara „InStock" in datele structurate si Google trimite clienti pe ea.
   const stockStatus = (product.page_sections as { stock_status?: string } | null)?.stock_status ?? "in_stock";
+  const varianteJsonLd = parseVariants(product.page_sections ?? null);
+  const priceRange = getProductPriceRange(Number(product.price) || 0, product.page_sections ?? null);
   const outOfStock = stockStatus === "out_of_stock"
-    || (product.track_inventory === true && product.stock_quantity === 0);
+    || (product.track_inventory === true && product.stock_quantity === 0)
+    // Un produs variabil fara nicio combinatie de vanzare nu se poate cumpara, dar
+    // declara „InStock", si Google trimite clienti pe o pagina cu butonul stins.
+    || priceRange.faraOferta
+    // Stocul combinatiilor conteaza DOAR cand produsul isi urmareste stocul, ca pe
+    // randul de deasupra si ca in amandoua feedurile (`facebook/catalog-feed.ts`,
+    // `google-merchant/mapping.ts`). Fara conditia asta, 171 de produse publicate
+    // de la un singur magazin ar fi declarat `OutOfStock` in microdate in timp ce
+    // feedul le trimite „in stoc" catre acelasi Merchant Center: zerourile lor vin
+    // din valoarea implicita a importului, iar comerciantul a stins tocmai
+    // urmarirea stocului.
+    || (product.track_inventory === true && toateCombinatiileEpuizate(varianteJsonLd));
   const availability = outOfStock
     ? "https://schema.org/OutOfStock"
     : stockStatus === "preorder"
@@ -49,10 +63,11 @@ export function buildProductJsonLd(
     ? product.created_at.slice(0, 10)
     : TODAY;
 
-  // Produs variabil cu preturi diferite: pagina afiseaza „De la X – Y lei", deci
-  // un Offer cu pretul de baza ar contrazice pretul vizibil (si pretul de baza
-  // poate sa nici nu fie cumparabil). Acelasi calcul ca pagina, ca sa nu poata
-  // diverge.
+  // Pretul publicat vine din intervalul vandabil, pe AMANDOUA ramurile.
+  // Ramura cu interval il folosea de mult; cea simpla publica pretul de BAZA, iar
+  // pe ANTIFOANE asta insemna 156,80 lei catre Google pentru un produs care se
+  // vinde cu 438 — pagina si microdatele contrazicandu-se pe acelasi ecran, adica
+  // exact motivul de suspendare din Merchant Center.
   /*
    * Identificatorii de produs: codul de bare si codul de fabricant.
    *
@@ -71,10 +86,10 @@ export function buildProductJsonLd(
   const gtin = isValidGtin(google?.gtin) ? normalizeGtin(google?.gtin) : null;
   const mpn = (google?.mpn ?? "").trim();
 
-  const priceRange = getProductPriceRange(Number(product.price) || 0, product.page_sections ?? null);
-  const combos = (product.page_sections as { variants?: { combinations?: { enabled?: boolean }[] } } | null)
-    ?.variants?.combinations;
-  const offerCount = Array.isArray(combos) ? combos.filter((c) => c?.enabled !== false).length : 0;
+  // Cate oferte anuntam: exact combinatiile vandabile, cate una pe titlu. Numarate
+  // altfel (`enabled !== false`, fara dedup) declaram catre Google mai multe
+  // oferte decat exista de vanzare.
+  const offerCount = combinatiiActiveUnice(varianteJsonLd).length;
 
   const shippingDetails = {
     "@type": "OfferShippingDetails",
@@ -135,7 +150,7 @@ export function buildProductJsonLd(
       : {
           "@type": "Offer",
           priceCurrency: "RON",
-          price: product.price ?? 0,
+          price: priceRange.min,
           itemCondition: "https://schema.org/NewCondition",
           availability,
           validFrom,

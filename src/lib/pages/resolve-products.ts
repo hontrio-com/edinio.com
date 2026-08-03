@@ -3,6 +3,7 @@ import type { Database } from "@/types/database.types";
 import type { Block, ProductsBlock } from "@/lib/pages/blocks.types";
 import { flattenBlocks } from "@/lib/pages/block-tree";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
+import { getProductPriceRange } from "@/lib/utils/product-price";
 
 type DB = SupabaseClient<Database>;
 
@@ -42,6 +43,7 @@ function toPageProduct(p: Record<string, unknown>): PageProduct {
     category: (p.category as string | null) ?? null,
     is_featured: !!p.is_featured,
     page_sections: p.page_sections ?? null,
+    price_range: getProductPriceRange(Number(p.price), p.page_sections ?? null),
   };
 }
 

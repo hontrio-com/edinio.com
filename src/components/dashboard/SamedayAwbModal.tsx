@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createSamedayAwbAction, deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { Button } from "@/components/ui/button";
@@ -75,17 +76,16 @@ export function SamedayAwbModal({
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
+  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
   useEffect(() => {
     if (open && !hasAwb) {
-      if (order.payment_method === "cash_on_delivery") {
-        setCod(String(Number(order.total).toFixed(2)));
-        setInsuredValue(String(Number(order.total).toFixed(2)));
-      } else {
-        setCod("0");
-        setInsuredValue("0");
-      }
+      setCod(rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2));
+      // Valoarea asigurata e valoarea MARFII, nu suma de incasat: o comanda deja
+      // platita calatoreste cu aceeasi marfa, deci se declara la fel.
+      setInsuredValue((Number(order.total) || 0).toFixed(2));
     }
-  }, [open, hasAwb, order.payment_method, order.total]);
+  }, [open, hasAwb, order.payment_status, order.total]);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");

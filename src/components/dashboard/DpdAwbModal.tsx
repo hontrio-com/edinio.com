@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createDpdShipmentAction, cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { euCountryByIso2 } from "@/lib/eu-countries";
@@ -81,15 +82,16 @@ export function DpdAwbModal({
   const [cancelling, setCancelling] = useState(false);
   const [downloadingFormat, setDownloadingFormat] = useState<"A4" | "A6" | null>(null);
 
+  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
+  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
   useEffect(() => {
+    // La international rambursul nu exista: biblioteca il trimite oricum pe zero
+    // (`lib/dpd.ts`), deci un numar precompletat aici ar promite o incasare care
+    // nu se intampla.
     if (open && !hasAwb) {
-      if (order.payment_method === "cash_on_delivery") {
-        setCashOnDelivery(String(Number(order.total).toFixed(2)));
-      } else {
-        setCashOnDelivery("0");
-      }
+      setCashOnDelivery(intlCountry ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2));
     }
-  }, [open, hasAwb, order.payment_method, order.total]);
+  }, [open, hasAwb, intlCountry, order.payment_status, order.total]);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");

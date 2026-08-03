@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { X, Loader2, Package, Truck, ChevronRight, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getCOPrices, createCOAwb } from "@/lib/actions/colete.actions";
 import type { COReceiver, COParcel } from "@/lib/colete";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,9 @@ interface PriceItem {
 
 export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
-  const isCod = (order.payment_method ?? "") === "cash_on_delivery" && order.payment_status === "unpaid";
+  // Ramburs dupa BANI, nu dupa metoda: o comanda cu plata online ramasa neplatita
+  // pleca altfel fara nicio cale de incasare. Vezi `rambursDeIncasat`.
+  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
 
   const hasAwb = !!(order as unknown as Record<string, unknown>)["colete_awb_number"];
   const awbNumber = ((order as unknown as Record<string, unknown>)["colete_awb_number"] as string) ?? "";
@@ -64,7 +67,17 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
   const [width, setWidth] = useState("20");
   const [height, setHeight] = useState("10");
   const [content, setContent] = useState("Produse comerciale");
-  const [repayment, setRepayment] = useState(isCod ? String(Math.round(Number(order.total))) : "0");
+  const [repayment, setRepayment] = useState(String(Math.round(ramburs)));
+
+  // Formularul se monteaza odata cu pagina, nu la deschidere, deci suma nu are voie
+  // sa ramana cea calculata la incarcare: dupa ce comerciantul marcheaza comanda
+  // platita, campul ar fi pastrat vechiul ramburs si l-ar fi trimis pe colet.
+  // Dependinte primitive, ca o simpla reimprospatare a paginii sa nu stearga suma
+  // scrisa cu mana.
+  useEffect(() => {
+    if (open && !hasAwb) setRepayment(String(Math.round(ramburs)));
+  }, [open, hasAwb, ramburs]);
+
   const [openAtDelivery, setOpenAtDelivery] = useState(false);
   const [saturday, setSaturday] = useState(false);
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { X, Loader2, Package, Truck, ChevronRight, Download, AlertCircle, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations, getWootReceiverLocations } from "@/lib/actions/woot.actions";
 import type { WootPriceResult, WootParcel, WootCounty, WootCity, WootLocation } from "@/lib/woot";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,9 @@ const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2
 
 export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
-  const isCod = (order.payment_method ?? "") === "cash_on_delivery" && order.payment_status === "unpaid";
+  // Ramburs dupa BANI, nu dupa metoda: comanda #0033 a plecat cu plata online
+  // neincasata si ramburs zero. Vezi `rambursDeIncasat`.
+  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
 
   // Receiver state
   const [counties, setCounties] = useState<WootCounty[]>([]);
@@ -50,7 +53,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [width, setWidth] = useState("20");
   const [height, setHeight] = useState("10");
   const [content, setContent] = useState("Produse comerciale");
-  const [repayment, setRepayment] = useState(isCod ? String(Math.round(Number(order.total))) : "0");
+  const [repayment, setRepayment] = useState(String(Math.round(ramburs)));
   const [opdEnabled, setOpdEnabled] = useState(false);
   const [satEnabled, setSatEnabled] = useState(false);
 
@@ -77,6 +80,16 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [cancelling, startCancel] = useTransition();
 
   const hasAwb = !!order.woot_awb_number;
+
+  // Formularul se monteaza odata cu pagina, nu la deschidere, deci suma nu are voie
+  // sa ramana cea calculata la incarcare: dupa ce comerciantul marcheaza comanda
+  // platita, campul ar fi pastrat vechiul ramburs si l-ar fi trimis pe colet.
+  // Dependinte primitive, ca o simpla reimprospatare a paginii sa nu stearga suma
+  // scrisa cu mana.
+  useEffect(() => {
+    if (open && !hasAwb) setRepayment(String(Math.round(ramburs)));
+  }, [open, hasAwb, ramburs]);
+
   // A service whose pickup isn't "door" needs the sender to hand the parcel over
   // at a Woot location, so it requires a sender location_id.
   const needsSenderLocation = !!selectedService?.service_pickup && selectedService.service_pickup !== "door";
@@ -422,7 +435,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
-                        Ramburs (RON) {!isCod && <span className="text-muted-foreground/60">— plata online</span>}
+                        Ramburs (RON) {ramburs === 0 && <span className="text-muted-foreground/60">— comanda platita</span>}
                       </label>
                       <input type="number" min="0" step="0.01" value={repayment}
                         onChange={e => setRepayment(e.target.value)} className={inputCls} />

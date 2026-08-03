@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, ExternalLink, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { createCargusAwbAction, deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
@@ -81,16 +82,11 @@ export function CargusAwbModal({
   const [deleting, setDeleting] = useState(false);
   const [downloadingFormat, setDownloadingFormat] = useState<0 | 1 | null>(null);
 
-  // Pre-fill COD for cash on delivery orders
+  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
+  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
   useEffect(() => {
-    if (open && !hasAwb) {
-      if (order.payment_method === "cash_on_delivery") {
-        setCashRepayment(String(Number(order.total).toFixed(2)));
-      } else {
-        setCashRepayment("0");
-      }
-    }
-  }, [open, hasAwb, order.payment_method, order.total]);
+    if (open && !hasAwb) setCashRepayment(rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2));
+  }, [open, hasAwb, order.payment_status, order.total]);
 
   const weightNum = parseFloat(weight) || 1;
   const isEnvelope = shipmentKind === "envelope";

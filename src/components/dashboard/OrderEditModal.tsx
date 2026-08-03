@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import {
   X, Pencil, Loader2, Plus, Minus, Trash2, Search, AlertTriangle,
   Package, Info, Truck, Check,
@@ -303,10 +304,13 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       cart: marfa.map((i) => ({ productId: i.product_id as string, quantity: Number(i.quantity) || 1 })),
       subtotal: previzualizare.stare === "gata" ? previzualizare.subtotal : Number(order.subtotal),
       // Rambursul cotat e cel NOU: prima curierului se calculeaza pe suma pe
-      // care o incaseaza el, iar aceea include produsele tocmai adaugate.
-      cod: order.payment_method === "cash_on_delivery"
-        ? (previzualizare.stare === "gata" ? previzualizare.total : Number(order.total))
-        : 0,
+      // care o incaseaza el, iar aceea include produsele tocmai adaugate. Si aici
+      // conteaza BANII, nu metoda: o comanda cu plata online neincasata pleaca cu
+      // ramburs, deci ar fi fost cotata gresit. Vezi `rambursDeIncasat`.
+      cod: rambursDeIncasat({
+        payment_status: order.payment_status,
+        total: previzualizare.stare === "gata" ? previzualizare.total : Number(order.total),
+      }),
     }).then((optiuni) => {
       setRequoting(false);
       const potrivita = optiuni.find((o) => o.courier === addr.courier

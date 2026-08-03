@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice } from "@/lib/actions/oblio.actions";
@@ -173,7 +174,7 @@ export async function bulkGenerateAwbs(
 
   const { data: orders } = await admin
     .from("orders")
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -221,6 +222,9 @@ export async function bulkGenerateAwbs(
 type BulkOrderRow = {
   id: string; order_number: string; customer_name: string; customer_phone: string;
   customer_email: string | null; total: number; payment_method: string | null;
+  // De starea platii atarna rambursul. Nedeclarata, ar fi fost mereu `undefined`,
+  // deci orice comanda ar fi plecat cu ramburs, inclusiv cele deja platite.
+  payment_status: string | null;
   shipping_address: unknown; items: unknown;
 };
 
@@ -233,7 +237,10 @@ async function createAwbForOrder(
   const addr = (o.shipping_address ?? {}) as ShippingAddr;
   const items = Array.isArray(o.items) ? (o.items as { name?: string }[]) : [];
   const content = (items.map((i) => i?.name).filter(Boolean).join(", ").slice(0, 100)) || o.order_number;
-  const cod = o.payment_method === "cash_on_delivery" ? (Number(o.total) || 0) : 0;
+  // Ramburs dupa BANI, nu dupa metoda — aceeasi regula ca in formularele de AWB.
+  // Aici conteaza mai mult decat oriunde: generarea in masa nu are camp de
+  // corectat, deci ce iese de aici pleaca direct pe colet.
+  const cod = rambursDeIncasat(o);
 
   const county = (addr.county ?? "").trim();
   const city = (addr.city ?? "").trim();

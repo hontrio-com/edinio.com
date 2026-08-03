@@ -118,10 +118,28 @@ export async function getShippingOptions(
     cod?: number;
     country?: string;  // EU ISO alpha-2 for international; absent or "RO" = domestic
     postCode?: string;
-    // Cart context for conditional shipping rules (weight/value/class/category).
-    // Product shipping data is loaded server-side (authoritative); subtotal is the
-    // goods value after promo. Absent => behaves exactly like before (no rules).
+    /*
+     * Liniile cosului: din ele ies greutatea, clasele si categoriile pe care se
+     * coteaza.
+     *
+     * Datele fiecarui produs (greutate, clasa, categorie) se citesc din baza,
+     * deci sunt autoritare. CARE produse sunt in cos NU e verificat nicaieri:
+     * lista vine de la browser, iar pretul care iese pleaca semnat. Se poate cere
+     * o cotatie cu un cos usor si se poate comanda apoi altceva; amprenta nu
+     * leaga liniile (vezi `quote-token.ts`).
+     *
+     * Masurat 2026-08-03, cat costa asta azi: din cele 3 magazine care coteaza
+     * live, doua (okxi, yulmis-sound) n-au NICIUN produs cu greutate completata,
+     * deci acolo greutatea e mereu rezerva de 1 kg si o lista mincinoasa nu misca
+     * nimic. Ramane tonel-beauty, cu 253 de produse cantarite si maximum 1 kg
+     * bucata. Nelegat inca fiindca la comanda ar trebui reconstruit acelasi numar
+     * din liniile finale (cu pachete desfacute si oferte acordate server-side),
+     * iar o nepotrivire cinstita cade pe `max(suma ceruta, tarif implicit)` —
+     * adica exact +18 pana la +45 de lei peste 0,00 pe „Ridicare personala", la 5
+     * magazine publicate.
+     */
     cart?: { productId: string; quantity: number }[];
+    /** Valoarea marfii dupa promotii, de la client. Vezi avertismentul de la `ctx.subtotal`. */
     subtotal?: number;
   },
 ): Promise<ShippingOptionSemnata[]> {
@@ -162,6 +180,15 @@ export async function getShippingOptions(
    */
   const iso2 = destination.country?.toUpperCase();
   const esteIntl = !!iso2 && iso2 !== "RO";
+  /*
+   * Regimul in care se cere TOT lotul de preturi de mai jos.
+   *
+   * `cod` e o suma trimisa de browser care intra direct in cererea catre curier
+   * si din care iese comisionul de ramburs. Calculat o singura data aici si dus
+   * in amprenta, ca pretul semnat sa spuna si in ce regim a fost cotat. Vezi
+   * `QuoteOption.ramburs` pentru ce acopera si ce nu.
+   */
+  const esteRamburs = (Number(destination.cod) || 0) > 0;
   let cos = contextulCosului([], []);
   if (destination.cart && destination.cart.length > 0) {
     const { data: cartProducts, error: eroareCos } = await supabase
@@ -225,7 +252,7 @@ export async function getShippingOptions(
       // functie inainte de pasul de la final, si tocmai de aceea pleca fara
       // token. Cu `semneazaOptiuni` in amandoua iesirile, o optiune nesemnata
       // nu mai poate scapa dintr-un `return` nou.
-      return semneazaOptiuni(businessId, destination, [{
+      return semneazaOptiuni(businessId, destination, esteRamburs, [{
         courier: "dpd",
         courierLabel: `DPD International (${eu!.name})`,
         deliveryType: "address" as const,
@@ -566,7 +593,22 @@ export async function getShippingOptions(
       }
     }
     const ctx: ShippingCartContext = {
-      subtotal: Math.max(0, Number(destination.subtotal) || 0),
+      /*
+       * ATENTIE: valoarea asta RAMANE un numar trimis de browser, si pretul care
+       * iese din ea pleaca SEMNAT. Nu e reparata aici, doar ingradita.
+       *
+       * Ce se inchide: `getShippingOptions(biz, { county:"Cluj", subtotal:5000,
+       * cart:[] })` nu mai poate scoate livrare gratuita semnata pentru o comanda
+       * de 50 de lei — fara linii declarate nu exista nimic care sa sustina suma,
+       * deci suma e zero. Ce RAMANE deschis: cine declara cosul cinstit si umfla
+       * doar suma trece in continuare.
+       *
+       * Inchiderea adevarata inseamna repretuirea cosului din baza chiar aici, si
+       * n-am facut-o intr-un singur commit. Nu e urgenta masurata: 0 din 127 de
+       * magazine au reguli de transport (2026-08-03), deci ramura asta nu se
+       * executa azi la nimeni.
+       */
+      subtotal: cos.productIds.length > 0 ? Math.max(0, Number(destination.subtotal) || 0) : 0,
       weightKg: cos.weightKg,
       quantity: cos.quantity,
       classIds: cos.classIds,
@@ -581,7 +623,7 @@ export async function getShippingOptions(
   // Fiecare optiune pleaca semnata. Tokenul se intoarce cu comanda si e singurul
   // fel in care serverul poate sti ca pretul livrarii chiar a fost cotat de el.
   // Vezi `quote-token.ts`.
-  const semnate = semneazaOptiuni(businessId, destination, finalOptions);
+  const semnate = semneazaOptiuni(businessId, destination, esteRamburs, finalOptions);
 
   // Sort: address first, then lockers, by price
   return semnate.sort((a, b) => {

@@ -193,11 +193,15 @@ export function buildOrderLines(order: KlarnaOrderInput): KlarnaLine[] {
     });
   }
 
-  // Promo + offer + card-payment discounts are already subtracted from
-  // `orders.total`, so mirror them as a single negative line.
+  // Promo + card-payment discounts are already subtracted from `orders.total`,
+  // so mirror them as a single negative line.
+  //
+  // `offer_discount_amount` NU intra aici: reducerea de oferta sta in pretul
+  // liniei, deci e deja scazuta din liniile de mai sus. Adunata si aici, s-ar
+  // scadea de doua ori, iar suma liniilor n-ar mai da totalul comenzii. Coloana
+  // exista doar ca pista de audit.
   const discount = toMinor(
     (Number(order.discount_amount) || 0) +
-    (Number(order.offer_discount_amount) || 0) +
     (Number(order.card_discount_amount) || 0),
   );
   if (discount > 0) {

@@ -48,14 +48,30 @@ export function fbtCompanionPrices(
   companionPrices: number[],
   config: ConfigReducereSet,
 ): number[] {
+  const pricing = pretulSetului([anchorPrice, ...companionPrices], config);
+  return imparteEconomiaCompanionilor(anchorPrice, companionPrices, pricing.savings);
+}
+
+/**
+ * Pretul unui set de produse dupa reducerea ofertei — SINGURUL loc unde se face.
+ *
+ * Il folosesc deopotriva magazinul, cand aseaza pretul pe card (`resolveProductOffers`,
+ * `resolveCartOffers`), si comanda, cand incaseaza (`aplicaOfertaPeLinii`). Un
+ * singur produs in `preturi` inseamna un order bump; ancora plus companionii,
+ * un set „cumparate frecvent impreuna".
+ */
+export function pretulSetului(
+  preturi: number[],
+  config: ConfigReducereSet,
+): { price: number; compareAt: number; savings: number } {
   const mode = modBundle(config.discountMode);
-  if (!mode) return companionPrices.map((p) => round2(p));
-  const pricing = computeBundlePricing(
-    [anchorPrice, ...companionPrices].map((p) => ({ price: p, quantity: 1 })),
+  const compareAt = round2(preturi.reduce((s, p) => s + p, 0));
+  if (!mode) return { price: compareAt, compareAt, savings: 0 };
+  return computeBundlePricing(
+    preturi.map((p) => ({ price: p, quantity: 1 })),
     mode,
     { fixedPrice: config.fixedPrice, discountPercent: config.discountPercent, discountAmount: config.discountAmount },
   );
-  return imparteEconomiaCompanionilor(anchorPrice, companionPrices, pricing.savings);
 }
 
 /**

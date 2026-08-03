@@ -349,8 +349,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!open) return;
     // Cantitatea aleasa pe pagina, cand pagina are selector. Treapta se bifeaza
     // singura daca exista una cu exact atatea bucati.
+    //
+    // In fluxul „cumpara impreuna" ramane 1: cardul ofera setul o data si
+    // formularul scrie „1 buc" langa ancora, dar cantitatea de pe pagina venea
+    // prin `initialQuantity` si se incasau toate bucatile.
     const cerute = Math.max(1, Math.floor(Number(initialQuantity) || 1));
-    setQuantity(cerute);
+    setQuantity(fbtOffer ? 1 : cerute);
     setErrors({});
     setDiscountInput("");
     setAppliedDiscount(null);
@@ -428,14 +432,24 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   }, [open, business.id]);
 
   // Order-bump offers applicable to this order (the buy-now product + carried cart).
+  //
+  // Se recitesc si cand se schimba liniile purtate din cos, nu doar la deschidere:
+  // serverul verifica acum declansatorul la plasarea comenzii, iar un bump aprins
+  // de un produs pe care clientul tocmai l-a scos din formular ar fi ramas bifat
+  // si ar fi oprit comanda. Lista reincarcata il scoate singura, fiindca
+  // `acceptedBumpOffers` se filtreaza pe ofertele inca aplicabile.
+  const idProduseComanda = [product.id, ...cart.map((c) => c.productId)].join(",");
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    const ids = [product.id, ...(cartItems ?? []).map((c) => c.productId)];
-    getCheckoutBumps(business.id, ids).then((b) => { if (!cancelled) setBumps(b ?? []); }).catch(() => {});
+    // Pe esec lista se GOLESTE, nu ramane cea veche: `acceptedBumpOffers` se
+    // filtreaza prin ea, deci o lista invechita ar trimite la server un bump pe
+    // care el il refuza acum, si comanda s-ar opri din cauza unei erori de retea.
+    getCheckoutBumps(business.id, idProduseComanda.split(","))
+      .then((b) => { if (!cancelled) setBumps(b ?? []); })
+      .catch(() => { if (!cancelled) setBumps([]); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, business.id, product.id]);
+  }, [open, business.id, idProduseComanda]);
 
   // Re-validate discount when quantity/tier changes (min_order_amount may no longer be met)
   useEffect(() => {

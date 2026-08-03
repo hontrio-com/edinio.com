@@ -285,7 +285,12 @@ export function useCheckoutOrder({
   useEffect(() => {
     if (preview || !open || items.length === 0) return;
     let cancelled = false;
-    getCheckoutBumps(businessId, items.map((i) => i.productId)).then((b) => { if (!cancelled) setBumps(b ?? []); }).catch(() => {});
+    // Pe esec lista se GOLESTE, nu ramane cea veche: serverul re-evalueaza acum
+    // ofertele la plasarea comenzii, iar un bump bifat dintr-o lista invechita
+    // i-ar opri comanda din cauza unei erori de retea.
+    getCheckoutBumps(businessId, items.map((i) => i.productId))
+      .then((b) => { if (!cancelled) setBumps(b ?? []); })
+      .catch(() => { if (!cancelled) setBumps([]); });
     return () => { cancelled = true; };
   }, [preview, open, businessId, items]);
 

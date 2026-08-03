@@ -227,8 +227,8 @@ function estePretAutoritar(linie: LinieComanda, cat: CatalogEdit): boolean {
  * Se poate contopi adaugarea cu o linie care e deja pe comanda?
  *
  * Lista ALBA, nu neagra: se contopeste doar ce se poate dovedi curat. Motivul e
- * ca liniile stabilite de oferte nu poarta niciun semn pe ele — `applyBumpPricing`
- * si `applyFbtPricing` schimba doar `price` si pleaca. O contopire care
+ * ca liniile stabilite de oferte nu poarta niciun semn pe ele — `applyOfferPricing`
+ * schimba doar `price` (si desprinde o bucata) si pleaca. O contopire care
  * repretuieste din catalog ar sterge tacit reducerea convenita cu clientul si
  * i-ar urca pretul dupa ce a comandat.
  *

@@ -21,7 +21,11 @@ export async function resolve(specifier, context, next) {
       if (existsSync(candidate)) return next(pathToFileURL(candidate).href, context);
     }
   }
-  if (specifier.startsWith(".") && !/\.[a-z]+$/i.test(specifier)) {
+  // Doar extensiile ADEVARATE se lasa in pace. Cu „orice se termina in punct plus
+  // litere", un modul ca `./offer.types` parea deja rezolvat si nu se mai incerca
+  // `./offer.types.ts`: fisierul devenea netestabil, si logica din el a plecat in
+  // alta parte doar ca sa poata fi verificata.
+  if (specifier.startsWith(".") && !/\.(ts|tsx|js|jsx|mjs|cjs|json)$/i.test(specifier)) {
     try {
       return await next(`${specifier}.ts`, context);
     } catch {

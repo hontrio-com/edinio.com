@@ -28,7 +28,8 @@ import { verifyShippingQuote } from "@/lib/shipping/quote-token";
 import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleStock } from "@/lib/bundles";
-import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
+import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
+import { MAX_CANTITATE_LINIE } from "@/lib/offers/offer-pricing";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
@@ -49,6 +50,37 @@ const STORE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/**
+ * Ofertele refuzate la re-evaluare, scrise in jurnal cu clientul ADMIN.
+ *
+ * `logError` scrie prin clientul de cerere, iar comenzile magazinului sunt
+ * anonime: politicile RLS taie insertul, deci pe calea publica un jurnal gol nu
+ * dovedeste ca nu s-a intamplat nimic. Aici avem nevoie exact de dovada aceea:
+ * daca dupa lansare apar des refuzuri cu motivul „declansator" sau „suprafata",
+ * inseamna ca re-evaluarea difera de magazin undeva unde n-am prevazut, si
+ * clienti adevarati raman cu comanda blocata.
+ */
+async function jurnalizeazaOfertele(
+  admin: SupabaseClient<Database>, businessId: string, rez: RezultatOferte,
+): Promise<void> {
+  // Se scrie DOAR cand comanda chiar s-a oprit. Asta e singurul semnal care
+  // trebuie urmarit, si tot asta tine jurnalul mic: apelul vine dintr-un
+  // endpoint public anonim, deci fiecare rand scris e un rand pe care il poate
+  // cere oricine (limitat de cele 10 incercari pe minut si pe IP).
+  if (!rez.error) return;
+  try {
+    await admin.from("error_logs").insert({
+      action: "applyOfferPricing.rejected",
+      message: "Comanda oprita: oferta revendicata nu se mai justifica",
+      details: { rejected: rez.rejected, applied: rez.applied } as never,
+      business_id: businessId,
+      severity: "warning",
+    });
+  } catch {
+    // Jurnalul nu are voie sa pice o comanda.
+  }
 }
 
 // ── Server-authoritative pricing ─────────────────────────────────────────────
@@ -115,7 +147,11 @@ function authoritativeSubtotal(
   quantity: number,
   variantTitle?: string | null,
 ): number | null {
-  if (!Number.isFinite(claimedUnit) || quantity < 1) return null;
+  // `Number.isFinite` si pe CANTITATE, nu doar pe pret: `round2` inghite NaN in
+  // zero (`Number(NaN) || 0`), deci o cantitate nenumerica facea si suma ceruta,
+  // si toate totalurile legitime sa fie 0,00 — se potriveau perfect intre ele si
+  // produsul principal pleca pe gratis. `NaN < 1` e fals, deci poarta veche o lasa.
+  if (!Number.isFinite(claimedUnit) || !Number.isFinite(quantity) || quantity < 1) return null;
   const claimed = round2(claimedUnit * quantity);
   let best: number | null = null;
   let bestDiff = Infinity;
@@ -485,9 +521,22 @@ export async function placeOrder(data: {
     return { error: "Produsul nu mai este disponibil. Reincarca pagina." };
   }
 
-  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, data.quantity, data.variant_title);
+  /*
+   * Cantitatea comandata, normalizata o singura data si folosita peste tot.
+   *
+   * Era singurul numar din comanda care nu trecea prin nicio plafonare: liniile
+   * din cos si editarea din panou se opresc de mult la 999, formularul de produs
+   * nu se oprea nicaieri. Iar `Math.floor` pe ce vine din browser nu e de ajuns,
+   * fiindca `quantity` poate sosi si nenumeric.
+   */
+  const cantitate = Math.min(MAX_CANTITATE_LINIE, Math.floor(Number(data.quantity)));
+  if (!(cantitate >= 1)) {
+    return { error: "Cantitatea comandata nu este valida. Reincarca pagina si incearca din nou." };
+  }
+
+  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
   if (mainSubtotal === null) {
-    logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity }, severity: "warning" });
+    logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity, cantitate }, severity: "warning" });
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
   }
 
@@ -502,12 +551,18 @@ export async function placeOrder(data: {
     [product.id, comboStockMap(product.page_sections)],
   ]);
   const liniiCuVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [
-    { product_id: data.product_id, variant_title: data.variant_title, quantity: data.quantity },
+    { product_id: data.product_id, variant_title: data.variant_title, quantity: cantitate },
   ];
   if (data.additional_items?.length) {
     const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
     if (ids.length > 0) {
-      const { data: extraProducts } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
+      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
+      // O interogare cazuta arunca TOT cosul purtat, in tacere: clientul ar primi
+      // o comanda doar cu produsul din formular, la un total pe care nu l-a vazut.
+      if (eroareExtra) {
+        logError({ action: "placeOrder.cartItemsUnavailable", message: eroareExtra.message, details: { businessId: data.business_id, ids }, severity: "error" });
+        return { error: "Nu am putut verifica produsele din cos. Te rugam incearca din nou in cateva momente." };
+      }
       const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => {
         const base = round2(Number(p.price));
         stocPeVarianta.set(p.id, comboStockMap(p.page_sections));
@@ -518,10 +573,21 @@ export async function placeOrder(data: {
           tiers: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers,
         }];
       }));
-      // Lista filtrata se tine intr-o variabila, ca stocul si preturile sa se uite
-      // la EXACT aceleasi linii. Repetat, filtrul ar putea ajunge sa difere.
+      /*
+       * Lista filtrata se tine intr-o variabila, ca stocul si preturile sa se uite
+       * la EXACT aceleasi linii. Repetat, filtrul ar putea ajunge sa difere.
+       *
+       * Cantitatea se PLAFONEAZA aici, o singura data, si tot de aici o iau si
+       * verificarea de stoc, si pretul. `placeOrder` e export dintr-un modul
+       * „use server", adica endpoint public, iar `Math.floor` primea pur si simplu
+       * ce trimitea browserul; calea de editare plafoneaza de mult la 999.
+       * Plafonata doar la pret, s-ar fi scazut din stoc un numar si s-ar fi
+       * incasat altul.
+       */
       const liniiDinCos = data.additional_items
-        .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0);
+        .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id))
+        .map((i) => ({ ...i, quantity: Math.min(MAX_CANTITATE_LINIE, Math.floor(i.quantity)) }))
+        .filter((i) => i.quantity >= 1);
       liniiCuVarianta.push(...liniiDinCos);
       cartItems = liniiDinCos
         .map((i) => {
@@ -533,24 +599,12 @@ export async function placeOrder(data: {
           // Treptele se aplica si liniilor purtate din cos in comanda directa,
           // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
           // plecata din formularul de produs il pierde pe drum.
-          /*
-           * Cantitatea se PLAFONEAZA, ca la editarea comenzii.
-           *
-           * `placeOrder` e export dintr-un modul „use server", adica endpoint
-           * public, iar aici nu exista nicio limita: `Math.floor` primeste ce
-           * trimite browserul. Calea de editare plafoneaza de mult la 999
-           * (`edit-pricing.ts`), asta nu. Cat timp o reducere de set se putea
-           * aplica pe fiecare bucata, lipsa plafonului transforma un defect
-           * marginit intr-unul nemarginit: la 999 de bucati, aproape 9.900 de
-           * lei pe o singura comanda.
-           */
-          const cantitate = Math.min(999, Math.max(0, Math.floor(i.quantity)));
-          const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), cantitate, unitPrice);
+          const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
           return {
             product_id: i.product_id,
             name: i.variant_title ? `${meta.name} (${i.variant_title})` : meta.name,
             price: linie.unitPrice,
-            quantity: cantitate,
+            quantity: i.quantity,
           };
         });
     }
@@ -565,17 +619,28 @@ export async function placeOrder(data: {
   const eroareStoc = eroareStocPeVarianta(stocPeVarianta, liniiCuVarianta);
   if (eroareStoc) return { error: eroareStoc };
 
-  // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
-  // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
-  if (data.accepted_offer_ids?.length) {
-    const bumped = await applyBumpPricing(admin, data.business_id, data.accepted_offer_ids, cartItems);
-    cartItems = bumped.items;
-    // FBT: distribute the "bought together" set discount across the companion lines.
-    // Anchor priced at the product's BASE price — matches the set pricing the storefront
-    // showed (resolveProductOffers uses the base price), so preview and charge agree.
-    const fbt = await applyFbtPricing(admin, data.business_id, data.accepted_offer_ids, data.product_id, round2(Number(product.price)), cartItems);
-    cartItems = fbt.items;
-  }
+  /*
+   * Ofertele acceptate, RE-EVALUATE de la zero pe server: declansatorul,
+   * suprafata, setul pe care magazinul l-ar fi aratat si abia apoi pretul.
+   *
+   * Ancora se paseaza cu pretul ei unitar REAL, adica al variantei alese, nu cu
+   * pretul de baza al produsului. Cardul din pagina imparte economia setului
+   * folosind pretul afisat, deci pe un produs cu variante cele doua numere
+   * spuneau lucruri diferite.
+   */
+  const oferte = await applyOfferPricing(admin, data.business_id, data.accepted_offer_ids, cartItems, {
+    anchor: {
+      productId: data.product_id,
+      basePrice: round2(Number(product.price)),
+      unitPrice: round2(mainSubtotal / cantitate),
+    },
+    // Liniile cu varianta aleasa vin sigur din cos, nu de la o oferta: ofertele
+    // adauga produsul dintr-o apasare, deci nu pot alege o marime.
+    cuVariantaAleasa: new Set((data.additional_items ?? []).filter((i) => i.variant_title).map((i) => i.product_id)),
+  });
+  await jurnalizeazaOfertele(admin, data.business_id, oferte);
+  if (oferte.error) return { error: oferte.error };
+  cartItems = oferte.items;
   const cartSubtotal = round2(cartItems.reduce((s, i) => s + i.price * i.quantity, 0));
   const subtotal = round2(mainSubtotal + cartSubtotal);
 
@@ -682,20 +747,20 @@ export async function placeOrder(data: {
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
   const stockExp = await expandBundleStock(admin, data.business_id, [
-    { product_id: data.product_id, quantity: data.quantity },
+    { product_id: data.product_id, quantity: cantitate },
     ...cartItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
   ]);
   if ("error" in stockExp) return { error: stockExp.error };
 
   const order_number = await buildOrderNumber(admin, data.business_id);
 
-  const unitPrice = round2(mainSubtotal / data.quantity);
+  const unitPrice = round2(mainSubtotal / cantitate);
   const allItems = [
     {
       product_id: data.product_id,
       name: data.product_name,
       price: unitPrice,
-      quantity: data.quantity,
+      quantity: cantitate,
       ...(data.customization && { customization: data.customization }),
     },
     ...cartItems,
@@ -762,6 +827,11 @@ export async function placeOrder(data: {
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
+    // Reducerea data de oferte sta DEJA in pretul liniilor; coloana o inregistreaza
+    // ca sa existe o pista de audit. Fara ea, o reducere de oferta nu se poate
+    // deosebi in `items` de o schimbare ulterioara a pretului de catalog, si nici
+    // nu se putea dovedi ca nu s-a abuzat de vreo oferta.
+    offer_discount_amount: oferte.savings,
     card_discount_amount: cardDiscount,
     cod_discount_amount: codDiscount,
     cod_fee_amount: codFee,
@@ -1722,7 +1792,7 @@ export async function placeCartOrder(data: {
 
   // Reload every product + store config; recompute all prices server-side.
   const productIds = [...new Set(data.items.map((i) => i.product_id))];
-  const [{ data: dbProducts }, { data: cfgRow }] = await Promise.all([
+  const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow }] = await Promise.all([
     admin.from("products")
       .select("id, price, is_active, page_sections")
       .in("id", productIds)
@@ -1732,6 +1802,14 @@ export async function placeCartOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
   ]);
+
+  // O interogare cazuta nu inseamna „produsul nu mai e disponibil": fara `error`
+  // citit, orice pana de o secunda ii spunea clientului sa reincarce cosul, iar
+  // reincarcarea nu repara nimic. Raspunsul corect e sa mai incerce.
+  if (eroareProduse) {
+    logError({ action: "placeCartOrder.productsUnavailable", message: eroareProduse.message, details: { businessId: data.business_id, productIds }, severity: "error" });
+    return { error: "Nu am putut verifica produsele din cos. Te rugam incearca din nou in cateva momente." };
+  }
 
   const activeProducts = (dbProducts ?? []).filter((p) => p.is_active);
   const priceMap = new Map(activeProducts.map((p) => [p.id, round2(Number(p.price))]));
@@ -1761,9 +1839,24 @@ export async function placeCartOrder(data: {
    * Aceeasi regula, acelasi ajutor ca la comanda directa. Scrisa de doua ori, a
    * si apucat-o pe drumuri diferite: calea cealalta n-a avut-o niciodata.
    */
+  /*
+   * Cantitatea se plafoneaza AICI, o singura data, si de aici o iau toate cele
+   * trei locuri: verificarea de stoc, pretul si scaderea stocului pe marime.
+   * Endpointul e public, iar fara plafon orice defect de pret se inmulteste cu
+   * un numar ales de client; plafonata doar la pret, s-ar fi scazut din stoc un
+   * numar si s-ar fi incasat altul.
+   */
+  const liniiCerute = data.items
+    .map((i) => ({ ...i, quantity: Math.min(MAX_CANTITATE_LINIE, Math.floor(Number(i.quantity))) }))
+    // `NaN >= 1` e fals, deci filtrul asta scoate si cantitatile nenumerice. Fara
+    // el, o cantitate NaN trecea de plafonare, `round2` o inghitea in zero la
+    // subtotal (`Number(NaN) || 0`) si comanda pleca de 0 lei, cu stocul scazut.
+    .filter((i) => i.quantity >= 1);
+  if (liniiCerute.length === 0) return { error: "Cosul este gol." };
+
   const eroareStoc = eroareStocPeVarianta(
     new Map(activeProducts.map((p) => [p.id, comboStockMap(p.page_sections)])),
-    data.items,
+    liniiCerute,
   );
   if (eroareStoc) return { error: eroareStoc };
 
@@ -1773,7 +1866,7 @@ export async function placeCartOrder(data: {
     activeProducts.map((p) => [p.id, (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers]),
   );
 
-  let validatedItems = data.items.map((i) => {
+  let validatedItems = liniiCerute.map((i) => {
     const variantPrice = i.variant_title ? comboMap.get(i.product_id)!.get(i.variant_title) : undefined;
     const unitPrice = variantPrice != null ? round2(variantPrice) : priceMap.get(i.product_id)!;
     // Treptele de cantitate se aplica si pe calea cosului, cu ACELASI motor pe
@@ -1793,12 +1886,16 @@ export async function placeCartOrder(data: {
       quantity: i.quantity,
     };
   });
-  // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
-  // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
-  if (data.accepted_offer_ids?.length) {
-    const bumped = await applyBumpPricing(admin, data.business_id, data.accepted_offer_ids, validatedItems);
-    validatedItems = bumped.items;
-  }
+  // Aceeasi re-evaluare ca la comanda directa, fara ancora: „cumparate frecvent
+  // impreuna" se vinde numai din pagina produsului, deci un id de FBT revendicat
+  // aici n-a fost niciodata aratat.
+  const oferte = await applyOfferPricing(admin, data.business_id, data.accepted_offer_ids, validatedItems, {
+    anchor: null,
+    cuVariantaAleasa: new Set(liniiCerute.filter((i) => i.variant_title).map((i) => i.product_id)),
+  });
+  await jurnalizeazaOfertele(admin, data.business_id, oferte);
+  if (oferte.error) return { error: oferte.error };
+  validatedItems = oferte.items;
   const subtotal = round2(validatedItems.reduce((s, i) => s + i.price * i.quantity, 0));
 
   // Enforce the merchant's minimum order value (Setari > Livrare) against the authoritative subtotal.
@@ -1968,6 +2065,11 @@ export async function placeCartOrder(data: {
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
+    // Reducerea data de oferte sta DEJA in pretul liniilor; coloana o inregistreaza
+    // ca sa existe o pista de audit. Fara ea, o reducere de oferta nu se poate
+    // deosebi in `items` de o schimbare ulterioara a pretului de catalog, si nici
+    // nu se putea dovedi ca nu s-a abuzat de vreo oferta.
+    offer_discount_amount: oferte.savings,
     card_discount_amount: cardDiscount,
     cod_discount_amount: codDiscount,
     cod_fee_amount: codFee,
@@ -1992,8 +2094,8 @@ export async function placeCartOrder(data: {
   // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
   // Si stocul marimii vandute, pe aceleasi linii pe care le-a verificat
-  // `eroareStocPeVarianta` la intrare.
-  await scadeStoculVariantelor(admin, data.items);
+  // `eroareStocPeVarianta` la intrare — cu cantitatea plafonata, cea incasata.
+  await scadeStoculVariantelor(admin, liniiCerute);
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
   void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);

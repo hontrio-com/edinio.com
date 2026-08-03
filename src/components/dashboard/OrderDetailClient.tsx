@@ -14,6 +14,7 @@ import {
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
+import { totaluriComanda, type SetariTvaMagazin } from "@/lib/orders/totals-box";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
 import {
   generateOrderInvoice,
@@ -211,6 +212,7 @@ const CARD = "bg-surface border border-border rounded-xl";
 export function OrderDetailClient({
   order,
   businessId,
+  setariTva,
   smartbillEnabled,
   hasEstimateSeries,
   wootEnabled,
@@ -225,6 +227,13 @@ export function OrderDetailClient({
 }: {
   order: Order;
   businessId: string;
+  /*
+   * OBLIGATORIU, nu optional cu implicit: fara el, caseta de totaluri nu poate
+   * sti daca `orders.vat_amount` e o suma de adunat sau una deja continuta in
+   * total, si a ghicit gresit pe 20 din 96 de comenzi. Un camp optional s-ar
+   * putea uita din nou la urmatoarea pagina care randeaza componenta.
+   */
+  setariTva: SetariTvaMagazin;
   smartbillEnabled: boolean;
   hasEstimateSeries: boolean;
   wootEnabled?: boolean;
@@ -243,6 +252,19 @@ export function OrderDetailClient({
   const [isPending, startTransition] = useTransition();
 
   const items = (order.items as unknown as OrderItem[]) ?? [];
+  const totaluri = totaluriComanda({
+    items,
+    subtotal: order.subtotal,
+    shippingCost: order.shipping_cost,
+    discountAmount: order.discount_amount,
+    cardDiscount: order.card_discount_amount,
+    codDiscount: order.cod_discount_amount,
+    codFee: order.cod_fee_amount,
+    vatAmount: order.vat_amount,
+    vatRate: order.vat_rate,
+    total: order.total,
+    setariTva,
+  });
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
   const firma = readBillingCompany(order.billing_company);
   const notes = order.notes as Record<string, string> | null;
@@ -932,50 +954,92 @@ export function OrderDetailClient({
                 </div>
               ))}
             </div>
+            {/*
+                Toate cifrele de aici vin din `totaluriComanda`, nu din coloane
+                citite una cate una: randurile trebuie sa DEA totalul de sub ele,
+                iar regula asta se tine intr-un singur loc, cu test. Vezi
+                `lib/orders/totals-box.ts`.
+            */}
             <div className="border-t border-border pt-3 space-y-1.5 text-sm">
               <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span>{formatPrice(Number(order.subtotal))}</span>
+                <span>Subtotal</span><span>{formatPrice(totaluri.subtotal)}</span>
               </div>
-              {Number(order.discount_amount) > 0 && (
+              {/* Extraoptiunile sunt listate sus, la produse, dar nu intra in
+                  `orders.subtotal`. Fara randul asta, cei 5 lei de pe comanda
+                  #0018 se vedeau in lista si dispareau din socoteala. Aceeasi
+                  eticheta ca la finalizare (`CheckoutSummary`). */}
+              {totaluri.extras > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Optiuni extra</span>
+                  <span className="font-medium">+{formatPrice(totaluri.extras)}</span>
+                </div>
+              )}
+              {totaluri.reducere > 0 && (
                 <div className="flex justify-between text-success">
                   <span>Discount {order.discount_code ? `(${order.discount_code})` : ""}</span>
-                  <span className="font-medium">-{formatPrice(Number(order.discount_amount))}</span>
+                  <span className="font-medium">-{formatPrice(totaluri.reducere)}</span>
                 </div>
               )}
               {/* Reducerile si taxa de plata lipseau din caseta asta, desi sunt
                   in `total`: subtotal + transport + TVA nu dadeau totalul, iar
                   diferenta nu avea nicio explicatie pe ecran. */}
-              {Number(order.card_discount_amount) > 0 && (
+              {totaluri.reducereCard > 0 && (
                 <div className="flex justify-between text-success">
                   <span>Reducere plata cu cardul</span>
-                  <span className="font-medium">-{formatPrice(Number(order.card_discount_amount))}</span>
+                  <span className="font-medium">-{formatPrice(totaluri.reducereCard)}</span>
                 </div>
               )}
-              {Number(order.cod_discount_amount) > 0 && (
+              {totaluri.reducereRamburs > 0 && (
                 <div className="flex justify-between text-success">
                   <span>Reducere plata ramburs</span>
-                  <span className="font-medium">-{formatPrice(Number(order.cod_discount_amount))}</span>
+                  <span className="font-medium">-{formatPrice(totaluri.reducereRamburs)}</span>
                 </div>
               )}
-              {Number(order.cod_fee_amount) > 0 && (
+              {totaluri.taxaRamburs > 0 && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>Taxa plata ramburs</span>
-                  <span className="font-medium">{formatPrice(Number(order.cod_fee_amount))}</span>
+                  <span className="font-medium">{formatPrice(totaluri.taxaRamburs)}</span>
                 </div>
               )}
               <div className="flex justify-between text-muted-foreground">
                 <span>Transport</span>
-                <span>{Number(order.shipping_cost) === 0 ? "Gratuit" : formatPrice(Number(order.shipping_cost))}</span>
+                <span>{totaluri.transport === 0 ? "Gratuit" : formatPrice(totaluri.transport)}</span>
               </div>
-              {Number(order.vat_amount) > 0 && (
+              {totaluri.tvaEticheta && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>TVA ({Number(order.vat_rate)}%)</span>
-                  <span>{formatPrice(Number(order.vat_amount))}</span>
+                  {/* La preturi cu TVA inclus eticheta poarta cuvantul „inclus" si
+                      cifra NU se aduna: e portiunea extrasa din randurile de mai
+                      sus, nu o suma in plus. Pe comanda #0074, adunata, ducea
+                      coloana la 66,94 sub un Total de 60. */}
+                  <span>{totaluri.tvaEticheta}</span>
+                  <span>{formatPrice(totaluri.tva)}</span>
+                </div>
+              )}
+              {/* Cand socoteala tot nu se inchide, diferenta se SPUNE. Se intampla
+                  azi pe 2 comenzi din 96, ambele din 9 iunie, unde `orders.total`
+                  insusi a fost scris de codul de dinaintea reparatiei de TVA din
+                  24 iulie. Un rand de umplutura ar fi ascuns tocmai comanda care
+                  trebuie verificata pe factura. Reincarcarea paginii nu schimba
+                  nimic, deci nici nu o cerem. */}
+              {Math.abs(totaluri.diferenta) >= 0.01 && (
+                <div className="flex justify-between text-warning">
+                  {/* Cand diferenta e chiar cat TVA-ul, ea are un nume: caseta nu
+                      mai tipareste acelasi numar de doua ori, o data ca „TVA
+                      inclus" si o data ca „nejustificat". */}
+                  <span>{totaluri.tvaAdunatPesteTotal ? "TVA adunat peste total la plasare" : "Diferenta nejustificata"}</span>
+                  <span className="font-medium">{totaluri.diferenta > 0 ? "-" : "+"}{formatPrice(Math.abs(totaluri.diferenta))}</span>
                 </div>
               )}
               <div className="flex justify-between font-semibold text-foreground text-base pt-1 border-t border-border">
-                <span>Total</span><span>{formatPrice(Number(order.total))}</span>
+                <span>Total</span><span>{formatPrice(totaluri.total)}</span>
               </div>
+              {Math.abs(totaluri.diferenta) >= 0.01 && (
+                <p className="text-[11px] text-warning leading-snug">
+                  {totaluri.tvaAdunatPesteTotal
+                    ? "Comanda a fost plasata cand TVA-ul se aduna peste preturi, desi magazinul le are cu TVA inclus. Totalul incasat e cel de mai jos; factura trebuie sa il contina pe el."
+                    : "Totalul salvat pe comanda nu se explica din randurile de mai sus. Compara-l cu factura inainte de a incasa sau storna."}
+                </p>
+              )}
             </div>
           </div>
 

@@ -9,6 +9,7 @@ import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/acti
 import { publishProductsToOlx } from "@/lib/actions/olx.actions";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
+import { pretVechiDeTaiat } from "@/lib/products/compare-at";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
@@ -462,9 +463,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                       {product.sku && <div className="text-xs text-muted-foreground font-mono truncate">SKU: {product.sku}</div>}
                       <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-sm whitespace-nowrap">{formatPrice(Number(product.price))}</span>
-                        {product.compare_at_price && (
-                          <span className="text-xs text-muted-foreground line-through whitespace-nowrap">{formatPrice(Number(product.compare_at_price))}</span>
-                        )}
+                        {(() => {
+                          // Aceeasi regula ca pe cardul din magazin: se taie doar
+                          // ce e STRICT peste pretul afisat. Vezi `compare-at.ts`.
+                          const vechi = pretVechiDeTaiat(product.compare_at_price, product.price);
+                          return vechi == null ? null : (
+                            <span className="text-xs text-muted-foreground line-through whitespace-nowrap">{formatPrice(vechi)}</span>
+                          );
+                        })()}
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                         <span className={cn(
@@ -565,11 +571,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                     </td>
                     <td className="px-4 py-3">
                       <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Number(product.price))}</span>
-                      {product.compare_at_price && (
-                        <div className="text-xs text-muted-foreground line-through whitespace-nowrap">
-                          {formatPrice(Number(product.compare_at_price))}
-                        </div>
-                      )}
+                      {(() => {
+                        const vechi = pretVechiDeTaiat(product.compare_at_price, product.price);
+                        return vechi == null ? null : (
+                          <div className="text-xs text-muted-foreground line-through whitespace-nowrap">
+                            {formatPrice(vechi)}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell whitespace-nowrap">
                       {product.track_inventory ? `${product.stock_quantity ?? 0} buc` : "Nelimitat"}

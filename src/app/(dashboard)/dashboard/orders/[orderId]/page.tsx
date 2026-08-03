@@ -41,7 +41,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, smso_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -71,10 +71,24 @@ export default async function OrderDetailPage({ params }: Props) {
   const sm = settings?.smso_config as SmsoConfig | null;
   const smsoEnabled = !!(sm?.enabled && sm?.api_key && sm?.sender_id);
 
+  /*
+   * Regimul de preturi decide daca randul de TVA din caseta de totaluri se ADUNA
+   * sau doar se arata. Pagina nu il cerea deloc, iar caseta presupunea „se aduna
+   * mereu": pe 20 din cele 96 de comenzi din productie randurile dadeau altceva
+   * decat Totalul de sub ele. Implicitele sunt cele din `store_settings`
+   * (`prices_include_vat` implicit adevarat), ca un magazin fara rand de setari
+   * sa nu inceapa dintr-odata sa adune TVA-ul peste total.
+   */
+  const setariTva = {
+    vat_enabled: settings?.vat_enabled ?? false,
+    prices_include_vat: settings?.prices_include_vat ?? true,
+  };
+
   return (
     <OrderDetailClient
       order={order}
       businessId={biz.id}
+      setariTva={setariTva}
       smartbillEnabled={smartbillEnabled}
       hasEstimateSeries={hasEstimateSeries}
       wootEnabled={wootEnabled}

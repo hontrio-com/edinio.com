@@ -46,22 +46,34 @@ const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
  * netul de dupa reducere.
  *
  * Taxa de ramburs INTRA in baza: e un serviciu facturabil, ca extraoptiunile.
- * Transportul NU intra; el isi are regimul lui.
  *
- * Sta aici, intr-un singur loc, fiindca formula are CINCI apelanti: doua cai de
- * comanda pe server, editarea comenzii, si cele doua formulare din magazin. Scrisa
- * de cinci ori, ar apuca-o pe drumuri diferite — s-a mai intamplat de trei ori.
+ * Si TRANSPORTUL intra. Pana in 2026-08-03 statea in afara — se aduna brut la
+ * total, dupa TVA — desi toate cele trei case de facturare ii pun exact aceleasi
+ * campuri de TVA ca marfii, si asa e si corect: transportul facturat clientului e
+ * prestatie accesorie livrarii si urmeaza regimul bunului livrat. Ieseau doua
+ * numere diferite pentru aceeasi comanda. La magazinele cu preturi CU TVA totalul
+ * era bun, dar `vat_amount` iesea subevaluat si contrazicea factura: panoul scria
+ * „TVA (21%) 6,94" pentru o factura care spunea 10,41. La cele cu preturi FARA
+ * TVA, unde TVA-ul chiar se adauga, comanda incasa 650 si factura cerea 659,45,
+ * deci factura ramanea vesnic partial incasata.
+ *
+ * Campul e OBLIGATORIU, nu optional, tocmai ca un apelant sa nu-l poata uita in
+ * tacere: formula are SASE apelanti — doua cai de comanda pe server, editarea
+ * comenzii, cele doua formulare din magazin si cosul. Scrisa de sase ori, ar apuca-o
+ * pe drumuri diferite — s-a mai intamplat de trei ori.
  */
 export function vatBase(p: {
   /** Marfa, dupa treptele de cantitate. */
   goods: number;
   extras: number;
+  /** Transportul CERUT, adica dupa pragul de livrare gratuita (0 cand e gratuit). */
+  shipping: number;
   discount: number;
   cardDiscount: number;
   codDiscount: number;
   codFee: number;
 }): number {
-  const net = p.goods + p.extras - p.discount - p.cardDiscount - p.codDiscount + p.codFee;
+  const net = p.goods + p.extras + p.shipping - p.discount - p.cardDiscount - p.codDiscount + p.codFee;
   return Math.max(0, round2(net));
 }
 

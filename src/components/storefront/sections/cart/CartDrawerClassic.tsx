@@ -84,7 +84,7 @@ export function CartDrawerClassic({
   // 199.89999999999998, adica sub un prag de 199,90 desi se afiseaza egal).
   const {
     shipping, grandTotal, belowMinOrder, freeShippingPct: progressPct,
-    areaPrag, shippingIsFree, freeShippingRemaining, minOrderRemaining, vatAmount,
+    areaPrag, shippingIsFree, freeShippingRemaining, minOrderRemaining, vatAmount, vatLabel,
   } = computeCartPricing({
     total, shippingCost, freeShippingThreshold, minOrderAmount, vat,
   });
@@ -275,7 +275,7 @@ export function CartDrawerClassic({
               </div>
               {vatAmount !== null && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>TVA</span>
+                  <span>{vatLabel}</span>
                   <span className="font-medium text-foreground">{formatPrice(vatAmount)}</span>
                 </div>
               )}

@@ -12,7 +12,7 @@
  * iese e ce se afiseaza.
  */
 
-import { computeVat } from "@/lib/utils/vat";
+import { computeVat, vatBase } from "@/lib/utils/vat";
 
 export interface CartPricingInput {
   /** Valoarea produselor din cos, inainte de transport. */
@@ -66,6 +66,16 @@ export interface CartPricing {
    * FARA TVA e suma chiar adaugata la total.
    */
   vatAmount: number | null;
+  /**
+   * Eticheta randului de TVA, gata facuta: „TVA (21%) inclus" sau „TVA (21%)".
+   *
+   * Vine de aici, nu din marcaj, fiindca sertarul si paginile de cos scriau doar
+   * „TVA" langa un numar care la preturi cu TVA inclus e DEJA in total: randurile
+   * de deasupra se adunau la mai mult decat totalul, fara niciun cuvant care sa
+   * spuna de ce. Pagina de finalizare o scria corect, deci doua suprafete ale
+   * aceleiasi comenzi spuneau lucruri diferite.
+   */
+  vatLabel: string | null;
 }
 
 export function computeCartPricing({
@@ -98,10 +108,13 @@ export function computeCartPricing({
    * Cand clientul ajunge la checkout si adauga un cupon, numarul se reface
    * acolo, pe baza intreaga.
    *
-   * Transportul ramane in afara bazei, ca peste tot.
+   * Trece totusi prin `vatBase`, chiar cu restul campurilor pe zero: transportul
+   * INTRA in baza, iar calculul scris de mana aici era singurul din tot proiectul
+   * pe care compilatorul nu-l semnaleaza cand se schimba regula. Lasat asa, cosul
+   * ar fi aratat un total, iar finalizarea ar fi incasat altul.
    */
   const { vatAmount, vatAddOn } = vat
-    ? computeVat(totalBani, vat)
+    ? computeVat(vatBase({ goods: totalBani, extras: 0, shipping, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0 }), vat)
     : { vatAmount: 0, vatAddOn: 0 };
 
   return {
@@ -112,6 +125,9 @@ export function computeCartPricing({
     // Suma se ADUNA oricum la total; comutatorul spune doar daca se si ARATA pe
     // o linie. Stins, clientul vede totalul corect, fara defalcare.
     vatAmount: vat?.vat_enabled && vat.show_vat_breakdown !== false ? vatAmount : null,
+    vatLabel: vat?.vat_enabled && vat.show_vat_breakdown !== false
+      ? `TVA (${vat.vat_rate}%)${vat.prices_include_vat ? " inclus" : ""}`
+      : null,
     belowMinOrder,
     minOrderRemaining: belowMinOrder ? laBani(minOrderAmount! - totalBani) : 0,
     freeShippingRemaining: areaPrag && !shippingIsFree ? laBani(freeShippingThreshold - totalBani) : 0,

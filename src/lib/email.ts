@@ -133,6 +133,9 @@ export async function sendOrderConfirmationToCustomer(
     card_discount_amount?: number;
     cod_discount_amount?: number;
     cod_fee_amount?: number;
+    /** TVA-ul si cota INREGISTRATE pe comanda, nu cele din setarile de azi. */
+    vat_amount?: number;
+    vat_rate?: number;
     payment_method?: string;
     store_url?: string;
   },
@@ -179,6 +182,22 @@ export async function sendOrderConfirmationToCustomer(
       </tr>`
     : "";
 
+  /*
+   * Randul de TVA, si in emailul CLIENTULUI.
+   *
+   * Il avea doar emailul catre comerciant: la magazinele cu preturi fara TVA,
+   * randurile pe care le vedea clientul (produse + transport) nu dadeau „Total de
+   * plata", si nimic de pe ecran nu spunea de ce lipsesc banii aceia. Cota se ia
+   * de pe COMANDA, nu din setarile de azi, ca un email vechi sa nu isi schimbe
+   * cifrele cand comerciantul isi schimba regimul.
+   */
+  const vatRow = order.vat_amount && order.vat_amount > 0
+    ? `<tr>
+        <td style="padding-top:10px;font-size:14px;color:#71717a;">TVA (${Number(order.vat_rate) || 0}%)</td>
+        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${formatPrice(order.vat_amount)}</td>
+      </tr>`
+    : "";
+
   const paymentLabel = order.payment_method === "stripe"
     ? "Card online (Stripe)"
     : order.payment_method === "netopia"
@@ -222,6 +241,7 @@ export async function sendOrderConfirmationToCustomer(
         <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
         <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
       </tr>
+      ${vatRow}
       <tr>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total de plata</td>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#1AB554;text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(order.total)}</td>

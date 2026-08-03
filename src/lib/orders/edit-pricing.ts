@@ -424,6 +424,7 @@ export function recalculeazaTotal(p: {
     vatBase({
       goods: subtotal,
       extras: p.extras,
+      shipping,
       discount: p.discount,
       cardDiscount: p.cardDiscount,
       codDiscount: p.codDiscount,

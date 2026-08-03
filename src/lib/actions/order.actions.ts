@@ -757,16 +757,16 @@ export async function placeOrder(data: {
   );
 
   // VAT: recomputed server-side (mirrors placeCartOrder + the storefront) so single-
-  // product / One-Product-Store orders collect VAT too. Base is the PRE-discount
-  // goods+extras; only VAT-exclusive pricing adds VAT on top of the total.
+  // product / One-Product-Store orders collect VAT too. Only VAT-exclusive pricing
+  // adds VAT on top of the total.
   const vatEnabled = cfgRow?.vat_enabled ?? false;
   const vatRate = Number(cfgRow?.vat_rate ?? 19);
   const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
-  // Baza: marfa si extraoptiunile DUPA toate reducerile, plus taxa de ramburs.
-  // Formula sta in `vatBase`, folosita si de cele doua formulare din magazin, ca
-  // ce vede clientul sa fie ce se incaseaza.
+  // Baza: marfa, extraoptiunile si TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs.
+  // Formula sta in `vatBase`, folosita si de cele doua formulare din magazin si de
+  // cos, ca ce vede clientul sa fie ce se incaseaza.
   const { vatAmount, vatAddOn } = computeVat(
-    vatBase({ goods: subtotal, extras: extrasTotal, discount: discountAmount, cardDiscount, codDiscount, codFee }),
+    vatBase({ goods: subtotal, extras: extrasTotal, shipping, discount: discountAmount, cardDiscount, codDiscount, codFee }),
     { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat },
   );
 
@@ -942,6 +942,10 @@ export async function placeOrder(data: {
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
         cod_fee_amount: codFee > 0 ? codFee : undefined,
+        // Emailul clientului arata si TVA-ul: la preturi fara TVA, randurile de
+        // deasupra nu dadeau altfel „Total de plata".
+        vat_amount: vatAmount > 0 ? vatAmount : undefined,
+        vat_rate: vatEnabled ? vatRate : undefined,
         payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
@@ -2011,13 +2015,6 @@ export async function placeCartOrder(data: {
     vatCfgTaxa,
   );
 
-  // Aceeasi baza ca la comanda directa si ca in magazin: marfa si extraoptiunile
-  // DUPA toate reducerile, plus taxa de ramburs. Vezi `vatBase`.
-  const { vatAmount, vatAddOn } = computeVat(
-    vatBase({ goods: subtotal, extras: extrasTotal, discount: discountAmount, cardDiscount, codDiscount, codFee }),
-    { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat },
-  );
-
   const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
   // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
   // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
@@ -2031,6 +2028,15 @@ export async function placeCartOrder(data: {
     { courier: data.selected_courier, deliveryType: data.delivery_type, courierLabel: data.courier_label },
     (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
     esteGratuit,
+  );
+
+  // Aceeasi baza ca la comanda directa si ca in magazin: marfa, extraoptiunile si
+  // TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs. Vezi `vatBase`.
+  // Blocul asta statea mai sus, INAINTE ca transportul sa fie calculat; de cand
+  // transportul intra in baza, ordinea corecta e taxa de ramburs, transport, TVA.
+  const { vatAmount, vatAddOn } = computeVat(
+    vatBase({ goods: subtotal, extras: extrasTotal, shipping, discount: discountAmount, cardDiscount, codDiscount, codFee }),
+    { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat },
   );
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
@@ -2193,6 +2199,10 @@ export async function placeCartOrder(data: {
         card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
         cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
         cod_fee_amount: codFee > 0 ? codFee : undefined,
+        // Emailul clientului arata si TVA-ul: la preturi fara TVA, randurile de
+        // deasupra nu dadeau altfel „Total de plata".
+        vat_amount: vatAmount > 0 ? vatAmount : undefined,
+        vat_rate: vatEnabled ? vatRate : undefined,
         payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,

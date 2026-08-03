@@ -52,6 +52,8 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let cardDiscountAmount = 0;
   let codDiscountAmount = 0;
   let codFeeAmount = 0;
+  let vatAmount = 0;
+  let vatRate = 0;
   let discountCode: string | null = null;
   let orderNumber: string | null = null;
   // Customer identifiers for pixel Advanced Matching (hashed client-side).
@@ -64,7 +66,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, subtotal, total, customer_name, customer_email, customer_phone")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, subtotal, total, customer_name, customer_email, customer_phone")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -76,6 +78,8 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       cardDiscountAmount = order.card_discount_amount ?? 0;
       codDiscountAmount = order.cod_discount_amount ?? 0;
       codFeeAmount = order.cod_fee_amount ?? 0;
+      vatAmount = Number(order.vat_amount ?? 0);
+      vatRate = Number(order.vat_rate ?? 0);
       discountCode = order.discount_code ?? null;
       orderNumber = order.order_number ?? null;
       customerName = order.customer_name ?? null;
@@ -274,6 +278,16 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-[var(--st-muted)]">Taxa plata ramburs</span>
                           <span className="font-medium text-[var(--st-text)]">{formatPrice(codFeeAmount)}</span>
+                        </div>
+                      )}
+                      {vatAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          {/* Cu preturi FARA TVA, taxa se adauga peste randurile de deasupra: fara
+                              randul asta, ele nu dadeau „Total de plata" si clientul n-avea din ce
+                              intelege diferenta. Cu preturi CU TVA inclus, cuvantul „inclus" spune
+                              ca suma e deja in total. */}
+                          <span className="text-[var(--st-muted)]">TVA ({vatRate}%){(storeSettings?.prices_include_vat ?? true) ? " inclus" : ""}</span>
+                          <span className="font-medium text-[var(--st-text)]">{formatPrice(vatAmount)}</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between pt-2 border-t border-[var(--st-border)]">

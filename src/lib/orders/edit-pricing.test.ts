@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { computeVat, vatBase } from "@/lib/utils/vat";
 import { test } from "node:test";
 import {
   cheieLinie,
@@ -363,12 +364,28 @@ test("totalul nu coboara sub zero", () => {
 });
 
 test("serverul si previzualizarea dau acelasi numar pentru aceleasi intrari", () => {
+  // Comparatia era functia pura cu ea insasi, deci trecea orice s-ar fi schimbat
+  // in ea. Acum se compara cu formula scrisa de mana, aceeasi pe care o compun
+  // cele doua formulare din magazin: daca una din ele apuca pe alt drum, pica.
   const intrare = {
     subtotal: 187.53, extras: 12.5, discount: 20, cardDiscount: 5, codDiscount: 0, codFee: 7.5,
     shipping: 19.99, freeShippingThreshold: 300,
     vat: { vat_enabled: true, vat_rate: 21, prices_include_vat: false },
   };
-  assert.deepEqual(recalculeazaTotal(intrare), recalculeazaTotal({ ...intrare }));
+  const r = recalculeazaTotal(intrare);
+
+  const baza = vatBase({
+    goods: intrare.subtotal, extras: intrare.extras, shipping: intrare.shipping,
+    discount: intrare.discount, cardDiscount: intrare.cardDiscount,
+    codDiscount: intrare.codDiscount, codFee: intrare.codFee,
+  });
+  const { vatAmount, vatAddOn } = computeVat(baza, intrare.vat);
+  const total = Math.round((intrare.subtotal + intrare.extras - intrare.discount - intrare.cardDiscount
+    - intrare.codDiscount + intrare.codFee + intrare.shipping + vatAddOn) * 100) / 100;
+
+  assert.equal(r.shipping, 19.99, "sub prag, transportul ramane");
+  assert.equal(r.vatAmount, vatAmount);
+  assert.equal(r.total, total);
 });
 
 // ── Slabirea variantelor ─────────────────────────────────────────────────────
@@ -496,4 +513,45 @@ test("contributia unei linii de pachet e subtotalul pachetului, nu pret x cantit
   const cat = simplu({ price: 84.99, trepte: trepteMokka });
   const r = plan([], [{ product_id: "p1", quantity: 3 }], catalogCu([["p1", cat]]));
   assert.equal(r.contributii[cheieLinie("p1", null)], 250);
+});
+
+/* ─── Transportul in baza de TVA, si la editare ───────────────────────────── */
+
+test("editarea: transportul isi poarta TVA-ul, la preturi fara TVA", () => {
+  // Cazul eSAFE, refacut din panou: 500 marfa + 45 transport, cota 21.
+  const r = recalculeazaTotal({
+    subtotal: 500, extras: 0, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0,
+    shipping: 45, freeShippingThreshold: 999,
+    vat: { vat_enabled: true, vat_rate: 21, prices_include_vat: false },
+  });
+  assert.equal(r.shipping, 45);
+  assert.equal(r.vatAmount, 114.45);
+  assert.equal(r.total, 659.45);
+});
+
+test("editarea: la preturi cu TVA inclus totalul nu se misca, doar TVA-ul inregistrat", () => {
+  // O comanda veche editata pentru un fleac nu are voie sa-si schimbe pretul.
+  const r = recalculeazaTotal({
+    subtotal: 40, extras: 0, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0,
+    shipping: 20, freeShippingThreshold: null,
+    vat: { vat_enabled: true, vat_rate: 21, prices_include_vat: true },
+  });
+  assert.equal(r.total, 60);
+  assert.equal(r.vatAmount, 10.41);
+});
+
+test("editarea: trecerea pragului scoate si TVA-ul transportului", () => {
+  const sub = recalculeazaTotal({
+    subtotal: 900, extras: 0, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0,
+    shipping: 45, freeShippingThreshold: 999,
+    vat: { vat_enabled: true, vat_rate: 21, prices_include_vat: false },
+  });
+  const peste = recalculeazaTotal({
+    subtotal: 1000, extras: 0, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0,
+    shipping: 45, freeShippingThreshold: 999,
+    vat: { vat_enabled: true, vat_rate: 21, prices_include_vat: false },
+  });
+  assert.equal(sub.vatAmount, 198.45, "945 x 21%");
+  assert.equal(peste.shipping, 0);
+  assert.equal(peste.vatAmount, 210, "1000 x 21%, fara transport");
 });

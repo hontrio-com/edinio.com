@@ -123,10 +123,11 @@ export function useCheckoutOrder({
   // intra in baza lui alaturi de marfa si extraoptiuni.
   const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount, vatConfig);
   // VAT: aceeasi baza si acelasi helper ca serverul si ca formularul de comanda
-  // directa. Marfa si extraoptiunile DUPA toate reducerile, plus taxa de ramburs.
+  // directa — marfa, extraoptiunile si TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs.
   const bazaTva = vatBase({
     goods: goodsTotal,
     extras: extrasTotal,
+    shipping,
     discount: discountAmount,
     cardDiscount: cardDiscountAmount,
     codDiscount: codDiscountAmount,

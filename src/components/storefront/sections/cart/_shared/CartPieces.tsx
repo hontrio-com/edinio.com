@@ -261,7 +261,7 @@ export function RezumatCos({
         </div>
         {pricing.vatAmount !== null && (
           <div className="flex justify-between text-muted-foreground">
-            <span>TVA</span>
+            <span>{pricing.vatLabel}</span>
             <span className="font-medium text-foreground tabular-nums">{formatPrice(pricing.vatAmount)}</span>
           </div>
         )}

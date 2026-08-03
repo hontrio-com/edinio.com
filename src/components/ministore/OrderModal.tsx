@@ -290,11 +290,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Taxa de ramburs (oglinda serverului): calculata INAINTEA TVA-ului, fiindca
   // intra in baza lui alaturi de marfa si extraoptiuni.
   const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, discountedSubtotal + extrasTotal, vatConfig);
-  // VAT: aceeasi baza si acelasi helper ca serverul si ca finalizarea cosului.
-  // Marfa si extraoptiunile DUPA toate reducerile, plus taxa de ramburs.
+  // VAT: aceeasi baza si acelasi helper ca serverul si ca finalizarea cosului —
+  // marfa, extraoptiunile si TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs.
   const bazaTva = vatBase({
     goods: subtotal,
     extras: extrasTotal,
+    shipping,
     discount: discountAmount,
     cardDiscount: cardDiscountAmount,
     codDiscount: codDiscountAmount,

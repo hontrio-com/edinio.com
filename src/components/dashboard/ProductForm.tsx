@@ -16,6 +16,7 @@ import {
   SortableContext, arrayMove, useSortable, rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { construiesteTrepte, mesajProblemaTrepte, problemaMonotonie } from "@/lib/storefront/quantity-tiers";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { publishOlxProduct } from "@/lib/actions/olx.actions";
@@ -1478,19 +1479,46 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
               </div>
               {helpOpen === "tiers" && (
                 <HelpCard>
-                  <p>Oferi un pret mai mic cand clientul cumpara mai multe bucati din acelasi produs, ca sa-l incurajezi sa comande mai mult.</p>
-                  <p>Setezi pana la 2 praguri (la 2 buc. si la 3 buc.), fie ca pret fix pe bucata, fie ca procent de reducere. Poti adauga si o eticheta (ex: &laquo;Cel mai bun pret&raquo;).</p>
+                  <p>Oferi un pret mai bun cand clientul cumpara 2 sau 3 bucati deodata, ca sa-l incurajezi sa comande mai mult.</p>
+                  <p>Fiecare treapta e un <span className="font-medium text-foreground">pachet</span>: la <span className="font-medium text-foreground">Suma fixa</span> scrii cat costa pachetul <span className="font-medium text-foreground">intreg</span>, nu cat costa o bucata din el. La <span className="font-medium text-foreground">Procent</span> scrii cat la suta scade pretul, iar totalul pachetului se calculeaza singur. Poti adauga si o eticheta (ex: &laquo;Cel mai bun pret&raquo;).</p>
                   <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
                     <p className="font-medium text-foreground mb-1">Exemplu</p>
-                    <p>Pret normal 50 lei/buc. La 2 buc. &rarr; 45 lei/buc, la 3 buc. &rarr; 40 lei/buc. Clientul vede economia pe pagina produsului si e tentat sa ia mai multe.</p>
+                    <p>Pret normal 50 lei bucata. Pachetul de 2 bucati &rarr; scrii <span className="font-medium text-foreground">90</span> (adica 45 lei/bucata). Pachetul de 3 bucati &rarr; scrii <span className="font-medium text-foreground">120</span> (adica 40 lei/bucata).</p>
+                  </div>
+                  <div className="rounded-lg bg-warning/10 border border-warning/30 p-2.5 mt-1">
+                    <p className="font-medium text-foreground mb-1">Atentie</p>
+                    <p>Un pachet mai mare trebuie sa coste mai mult decat unul mai mic. La un produs de 149 lei, daca scrii <span className="font-medium text-foreground">129</span> la 2 bucati, doua bucati ar costa mai putin decat una singura &mdash; si chiar asa s-ar si incasa. O astfel de configuratie nu se salveaza.</p>
                   </div>
                 </HelpCard>
               )}
               {form.quantity_tiers.enabled && (
                 <div className="px-5 py-4 space-y-4">
+                  {/* Configuratia stricata se ARATA, nu se corecteaza in tacere:
+                      zece produse active din magazine publicate au deja pachete
+                      sub pretul unei bucati, si comerciantul n-avea de unde sa
+                      afle. Serverul refuza oricum salvarea. */}
+                  {(() => {
+                    const problema = problemaMonotonie(construiesteTrepte(
+                      {
+                        enabled: true,
+                        mode: form.quantity_tiers.mode,
+                        tier2_price: parseFloat(form.quantity_tiers.tier2_price) || 0,
+                        tier3_price: parseFloat(form.quantity_tiers.tier3_price) || 0,
+                        tier2_percent: parseFloat(form.quantity_tiers.tier2_percent) || 0,
+                        tier3_percent: parseFloat(form.quantity_tiers.tier3_percent) || 0,
+                      },
+                      parseFloat(form.price) || 0,
+                    ));
+                    if (!problema) return null;
+                    return (
+                      <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3">
+                        <p className="text-xs text-foreground">{mesajProblemaTrepte(problema)}</p>
+                      </div>
+                    );
+                  })()}
                   {/* Mode selector */}
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Tip reducere</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Cum stabilesti pretul pachetului</p>
                     <div className="grid grid-cols-2 gap-2">
                       {(["fixed", "percent"] as const).map(m => (
                         <button key={m} type="button"
@@ -1544,11 +1572,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                             </>
                           ) : (
                             <>
-                              <label className="text-xs text-muted-foreground mb-1 block">Pret total (lei)</label>
-                              <input type="number" min="0" placeholder="ex: 179"
+                              <label className="text-xs text-muted-foreground mb-1 block">Pret total pachet (lei)</label>
+                              <input type="number" min="0" placeholder={`ex: ${Math.round((parseFloat(form.price) || 50) * Number(qty) * 0.9)}`}
                                 value={form.quantity_tiers[priceKey]}
                                 onChange={e => set("quantity_tiers", { ...form.quantity_tiers, [priceKey]: e.target.value })}
                                 className={smallInputCls} />
+                              {/* Acelasi ajutor calculat ca la procente: cifra scrisa e
+                                  totalul, iar aici se vede ce inseamna pe bucata. */}
+                              {parseFloat(form.quantity_tiers[priceKey]) > 0 && (
+                                <p className="text-[11px] text-muted-foreground mt-1">
+                                  {Number(qty)} buc = {formatPrice(parseFloat(form.quantity_tiers[priceKey]) / Number(qty))} /buc
+                                </p>
+                              )}
                             </>
                           )}
                         </div>

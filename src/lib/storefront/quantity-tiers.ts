@@ -59,6 +59,59 @@ export function construiesteTrepte(raw: unknown, unitPrice: number): QuantityTie
   ];
 }
 
+export interface ProblemaTrepte {
+  /** Pachetul care iese mai ieftin decat o cantitate mai mica. */
+  qty: number;
+  /** Cat costa pachetul, asa cum e configurat. */
+  pretPachet: number;
+  /** Sub suma asta pachetul nu are voie sa coboare. */
+  minimAcceptat: number;
+}
+
+/**
+ * Pachetul asta chiar costa mai mult decat o cantitate mai mica?
+ *
+ * Se verifica pe TOTALURI, nu pe procente, si de aceea merge la fel in ambele
+ * moduri. Pe procente conditia ar fi parut „sub 50%", dar nu e adevarat: „Guess
+ * CONNOISSEUR" are procente CRESCATOARE (30% la doua bucati, 60% la trei) si tot
+ * iese rupt, fiindca pachetul de trei (84,00) cade sub cel de doua (98,00).
+ *
+ * Verificarea sta aici, langa motor, ca sa o poata chema si formularul din
+ * panou, si actiunea de salvare, si importul. Se cheama la SCRIERE, nu la
+ * citire: o clema pusa in motor ar fi ascuns configuratia gresita in loc sa o
+ * arate, iar comerciantul de la bricosmart ar fi ramas convins ca vinde doua
+ * aspiratoare cu 10 lei — doar ca fara sa mai vada nicaieri ca a gresit. Si
+ * oricum nu l-ar fi salvat: dupa o clema, sase aspiratoare tot ar fi costat
+ * 134 lei fata de 714 din catalog.
+ */
+export function problemaMonotonie(tiers: QuantityTier[] | undefined): ProblemaTrepte | null {
+  if (!tiers || tiers.length === 0) return null;
+  const unit = tiers.find((t) => t.qty === 1)?.price ?? 0;
+  const pachete = new Map(tiers.filter((t) => t.qty > 1 && t.price > 0).map((t) => [t.qty, t.price]));
+  if (pachete.size === 0 || unit <= 0) return null;
+
+  // `cost[n]` = cel mai ieftin mod de a acoperi n bucati cu ce s-a validat pana
+  // aici. Fiecare pachet se compara cu cantitatea imediat mai mica, nu cu
+  // `n x pretul de baza`: altfel nicio reducere n-ar mai fi permisa.
+  const cost: number[] = [0, unit];
+  for (let n = 2; n <= Math.max(...pachete.keys()); n++) {
+    const faraPachet = round2(cost[n - 1] + unit);
+    const pachet = pachete.get(n);
+    if (pachet != null && pachet < cost[n - 1] - 0.005) {
+      return { qty: n, pretPachet: round2(pachet), minimAcceptat: round2(cost[n - 1]) };
+    }
+    cost[n] = pachet != null ? Math.min(faraPachet, pachet) : faraPachet;
+  }
+  return null;
+}
+
+/** Mesajul aratat comerciantului cand un pachet iese mai ieftin decat unul mic. */
+export function mesajProblemaTrepte(p: ProblemaTrepte): string {
+  return `Pachetul de ${p.qty} bucati costa ${p.pretPachet.toFixed(2)} lei, adica mai putin decat `
+    + `${p.qty - 1} ${p.qty - 1 === 1 ? "bucata" : "bucati"} (${p.minimAcceptat.toFixed(2)} lei). `
+    + `Scrie pretul TOTAL al pachetului, nu pretul unei bucati.`;
+}
+
 /** Peste atatea bucati nu mai calculam pachete: e cos de gros, nu de retail. */
 const MAX_CANTITATE_PACHETE = 500;
 

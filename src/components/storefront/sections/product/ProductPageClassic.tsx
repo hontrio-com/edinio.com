@@ -17,6 +17,7 @@ import {
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
+import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
@@ -365,24 +366,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
   // Build quantity tiers — percent mode when variants enabled
   const tierConfig = pageSections.quantity_tiers;
-  const quantityTiers: QuantityTier[] | undefined = tierConfig?.enabled
-    ? (() => {
-        const isPercent = tierConfig.mode === "percent";
-        const tier2Price = isPercent
-          ? displayPrice * 2 * (1 - (tierConfig.tier2_percent ?? 0) / 100)
-          : tierConfig.tier2_price;
-        const tier3Price = isPercent
-          ? displayPrice * 3 * (1 - (tierConfig.tier3_percent ?? 0) / 100)
-          : tierConfig.tier3_price;
-        const hasT2 = isPercent ? (tierConfig.tier2_percent ?? 0) > 0 : tier2Price > 0;
-        const hasT3 = isPercent ? (tierConfig.tier3_percent ?? 0) > 0 : tier3Price > 0;
-        return [
-          { qty: 1, price: displayPrice, badge: "" },
-          ...(hasT2 ? [{ qty: 2, price: Math.round(tier2Price * 100) / 100, badge: tierConfig.tier2_badge }] : []),
-          ...(hasT3 ? [{ qty: 3, price: Math.round(tier3Price * 100) / 100, badge: tierConfig.tier3_badge }] : []),
-        ];
-      })()
-    : undefined;
+  // Treptele vin din motorul comun, nu dintr-o copie locala. Formula era scrisa
+  // de trei ori — aici, in cealalta pagina de produs si in `construiesteTrepte` —
+  // desi docstring-ul motorului sustinea deja ca exista un singur loc. Copiile
+  // se pot desincroniza tacit de motorul care chiar incaseaza.
+  const quantityTiers: QuantityTier[] | undefined = construiesteTrepte(tierConfig, displayPrice);
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);

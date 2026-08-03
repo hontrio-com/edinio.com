@@ -170,9 +170,13 @@ export const OUR_FIELDS: FieldDef[] = [
   { key: "dim_height", label: "Inaltime (cm)", required: false },
   { key: "specifications", label: "Specificatii", required: false, hint: "Eticheta: Valoare, separate prin | (ex: Material: Bumbac | Greutate: 200g)" },
   { key: "upsell_mode", label: "Upsell - mod", required: false, hint: "suma sau procent" },
-  { key: "upsell_qty2", label: "Upsell 2 buc - valoare", required: false, hint: "pret/buc (suma) sau reducere % (procent)" },
+  // Valoarea intra direct in `tier2_price` / `tier3_price`, pe care motorul le
+  // citeste ca TOTAL de pachet. Hintul spunea „pret/buc" si trimitea in aceeasi
+  // capcana ca eticheta din formular: un import de cateva sute de randuri putea
+  // seta tot atatea pachete sub pretul unei bucati, dintr-o apasare.
+  { key: "upsell_qty2", label: "Upsell 2 buc - valoare", required: false, hint: "pretul TOTAL al pachetului de 2 (suma) sau reducere % (procent)" },
   { key: "upsell_qty2_badge", label: "Upsell 2 buc - eticheta", required: false },
-  { key: "upsell_qty3", label: "Upsell 3 buc - valoare", required: false },
+  { key: "upsell_qty3", label: "Upsell 3 buc - valoare", required: false, hint: "pretul TOTAL al pachetului de 3 (suma) sau reducere % (procent)" },
   { key: "upsell_qty3_badge", label: "Upsell 3 buc - eticheta", required: false },
   { key: "variant_options", label: "Optiuni variante", required: false, hint: "Ex: Marime: S, M, L | Culoare: Rosu, Negru" },
   { key: "variants", label: "Variante (combinatii)", required: false, hint: "Cate o combinatie pe rand: Titlu | pret=.. | pret_vechi=.. | sku=.. | ean=.. | stoc=.. | activ=da | imagine=URL" },

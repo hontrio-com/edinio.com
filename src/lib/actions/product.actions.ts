@@ -9,6 +9,7 @@ import { getProductLimit } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
+import { construiesteTrepte, mesajProblemaTrepte, problemaMonotonie } from "@/lib/storefront/quantity-tiers";
 import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { enqueueOlxSync, enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouSync, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
@@ -84,6 +85,41 @@ function isSlugConflict(error: { code?: string | null; message: string }) {
   return error.code === "23505" && error.message.includes("slug");
 }
 
+/**
+ * Un pachet nu are voie sa coste mai putin decat o cantitate mai mica.
+ *
+ * Verificarea sta pe SERVER, nu doar in formular: `createProduct` si
+ * `updateProduct` scriu `page_sections` cu `as never`, deci nici tipurile nu
+ * apara, iar orice cale care ocoleste formularul — import, un tab vechi, un
+ * viitor API — intra direct in baza.
+ *
+ * Se verifica pe pretul de BAZA si, la produsele variabile, pe fiecare pret de
+ * combinatie: in modul suma fixa cazul cel mai defavorabil e varianta cea mai
+ * scumpa, fiindca un pachet fix e cu atat mai probabil sub o bucata cu cat
+ * bucata e mai scumpa.
+ */
+function problemaTrepteProdus(data: ProductData): string | null {
+  const ps = (data.page_sections ?? null) as { quantity_tiers?: unknown; variants?: { enabled?: boolean; combinations?: Array<{ enabled?: boolean; price?: unknown }> } } | null;
+  const cfg = ps?.quantity_tiers;
+  if (!cfg) return null;
+
+  const preturi = new Set<number>();
+  const baza = Number(data.price);
+  if (Number.isFinite(baza) && baza > 0) preturi.add(baza);
+  if (ps?.variants?.enabled && Array.isArray(ps.variants.combinations)) {
+    for (const c of ps.variants.combinations) {
+      const n = Number(c?.price);
+      if (c?.enabled && Number.isFinite(n) && n > 0) preturi.add(n);
+    }
+  }
+
+  for (const unit of preturi) {
+    const problema = problemaMonotonie(construiesteTrepte(cfg, unit));
+    if (problema) return mesajProblemaTrepte(problema);
+  }
+  return null;
+}
+
 export async function createProduct(businessId: string, data: ProductData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -96,6 +132,9 @@ export async function createProduct(businessId: string, data: ProductData) {
     .eq("user_id", user.id)
     .single();
   if (!biz) return { error: "Magazin negasit" };
+
+  const problemaTrepte = problemaTrepteProdus(data);
+  if (problemaTrepte) return { error: problemaTrepte };
 
   // Check plan product limit
   const { data: profile } = await supabase
@@ -164,6 +203,9 @@ export async function updateProduct(productId: string, businessId: string, data:
     .eq("user_id", user.id)
     .single();
   if (!biz) return { error: "Magazin negasit" };
+
+  const problemaTrepte = problemaTrepteProdus(data);
+  if (problemaTrepte) return { error: problemaTrepte };
 
   // Fetch old images to detect removals
   const { data: oldProduct } = await supabase

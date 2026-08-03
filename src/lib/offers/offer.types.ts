@@ -1,3 +1,4 @@
+import { imparteEconomiaCompanionilor } from "./fbt-pricing";
 // Shared (non-"use server") types + parsing for the Offers hub.
 //
 // An "offer" is one row in the `offers` table with four layers:
@@ -214,9 +215,11 @@ export interface ResolvedOffer {
  * handler, so the card, the checkout modal and the charged total always agree to the ban.
  * The anchor stays at full price; companions never go below 0.
  */
-export function distributeFbtSavings(companionPrices: number[], savings: number): number[] {
-  const compTotal = companionPrices.reduce((s, p) => s + p, 0);
-  const cap = Math.min(savings, compTotal);
-  if (cap <= 0 || compTotal <= 0) return companionPrices.map((p) => Math.round(p * 100) / 100);
-  return companionPrices.map((p) => Math.round(Math.max(0, p - cap * (p / compTotal)) * 100) / 100);
+export function distributeFbtSavings(
+  companionPrices: number[],
+  savings: number,
+  /** Pretul ancorei: economia se imparte pe cota companionilor din set. */
+  anchorPrice: number,
+): number[] {
+  return imparteEconomiaCompanionilor(anchorPrice, companionPrices, savings);
 }

@@ -83,7 +83,7 @@ function FbtCard({ offer, anchor, color, onBuyTogether, indisponibil }: {
   const compPrices = offer.products.map((p) => p.price);
   // Set price = current anchor price (variant-aware) + companions after their FBT share,
   // computed exactly like the checkout modal — so card, modal and charge always agree.
-  const distributed = distributeFbtSavings(compPrices, offer.pricing!.savings);
+  const distributed = distributeFbtSavings(compPrices, offer.pricing!.savings, anchor.price);
   const setPrice = round2(anchor.price + distributed.reduce((s, p) => s + p, 0));
   const setCompareAt = round2(anchor.price + compPrices.reduce((s, p) => s + p, 0));
   const setSavings = round2(setCompareAt - setPrice);

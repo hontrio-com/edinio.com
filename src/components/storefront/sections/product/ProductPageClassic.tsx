@@ -469,7 +469,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // (the exact formula the server enforces), pre-accept the offer, open the buy-now modal.
   function handleBuyTogether(offer: ResolvedOffer) {
     if (!offer.pricing) return;
-    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings);
+    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings, displayPrice);
     const items = offer.products.map((p, idx) => ({
       product_id: p.id,
       name: p.name,

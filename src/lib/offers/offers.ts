@@ -402,20 +402,12 @@ export async function applyBumpPricing(
   return { items: out, savings };
 }
 
-/**
- * Distribute an FBT set's savings across the COMPANION prices — the anchor stays at
- * full price (it's the main product being ordered via the buy box). Deterministic and
- * shared by the storefront preview and the order-time enforcement, so the two always
- * compute identical companion prices (no client/server mismatch). Savings are capped
- * at the companions' total (companions never go below 0).
- */
-export function fbtCompanionPrices(anchorPrice: number, companionPrices: number[], config: OfferConfig): number[] {
-  const pricing = computeSetPricing([anchorPrice, ...companionPrices], config);
-  const compTotal = round2(companionPrices.reduce((s, p) => s + p, 0));
-  const savings = pricing ? Math.min(pricing.savings, compTotal) : 0;
-  if (savings <= 0 || compTotal <= 0) return companionPrices.map((p) => round2(p));
-  return companionPrices.map((p) => round2(Math.max(0, p - savings * (p / compTotal))));
-}
+// `fbtCompanionPrices` sta in `fbt-pricing.ts`: e aritmetica de bani, nu are
+// nevoie de baza de date, deci poate fi testata direct — acelasi motiv ca la
+// `aplicaBumpPeOBucata`. Se re-exporta ca apelantii sa nu se schimbe.
+export { fbtCompanionPrices } from "./fbt-pricing";
+import { fbtCompanionPrices } from "./fbt-pricing";
+
 
 /**
  * Order-time enforcement for accepted "frequently bought together" offers. Re-prices

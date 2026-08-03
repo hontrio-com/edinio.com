@@ -494,7 +494,7 @@ export function ProductPageDetailed({
 
   function handleBuyTogether(offer: ResolvedOffer) {
     if (!offer.pricing) return;
-    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings);
+    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings, displayPrice);
     setFbtOffer({
       id: offer.id,
       items: offer.products.map((p, idx) => ({

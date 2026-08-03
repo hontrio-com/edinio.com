@@ -11,6 +11,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
 import { invoiceParty } from "@/lib/billing/invoice-party";
+import { baniiAuIntrat, tipIncasareOblio } from "@/lib/billing/incasare";
+import {
+  cheieDocument,
+  mentiuneRefacturare,
+  slotFacturare,
+  type SlotFacturare,
+} from "@/lib/billing/refacturare";
 import { cereNumeleCotei, invoiceVat, numeCota, type RegimTva } from "@/lib/billing/invoice-vat";
 import {
   getOblioToken,
@@ -255,26 +262,24 @@ async function buildProducts(
   return products;
 }
 
-function buildCollect(
-  paymentMethod: string,
-  paymentStatus: string,
-  orderNumber: string,
-): OblioInvoiceData["collect"] | undefined {
-  if (paymentStatus !== "paid" && paymentMethod !== "cash_on_delivery") return undefined;
-
-  const typeMap: Record<string, string> = {
-    cash_on_delivery: "Ramburs",
-    stripe: "Card",
-    ipay: "Card",
-    netopia: "Card",
-    klarna: "Alta incasare banca",
-    revolut: "Card",
-  };
-
-  const type = typeMap[paymentMethod] ?? "Alta incasare banca";
+/**
+ * Incasarea inregistrata pe factura la emitere.
+ *
+ * Conditia de dinainte era `status !== "paid" && metoda !== "cash_on_delivery"`,
+ * adica metoda de plata raspundea in locul starii platii: orice comanda cu ramburs
+ * NEPLATIT trecea. Si cum documentul pleaca fara camp `value`, Oblio incaseaza
+ * automat TOTALUL facturii — deci o comanda refuzata la livrare ramanea cu factura
+ * incasata integral. Regula e acum cea comuna, din `billing/incasare.ts`.
+ */
+function buildCollect(order: {
+  payment_method: string;
+  payment_status: string;
+  order_number: string;
+}): OblioInvoiceData["collect"] | undefined {
+  if (!baniiAuIntrat(order)) return undefined;
   // Fara `value`: Oblio incaseaza automat totalul facturii. Trimiterea unei valori
   // explicite ar risca nepotriviri (factura partial platita) daca totalul difera.
-  return { type, documentNumber: `#${orderNumber}` };
+  return { type: tipIncasareOblio(order.payment_method), documentNumber: `#${order.order_number}` };
 }
 
 async function buildInvoiceData(
@@ -300,6 +305,8 @@ async function buildInvoiceData(
   vat: RegimTva,
   vatName: string,
   sursa: SursaCoduri,
+  /** Ce document desfiintat inlocuieste acesta. Vezi `billing/refacturare.ts`. */
+  slot: SlotFacturare,
   extra?: Partial<OblioInvoiceData>,
 ): Promise<OblioInvoiceData | { error: string }> {
   const addr = order.shipping_address as ShippingAddress | null;
@@ -307,7 +314,7 @@ async function buildInvoiceData(
   const products = await buildProducts(sursa, order, config, vat, vatName);
   if ("error" in products) return products;
   const parte = invoiceParty(order, addr);
-  const collect = buildCollect(order.payment_method, order.payment_status, order.order_number);
+  const collect = buildCollect(order);
 
   const dueDays = Math.floor(Number(config.due_days) || 0);
   const dueDate = dueDays > 0
@@ -340,11 +347,15 @@ async function buildInvoiceData(
     products,
     ...(collect ? { collect } : {}),
     // mentions apare PE factura (leaga documentul de comanda vizibil), internalNote
-    // doar in interfata Oblio.
-    mentions: `Comanda ${order.order_number}`,
-    internalNote: `Comanda ${order.order_number}`,
+    // doar in interfata Oblio. La reemiterea dupa storno, mentiunea e si singura
+    // urma pe hartie a documentului desfiintat: randul comenzii pastreaza doar
+    // documentul viu.
+    mentions: mentiuneRefacturare(`Comanda ${order.order_number}`, slot),
+    internalNote: mentiuneRefacturare(`Comanda ${order.order_number}`, slot),
     ...(config.send_to_spv ? { spvExtern: 1 as const } : {}),
-    idempotencyKey: `${config.cif}-${seriesName}-${order.order_number}`,
+    // Cheia primei emiteri ramane cea de dinainte; reemiterea o discrimineaza prin
+    // numarul notei de credit. Fara asta, Oblio ar fi intors CHIAR factura stornata.
+    idempotencyKey: cheieDocument(`${config.cif}-${seriesName}-${order.order_number}`, slot),
     ...extra,
   };
 }
@@ -453,13 +464,24 @@ export async function generateOblioInvoice(
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config, order, pricesIncludeVat, vatEnabled, vatRate } = ctx;
 
-  const orderData = order as typeof order & { oblio_invoice_number?: string | null };
-  if (orderData.oblio_invoice_number) return { error: "Factura Oblio a fost deja generata" };
+  const orderData = order as typeof order & {
+    oblio_invoice_number?: string | null;
+    oblio_storno_number?: string | null;
+  };
+  // Slotul e ocupat doar cat timp exista o factura FARA storno. Dupa storno,
+  // factura e desfiintata fiscal si comanda e din nou facturabila. Vezi
+  // `billing/refacturare.ts` pentru cele 7 comenzi blocate definitiv din productie.
+  const slot = slotFacturare({
+    casa: "Oblio",
+    factura: orderData.oblio_invoice_number,
+    storno: orderData.oblio_storno_number,
+  });
+  if (!slot.poateEmite) return { error: slot.mesaj };
 
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
     const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
-    const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName, { supabase, businessId });
+    const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName, { supabase, businessId }, slot);
     // Comanda care nu se reconciliaza NU se factureaza. Vezi `reconcile.ts`.
     if ("error" in data) return { error: data.error };
     const result = await createOblioDoc(token, "invoice", data);
@@ -468,8 +490,26 @@ export async function generateOblioInvoice(
       oblio_invoice_number: result.number,
       oblio_invoice_series: result.seriesName,
       oblio_invoice_link: result.link ?? null,
+      // Stornul se sterge odata cu factura pe care o desfiintase: altfel a doua
+      // stornare ar fi blocata de propria garda, iar ecranul ar arata factura NOUA
+      // drept stornata prin nota de credit a celei vechi.
+      oblio_storno_number: null,
+      oblio_storno_series: null,
+      oblio_storno_link: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    if (slot.inlocuieste) {
+      // Urma locala a perechii desfiintate. Randul comenzii tine doar documentul viu,
+      // iar evidenta fiscala reala e oricum in contul Oblio.
+      await logError({
+        action: "oblio.refacturareDupaStorno",
+        message: `Comanda ${order.order_number}: factura ${result.seriesName}${result.number} inlocuieste ${slot.inlocuieste.factura ?? "?"}, stornata prin ${slot.inlocuieste.storno}`,
+        details: { orderId, ...slot.inlocuieste, facturaNoua: `${result.seriesName}${result.number}` },
+        businessId,
+        severity: "info",
+      });
+    }
 
     return { number: result.number, series: result.seriesName };
   } catch (e) {
@@ -536,7 +576,9 @@ export async function generateOblioProforma(
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
     const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
-    const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName, { supabase, businessId });
+    // Proforma nu se storneaza niciodata (se anuleaza, prin `cancelOblioProforma`,
+    // care ii goleste numarul), deci slotul ei nu inlocuieste vreun document.
+    const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName, { supabase, businessId }, { poateEmite: true });
     // O proforma gresita e sursa unei facturi gresite, deci trece prin aceeasi garda.
     if ("error" in data) return { error: data.error };
     // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).

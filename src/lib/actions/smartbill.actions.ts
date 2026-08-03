@@ -5,6 +5,8 @@ import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
+import { baniiAuIntrat } from "@/lib/billing/incasare";
+import { mentiuneRefacturare, slotFacturare, type SlotFacturare } from "@/lib/billing/refacturare";
 import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
@@ -303,6 +305,8 @@ async function buildInvoiceParams(
   pricesIncludeVat: boolean,
   vatEnabled: boolean,
   storeVatRate: number,
+  /** Ce document desfiintat inlocuieste acesta. Vezi `billing/refacturare.ts`. */
+  slot: SlotFacturare,
   extraParams?: Partial<MerchantInvoiceParams>
 ): Promise<MerchantInvoiceParams | { error: string }> {
   const address = order.shipping_address as ShippingAddress | null;
@@ -346,9 +350,11 @@ async function buildInvoiceParams(
     issueDate: today,
     ...(dueDate ? { dueDate } : {}),
     // Leaga documentul de comanda: mentions apare pe factura, observations doar
-    // in rapoartele SmartBill.
-    mentions: `Comanda #${order.order_number}${payLabel ? ` - plata: ${payLabel}` : ""}`,
-    observations: `Comanda #${order.order_number}`,
+    // in rapoartele SmartBill. La reemiterea dupa storno, mentiunea e si singura
+    // urma pe hartie a documentului desfiintat: randul comenzii pastreaza doar
+    // documentul viu.
+    mentions: mentiuneRefacturare(`Comanda #${order.order_number}${payLabel ? ` - plata: ${payLabel}` : ""}`, slot),
+    observations: mentiuneRefacturare(`Comanda #${order.order_number}`, slot),
     products,
     isDraft: false,
     // Email is sent as a separate, non-blocking step after creation (see
@@ -363,14 +369,50 @@ async function buildInvoiceParams(
 // modulul WooCommerce oficial. Nu se aplica proformelor.
 function paymentAtIssue(
   config: SmartbillConfig,
-  order: { payment_method?: string | null; payment_status?: string | null; total?: unknown }
+  order: { payment_method?: string | null; payment_status: string | null | undefined; total?: unknown }
 ): Pick<MerchantInvoiceParams, "payment"> | Record<string, never> {
   if (!config.mark_paid_online) return {};
-  if (order.payment_status !== "paid") return {};
+  // „Au intrat banii?" e regula COMUNA celor trei case (`billing/incasare.ts`).
+  // Aici era scrisa corect; la Oblio, gresit — metoda de plata raspundea in locul
+  // starii platii si rambursul neplatit iesea incasat.
+  if (!baniiAuIntrat(order)) return {};
+  // Restul e specific SmartBill si NU e aceeasi intrebare: tipul trimis e „Card
+  // online", deci se limiteaza la platile cu cardul, si ramane opt-in per magazin.
   if (!isCardPaymentMethod(order.payment_method)) return {};
   const value = Number(order.total);
   if (!Number.isFinite(value) || value <= 0) return {};
   return { payment: { value, type: "Card online", isCash: false } };
+}
+
+/**
+ * Stornul se sterge odata cu factura pe care o desfiintase.
+ *
+ * Altfel a doua stornare ar fi blocata de propria ei garda („deja stornata"), iar
+ * ecranul ar arata factura NOUA drept stornata prin nota de credit a celei vechi.
+ * Randul comenzii tine documentul VIU, nu arhiva; perechea desfiintata pleaca in
+ * mentiunile facturii noi, in jurnal, si ramane in contul SmartBill.
+ */
+const campuriStornoGolite = {
+  smartbill_storno_number: null,
+  smartbill_storno_series: null,
+} as const;
+
+/** Urma locala a perechii desfiintate, cand emiterea a fost o reemitere. */
+async function jurnalRefacturare(
+  businessId: string,
+  orderId: string,
+  orderNumber: string | number,
+  slot: SlotFacturare,
+  emis: { series: string; number: string },
+): Promise<void> {
+  if (!slot.poateEmite || !slot.inlocuieste) return;
+  await logError({
+    action: "smartbill.refacturareDupaStorno",
+    message: `Comanda #${orderNumber}: factura ${emis.series}${emis.number} inlocuieste ${slot.inlocuieste.factura ?? "?"}, stornata prin ${slot.inlocuieste.storno}`,
+    details: { orderId, ...slot.inlocuieste, facturaNoua: `${emis.series}${emis.number}` },
+    businessId,
+    severity: "info",
+  });
 }
 
 async function getStoreVatSettings(businessId: string) {
@@ -474,12 +516,20 @@ export async function generateOrderInvoice(
   const { data: order } = await supabase
     .from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single();
   if (!order) return { error: "Comanda nu a fost gasita." };
-  if (order.smartbill_invoice_number) return { error: "Factura a fost deja generata pentru aceasta comanda." };
+  // Slotul e ocupat doar cat timp exista o factura FARA storno. Dupa storno,
+  // factura e desfiintata fiscal si comanda e din nou facturabila. Vezi
+  // `billing/refacturare.ts` pentru cele 7 comenzi blocate definitiv din productie.
+  const slot = slotFacturare({
+    casa: "SmartBill",
+    factura: order.smartbill_invoice_number,
+    storno: order.smartbill_storno_number,
+  });
+  if (!slot.poateEmite) return { error: slot.mesaj };
 
   const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
   const params = await buildInvoiceParams(
     { supabase, businessId }, config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
-    paymentAtIssue(config, order),
+    slot, paymentAtIssue(config, order),
   );
   // Comanda care nu se reconciliaza NU se factureaza: mesajul spune numerele si
   // pasul urmator, si ajunge in interfata.
@@ -491,8 +541,10 @@ export async function generateOrderInvoice(
     smartbill_invoice_number: result.number,
     smartbill_invoice_series: result.series,
     smartbill_invoice_url: result.documentUrl ?? null,
+    ...campuriStornoGolite,
   }).eq("id", orderId);
 
+  await jurnalRefacturare(businessId, orderId, order.order_number, slot, result);
   const emailWarning = await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
   return { number: result.number, series: result.series, ...(emailWarning ? { emailWarning } : {}) };
 }
@@ -517,7 +569,8 @@ export async function generateOrderEstimate(
   if (order.smartbill_estimate_number) return { error: "Proforma a fost deja generata pentru aceasta comanda." };
 
   const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
-  const params = await buildInvoiceParams({ supabase, businessId }, config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate);
+  // Proforma nu se storneaza, deci nu inlocuieste vreun document desfiintat.
+  const params = await buildInvoiceParams({ supabase, businessId }, config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate, { poateEmite: true });
   if ("error" in params) return params;
   const result = await createMerchantEstimate(config, params);
   if ("error" in result) return result;
@@ -549,7 +602,13 @@ export async function convertEstimateToInvoice(
   if (!order.smartbill_estimate_number || !order.smartbill_estimate_series) {
     return { error: "Nu exista proforma pentru aceasta comanda." };
   }
-  if (order.smartbill_invoice_number) return { error: "Factura a fost deja generata." };
+  // Aceeasi regula ca la emiterea directa: stornata inseamna slot liber.
+  const slot = slotFacturare({
+    casa: "SmartBill",
+    factura: order.smartbill_invoice_number,
+    storno: order.smartbill_storno_number,
+  });
+  if (!slot.poateEmite) return { error: slot.mesaj };
 
   const estimateRef = {
     seriesName: order.smartbill_estimate_series as string,
@@ -564,14 +623,29 @@ export async function convertEstimateToInvoice(
     number: estimateRef.number,
   });
   if (!("error" in status) && status.invoiced) {
-    const existing = status.invoices[0];
+    // Dupa un storno, SmartBill raporteaza in continuare proforma ca facturata — cu
+    // chiar factura desfiintata. Adoptata orbeste, ea ar reinvia numarul mort pe
+    // rand si comanda ar ramane blocata a doua oara. Se adopta doar un document
+    // DIFERIT de cel inlocuit, adica unul pe care l-a emis intre timp comerciantul.
+    const inlocuita = slot.inlocuieste?.factura ?? null;
+    const existing = status.invoices.find((i) => i.number !== inlocuita);
     if (!existing) {
-      return { error: "Proforma a fost deja facturata in SmartBill (factura e inca ciorna). Finalizeaz-o din contul SmartBill." };
+      return inlocuita
+        ? { error: `Proforma e legata in SmartBill de factura ${inlocuita}, cea pe care ai stornat-o. Emite factura direct din comanda (butonul Factura), nu din proforma.` }
+        : { error: "Proforma a fost deja facturata in SmartBill (factura e inca ciorna). Finalizeaz-o din contul SmartBill." };
     }
     await supabase.from("orders").update({
       smartbill_invoice_number: existing.number,
       smartbill_invoice_series: existing.series,
+      // Linkul se GOLESTE, nu se pastreaza. Pana acum ramura asta era accesibila
+      // doar cand nu exista factura, deci nici link; de cand e accesibila si dupa
+      // un storno, `smartbill_invoice_url` tine adresa facturii DESFIINTATE —
+      // ecranul ar scrie numarul cel nou langa un buton care deschide stornoul.
+      // `getEstimateInvoices` nu intoarce adresa, deci null e valoarea onesta.
+      smartbill_invoice_url: null,
+      ...campuriStornoGolite,
     }).eq("id", orderId);
+    await jurnalRefacturare(businessId, orderId, order.order_number, slot, existing);
     return { number: existing.number, series: existing.series };
   }
 
@@ -585,6 +659,9 @@ export async function convertEstimateToInvoice(
     sendEmail: false,
     useEstimateDetails: true,
     estimate: estimateRef,
+    // Doar la reemitere: pe drumul obisnuit mentiunile se preiau din proforma, si
+    // n-are rost sa le suprascriem cu acelasi text.
+    ...(slot.inlocuieste ? { mentions: mentiuneRefacturare(`Comanda #${order.order_number}`, slot) } : {}),
     ...paymentAtIssue(config, order),
   };
 
@@ -595,8 +672,10 @@ export async function convertEstimateToInvoice(
     smartbill_invoice_number: result.number,
     smartbill_invoice_series: result.series,
     smartbill_invoice_url: result.documentUrl ?? null,
+    ...campuriStornoGolite,
   }).eq("id", orderId);
 
+  await jurnalRefacturare(businessId, orderId, order.order_number, slot, result);
   const emailWarning = await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
   return { number: result.number, series: result.series, ...(emailWarning ? { emailWarning } : {}) };
 }
@@ -711,7 +790,21 @@ export async function maybeAutoGenerateInvoice(
     // Check order doesn't already have invoice
     const { data: order } = await supabase
       .from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single();
-    if (!order || order.smartbill_invoice_number) return false;
+    if (!order) return false;
+    /*
+     * Aceeasi regula ca pe calea manuala, ca sa nu existe doua raspunsuri la „se
+     * poate emite?". In practica azi nu se ajunge aici cu o comanda stornata:
+     * dispecerul (`invoice-auto.actions.ts`) iese mai devreme la orice numar de
+     * factura setat, indiferent de storno. Reemiterea ramane deci o actiune
+     * DELIBERATA, din buton — ce si vrem: o comanda stornata nu are voie sa-si
+     * refaca singura factura la urmatoarea schimbare de stare.
+     */
+    const slot = slotFacturare({
+      casa: "SmartBill",
+      factura: order.smartbill_invoice_number,
+      storno: order.smartbill_storno_number,
+    });
+    if (!slot.poateEmite) return false;
 
     const { data: storeSettings } = await supabase
       .from("store_settings").select("prices_include_vat, vat_enabled, vat_rate").eq("business_id", businessId).single();
@@ -722,7 +815,7 @@ export async function maybeAutoGenerateInvoice(
 
     const params = await buildInvoiceParams(
       { supabase, businessId }, config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
-      paymentAtIssue(config, order),
+      slot, paymentAtIssue(config, order),
     );
     /*
      * Pe calea automata esecul e MUT (`return false`, iar dispecerul inghite), deci
@@ -747,7 +840,9 @@ export async function maybeAutoGenerateInvoice(
       smartbill_invoice_number: result.number,
       smartbill_invoice_series: result.series,
       smartbill_invoice_url: result.documentUrl ?? null,
+      ...campuriStornoGolite,
     }).eq("id", orderId);
+    await jurnalRefacturare(businessId, orderId, order.order_number, slot, result);
     // Best-effort email — never affects the already-created invoice.
     await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
     return true;

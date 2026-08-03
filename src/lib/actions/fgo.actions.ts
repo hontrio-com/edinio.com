@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
+import { cheieDocument, slotFacturare } from "@/lib/billing/refacturare";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
@@ -314,8 +315,20 @@ export async function generateFgoInvoice(
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config, order, vatEnabled, vatRate, pricesIncludeVat } = ctx;
 
-  const orderData = order as typeof order & { fgo_invoice_number?: string | null };
-  if (orderData.fgo_invoice_number) return { error: "Factura fGO a fost deja generata" };
+  const orderData = order as typeof order & {
+    fgo_invoice_number?: string | null;
+    fgo_storno_number?: string | null;
+  };
+  // Slotul e ocupat doar cat timp exista o factura FARA storno. Dupa storno,
+  // factura e desfiintata fiscal si comanda e din nou facturabila. Vezi
+  // `billing/refacturare.ts`: doua din cele 7 comenzi blocate definitiv in
+  // productie sunt chiar aici, la itp-blk, si sunt marfa vie (`pending`, `confirmed`).
+  const slot = slotFacturare({
+    casa: "fGO",
+    factura: orderData.fgo_invoice_number,
+    storno: orderData.fgo_storno_number,
+  });
+  if (!slot.poateEmite) return { error: slot.mesaj };
 
   try {
     const addr = order.shipping_address as ShippingAddress | null;
@@ -345,15 +358,40 @@ export async function generateFgoInvoice(
         codUnic: parte.vatCode ?? undefined,
       },
       items,
-      { dueDate, idExtern: order.order_number ? String(order.order_number) : undefined },
+      {
+        dueDate,
+        // fGO refuza cu 409 un al doilea document pe acelasi `IdExtern`, iar fara
+        // camp de mentiuni in model, sufixul cu numarul notei de credit e si
+        // singura urma pe document a facturii pe care o inlocuieste.
+        idExtern: order.order_number
+          ? cheieDocument(String(order.order_number), slot)
+          : undefined,
+      },
     );
 
     await supabase.from("orders").update({
       fgo_invoice_number: result.Numar,
       fgo_invoice_series: result.Serie,
       fgo_invoice_link: result.Link,
+      // Stornul se sterge odata cu factura pe care o desfiintase: altfel a doua
+      // stornare ar fi blocata de propria garda, iar ecranul ar arata factura NOUA
+      // drept stornata prin nota de credit a celei vechi.
+      fgo_storno_number: null,
+      fgo_storno_series: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    if (slot.inlocuieste) {
+      // Urma locala a perechii desfiintate. Randul comenzii tine doar documentul viu,
+      // iar evidenta fiscala reala e oricum in contul fGO.
+      await logError({
+        action: "fgo.refacturareDupaStorno",
+        message: `Comanda ${order.order_number}: factura ${result.Serie}${result.Numar} inlocuieste ${slot.inlocuieste.factura ?? "?"}, stornata prin ${slot.inlocuieste.storno}`,
+        details: { orderId, ...slot.inlocuieste, facturaNoua: `${result.Serie}${result.Numar}` },
+        businessId,
+        severity: "info",
+      });
+    }
 
     return { number: result.Numar, series: result.Serie, link: result.Link };
   } catch (e) {
@@ -406,15 +444,33 @@ export async function cancelFgoInvoiceAction(
   const orderData = order as typeof order & {
     fgo_invoice_number?: string | null;
     fgo_invoice_series?: string | null;
+    fgo_storno_number?: string | null;
   };
 
   if (!orderData.fgo_invoice_number || !orderData.fgo_invoice_series) {
     return { error: "Nu exista factura fGO pentru aceasta comanda" };
   }
+  /*
+   * Anularea si stornarea sunt doua acte fiscale diferite si nu se pot suprapune.
+   * Fara garda asta, o factura deja stornata putea fi si anulata, iar stergerea
+   * numarului de factura lasa numarul notei de credit ORFAN pe rand — o nota care
+   * nu mai anuleaza nimic. In productie nu exista niciun astfel de rand (0), fiindca
+   * actiunea nu e legata azi de niciun buton; garda o inchide inainte sa fie.
+   */
+  if (orderData.fgo_storno_number) {
+    return { error: `Factura a fost deja stornata prin ${orderData.fgo_storno_number}, deci nu mai poate fi anulata. Emite direct factura noua.` };
+  }
 
   try {
     await cancelFgoInvoice(config, orderData.fgo_invoice_number, orderData.fgo_invoice_series);
 
+    // RAMANE deschis: `IdExtern` al documentului anulat ramane luat la fGO, deci o
+    // emitere ulterioara pe aceeasi comanda ia 409 („factura pare deja emisa").
+    // Reemiterea dupa STORNO nu are problema asta — acolo numarul notei de credit e
+    // discriminantul. Aici nu exista niciun numar care sa supravietuiasca anularii,
+    // iar un discriminant din ceas ar strica idempotenta si ar putea emite doua
+    // facturi la o simpla reincercare. Se lasa asa cat timp actiunea nu e legata de
+    // niciun buton si n-a rulat niciodata in productie.
     await supabase.from("orders").update({
       fgo_invoice_number: null,
       fgo_invoice_series: null,

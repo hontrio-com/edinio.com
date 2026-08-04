@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contextulCosului } from "./cart-weight";
+import { contextulCosului, subtotalMaximDinCatalog, type ProdusCotat } from "./cart-weight";
 
 /**
  * Cantitatea nu atingea deloc pretul livrarii.
@@ -74,4 +74,51 @@ test("fara cos, contextul e gol — nu zero-uri inventate", () => {
   assert.deepEqual(contextulCosului(undefined, []), {
     weightKg: 0, quantity: 0, classIds: [], categories: [], productIds: [],
   });
+});
+
+// ── Plafonul de subtotal pentru regulile de transport ────────────────────────
+//
+// Regulile („livrare gratuita peste 200 de lei") primeau subtotalul de la
+// BROWSER, iar pretul care iesea din ele pleaca SEMNAT: cine trimitea o suma
+// umflata obtinea transport gratuit semnat pentru un cos ieftin.
+
+const CATALOG: ProdusCotat[] = [
+  { id: "p1", price: 50 },
+  { id: "p2", price: 25 },
+  { id: "fara-pret", price: null },
+];
+
+test("plafonul e suma din catalog, nu ce spune clientul", () => {
+  assert.equal(subtotalMaximDinCatalog([{ productId: "p1", quantity: 2 }], CATALOG), 100);
+  assert.equal(
+    subtotalMaximDinCatalog([{ productId: "p1", quantity: 1 }, { productId: "p2", quantity: 4 }], CATALOG),
+    150,
+  );
+});
+
+test("ATACUL: suma umflata e taiata la cat sustine catalogul", () => {
+  const cerutDeClient = 5000;
+  const plafon = subtotalMaximDinCatalog([{ productId: "p1", quantity: 1 }], CATALOG);
+  assert.equal(Math.min(cerutDeClient, plafon), 50, "nu poate depasi 50 lei");
+});
+
+test("CAZUL LEGITIM: o reducere coboara suma si trece neatinsa", () => {
+  const dupaReducere = 40; // 50 lei cu 20% reducere
+  const plafon = subtotalMaximDinCatalog([{ productId: "p1", quantity: 1 }], CATALOG);
+  assert.equal(Math.min(dupaReducere, plafon), 40, "reducerea nu e anulata de plafon");
+});
+
+test("un cos nedeclarat nu sustine nicio suma", () => {
+  assert.equal(subtotalMaximDinCatalog([], CATALOG), 0);
+  assert.equal(subtotalMaximDinCatalog(undefined, CATALOG), 0);
+});
+
+test("produsele negasite sau fara pret nu adauga la plafon", () => {
+  assert.equal(subtotalMaximDinCatalog([{ productId: "inexistent", quantity: 9 }], CATALOG), 0);
+  assert.equal(subtotalMaximDinCatalog([{ productId: "fara-pret", quantity: 9 }], CATALOG), 0);
+});
+
+test("cantitatea absurda e normalizata, ca peste tot", () => {
+  const r = subtotalMaximDinCatalog([{ productId: "p1", quantity: 99999 }], CATALOG);
+  assert.ok(r <= 50 * 999, "cantitatea trece prin normalizeazaCantitate");
 });

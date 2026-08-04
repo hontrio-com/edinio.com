@@ -14,7 +14,7 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
-import { contextulCosului } from "@/lib/shipping/cart-weight";
+import { contextulCosului , subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
 import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
 
 /**
@@ -209,17 +209,21 @@ export async function getShippingOptions(
    */
   const esteRamburs = (Number(destination.cod) || 0) > 0;
   let cos = contextulCosului([], []);
+  // Ridicat in afara blocului: pretul din catalog e nevoie si mai jos, ca sa
+  // plafoneze subtotalul declarat de client in regulile de transport.
+  let produseCotate: { id: string; shipping_class: string | null; category: string | null; weight_grams: number | null; price: number | null }[] = [];
   if (destination.cart && destination.cart.length > 0) {
     const { data: cartProducts, error: eroareCos } = await supabase
       .from("products")
-      .select("id, shipping_class, category, weight_grams")
+      .select("id, shipping_class, category, weight_grams, price")
       .eq("business_id", businessId)
       .in("id", [...new Set(destination.cart.map((c) => c.productId))]);
     // O interogare cazuta inseamna greutate zero, adica tariful unui kilogram
     // pentru un colet de zece — tacut. Fiecare esec de curier de mai jos se
     // jurnalizeaza; asta se jurnaliza pana acum nicaieri.
     if (eroareCos) console.error("[shipping] cart weight lookup failed:", eroareCos.message);
-    cos = contextulCosului(destination.cart, cartProducts ?? []);
+    produseCotate = cartProducts ?? [];
+    cos = contextulCosului(destination.cart, produseCotate);
   }
   const cartWeightKg = cos.weightKg;
 
@@ -627,7 +631,17 @@ export async function getShippingOptions(
        * magazine au reguli de transport (2026-08-03), deci ramura asta nu se
        * executa azi la nimeni.
        */
-      subtotal: cos.productIds.length > 0 ? Math.max(0, Number(destination.subtotal) || 0) : 0,
+      /*
+       * PLAFONAT cu ce sustine catalogul. Valoarea vine tot de la browser (e
+       * singura care stie reducerile si preturile de varianta), dar nu mai poate
+       * fi UMFLATA: `min(cerut, maxim din catalog)`. Inflatia era atacul —
+       * livrare gratuita semnata pentru un cos ieftin. Reducerile doar coboara
+       * suma, deci trec neatinse.
+       */
+      subtotal: Math.min(
+        Math.max(0, Number(destination.subtotal) || 0),
+        subtotalMaximDinCatalog(destination.cart, produseCotate),
+      ),
       weightKg: cos.weightKg,
       quantity: cos.quantity,
       classIds: cos.classIds,

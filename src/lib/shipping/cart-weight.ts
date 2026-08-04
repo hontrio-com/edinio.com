@@ -24,6 +24,9 @@ export interface ProdusCotat {
   shipping_class?: string | null;
   category?: string | null;
   weight_grams?: number | null;
+  /** Pretul din catalog. Serveste la PLAFONAREA subtotalului declarat de client
+   *  in regulile de transport — vezi `subtotalMaximDinCatalog`. */
+  price?: number | null;
 }
 
 export interface ContextCos {
@@ -69,4 +72,38 @@ export function contextulCosului(linii: LinieCotata[] | undefined, produse: Prod
     categories: [...categories],
     productIds: [...new Set((linii ?? []).map((l) => l.productId))],
   };
+}
+
+
+/**
+ * Cat POATE valora cel mult cosul declarat, dupa preturile din catalog.
+ *
+ * Regulile de transport („livrare gratuita peste 200 de lei") primeau subtotalul
+ * de la BROWSER, iar pretul care iesea din ele pleaca SEMNAT. Cine trimitea o
+ * suma umflata obtinea livrare gratuita semnata pentru un cos ieftin.
+ *
+ * Nu inlocuim valoarea clientului, o PLAFONAM. Motivul: subtotalul real e
+ * dupa reduceri, oferte si preturi de varianta — lucruri pe care cotatia nu le
+ * poate reconstrui exact din `{productId, quantity}`. Daca l-am inlocui cu
+ * pretul de catalog, un cos cu reducere ar parea mai scump decat este si ar
+ * primi transport gratuit pe nedrept, in dauna comerciantului.
+ *
+ * Plafonul taie exact atacul (umflarea) si lasa neatins cazul legitim
+ * (reducerea, care doar coboara suma). Produsele negasite in catalog nu adauga
+ * nimic: plafonul e ce putem SUSTINE, nu ce sustine clientul.
+ */
+export function subtotalMaximDinCatalog(
+  linii: LinieCotata[] | undefined,
+  produse: ProdusCotat[],
+): number {
+  const byId = new Map(produse.map((p) => [p.id, p]));
+  let total = 0;
+  for (const linie of linii ?? []) {
+    const p = byId.get(linie.productId);
+    if (!p) continue;
+    const pret = Number(p.price);
+    if (!Number.isFinite(pret) || pret <= 0) continue;
+    total += pret * normalizeazaCantitate(linie.quantity);
+  }
+  return Math.round(total * 100) / 100;
 }

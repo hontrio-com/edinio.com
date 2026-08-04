@@ -29,6 +29,25 @@ import { createHmac, timingSafeEqual } from "crypto";
  * greutatea iese din lista de produse declarata de client, dar la comanda ar
  * trebui reconstruita din liniile finale, cu pachete desfacute si oferte
  * acordate server-side. Vezi `getShippingOptions` pentru cat costa asta azi.
+ *
+ * DECIS 04.08.2026, dupa auditul de securitate: RAMANE ASA, deliberat.
+ *
+ * Compromisul, pus pe masa inainte de decizie: gaura e exploatabila azi de UN
+ * SINGUR magazin (doar tonel-beauty are produse cantarite, maximum 1 kg bucata),
+ * in timp ce o legare GRESITA a cosului trimite comenzi REALE pe
+ * `max(suma ceruta, tarif implicit)` — adica omul vede 0,00 la „Ridicare
+ * personala" si plateste 18-45 de lei. Cinci magazine publicate au ridicare
+ * personala langa curieri platiti. Riscul pentru cumparatori depaseste castigul.
+ *
+ * Ce S-A facut in schimb, fiindca se putea face fara risc: subtotalul folosit de
+ * REGULILE de transport e acum plafonat cu pretul din catalog
+ * (`subtotalMaximDinCatalog` din cart-weight.ts), deci nu mai poate fi UMFLAT ca
+ * sa scoata livrare gratuita semnata. Aia era partea exploatabila si de
+ * magazinele fara greutati in catalog — adica de aproape toate.
+ *
+ * Daca cineva reia asta: nu lega cosul cu esec pe tariful implicit. Esueaza in
+ * FAVOAREA clientului (refuza comanda si cere recotare), altfel un caz de colt
+ * netestat se plateste din buzunarul cumparatorului.
  */
 function secret(): string {
   return process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";

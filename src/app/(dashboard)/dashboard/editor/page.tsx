@@ -12,7 +12,23 @@ export default async function EditorPage() {
 
   const { data: row } = await supabase
     .from("businesses")
-    .select("*, store_settings(*)")
+    /*
+     * `store_settings(*)` ar aduce toate cele 59 de coloane si le-ar trimite
+     * intregi unei Client Component (StoreEditor are "use client"), adica in
+     * payload-ul RSC. Editorul citeste O SINGURA coloana: `page_content`.
+     *
+     * Conteaza in mod concret pentru PAROLA SMTP: pagina de setari o scoate
+     * INTENTIONAT inainte de a trimite spre client (vezi settings/page.tsx,
+     * `hasPassword: !!emailSmtp.pass` — camp write-only), iar editorul o scapa
+     * inapoi in browser prin `*`. Restul paginilor de editor sunt deja proiectate
+     * (editor/design, editor/sectiuni, products/[id]/edit, orders) — asta era
+     * singura exceptie.
+     *
+     * ATENTIE: NU aplica aceeasi taiere in cached-queries.ts
+     * (`getCachedBusinessWithSettings`) — acolo `store_settings(*)` e cerut de
+     * cele ~24 de pagini de integrari, care chiar au nevoie de configuratiile lor.
+     */
+    .select("*, store_settings(page_content)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)

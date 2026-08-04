@@ -21,7 +21,24 @@ export default async function SettingsPage({ searchParams }: Props) {
   if (!user) redirect("/login");
 
   const [{ data: profile }, { data: bizRow }] = await Promise.all([
-    supabase.from("users_profile").select("*").eq("id", user.id).single(),
+    /*
+     * NU `select("*")`: randul intreg ajungea in payload-ul RSC al unei Client
+     * Component, cu tot cu `admin_notes` — notitele INTERNE ale platformei despre
+     * acel comerciant — plus `role`, `suspended_until`, `stripe_customer_id` si
+     * hash-ul OTP. Componenta citeste cinci campuri.
+     *
+     * ATENTIE, ca sa nu se inchida constatarea prea devreme: asta e igiena de
+     * payload, NU remedierea. Comerciantul poate citi `admin_notes` oricum, direct
+     * din browser cu cheia anon, fiindca SELECT pe `users_profile` n-a fost
+     * niciodata revocat de la `authenticated`. Remedierea reala e revocarea la
+     * nivel de coloana — e RESTRICTIVA, deci se aplica DUPA deploy
+     * (migrations/2026-08-04-DUPA-DEPLOY-coloane-profil.sql).
+     */
+    supabase
+      .from("users_profile")
+      .select("full_name, plan, plan_interval, plan_expires_at, payment_failed_at, mfa_email_enabled")
+      .eq("id", user.id)
+      .single(),
     supabase
       .from("businesses")
       .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")

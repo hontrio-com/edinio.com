@@ -33,7 +33,15 @@ import { TIPURI_POLITICI } from "@/lib/storefront/policy-index";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { type StoreMode } from "@/lib/storefront/store-mode";
 
-type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
+/**
+ * DOAR campurile de care are nevoie ecranul, nu randul intreg. Pagina trimite
+ * exact atat (vezi settings/page.tsx): `admin_notes`, `role`, `suspended_until`,
+ * `stripe_customer_id` si hash-ul OTP nu au ce cauta in browser.
+ */
+type UserProfile = Pick<
+  Database["public"]["Tables"]["users_profile"]["Row"],
+  "full_name" | "plan" | "plan_interval" | "plan_expires_at" | "payment_failed_at" | "mfa_email_enabled"
+>;
 
 type SectionId =
   | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"

@@ -1,4 +1,24 @@
-"use server";
+/*
+ * FARA "use server" AICI, INTENTIONAT. Nu-l readauga.
+ *
+ * Intr-un modul "use server", FIECARE export devine un endpoint HTTP. `logError`
+ * ajunsese astfel in manifestul de build ca Server Action inregistrata pe 13
+ * rute, dintre care doua sunt PAGINI PUBLICE de magazin (`/[slug]` si
+ * `/[slug]/product/[productSlug]`) — lantul e page.tsx -> storefront/product-data
+ * -> store.actions ("use server") -> error-logger.
+ *
+ * Consecinta: orice vizitator anonim putea trimite un POST cu antetul
+ * `Next-Action` si scrie in `error_logs` cu clientul de SISTEM (service role,
+ * deci ocolind RLS), alegand singur `userId`, `businessId` si `severity`. Adica:
+ * jurnalul de erori al platformei se putea umple si falsifica din exterior, cu
+ * incidente puse in carca oricarui magazin.
+ *
+ * Modulul e folosit EXCLUSIV ca functie obisnuita, din 33 de fisiere care ruleaza
+ * toate pe server (26 de actions, 3 rute API, 4 module de biblioteca). Niciunul
+ * nu e componenta de client, si nicaieri nu e folosita ca VALOARE (nu apare in
+ * `<form action={...}>` sau `useActionState`), deci scoaterea directivei nu
+ * schimba nimic pentru apelanti.
+ */
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.types";

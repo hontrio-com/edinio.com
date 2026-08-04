@@ -42,6 +42,11 @@ export async function GET(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
+  // Curata contoarele de limitare expirate (tabela `rate_limits`). Merge aici
+  // fiindca acesta e cronul orar cel mai usor; nu are legatura cu cupoanele, dar
+  // altfel tabela ar creste la nesfarsit.
+  await admin.rpc("curata_limite").then(() => {}, () => {});
+
   // `?ore=` largeste sau stramteaza pragul pentru o verificare manuala; rularea
   // programata foloseste implicitul.
   const ore = Math.min(Math.max(Number(req.nextUrl.searchParams.get("ore")) || ORE_PANA_LA_ELIBERARE, 1), 24 * 30);

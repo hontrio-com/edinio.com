@@ -73,6 +73,27 @@ async function limitaMfa(userId: string): Promise<{ error: string } | null> {
   return { error: mesajLimita(lim, "Prea multe coduri gresite. Incearca din nou mai tarziu.") };
 }
 
+
+/**
+ * Scrierile pe campurile MFA trec OBLIGATORIU prin service role.
+ *
+ * `mfa_otp`, `mfa_otp_expires_at` si `mfa_email_enabled` sunt pe randul propriu
+ * al utilizatorului, deci pana acum si le putea scrie singur cu cheia anon. Iar
+ * dupa `signInWithPassword` sesiunea E DEJA valida — al doilea factor doar
+ * intarzie redirectarea. Deci un atacator care avea numai parola putea:
+ *   update({ mfa_email_enabled: false })                  -> stinge MFA de tot
+ *   update({ mfa_otp: sha256("123456"), expires: viitor }) -> isi alege codul
+ * si intra. Coloanele sunt acum revocate pentru rolul `authenticated`
+ * (migrations/2026-08-04-blindare-mfa.sql), iar scrierile legitime trec pe aici.
+ */
+async function scrieCampuriMfa(
+  userId: string,
+  campuri: { mfa_otp?: string | null; mfa_otp_expires_at?: string | null; mfa_email_enabled?: boolean },
+): Promise<void> {
+  const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
+  await getAdmin().from("users_profile").update(campuri as never).eq("id", userId);
+}
+
 export async function login(formData: { email: string; password: string }) {
   const ip = await ipApelant();
   const email = formData.email.trim().toLowerCase();
@@ -121,7 +142,7 @@ export async function login(formData: { email: string; password: string }) {
 
   if (profile?.mfa_email_enabled) {
     const { otp, otpHash, expiresAt } = generateOtp();
-    await supabase.from("users_profile").update({ mfa_otp: otpHash, mfa_otp_expires_at: expiresAt }).eq("id", user.id);
+    await scrieCampuriMfa(user.id, { mfa_otp: otpHash, mfa_otp_expires_at: expiresAt });
     await sendMfaOtpEmail(user.email!, otp);
     const cookieStore = await cookies();
     cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 10 * 60, secure: process.env.NODE_ENV === "production" });
@@ -161,7 +182,7 @@ export async function verifyMfaLogin(code: string): Promise<{ error: string } | 
   }
 
   await reseteazaLimita(`mfa:${user.id}`);
-  await supabase.from("users_profile").update({ mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
+  await scrieCampuriMfa(user.id, { mfa_otp: null, mfa_otp_expires_at: null });
   const cookieStore = await cookies();
   cookieStore.delete("mfa_pending");
   revalidatePath("/", "layout");
@@ -180,7 +201,7 @@ export async function sendMfaOtp(): Promise<{ error: string } | { success: true 
   if (!lim.permis) return { error: mesajLimita(lim, "Prea multe coduri cerute. Incearca mai tarziu.") };
 
   const { otp, otpHash, expiresAt } = generateOtp();
-  await supabase.from("users_profile").update({ mfa_otp: otpHash, mfa_otp_expires_at: expiresAt }).eq("id", user.id);
+  await scrieCampuriMfa(user.id, { mfa_otp: otpHash, mfa_otp_expires_at: expiresAt });
   await sendMfaOtpEmail(user.email, otp);
   return { success: true };
 }
@@ -200,7 +221,7 @@ export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: st
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
   await reseteazaLimita(`mfa:${user.id}`);
-  await supabase.from("users_profile").update({ mfa_email_enabled: true, mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
+  await scrieCampuriMfa(user.id, { mfa_email_enabled: true, mfa_otp: null, mfa_otp_expires_at: null });
   return { success: true };
 }
 
@@ -219,7 +240,7 @@ export async function verifyAndDisableMfaEmail(code: string): Promise<{ error: s
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
   await reseteazaLimita(`mfa:${user.id}`);
-  await supabase.from("users_profile").update({ mfa_email_enabled: false, mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
+  await scrieCampuriMfa(user.id, { mfa_email_enabled: false, mfa_otp: null, mfa_otp_expires_at: null });
   return { success: true };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { OPTIUNI_TLD } from "@/lib/domains/preturi";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
@@ -91,11 +92,10 @@ function cleanDomainLabel(value: string): string {
 // registrar points the whole domain at Vercel instead of adding individual records.
 const VERCEL_NAMESERVERS = ["ns1.vercel-dns.com", "ns2.vercel-dns.com"];
 
-// Hardcoded TLD pricing (lei/an) — updated manually from reseller panel
-const TLD_OPTIONS = [
-  { tld: ".ro",  price: 60, label: ".ro" },
-  { tld: ".com", price: 99, label: ".com" },
-];
+// Preturile vin din sursa comuna cu serverul (lib/domains/preturi.ts). Cand
+// tabelul traia doar aici, ruta de checkout calcula suma din `pricePerYear`
+// primit de la browser — deci afisajul si incasarea puteau spune lucruri diferite.
+const TLD_OPTIONS = OPTIUNI_TLD;
 
 const ORDER_STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; color: string }> = {
   pending:    { label: "In asteptare",  icon: Clock,        color: "bg-warning/10 text-warning border-warning/20" },

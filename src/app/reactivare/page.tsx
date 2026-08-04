@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getInactiveReason } from "@/lib/subscription";
 import { ReactivateClient } from "./ReactivateClient";
+import { esteAdminConfirmat } from "@/lib/admin-guard";
 
 export const metadata: Metadata = {
   title: "Reactiveaza-ti contul",
@@ -24,8 +25,8 @@ export default async function ReactivarePage({
     .eq("id", user.id)
     .single();
 
-  // Adminii nu sunt blocati niciodata.
-  if (profile?.role === "admin") redirect("/dashboard");
+  // Adminii nu sunt blocati niciodata — dar cere ambele surse de rol.
+  if (esteAdminConfirmat(user, profile?.role)) redirect("/dashboard");
 
   const { data: businesses } = await supabase
     .from("businesses")

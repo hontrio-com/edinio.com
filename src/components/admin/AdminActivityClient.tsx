@@ -33,6 +33,7 @@ const ACTION_LABELS: Record<string, string> = {
   "user.delete": "A sters contul",
   "user.edit": "A editat detaliile",
   "user.impersonate": "S-a conectat ca utilizator",
+  "user.impersonate_refuzat": "Impersonare refuzata (tinta e admin)",
   "user.notify": "A trimis notificare",
   "user.bulk_plan_change": "Schimbare plan in masa",
   "business.publish": "A publicat magazinul",

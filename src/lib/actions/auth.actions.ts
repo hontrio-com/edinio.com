@@ -199,6 +199,7 @@ export async function logout() {
   const cookieStore = await cookies();
   cookieStore.delete("mfa_pending");
   cookieStore.delete("onboarding_done");
+  cookieStore.delete("impersonare");
   revalidatePath("/", "layout");
   redirect("/login");
 }

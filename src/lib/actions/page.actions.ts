@@ -13,6 +13,7 @@ import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import type { MenuItem } from "@/lib/pages/menu";
 import { sendPageFormEmail } from "@/lib/email";
 import type { Database } from "@/types/database.types";
+import { esteAdminConfirmat } from "@/lib/admin-guard";
 
 type DB = SupabaseClient<Database>;
 
@@ -31,7 +32,7 @@ async function getUserAndBusiness(
   if (!biz) return null;
   const { data: profile } = await supabase
     .from("users_profile").select("role").eq("id", user.id).single();
-  return { userId: user.id, slug: biz.slug, isAdmin: profile?.role === "admin" };
+  return { userId: user.id, slug: biz.slug, isAdmin: esteAdminConfirmat(user, profile?.role) };
 }
 
 /** Unique page slug per business: "contact", "contact-2", ... */

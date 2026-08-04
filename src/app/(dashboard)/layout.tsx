@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/dashboard/Sidebar";
@@ -8,14 +9,18 @@ import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanner";
 import { getInactiveReason } from "@/lib/subscription";
+import { esteAdminConfirmat } from "@/lib/admin-guard";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
+import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
+
+  const esteImpersonare = (await cookies()).get("impersonare")?.value != null;
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
     supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at").eq("id", user.id).single(),
@@ -32,7 +37,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // SAU abonament platit neplatit (perioada de gratie expirata → magazin oprit).
   // Userul e trimis la /reactivare, unde poate plati; plata reactiveaza automat
   // accesul. Adminii sunt exceptati.
-  if (profile.role !== "admin") {
+  // Exceptarea cere AMBELE surse de rol (claim din JWT + coloana blocata), nu
+  // doar coloana: altfel „sunt admin" devenea si o cale de a sari peste plata.
+  if (!esteAdminConfirmat(user, profile.role)) {
     const inactive = getInactiveReason({
       plan: profile.plan,
       planExpiresAt: profile.plan_expires_at,
@@ -94,6 +101,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen bg-background">
       <ScrollToTop />
+      {esteImpersonare && <ImpersonationBanner />}
       <PlatformMetaPixel />
       <PlatformTikTokPixel />
       <Sidebar
@@ -102,7 +110,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         smsoEnabled={smsoEnabled}
         unreadSupportCount={unreadSupportCount}
         unreadReturnsCount={unreadReturnsCount}
-        isAdmin={profile.role === "admin"}
+        isAdmin={esteAdminConfirmat(user, profile.role)}
       />
       <div className="lg:pl-[var(--sidebar-width)]">
         {profile.plan === "free" && profile.plan_expires_at && (
@@ -121,11 +129,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
           currentBusiness={currentBusiness}
           smsoEnabled={smsoEnabled}
           unreadSupportCount={unreadSupportCount}
-          isAdmin={profile.role === "admin"}
+          isAdmin={esteAdminConfirmat(user, profile.role)}
         />
         <main className="min-h-screen pb-20 lg:pb-0">{children}</main>
       </div>
-      <BottomNav isAdmin={profile.role === "admin"} />
+      <BottomNav isAdmin={esteAdminConfirmat(user, profile.role)} />
     </div>
   );
 }

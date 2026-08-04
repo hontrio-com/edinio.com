@@ -70,6 +70,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   "user.delete": "Stergere cont",
   "user.edit": "Editare detalii",
   "user.impersonate": "Conectare ca utilizator",
+  "user.impersonate_refuzat": "Impersonare refuzata",
   "user.notify": "Notificare trimisa",
   "user.bulk_plan_change": "Schimbare plan in masa",
   "business.publish": "Publicare magazin",

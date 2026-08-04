@@ -99,17 +99,30 @@ export const BackgroundBeams = React.memo(({ className }: { className?: string }
                 y1: "0%",
                 y2: "0%",
               }}
+              /*
+               * Valorile se derivă din `index`, NU din `Math.random()`.
+               *
+               * Randarea unei componente se face de DOUA ori: o data pe server,
+               * o data in browser la hidratare. Cu `Math.random()` cele doua
+               * randari produceau numere diferite pentru aceeasi raza, deci
+               * marcajul trimis de server nu se potrivea cu ce astepta React —
+               * nepotrivire de hidratare, in productie, azi.
+               *
+               * Numerele prime (7, 11, 13) fac ca cele trei valori sa nu se
+               * repete in acelasi tipar: razele isi pastreaza aspectul
+               * neregulat, dar sunt aceleasi la fiecare randare.
+               */
               animate={{
                 x1: ["0%", "100%"],
                 x2: ["0%", "95%"],
                 y1: ["0%", "100%"],
-                y2: ["0%", `${93 + Math.random() * 8}%`],
+                y2: ["0%", `${93 + ((index * 7) % 8)}%`],
               }}
               transition={{
-                duration: Math.random() * 10 + 18,
+                duration: 18 + ((index * 11) % 10),
                 ease: "easeInOut",
                 repeat: Infinity,
-                delay: Math.random() * 2,
+                delay: ((index * 13) % 20) / 10,
               }}
             >
               {/* Green stripes (light theme) - saturated so they read on white */}

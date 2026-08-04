@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   GREUTATE_MINIMA_KG,
   GREUTATE_REZERVA_KG,
+  PRAG_API_CURIER,
+  greutatePentruCurier,
   greutateaColetului,
   idurileDeCantarit,
   liniileComenzii,
@@ -113,4 +115,50 @@ test("extraoptiunile nu se numara ca produse fara greutate", () => {
   const r = greutateaColetului(items, [{ id: "11111111-1111-4111-8111-111111111111", weight_grams: 500 }]);
   assert.equal(r.dinCatalog, true);
   assert.equal(r.liniiFaraGreutate, 0);
+});
+
+
+/**
+ * Pragul de VALIDARE al API-ului, distinct de cel de tarif.
+ *
+ * Cazul real: magazinul suporti-numar emisese 44 de AWB-uri Woot si s-a oprit
+ * brusc pe 3 august 2026, exact cand c253d85 a inlocuit greutatea fixa de 1 kg
+ * din formulare cu cea reala din catalog. Produsul lui cantareste 400 g, deci
+ * pleca `weight: 0.4`, iar Woot raspundea 400 cu:
+ *
+ *   {"error":{"parcels.0.weight":
+ *     "The parcels.0.weight field must contain a number greater than or equal to 1."}}
+ */
+test("Woot: 400 g — greutatea care a rupt emiterea — urca la 1 kg", () => {
+  assert.equal(greutatePentruCurier(0.4, "woot"), 1);
+});
+
+test("Woot: orice valoare subunitara urca la 1", () => {
+  for (const kg of [0.01, 0.1, 0.25, 0.999]) {
+    assert.equal(greutatePentruCurier(kg, "woot"), 1, `${kg} kg`);
+  }
+});
+
+test("Woot: greutatile reale de peste 1 kg NU se modifica", () => {
+  for (const kg of [1, 1.5, 7.79, 13.1]) {
+    assert.equal(greutatePentruCurier(kg, "woot"), kg, `${kg} kg`);
+  }
+});
+
+test("Woot: valorile imposibile cad pe prag, nu pe zero", () => {
+  assert.equal(greutatePentruCurier(0, "woot"), 1);
+  assert.equal(greutatePentruCurier(-3, "woot"), 1);
+  assert.equal(greutatePentruCurier(Number.NaN, "woot"), 1);
+});
+
+test("pragul de tarif si cel de validare raman lucruri diferite", () => {
+  // 0,1 e ales dupa benzile de tarif; 1 e cerinta API a lui Woot.
+  assert.equal(GREUTATE_MINIMA_KG, 0.1);
+  assert.equal(PRAG_API_CURIER.woot, 1);
+  assert.ok(PRAG_API_CURIER.woot > GREUTATE_MINIMA_KG);
+});
+
+test("ridicarea la 1 kg nu sare in alta banda de tarif", () => {
+  // 0-1 kg e prima banda la toti curierii interni: 0,4 si 1 costa la fel.
+  assert.ok(greutatePentruCurier(0.4, "woot") <= 1);
 });

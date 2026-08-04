@@ -139,9 +139,21 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
     const raw = await res.text().catch(() => "");
     let detail = "";
     try {
-      const parsed = JSON.parse(raw) as { message?: string; error?: string; errors?: unknown };
+      const parsed = JSON.parse(raw) as { message?: string; error?: unknown; errors?: unknown };
       if (typeof parsed.message === "string") detail = parsed.message;
       else if (typeof parsed.error === "string") detail = parsed.error;
+      else if (parsed.error && typeof parsed.error === "object") {
+        /*
+         * Woot mai raspunde si cu `error` ca OBIECT camp -> motiv, nu ca sir:
+         *   {"error":{"parcels.0.weight":"...must be >= 1"}}
+         * Varianta de dinainte verifica doar `typeof error === "string"`, deci
+         * pe forma asta `detail` ramanea gol si comerciantul vedea un sec
+         * „Woot API error 400". Exact asa s-a ascuns o zi cauza reala.
+         */
+        detail = Object.entries(parsed.error as Record<string, unknown>)
+          .map(([camp, motiv]) => `${camp}: ${Array.isArray(motiv) ? motiv.join(", ") : String(motiv)}`)
+          .join("; ");
+      }
       if (parsed.errors) {
         const msgs: string[] = [];
         if (Array.isArray(parsed.errors)) {

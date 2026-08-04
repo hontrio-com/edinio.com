@@ -43,6 +43,41 @@ export const GREUTATE_REZERVA_KG = 1;
 export const GREUTATE_MINIMA_KG = 0.1;
 
 /**
+ * Pragul de mai sus e ales dupa BENZILE DE TARIF. Unele API-uri au insa propriul
+ * lor prag de VALIDARE, iar acela respinge cererea cu totul.
+ *
+ * Woot: `>= 1`. Aflat pe teren, 04.08.2026 — magazinul suporti-numar emisese 44
+ * de AWB-uri Woot si s-a oprit brusc pe 3 august, exact cand c253d85 a inlocuit
+ * `useState("1")` din formulare cu greutatea reala din catalog. Produsul lui
+ * cantareste 400 g, deci pleca `weight: 0.4`, iar Woot raspundea:
+ *
+ *   {"error":{"parcels.0.weight":
+ *     "The parcels.0.weight field must contain a number greater than or equal to 1."}}
+ *
+ * Ridicarea la 1 kg NU scumpeste nimic: 0-1 kg e prima banda de tarif la toti
+ * curierii interni, deci un colet de 0,4 kg si unul de 1 kg costa la fel.
+ *
+ * Restul curierilor NU au aici un prag inventat: pentru ei nu avem nicio dovada
+ * ca ar refuza valori subunitare, iar o cifra umflata fara motiv ar putea sari
+ * intr-o banda superioara la un curier cu alta grila. Se completeaza cand apare
+ * dovada, la fel ca la Woot.
+ */
+export const PRAG_API_CURIER = {
+  woot: 1,
+} as const;
+
+/**
+ * Greutatea gata de trimis catre un anumit curier: valoarea reala, ridicata la
+ * pragul de validare al API-ului lui, daca acesta exista.
+ */
+export function greutatePentruCurier(kg: number, curier: keyof typeof PRAG_API_CURIER): number {
+  const valoare = Number(kg);
+  const minim = PRAG_API_CURIER[curier];
+  if (!Number.isFinite(valoare) || valoare <= 0) return minim;
+  return Math.max(valoare, minim);
+}
+
+/**
  * `orders.items` tine si linii care nu sunt produse: optiunile de comanda au
  * `product_id` de forma `extra_ext_1781723399523` (3 linii in productie). Trimis
  * intr-un `in("id", ...)` pe o coloana `uuid`, Postgres raspunde 22P02, iar

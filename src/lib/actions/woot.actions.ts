@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { stripDiacritics } from "@/lib/utils/ro-address";
+import { greutatePentruCurier } from "@/lib/shipping/awb-weight";
 import {
   getWootToken, getPrices, createOrder, cancelWootOrder,
   getAccountInfo, getCredit, getLocations, wootPhone,
@@ -133,7 +134,7 @@ export async function getWootPrices(
     const prices = await getPrices(token, {
       sender,
       receiver: { company: 0, ...receiverPentruWoot(receiver), phone: wootPhone(receiver.phone) },
-      parcels: parcels.map((c) => ({ ...c, content: textPentruWoot(c.content) })),
+      parcels: coletePentruWoot(parcels),
       repayment: repayment && repayment > 0 ? repayment : undefined,
       insurance,
     });
@@ -234,7 +235,7 @@ export async function createWootAwb(
         phone: wootPhone(receiver.phone),
         ...(receiverLocationId ? { location_id: receiverLocationId } : {}),
       },
-      parcels: parcels.map((c) => ({ ...c, content: textPentruWoot(c.content) })),
+      parcels: coletePentruWoot(parcels),
       repayment: repayment && repayment > 0 ? repayment : undefined,
       insurance,
       options,
@@ -334,6 +335,19 @@ async function resolveInsurance(
  */
 function textPentruWoot(v: string | null | undefined): string {
   return stripDiacritics((v ?? "").trim());
+}
+
+
+/**
+ * Coletele, gata de trimis la Woot: text fara diacritice si greutatea ridicata
+ * la pragul de validare al lor (>= 1 kg). Vezi `PRAG_API_CURIER` pentru dovada.
+ */
+function coletePentruWoot(parcels: WootParcel[]): WootParcel[] {
+  return parcels.map((c) => ({
+    ...c,
+    content: textPentruWoot(c.content),
+    ...(c.weight !== undefined ? { weight: greutatePentruCurier(c.weight, "woot") } : {}),
+  }));
 }
 
 /** Aceleasi reguli aplicate destinatarului trimis de modal. */

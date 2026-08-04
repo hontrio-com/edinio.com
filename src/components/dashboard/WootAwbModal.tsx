@@ -6,6 +6,33 @@ import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations, getWootReceiverLocations } from "@/lib/actions/woot.actions";
 import type { WootPriceResult, WootParcel, WootCounty, WootCity, WootLocation } from "@/lib/woot";
+import { stripDiacritics } from "@/lib/utils/ro-address";
+
+/**
+ * Potrivire de localitate intre comanda si nomenclatorul Woot.
+ *
+ * Compararea de dinainte era `a.toLowerCase().includes(b.toLowerCase())` pe text
+ * BRUT, si pica pe doua lucruri deodata:
+ *
+ *  1. diacriticele — comanda are "Comanesti" scris cu ș U+0219 (virgula
+ *     dedesubt), iar nomenclatoarele romanesti folosesc adesea ş U+015F
+ *     (sedila). Sunt caractere DIFERITE, deci `includes` da false in ambele
+ *     sensuri si orasul nu se preselecta;
+ *  2. `includes` in sine — "Bacau" se potrivea si cu "Bacau Nou".
+ *
+ * Acum: fara diacritice (helperul trateaza si ș, si ş), potrivire EXACTA intai,
+ * si abia daca nu exista una exacta acceptam un prefix.
+ */
+function potrivesteLocalitate<T extends { id: number; name: string }>(
+  lista: T[],
+  numeDinComanda: string,
+): T | undefined {
+  const cautat = stripDiacritics(numeDinComanda).trim().toLowerCase();
+  if (!cautat) return undefined;
+  const norm = (v: string) => stripDiacritics(v).trim().toLowerCase();
+  return lista.find((x) => norm(x.name) === cautat)
+      ?? lista.find((x) => norm(x.name).startsWith(cautat) || cautat.startsWith(norm(x.name)));
+}
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
@@ -110,11 +137,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
       .then((data: WootCounty[]) => {
         setCounties(data);
         // Auto-match county by name
-        const orderCounty = addr.county ?? "";
-        const match = data.find(c =>
-          c.name.toLowerCase().includes(orderCounty.toLowerCase()) ||
-          orderCounty.toLowerCase().includes(c.name.toLowerCase())
-        );
+        const match = potrivesteLocalitate(data, addr.county ?? "");
         if (match) setCountyId(match.id);
       })
       .catch(() => {});
@@ -130,11 +153,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
         setCities(data);
         setLoadingCities(false);
         // Auto-match city
-        const orderCity = addr.city ?? "";
-        const match = data.find(c =>
-          c.name.toLowerCase().includes(orderCity.toLowerCase()) ||
-          orderCity.toLowerCase().includes(c.name.toLowerCase())
-        );
+        const match = potrivesteLocalitate(data, addr.city ?? "");
         if (match) setCityId(match.id);
       })
       .catch(() => setLoadingCities(false));

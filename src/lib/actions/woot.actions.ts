@@ -4,6 +4,7 @@ import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { stripDiacritics } from "@/lib/utils/ro-address";
 import {
   getWootToken, getPrices, createOrder, cancelWootOrder,
   getAccountInfo, getCredit, getLocations, wootPhone,
@@ -131,8 +132,8 @@ export async function getWootPrices(
     const insurance = orderId ? await resolveInsurance(config, businessId, orderId) : undefined;
     const prices = await getPrices(token, {
       sender,
-      receiver: { company: 0, ...receiver, phone: wootPhone(receiver.phone) },
-      parcels,
+      receiver: { company: 0, ...receiverPentruWoot(receiver), phone: wootPhone(receiver.phone) },
+      parcels: parcels.map((c) => ({ ...c, content: textPentruWoot(c.content) })),
       repayment: repayment && repayment > 0 ? repayment : undefined,
       insurance,
     });
@@ -229,11 +230,11 @@ export async function createWootAwb(
       sender: buildSender(config, senderLocationId),
       receiver: {
         company: 0,
-        ...receiver,
+        ...receiverPentruWoot(receiver),
         phone: wootPhone(receiver.phone),
         ...(receiverLocationId ? { location_id: receiverLocationId } : {}),
       },
-      parcels,
+      parcels: parcels.map((c) => ({ ...c, content: textPentruWoot(c.content) })),
       repayment: repayment && repayment > 0 ? repayment : undefined,
       insurance,
       options,
@@ -317,18 +318,41 @@ async function resolveInsurance(
   return value > 0 ? Math.round(value * 100) / 100 : undefined;
 }
 
+
+/**
+ * Woot refuza campurile de text cu diacritice romanesti.
+ *
+ * Dovada, doua comenzi identice de la acelasi magazin, acelasi produs, aceeasi
+ * greutate: #0074 catre "Bl 44 Sc A str Republicii" (numai ASCII) a primit AWB;
+ * #0075 catre "Garii 98" (cu ă) a primit `Woot API error 400`. Woot raspunde 400
+ * FARA sa spuna de ce, deci eroarea nu ajuta cu nimic.
+ *
+ * Toti ceilalti curieri din proiect (FAN, Sameday, Cargus, DPD) normalizeaza deja
+ * prin `stripDiacritics` — Woot era singurul care trimitea textul brut. Exceptia
+ * cunoscuta e Colete Online, care dimpotriva CERE diacritice; de aceea
+ * normalizarea sta aici, pe calea Woot, nu intr-un loc comun.
+ */
+function textPentruWoot(v: string | null | undefined): string {
+  return stripDiacritics((v ?? "").trim());
+}
+
+/** Aceleasi reguli aplicate destinatarului trimis de modal. */
+function receiverPentruWoot<T extends { contact: string; address: string; email?: string }>(r: T): T {
+  return { ...r, contact: textPentruWoot(r.contact), address: textPentruWoot(r.address) };
+}
+
 function buildSender(config: WootConfig, locationId?: number): object {
   return {
     company: config.sender.company,
     ...(config.sender.company === 1 && config.sender.company_name
-      ? { company_name: config.sender.company_name }
+      ? { company_name: textPentruWoot(config.sender.company_name) }
       : {}),
-    contact: config.sender.contact,
+    contact: textPentruWoot(config.sender.contact),
     phone: wootPhone(config.sender.phone),
     email: config.sender.email,
     country_id: 189,
     city_id: config.sender.city_id,
-    address: config.sender.address,
+    address: textPentruWoot(config.sender.address),
     ...(config.sender.zipcode ? { zipcode: config.sender.zipcode } : {}),
     // Drop-off ("predare la locker") services: id of a Woot location from
     // GET /general/locations (only sent at AWB creation, never at pricing).

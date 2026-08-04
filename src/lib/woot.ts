@@ -158,6 +158,17 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
       // Non-JSON body (e.g. HTML error page) — keep a short snippet, skip markup.
       if (raw && !raw.trimStart().startsWith("<")) detail = raw.slice(0, 300);
     }
+    if (!detail) {
+      // Woot raspunde uneori 400 cu un corp din care nu iese niciun motiv, si
+      // atunci comerciantul vedea doar „Woot API error 400" — nediagnosticabil.
+      // Lasam in logurile serverului calea, statusul si inceputul corpului brut.
+      // NU logam payloadul: contine numele, telefonul si adresa clientului.
+      console.error("[woot] raspuns fara motiv", {
+        path,
+        status: res.status,
+        corp: raw.slice(0, 500),
+      });
+    }
     throw new Error(detail ? `Woot: ${detail}` : `Woot API error ${res.status}`);
   }
 

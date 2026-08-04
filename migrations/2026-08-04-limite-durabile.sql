@@ -141,3 +141,17 @@ $$;
 revoke execute on function public.curata_limite() from public, anon, authenticated;
 
 commit;
+
+-- ----------------------------------------------------------------------------
+-- OBLIGATORIU dupa orice GRANT/REVOKE pe coloane.
+--
+-- PostgREST tine in cache privilegiile pe coloane. Fara reincarcare, o cerere
+-- care numeste o coloana proaspat re-acordata poate fi respinsa desi in baza
+-- dreptul EXISTA — iar supabase-js intoarce `data: null` cu `error` setat, deci
+-- codul care nu verifica `error` vede pur si simplu „nu exista nimic".
+--
+-- Asa s-a rupt autentificarea cu MFA pe 04.08.2026: codul era scris in baza si
+-- valabil, dar citirea intorcea gol, iar utilizatorul primea „Codul a expirat".
+-- ----------------------------------------------------------------------------
+NOTIFY pgrst, 'reload schema';
+

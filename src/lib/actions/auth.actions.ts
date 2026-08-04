@@ -109,11 +109,24 @@ async function citesteCampuriMfa(userId: string): Promise<{
   onboarding_completed?: boolean | null;
 } | null> {
   const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
-  const { data } = await getAdmin()
+  const { data, error } = await getAdmin()
     .from("users_profile")
     .select("mfa_email_enabled, mfa_otp, mfa_otp_expires_at, onboarding_completed")
     .eq("id", userId)
     .single();
+
+  /*
+   * Eroarea NU se mai inghite.
+   *
+   * Varianta de dinainte facea `const { data } = ...` si returna `data ?? null`.
+   * Cand interogarea esua, apelantii vedeau `profile === null` si raspundeau
+   * „Codul a expirat" — un mesaj complet fals, care a costat o sesiune de
+   * diagnostic. Orice esec aici arata identic cu „nu exista niciun cod".
+   */
+  if (error) {
+    console.error("[mfa] citirea provocarii a esuat", { userId, cod: error.code, mesaj: error.message });
+    return null;
+  }
   return data ?? null;
 }
 
@@ -195,7 +208,8 @@ export async function verifyMfaLogin(code: string): Promise<{ error: string } | 
   const depasit = await limitaMfa(user.id);
   if (depasit) return depasit;
 
-  if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Autentifica-te din nou." };
+  if (!profile) return { error: "Nu am putut verifica codul. Incearca din nou in cateva secunde." };
+  if (!profile.mfa_otp || !profile.mfa_otp_expires_at) return { error: "Codul a expirat. Autentifica-te din nou." };
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) {
     return { error: "Cod incorect sau expirat." };
   }
@@ -235,7 +249,8 @@ export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: st
   const depasit = await limitaMfa(user.id);
   if (depasit) return depasit;
 
-  if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Incearca din nou." };
+  if (!profile) return { error: "Nu am putut verifica codul. Incearca din nou in cateva secunde." };
+  if (!profile.mfa_otp || !profile.mfa_otp_expires_at) return { error: "Codul a expirat. Cere unul nou." };
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
   await reseteazaLimita(`mfa:${user.id}`);
@@ -253,7 +268,8 @@ export async function verifyAndDisableMfaEmail(code: string): Promise<{ error: s
   const depasit = await limitaMfa(user.id);
   if (depasit) return depasit;
 
-  if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Incearca din nou." };
+  if (!profile) return { error: "Nu am putut verifica codul. Incearca din nou in cateva secunde." };
+  if (!profile.mfa_otp || !profile.mfa_otp_expires_at) return { error: "Codul a expirat. Cere unul nou." };
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
   await reseteazaLimita(`mfa:${user.id}`);

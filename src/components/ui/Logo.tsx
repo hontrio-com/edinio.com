@@ -33,6 +33,7 @@ export function Logo({
   const content = (
     <>
       <Image
+              unoptimized
         src="/logo.png"
         alt="Edinio"
         width={finalIcon}

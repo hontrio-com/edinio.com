@@ -183,7 +183,7 @@ export function DemoSection() {
                     style={{ transform: `translateX(-${slide * 100}%)` }}>
                     {IMAGES.map((src, i) => (
                       <div key={i} className="relative w-full h-full flex-shrink-0">
-                        <Image src={src} alt={`Lampă ${i + 1}`} fill className="object-contain p-2" sizes="375px" />
+                        <Image unoptimized src={src} alt={`Lampă ${i + 1}`} fill className="object-contain p-2" sizes="375px" />
                       </div>
                     ))}
                   </div>
@@ -427,7 +427,7 @@ export function DemoSection() {
                                 className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl border-2 transition-all text-left"
                                 style={{ borderColor: selected ? COLOR : "#E5E7EB", background: selected ? `${COLOR}12` : "#fff" }}>
                                 <div className="w-9 h-9 rounded-lg overflow-hidden border border-gray-200 shrink-0 bg-gray-50">
-                                  <Image src={IMAGES[0]} alt="Produs demo magazin online" width={36} height={36} className="w-full h-full object-contain p-0.5" />
+                                  <Image unoptimized src={IMAGES[0]} alt="Produs demo magazin online" width={36} height={36} className="w-full h-full object-contain p-0.5" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-bold text-[10px] text-gray-900">

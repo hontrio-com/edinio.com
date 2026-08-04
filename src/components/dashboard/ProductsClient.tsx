@@ -369,7 +369,8 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "category" ? null : "category"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "category" && "border-primary ring-1 ring-primary/30")}><Tag className="h-3.5 w-3.5" /> Categorie</button>
             {olxConnected && (
               <button type="button" disabled={bulkBusy} onClick={publishSelectedToOlx} className={bulkBtn}>
-                <Image src="/integrations/olx.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 rounded-[3px]" /> Publica pe OLX
+                <Image
+              unoptimized src="/integrations/olx.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 rounded-[3px]" /> Publica pe OLX
               </button>
             )}
             <button type="button" disabled={bulkBusy} onClick={() => { setConfirmBulkDelete(true); setBulkPanel(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/20 bg-surface hover:bg-destructive/5 rounded-lg transition-colors disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Sterge</button>

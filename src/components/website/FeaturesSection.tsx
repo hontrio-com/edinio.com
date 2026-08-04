@@ -120,7 +120,8 @@ function IntegrationOrbit() {
 
       {/* Center - Edinio logo (static) */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center z-10">
-        <Image src="/logo.png" alt="Edinio" width={72} height={72} className="w-16 h-16 sm:w-20 sm:h-20 object-contain" />
+        <Image
+              unoptimized src="/logo.png" alt="Edinio" width={72} height={72} className="w-16 h-16 sm:w-20 sm:h-20 object-contain" />
       </div>
 
       {/* Subtle glow behind center */}
@@ -148,7 +149,7 @@ function IntegrationOrbit() {
                 className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white border border-border flex items-center justify-center p-2 shadow-md"
                 style={{ animation: "spin 80s linear infinite reverse" }}
               >
-                <Image
+                <Image unoptimized
                   src={icon.src}
                   alt={icon.alt}
                   width={28}
@@ -290,7 +291,7 @@ export function FeaturesSection() {
                     <div className="flex items-center justify-center gap-3 sm:gap-4">
                       {feature.images.map((img) => (
                         <div key={img.src} className="w-[42%] sm:max-w-[220px]">
-                          <Image
+                          <Image unoptimized
                             src={img.src}
                             alt={img.alt}
                             width={400}
@@ -303,7 +304,7 @@ export function FeaturesSection() {
                     </div>
                   ) : feature.image ? (
                     <div className={feature.imageClass ?? ""}>
-                      <Image
+                      <Image unoptimized
                         src={feature.image}
                         alt={feature.title}
                         width={600}

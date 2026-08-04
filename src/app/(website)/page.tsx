@@ -166,6 +166,7 @@ export default function LandingPage() {
         {/* Romania map background */}
         <div className="absolute inset-0 flex items-center justify-center opacity-[0.06] pointer-events-none">
           <Image
+              unoptimized
             src="/ro.svg"
             alt=""
             width={900}

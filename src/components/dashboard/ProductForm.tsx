@@ -819,7 +819,8 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
                 {olxPublishing
                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Image src="/integrations/olx.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                  : <Image
+              unoptimized src="/integrations/olx.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
                 Postează pe OLX
               </button>
             )}
@@ -828,7 +829,8 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
                 {tyPublishing
                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Image src="/integrations/trendyol.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                  : <Image
+              unoptimized src="/integrations/trendyol.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
                 Publică pe Trendyol
               </button>
             )}

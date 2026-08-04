@@ -78,7 +78,7 @@ export function HeroMockups({ className }: { className?: string }) {
                     : "w-[190px] sm:w-[210px] lg:w-[230px] shadow-xl shadow-black/10"
                 }`}
               >
-                <Image
+                <Image unoptimized
                   src={src}
                   alt={`Exemplu magazin online creat cu Edinio - ${i + 1}`}
                   width={440}

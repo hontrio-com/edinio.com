@@ -98,6 +98,7 @@ export async function Footer() {
               rel="noopener noreferrer"
             >
               <Image
+              unoptimized
                 src="/anpc-sal.avif"
                 alt="ANPC SAL"
                 width={180}
@@ -111,6 +112,7 @@ export async function Footer() {
               rel="noopener noreferrer"
             >
               <Image
+              unoptimized
                 src="/anpc-sol.avif"
                 alt="ANPC SOL"
                 width={180}

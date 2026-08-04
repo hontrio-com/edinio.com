@@ -115,11 +115,13 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
         <div className="flex items-center gap-3">
           <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
             className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
-            <Image src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
+            <Image
+              unoptimized src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
           </a>
           <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
             className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
-            <Image src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
+            <Image
+              unoptimized src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
           </a>
         </div>
       </div>

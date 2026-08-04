@@ -331,7 +331,8 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
               )}>
                 {isUser
                   ? <User className="h-4 w-4 text-primary" />
-                  : <Image src="/logo.png" alt="Edinio" width={20} height={20} className="rounded-full object-cover" />
+                  : <Image
+              unoptimized src="/logo.png" alt="Edinio" width={20} height={20} className="rounded-full object-cover" />
                 }
               </div>
 

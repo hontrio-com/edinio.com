@@ -67,8 +67,12 @@ async function requireOwnedSource(id: string) {
 
 function validUrl(raw: string): boolean {
   try {
-    const u = new URL(raw);
-    return u.protocol === "http:" || u.protocol === "https:";
+    // https OBLIGATORIU. `saveStockFeedSource` NU trece prin `safeFetchFile`,
+    // deci fara verificarea de aici un http:// se salva cu succes si abia cronul
+    // orar il refuza, umpland `consecutive_failures` pana la dezactivarea automata
+    // a sursei — cu comerciantul convins ca a salvat corect.
+    // TLS-ul e si ce inchide rebinding-ul DNS pe calea feed-urilor (vezi ssrf.ts).
+    return new URL(raw).protocol === "https:";
   } catch {
     return false;
   }
@@ -102,7 +106,7 @@ export interface ProbeResult {
 export async function probeStockFeedUrl(url: string): Promise<ProbeResult | { error: string }> {
   const owner = await requireOwner();
   if (!owner.ok) return { error: owner.error };
-  if (!validUrl(url)) return { error: "Adresa trebuie sa inceapa cu http sau https" };
+  if (!validUrl(url)) return { error: "Adresa trebuie sa fie https (http nu e acceptat)" };
 
   const fetched = await safeFetchFile(url);
   if ("error" in fetched) return { error: fetched.error };
@@ -138,7 +142,7 @@ export async function saveStockFeedSource(
   const owner = await requireOwner();
   if (!owner.ok) return { error: owner.error };
 
-  if (!validUrl(input.url)) return { error: "Adresa trebuie sa inceapa cu http sau https" };
+  if (!validUrl(input.url)) return { error: "Adresa trebuie sa fie https (http nu e acceptat)" };
   if (!input.mapping.identifier) return { error: "Alege coloana cu identificatorul produsului" };
   if (!input.mapping.stock && !(input.options.update_price && input.mapping.price)) {
     return { error: "Alege cel putin coloana de stoc" };

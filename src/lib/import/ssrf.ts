@@ -41,6 +41,32 @@ function isPrivateIp(ip: string): boolean {
   return true;
 }
 
+/**
+ * Doar porturile web.
+ *
+ * Fara asta, o gazda PUBLICA ostila putea trimite platforma sa bata la 6379,
+ * 11211 sau 5432 si sa deduca ce e deschis dupa felul in care esueaza cererea —
+ * scanare de porturi din IP-ul platformei, cu reputatia ei.
+ *
+ * Sirul gol e OBLIGATORIU in lista: `new URL("https://x/").port` este "",
+ * fiindca URL sterge portul implicit.
+ */
+const PORTURI_PERMISE = new Set(["", "80", "443", "8080", "8443"]);
+
+/**
+ * Poarta completa pentru o adresa: intai portul, apoi gazda.
+ *
+ * ATENTIE, verificat cu Node inainte de a modifica: NU curata parantezele din
+ * `u.hostname` pentru literalele IPv6. Par o scapare (`net.isIP("[::1]")` da 0,
+ * deci ramura respectiva pare moarta), dar tocmai ele trimit adresa pe drumul
+ * prin `dns.lookup`, care o intoarce in forma canonica (`::1`) — singura pe care
+ * `isPrivateIp` o recunoaste. Taiate, s-ar pierde normalizarea.
+ */
+async function assertAdresaPermisa(u: URL): Promise<void> {
+  if (!PORTURI_PERMISE.has(u.port)) throw new Error("blocked:port");
+  await assertPublicHost(u.hostname);
+}
+
 async function assertPublicHost(hostname: string): Promise<void> {
   const host = hostname.toLowerCase();
   if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) {
@@ -116,8 +142,20 @@ async function citesteCuPlafon(res: Response, maxOcteti: number): Promise<Buffer
 export async function safeFetchFile(rawUrl: string): Promise<FetchFileResult> {
   try {
     const u = new URL(rawUrl);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "Protocol invalid" };
-    await assertPublicHost(u.hostname);
+    /*
+     * DOAR https, pe calea feed-urilor de stoc.
+     *
+     * Inchide rebinding-ul DNS (TOCTOU): verificam IP-ul, apoi `fetch` rezolva
+     * numele A DOUA OARA, iar intre cele doua un DNS ostil poate raspunde alt IP.
+     * Cu TLS, certificatul e validat pe NUME, deci o adresa interna la care ne-ar
+     * redirecta rebinding-ul nu poate prezenta un certificat valid pentru gazda
+     * ceruta — conexiunea cade inainte sa trimitem sau sa primim ceva.
+     *
+     * Se aplica aici, nu si la `safeFetchImage`: imaginile de produs vin de la
+     * furnizori care inca servesc http, iar refuzul lor ar rupe importuri reale.
+     */
+    if (u.protocol !== "https:") return { error: "Adresa trebuie sa fie https" };
+    await assertAdresaPermisa(u);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -153,6 +191,7 @@ export async function safeFetchFile(rawUrl: string): Promise<FetchFileResult> {
       clearTimeout(timer);
     }
   } catch (e) {
+    if (e instanceof Error && e.message === "blocked:port") return { error: "Port interzis" };
     if (e instanceof Error && e.message.startsWith("blocked:")) return { error: "Adresa interzisa" };
     if (e instanceof Error && e.name === "AbortError") return { error: "Timeout" };
     return { error: "Descarcare esuata" };
@@ -164,7 +203,7 @@ export async function safeFetchImage(rawUrl: string): Promise<FetchImageResult> 
   try {
     const u = new URL(rawUrl);
     if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "Protocol invalid" };
-    await assertPublicHost(u.hostname);
+    await assertAdresaPermisa(u);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -191,6 +230,7 @@ export async function safeFetchImage(rawUrl: string): Promise<FetchImageResult> 
       clearTimeout(timer);
     }
   } catch (e) {
+    if (e instanceof Error && e.message === "blocked:port") return { error: "Port interzis" };
     if (e instanceof Error && e.message.startsWith("blocked:")) return { error: "Adresa interzisa" };
     if (e instanceof Error && e.name === "AbortError") return { error: "Timeout" };
     return { error: "Descarcare esuata" };

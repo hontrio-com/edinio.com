@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -294,6 +297,20 @@ export async function submitPageForm(input: {
     .map((f) => ({ label: String(f.label).slice(0, 120), value: String(f.value ?? "").slice(0, 5000) }));
   if (fields.length === 0) return { error: "Formular gol." };
 
+  /*
+   * Plafon PE IP. Pana acum singurul plafon era pe MAGAZIN (8 mesaje/minut), ceea
+   * ce se intorcea impotriva comerciantului: un atacator trimitea el cele 8
+   * mesaje si formularul devenea inutilizabil pentru clientii REALI — o negare de
+   * serviciu tintita, cu efort minim.
+   */
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`pageForm:${ip}`, 5, 60_000)) {
+    return { error: "Prea multe mesaje trimise. Te rugam asteapta un minut." };
+  }
+  if (!(await consumaLimita(`formular:ip:${ip}`, 60, 3600)).permis) {
+    return { error: "Prea multe mesaje trimise. Te rugam incearca mai tarziu." };
+  }
+
   const admin = createAdminClient();
 
   // Light burst limit: cap submissions per business in the last minute.
@@ -303,7 +320,16 @@ export async function submitPageForm(input: {
     .select("id", { count: "exact", head: true })
     .eq("business_id", input.businessId)
     .gte("created_at", since);
-  if ((count ?? 0) >= 8) return { error: "Prea multe mesaje. Incearca din nou peste un minut." };
+  /*
+   * Doua praguri, nu unul.
+   *
+   * DUR (60): opreste inundarea tabelei. Un magazin real nu-l atinge niciodata.
+   * MOALE (8): mesajul se SALVEAZA in continuare si comerciantul il vede in
+   * panou, dar nu mai pleaca emailuri. Asa, o rafala nu mai poate face mesajul
+   * unui client real sa DISPARA — ceea ce se intampla cu pragul unic de dinainte.
+   */
+  if ((count ?? 0) >= 60) return { error: "Prea multe mesaje. Incearca din nou peste un minut." };
+  const pesteRafala = (count ?? 0) >= 8;
 
   const { data: biz } = await admin
     .from("businesses")
@@ -389,7 +415,9 @@ export async function submitPageForm(input: {
   }
 
   // Email the merchant ONLY when they opted in. Recipient is server-trusted.
-  if (emailEnabled) {
+  // Peste pragul moale mesajul e deja salvat; nu mai trimitem si emailuri, ca o
+  // rafala sa nu inunde cutia postala a comerciantului.
+  if (emailEnabled && !pesteRafala) {
     try {
       let to = emailTo || biz.email?.trim() || "";
       if (!to) {

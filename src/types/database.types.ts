@@ -1676,6 +1676,7 @@ export type Database = {
           ipay_order_id: string | null
           items: Json
           klarna_order_id: string | null
+          klarna_session_id: string | null
           notes: string | null
           oblio_invoice_link: string | null
           oblio_invoice_number: string | null
@@ -1748,6 +1749,7 @@ export type Database = {
           ipay_order_id?: string | null
           items: Json
           klarna_order_id?: string | null
+          klarna_session_id?: string | null
           notes?: string | null
           oblio_invoice_link?: string | null
           oblio_invoice_number?: string | null
@@ -1820,6 +1822,7 @@ export type Database = {
           ipay_order_id?: string | null
           items?: Json
           klarna_order_id?: string | null
+          klarna_session_id?: string | null
           notes?: string | null
           oblio_invoice_link?: string | null
           oblio_invoice_number?: string | null

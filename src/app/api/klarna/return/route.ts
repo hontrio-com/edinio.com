@@ -41,6 +41,15 @@ export async function GET(request: NextRequest) {
   const fail = (motiv: string) =>
     NextResponse.redirect(new URL(`/${slug}/confirm?status=esuat&motiv=${encodeURIComponent(motiv)}&orderId=${order.id}`, baseUrl));
 
+  // Sesiunea trebuie sa fie CHIAR a acestei comenzi: `sid` vine din URL, iar fara
+  // verificarea asta un sid valid de la o comanda ieftina putea finaliza alta.
+  // Vezi comentariul din /api/klarna/start.
+  const sidPrimit = sp.get("sid");
+  if (order.klarna_session_id && sidPrimit && order.klarna_session_id !== sidPrimit) {
+    console.error("[klarna/return] sid nu apartine comenzii", { orderId, sid: sidPrimit });
+    return fail("Sesiune de plata invalida");
+  }
+
   // Already finalized (e.g. the callback got here first) — just show confirmation.
   if (order.payment_status === "paid") {
     return NextResponse.redirect(successUrl);

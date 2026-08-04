@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { getAccessToken } from "@/lib/google-merchant/oauth";
@@ -15,6 +16,20 @@ export async function POST(req: NextRequest) {
   const secret = process.env.GMC_WEBHOOK_SECRET;
   if (secret && req.nextUrl.searchParams.get("token") !== secret) {
     return NextResponse.json({ ok: true });
+  }
+  /*
+   * Cand secretul NU e setat, ruta ramane deschisa (abonamentele vechi de la
+   * Google n-au token in URL, iar inchiderea ei ar opri in tacere actualizarea
+   * starilor de produs). Nu o inchidem, dar ii marginim EFECTUL: paguba reala nu
+   * e integritatea — ruta doar reciteste starea unui produs de la Google — ci
+   * costul, fiindca fiecare apel inseamna un token OAuth si o cerere catre
+   * Merchant API. Cu plafon, o bucla nu mai poate arde cota nimanui.
+   */
+  if (!secret) {
+    console.warn("[gmc/webhook] GMC_WEBHOOK_SECRET nu e setat — ruta accepta notificari nesemnate");
+    if (!rateLimit(`gmc-webhook:${clientIp(req)}`, 60, 60_000)) {
+      return NextResponse.json({ ok: true });
+    }
   }
 
   let body: Record<string, unknown> = {};

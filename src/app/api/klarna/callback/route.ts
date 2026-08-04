@@ -34,6 +34,12 @@ async function handle(request: NextRequest) {
 
   // Nothing to do: unknown order, already paid, or Klarna not configured.
   if (!order || order.payment_status === "paid") return ok();
+
+  // Sesiunea trebuie sa fie CHIAR a acestei comenzi. Vezi /api/klarna/start.
+  if (order.klarna_session_id && order.klarna_session_id !== sid) {
+    console.error("[klarna/callback] sid nu apartine comenzii", { orderId, sid });
+    return ok();
+  }
   const cfg = settings?.klarna_config as KlarnaConfig | null;
   if (!klarnaReady(cfg)) return ok();
 

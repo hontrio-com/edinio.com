@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
   const { data: order } = await admin
     .from("orders")
-    .select("id, business_id, status, payment_status")
+    .select("id, business_id, status, payment_status, total, order_number")
     .eq("id", orderId)
     .single();
 
@@ -52,6 +52,33 @@ export async function POST(request: NextRequest) {
   }
 
   const { orderStatus, paymentStatus: newPaymentStatus } = resolveNetopiaStatus(paymentStatus);
+
+  /*
+   * SUMA. Semnatura dovedeste ca notificarea vine de la Netopia si e legata de
+   * ACEASTA comanda — dar nu spune nimic despre cat s-a incasat. Fara verificarea
+   * de mai jos, o plata partiala (sau una pornita pentru alt cos si soldata mai
+   * ieftin) marca oricum comanda drept „platita", declansa facturarea automata si
+   * o trecea in „confirmata". Comerciantul livra marfa pe bani mai putini.
+   *
+   * Comparam cu toleranta de un ban, ca sa nu cada pe rotunjiri, si acceptam si
+   * incasarile MAI MARI (Netopia poate adauga comisioane; un plus nu pagubeste
+   * comerciantul). Refuzam doar ce e sub total.
+   */
+  if (newPaymentStatus === "paid") {
+    const incasat = Number(payload.payment?.amount ?? payload.order?.amount);
+    const datorat = Number(order.total);
+
+    if (!Number.isFinite(incasat)) {
+      console.error("[netopia/notify] plata fara suma in payload", { orderId, ntpID: payload.payment?.ntpID });
+      return NextResponse.json({ errorCode: 1, errorMessage: "Missing amount" }, { status: 400 });
+    }
+    if (Number.isFinite(datorat) && incasat + 0.01 < datorat) {
+      console.error("[netopia/notify] suma incasata sub totalul comenzii — comanda NU se marcheaza platita", {
+        orderId, numar: order.order_number, incasat, datorat,
+      });
+      return NextResponse.json({ errorCode: 1, errorMessage: "Amount mismatch" }, { status: 400 });
+    }
+  }
 
   if (orderStatus || newPaymentStatus) {
     const update: Record<string, string> = { updated_at: new Date().toISOString() };
@@ -71,7 +98,10 @@ export async function POST(request: NextRequest) {
     if (orderStatus === "cancelled") {
       await admin.rpc("release_order_discount" as never, { p_order_id: orderId } as never);
     }
-    if (newPaymentStatus === "paid") {
+    // Anti-reluare: aceeasi notificare retrimisa nu mai declanseaza a doua oara
+    // sincronizarile si facturarea. Netopia REPETA notificarile pana primeste
+    // errorCode 0, iar o retea proasta produce usor duplicate.
+    if (newPaymentStatus === "paid" && order.payment_status !== "paid") {
       void maybeMarkMailchimpOrderPaid(orderId);
       void maybeMarkBrevoOrderPaid(orderId);
       // Facturarea automata, daca magazinul o are pe „Platita" sau pe starea in

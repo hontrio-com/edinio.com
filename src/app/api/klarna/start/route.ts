@@ -50,6 +50,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: session.error || "Eroare la initierea platii Klarna." }, { status: 500 });
   }
 
+  /*
+   * Legam sesiunea Klarna de ACEASTA comanda.
+   *
+   * `sid` din URL-urile de mai jos e completat de Klarna si ajunge inapoi la noi
+   * in callback si in ruta de retur. Fara sa fi retinut care sesiune apartine
+   * carei comenzi, cele doua rute acceptau ORICE sid valid: cine platea o comanda
+   * ieftina putea refolosi acelasi sid cu `orderId` schimbat, ca sa marcheze
+   * platita o comanda scumpa.
+   */
+  await admin
+    .from("orders")
+    .update({ klarna_session_id: session.data.session_id })
+    .eq("id", orderId)
+    .eq("business_id", businessId);
+
   const q = `orderId=${encodeURIComponent(orderId)}&businessId=${encodeURIComponent(businessId)}`;
   const failUrl = `${baseUrl}/${slug}/confirm?status=esuat&orderId=${encodeURIComponent(orderId)}`;
   const hpp = await createHppSession(cfg!, session.data.session_id, {

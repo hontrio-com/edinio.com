@@ -400,7 +400,11 @@ export async function bulkUpdateOrderStatus(
      * RPC-ul e idempotent: marcajul si contorul se ating in aceeasi instructiune.
      */
     if (status === "cancelled" || status === "refunded") {
-      void admin.rpc("release_order_discount" as never, { p_order_id: row.id } as never);
+      // `await`, nu `void`: constructorul de cereri al lui postgrest-js e LENES —
+      // cererea se compune si pleaca abia in `then()`. Cu `void`, apelul nu iese
+      // niciodata din proces, deci eliberarea n-ar fi rulat deloc, tacut. Singurul
+      // loc din tot `src/` cu tiparul asta.
+      await admin.rpc("release_order_discount" as never, { p_order_id: row.id } as never);
     }
   }
   revalidatePath("/dashboard/orders");

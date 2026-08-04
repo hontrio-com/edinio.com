@@ -892,12 +892,23 @@ export async function placeOrder(data: {
    * care il vaneaza tot auditul. Se scrie in jurnal, ca sa se poata masura cat
    * costa cu adevarat inainte de a alege o garda mai dura.
    */
+  /*
+   * Se compara MARFA cu MARFA, nu marfa cu totalul.
+   *
+   * Amandoua formularele cer cotatia cu suma marfii, nu cu totalul: `OrderModal`
+   * trimite subtotalul, iar checkout-ul totalul cosului, care nu contine
+   * transportul. Comparat cu totalul final, pragul s-ar fi aprins pe aproape orice
+   * comanda cu transport platit — 49 din 51 de comenzi ramburs din ultimele 30 de
+   * zile — si jurnalul ar fi masurat propria noastra nepotrivire de unitati in loc
+   * de subdeclarare.
+   */
+  const marfaIncasata = round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount);
   if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
-      && total - round2(Number(data.cod_declarat)) > 1) {
+      && marfaIncasata - round2(Number(data.cod_declarat)) > 1) {
     logError({
       action: "placeOrder.rambursSubdeclarat",
-      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, comanda incaseaza ${total.toFixed(2)}`,
-      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), total: round2(total) },
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, total: round2(total) },
       severity: "warning",
     });
   }
@@ -2410,12 +2421,23 @@ export async function placeCartOrder(data: {
    * care il vaneaza tot auditul. Se scrie in jurnal, ca sa se poata masura cat
    * costa cu adevarat inainte de a alege o garda mai dura.
    */
+  /*
+   * Se compara MARFA cu MARFA, nu marfa cu totalul.
+   *
+   * Amandoua formularele cer cotatia cu suma marfii, nu cu totalul: `OrderModal`
+   * trimite subtotalul, iar checkout-ul totalul cosului, care nu contine
+   * transportul. Comparat cu totalul final, pragul s-ar fi aprins pe aproape orice
+   * comanda cu transport platit — 49 din 51 de comenzi ramburs din ultimele 30 de
+   * zile — si jurnalul ar fi masurat propria noastra nepotrivire de unitati in loc
+   * de subdeclarare.
+   */
+  const marfaIncasata = round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount);
   if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
-      && total - round2(Number(data.cod_declarat)) > 1) {
+      && marfaIncasata - round2(Number(data.cod_declarat)) > 1) {
     logError({
       action: "placeCartOrder.rambursSubdeclarat",
-      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, comanda incaseaza ${total.toFixed(2)}`,
-      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), total: round2(total) },
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, total: round2(total) },
       severity: "warning",
     });
   }

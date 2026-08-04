@@ -42,7 +42,7 @@ declare
   r record;
 begin
   for r in
-    select b.id,
+    select b.id, b.business_id,
            b.page_sections->'bundle' as cfg,
            b.page_sections->'bundle'->>'pricing_mode' as mod
     from public.products b
@@ -87,6 +87,16 @@ begin
           updated_at = now()
       where id = r.id
         and (price is distinct from v_pret or compare_at_price is distinct from round(v_suma, 2));
+
+      -- Pretul schimbat in baza trebuie sa ajunga si in feeduri, altfel Google
+      -- ramane pe cel vechi — exact divergenta pagina-vs-feed pe care o inchide
+      -- constatarea 19. Cronul citeste STRICT din coada (nu re-sincronizeaza tot),
+      -- deci pachetul se pune aici. `found` = s-a scris ceva mai sus.
+      if found then
+        insert into public.gmc_sync_queue (business_id, product_id, offer_id, op)
+        values (r.business_id, r.id, r.id, 'upsert')
+        on conflict (business_id, offer_id, op) do nothing;
+      end if;
     end;
   end loop;
 end;

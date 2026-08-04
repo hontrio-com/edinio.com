@@ -480,6 +480,18 @@ export async function sendMigrationLeadToAdmin(data: {
   });
 }
 
+/**
+ * Subiect curatat pentru antetul `Subject:`.
+ *
+ * `data.subject` e scris integral de utilizator si intra direct in antet.
+ * Aceeasi clasa pe care proiectul a tratat-o deja la `fromLine`: un CR sau LF
+ * strecurat acolo inseamna injectie de anteturi de email. Taiem si lungimea, ca
+ * un subiect de 10.000 de caractere sa nu ajunga in antet.
+ */
+function subiectSigur(brut: string): string {
+  return (brut ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 180);
+}
+
 export async function sendNewSupportTicketToAdmin(data: {
   ticketId: string;
   subject: string;
@@ -543,7 +555,7 @@ export async function sendNewSupportTicketToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Suport] ${data.subject} — ${data.userEmail}`,
+    subject: `[Suport] ${subiectSigur(data.subject)} — ${data.userEmail}`,
     html: baseTemplate(content),
   });
 }
@@ -570,7 +582,7 @@ export async function sendSupportReplyToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Suport] RE: ${data.subject} — ${data.userEmail}`,
+    subject: `[Suport] RE: ${subiectSigur(data.subject)} — ${data.userEmail}`,
     html: baseTemplate(emailContent),
   });
 }

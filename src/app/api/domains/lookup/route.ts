@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import net from "net";
 
@@ -74,9 +76,23 @@ async function checkAvailability(
   }
 }
 
+/*
+ * Fiecare cerere deschide socket-uri WHOIS BRUTE catre ROTLD si Verisign, cate
+ * unul per TLD verificat. Fara plafon, un cont putea cauta in bucla si obtine
+ * blocarea platformei de catre registre (rate-limiting la ei inseamna IP-ul
+ * nostru, comun tuturor comerciantilor). Cache scurt in memorie: disponibilitatea
+ * unui domeniu nu se schimba de la o secunda la alta.
+ */
+const cacheWhois = new Map<string, { date: unknown; expira: number }>();
+const DURATA_CACHE_MS = 5 * 60 * 1000;
+
 export async function POST(req: NextRequest) {
   const user = await getCachedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!rateLimit(`whois:${user.id}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Prea multe cautari. Asteapta un minut." }, { status: 429 });
+  }
 
   const body = (await req.json()) as { searchTerm?: string };
   // Curata si aici: scoate un TLD tastat (.ro/.com) inainte de a elimina punctele,
@@ -90,6 +106,15 @@ export async function POST(req: NextRequest) {
   if (!searchTerm || searchTerm.length < 2) {
     return NextResponse.json({ error: "searchTerm prea scurt" }, { status: 400 });
   }
+
+  const dinCache = cacheWhois.get(searchTerm);
+  if (dinCache && dinCache.expira > Date.now()) {
+    return NextResponse.json(dinCache.date);
+  }
+  if (!(await consumaLimita(`whois:${user.id}`, 60, 3600)).permis) {
+    return NextResponse.json({ error: "Ai facut prea multe cautari. Incearca mai tarziu." }, { status: 429 });
+  }
+  if (cacheWhois.size > 500) cacheWhois.clear();
 
   const results = await Promise.all(
     TLDS.map((tld) => checkAvailability(searchTerm, tld))

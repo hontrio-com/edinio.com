@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { listAllAuthUsers } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -15,8 +16,9 @@ import {
 
 // Verify cron secret to prevent unauthorized calls
 function verifyCron(req: NextRequest): boolean {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  return secret === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 function hoursBetween(a: Date, b: Date): number {

@@ -1,6 +1,9 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday";
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
@@ -144,6 +147,21 @@ export async function getShippingOptions(
     subtotal?: number;
   },
 ): Promise<ShippingOptionSemnata[]> {
+  /*
+   * LIMITARE. Actiunea e publica (cumparatorul e anonim, deci ID-ul ei e in
+   * bundle-ul fiecarui magazin) si fiecare apel poate declansa cereri catre
+   * API-urile PLATITE ale curierilor, cu credentialele COMERCIANTULUI. Fara
+   * plafon, o bucla de curl consuma cota lui la Sameday/FAN/DPD/Cargus/Woot si
+   * ii poate opri livrarile reale. Plafon si pe IP, si pe magazin.
+   */
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`shipQuote:${ip}`, 20, 60_000)) return [];
+  const [limIp, limBiz] = await Promise.all([
+    consumaLimita(`ship:ip:${ip}`, 60, 600),
+    consumaLimita(`ship:biz:${businessId}`, 600, 600),
+  ]);
+  if (!limIp.permis || !limBiz.permis) return [];
+
   // Service role: anonymous customers trigger this; courier secrets are read
   // server-side only and never returned to the client (only computed prices are).
   const supabase = createAdminClient();
@@ -762,6 +780,16 @@ export async function getLockers(
   /** COD amount of the order — Cargus Ship & Go points individually accept or refuse ramburs. */
   codAmount?: number,
 ): Promise<LockerItem[]> {
+  // Aceeasi expunere ca la cotatii: apel public → API platit de curier, pe
+  // credentialele comerciantului. Vezi comentariul din getShippingOptions.
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`lockers:${ip}`, 10, 60_000)) return [];
+  const [limIp, limBiz] = await Promise.all([
+    consumaLimita(`lockers:ip:${ip}`, 30, 600),
+    consumaLimita(`lockers:biz:${businessId}`, 300, 600),
+  ]);
+  if (!limIp.permis || !limBiz.permis) return [];
+
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")

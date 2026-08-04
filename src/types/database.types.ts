@@ -761,6 +761,7 @@ export type Database = {
           email?: string | null
           external_id?: string | null
           id?: string
+          key?: string
           name?: string
           phone?: string | null
           postcode?: string | null
@@ -776,6 +777,7 @@ export type Database = {
           email?: string | null
           external_id?: string | null
           id?: string
+          key?: string
           name?: string
           phone?: string | null
           postcode?: string | null
@@ -1659,6 +1661,8 @@ export type Database = {
           customer_phone: string
           discount_amount: number
           discount_code: string | null
+          discount_id: string | null
+          discount_released_at: string | null
           dpd_awb_number: string | null
           dpd_shipment_id: number | null
           fan_courier_awb_number: string | null
@@ -1729,6 +1733,8 @@ export type Database = {
           customer_phone: string
           discount_amount?: number
           discount_code?: string | null
+          discount_id?: string | null
+          discount_released_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
           fan_courier_awb_number?: string | null
@@ -1799,6 +1805,8 @@ export type Database = {
           customer_phone?: string
           discount_amount?: number
           discount_code?: string | null
+          discount_id?: string | null
+          discount_released_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
           fan_courier_awb_number?: string | null
@@ -1857,6 +1865,13 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_discount_id_fkey"
+            columns: ["discount_id"]
+            isOneToOne: false
+            referencedRelation: "discounts"
             referencedColumns: ["id"]
           },
         ]
@@ -2154,6 +2169,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limits: {
+        Row: {
+          actualizat_la: string
+          blocat_pana: string | null
+          cheie: string
+          fereastra_start: string
+          lovituri: number
+        }
+        Insert: {
+          actualizat_la?: string
+          blocat_pana?: string | null
+          cheie: string
+          fereastra_start?: string
+          lovituri?: number
+        }
+        Update: {
+          actualizat_la?: string
+          blocat_pana?: string | null
+          cheie?: string
+          fereastra_start?: string
+          lovituri?: number
+        }
+        Relationships: []
       }
       recovery_optout: {
         Row: {
@@ -3105,11 +3144,49 @@ export type Database = {
         }
         Relationships: []
       }
+      zz_backup_preturi_bricosmart_20260804: {
+        Row: {
+          compare_at_price: number | null
+          id: string | null
+          luat_la: string | null
+          page_sections: Json | null
+          price: number | null
+        }
+        Insert: {
+          compare_at_price?: number | null
+          id?: string | null
+          luat_la?: string | null
+          page_sections?: Json | null
+          price?: number | null
+        }
+        Update: {
+          compare_at_price?: number | null
+          id?: string | null
+          luat_la?: string | null
+          page_sections?: Json | null
+          price?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      claim_discount_use: { Args: { p_discount_id: string }; Returns: boolean }
+      consuma_limita: {
+        Args: {
+          p_blocare_sec?: number
+          p_cheie: string
+          p_fereastra_sec: number
+          p_limita: number
+        }
+        Returns: {
+          blocat_pana: string
+          permis: boolean
+        }[]
+      }
+      curata_limite: { Args: never; Returns: number }
       customer_orders: {
         Args: {
           bid: string
@@ -3138,15 +3215,15 @@ export type Database = {
           sort_key?: string
         }
         Returns: {
-          address: string | null
+          address: string
           aov: number
-          city: string | null
-          county: string | null
-          email: string | null
-          first_order_at: string | null
+          city: string
+          county: string
+          email: string
+          first_order_at: string
           key: string
-          last_order_at: string | null
-          last_status: string | null
+          last_order_at: string
+          last_status: string
           name: string
           order_count: number
           paid_order_count: number
@@ -3169,6 +3246,10 @@ export type Database = {
         Returns: undefined
       }
       decrement_stock_batch: { Args: { p_items: Json }; Returns: undefined }
+      decrement_variant_stock_batch: {
+        Args: { p_items: Json }
+        Returns: undefined
+      }
       increment_discount_uses: {
         Args: { p_discount_id: string }
         Returns: undefined
@@ -3228,10 +3309,21 @@ export type Database = {
           status: string
         }[]
       }
+      reclaim_order_discount: { Args: { p_order_id: string }; Returns: string }
+      release_discount_use: {
+        Args: { p_discount_id: string }
+        Returns: undefined
+      }
+      release_order_discount: { Args: { p_order_id: string }; Returns: boolean }
+      repretuieste_pachetele_cu: {
+        Args: { p_component_id: string }
+        Returns: undefined
+      }
       reserve_payout_balance: {
         Args: { p_amount: number; p_user_id: string }
         Returns: undefined
       }
+      reseteaza_limita: { Args: { p_cheie: string }; Returns: undefined }
       site_analytics_breakdown: {
         Args: { bid: string; t_from: string }
         Returns: {

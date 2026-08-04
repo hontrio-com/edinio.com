@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { verificaDezabonare } from "@/lib/recovery-unsubscribe";
 
 // One-click email unsubscribe from abandoned-cart recovery messages. The link is
 // included in recovery emails as ?b=<businessId>&e=<email>. Idempotent: a duplicate
@@ -8,8 +9,16 @@ import type { Database } from "@/types/database.types";
 export async function GET(req: NextRequest) {
   const businessId = req.nextUrl.searchParams.get("b");
   const email = req.nextUrl.searchParams.get("e");
+  const semnatura = req.nextUrl.searchParams.get("s");
   if (!businessId || !email) {
     return new NextResponse("Link invalid.", { status: 400 });
+  }
+
+  // Linkul trebuie SEMNAT. Fara asta, oricine putea dezabona pe oricine de la
+  // orice magazin: `b` e public (apare in HTML-ul magazinului), `e` se ghiceste,
+  // iar scrierea se face cu service role, deci RLS nu opreste nimic.
+  if (!verificaDezabonare(businessId, email, semnatura)) {
+    return new NextResponse("Link invalid sau expirat.", { status: 403 });
   }
 
   const admin = createClient<Database>(

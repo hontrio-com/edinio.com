@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -44,7 +47,28 @@ export async function trackAbandonedCart(input: {
     const hasContact = (!!email && email.includes("@")) || (!!phone && phone.replace(/\D/g, "").length >= 6);
     if (!hasContact) return;
 
+    // LIMITARE. Actiunea asta e un endpoint PUBLIC (export dintr-un modul
+    // "use server", importat de componente client, deci ID-ul ei e in bundle-ul
+    // public al fiecarui magazin) care scrie cu service role si al carei rezultat
+    // este alimentat mai tarziu cronului de recuperare: emailuri si SMS-uri
+    // trimise pe banii comerciantului, catre adrese si numere alese de apelant.
+    // Fara plafon, oricine putea folosi orice magazin ca sursa de spam.
+    const ip = clientIpFromHeaders(await headers());
+    if (!rateLimit(`trackCart:${ip}`, 10, 60_000)) return;
+    const lim = await consumaLimita(`cart:ip:${ip}`, 30, 3600);
+    if (!lim.permis) return;
+
     const admin = createAdminClient();
+
+    // Plafon si PER MAGAZIN, ca o retea de IP-uri sa nu poata umple cosurile unui
+    // magazin anume (acelasi tipar ca in submitPageForm).
+    const deLa = new Date(Date.now() - 3_600_000).toISOString();
+    const { count: cosuriRecente } = await admin
+      .from("abandoned_carts")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", input.businessId)
+      .gte("created_at", deLa);
+    if ((cosuriRecente ?? 0) >= 200) return;
 
     // Respect the per-store opt-in flag.
     const { data: settings } = await admin

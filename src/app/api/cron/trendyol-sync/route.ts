@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
@@ -24,7 +25,9 @@ const ORDERS_OVERLAP_MS = 5 * 60 * 1000;
 const PENDING_STATUSES = ["pending", "created"];
 
 function verifyCron(req: NextRequest): boolean {
-  return req.headers.get("authorization")?.replace("Bearer ", "") === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 export async function GET(req: NextRequest) {

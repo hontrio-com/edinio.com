@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
+import { calculeazaTotal } from "@/lib/domains/preturi";
 
 interface DomainCheckoutBody {
   domain: string;
   tld: string;
   period: number;
-  pricePerYear: number;
+  /** Trimis de interfata, IGNORAT de server. Pretul se recalculeaza din lib/domains/preturi. */
+  pricePerYear?: number;
   businessId: string;
   contact: {
     entityType: "pf" | "pj";
@@ -32,10 +34,18 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
 
   const body = (await req.json()) as DomainCheckoutBody;
-  const { domain, tld, period, pricePerYear, businessId, contact } = body;
+  // `pricePerYear` din corpul cererii se IGNORA deliberat: pretul se recalculeaza
+  // pe server. Inainte ajungea direct in `unit_amount`, deci oricine intercepta
+  // cererea cumpara un domeniu .ro cu 1 leu in loc de 60.
+  const { domain, tld, period, businessId, contact } = body;
 
   if (!domain || !tld || !period || !businessId || !contact) {
     return NextResponse.json({ error: "Date incomplete" }, { status: 400 });
+  }
+
+  const pret = calculeazaTotal(tld, period);
+  if (!pret) {
+    return NextResponse.json({ error: "Extensie sau perioada invalida." }, { status: 400 });
   }
 
   // Verify ownership
@@ -50,7 +60,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
   }
 
-  const totalPrice = pricePerYear * period;
+  const totalPrice = pret.total;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
   const session = await stripe.checkout.sessions.create({
@@ -63,7 +73,7 @@ export async function POST(req: NextRequest) {
           unit_amount: totalPrice * 100, // Stripe uses cents
           product_data: {
             name: `Domeniu ${domain}`,
-            description: `Inregistrare domeniu ${domain} pentru ${period} ${period === 1 ? "an" : "ani"}`,
+            description: `Inregistrare domeniu ${domain} pentru ${pret.ani} ${pret.ani === 1 ? "an" : "ani"}`,
           },
         },
         quantity: 1,
@@ -78,8 +88,10 @@ export async function POST(req: NextRequest) {
       business_id: businessId,
       domain,
       tld,
-      period: String(period),
-      price_per_year: String(pricePerYear),
+      // Valorile RECALCULATE pe server, nu cele primite de la client: webhookul
+      // creeaza comanda de domeniu din aceste metadate.
+      period: String(pret.ani),
+      price_per_year: String(pret.peAn),
       total_price: String(totalPrice),
       contact: JSON.stringify(contact),
     },

@@ -290,7 +290,11 @@ export default async function SlugPage({ params, searchParams }: Props) {
   if (!isOwner && !isNonProductionHost(host)) {
     const ua = headersList.get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
-    supabase.from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
+    // Scriem cu SERVICE ROLE, nu cu clientul vizitatorului. Politica publica de
+    // INSERT (`with_check true`) a fost stearsa: permitea oricui cu cheia anon
+    // sa injecteze evenimente pentru ORICE magazin — statistici otravite si
+    // crestere necontrolata a bazei. Serverul stie deja ce magazin randeaza.
+    createAdminClient().from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
   }
 
   // One Product Store: render the chosen product's landing page as the homepage,

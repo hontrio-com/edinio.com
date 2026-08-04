@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dueSources } from "@/lib/import/stock-feed/sources";
 import { resumeStalledStockJobs, runSource } from "@/lib/import/stock-feed/runner";
@@ -29,7 +30,9 @@ const MAX_SOURCES = 5;
 const STALE_MS = 2 * 60 * 1000;
 
 function verifyCron(req: NextRequest): boolean {
-  return req.headers.get("authorization")?.replace("Bearer ", "") === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 export async function GET(req: NextRequest) {

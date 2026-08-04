@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
 
@@ -13,8 +14,9 @@ import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
  * webhook-ului. Ruleaza la 15 minute, ca `ipay-reconcile`.
  */
 function verifyCron(req: NextRequest): boolean {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  return secret === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 /** Fereastra implicita de reconciliere, in zile. */

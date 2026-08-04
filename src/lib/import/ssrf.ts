@@ -62,6 +62,51 @@ const MAX_TEXT_BYTES = 8 * 1024 * 1024; // 8MB / feed, cat si incarcarea manuala
 export type FetchFileResult = { buffer: Buffer } | { error: string };
 
 /**
+ * Citeste corpul raspunsului IN FLUX si rupe conexiunea in clipa in care se
+ * depaseste plafonul.
+ *
+ * DE CE nu `res.arrayBuffer()`: acela aduce TOT corpul in memorie si abia apoi
+ * se putea verifica dimensiunea. Un server ostil (feedul de stoc si importul de
+ * produse descarca adrese date de comerciant) putea raspunde fara
+ * `Content-Length`, cu `Transfer-Encoding: chunked`, si trimite octeti la
+ * nesfarsit — pana cadea functia. Sau ii putea trimite foarte incet, tinand-o
+ * ocupata pana la termenul platformei.
+ *
+ * Cronometrul de abandon NU se opreste aici: apelantul il stinge abia DUPA ce
+ * corpul a fost citit, tocmai ca termenul sa acopere si descarcarea, nu doar
+ * anteturile.
+ */
+async function citesteCuPlafon(res: Response, maxOcteti: number): Promise<Buffer | { error: string }> {
+  const declarat = res.headers.get("content-length");
+  if (declarat && Number(declarat) > maxOcteti) return { error: "Fisier prea mare" };
+
+  if (!res.body) return { error: "Raspuns gol" };
+
+  const reader = res.body.getReader();
+  const bucati: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      total += value.byteLength;
+      if (total > maxOcteti) {
+        await reader.cancel().catch(() => {});
+        return { error: "Fisier prea mare" };
+      }
+      bucati.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(bucati);
+}
+
+/**
  * Descarca un fisier tabelar (CSV sau XLSX) ca octeti bruti.
  *
  * Intoarce octeti, nu text, si asta e esential: un XLSX e o arhiva ZIP, iar citit
@@ -88,25 +133,25 @@ export async function safeFetchFile(rawUrl: string): Promise<FetchFileResult> {
         },
         cache: "no-store",
       });
+
+      if (!res.ok) return { error: `HTTP ${res.status}` };
+
+      const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+      if (contentType.startsWith("image/") || contentType.startsWith("video/")) {
+        return { error: "Adresa nu returneaza un fisier tabelar" };
+      }
+
+      const citit = await citesteCuPlafon(res, MAX_TEXT_BYTES);
+      if ("error" in citit) return citit;
+      if (citit.byteLength === 0) return { error: "Fisier gol" };
+
+      return { buffer: citit };
     } finally {
+      // Abia AICI, ca termenul sa acopere si descarcarea corpului, nu doar
+      // anteturile. Inainte se oprea imediat dupa `fetch`, deci un server care
+      // trimitea octeti la nesfarsit nu mai era intrerupt de nimic.
       clearTimeout(timer);
     }
-
-    if (!res.ok) return { error: `HTTP ${res.status}` };
-
-    const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    if (contentType.startsWith("image/") || contentType.startsWith("video/")) {
-      return { error: "Adresa nu returneaza un fisier tabelar" };
-    }
-
-    const declared = res.headers.get("content-length");
-    if (declared && Number(declared) > MAX_TEXT_BYTES) return { error: "Fisier prea mare" };
-
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength === 0) return { error: "Fisier gol" };
-    if (buffer.byteLength > MAX_TEXT_BYTES) return { error: "Fisier prea mare" };
-
-    return { buffer };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("blocked:")) return { error: "Adresa interzisa" };
     if (e instanceof Error && e.name === "AbortError") return { error: "Timeout" };
@@ -131,23 +176,20 @@ export async function safeFetchImage(rawUrl: string): Promise<FetchImageResult> 
         signal: controller.signal,
         headers: { "User-Agent": USER_AGENT, Accept: "image/*" },
       });
+
+      if (!res.ok) return { error: `HTTP ${res.status}` };
+
+      const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+      if (!contentType.startsWith("image/")) return { error: "Continut non-imagine" };
+
+      const citit = await citesteCuPlafon(res, MAX_BYTES);
+      if ("error" in citit) return { error: "Imagine prea mare" };
+      if (citit.byteLength === 0) return { error: "Imagine goala" };
+
+      return { buffer: citit, contentType };
     } finally {
       clearTimeout(timer);
     }
-
-    if (!res.ok) return { error: `HTTP ${res.status}` };
-
-    const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    if (!contentType.startsWith("image/")) return { error: "Continut non-imagine" };
-
-    const declared = res.headers.get("content-length");
-    if (declared && Number(declared) > MAX_BYTES) return { error: "Imagine prea mare" };
-
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength === 0) return { error: "Imagine goala" };
-    if (buffer.byteLength > MAX_BYTES) return { error: "Imagine prea mare" };
-
-    return { buffer, contentType };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("blocked:")) return { error: "Adresa interzisa" };
     if (e instanceof Error && e.name === "AbortError") return { error: "Timeout" };

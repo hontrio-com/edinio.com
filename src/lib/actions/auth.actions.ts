@@ -3,10 +3,44 @@
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { sendMfaOtpEmail, sendAccountWelcomeEmail } from "@/lib/email";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita, reseteazaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
+
+/**
+ * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
+ * `x-forwarded-for` e pus de Vercel in fata aplicatiei, deci primul element e
+ * de incredere in productie. Nu ne bazam DOAR pe el — la login limitam si pe
+ * adresa de email, tocmai pentru cazul in care atacatorul roteste IP-uri.
+ */
+async function ipApelant(): Promise<string> {
+  return clientIpFromHeaders(await headers());
+}
+
+/**
+ * Limitele de autentificare, intr-un singur loc.
+ *
+ * De ce sunt necesare aici, si nu ne bazam pe Supabase: `signInWithPassword` e
+ * apelat de pe SERVER (e Server Action), deci GoTrue vede IP-ul functiei Vercel,
+ * nu al atacatorului. Limitarea per-IP din Supabase e practic anulata — si, mai
+ * rau, daca se declanseaza ii loveste pe TOTI utilizatorii deodata.
+ */
+const LIMITE = {
+  // 8 incercari / 15 min per IP, apoi blocare 15 min.
+  loginIp:    { limita: 8,  fereastra: 900,  blocare: 900 },
+  // 5 incercari / 15 min pe ACELASI email, apoi blocare 30 min. Opreste atacul
+  // tintit pe un cont anume chiar daca atacatorul isi schimba IP-ul.
+  loginEmail: { limita: 5,  fereastra: 900,  blocare: 1800 },
+  // Inregistrarea trimite 2 emailuri Resend + confirmarea Supabase la fiecare apel.
+  register:   { limita: 3,  fereastra: 3600, blocare: 3600 },
+  // Resetarea trimite un email catre orice adresa data.
+  forgot:     { limita: 3,  fereastra: 3600, blocare: 3600 },
+  // Codul MFA are 6 cifre: fara plafon se ghiceste prin forta bruta.
+  mfa:        { limita: 5,  fereastra: 900,  blocare: 900 },
+} as const;
 
 function generateOtp(): { otp: string; otpHash: string; expiresAt: string } {
   const otp = crypto.randomInt(100000, 1000000).toString();
@@ -18,14 +52,49 @@ function generateOtp(): { otp: string; otpHash: string; expiresAt: string } {
 function verifyOtpHash(code: string, storedHash: string, expiresAt: string): boolean {
   if (new Date() > new Date(expiresAt)) return false;
   const hash = crypto.createHash("sha256").update(code).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(storedHash));
+  const a = Buffer.from(hash);
+  const b = Buffer.from(storedHash);
+  // `timingSafeEqual` ARUNCA daca lungimile difera. Un `mfa_otp` stricat sau
+  // gol in baza transforma o verificare esuata intr-o eroare 500 neprinsa.
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * Plafon pe incercarile de cod MFA.
+ *
+ * Codul are 6 cifre (1.000.000 de combinatii) si e valabil 10 minute. Fara
+ * plafon, un atacator care are deja parola poate ghici codul prin forta bruta
+ * — sesiunea e deja valida in acel punct, doar redirectarea il tine pe loc.
+ */
+async function limitaMfa(userId: string): Promise<{ error: string } | null> {
+  const lim = await consumaLimita(`mfa:${userId}`, LIMITE.mfa.limita, LIMITE.mfa.fereastra, LIMITE.mfa.blocare);
+  if (lim.permis) return null;
+  return { error: mesajLimita(lim, "Prea multe coduri gresite. Incearca din nou mai tarziu.") };
 }
 
 export async function login(formData: { email: string; password: string }) {
+  const ip = await ipApelant();
+  const email = formData.email.trim().toLowerCase();
+
+  // Prima linie, in memorie: taie rafalele fara sa atinga baza.
+  if (!rateLimit(`login:${ip}`, 12, 60_000)) {
+    return { error: "Prea multe incercari. Incearca din nou peste un minut." };
+  }
+
+  // A doua linie, durabila si globala. Limitam pe DOUA chei independente: IP-ul
+  // (opreste maturarea a multe conturi de la aceeasi sursa) si adresa de email
+  // (opreste atacul tintit pe un cont anume, chiar daca IP-ul se roteste).
+  const limIp = await consumaLimita(`login:ip:${ip}`, LIMITE.loginIp.limita, LIMITE.loginIp.fereastra, LIMITE.loginIp.blocare);
+  if (!limIp.permis) return { error: mesajLimita(limIp) };
+
+  const limEmail = await consumaLimita(`login:email:${email}`, LIMITE.loginEmail.limita, LIMITE.loginEmail.fereastra, LIMITE.loginEmail.blocare);
+  if (!limEmail.permis) return { error: mesajLimita(limEmail) };
+
   const supabase = await createClient();
 
   const { data: authData, error } = await supabase.auth.signInWithPassword({
-    email: formData.email,
+    email,
     password: formData.password,
   });
 
@@ -34,6 +103,13 @@ export async function login(formData: { email: string; password: string }) {
   }
 
   const user = authData.user;
+
+  // Autentificare reusita: stergem contoarele, ca utilizatorul legitim sa nu
+  // ramana pedepsit pentru incercarile esuate de dinainte.
+  await Promise.all([
+    reseteazaLimita(`login:ip:${ip}`),
+    reseteazaLimita(`login:email:${email}`),
+  ]);
 
   const { data: profile } = await supabase
     .from("users_profile")
@@ -76,11 +152,15 @@ export async function verifyMfaLogin(code: string): Promise<{ error: string } | 
     .eq("id", user.id)
     .single();
 
+  const depasit = await limitaMfa(user.id);
+  if (depasit) return depasit;
+
   if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Autentifica-te din nou." };
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) {
     return { error: "Cod incorect sau expirat." };
   }
 
+  await reseteazaLimita(`mfa:${user.id}`);
   await supabase.from("users_profile").update({ mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
   const cookieStore = await cookies();
   cookieStore.delete("mfa_pending");
@@ -94,6 +174,10 @@ export async function sendMfaOtp(): Promise<{ error: string } | { success: true 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user?.email) return { error: "Neautorizat" };
+
+  // Retrimiterea codului trimite un email de fiecare data.
+  const lim = await consumaLimita(`mfa-trimite:${user.id}`, 4, 900, 900);
+  if (!lim.permis) return { error: mesajLimita(lim, "Prea multe coduri cerute. Incearca mai tarziu.") };
 
   const { otp, otpHash, expiresAt } = generateOtp();
   await supabase.from("users_profile").update({ mfa_otp: otpHash, mfa_otp_expires_at: expiresAt }).eq("id", user.id);
@@ -109,9 +193,13 @@ export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: st
   const { data: profile } = await supabase
     .from("users_profile").select("mfa_otp, mfa_otp_expires_at").eq("id", user.id).single();
 
+  const depasit = await limitaMfa(user.id);
+  if (depasit) return depasit;
+
   if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Incearca din nou." };
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
+  await reseteazaLimita(`mfa:${user.id}`);
   await supabase.from("users_profile").update({ mfa_email_enabled: true, mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
   return { success: true };
 }
@@ -124,9 +212,13 @@ export async function verifyAndDisableMfaEmail(code: string): Promise<{ error: s
   const { data: profile } = await supabase
     .from("users_profile").select("mfa_otp, mfa_otp_expires_at").eq("id", user.id).single();
 
+  const depasit = await limitaMfa(user.id);
+  if (depasit) return depasit;
+
   if (!profile?.mfa_otp || !profile?.mfa_otp_expires_at) return { error: "Codul a expirat. Incearca din nou." };
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
+  await reseteazaLimita(`mfa:${user.id}`);
   await supabase.from("users_profile").update({ mfa_email_enabled: false, mfa_otp: null, mfa_otp_expires_at: null }).eq("id", user.id);
   return { success: true };
 }
@@ -136,6 +228,14 @@ export async function register(formData: {
   email: string;
   password: string;
 }) {
+  const ip = await ipApelant();
+
+  if (!rateLimit(`register:${ip}`, 5, 60_000)) {
+    return { error: "Prea multe incercari. Incearca din nou peste un minut." };
+  }
+  const lim = await consumaLimita(`register:ip:${ip}`, LIMITE.register.limita, LIMITE.register.fereastra, LIMITE.register.blocare);
+  if (!lim.permis) return { error: mesajLimita(lim, "Prea multe inregistrari de la aceasta adresa. Incearca mai tarziu.") };
+
   const supabase = await createClient();
 
   const { error } = await supabase.auth.signUp({
@@ -147,10 +247,13 @@ export async function register(formData: {
   });
 
   if (error) {
-    if (error.message.includes("already registered")) {
-      return { error: "Exista deja un cont cu aceasta adresa de email." };
-    }
-    return { error: "Inregistrarea a esuat. Incearca din nou." };
+    // Raspuns IDENTIC indiferent daca adresa exista sau nu. Mesajul de dinainte
+    // („Exista deja un cont...") transforma formularul intr-un oracol: un atacator
+    // putea verifica in masa care adrese sunt inregistrate pe platforma, ceea ce
+    // e prima etapa a oricarui atac cu parole reutilizate.
+    return {
+      error: "Nu am putut finaliza inregistrarea. Verifica datele si incearca din nou.",
+    };
   }
 
   // Send account welcome email + notify admin (fire-and-forget)
@@ -168,16 +271,32 @@ export async function register(formData: {
 }
 
 export async function forgotPassword(email: string) {
+  const ip = await ipApelant();
+  const adresa = email.trim().toLowerCase();
+
+  if (!rateLimit(`forgot:${ip}`, 5, 60_000)) {
+    // Raspuns de succes chiar si cand limitam: altfel diferenta de mesaj devine
+    // tot un oracol de enumerare.
+    return { success: true };
+  }
+
+  // Doua chei: IP-ul (bombardare de la o sursa) si adresa tinta (o singura
+  // victima inundata cu emailuri de resetare de la mai multe IP-uri).
+  const [limIp, limAdresa] = await Promise.all([
+    consumaLimita(`forgot:ip:${ip}`, LIMITE.forgot.limita, LIMITE.forgot.fereastra, LIMITE.forgot.blocare),
+    consumaLimita(`forgot:email:${adresa}`, LIMITE.forgot.limita, LIMITE.forgot.fereastra, LIMITE.forgot.blocare),
+  ]);
+  if (!limIp.permis || !limAdresa.permis) return { success: true };
+
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+  await supabase.auth.resetPasswordForEmail(adresa, {
     redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/reset-password`,
   });
 
-  if (error) {
-    return { error: "Nu am putut trimite email-ul de resetare. Incearca din nou." };
-  }
-
+  // Mereu acelasi raspuns, indiferent de rezultat: pagina afiseaza deja mesajul
+  // neutru „Daca exista un cont cu aceasta adresa...". Un mesaj de eroare
+  // diferentiat ar spune atacatorului care adrese sunt inregistrate.
   return { success: true };
 }
 

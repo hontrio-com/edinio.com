@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processImport } from "@/lib/import/committer";
 import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
@@ -30,7 +31,9 @@ const TERMINAL = ["completed", "completed_with_errors", "failed", "cancelled"];
 const PRODUCT_SOURCES = ["shopify_csv", "woo_csv", "generic_csv"];
 
 function verifyCron(req: NextRequest): boolean {
-  return req.headers.get("authorization")?.replace("Bearer ", "") === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 export async function GET(req: NextRequest) {

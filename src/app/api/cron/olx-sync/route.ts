@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
@@ -21,7 +22,9 @@ const MAX_ATTEMPTS = 5;
 const PACE_MS = 300;
 
 function verifyCron(req: NextRequest): boolean {
-  return req.headers.get("authorization")?.replace("Bearer ", "") === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 export async function GET(req: NextRequest) {

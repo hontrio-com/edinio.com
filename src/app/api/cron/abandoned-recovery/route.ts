@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { sendAbandonedCartRecovery } from "@/lib/email";
@@ -12,12 +13,14 @@ import {
   readAutomationConfig, isQuietHour, buildRecoverUrl, defaultRecoverySms, interpolateRecoveryMessage,
   ABANDON_MINUTES, cosRecuperabil, type AbandonedCartItem,
 } from "@/lib/abandoned-cart";
+import { urlDezabonare } from "@/lib/recovery-unsubscribe";
 
 type Admin = SupabaseClient<Database>;
 
 function verifyCron(req: NextRequest): boolean {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  return secret === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 // Advance a cart's automation pointer; record the send when a channel fired.
@@ -167,7 +170,7 @@ export async function GET(req: NextRequest) {
             color: biz.primary_color ?? "#1AB554",
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,
-            unsubscribeUrl: `${PLATFORM_ORIGIN}/api/recovery/unsubscribe?b=${store.businessId}&e=${encodeURIComponent(cart.email)}`,
+            unsubscribeUrl: urlDezabonare(PLATFORM_ORIGIN, store.businessId, cart.email),
           }, emailSender);
           await advance(admin, cart.id, cart, now, "email");
           sent++;

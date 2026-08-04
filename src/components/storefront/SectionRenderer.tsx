@@ -121,7 +121,7 @@ const HEROURI: Record<string, VariantaSectiune> = {
  * potrivire e chiar „classic", respectiv „dark"; hero-ul nu are asa ceva, toate
  * variantele lui sunt in lista.
  */
-function SectionOne({ section }: { section: SectionInstance }) {
+function SectionOne({ section, estePrima = false }: { section: SectionInstance; estePrima?: boolean }) {
   switch (section.kind) {
     case "announcement":
       return <AnnouncementMarquee />;
@@ -154,9 +154,9 @@ function SectionOne({ section }: { section: SectionInstance }) {
       // varianta: randul n-are catalog de design-uri, iar o varianta salvata ar
       // ingheta o alegere pe care comerciantul o schimba din alta parte.
       return section.settings.mode === "featured" ? (
-        <FeaturedRowClassic />
+        <FeaturedRowClassic prioritate={estePrima} />
       ) : (
-        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} />
+        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} prioritate={estePrima} />
       );
     case "product_grid":
       return <ProductGridClassic />;
@@ -184,12 +184,12 @@ function SectionOne({ section }: { section: SectionInstance }) {
  * si cu `display: contents` — ramane vizibil pentru selectori de tip copil
  * direct sau `:nth-child`, deci ar putea rupe o varianta de design.
  */
-function Marcata({ section }: { section: SectionInstance }) {
+function Marcata({ section, estePrima = false }: { section: SectionInstance; estePrima?: boolean }) {
   const { isPreview } = useStoreChrome();
-  if (!isPreview) return <SectionOne section={section} />;
+  if (!isPreview) return <SectionOne section={section} estePrima={estePrima} />;
   return (
     <div {...{ [SECTION_ATTR]: section.id }} className="contents">
-      <SectionOne section={section} />
+      <SectionOne section={section} estePrima={estePrima} />
     </div>
   );
 }
@@ -210,20 +210,27 @@ function Marcata({ section }: { section: SectionInstance }) {
  * de jos — adica exact ce produce reordonarea din editor.
  */
 export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
+  // Imaginile din PRIMA sectiune sunt candidatele pentru LCP („cel mai mare
+  // element vizibil"), metrica dupa care Google judeca viteza perceputa. Fara
+  // `priority`, `next/image` le incarca lenes: browserul le descopera abia dupa
+  // ce a parsat pagina, si LCP-ul intarzie cu sute de milisecunde. Marcam DOAR
+  // prima sectiune — incarcarea nerabdatoare a imaginilor de sub pliu ar fura
+  // latime de banda tocmai de la cea care conteaza.
+  const idPrimeiSectiuni = sections[0]?.id;
   return (
     <>
       {groupSections(sections).map((bloc) =>
         bloc.tip === "full" ? (
           <Fragment key={bloc.section.id}>
-            <Marcata section={bloc.section} />
+            <Marcata section={bloc.section} estePrima={bloc.section.id === idPrimeiSectiuni} />
           </Fragment>
         ) : bloc.esteMain ? (
           <main key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 py-10">
-            {bloc.sections.map((s) => <Marcata key={s.id} section={s} />)}
+            {bloc.sections.map((s) => <Marcata key={s.id} section={s} estePrima={s.id === idPrimeiSectiuni} />)}
           </main>
         ) : (
           <div key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 py-10">
-            {bloc.sections.map((s) => <Marcata key={s.id} section={s} />)}
+            {bloc.sections.map((s) => <Marcata key={s.id} section={s} estePrima={s.id === idPrimeiSectiuni} />)}
           </div>
         ),
       )}
@@ -246,6 +253,8 @@ export function ChromeSection({ section }: { section: SectionInstance | null }) 
  * miniatura nu mai arata designul, ci un design fara jumatate din asezarea lui.
  */
 export function PreviewSection({ section }: { section: SectionInstance }) {
+  // Miniatura din editor: fara `estePrima`. Sectiunea e aratata izolat, nu ca
+  // prima a unei pagini, deci n-ar avea ce imagine LCP sa grabeasca.
   if (sectionLayout(section) === "full") return <SectionOne section={section} />;
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">

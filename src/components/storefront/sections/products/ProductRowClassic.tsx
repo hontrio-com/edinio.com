@@ -18,10 +18,13 @@ export function ProductRowClassic({
   layout = "grid",
   onViewAll,
   headerGap = "gap-2",
+  prioritate = false,
 }: {
   title: string;
   items: StorefrontProduct[];
   layout?: "grid" | "carousel";
+  /** Prima sectiune a paginii: primele carduri isi incarca imaginea nerabdator. */
+  prioritate?: boolean;
   onViewAll?: () => void;
   /**
    * Spatierea din antet difera intre cele doua randuri de azi, din motive
@@ -51,16 +54,16 @@ export function ProductRowClassic({
 
       {layout === "carousel" ? (
         <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-hide">
-          {items.map((product) => (
+          {items.map((product, i) => (
             <div key={product.id} className="snap-start shrink-0 w-[44%] sm:w-[30%] lg:w-[23%]">
-              <StoreProductCard product={product} />
+              <StoreProductCard product={product} priority={prioritate && i < 4} />
             </div>
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-          {items.map((product) => (
-            <StoreProductCard key={product.id} product={product} />
+          {items.map((product, i) => (
+            <StoreProductCard key={product.id} product={product} priority={prioritate && i < 4} />
           ))}
         </div>
       )}
@@ -72,7 +75,7 @@ export function ProductRowClassic({
  * Sectiunea „Recomandate": produsele marcate ca populare, in grila.
  * Titlul e configurabil din editor.
  */
-export function FeaturedRowClassic() {
+export function FeaturedRowClassic({ prioritate = false }: { prioritate?: boolean }) {
   const { pageContent, featuredProducts } = useStorefront();
   if (pageContent.show_featured_section !== true) return null;
 
@@ -80,6 +83,7 @@ export function FeaturedRowClassic() {
     <ProductRowClassic
       title={pageContent.featured_section_title || "Recomandate"}
       items={featuredProducts}
+      prioritate={prioritate}
     />
   );
 }
@@ -92,7 +96,7 @@ export function FeaturedRowClassic() {
  * randurile fara produse sunt deja eliminate din context, deci lipsa lui aici
  * inseamna „nimic de afisat".
  */
-export function CustomProductRow({ sectionId }: { sectionId: string }) {
+export function CustomProductRow({ sectionId, prioritate = false }: { sectionId: string; prioritate?: boolean }) {
   const { productSections, viewAllCategory } = useStorefront();
   const rand = productSections.find((x) => x.section.id === sectionId);
   if (!rand) return null;
@@ -102,6 +106,7 @@ export function CustomProductRow({ sectionId }: { sectionId: string }) {
     <ProductRowClassic
       title={section.title || "Produse"}
       items={items}
+      prioritate={prioritate}
       layout={section.layout === "carousel" ? "carousel" : "grid"}
       headerGap="gap-3"
       onViewAll={

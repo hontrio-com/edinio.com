@@ -1,11 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendSms } from "@/lib/smso";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { consumaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
+
+  /*
+   * Ruta trimite un SMS REAL catre un numar ales de apelant, folosind o cheie
+   * data tot de apelant. E necesar asa: utilizatorul isi testeaza integrarea
+   * inainte de a o salva. Dar fara plafon devine o unealta de bombardare cu
+   * SMS-uri (pe cheia lui, sau pe una furata) — cateva teste pe ora sunt
+   * suficiente pentru scopul real.
+   */
+  if (!rateLimit(`sms-test:${clientIp(req)}`, 3, 60_000)) {
+    return NextResponse.json({ error: "Prea multe incercari." }, { status: 429 });
+  }
+  const lim = await consumaLimita(`sms-test:${user.id}`, 5, 3600, 3600);
+  if (!lim.permis) {
+    return NextResponse.json(
+      { error: mesajLimita(lim, "Ai trimis deja destule SMS-uri de test. Incearca peste o ora.") },
+      { status: 429 },
+    );
+  }
 
   const { api_key, sender_id, phone } = await req.json() as {
     api_key?: string;

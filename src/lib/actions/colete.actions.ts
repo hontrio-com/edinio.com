@@ -95,6 +95,13 @@ export async function getCOPrices(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Neautorizat" };
 
+    // Proprietatea asupra magazinului, INAINTE de a folosi clientul cu service
+    // role: fara ea, orice comerciant logat cerea cotatii pe contul Colete al
+    // ALTUI magazin — ii consuma cota de API si ii vedea tarifele negociate.
+    const { data: biz } = await supabase
+      .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).maybeSingle();
+    if (!biz) return { error: "Magazin negasit" };
+
     const admin = adminClient();
     const { data: settings } = await admin.from("store_settings").select("colete_config").eq("business_id", businessId).single();
     const config = settings?.colete_config as COConfig | null;

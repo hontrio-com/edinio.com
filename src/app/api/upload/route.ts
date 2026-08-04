@@ -3,6 +3,20 @@ import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
 import { registerMedia } from "@/lib/actions/media.actions";
+import { detectImageMime } from "@/lib/utils/file-signature";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
+
+/**
+ * `folder` vine de la client si intra in cheia obiectului R2. Nefiltrat, un
+ * `folder` de forma "../../products/<alt-user>" scria in prefixul ALTUI
+ * comerciant. Pastram doar un segment simplu.
+ */
+function curataFolder(brut: string | null): string | null {
+  if (!brut) return null;
+  const curat = brut.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  return curat.length > 0 && curat.length <= 40 ? curat : null;
+}
 
 export const runtime = "nodejs";
 
@@ -18,10 +32,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nu esti autentificat." }, { status: 401 });
   }
 
+  // Fara plafon, un singur cont putea incarca 10MB la nesfarsit in R2-ul
+  // platformei — cost care creste la nesfarsit si nu se recupereaza de nicaieri.
+  if (!rateLimit(`upload:${clientIp(request)}`, 30, 60_000)) {
+    return NextResponse.json({ error: "Prea multe incarcari. Asteapta un minut." }, { status: 429 });
+  }
+  const lim = await consumaLimita(`upload:${user.id}`, 300, 3600);
+  if (!lim.permis) {
+    return NextResponse.json({ error: "Ai atins limita de incarcari pe ora." }, { status: 429 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const bucket = formData.get("bucket") as string | null;
-  const folder = formData.get("folder") as string | null;
+  const folder = curataFolder(formData.get("folder") as string | null);
 
   if (!file || !bucket) {
     return NextResponse.json({ error: "Fisier si bucket obligatorii." }, { status: 400 });
@@ -56,7 +80,22 @@ export async function POST(request: NextRequest) {
     if (buffer.length === 0) {
       return NextResponse.json({ error: "Fisierul pare gol (0 octeti). Reincarca imaginea." }, { status: 400 });
     }
-    const url = await uploadToR2(buffer, key, file.type);
+
+    // Tipul REAL, din octeti, nu `file.type` (pe care il alege clientul). Tipul
+    // declarat era si validat, si trimis mai departe ca `Content-Type` la R2 —
+    // deci se putea gazdui continut arbitrar pe domeniul CDN al platformei, cu
+    // un antet ales de incarcator. PDF-ul e singura exceptie non-imagine
+    // acceptata si il verificam separat, tot pe octeti.
+    const estePdf = buffer.subarray(0, 5).toString("ascii") === "%PDF-";
+    const tipReal = detectImageMime(buffer) ?? (estePdf ? "application/pdf" : null);
+    if (!tipReal || !ALL_ALLOWED_TYPES.includes(tipReal)) {
+      return NextResponse.json(
+        { error: "Continutul fisierului nu corespunde unui tip acceptat." },
+        { status: 400 },
+      );
+    }
+
+    const url = await uploadToR2(buffer, key, tipReal);
 
     // Register in the Media Library (best-effort; never blocks the upload).
     let width: number | null = null;
@@ -69,7 +108,7 @@ export async function POST(request: NextRequest) {
     await registerMedia({
       url,
       type: "image",
-      mimeType: file.type,
+      mimeType: tipReal,
       fileName: file.name || null,
       sizeBytes: buffer.length,
       width,

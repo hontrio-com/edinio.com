@@ -23,11 +23,22 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient();
 
-  // Get business name for email
+  // `business_id` vine din corpul cererii. Verificam ca magazinul e AL LUI:
+  // altfel tichetul se atasa magazinului altui comerciant, iar raspunsul si
+  // emailul catre suport ii dezvaluiau numele. Daca nu e al lui, il ignoram.
   let businessName: string | null = null;
+  let businessIdValidat: string | null = null;
   if (business_id) {
-    const { data: biz } = await supabase.from("businesses").select("business_name, store_name").eq("id", business_id).single();
-    businessName = biz?.store_name ?? biz?.business_name ?? null;
+    const { data: biz } = await supabase
+      .from("businesses")
+      .select("id, business_name, store_name")
+      .eq("id", business_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (biz) {
+      businessIdValidat = biz.id;
+      businessName = biz.store_name ?? biz.business_name ?? null;
+    }
   }
 
   // Create ticket
@@ -35,7 +46,7 @@ export async function POST(req: NextRequest) {
     .from("support_tickets")
     .insert({
       user_id: user.id,
-      business_id: business_id ?? null,
+      business_id: businessIdValidat,
       subject: subject.trim(),
       category,
       priority,

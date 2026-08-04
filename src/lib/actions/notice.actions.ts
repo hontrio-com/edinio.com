@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { consumaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -103,6 +104,11 @@ export async function sendNoticeTestSms(
   if (!user) return { error: "Neautorizat" };
   if (!token.trim()) return { error: "Introdu tokenul API." };
   if (!phone.trim()) return { error: "Introdu un numar de telefon." };
+
+  // Trimite un SMS real catre un numar ales de apelant. Vezi si /api/sms/test:
+  // fara plafon, e o unealta de bombardare cu SMS-uri.
+  const lim = await consumaLimita(`notice-test:${user.id}`, 5, 3600, 3600);
+  if (!lim.permis) return { error: mesajLimita(lim, "Ai trimis deja destule mesaje de test. Incearca peste o ora.") };
   const res = await sendNoticeSms(token.trim(), {
     number: phone.trim(),
     message: "Test notice.ro din magazinul tau Edinio. Integrarea SMS functioneaza!",
@@ -239,6 +245,11 @@ export async function sendNoticeTestWhatsapp(token: string, phone: string): Prom
   if (!user) return { error: "Neautorizat" };
   if (!token.trim()) return { error: "Introdu tokenul API." };
   if (!phone.trim()) return { error: "Introdu un numar de telefon." };
+
+  // Trimite un SMS real catre un numar ales de apelant. Vezi si /api/sms/test:
+  // fara plafon, e o unealta de bombardare cu SMS-uri.
+  const lim = await consumaLimita(`notice-test:${user.id}`, 5, 3600, 3600);
+  if (!lim.permis) return { error: mesajLimita(lim, "Ai trimis deja destule mesaje de test. Incearca peste o ora.") };
   const res = await sendNoticeWhatsapp(token.trim(), { number: phone.trim(), message: "Test WhatsApp din magazinul tau Edinio. Integrarea functioneaza!" });
   if (!res.success) return { error: res.error ?? "Trimitere esuata." };
   return { success: true };
@@ -249,6 +260,11 @@ export async function sendNoticeTestVoice(token: string, phone: string): Promise
   if (!user) return { error: "Neautorizat" };
   if (!token.trim()) return { error: "Introdu tokenul API." };
   if (!phone.trim()) return { error: "Introdu un numar de telefon." };
+
+  // Trimite un SMS real catre un numar ales de apelant. Vezi si /api/sms/test:
+  // fara plafon, e o unealta de bombardare cu SMS-uri.
+  const lim = await consumaLimita(`notice-test:${user.id}`, 5, 3600, 3600);
+  if (!lim.permis) return { error: mesajLimita(lim, "Ai trimis deja destule mesaje de test. Incearca peste o ora.") };
   const res = await sendNoticeAudio(token.trim(), { number: phone.trim(), text: "Acesta este un apel de test de la magazinul tau Edinio. Integrarea vocala functioneaza.", type: "draft" });
   if (!res.success) return { error: res.error ?? "Trimitere esuata." };
   return { success: true };

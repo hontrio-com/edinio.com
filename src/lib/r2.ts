@@ -46,9 +46,18 @@ export async function uploadToR2(
 export async function createPresignedPutUrl(
   key: string,
   contentType: string,
-  expiresIn = 600
+  expiresIn = 600,
+  /** Cand e dat, intra in semnatura: incarcarea reala trebuie sa aiba EXACT
+   *  aceasta dimensiune, altfel R2 o refuza. Fara el, limita de dimensiune
+   *  verificata pe server era doar o promisiune a clientului. */
+  contentLength?: number,
 ): Promise<{ uploadUrl: string; publicUrl: string }> {
-  const command = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType });
+  const command = new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ContentType: contentType,
+    ...(contentLength !== undefined ? { ContentLength: contentLength } : {}),
+  });
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn });
   return { uploadUrl, publicUrl: `${PUBLIC_URL}/${key}` };
 }

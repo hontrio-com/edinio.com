@@ -28,8 +28,28 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   const key = sp.get("p") ?? "";
-  const width = Math.min(2048, Math.max(16, parseInt(sp.get("w") ?? "", 10) || 0));
-  const quality = Math.min(100, Math.max(1, parseInt(sp.get("q") ?? "", 10) || 75));
+
+  /*
+   * Latimea si calitatea se ROTUNJESC la o lista fixa.
+   *
+   * Inainte erau doar limitate la interval: 16-2048 x 1-100, adica peste 200.000
+   * de combinatii DISTINCTE pentru fiecare imagine. Fiecare combinatie noua
+   * inseamna o rulare de `sharp` si un obiect NOU scris permanent in R2, care nu
+   * se sterge niciodata. O bucla peste `w` si `q` umplea depozitul platformei si
+   * factura, fara sa incalce nicio limita.
+   *
+   * Lista acopera latimile pe care le cere efectiv interfata; orice alta valoare
+   * urca la prima treapta mai mare, deci imaginea ramane cel putin la fel de
+   * clara ca cea ceruta.
+   */
+  const TREPTE_LATIME = [16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 640, 768, 896, 1024, 1280, 1536, 1920, 2048];
+  const TREPTE_CALITATE = [50, 65, 75, 85, 95];
+
+  const latimeCeruta = Math.min(2048, Math.max(16, parseInt(sp.get("w") ?? "", 10) || 0));
+  const calitateCeruta = Math.min(100, Math.max(1, parseInt(sp.get("q") ?? "", 10) || 75));
+
+  const width = latimeCeruta ? (TREPTE_LATIME.find((t) => t >= latimeCeruta) ?? 2048) : 0;
+  const quality = TREPTE_CALITATE.find((t) => t >= calitateCeruta) ?? 95;
 
   const originalUrl = key && R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : null;
   const fallback = () =>

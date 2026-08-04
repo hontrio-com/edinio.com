@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2, deleteFromR2, r2KeyFromUrl, createPresignedPutUrl } from "@/lib/r2";
 import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES, MAX_VIDEO_MB, VIDEO_EXT_BY_TYPE } from "@/lib/pages/video-config";
+import { detectImageMime } from "@/lib/utils/file-signature";
 
 type UploadBucket = "logos" | "covers" | "gallery" | "products" | "avatars";
 
@@ -15,28 +16,39 @@ export async function uploadImage(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "webp";
-  const allowedTypes = ["jpg", "jpeg", "png", "webp"];
-  if (!allowedTypes.includes(ext)) {
-    return { error: "Tipul de fisier nu este acceptat. Foloseste JPG, PNG sau WebP." };
-  }
-
   if (file.size > 5 * 1024 * 1024) {
     return { error: "Fisierul este prea mare. Limita este 5MB." };
   }
 
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-  const key = folder
-    ? `${bucket}/${user.id}/${folder}/${filename}`
-    : `${bucket}/${user.id}/${filename}`;
-
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const url = await uploadToR2(buffer, key, file.type);
+    if (buffer.length === 0) return { error: "Fisierul pare gol." };
+
+    /*
+     * Verificarea era pe EXTENSIA din numele fisierului, iar `file.type` — ales
+     * tot de client — ajungea ca `Content-Type` la R2. Adica: un fisier numit
+     * "poza.png" cu `type: "text/html"` era acceptat si apoi SERVIT ca HTML de pe
+     * domeniul CDN al platformei. XSS stocat pe origine proprie.
+     *
+     * Acum decide serverul, din octeti: si ce se accepta, si ce antet se pune.
+     */
+    const PERMISE = ["image/jpeg", "image/png", "image/webp"];
+    const tipReal = detectImageMime(buffer);
+    if (!tipReal || !PERMISE.includes(tipReal)) {
+      return { error: "Tipul de fisier nu este acceptat. Foloseste JPG, PNG sau WebP." };
+    }
+    const ext = tipReal === "image/jpeg" ? "jpg" : tipReal === "image/png" ? "png" : "webp";
+
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const key = folder
+      ? `${bucket}/${user.id}/${folder}/${filename}`
+      : `${bucket}/${user.id}/${filename}`;
+
+    const url = await uploadToR2(buffer, key, tipReal);
     // Register in the Media Library (best-effort).
     const { registerMedia } = await import("@/lib/actions/media.actions");
     await registerMedia({
-      url, type: "image", mimeType: file.type, fileName: file.name || null,
+      url, type: "image", mimeType: tipReal, fileName: file.name || null,
       sizeBytes: buffer.length, folder: bucket,
     }).catch(() => {});
     return { url };
@@ -72,7 +84,10 @@ export async function createVideoUpload(input: { contentType: string; size: numb
   const key = `gallery/${user.id}/pages/videos/${filename}`;
 
   try {
-    return await createPresignedPutUrl(key, input.contentType);
+    // Dimensiunea intra in SEMNATURA. Fara ea, `input.size` era doar un numar
+    // trimis de client: se cerea URL pentru 1MB si se incarca apoi orice, direct
+    // in R2, ocolind complet limita de 50MB.
+    return await createPresignedPutUrl(key, input.contentType, 600, input.size);
   } catch {
     return { error: "Nu am putut pregati incarcarea. Incearca din nou." };
   }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
@@ -252,8 +253,15 @@ export async function saveFgoConfig(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Business negasit" };
 
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  const { data: vechi } = await supabase
+    .from("store_settings").select("fgo_config").eq("business_id", businessId).maybeSingle();
+  const configFinal = pastreazaSecretele("fgo_config", config, vechi?.fgo_config);
+
   const { error } = await supabase.from("store_settings").update({
-    fgo_config: config as unknown as import("@/types/database.types").Json,
+    fgo_config: configFinal as unknown as import("@/types/database.types").Json,
     updated_at: new Date().toISOString(),
   }).eq("business_id", businessId);
 

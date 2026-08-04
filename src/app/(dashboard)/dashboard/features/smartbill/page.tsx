@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { SmartbillConfigClient } from "@/components/dashboard/SmartbillConfigClient";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -10,7 +11,7 @@ export default async function SmartbillPage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const config: SmartbillConfig = (settings?.smartbill_config as SmartbillConfig | null) ?? {
+  const config: SmartbillConfig = (mascheazaConfig("smartbill_config", settings?.smartbill_config) as SmartbillConfig | null) ?? {
     enabled: false,
     email: "",
     token: "",

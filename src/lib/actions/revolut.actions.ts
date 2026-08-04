@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { createWebhook, deleteWebhook, type RevolutConfig, type RevolutConfigInput } from "@/lib/revolut";
 
@@ -79,9 +80,16 @@ export async function saveRevolutConfig(
     }
   }
 
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  const { data: vechi } = await supabase
+    .from("store_settings").select("revolut_config").eq("business_id", businessId).maybeSingle();
+  const cleanFinal = pastreazaSecretele("revolut_config", clean, vechi?.revolut_config);
+
   const { error } = await supabase
     .from("store_settings")
-    .update({ revolut_config: clean as never, updated_at: new Date().toISOString() })
+    .update({ revolut_config: cleanFinal as never, updated_at: new Date().toISOString() })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

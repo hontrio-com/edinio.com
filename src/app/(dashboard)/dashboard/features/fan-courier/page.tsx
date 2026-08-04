@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { FanCourierConfigClient } from "@/components/dashboard/FanCourierConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
@@ -11,7 +12,7 @@ export default async function FanCourierPage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const config = (settings?.fan_courier_config as FanCourierConfig | null) ?? null;
+  const config = (mascheazaConfig("fan_courier_config", settings?.fan_courier_config) as FanCourierConfig | null) ?? null;
 
   return (
     <div className="p-6 max-w-2xl">

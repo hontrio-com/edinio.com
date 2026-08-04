@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import type { KlarnaConfig } from "@/lib/klarna";
 
@@ -29,9 +30,16 @@ export async function saveKlarnaConfig(
     title: config.title.trim(),
   };
 
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  const { data: vechi } = await supabase
+    .from("store_settings").select("klarna_config").eq("business_id", businessId).maybeSingle();
+  const cleanFinal = pastreazaSecretele("klarna_config", clean, vechi?.klarna_config);
+
   const { error } = await supabase
     .from("store_settings")
-    .update({ klarna_config: clean as never, updated_at: new Date().toISOString() })
+    .update({ klarna_config: cleanFinal as never, updated_at: new Date().toISOString() })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

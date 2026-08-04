@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { NoticeConfigClient } from "@/components/dashboard/NoticeConfigClient";
 import type { NoticeConfig } from "@/lib/notice";
@@ -10,7 +11,7 @@ export default async function NoticePage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const noticeConfig: NoticeConfig = (settings?.notice_config as NoticeConfig | null) ?? {
+  const noticeConfig: NoticeConfig = (mascheazaConfig("notice_config", settings?.notice_config) as NoticeConfig | null) ?? {
     enabled: false,
     api_token: "",
     strip_diacritics: true,

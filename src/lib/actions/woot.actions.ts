@@ -1,5 +1,6 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -52,9 +53,16 @@ export async function saveWootConfig(
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
 
   const supabase = await createClient();
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  const { data: vechi } = await supabase
+    .from("store_settings").select("woot_config").eq("business_id", businessId).maybeSingle();
+  const configFinal = pastreazaSecretele("woot_config", config, vechi?.woot_config);
+
   const { error } = await supabase
     .from("store_settings")
-    .update({ woot_config: config })
+    .update({ woot_config: configFinal as never })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

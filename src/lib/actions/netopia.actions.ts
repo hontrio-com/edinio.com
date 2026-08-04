@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeNetopiaBadge } from "@/lib/utils/sanitize-embed";
@@ -34,9 +35,16 @@ export async function saveNetopiaConfig(
     badge_html: sanitizeNetopiaBadge(config.badge_html),
   };
 
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  const { data: vechi } = await supabase
+    .from("store_settings").select("netopia_config").eq("business_id", businessId).maybeSingle();
+  const cleanFinal = pastreazaSecretele("netopia_config", clean, vechi?.netopia_config);
+
   const { error } = await supabase
     .from("store_settings")
-    .update({ netopia_config: clean, updated_at: new Date().toISOString() })
+    .update({ netopia_config: cleanFinal as never, updated_at: new Date().toISOString() })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

@@ -1,4 +1,5 @@
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { redirect } from "next/navigation";
 import RevolutConfigClient from "@/components/dashboard/RevolutConfigClient";
 import type { RevolutConfig, RevolutConfigInput } from "@/lib/revolut";
@@ -10,7 +11,7 @@ export default async function RevolutPage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const full = (settings?.revolut_config as RevolutConfig | null) ?? null;
+  const full = (mascheazaConfig("revolut_config", settings?.revolut_config) as RevolutConfig | null) ?? null;
   // Only the editable fields reach the client — the server-side webhook signing
   // secret never leaves the server.
   const initialConfig: RevolutConfigInput | null = full

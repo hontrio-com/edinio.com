@@ -1,5 +1,6 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -28,8 +29,15 @@ export async function saveFanCourierConfig(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Business negasit" };
 
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  const { data: vechi } = await supabase
+    .from("store_settings").select("fan_courier_config").eq("business_id", businessId).maybeSingle();
+  const configFinal = pastreazaSecretele("fan_courier_config", config, vechi?.fan_courier_config);
+
   const { error } = await supabase.from("store_settings").update({
-    fan_courier_config: config as unknown as import("@/types/database.types").Json,
+    fan_courier_config: configFinal as unknown as import("@/types/database.types").Json,
     updated_at: new Date().toISOString(),
   }).eq("business_id", businessId);
 

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { FgoConfigClient } from "@/components/dashboard/FgoConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
@@ -11,7 +12,7 @@ export default async function FgoPage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const config = (settings?.fgo_config as FgoConfig | null) ?? null;
+  const config = (mascheazaConfig("fgo_config", settings?.fgo_config) as FgoConfig | null) ?? null;
 
   return (
     <div className="p-6 max-w-2xl">

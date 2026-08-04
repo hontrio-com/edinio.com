@@ -47,16 +47,35 @@ export async function consumaLimita(
       p_blocare_sec: blocareSec,
     });
 
-    if (error) return { permis: true, blocatPana: null };
+    if (error) return esecTacut(cheie, error.message);
 
     const rand = Array.isArray(data) ? data[0] : data;
     const r = rand as { permis?: boolean; blocat_pana?: string | null } | null;
-    if (!r || typeof r.permis !== "boolean") return { permis: true, blocatPana: null };
+    if (!r || typeof r.permis !== "boolean") return esecTacut(cheie, "raspuns de forma neasteptata");
 
     return { permis: r.permis, blocatPana: r.blocat_pana ? new Date(r.blocat_pana) : null };
-  } catch {
-    return { permis: true, blocatPana: null };
+  } catch (e) {
+    return esecTacut(cheie, e instanceof Error ? e.message : String(e));
   }
+}
+
+/**
+ * Cand limitatorul cade, LASA cererea sa treaca — dar SPUNE-O.
+ *
+ * Alegerea de a raspunde „permis" e deliberata: limitatorul nu trebuie sa devina
+ * el insusi o cadere de serviciu, si prima linie (cea din memorie) ramane activa.
+ * Riscul e insa ca o limitare complet stricata (grant revocat din greseala,
+ * functie redenumita, tabela lipsa) arata EXACT ca una care functioneaza si nu
+ * blocheaza pe nimeni. Fara linia asta in loguri, singurul semn ar fi o tabela
+ * `rate_limits` suspect de goala — greu de observat, fiindca si o autentificare
+ * reusita sterge randul.
+ */
+function esecTacut(cheie: string, motiv: string): RezultatLimita {
+  console.error("[limita-durabila] contorul NU a putut fi consultat — cererea trece nelimitata", {
+    cheie: cheie.split(":").slice(0, 2).join(":"), // fara partea variabila (IP, email)
+    motiv,
+  });
+  return { permis: true, blocatPana: null };
 }
 
 /** Sterge contorul — de chemat dupa o incercare REUSITA, ca sa nu ramana

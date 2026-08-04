@@ -23,6 +23,7 @@ import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
+import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
 
 import type {
   Business, Product, StoreSettings, PageContent, PageSections,
@@ -187,6 +188,19 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
     fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
     ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
   }, [demo, productId, productName, productPrice]);
+
+  /*
+   * Afisarea ofertelor, in contorul lor (`offers.impressions`) — pana acum nu o
+   * scria nimeni, deci panoul arata zero pe oferte care rulau de saptamani.
+   * Toata judecata (din browser, la intrarea in ecran, o singura data) sta in
+   * `useAfisariOferte`, ca sa nu diverga intre cele doua designuri de pagina.
+   *
+   * `productOffers` e chiar lista pe care o primeste `ProductOffers`, iar
+   * `resolveProductOffers` scoate deja ofertele fara produse si seturile FBT
+   * necumparabile — ce e in lista se si vede pe ecran.
+   */
+  const refOferte = useAfisariOferte(business.id, productOffers.map((o) => o.id), !demo);
+
   // SEO alt text from the Media Library, falling back to the product name.
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
 
@@ -798,11 +812,15 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           ramane transparente. */}
       {demo ? null : (
       <>
-      {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none */}
-      <ProductOffers offers={productOffers} basePath={basePath} color={color}
-        anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
-        ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
-        onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+      {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none.
+          Invelisul nestilizat e doar tinta observatorului de afisari: sectiunea isi
+          pastreaza fundalul, chenarul de sus si spatierea, deci nimic nu se muta. */}
+      <div ref={refOferte}>
+        <ProductOffers offers={productOffers} basePath={basePath} color={color}
+          anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+          ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
+          onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+      </div>
 
       {/* Benefits */}
       {benefitsSection?.enabled && benefitsSection.items.length > 0 && (

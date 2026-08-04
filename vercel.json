@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/stock-feeds",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/discount-release",
+      "schedule": "0 * * * *"
     }
   ]
 }

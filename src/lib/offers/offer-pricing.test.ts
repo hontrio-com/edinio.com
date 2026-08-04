@@ -473,7 +473,7 @@ test("ciclu in arborele de categorii: nu blocheaza", () => {
 test("nicio oferta acceptata inseamna zero atingeri", () => {
   const linii = [linie("p", 20, 3)];
   const rez = ruleaza([], linii, [produs("p", 20)]);
-  assert.deepEqual(rez, { savings: 0, applied: [], rejected: [], linii, opreste: false });
+  assert.deepEqual(rez, { savings: 0, applied: [], rejected: [], venitPeOferta: {}, linii, opreste: false });
 });
 
 const UUID = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -516,9 +516,57 @@ test("aplicaOfertaPeLinii nu atinge de doua ori linia desprinsa", () => {
   const set = [produs("p", 20)];
 
   const unu = aplicaOfertaPeLinii(linii, o, set, { basePrice: 0, unitPrice: 0 }, atinse);
-  assert.deepEqual(unu, { savings: 10 });
+  assert.deepEqual(unu, { savings: 10, venit: 10 });
   // A doua trecere gaseste doar linia ramasa la pret intreg — cea desprinsa e insemnata.
   const doi = aplicaOfertaPeLinii(linii, o, set, { basePrice: 0, unitPrice: 0 }, atinse);
   assert.deepEqual(doi, { motiv: "lipsa_din_comanda" });
   assert.deepEqual(linii.map((l) => [l.price, l.quantity]), [[20, 4], [10, 1]]);
+});
+
+/* ─── Venitul adus de fiecare oferta (offers.revenue_added) ───────────────── */
+
+test("venitul unui bump e pretul incasat pe bucata adusa, nu economia", () => {
+  const o = oferta("bump", "order_bump", { scope: "all" }, { productIds: ["p"], fixedPrice: 16, discountMode: "fixed_price" });
+  const linii = [linie("p", 18)];
+  const rez = ruleaza([o], linii, [produs("p", 18)]);
+
+  assert.deepEqual(rez.applied, ["bump"]);
+  assert.equal(rez.savings, 2);
+  assert.deepEqual(rez.venitPeOferta, { bump: 16 });
+});
+
+test("bump fara reducere: venitul NU e zero", () => {
+  // Cazul din productie: cele doua oferte de la suporti-numar au fixedPrice egal
+  // cu pretul de catalog (55 = 55 si 10 = 10), deci reducerea e 0 — dar produsul
+  // a intrat in comanda si s-a incasat. Un contor pe economie ar fi ramas zero
+  // exact pe singurele acceptari plauzibile ale magazinului.
+  const o = oferta("bump", "order_bump", { scope: "all" }, { productIds: ["p"], fixedPrice: 55, discountMode: "fixed_price" });
+  const linii = [linie("p", 55)];
+  const rez = ruleaza([o], linii, [produs("p", 55)]);
+
+  assert.deepEqual(rez.applied, ["bump"]);
+  assert.equal(rez.savings, 0);
+  assert.deepEqual(rez.venitPeOferta, { bump: 55 });
+});
+
+test("venitul unui set FBT e suma companionilor la pretul lor redus", () => {
+  const o = oferta("fbt", "frequently_bought", { scope: "all" }, { productIds: ["c1", "c2"], discountMode: "percent", discountPercent: 10 });
+  const linii = [linie("c1", 50), linie("c2", 30)];
+  const rez = ruleaza([o], linii, [produs("c1", 50), produs("c2", 30)]);
+
+  assert.deepEqual(rez.applied, ["fbt"]);
+  // Ancora ramane intreaga: venitul ofertei e ce au adus companionii, cu aceleasi
+  // preturi pe care le-a scris pe linii.
+  const reduse = fbtCompanionPrices(100, [50, 30], o.config);
+  assert.deepEqual(rez.venitPeOferta, { fbt: Math.round((reduse[0] + reduse[1]) * 100) / 100 });
+  assert.equal(linii[0].price, reduse[0]);
+  assert.equal(linii[1].price, reduse[1]);
+});
+
+test("o oferta refuzata nu apare in venit", () => {
+  const o = oferta("bump", "order_bump", { scope: "products", productIds: ["declansator"] }, { productIds: ["oferit"], fixedPrice: 16, discountMode: "fixed_price" });
+  const rez = ruleaza([o], [linie("oferit", 18)], [produs("oferit", 18)], { id: "altceva", unitPrice: 40 });
+
+  assert.deepEqual(rez.applied, []);
+  assert.deepEqual(rez.venitPeOferta, {});
 });

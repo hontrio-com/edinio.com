@@ -298,6 +298,13 @@ export function setulOfertei(
  * asa o a doua oferta nu mai poate recalcula peste un pret deja redus. Iar o
  * linie atinsa o data nu mai poate fi atinsa de alta oferta (`atinse`, dupa
  * IDENTITATEA obiectului — `aplicaBumpPeOBucata` creeaza linii noi).
+ *
+ * `venit` e a doua cifra intoarsa, si e alta decat economia: e ce se INCASEAZA
+ * pe bucatile pe care oferta le-a adus in comanda. Coloana `offers.revenue_added`
+ * asta trebuie sa arate. Un contor pe economie ar fi ramas zero exact pe
+ * singurele doua acceptari plauzibile din productie (comenzile #0033 si #0064 de
+ * la suporti-numar): acolo pretul de bump era EGAL cu cel de catalog (55 = 55 si
+ * 10 = 10), deci reducerea a fost 0, dar produsul a intrat totusi in comanda.
  */
 export function aplicaOfertaPeLinii(
   linii: BumpItem[],
@@ -305,7 +312,7 @@ export function aplicaOfertaPeLinii(
   set: OfferProduct[],
   ancora: PretAncora,
   atinse: Set<BumpItem>,
-): { savings: number } | { motiv: MotivRefuz } {
+): { savings: number; venit: number } | { motiv: MotivRefuz } {
   if (o.type === "order_bump") {
     const produse = new Map(set.map((p) => [p.id, p]));
     // De la coada catre inceput: liniile de bump se adauga DUPA cele din cos,
@@ -320,8 +327,10 @@ export function aplicaOfertaPeLinii(
     }
     if (!linie) return { motiv: "lipsa_din_comanda" };
     const pret = pretulSetului([produse.get(linie.product_id)!.price], o.config).price;
-    if (pret >= linie.price) return { savings: 0 };
-    return { savings: aplicaSiMarcheaza(linii, linie, pret, atinse) };
+    // Si cand bump-ul nu ieftineste nimic, bucata lui e in comanda si se
+    // incaseaza: venitul e pretul chiar platit, nu zero.
+    if (pret >= linie.price) return { savings: 0, venit: round2(linie.price) };
+    return { savings: aplicaSiMarcheaza(linii, linie, pret, atinse), venit: round2(pret) };
   }
 
   // FBT: setul se cumpara intreg sau deloc. Cand lipseste un companion, pretul de
@@ -343,10 +352,15 @@ export function aplicaOfertaPeLinii(
     pretulSetului([ancora.basePrice, ...set.map((p) => p.price)], o.config).savings,
   );
   let savings = 0;
+  let venit = 0;
   liniiSet.forEach((l, idx) => {
+    // Pretul chiar incasat pe bucata companionului, CITIT INAINTE de aplicare:
+    // `aplicaSiMarcheaza` scrie peste `l.price` cand linia are o singura bucata.
+    const platit = Math.min(reduse[idx], l.price);
+    venit = round2(venit + platit);
     if (reduse[idx] < l.price) savings = round2(savings + aplicaSiMarcheaza(linii, l, reduse[idx], atinse));
   });
-  return { savings };
+  return { savings, venit };
 }
 
 /**
@@ -384,6 +398,13 @@ export interface IesireOferte {
   savings: number;
   applied: string[];
   rejected: { id: string; motiv: MotivRefuz }[];
+  /**
+   * Venitul adus de FIECARE oferta aplicata, in lei — pentru
+   * `offers.revenue_added`. Cheile sunt exact `applied`; sta separat de `applied`
+   * fiindca acolo raspunsul e „care oferte s-au aplicat", aici „cat a adus
+   * fiecare", si un singur camp le-ar fi amestecat.
+   */
+  venitPeOferta: Record<string, number>;
 }
 
 /**
@@ -410,6 +431,7 @@ export function pretuiesteOfertele(intrare: IntrareOferte): IesireOferte {
   const cuVariantaAleasa = ctx.cuVariantaAleasa ?? new Set<string>();
   const rejected: { id: string; motiv: MotivRefuz }[] = [];
   const applied: string[] = [];
+  const venitPeOferta: Record<string, number> = {};
   const atinse = new Set<BumpItem>();
   // Ancora intra si ea: la afisare, `OrderModal` cere bump-urile cu
   // `[product.id, ...cosul]`, deci produsul din formular ascunde bump-ul lui exact
@@ -442,7 +464,8 @@ export function pretuiesteOfertele(intrare: IntrareOferte): IesireOferte {
     const rez = aplicaOfertaPeLinii(linii, o, set.set, ancora, atinse);
     if ("motiv" in rez) { rejected.push({ id: o.id, motiv: rez.motiv }); continue; }
     savings = round2(savings + rez.savings);
+    venitPeOferta[o.id] = round2((venitPeOferta[o.id] ?? 0) + rez.venit);
     applied.push(o.id);
   }
-  return { savings, applied, rejected };
+  return { savings, applied, rejected, venitPeOferta };
 }

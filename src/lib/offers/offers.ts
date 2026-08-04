@@ -333,6 +333,8 @@ export interface RezultatOferte {
   savings: number;
   applied: string[];
   rejected: { id: string; motiv: MotivRefuz }[];
+  /** Venitul adus de fiecare oferta aplicata — vezi `IesireOferte.venitPeOferta`. */
+  venitPeOferta: Record<string, number>;
   /** Cand e prezent, comanda se OPRESTE cu mesajul asta. */
   error?: string;
 }
@@ -369,7 +371,7 @@ export async function applyOfferPricing(
   ctx: ContextOferte,
 ): Promise<RezultatOferte> {
   const oprit = (rejected: { id: string; motiv: MotivRefuz }[], error?: string): RezultatOferte =>
-    ({ items, savings: 0, applied: [], rejected, error });
+    ({ items, savings: 0, applied: [], rejected, venitPeOferta: {}, error });
 
   const { ids, preaMulte } = normalizeazaIds(acceptedOfferIds);
   if (ids.length === 0) return oprit([]);
@@ -456,5 +458,19 @@ export async function applyOfferPricing(
   rejected.push(...rez.rejected);
   if (opresteComanda(rejected)) return oprit(rejected, OFERTA_INDISPONIBILA);
 
-  return { items: out, savings: rez.savings, applied: rez.applied, rejected };
+  /*
+   * ACCEPTARILE nu se numara AICI.
+   *
+   * `applyOfferPricing` e singurul loc prin care trec ambele cai de comanda, deci
+   * era tentant — dar intre el si insertul comenzii stau SASE iesiri cu eroare:
+   * comanda minima neatinsa, verificarea firmei la ANAF, cuponul respins intre
+   * timp, stocul pierdut la expandarea pachetelor, limita cuponului, si insertul
+   * insusi. Numarate aici, toate ar fi intrat in contor ca „acceptari", iar
+   * clientul care corecteaza eroarea si retrimite ar fi adaugat inca una.
+   *
+   * `applied` si `venitPeOferta` se intorc mai jos tocmai ca sa poata fi scrise de
+   * apelant, DUPA ce comanda a intrat cu adevarat.
+   */
+
+  return { items: out, savings: rez.savings, applied: rez.applied, rejected, venitPeOferta: rez.venitPeOferta };
 }

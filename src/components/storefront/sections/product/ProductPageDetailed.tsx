@@ -22,6 +22,7 @@ import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
+import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
@@ -251,6 +252,10 @@ export function ProductPageDetailed({
     fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
     ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
   }, [demo, productId, productName, productPrice]);
+
+  // Afisarea ofertelor, in contorul lor — aceeasi judecata ca in
+  // `ProductPageClassic`, scrisa o singura data in `useAfisariOferte`.
+  const refOferte = useAfisariOferte(business.id, productOffers.map((o) => o.id), !demo);
 
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
   const color = business.primary_color ?? "#1AB554";
@@ -982,11 +987,15 @@ export function ProductPageDetailed({
           )}
 
           {/* ─── Merge bine cu ───────────────────────────────────────────── */}
+          {/* Invelisul nestilizat e doar tinta observatorului de afisari; fratii
+              lui sunt tot blocuri, deci asezarea ramane neschimbata. */}
           {productOffers.length > 0 && (
-            <ProductOffers offers={productOffers} basePath={basePath} color={color}
-              anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
-              ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
-              onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+            <div ref={refOferte}>
+              <ProductOffers offers={productOffers} basePath={basePath} color={color}
+                anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
+                ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
+                onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+            </div>
           )}
 
           {/* ─── Beneficii ───────────────────────────────────────────────── */}

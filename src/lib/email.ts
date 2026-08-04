@@ -6,6 +6,9 @@ import { storeEmailShell } from "@/lib/email/store-shell";
 import { deliverStoreEmail } from "@/lib/email/deliver";
 import { renderTemplate } from "@/lib/email/templates";
 import type { BillingCompany } from "@/lib/billing/company";
+// Randurile de bani ale unei comenzi (Subtotal, extraoptiuni, reduceri, TVA) se
+// construiesc INTR-UN SINGUR LOC, pentru amandoua emailurile. Vezi acolo de ce.
+import { randuriDeBani, type BaniComanda } from "@/lib/email/order-totals";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -145,21 +148,10 @@ export function baseTemplateForTest(from: string): string {
 
 export async function sendOrderConfirmationToCustomer(
   to: string,
-  order: {
+  order: BaniComanda & {
     order_number: string;
     customer_name: string;
-    total: number;
-    items: { name: string; quantity: number; price: number }[];
-    shipping_cost: number;
     business_name: string;
-    discount_code?: string;
-    discount_amount?: number;
-    card_discount_amount?: number;
-    cod_discount_amount?: number;
-    cod_fee_amount?: number;
-    /** TVA-ul si cota INREGISTRATE pe comanda, nu cele din setarile de azi. */
-    vat_amount?: number;
-    vat_rate?: number;
     payment_method?: string;
     store_url?: string;
   },
@@ -177,50 +169,27 @@ export async function sendOrderConfirmationToCustomer(
     )
     .join("");
 
-  const discountRow = order.discount_code && order.discount_amount
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere (${esc(order.discount_code)})</td>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.discount_amount)}</td>
-      </tr>`
-    : "";
-
-  const cardDiscountRow = order.card_discount_amount && order.card_discount_amount > 0
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere plata cu cardul</td>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.card_discount_amount)}</td>
-      </tr>`
-    : "";
-
-  const codDiscountRow = order.cod_discount_amount && order.cod_discount_amount > 0
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere plata ramburs</td>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.cod_discount_amount)}</td>
-      </tr>`
-    : "";
-
-  // Taxa se aduna, deci nu poarta verdele reducerilor.
-  const codFeeRow = order.cod_fee_amount && order.cod_fee_amount > 0
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;">Taxa plata ramburs</td>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${formatPrice(order.cod_fee_amount)}</td>
-      </tr>`
-    : "";
-
   /*
-   * Randul de TVA, si in emailul CLIENTULUI.
+   * Randurile de bani, din `randuriDeBani` — aceeasi socoteala ca in emailul
+   * comerciantului si ca in caseta din panou.
    *
-   * Il avea doar emailul catre comerciant: la magazinele cu preturi fara TVA,
-   * randurile pe care le vedea clientul (produse + transport) nu dadeau „Total de
-   * plata", si nimic de pe ecran nu spunea de ce lipsesc banii aceia. Cota se ia
-   * de pe COMANDA, nu din setarile de azi, ca un email vechi sa nu isi schimbe
-   * cifrele cand comerciantul isi schimba regimul.
+   * „Subtotal" si „Optiuni extra" se sar: produsele sunt insirate mai sus unul
+   * cate unul, extraoptiunile printre ele, deci suma lor e deja pe ecran. Randul
+   * de TVA se ARATA acum si aici (pana pe 2026-08-03 lipsea cu totul): la
+   * magazinele cu preturi fara TVA, produsele si transportul nu dadeau „Total de
+   * plata" si nimic din email nu spunea de ce. Eticheta lui vine tot din
+   * `totaluriComanda`, deci poarta cuvantul „inclus" cand cifra nu se aduna.
    */
-  const vatRow = order.vat_amount && order.vat_amount > 0
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;">TVA (${Number(order.vat_rate) || 0}%)</td>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${formatPrice(order.vat_amount)}</td>
-      </tr>`
-    : "";
+  const totalsRows = randuriDeBani(order)
+    .filter((r) => r.cheie !== "subtotal" && r.cheie !== "extras")
+    .map((r) => {
+      const col = r.verde ? "#16a34a" : "#71717a";
+      return `<tr>
+        <td style="padding-top:10px;font-size:14px;color:${col};">${esc(r.eticheta)}</td>
+        <td style="padding-top:10px;font-size:14px;color:${col};text-align:right;white-space:nowrap;">${r.valoare}</td>
+      </tr>`;
+    })
+    .join("");
 
   const paymentLabel = order.payment_method === "stripe"
     ? "Card online (Stripe)"
@@ -260,15 +229,7 @@ export async function sendOrderConfirmationToCustomer(
         <td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produsele tale</td>
       </tr>
       ${itemsRows}
-      ${discountRow}
-      ${cardDiscountRow}
-      ${codDiscountRow}
-      ${codFeeRow}
-      <tr>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
-      </tr>
-      ${vatRow}
+      ${totalsRows}
       <tr>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total de plata</td>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#1AB554;text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(order.total)}</td>
@@ -785,21 +746,11 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 export async function sendNewOrderEmail(
   to: string,
-  order: {
+  order: BaniComanda & {
     order_number: string;
     customer_name: string;
     customer_phone: string;
     customer_email?: string | null;
-    total: number;
-    subtotal?: number;
-    items: { name: string; quantity: number; price: number }[];
-    shipping_cost: number;
-    discount_code?: string | null;
-    discount_amount?: number;
-    card_discount_amount?: number;
-    cod_discount_amount?: number;
-    cod_fee_amount?: number;
-    vat_amount?: number;
     payment_method?: string;
     business_name: string;
     order_id: string;
@@ -836,6 +787,22 @@ export async function sendNewOrderEmail(
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
+    .join("");
+
+  /*
+   * Randurile de bani, din `randuriDeBani`. Aici se pastreaza si „Subtotal", si
+   * randul de extraoptiuni care lipsea: `orders.subtotal` NU le contine, desi
+   * `itemsRows` de deasupra le insira ca produse. Randul de mai jos e singurul
+   * loc din email in care cei 5 lei ai „Comenzii cu Prioritate" de pe #0073 intra
+   * in coloana.
+   *
+   * Nota „din care TVA" de la coada tabelului a plecat: era mereu dedesubtul
+   * Totalului, deci nu spunea nimic la magazinele cu preturi FARA TVA, unde suma
+   * chiar se adauga. Acum e un rand ca oricare altul, iar eticheta lui spune
+   * „inclus" cand nu se aduna.
+   */
+  const totalsRows = randuriDeBani(order)
+    .map((r) => totalRow(esc(r.eticheta), r.valoare, r.verde ? { color: "#16a34a" } : {}))
     .join("");
 
   const addrParts = [order.address, order.city, order.county]
@@ -921,14 +888,8 @@ export async function sendNewOrderEmail(
         <td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produse</td>
       </tr>
       ${itemsRows}
-      ${order.subtotal != null ? totalRow("Subtotal", formatPrice(order.subtotal)) : ""}
-      ${order.discount_amount && order.discount_amount > 0 ? totalRow(`Reducere${order.discount_code ? ` (${esc(order.discount_code)})` : ""}`, `- ${formatPrice(order.discount_amount)}`, { color: "#16a34a" }) : ""}
-      ${order.card_discount_amount && order.card_discount_amount > 0 ? totalRow("Reducere plata cu cardul", `- ${formatPrice(order.card_discount_amount)}`, { color: "#16a34a" }) : ""}
-      ${order.cod_discount_amount && order.cod_discount_amount > 0 ? totalRow("Reducere plata ramburs", `- ${formatPrice(order.cod_discount_amount)}`, { color: "#16a34a" }) : ""}
-      ${order.cod_fee_amount && order.cod_fee_amount > 0 ? totalRow("Taxa plata ramburs", formatPrice(order.cod_fee_amount)) : ""}
-      ${totalRow("Transport", order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost))}
+      ${totalsRows}
       ${totalRow("Total", formatPrice(order.total), { bold: true, color: "#1AB554", border: true })}
-      ${order.vat_amount && order.vat_amount > 0 ? `<tr><td colspan="2" style="padding-top:6px;font-size:12px;color:#a1a1aa;text-align:right;">din care TVA: ${formatPrice(order.vat_amount)}</td></tr>` : ""}
     </table>
 
     <div style="text-align:center;margin-top:28px;">

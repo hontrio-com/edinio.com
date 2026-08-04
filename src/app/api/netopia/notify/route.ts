@@ -59,6 +59,18 @@ export async function POST(request: NextRequest) {
     if (newPaymentStatus) update.payment_status = newPaymentStatus;
 
     await admin.from("orders").update(update).eq("id", orderId);
+    /*
+     * Anularea venita de la procesator elibereaza cuponul.
+     *
+     * Ruta asta scrie direct in `orders`, deci nu trece nici prin `updateOrder`,
+     * nici prin cron (el cere `status = pending`). E chiar scenariul constatarii
+     * 27 — clientul abandoneaza pagina procesatorului — pe procesatorul cu cele
+     * mai multe comenzi online din baza. iPay si Stripe nu anuleaza comenzi:
+     * acolo comanda ramane `pending` si o prinde cronul.
+     */
+    if (orderStatus === "cancelled") {
+      await admin.rpc("release_order_discount" as never, { p_order_id: orderId } as never);
+    }
     if (newPaymentStatus === "paid") {
       void maybeMarkMailchimpOrderPaid(orderId);
       void maybeMarkBrevoOrderPaid(orderId);

@@ -26,6 +26,7 @@ import { JUDETE } from "@/lib/ro/judete";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
+import { fbtInCos } from "@/lib/offers/fbt-in-cos";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 
 
@@ -244,7 +245,31 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // se inmulteau. 
   const pretBucataCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
     cosMagazin ? cosMagazin.lineUnit({ ...i, name: "", imageUrl: null } as never) : i.price;
-  const cartSubtotal = cart.reduce((s, i) => s + totalLinieCos(i), 0);
+  /*
+   * Setul „cumparate frecvent impreuna" asezat peste liniile purtate din cos.
+   *
+   * Companionul aflat DEJA in cos nu se mai adauga a doua oara: linia lui ramane
+   * cu toate bucatile si primeste pretul de set pe UNA SINGURA, exact ce face
+   * serverul in `aplicaOfertaPeLinii`. Companionul care nu e in cos iese prin
+   * `companioniNoi` si pleaca ca linie proprie, ca pana acum.
+   *
+   * Pretul pe bucata e chiar cel cu care pleaca linia catre server: totalul ei
+   * (cu trepte cu tot) impartit la cantitate, NEROTUNJIT, ca in `pretPeTrepte`.
+   */
+  const fbt = fbtInCos(
+    cart.map((i) => ({
+      product_id: i.productId,
+      name: i.name,
+      price: i.quantity > 0 ? totalLinieCos(i) / i.quantity : 0,
+      quantity: i.quantity,
+    })),
+    fbtOffer?.items ?? [],
+  );
+  const economiaFbtPeLinie = (idx: number) => fbt.economiePeLinie[idx] ?? 0;
+  /** Linia din cos e chiar un companion al setului acceptat? */
+  const esteCompanionFbt = (i: { productId: string }) =>
+    (fbtOffer?.items ?? []).some((c) => c.product_id === i.productId);
+  const cartSubtotal = cart.reduce((s, i) => s + totalLinieCos(i), 0) - fbt.economieTotala;
   // Accepted order bumps add their discounted product to the goods subtotal, so it
   // flows through discount, free-shipping, card-discount and total automatically.
   // Hide a bump when its product is already in the order (carried cart or FBT set) — it
@@ -258,7 +283,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   });
   const acceptedBumpOffers = visibleBumps.filter((o) => acceptedBumps.has(o.id) && o.pricing && o.products[0]);
   const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
-  const fbtSubtotal = fbtOffer ? fbtOffer.items.reduce((s, i) => s + i.price * i.quantity, 0) : 0;
+  const fbtSubtotal = fbt.companioniNoi.reduce((s, i) => s + i.price * i.quantity, 0);
   const subtotal = Math.round((productSubtotal + cartSubtotal + bumpSubtotal + fbtSubtotal) * 100) / 100;
   // Editarea scrie in DOUA locuri: starea locala, ca formularul sa se actualizeze
   // pe loc, si cosul magazinului prin `onCartLineChange`, ca modificarea sa
@@ -369,9 +394,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setHasCouriers(false);
     setAcceptedBumps(new Set());
     // Re-sync the carried cart from the latest prop on open, so products added from the
-    // page's cross-sell after this modal first mounted are included in the order. Drop any
-    // items that are part of an accepted FBT set — they show in that set, not twice.
-    setCartLines((cartItems ?? []).filter((c) => !fbtOffer?.items.some((i) => i.product_id === c.productId)));
+    // page's cross-sell after this modal first mounted are included in the order.
+    //
+    // Liniile companionilor din setul FBT RAMAN aici, cu cantitatea lor. Pana pe
+    // 2026-08-04 se scoteau de tot, iar setul intra cu 1 bucata fixa: cine avea
+    // 3 bucati din companion in cos nu-l mai vedea nicaieri in formular si pleca
+    // cu una. Acum linia ramane si primeste pretul de set pe o bucata (`fbtInCos`),
+    // exact ca la server.
+    setCartLines(cartItems ?? []);
     setCustValues(() => {
       const defaults: Record<string, string | string[]> = {};
       for (const f of customizationFields ?? []) {
@@ -586,7 +616,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       const allAdditional = [
         ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
-        ...(fbtOffer ? fbtOffer.items.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })) : []),
+        // Doar companionii FARA linie in cos: ceilalti au plecat deja mai sus, cu
+        // cantitatea lor reala. Trimisi si aici, serverul ar fi vazut DOUA linii
+        // ale aceluiasi produs, ar fi redus-o pe prima (cea din cos) si ar fi
+        // incasat-o pe a doua intreaga — companionul platit inca o data.
+        ...fbt.companioniNoi.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })),
       ];
       const acceptedOfferIds = [...acceptedBumpOffers.map((o) => o.id), ...(fbtOffer ? [fbtOffer.id] : [])];
       const payload = {
@@ -805,8 +839,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     <Package size={12} /> Din cosul tau
                   </p>
-                  {cart.map((ci) => {
+                  {cart.map((ci, idx) => {
                     const key = cartLineKey(ci);
+                    const economieSet = economiaFbtPeLinie(idx);
                     return (
                     <div key={key} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-border bg-muted/40">
                       <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border shrink-0 bg-surface flex-shrink-0">
@@ -822,6 +857,30 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                         <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(totalLinieCos(ci))}</p>
                         {ci.quantity > 1 && (
                           <p className="text-[11px] text-muted-foreground">{formatPrice(pretBucataCos(ci))} bucata</p>
+                        )}
+                        {/* Setul se da pe O bucata din linie, nu pe toata linia
+                            (`aplicaBumpPeOBucata`). Spus pe fata, ca sa nu mai
+                            existe cazul in care clientul avea 3 bucati, accepta
+                            setul si pleca cu 1 fara ca ecranul sa zica nimic. */}
+                        {economieSet > 0 ? (
+                          <p className="text-[11px] font-semibold" style={{ color }}>
+                            1 buc la pret de set: -{formatPrice(economieSet)}
+                          </p>
+                        ) : fbtOffer && esteCompanionFbt(ci) && (
+                          /*
+                           * Setul nu mai are ce sa reduca pe linia asta.
+                           *
+                           * `aplicaBumpPeOBucata` nu coboara niciodata pretul: cand
+                           * linia din cos are deja o treapta de cantitate mai buna
+                           * decat pretul de set, economia iese 0 — serverul face
+                           * exact la fel, deci nu e nicio divergenta de bani. Dar
+                           * clientul a apasat un buton pe care scria „Economisesti
+                           * X" si trebuie sa afle de ce nu vede nimic, altfel setul
+                           * pare pierdut.
+                           */
+                          <p className="text-[11px] text-muted-foreground">
+                            Pretul pe care il ai deja pentru cantitatea asta e mai bun decat cel de set.
+                          </p>
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -1113,7 +1172,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   cart={[
                     { productId: product.id, quantity },
                     ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-                    ...(fbtOffer ? fbtOffer.items.map((i) => ({ productId: i.product_id, quantity: i.quantity })) : []),
+                    // Aceleasi linii ca in `allAdditional`: companionul din cos e
+                    // numarat o data, cu toate bucatile lui. Pana acum coletul se
+                    // cota pe 1 bucata acolo unde clientul comanda 3.
+                    ...fbt.companioniNoi.map((i) => ({ productId: i.product_id, quantity: i.quantity })),
                     ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
                   ]}
                   subtotal={Math.max(0, discountedSubtotal)}
@@ -1276,10 +1338,23 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <span>Produs ({quantity} buc)</span>
                   <span className="font-medium text-foreground">{formatPrice(productSubtotal)}</span>
                 </div>
-                {cart.map((ci) => (
-                  <div key={ci.productId} className="flex justify-between text-muted-foreground">
-                    <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
-                    <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Math.round(totalLinieCos(ci) * 100) / 100)}</span>
+                {/* Cheia pe produs+varianta, nu pe produs: doua marimi ale
+                    aceluiasi produs se ciocneau si React randa o singura linie. */}
+                {cart.map((ci, idx) => (
+                  <div key={cartLineKey(ci)} className="space-y-1.5">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
+                      <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Math.round(totalLinieCos(ci) * 100) / 100)}</span>
+                    </div>
+                    {/* Rand separat, nu un numar mai mic pe randul de sus: asa
+                        coloana se aduna in continuare la totalul de pe buton si
+                        se vede DE CE a scazut. */}
+                    {economiaFbtPeLinie(idx) > 0 && (
+                      <div className="flex justify-between" style={{ color }}>
+                        <span className="truncate pr-2">Set: 1 buc {ci.name}</span>
+                        <span className="font-semibold whitespace-nowrap">-{formatPrice(economiaFbtPeLinie(idx))}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {acceptedBumpOffers.map((o) => (
@@ -1288,7 +1363,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <span className="font-medium whitespace-nowrap">{formatPrice(o.pricing!.price)}</span>
                   </div>
                 ))}
-                {fbtOffer?.items.map((i) => (
+                {/* Doar companionii care intra ca linie noua. Cei aflati deja in
+                    cos si-au aratat randul lor mai sus, cu reducerea de set sub el. */}
+                {fbt.companioniNoi.map((i) => (
                   <div key={i.product_id} className="flex justify-between" style={{ color }}>
                     <span className="truncate pr-2">+ {i.name}</span>
                     <span className="font-medium whitespace-nowrap">{formatPrice(Math.round(i.price * i.quantity * 100) / 100)}</span>

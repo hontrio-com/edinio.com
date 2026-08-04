@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { scrieStatisticiOferte } from "@/lib/offers/statistici";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -482,9 +484,21 @@ export async function placeOrder(data: {
   customer_postal_code?: string;
   /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
   billing_company?: BillingCompanyInput;
+  /**
+   * NU SE CITESC. `discount_id` n-a fost citit niciodata, iar `discount_amount`
+   * a plecat pe 2026-08-04 din singurul loc care il folosea (payload-ul de
+   * email). Cuponul se re-valideaza integral pe server din `discount_code`, si
+   * doar ce iese de acolo ajunge si in `orders`, si in emailuri.
+   *
+   * Raman declarate fiindca `OrderModal.tsx` si `checkout-core.ts` inca le
+   * trimit; scoase de aici, `tsc` ar pica pe ele. Cine le sterge, sa le stearga
+   * si de la apelanti — dar sa nu le RECITEASCA: un numar de reducere venit de
+   * la browser nu are ce cauta langa un total calculat de server.
+   */
   discount_id?: string;
-  discount_code?: string;
   discount_amount?: number;
+  /** Singurul camp de cupon citit: se re-valideaza cu `validateDiscount`. */
+  discount_code?: string;
   vat_amount?: number;
   vat_rate?: number;
   extras?: { id: string; label: string; price: number }[];
@@ -984,6 +998,20 @@ export async function placeOrder(data: {
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
     billing_company: (billingCompany ?? null) as never,
+    /*
+     * Id-ul cuponului revendicat, scris PE COMANDA — nu doar codul lui.
+     *
+     * Utilizarea revendicata mai sus trebuie sa se poata da inapoi cand comanda
+     * nu se mai face (anulata, returnata, stearsa, plata online abandonata).
+     * Codul ca text nu ajunge: comerciantul poate redenumi cuponul intre timp, si
+     * atunci comanda ar arata catre un cod inexistent — sau, mai rau, catre un
+     * cupon nou cu acelasi nume. Coloana vine din migratia
+     * `2026-08-04-eliberare-cupon.sql`.
+     *
+     * `as never` ca la `order_source` si `billing_company`: coloana e in baza,
+     * dar inca nu si in tipurile generate.
+     */
+    discount_id: (validDiscountId ?? null) as never,
   }).select("id, order_number").single();
 
   if (error) {
@@ -992,6 +1020,24 @@ export async function placeOrder(data: {
     logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
+
+  /*
+   * Acceptarile de oferta intra in contor ABIA ACUM, cand comanda chiar exista.
+   *
+   * Numarate in `applyOfferPricing`, cum erau, treceau in contor si comenzile
+   * care picau mai jos — comanda minima, ANAF, cupon respins, stoc pierdut,
+   * insert cazut — iar clientul care corecta si retrimitea mai adauga una.
+   * `after` scoate scrierea de pe drumul raspunsului: nicio comanda nu asteapta
+   * dupa o statistica.
+   */
+  if (oferte.applied.length > 0) {
+    try {
+      after(() => scrieStatisticiOferte(admin, oferte.applied.map((id) => ({
+        offerId: id, conversions: 1, revenue: oferte.venitPeOferta[id] ?? 0,
+      }))));
+    } catch { /* fara context de cerere (scripturi, teste) */ }
+  }
+
 
   // Atomic stock decrement — bundle components when ordering a bundle, else the product itself.
   await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
@@ -1047,17 +1093,47 @@ export async function placeOrder(data: {
         customer_email: data.customer_email,
         total,
         subtotal,
-        items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
+        // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
+        // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
+        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
         shipping_cost: shipping,
-        discount_code: data.discount_code,
-        discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
-        card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
-        cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
-        cod_fee_amount: codFee > 0 ? codFee : undefined,
-        // Emailul clientului arata si TVA-ul: la preturi fara TVA, randurile de
-        // deasupra nu dadeau altfel „Total de plata".
-        vat_amount: vatAmount > 0 ? vatAmount : undefined,
-        vat_rate: vatEnabled ? vatRate : undefined,
+        /*
+         * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`
+         * mai sus, aceleasi doua expresii.
+         *
+         * Pana acum plecau `data.discount_amount` si `data.discount_code`, adica
+         * numerele din cererea browserului, desi vecinele lor (`total`,
+         * `cardDiscount`, `codFee`) erau recalculate de server. Baza si emailul
+         * puteau deci sa se contrazica pe aceeasi comanda.
+         *
+         * Expunere MASURATA 2026-08-04: zero comenzi din 96 au `discount_amount`
+         * peste zero, iar singurul cupon folosit vreodata (tonel-beauty #0003,
+         * „PRIMA") e de tip `free_shipping`, adica are `discount_amount` 0 prin
+         * constructie — deci si clientul si serverul duceau acelasi 0, si emailul
+         * nu tiparea niciun rand. Nu s-a contrazis nimic pana acum.
+         *
+         * Varianta ostila era mai rea: `placeOrder` e export „use server" cu
+         * adresa de destinatie aleasa de apelant, deci un `discount_amount:
+         * 100000` fabricat tiparea „Reducere -100.000,00 lei" intr-un email
+         * purtand numele unui magazin real.
+         *
+         * `data.discount_amount` si `data.discount_id` nu mai sunt citite acum
+         * NICAIERI; raman in semnatura doar fiindca `OrderModal.tsx` si
+         * `checkout-core.ts` inca le trimit.
+         */
+        discount_code: validDiscountId ? data.discount_code : undefined,
+        discount_amount: discountAmount,
+        card_discount_amount: cardDiscount,
+        cod_discount_amount: codDiscount,
+        cod_fee_amount: codFee,
+        // TVA-ul si REGIMUL de preturi: emailul trebuie sa stie nu doar cifra, ci
+        // si daca ea se aduna in coloana. La preturi cu TVA inclus e portiunea
+        // extrasa din incasare — adunata, ducea coloana peste Total.
+        vat_amount: vatAmount,
+        vat_rate: vatEnabled ? vatRate : 0,
+        vat_enabled: vatEnabled,
+        prices_include_vat: pricesIncludeVat,
         payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
@@ -1223,7 +1299,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   const { data: order } = await supabase
     .from("orders")
-    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status, shipping_address, payment_method, created_at, items, order_source")
+    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status, shipping_address, payment_method, created_at, items, order_source, discount_code")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -1251,6 +1327,64 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     const refundItems = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
     const gaClientId = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
     void ga4OrderEvent(order.business_id, "refund", { transactionId: orderId, value: order.total ?? 0, clientId: gaClientId, items: refundItems });
+  }
+
+  /*
+   * Utilizarea cuponului se da inapoi cand vanzarea se intoarce, si se ia inapoi
+   * daca vanzarea se reia.
+   *
+   * Pana acum se revendica atomic la plasare si nu se elibera niciodata: un cupon
+   * cu 100 de utilizari se epuiza cu 100 de comenzi anulate. Masurat pe productie
+   * (2026-08-04): 26 de comenzi in `cancelled`/`refunded`, niciuna cu cupon, deci
+   * azi nu se repara nimic retroactiv — dar CADOU30 are max_uses 4, si patru
+   * anulari i-ar fi stins campania.
+   *
+   * Ramura asta se uita la STATUS. Comerciantul care da banii inapoi mutand doar
+   * `payment_status` pe „refunded" (doua comenzi asa in productie, amandoua
+   * ramburs) nu elibereaza cuponul — cazul ramane deschis, si se vede aici.
+   *
+   * `GA4_REVERSAL`, aceeasi multime ca la evenimentul de refund: e exact
+   * intrebarea „vanzarea asta se mai face?".
+   *
+   * Cine hotaraste ca utilizarea a fost DEJA data inapoi e baza, nu codul de
+   * aici: `release_order_discount` pune marcajul si scade contorul in aceeasi
+   * instructiune, deci o comanda anulata de doua ori (sau anulata din panou si
+   * stearsa pe urma) scade o singura data. Din acelasi motiv nu conteaza ca
+   * `bulkUpdateOrderStatus` nu stie statusul vechi.
+   *
+   * `discount_code` e doar poarta ieftina: fara cod nu poate exista revendicare,
+   * deci nu mai facem drumul pana la baza pentru cele 95 de comenzi din 96 care
+   * n-au avut niciodata cupon.
+   */
+  if (order.discount_code && statusChanged) {
+    const seIntoarce = GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string);
+    /*
+     * Re-revendicarea NU cere ca statusul vechi sa fi fost anulat.
+     *
+     * Cronul elibereaza comenzi ramase in `pending`, nu anulate. Cu conditia pe
+     * statusul vechi, comerciantul care duce apoi comanda `pending -> confirmed`
+     * nu declansa nimic: comanda pastra reducerea, campania n-o mai numara, si o
+     * campanie de 4 servea 5. Nu e ipotetic — in productie exista o comanda
+     * `shipped` + `unpaid`, adica expediata inainte de plata.
+     *
+     * Garda ramane in baza: `reclaim_order_discount` intoarce „nimic" cand
+     * marcajul de eliberare lipseste, deci nu se poate revendica ce n-a fost dat
+     * inapoi.
+     */
+    const seReia = !GA4_REVERSAL.has(data.status);
+    const admin = createAdminClient();
+    if (seIntoarce) {
+      await admin.rpc("release_order_discount" as never, { p_order_id: orderId } as never);
+    } else if (seReia) {
+      // Comanda scoasa din anulare isi ia utilizarea la loc, altfel reducerea ar
+      // ramane acordata dar necontorizata si o campanie de 4 ar servi 5 clienti.
+      // „plin" = intre timp cuponul si-a atins limita: comanda ramane valida, dar
+      // peste limita, si asta trebuie sa se vada undeva.
+      const { data: reluat } = await admin.rpc("reclaim_order_discount" as never, { p_order_id: orderId } as never);
+      if (reluat === "plin") {
+        logError({ action: "updateOrder.reclaimDiscount", message: "Cuponul si-a atins limita intre anulare si reactivare; comanda ramane cu reducerea, necontorizata.", details: { orderId, code: order.discount_code }, businessId: order.business_id, userId: user.id, severity: "warning" });
+      }
+    }
   }
 
   // Send status change email to customer
@@ -1815,11 +1949,28 @@ export async function deleteOrder(orderId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: order } = await supabase.from("orders").select("business_id").eq("id", orderId).single();
+  const { data: order } = await supabase.from("orders").select("business_id, discount_code").eq("id", orderId).single();
   if (!order) return { error: "Comanda negasita" };
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
+
+  /*
+   * Utilizarea cuponului se da inapoi INAINTE de stergere.
+   *
+   * Dupa DELETE randul nu mai exista, deci nu se mai poate afla ce cupon
+   * revendicase comanda: `discount_id` pleaca odata cu ea, si contorul ar ramane
+   * crescut pentru o comanda care nu mai e nicaieri.
+   *
+   * Daca stergerea de mai jos esueaza, utilizarea a plecat inapoi la o comanda
+   * care inca traieste — dar marcajul pus de `release_order_discount` face ca o a
+   * doua incercare (sau o anulare din panou) sa nu mai scada inca o data. Un
+   * cupon in plus la o stergere esuata e mai bun decat o campanie stinsa de
+   * comenzi care nu mai exista.
+   */
+  if (order.discount_code) {
+    await createAdminClient().rpc("release_order_discount" as never, { p_order_id: orderId } as never);
+  }
 
   const { error } = await supabase.from("orders").delete().eq("id", orderId);
   if (error) {
@@ -1918,9 +2069,21 @@ export async function placeCartOrder(data: {
   customer_postal_code?: string;
   /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
   billing_company?: BillingCompanyInput;
+  /**
+   * NU SE CITESC. `discount_id` n-a fost citit niciodata, iar `discount_amount`
+   * a plecat pe 2026-08-04 din singurul loc care il folosea (payload-ul de
+   * email). Cuponul se re-valideaza integral pe server din `discount_code`, si
+   * doar ce iese de acolo ajunge si in `orders`, si in emailuri.
+   *
+   * Raman declarate fiindca `OrderModal.tsx` si `checkout-core.ts` inca le
+   * trimit; scoase de aici, `tsc` ar pica pe ele. Cine le sterge, sa le stearga
+   * si de la apelanti — dar sa nu le RECITEASCA: un numar de reducere venit de
+   * la browser nu are ce cauta langa un total calculat de server.
+   */
   discount_id?: string;
-  discount_code?: string;
   discount_amount?: number;
+  /** Singurul camp de cupon citit: se re-valideaza cu `validateDiscount`. */
+  discount_code?: string;
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
   vat_amount?: number;
@@ -2290,6 +2453,9 @@ export async function placeCartOrder(data: {
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
     billing_company: (billingCompany ?? null) as never,
+    /* Vezi `placeOrder`: id-ul cuponului revendicat, ca utilizarea sa se poata da
+     * inapoi cand comanda nu se mai face. `as never` din acelasi motiv. */
+    discount_id: (validDiscountId ?? null) as never,
   }).select("id, order_number, total").single();
 
   if (error) {
@@ -2297,6 +2463,16 @@ export async function placeCartOrder(data: {
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
     logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
+  }
+
+  // Acelasi motiv ca pe calea directa: contorul se misca abia dupa ce comanda a
+  // intrat cu adevarat.
+  if (oferte.applied.length > 0) {
+    try {
+      after(() => scrieStatisticiOferte(admin, oferte.applied.map((id) => ({
+        offerId: id, conversions: 1, revenue: oferte.venitPeOferta[id] ?? 0,
+      }))));
+    } catch { /* fara context de cerere (scripturi, teste) */ }
   }
 
   // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.
@@ -2352,17 +2528,47 @@ export async function placeCartOrder(data: {
         customer_email: data.customer_email,
         total,
         subtotal,
-        items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
+        // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
+        // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
+        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
         shipping_cost: shipping,
-        discount_code: data.discount_code,
-        discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
-        card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
-        cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
-        cod_fee_amount: codFee > 0 ? codFee : undefined,
-        // Emailul clientului arata si TVA-ul: la preturi fara TVA, randurile de
-        // deasupra nu dadeau altfel „Total de plata".
-        vat_amount: vatAmount > 0 ? vatAmount : undefined,
-        vat_rate: vatEnabled ? vatRate : undefined,
+        /*
+         * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`
+         * mai sus, aceleasi doua expresii.
+         *
+         * Pana acum plecau `data.discount_amount` si `data.discount_code`, adica
+         * numerele din cererea browserului, desi vecinele lor (`total`,
+         * `cardDiscount`, `codFee`) erau recalculate de server. Baza si emailul
+         * puteau deci sa se contrazica pe aceeasi comanda.
+         *
+         * Expunere MASURATA 2026-08-04: zero comenzi din 96 au `discount_amount`
+         * peste zero, iar singurul cupon folosit vreodata (tonel-beauty #0003,
+         * „PRIMA") e de tip `free_shipping`, adica are `discount_amount` 0 prin
+         * constructie — deci si clientul si serverul duceau acelasi 0, si emailul
+         * nu tiparea niciun rand. Nu s-a contrazis nimic pana acum.
+         *
+         * Varianta ostila era mai rea: `placeOrder` e export „use server" cu
+         * adresa de destinatie aleasa de apelant, deci un `discount_amount:
+         * 100000` fabricat tiparea „Reducere -100.000,00 lei" intr-un email
+         * purtand numele unui magazin real.
+         *
+         * `data.discount_amount` si `data.discount_id` nu mai sunt citite acum
+         * NICAIERI; raman in semnatura doar fiindca `OrderModal.tsx` si
+         * `checkout-core.ts` inca le trimit.
+         */
+        discount_code: validDiscountId ? data.discount_code : undefined,
+        discount_amount: discountAmount,
+        card_discount_amount: cardDiscount,
+        cod_discount_amount: codDiscount,
+        cod_fee_amount: codFee,
+        // TVA-ul si REGIMUL de preturi: emailul trebuie sa stie nu doar cifra, ci
+        // si daca ea se aduna in coloana. La preturi cu TVA inclus e portiunea
+        // extrasa din incasare — adunata, ducea coloana peste Total.
+        vat_amount: vatAmount,
+        vat_rate: vatEnabled ? vatRate : 0,
+        vat_enabled: vatEnabled,
+        prices_include_vat: pricesIncludeVat,
         payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,

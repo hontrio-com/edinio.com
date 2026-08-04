@@ -126,9 +126,16 @@ export function totaluriComanda(p: {
   const rata = num(p.vatRate);
   /*
    * Randul se arata ori de cate ori exista o cifra, indiferent de
-   * `show_vat_breakdown`. Setarea aceea se numeste in panou „Afiseaza defalcarea
-   * TVA IN COS" si e despre ce vede CLIENTUL; comerciantul are nevoie de cifra ca
-   * sa o poata pune fata in fata cu factura, care o contine intotdeauna.
+   * `show_vat_breakdown`, si asta e o decizie deliberata pentru AMANDOI apelantii.
+   *
+   * In panou: setarea se numeste „Afiseaza defalcarea TVA IN COS" si e despre ce
+   * vede clientul cat timp cumpara; comerciantul are nevoie de cifra ca sa o poata
+   * pune fata in fata cu factura, care o contine intotdeauna.
+   *
+   * In emailul clientului: acolo comanda s-a incheiat, iar emailul e documentul pe
+   * care il pastreaza si cu care compara factura. Un rand ascuns acolo l-ar lasa
+   * cu un total pe care nu-l poate desface. Un singur magazin din cele noua cu TVA
+   * are setarea stinsa, si are doua comenzi.
    */
   const arataTva = p.setariTva.vat_enabled && tva > 0;
   /*

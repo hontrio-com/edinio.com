@@ -390,6 +390,18 @@ export async function bulkUpdateOrderStatus(
 
   for (const row of updated ?? []) {
     void maybeAutoInvoice(businessId, row.id, status, (row.payment_status as string) ?? "");
+    /*
+     * Utilizarea cuponului se elibereaza si de AICI, nu doar din `updateOrder`.
+     *
+     * Masurat: din cele 8 comenzi online anulate din productie, SASE au fost
+     * anulate in lot — se vad dupa `updated_at` identic la microsecunda. Adica
+     * exact populatia constatarii 27 pleaca pe calea asta, iar cronul nu le
+     * prinde nici el (el cere `status = pending`, astea sunt `cancelled`).
+     * RPC-ul e idempotent: marcajul si contorul se ating in aceeasi instructiune.
+     */
+    if (status === "cancelled" || status === "refunded") {
+      void admin.rpc("release_order_discount" as never, { p_order_id: row.id } as never);
+    }
   }
   revalidatePath("/dashboard/orders");
   return { updated: (updated ?? []).length };

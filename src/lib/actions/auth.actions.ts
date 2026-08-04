@@ -95,6 +95,28 @@ async function scrieCampuriMfa(
   await getAdmin().from("users_profile").update(campuri as never).eq("id", userId);
 }
 
+
+/**
+ * Citirea campurilor MFA trece prin service role, ca si scrierea.
+ *
+ * `mfa_otp` e hash-ul codului in curs. Citibil de proprietarul randului, devine
+ * o unealta pentru chiar atacul de care MFA ar trebui sa apere: cine are parola
+ * primeste o sesiune valida (al doilea factor doar intarzie redirectarea), isi
+ * citeste hash-ul si sparge 6 cifre offline in mai putin de o secunda.
+ */
+async function citesteCampuriMfa(userId: string): Promise<{
+  mfa_email_enabled: boolean | null; mfa_otp: string | null; mfa_otp_expires_at: string | null;
+  onboarding_completed?: boolean | null;
+} | null> {
+  const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
+  const { data } = await getAdmin()
+    .from("users_profile")
+    .select("mfa_email_enabled, mfa_otp, mfa_otp_expires_at, onboarding_completed")
+    .eq("id", userId)
+    .single();
+  return data ?? null;
+}
+
 export async function login(formData: { email: string; password: string }) {
   const ip = await ipApelant();
   const email = formData.email.trim().toLowerCase();
@@ -168,11 +190,7 @@ export async function verifyMfaLogin(code: string): Promise<{ error: string } | 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Sesiune expirata. Autentifica-te din nou." };
 
-  const { data: profile } = await supabase
-    .from("users_profile")
-    .select("mfa_otp, mfa_otp_expires_at, onboarding_completed")
-    .eq("id", user.id)
-    .single();
+  const profile = await citesteCampuriMfa(user.id);
 
   const depasit = await limitaMfa(user.id);
   if (depasit) return depasit;
@@ -212,8 +230,7 @@ export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: st
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: profile } = await supabase
-    .from("users_profile").select("mfa_otp, mfa_otp_expires_at").eq("id", user.id).single();
+  const profile = await citesteCampuriMfa(user.id);
 
   const depasit = await limitaMfa(user.id);
   if (depasit) return depasit;
@@ -231,8 +248,7 @@ export async function verifyAndDisableMfaEmail(code: string): Promise<{ error: s
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: profile } = await supabase
-    .from("users_profile").select("mfa_otp, mfa_otp_expires_at").eq("id", user.id).single();
+  const profile = await citesteCampuriMfa(user.id);
 
   const depasit = await limitaMfa(user.id);
   if (depasit) return depasit;
@@ -361,12 +377,7 @@ export async function schimbaParola(
   const lim = await consumaLimita(`schimba-parola:${user.id}`, 5, 900, 900);
   if (!lim.permis) return { error: mesajLimita(lim, "Prea multe incercari. Incearca mai tarziu.") };
 
-  const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
-  const { data: profil } = await getAdmin()
-    .from("users_profile")
-    .select("mfa_email_enabled, mfa_otp, mfa_otp_expires_at")
-    .eq("id", user.id)
-    .single();
+  const profil = await citesteCampuriMfa(user.id);
   if (mfaInAsteptare(profil)) {
     return { error: "Finalizeaza autentificarea in doi pasi inainte de a schimba parola." };
   }

@@ -24,7 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const esteImpersonare = (await cookies()).get("impersonare")?.value != null;
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
-    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at, mfa_email_enabled, mfa_otp, mfa_otp_expires_at").eq("id", user.id).single(),
+    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at, mfa_email_enabled").eq("id", user.id).single(),
     supabase.from("businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
   ]);
 
@@ -39,7 +39,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
    * Sursa de adevar e provocarea din baza (`mfa_otp`, stearsa la verificarea
    * reusita). Nu costa nicio interogare in plus: profilul e citit oricum aici.
    */
-  if (mfaInAsteptare(profile)) redirect("/login/mfa");
+  /*
+   * Provocarea MFA se citeste cu SERVICE ROLE, si numai cand MFA e chiar pornit.
+   *
+   * `mfa_otp` e hash-ul codului in curs: citibil de proprietarul randului, devine
+   * unealta pentru chiar atacul de care MFA apara (cine are parola isi citeste
+   * hash-ul si sparge 6 cifre offline). Nu poate ramane in interogarea facuta cu
+   * clientul utilizatorului.
+   *
+   * Conditionarea pe `mfa_email_enabled` — camp nesecret, citit oricum mai sus —
+   * face ca interogarea in plus sa apara DOAR pentru conturile cu MFA activ. Cei
+   * fara MFA nu platesc nimic.
+   */
+  if (profile?.mfa_email_enabled) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { data: provocare } = await createAdminClient()
+      .from("users_profile")
+      .select("mfa_email_enabled, mfa_otp, mfa_otp_expires_at")
+      .eq("id", user.id)
+      .single();
+    if (mfaInAsteptare(provocare)) redirect("/login/mfa");
+  }
 
   if (!profile?.onboarding_completed) redirect("/onboarding/details");
 

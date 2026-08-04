@@ -16,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 export function DpdConfigClient({
   businessId,
@@ -44,10 +45,10 @@ export function DpdConfigClient({
 
   async function handleConnect() {
     if (!username.trim()) return toast.error("Completeaza username-ul DPD");
-    if (!password.trim()) return toast.error("Completeaza parola DPD");
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completeaza parola DPD");
 
     setLoading(true);
-    const result = await loadDpdAccountAction(username.trim(), password.trim());
+    const result = await loadDpdAccountAction(businessId, username.trim(), password.trim());
     setLoading(false);
 
     if ("error" in result) {
@@ -142,14 +143,14 @@ export function DpdConfigClient({
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Parola contului DPD"
+              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola contului DPD"}
             />
           </Field>
         </div>
 
         <Button
           onClick={handleConnect}
-          disabled={loading || !username.trim() || !password.trim()}
+          disabled={loading || !username.trim() || (!password.trim() && !secretulEsteSalvat(initialConfig, "password"))}
         >
           {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
           {loading ? "Se conecteaza..." : "Testeaza si conecteaza"}

@@ -1,6 +1,7 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -64,6 +65,7 @@ export async function disconnectSameday(
 }
 
 export async function loadSamedayAccountAction(
+  businessId: string,
   username: string,
   password: string,
   sandbox: boolean,
@@ -72,7 +74,9 @@ export async function loadSamedayAccountAction(
   services: SamedayService[];
 } | { error: string }> {
   try {
-    return await loadSamedayAccount(username, password, sandbox);
+    const parola = await secretDinConfig(businessId, "sameday_config", "password", password);
+    if (!parola) return { error: "Completeaza parola Sameday." };
+    return await loadSamedayAccount(username, parola, sandbox);
   } catch (e) {
     console.error("[sameday] loadSamedayAccountAction error:", e);
     return { error: (e as Error).message ?? "Eroare necunoscuta" };

@@ -1,6 +1,7 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -66,10 +67,13 @@ export async function disconnectFanCourier(
 }
 
 export async function loadFanCourierAccountAction(
+  businessId: string,
   username: string,
   password: string,
 ): Promise<{ branches: FanCourierBranch[] } | { error: string }> {
-  return loadFanCourierAccount(username, password);
+  const parola = await secretDinConfig(businessId, "fan_courier_config", "password", password);
+  if (!parola) return { error: "Completeaza parola selfAWB." };
+  return loadFanCourierAccount(username, parola);
 }
 
 // ─── AWB actions ──────────────────────────────────────────────────────────────

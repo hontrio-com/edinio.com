@@ -81,39 +81,45 @@ export async function updateNoticeConfig(
 
 // Validate the token by making an authenticated call (templates list). Free — no SMS sent.
 export async function testNoticeConnection(
+  businessId: string,
   token: string,
 ): Promise<{ ok: true; templateCount: number } | { ok: false; error: string }> {
   const { user } = await requireUser();
   if (!user) return { ok: false, error: "Neautorizat" };
-  if (!token.trim()) return { ok: false, error: "Introdu tokenul API." };
-  return testNoticeToken(token.trim());
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (!tokenReal) return { ok: false, error: "Introdu tokenul API." };
+  return testNoticeToken(tokenReal);
 }
 
 export async function listNoticeTemplates(
+  businessId: string,
   token: string,
 ): Promise<{ templates: NoticeTemplate[] } | { error: string }> {
   const { user } = await requireUser();
   if (!user) return { error: "Neautorizat" };
-  if (!token.trim()) return { error: "Introdu tokenul API." };
-  const res = await getNoticeTemplates(token.trim());
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (!tokenReal) return { error: "Introdu tokenul API." };
+  const res = await getNoticeTemplates(tokenReal);
   if ("error" in res) return res;
   return { templates: res };
 }
 
 export async function sendNoticeTestSms(
+  businessId: string,
   token: string,
   phone: string,
 ): Promise<{ success: true } | { error: string }> {
   const { user } = await requireUser();
   if (!user) return { error: "Neautorizat" };
-  if (!token.trim()) return { error: "Introdu tokenul API." };
   if (!phone.trim()) return { error: "Introdu un numar de telefon." };
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (!tokenReal) return { error: "Introdu tokenul API." };
 
   // Trimite un SMS real catre un numar ales de apelant. Vezi si /api/sms/test:
   // fara plafon, e o unealta de bombardare cu SMS-uri.
   const lim = await consumaLimita(`notice-test:${user.id}`, 5, 3600, 3600);
   if (!lim.permis) return { error: mesajLimita(lim, "Ai trimis deja destule mesaje de test. Incearca peste o ora.") };
-  const res = await sendNoticeSms(token.trim(), {
+  const res = await sendNoticeSms(tokenReal, {
     number: phone.trim(),
     message: "Test notice.ro din magazinul tau Edinio. Integrarea SMS functioneaza!",
   });
@@ -187,22 +193,26 @@ export async function connectNoticeWhatsapp(
 }
 
 export async function refreshNoticeWhatsappQr(
-  token: string, deviceId: string,
+  businessId: string, token: string, deviceId: string,
 ): Promise<{ qr_code: string | null } | { error: string }> {
   const { user } = await requireUser();
   if (!user) return { error: "Neautorizat" };
-  if (!token.trim() || !deviceId) return { error: "Lipsesc datele." };
-  return refreshNoticeWaQr(token.trim(), deviceId);
+  if (!deviceId) return { error: "Lipsesc datele." };
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (!tokenReal) return { error: "Introdu tokenul API." };
+  return refreshNoticeWaQr(tokenReal, deviceId);
 }
 
 export async function requestNoticeWhatsappPairing(
-  token: string, deviceId: string, phone: string,
+  businessId: string, token: string, deviceId: string, phone: string,
 ): Promise<{ pairing_code: string | null } | { error: string }> {
   const { user } = await requireUser();
   if (!user) return { error: "Neautorizat" };
-  if (!token.trim() || !deviceId) return { error: "Lipsesc datele." };
+  if (!deviceId) return { error: "Lipsesc datele." };
   if (!phone.trim()) return { error: "Introdu numarul de WhatsApp." };
-  return requestNoticeWaPairing(token.trim(), deviceId, phone.trim());
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (!tokenReal) return { error: "Introdu tokenul API." };
+  return requestNoticeWaPairing(tokenReal, deviceId, phone.trim());
 }
 
 // Poll the device; once authenticated, flip whatsapp.enabled on and persist status.
@@ -230,7 +240,8 @@ export async function disconnectNoticeWhatsapp(
 ): Promise<{ success: true } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
-  if (deviceId && token.trim()) await deleteNoticeWaDevice(token.trim(), deviceId); // best-effort
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (deviceId && tokenReal) await deleteNoticeWaDevice(tokenReal, deviceId); // best-effort
 
   await mergeNoticeConfig(owned.supabase, businessId, (c) => {
     const triggers = Object.fromEntries(
@@ -244,32 +255,57 @@ export async function disconnectNoticeWhatsapp(
 
 // ── Channel tests ───────────────────────────────────────────────────────────────
 
-export async function sendNoticeTestWhatsapp(token: string, phone: string): Promise<{ success: true } | { error: string }> {
+
+/**
+ * Tokenul real al magazinului, pentru orice apel catre notice.ro pornit din formular.
+ *
+ * Formularul primeste `api_token` MASCAT (gol), deci orice actiune care se bazeaza
+ * pe valoarea venita de la client ar pleca spre notice.ro cu sirul gol si ar
+ * raspunde mereu „neautorizat" — arata ca o integrare stricata, desi e doar
+ * mascarea. Cand clientul nu trimite nimic, citim valoarea salvata.
+ *
+ * Se aplica la TOATE cele sase actiuni care consuma tokenul, nu doar la testele
+ * de trimitere: si validarea conexiunii, si lista de sabloane, si imperecherea
+ * WhatsApp treceau prin aceeasi valoare.
+ */
+async function tokenulNotice(businessId: string, primit: string): Promise<string> {
+  if (primit.trim()) return primit.trim();
+  const owned = await requireOwned(businessId);
+  if ("error" in owned) return "";
+  const { data } = await owned.supabase
+    .from("store_settings").select("notice_config").eq("business_id", businessId).single();
+  const cfg = (data?.notice_config as NoticeConfig | null) ?? EMPTY_CONFIG;
+  return (cfg.api_token ?? "").trim();
+}
+
+export async function sendNoticeTestWhatsapp(businessId: string, token: string, phone: string): Promise<{ success: true } | { error: string }> {
   const { user } = await requireUser();
   if (!user) return { error: "Neautorizat" };
-  if (!token.trim()) return { error: "Introdu tokenul API." };
   if (!phone.trim()) return { error: "Introdu un numar de telefon." };
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (!tokenReal) return { error: "Introdu tokenul API." };
 
   // Trimite un SMS real catre un numar ales de apelant. Vezi si /api/sms/test:
   // fara plafon, e o unealta de bombardare cu SMS-uri.
   const lim = await consumaLimita(`notice-test:${user.id}`, 5, 3600, 3600);
   if (!lim.permis) return { error: mesajLimita(lim, "Ai trimis deja destule mesaje de test. Incearca peste o ora.") };
-  const res = await sendNoticeWhatsapp(token.trim(), { number: phone.trim(), message: "Test WhatsApp din magazinul tau Edinio. Integrarea functioneaza!" });
+  const res = await sendNoticeWhatsapp(tokenReal, { number: phone.trim(), message: "Test WhatsApp din magazinul tau Edinio. Integrarea functioneaza!" });
   if (!res.success) return { error: res.error ?? "Trimitere esuata." };
   return { success: true };
 }
 
-export async function sendNoticeTestVoice(token: string, phone: string): Promise<{ success: true } | { error: string }> {
+export async function sendNoticeTestVoice(businessId: string, token: string, phone: string): Promise<{ success: true } | { error: string }> {
   const { user } = await requireUser();
   if (!user) return { error: "Neautorizat" };
-  if (!token.trim()) return { error: "Introdu tokenul API." };
   if (!phone.trim()) return { error: "Introdu un numar de telefon." };
+  const tokenReal = await tokenulNotice(businessId, token);
+  if (!tokenReal) return { error: "Introdu tokenul API." };
 
   // Trimite un SMS real catre un numar ales de apelant. Vezi si /api/sms/test:
   // fara plafon, e o unealta de bombardare cu SMS-uri.
   const lim = await consumaLimita(`notice-test:${user.id}`, 5, 3600, 3600);
   if (!lim.permis) return { error: mesajLimita(lim, "Ai trimis deja destule mesaje de test. Incearca peste o ora.") };
-  const res = await sendNoticeAudio(token.trim(), { number: phone.trim(), text: "Acesta este un apel de test de la magazinul tau Edinio. Integrarea vocala functioneaza.", type: "draft" });
+  const res = await sendNoticeAudio(tokenReal, { number: phone.trim(), text: "Acesta este un apel de test de la magazinul tau Edinio. Integrarea vocala functioneaza.", type: "draft" });
   if (!res.success) return { error: res.error ?? "Trimitere esuata." };
   return { success: true };
 }

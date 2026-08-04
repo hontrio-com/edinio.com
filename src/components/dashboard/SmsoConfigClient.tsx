@@ -47,7 +47,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
       const res = await fetch("/api/sms/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: smso.api_key, sender_id: smso.sender_id, phone: testPhone }),
+        body: JSON.stringify({ businessId, api_key: smso.api_key, sender_id: smso.sender_id, phone: testPhone }),
       });
       const data = await res.json() as { success?: boolean; responseToken?: string; transaction_cost?: number; to?: string; error?: string };
       if (data.success) {
@@ -193,7 +193,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
         </Panel>
 
         {/* Test SMS */}
-        {smso.api_key && smso.sender_id && (
+        {(smso.api_key || secretulEsteSalvat(initialConfig, "api_key")) && smso.sender_id && (
           <Panel className="space-y-4 p-5">
             <div>
               <p className="text-sm font-semibold text-foreground">Testeaza integrarea</p>

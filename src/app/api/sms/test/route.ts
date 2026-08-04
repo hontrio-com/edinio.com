@@ -27,13 +27,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { api_key, sender_id, phone } = await req.json() as {
+  const { api_key, sender_id, phone, businessId } = await req.json() as {
     api_key?: string;
     sender_id?: string;
     phone?: string;
+    businessId?: string;
   };
 
-  if (!api_key?.trim()) return NextResponse.json({ error: "Cheia API lipseste." }, { status: 400 });
+  /*
+   * Cheia poate veni goala din doua motive foarte diferite: ori omul n-a
+   * completat-o (si atunci refuzam), ori o are deja SALVATA si formularul o
+   * primeste mascata (si atunci ar fi absurd sa-i cerem sa o retasteze doar ca
+   * sa testeze). Cand lipseste, o citim din configuratia magazinului lui —
+   * verificand intai ca e chiar al lui.
+   */
+  let cheie = api_key?.trim() ?? "";
+  if (!cheie && businessId) {
+    const { data: biz } = await supabase
+      .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+    if (biz) {
+      const { data: st } = await supabase
+        .from("store_settings").select("smso_config").eq("business_id", businessId).single();
+      cheie = ((st?.smso_config as { api_key?: string } | null)?.api_key ?? "").trim();
+    }
+  }
+  if (!cheie) return NextResponse.json({ error: "Cheia API lipseste." }, { status: 400 });
   if (!sender_id?.trim()) return NextResponse.json({ error: "Sender ID lipseste." }, { status: 400 });
   if (!phone?.trim()) return NextResponse.json({ error: "Numarul de telefon lipseste." }, { status: 400 });
 
@@ -44,7 +62,7 @@ export async function POST(req: NextRequest) {
     ? "+" + rawPhone
     : rawPhone;
 
-  const result = await sendSms(api_key.trim(), {
+  const result = await sendSms(cheie, {
     to: normalizedPhone,
     sender: sender_id.trim(),
     body: "Test SMS de la Edinio. Integrarea SMSO functioneaza corect!",

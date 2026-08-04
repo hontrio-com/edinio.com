@@ -1,6 +1,7 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -66,6 +67,7 @@ export async function disconnectCargus(
 }
 
 export async function loadCargusAccountAction(
+  businessId: string,
   username: string,
   password: string,
   subscriptionKey: string,
@@ -73,7 +75,15 @@ export async function loadCargusAccountAction(
   locations: CargusPickupLocation[];
   priceTables: CargusPriceTable[];
 } | { error: string }> {
-  return loadCargusAccount(username, password, subscriptionKey);
+  // Formularul primeste parola si cheia MASCATE. Cand vin goale, le luam pe cele
+  // salvate — altfel „reconecteaza-te" ar cere retastarea unor secrete pe care
+  // comerciantul nu le mai are la indemana.
+  const [parola, cheie] = await Promise.all([
+    secretDinConfig(businessId, "cargus_config", "password", password),
+    secretDinConfig(businessId, "cargus_config", "subscription_key", subscriptionKey),
+  ]);
+  if (!parola || !cheie) return { error: "Completeaza parola si Subscription Key." };
+  return loadCargusAccount(username, parola, cheie);
 }
 
 // ─── AWB actions ──────────────────────────────────────────────────────────────

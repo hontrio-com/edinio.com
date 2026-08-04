@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
@@ -408,6 +409,7 @@ export async function disconnectOblio(businessId: string): Promise<{ success: tr
 }
 
 export async function loadOblioAccountData(
+  businessId: string,
   clientId: string,
   clientSecret: string,
 ): Promise<{
@@ -417,7 +419,9 @@ export async function loadOblioAccountData(
   firstCif: string;
 } | { error: string }> {
   try {
-    const token = await getOblioToken(clientId, clientSecret);
+    const secret = await secretDinConfig(businessId, "oblio_config", "client_secret", clientSecret);
+    if (!secret) return { error: "Completeaza tokenul secret Oblio." };
+    const token = await getOblioToken(clientId, secret);
     const companies = await getCompanies(token);
     if (!companies.length) return { error: "Nicio firma gasita in contul Oblio" };
 
@@ -439,6 +443,7 @@ export async function loadOblioAccountData(
 }
 
 export async function loadOblioSeriesForCif(
+  businessId: string,
   clientId: string,
   clientSecret: string,
   cif: string,
@@ -447,7 +452,9 @@ export async function loadOblioSeriesForCif(
   vatRates: { name: string; percent: number; default: boolean }[];
 } | { error: string }> {
   try {
-    const token = await getOblioToken(clientId, clientSecret);
+    const secret = await secretDinConfig(businessId, "oblio_config", "client_secret", clientSecret);
+    if (!secret) return { error: "Completeaza tokenul secret Oblio." };
+    const token = await getOblioToken(clientId, secret);
     const [series, vatRates] = await Promise.all([
       getSeries(token, cif),
       getVatRates(token, cif),

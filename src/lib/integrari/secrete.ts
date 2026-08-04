@@ -19,6 +19,15 @@
  * credentiala — integrarea se opreste si nimeni nu intelege de ce.
  */
 
+/*
+ * CE NU INTRA AICI, desi arata a secret: `notice_config.webhook_secret`.
+ * Nu e o credentiala catre un serviciu extern, ci partea secreta din URL-ul de
+ * webhook pe care comerciantul TREBUIE sa-l citeasca si sa-l lipeasca in contul
+ * lui de notice.ro. Mascat, formularul nu mai are ce afisa si integrarea devine
+ * imposibil de configurat — iar expunerea ar fi oricum aceeasi, fiindca scopul
+ * campului este chiar sa fie aratat proprietarului.
+ */
+
 /** Numele reale ale campurilor, luate din datele de productie si din tipuri. */
 export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   cargus_config: ["password", "subscription_key"],
@@ -29,7 +38,7 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   ipay_config: ["password"],
   klarna_config: ["password", "authorization_token"],
   netopia_config: ["api_key", "pos_signature"],
-  notice_config: ["api_token", "webhook_secret"],
+  notice_config: ["api_token"],
   oblio_config: ["client_secret"],
   revolut_config: ["secret_key", "signing_secret", "token"],
   sameday_config: ["password"],

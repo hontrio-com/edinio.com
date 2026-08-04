@@ -1,6 +1,7 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -65,10 +66,13 @@ export async function disconnectDpd(
 }
 
 export async function loadDpdAccountAction(
+  businessId: string,
   username: string,
   password: string,
 ): Promise<{ clientId: number; name: string } | { error: string }> {
-  return loadDpdAccount(username, password);
+  const parola = await secretDinConfig(businessId, "dpd_config", "password", password);
+  if (!parola) return { error: "Completeaza parola DPD." };
+  return loadDpdAccount(username, parola);
 }
 
 // ─── AWB actions ──────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -75,12 +76,15 @@ export async function disconnectCO(businessId: string): Promise<{ success: true 
 }
 
 export async function testCOConnection(
+  businessId: string,
   clientId: string,
   clientSecret: string,
   sandbox: boolean,
 ): Promise<{ balance: number; bonus: number } | { error: string }> {
   try {
-    const token = await getCOToken(clientId, clientSecret);
+    const secret = await secretDinConfig(businessId, "colete_config", "client_secret", clientSecret);
+    if (!secret) return { error: "Completeaza Client Secret." };
+    const token = await getCOToken(clientId, secret);
     const balance = await getBalance(token, sandbox);
     return { balance: balance.amount, bonus: balance.bonus };
   } catch (e) {

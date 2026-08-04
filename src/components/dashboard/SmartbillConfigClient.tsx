@@ -81,7 +81,7 @@ export function SmartbillConfigClient({
   // Auto-load the VAT rates on open if creds are already saved (state set only
   // after the await, never synchronously inside the effect).
   useEffect(() => {
-    if (!(initialConfig.email && initialConfig.token && initialConfig.company_vat_code)) return;
+    if (!(initialConfig.email && (initialConfig.token || secretulEsteSalvat(initialConfig, "token")) && initialConfig.company_vat_code)) return;
     let active = true;
     void (async () => {
       const res = await getSmartbillTaxes(businessId);
@@ -135,7 +135,7 @@ export function SmartbillConfigClient({
     }
   }
 
-  const canTest = !!(cfg.email.trim() && cfg.token.trim() && cfg.company_vat_code.trim());
+  const canTest = !!(cfg.email.trim() && (cfg.token.trim() || secretulEsteSalvat(initialConfig, "token")) && cfg.company_vat_code.trim());
 
   return (
     <div className="p-6 max-w-2xl">

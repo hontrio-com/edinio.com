@@ -1,3 +1,5 @@
+import { isPlatformHost } from "@/lib/platform-hosts";
+
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID;
 
@@ -104,6 +106,16 @@ export async function removeDomainFromVercel(
   domain: string
 ): Promise<{ success: boolean; error?: string }> {
   const apex = apexOf(domain);
+
+  // PAZA FINALA, indiferent de cine cheama functia: nu stergem niciodata din
+  // proiectul Vercel o gazda a platformei. Fara ea, orice cale care ajunge aici
+  // cu `edinio.com` (un rand stricat in baza, un viitor apelant, o revendicare
+  // strecurata inainte de validare) scotea panoul si toate magazinele de pe
+  // edinio.com/<slug> din rutare, impreuna cu certificatul.
+  if (isPlatformHost(apex)) {
+    console.error("[vercel] BLOCAT: incercare de stergere a unei gazde de platforma", { apex });
+    return { success: false, error: "Domeniul apartine platformei si nu poate fi sters." };
+  }
 
   if (shouldPairWww(apex)) {
     // Best-effort — ignore if the twin was never added.

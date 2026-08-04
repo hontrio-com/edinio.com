@@ -197,12 +197,14 @@ function PlanPageContent() {
     try {
       const details = JSON.parse(storedDetails);
 
+      // `plan` NU se mai trimite: serverul decide singur (trial gratuit sau
+      // planul platit scris de webhook-ul Stripe). Il pastram aici doar pentru
+      // evenimentele de analiza de mai jos.
       const result = await createBusiness({
         business_name: String(details.business_name ?? ""),
         phone: String(details.phone ?? ""),
         slug: String(details.slug ?? ""),
         primary_color: "#1AB554",
-        plan,
       });
 
       if (result.error) {

@@ -2,6 +2,25 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/types/database.types";
 
+/**
+ * Repara steagul `onboarding_completed` ramas pe false desi userul are deja
+ * magazin. Coloana e privilegiata (fara grant de UPDATE pentru `authenticated`),
+ * deci scrierea trece prin service role. Import dinamic ca sa nu incarcam
+ * clientul de admin pe fiecare cerere care nu are nevoie de el; erorile se
+ * inghit intentionat — e o reparatie cosmetica, nu o cale critica.
+ */
+async function repairOnboardingFlag(userId: string): Promise<void> {
+  try {
+    const { createAdminClient } = await import("./admin");
+    await createAdminClient()
+      .from("users_profile")
+      .update({ onboarding_completed: true } as never)
+      .eq("id", userId);
+  } catch {
+    /* se reincearca la cererea urmatoare */
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -106,8 +125,12 @@ export async function updateSession(request: NextRequest) {
 
     if (profile && !profile.onboarding_completed) {
       if (hasBusiness) {
-        // Stale flag - fix silently and set cookie
-        supabase.from("users_profile").update({ onboarding_completed: true }).eq("id", user.id).then(() => {});
+        // Steag invechit - il reparam in tacere si punem cookie-ul.
+        // `onboarding_completed` e coloana privilegiata (clientul utilizatorului
+        // nu mai are grant de UPDATE pe ea), deci scrierea trece prin service
+        // role. Ramane fire-and-forget: nu blocam raspunsul pentru o reparatie
+        // cosmetica, iar daca esueaza se reincearca la cererea urmatoare.
+        void repairOnboardingFlag(user.id);
         supabaseResponse.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
       } else {
         return redirectTo("/onboarding/details");

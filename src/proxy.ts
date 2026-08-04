@@ -3,23 +3,10 @@ import { updateSession } from "@/lib/supabase/middleware";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/types/database.types";
 
-// Hostnames that belong to the platform itself (not custom domains)
-const PLATFORM_HOSTS = new Set([
-  "localhost",
-  "edinio.com",
-  "www.edinio.com",
-  "edinio.com",
-  "www.edinio.com",
-]);
-
-function isPlatformHost(hostname: string): boolean {
-  // Strip port for localhost:3000
-  const bare = hostname.split(":")[0];
-  if (PLATFORM_HOSTS.has(bare)) return true;
-  // Vercel preview deploys
-  if (bare.endsWith(".vercel.app")) return true;
-  return false;
-}
+// Gazdele platformei traiesc intr-un modul comun, ca sa fie ACEEASI lista si
+// aici (rutare) si in /api/domains/connect (refuzul revendicarii). Vezi
+// src/lib/platform-hosts.ts.
+import { isPlatformHost, bareHost as gazdaFaraPort } from "@/lib/platform-hosts";
 
 // First path segments on the platform host that are app/website routes (not
 // storefront slugs). The custom-domain redirect below skips these.
@@ -32,7 +19,9 @@ const NON_STORE_SEGMENTS = new Set([
 
 export async function proxy(request: NextRequest) {
   const hostname = request.headers.get("host") ?? "";
-  const bare = hostname.split(":")[0];
+  // Normalizat (fara port, minuscule): antetul Host vine de la client si poate
+  // sosi cu majuscule, caz in care comparatiile exacte de mai jos ratau.
+  const bare = gazdaFaraPort(hostname);
 
   // Editor live-preview loads /{slug}?preview=1 inside a same-origin iframe.
   // Both the www and custom-domain redirects below would send it cross-origin,
@@ -49,7 +38,7 @@ export async function proxy(request: NextRequest) {
 
   // Custom domain routing: rewrite to /{slug} for public site
   if (!isPlatformHost(hostname)) {
-    const bareHost = hostname.split(":")[0].toLowerCase();
+    const bareHost = gazdaFaraPort(hostname);
 
     const { pathname } = request.nextUrl;
 

@@ -19,7 +19,11 @@ export async function createBusiness(data: {
   logo_url?: string;
   cover_url?: string;
   primary_color: string;
-  plan?: string;
+  // NU exista `plan` aici, intentionat. Planul e decis EXCLUSIV pe server:
+  // planurile platite vin din webhook-ul Stripe (checkout.session.completed /
+  // invoice.payment_succeeded), iar trialul gratuit se acorda mai jos. Cand
+  // parametrul exista, oricine putea trimite `plan: "ultra"` si primea planul
+  // cel mai scump fara sa plateasca.
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -60,27 +64,52 @@ export async function createBusiness(data: {
   // Create store settings
   await supabase.from("store_settings").insert({ business_id: business.id });
 
-  // Set plan + mark onboarding complete (free = 15-day trial). Pentru planurile
-  // PLATITE nu atingem plan_expires_at: e gestionat exclusiv de webhook-ul Stripe
-  // (checkout.session.completed / invoice.payment_succeeded). Daca l-am seta la
-  // `null` aici, un race cu webhook-ul (care ruleaza in paralel dupa plata) ar
-  // sterge data reala de reinnoire → user platitor cu plan_expires_at gol.
-  const plan = data.plan ?? "free";
-  const profilePayload: { onboarding_completed: boolean; plan: string; plan_expires_at?: string } = {
-    onboarding_completed: true,
-    plan,
-  };
-  if (plan === "free") {
+  // Marcheaza onboarding-ul incheiat si acorda trialul gratuit.
+  //
+  // Coloanele `onboarding_completed`, `plan` si `plan_expires_at` sunt
+  // PRIVILEGIATE: clientul utilizatorului nu mai are voie sa le scrie (vezi
+  // migrations/2026-08-04-blocare-escaladare-rol.sql), asa ca trecem prin
+  // service role.
+  //
+  // Planul nu se mai ia de la client. Trialul de 15 zile se acorda DOAR daca
+  // nimeni nu a stabilit deja un plan: cand utilizatorul a platit, webhook-ul
+  // Stripe a scris intre timp `plan` + `plan_expires_at` reale, iar noi nu
+  // trebuie sa le stricam (race-ul checkout → webhook → finalizeBusiness).
+  // Conditia pe `plan_expires_at is null` face si operatia idempotenta: un al
+  // doilea magazin al aceluiasi cont nu reporneste trialul.
+  const adminDb = createAdminClient();
+
+  const { data: currentProfile } = await adminDb
+    .from("users_profile")
+    .select("plan, plan_expires_at")
+    .eq("id", user.id)
+    .single();
+
+  const areDejaPlan =
+    !!currentProfile?.plan_expires_at || (currentProfile?.plan ?? "free") !== "free";
+
+  const profilePayload: { onboarding_completed: boolean; plan?: string; plan_expires_at?: string } =
+    { onboarding_completed: true };
+
+  if (!areDejaPlan) {
+    profilePayload.plan = "free";
     profilePayload.plan_expires_at = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
   }
 
-  const { error: profileError } = await supabase
+  const { error: profileError } = await adminDb
     .from("users_profile")
-    .update(profilePayload)
+    .update(profilePayload as never)
     .eq("id", user.id);
 
   if (profileError) {
-    await supabase.from("users_profile").update(profilePayload).eq("id", user.id);
+    logError({
+      action: "createBusiness.profileUpdate",
+      message: profileError.message,
+      details: { code: profileError.code },
+      userId: user.id,
+      severity: "critical",
+    });
+    await adminDb.from("users_profile").update(profilePayload as never).eq("id", user.id);
   }
 
   // Send welcome email + notify admin (non-blocking)
@@ -142,10 +171,36 @@ export async function updateBusiness(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
 
+  // Lista alba, aplicata la RULARE. Tipul `Partial<{...}>` de mai sus dispare la
+  // compilare, iar `data` vine INTREG de la client (e Server Action), deci pana
+  // acum orice cheie in plus ajungea direct in UPDATE: `suspended_until: null`
+  // anula suspendarea/perioada de gratie, `custom_domain` ocolea validarea si
+  // sincronizarea cu Vercel din /api/domains/connect, `slug` permitea mutarea
+  // magazinului pe alta adresa. `user_id` era deja blocat de RLS (USING tine loc
+  // de WITH CHECK), dar il tinem afara oricum.
+  const COLOANE_PERMISE = new Set([
+    "business_name", "store_name", "tagline", "description",
+    "phone", "whatsapp", "email", "website",
+    "address", "city", "county",
+    "store_address", "store_city", "store_county",
+    "lat", "lng",
+    "logo_url", "cover_url", "primary_color",
+    "social", "gallery", "features", "is_published",
+  ]);
+
+  const payload: Record<string, unknown> = {};
+  for (const [cheie, valoare] of Object.entries(data ?? {})) {
+    if (COLOANE_PERMISE.has(cheie)) payload[cheie] = valoare;
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return { error: "Nu exista nimic de salvat." };
+  }
+
   const { error } = await supabase
     .from("businesses")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(data as any)
+    .update(payload as any)
     .eq("id", businessId)
     .eq("user_id", user.id);
 

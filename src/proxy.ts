@@ -7,6 +7,32 @@ import type { Database } from "@/types/database.types";
 // aici (rutare) si in /api/domains/connect (refuzul revendicarii). Vezi
 // src/lib/platform-hosts.ts.
 import { isPlatformHost, bareHost as gazdaFaraPort } from "@/lib/platform-hosts";
+import { CacheScurt } from "@/lib/utils/cache-scurt";
+
+/*
+ * Proxy-ul ruleaza la FIECARE cerere, iar cele doua cautari de mai jos intrebau
+ * baza de fiecare data: 2.268.466 de apeluri pentru rezolvarea domeniului si
+ * 1.029.090 pentru redirectarea de pe gazda platformei (masurat in productie).
+ * Legatura slug <-> domeniu se schimba insa foarte rar.
+ *
+ * Un minut de prospetime e sub timpul de propagare DNS al oricarei schimbari de
+ * domeniu, deci invechirea e invizibila pentru comerciant. Raspunsurile
+ * NEGATIVE se tin doar 15 secunde: altfel un domeniu tocmai conectat ar da 404
+ * un minut intreg, exact in clipa in care omul se uita daca a mers.
+ */
+const TTL_GASIT = 60_000;
+const TTL_NEGASIT = 15_000;
+type RandDomeniu = { slug: string; custom_domain: string | null };
+const cacheDomenii = new CacheScurt<RandDomeniu[]>(TTL_GASIT);
+const cacheSlugCatreDomeniu = new CacheScurt<string | null>(TTL_GASIT);
+
+function clientAnonim() {
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll() { return []; }, setAll() {} } },
+  );
+}
 
 // First path segments on the platform host that are app/website routes (not
 // storefront slugs). The custom-domain redirect below skips these.
@@ -55,17 +81,21 @@ export async function proxy(request: NextRequest) {
     const apexHost = isWww ? bareHost.slice(4) : bareHost;
     const candidates = isWww ? [bareHost, apexHost] : [bareHost];
 
-    const supabase = createServerClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { getAll() { return []; }, setAll() {} } }
-    );
-
-    const { data: rows } = await supabase
-      .from("businesses")
-      .select("slug, custom_domain")
-      .in("custom_domain", candidates)
-      .eq("is_published", true);
+    // `error` se trateaza SEPARAT de „nu s-a gasit". Daca am cacha si esecul,
+    // o pana de o clipa a bazei s-ar transforma in 15 secunde de 404 pe domeniul
+    // respectiv, desi magazinul exista. La eroare raspundem ca inainte, dar NU
+    // retinem nimic — cererea urmatoare reincearca.
+    const cheieDomeniu = candidates.join("|");
+    let rows = cacheDomenii.get(cheieDomeniu);
+    if (rows === undefined) {
+      const { data, error } = await clientAnonim()
+        .from("businesses")
+        .select("slug, custom_domain")
+        .in("custom_domain", candidates)
+        .eq("is_published", true);
+      rows = data ?? [];
+      if (!error) cacheDomenii.set(cheieDomeniu, rows, rows.length === 0 ? TTL_NEGASIT : undefined);
+    }
 
     const exact = rows?.find((r) => r.custom_domain === bareHost) ?? null;
     const apexMatch = rows?.find((r) => r.custom_domain === apexHost) ?? null;
@@ -98,19 +128,20 @@ export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const firstSeg = pathname.split("/")[1] ?? "";
     if (firstSeg && !NON_STORE_SEGMENTS.has(firstSeg)) {
-      const supabase = createServerClient<Database>(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { cookies: { getAll() { return []; }, setAll() {} } },
-      );
-      const { data: store } = await supabase
-        .from("businesses")
-        .select("custom_domain")
-        .eq("slug", firstSeg)
-        .eq("is_published", true)
-        .maybeSingle();
-      if (store?.custom_domain) {
-        const target = new URL(`https://${store.custom_domain}${pathname.slice(firstSeg.length + 1) || "/"}`);
+      // Acelasi rationament ca mai sus: esecul nu se cacheaza.
+      let domeniu = cacheSlugCatreDomeniu.get(firstSeg);
+      if (domeniu === undefined) {
+        const { data, error } = await clientAnonim()
+          .from("businesses")
+          .select("custom_domain")
+          .eq("slug", firstSeg)
+          .eq("is_published", true)
+          .maybeSingle();
+        domeniu = data?.custom_domain ?? null;
+        if (!error) cacheSlugCatreDomeniu.set(firstSeg, domeniu, domeniu === null ? TTL_NEGASIT : undefined);
+      }
+      if (domeniu) {
+        const target = new URL(`https://${domeniu}${pathname.slice(firstSeg.length + 1) || "/"}`);
         target.search = request.nextUrl.search;
         return NextResponse.redirect(target, 307);
       }

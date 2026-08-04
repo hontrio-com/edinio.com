@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin";
 import { FacebookPixel } from "@/components/public/FacebookPixel";
 import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { GoogleTag } from "@/components/public/GoogleTag";
@@ -33,14 +33,9 @@ interface Props {
  */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const { data } = await createAdminClient()
-    .from("businesses")
-    .select("logo_url, business_name, store_name, store_city, description, tagline, cover_url, store_settings(page_content)")
-    .eq("slug", slug)
-    .single();
+  const data = await incarcaAntetMagazin(slug);
   if (!data) return {};
-  const rawSettings = (data as unknown as { store_settings: { page_content: unknown } | { page_content: unknown }[] | null }).store_settings;
-  const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
+  const settings = setarileDin<{ page_content: unknown }>(data);
   const favicon = ((settings?.page_content ?? null) as { favicon_url?: string | null } | null)?.favicon_url || data.logo_url;
   // Google Search Console "HTML tag" verification, set in Settings > SEO.
   const seo = parseStoreSeo(settings?.page_content ?? null);
@@ -82,13 +77,10 @@ export default async function StoreLayout({ children, params }: Props) {
   const { slug } = await params;
   // Service role: marketing_config (public pixel IDs) lives in store_settings,
   // which is no longer anon-readable. Read it server-side and pass only pixel IDs.
-  const admin = createAdminClient();
-
-  const { data: business } = await admin
-    .from("businesses")
-    .select("id, slug, store_name, business_name, primary_color, custom_domain, store_settings(marketing_config, cookie_banner_config, google_analytics_config)")
-    .eq("slug", slug)
-    .single();
+  // Acelasi rand pe care l-a citit deja `generateMetadata` in aceasta randare:
+  // `incarcaAntetMagazin` e invelit in `cache` din React, deci al doilea apel nu
+  // mai atinge baza.
+  const business = await incarcaAntetMagazin(slug);
 
   let fbPixelId: string | null = null;
   let ttPixelId: string | null = null;

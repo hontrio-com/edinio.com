@@ -224,6 +224,7 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
   const [cityResults, setCityResults] = useState<OlxCity[]>([]);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generatieCautare = useRef(0);
 
   useEffect(() => {
     if (!cityId) return;
@@ -235,10 +236,16 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
   function onCityQuery(q: string) {
     setCityQuery(q);
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (q.trim().length < 2) { setCityResults([]); return; }
+    if (q.trim().length < 2) { generatieCautare.current++; setCityResults([]); return; }
     setSearching(true);
+    // `clearTimeout` anuleaza doar un temporizator IN ASTEPTARE, nu o cerere
+    // deja plecata. Fara numarul de generatie, raspunsul lent pentru „buc"
+    // sosea dupa cel pentru „bucuresti" si il suprascria — omul vedea orase
+    // care nu corespund cu ce scrisese.
+    const a_mea = ++generatieCautare.current;
     searchTimer.current = setTimeout(async () => {
       const res = await searchCities(businessId, q);
+      if (a_mea !== generatieCautare.current) return;
       setCityResults("error" in res ? [] : res.cities);
       setSearching(false);
     }, 350);

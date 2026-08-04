@@ -24,6 +24,7 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
+import { jsonLdSafe } from "@/lib/json-ld";
 
 interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string; sale?: string }>; }
 
@@ -347,7 +348,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         <>
           <script
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(opsJsonLd) }}
+            dangerouslySetInnerHTML={{ __html: jsonLdSafe(opsJsonLd) }}
           />
           <StorefrontThemeScope style={opsResolved.style}>
             <StorePageShell chrome={opsChrome} design={opsResolved.design} className="min-h-screen">
@@ -451,7 +452,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(storeJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(storeJsonLd) }}
       />
       <MiniStoreRenderer
         business={business}

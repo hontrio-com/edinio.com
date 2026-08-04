@@ -9,6 +9,7 @@ import { DemoSection } from "@/components/website/DemoSection";
 import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
 import { PlatformEvent } from "@/components/platform/PlatformEvent";
+import { jsonLdSafe } from "@/lib/json-ld";
 
 export const metadata: Metadata = {
   title: "Creare magazin online rapid",
@@ -144,7 +145,7 @@ export default function LandingPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }}
       />
       <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
       <HeroSection />

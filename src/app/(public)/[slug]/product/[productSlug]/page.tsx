@@ -17,6 +17,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
+import { jsonLdSafe } from "@/lib/json-ld";
 
 interface Props {
   params: Promise<{ slug: string; productSlug: string }>;
@@ -224,11 +225,11 @@ export default async function ProductDetailPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(breadcrumbJsonLd) }}
       />
       <StorefrontThemeScope style={resolved.style}>
         <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen">

@@ -8,9 +8,21 @@ import type { Block } from "@/lib/pages/blocks.types";
  *
  *  - text / columns rich text -> allowlist `sanitizeHtml`
  *  - html block:
- *      raw + approved (admin) -> left intact (admin-trusted, injected directly)
- *      js present             -> left intact (rendered in an isolated sandbox iframe)
- *      safe HTML/CSS          -> `sanitizeEmbedHtml` (allows layout markup + safe iframes)
+ *      js present    -> left intact (rendered in an isolated sandbox iframe)
+ *      orice altceva -> `sanitizeEmbedHtml` (allows layout markup + safe iframes)
+ *
+ * NU mai exista o cale „raw + aprobat de admin -> lasat neatins". Ea injecta HTML
+ * si `<script>` nefiltrate direct in magazinul PUBLIC, iar poarta era
+ * `users_profile.role` — coloana pe care, pana la migratia din 04.08.2026, orice
+ * utilizator si-o putea scrie singur. Un singur UPDATE anula tot restul
+ * arhitecturii de izolare (sandbox, liste albe, sanitize-html) si servea cod
+ * arbitrar cumparatorilor, pe originea platformei, unde cookie-ul de sesiune
+ * Supabase e citibil din JavaScript.
+ *
+ * Verificat inainte de stergere: zero blocuri cu `raw:true` in productie
+ * (custom_pages.blocks si store_settings.page_content), deci nu se rupe nimic.
+ * Codul personalizat ramane posibil — dar trece prin SandboxEmbed, intr-un
+ * iframe fara `allow-same-origin`.
  */
 export function prepareBlocksForPublic(blocks: Block[]): Block[] {
   return (blocks ?? []).map(prepareBlock);
@@ -31,9 +43,11 @@ function prepareBlock(b: Block): Block {
         })),
       };
     case "html": {
-      if (b.raw && b.rawApprovedBy) return b;
+      // Codul cu JS merge in sandbox (iframe fara allow-same-origin), deci poate
+      // ramane neatins. Orice altceva se igienizeaza, INDIFERENT de `raw` /
+      // `rawApprovedBy`: steagurile acelea nu mai deschid nicio portita.
       if ((b.js ?? "").trim()) return b;
-      return { ...b, html: sanitizeEmbedHtml(b.html) };
+      return { ...b, raw: false, rawApprovedBy: null, html: sanitizeEmbedHtml(b.html) };
     }
     case "video": {
       // Uploaded video/poster URLs come from our own R2 upload flow; still pin

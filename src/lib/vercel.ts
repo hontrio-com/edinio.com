@@ -52,9 +52,25 @@ async function addOne(name: string, body?: Record<string, unknown>): Promise<{ s
   );
   if (ok) return { success: true };
   const err = (data.error as Record<string, unknown>)?.message ?? data.message ?? "Eroare Vercel API";
-  // Domain already added is not an error.
-  if (String(err).includes("already") || String(data.code).includes("domain_already")) {
-    return { success: true };
+  const cod = String((data.error as Record<string, unknown>)?.code ?? data.code ?? "");
+
+  /*
+   * „Deja adaugat" sunt DOUA lucruri diferite, si pana acum amandoua treceau
+   * drept succes.
+   *
+   * `domain_already_in_use` inseamna ca domeniul e al ALTUI proiect sau al altui
+   * cont Vercel: nu s-a adaugat nimic, dar magazinul ii scria clientului
+   * „conectat" si asta ramanea asa. Exact starea in care a stat `vetdepo.ro`,
+   * cu nameserverele mutate si zona inexistenta, si nimeni n-avea de unde sti.
+   * Doar „e deja in proiectul NOSTRU" e succes adevarat.
+   */
+  const dejaAlNostru = cod === "domain_already_exists" || /already (exists|added)/i.test(String(err));
+  if (dejaAlNostru) return { success: true };
+  if (cod.includes("domain_already") || /already in use/i.test(String(err))) {
+    return {
+      success: false,
+      error: `Domeniul este deja folosit de alt proiect Vercel si nu poate fi conectat aici. Scoate-l din proiectul acela, apoi incearca din nou. (${err})`,
+    };
   }
   return { success: false, error: String(err) };
 }

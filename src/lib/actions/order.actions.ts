@@ -473,6 +473,8 @@ export async function placeOrder(data: {
   shipping_cost: number;
   /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
   shipping_token?: string;
+  /** Rambursul pentru care s-a cerut cotatia. Doar pentru masurare. */
+  cod_declarat?: number;
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
@@ -873,6 +875,33 @@ export async function placeOrder(data: {
   );
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
+
+  /*
+   * Cat de mult a subdeclarat clientul rambursul la cotare — masurat, nu blocat.
+   *
+   * Semnatura leaga STEAGUL de ramburs, nu suma: suma nu se poate reconstrui,
+   * fiindca e chiar totalul care contine transportul pe care tocmai il verificam.
+   * La FAN Courier atat ajunge (pretul lui comuta pe un boolean), dar la ceilalti
+   * cinci curieri comisionul iese din SUMA — deci cine cere cotatia cu `cod: 0.01`
+   * si comanda apoi 5000 de lei pastreaza steagul, iar diferenta de comision o
+   * plateste comerciantul.
+   *
+   * NU se refuza si NU se cade pe tariful implicit: asta ar repretui tacit o
+   * comanda buna ori de cate ori clientul isi schimba cosul intre cotatie si
+   * trimitere — adica exact defectul „ecranul spune una, se incaseaza alta" pe
+   * care il vaneaza tot auditul. Se scrie in jurnal, ca sa se poata masura cat
+   * costa cu adevarat inainte de a alege o garda mai dura.
+   */
+  if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
+      && total - round2(Number(data.cod_declarat)) > 1) {
+    logError({
+      action: "placeOrder.rambursSubdeclarat",
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, comanda incaseaza ${total.toFixed(2)}`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), total: round2(total) },
+      severity: "warning",
+    });
+  }
+
 
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
@@ -1339,9 +1368,9 @@ export async function updateOrder(orderId: string, data: { status: string; payme
    * azi nu se repara nimic retroactiv — dar CADOU30 are max_uses 4, si patru
    * anulari i-ar fi stins campania.
    *
-   * Ramura asta se uita la STATUS. Comerciantul care da banii inapoi mutand doar
-   * `payment_status` pe „refunded" (doua comenzi asa in productie, amandoua
-   * ramburs) nu elibereaza cuponul — cazul ramane deschis, si se vede aici.
+   * Se uita si la PLATA, nu doar la status: comerciantul care da banii inapoi
+   * mutand `payment_status` pe „refunded" fara sa atinga statusul face exact
+   * acelasi lucru — vanzarea nu se mai face. Doua comenzi din productie arata asa.
    *
    * `GA4_REVERSAL`, aceeasi multime ca la evenimentul de refund: e exact
    * intrebarea „vanzarea asta se mai face?".
@@ -1356,8 +1385,10 @@ export async function updateOrder(orderId: string, data: { status: string; payme
    * deci nu mai facem drumul pana la baza pentru cele 95 de comenzi din 96 care
    * n-au avut niciodata cupon.
    */
-  if (order.discount_code && statusChanged) {
-    const seIntoarce = GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string);
+  const banaRestituita = data.payment_status === "refunded" && (order.payment_status as string) !== "refunded";
+  if (order.discount_code && (statusChanged || banaRestituita)) {
+    const seIntoarce = banaRestituita
+      || (GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string));
     /*
      * Re-revendicarea NU cere ca statusul vechi sa fi fost anulat.
      *
@@ -2058,6 +2089,8 @@ export async function placeCartOrder(data: {
   shipping_cost: number;
   /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
   shipping_token?: string;
+  /** Rambursul pentru care s-a cerut cotatia. Doar pentru masurare. */
+  cod_declarat?: number;
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
@@ -2360,6 +2393,33 @@ export async function placeCartOrder(data: {
   );
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
+
+  /*
+   * Cat de mult a subdeclarat clientul rambursul la cotare — masurat, nu blocat.
+   *
+   * Semnatura leaga STEAGUL de ramburs, nu suma: suma nu se poate reconstrui,
+   * fiindca e chiar totalul care contine transportul pe care tocmai il verificam.
+   * La FAN Courier atat ajunge (pretul lui comuta pe un boolean), dar la ceilalti
+   * cinci curieri comisionul iese din SUMA — deci cine cere cotatia cu `cod: 0.01`
+   * si comanda apoi 5000 de lei pastreaza steagul, iar diferenta de comision o
+   * plateste comerciantul.
+   *
+   * NU se refuza si NU se cade pe tariful implicit: asta ar repretui tacit o
+   * comanda buna ori de cate ori clientul isi schimba cosul intre cotatie si
+   * trimitere — adica exact defectul „ecranul spune una, se incaseaza alta" pe
+   * care il vaneaza tot auditul. Se scrie in jurnal, ca sa se poata masura cat
+   * costa cu adevarat inainte de a alege o garda mai dura.
+   */
+  if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
+      && total - round2(Number(data.cod_declarat)) > 1) {
+    logError({
+      action: "placeCartOrder.rambursSubdeclarat",
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, comanda incaseaza ${total.toFixed(2)}`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), total: round2(total) },
+      severity: "warning",
+    });
+  }
+
 
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).

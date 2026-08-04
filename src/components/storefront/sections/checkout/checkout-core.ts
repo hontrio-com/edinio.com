@@ -382,6 +382,8 @@ export function useCheckoutOrder({
         accepted_offer_ids: acceptedBumpOffers.length > 0 ? acceptedBumpOffers.map((o) => o.id) : undefined,
         shipping_cost: shipping,
         shipping_token: courierSelection?.token,
+        // Vezi `placeCartOrder`: doar pentru masurare, nu pentru decizie.
+        cod_declarat: paymentMethod === "cash_on_delivery" ? total : 0,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
         customer_name: form.name,

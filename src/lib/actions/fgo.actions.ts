@@ -195,6 +195,34 @@ async function buildItems(
   if (rec.fel === "refuz") {
     return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
   }
+  /*
+   * Restul de un ban care poate ramane pe BRUT, spus pe fata in loc sa fie tacut.
+   *
+   * fGO cere pret NET si reconstruieste el brutul inmultind inapoi. Reconstructia
+   * pierde: netul se taie la doi bani INAINTE sa se aplice cota, deci vreo sasea
+   * parte din totalurile brute nici nu se pot scrie pe o factura fGO — 100,00 lei
+   * la 21% se desface in 82,64 + 17,35 = 99,99, si nu exista pret unitar care sa
+   * dea 100,00. Nicio linie de ajustare nu ajuta: pasul ei, dus in brut, e de
+   * 1,21 bani.
+   *
+   * Garda certifica baza NETA, deci pana acum diferenta asta pleca fara ca cineva
+   * sa afle. Nu se poate repara — e o limita a formatului — dar se poate VEDEA,
+   * si atunci comerciantul stie de ce factura difera de comanda cu un ban.
+   */
+  if (vat.taxIncluded && vat.rate > 0) {
+    const net = lineItems.reduce((s, i) => s + pretDeDocument(Number(i.unitPrice) || 0) * (Number(i.quantity) || 0) * (i.isDiscount ? -1 : 1), 0);
+    const brutReconstruit = Math.round(net * (1 + vat.rate / 100) * 100) / 100;
+    const totalComanda = Math.round((Number(order.total) || 0) * 100) / 100;
+    if (Math.abs(brutReconstruit - totalComanda) >= 0.01) {
+      logError({
+        action: "fgo.brutNereprezentabil",
+        message: `Factura fGO va iesi pe ${brutReconstruit.toFixed(2)} in loc de ${totalComanda.toFixed(2)}`,
+        details: { businessId: sursa.businessId, comanda: String(order.order_number ?? ""), diferenta: Math.round((brutReconstruit - totalComanda) * 100) / 100 },
+        severity: "info",
+      });
+    }
+  }
+
   if (rec.fel === "ajustare") {
     lineItems.push({
       name: "Ajustare rotunjire",

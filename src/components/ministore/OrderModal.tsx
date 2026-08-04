@@ -633,6 +633,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         quantity,
         shipping_cost: shipping,
         shipping_token: courierSelection?.token,
+        // Rambursul pentru care s-a cerut chiar cotatia de mai sus. Serverul il
+        // compara cu totalul real si jurnalizeaza diferenta; nu decide nimic pe el.
+        cod_declarat: paymentMethod === "cash_on_delivery" ? subtotal : 0,
         customer_name: form.name,
         customer_phone: form.phone.replace(/[\s\-().]/g, ""),
         customer_email: form.email.trim() || undefined,

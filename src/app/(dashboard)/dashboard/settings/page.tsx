@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
+import { Skeleton } from "@/components/ui/skeleton";
 import { processorReadiness, resolvePaymentMethods, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules } from "@/lib/shipping/rules";
@@ -9,46 +11,125 @@ import type { MarketingConfig } from "@/lib/marketing";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 import { parseEmailConfig } from "@/lib/email/config";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
+import type { Database } from "@/types/database.types";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
 }
 
+/** Exact campurile trimise mai departe — aceleasi cu selectul de mai jos. */
+type ProfilSetari = Pick<
+  Database["public"]["Tables"]["users_profile"]["Row"],
+  "full_name" | "plan" | "plan_interval" | "plan_expires_at" | "payment_failed_at" | "mfa_email_enabled"
+>;
+
+/**
+ * Setarile se despart in DOUA, nu pe sectiuni.
+ *
+ * Ecranul e o singura Client Component cu 14 file care primesc totul dintr-un
+ * foc, deci nu se poate livra fila cu fila fara sa o rup in bucati. Ce se poate
+ * insa: interogarea grea sa nu mai tina coaja pe loc. Selectul de magazin cere
+ * ~30 de coloane de setari, iar lista de produse pentru „Tip magazin" umbla
+ * baza in ferestre de cate 1000 de randuri — la un catalog mare, mai multe
+ * dus-intors inainte sa apara ceva pe ecran.
+ *
+ * Profilul ramane in parinte fiindca de el atarna `redirect("/login")`: un
+ * `redirect` de sub `<Suspense>` ar ajunge dupa ce coaja a plecat deja. Costa o
+ * interogare de un rand pusa inaintea celorlalte (inainte mergeau in paralel) —
+ * in schimb scheletul pleaca imediat, nu dupa produse.
+ */
 export default async function SettingsPage({ searchParams }: Props) {
   const { plan_success, domain_success } = await searchParams;
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: bizRow }] = await Promise.all([
-    /*
-     * NU `select("*")`: randul intreg ajungea in payload-ul RSC al unei Client
-     * Component, cu tot cu `admin_notes` — notitele INTERNE ale platformei despre
-     * acel comerciant — plus `role`, `suspended_until`, `stripe_customer_id` si
-     * hash-ul OTP. Componenta citeste cinci campuri.
-     *
-     * ATENTIE, ca sa nu se inchida constatarea prea devreme: asta e igiena de
-     * payload, NU remedierea. Comerciantul poate citi `admin_notes` oricum, direct
-     * din browser cu cheia anon, fiindca SELECT pe `users_profile` n-a fost
-     * niciodata revocat de la `authenticated`. Remedierea reala e revocarea la
-     * nivel de coloana — e RESTRICTIVA, deci se aplica DUPA deploy
-     * (migrations/2026-08-04-DUPA-DEPLOY-coloane-profil.sql).
-     */
-    supabase
-      .from("users_profile")
-      .select("full_name, plan, plan_interval, plan_expires_at, payment_failed_at, mfa_email_enabled")
-      .eq("id", user.id)
-      .single(),
-    supabase
-      .from("businesses")
-      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
-      .eq("user_id", user.id)
-      .order("created_at")
-      .limit(1)
-      .single(),
-  ]);
+  /*
+   * NU `select("*")`: randul intreg ajungea in payload-ul RSC al unei Client
+   * Component, cu tot cu `admin_notes` — notitele INTERNE ale platformei despre
+   * acel comerciant — plus `role`, `suspended_until`, `stripe_customer_id` si
+   * hash-ul OTP. Componenta citeste cinci campuri.
+   *
+   * ATENTIE, ca sa nu se inchida constatarea prea devreme: asta e igiena de
+   * payload, NU remedierea. Comerciantul poate citi `admin_notes` oricum, direct
+   * din browser cu cheia anon, fiindca SELECT pe `users_profile` n-a fost
+   * niciodata revocat de la `authenticated`. Remedierea reala e revocarea la
+   * nivel de coloana — e RESTRICTIVA, deci se aplica DUPA deploy
+   * (migrations/2026-08-04-DUPA-DEPLOY-coloane-profil.sql).
+   */
+  const { data: profile } = await supabase
+    .from("users_profile")
+    .select("full_name, plan, plan_interval, plan_expires_at, payment_failed_at, mfa_email_enabled")
+    .eq("id", user.id)
+    .single();
 
   if (!profile) redirect("/login");
+
+  return (
+    <Suspense fallback={<ScheletSetari />}>
+      <ContinutSetari
+        profile={profile}
+        userId={user.id}
+        email={user.email ?? ""}
+        planSuccess={plan_success === "1"}
+        domainSuccess={domain_success === "1"}
+      />
+    </Suspense>
+  );
+}
+
+function ScheletSetari() {
+  return (
+    <div className="flex min-h-[calc(100vh-3.5rem)]">
+      {/* coloana din stanga tine locul celor 14 file din NAV_SECTIONS */}
+      <aside className="hidden lg:flex flex-col flex-shrink-0 w-52 border-r border-border py-6 px-2 space-y-1">
+        {Array.from({ length: 14 }).map((_, i) => (
+          <Skeleton key={i} className="h-9" />
+        ))}
+      </aside>
+      <div className="flex-1 p-6 max-w-3xl space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <div className="flex gap-2 lg:hidden">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-24" />
+          ))}
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-10 w-32 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+async function ContinutSetari({
+  profile,
+  userId,
+  email,
+  planSuccess,
+  domainSuccess,
+}: {
+  profile: ProfilSetari;
+  userId: string;
+  email: string;
+  planSuccess: boolean;
+  domainSuccess: boolean;
+}) {
+  const supabase = await createClient();
+
+  const { data: bizRow } = await supabase
+    .from("businesses")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .eq("user_id", userId)
+    .order("created_at")
+    .limit(1)
+    .single();
 
   const business = bizRow ? { id: bizRow.id, business_name: bizRow.business_name, address: bizRow.address, city: bizRow.city, county: bizRow.county, phone: bizRow.phone, email: bizRow.email, cui: bizRow.cui, reg_com: bizRow.reg_com, custom_domain: bizRow.custom_domain } : null;
   const rawSettings = bizRow?.store_settings;
@@ -144,7 +225,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   return (
     <SettingsClient
       profile={profile}
-      email={user.email ?? ""}
+      email={email}
       businessId={business?.id ?? null}
       businessData={business ?? null}
       storePolicies={(storeSettings?.store_policies as Record<string, unknown>) ?? {}}
@@ -190,8 +271,8 @@ export default async function SettingsPage({ searchParams }: Props) {
       products={opsProducts}
       shippingCategories={shippingCategories}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
-      planSuccess={plan_success === "1"}
-      domainSuccess={domain_success === "1"}
+      planSuccess={planSuccess}
+      domainSuccess={domainSuccess}
     />
   );
 }

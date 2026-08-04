@@ -1,3 +1,4 @@
+import { Suspense, type ComponentProps } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -5,7 +6,19 @@ import { PagesListClient } from "@/components/pages/PagesListClient";
 import type { MenuItem } from "@/lib/pages/menu";
 import { cartOnPage, checkoutOnPage, shopOnPage } from "@/lib/storefront/design/commerce";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { Skeleton } from "@/components/ui/skeleton";
 
+/** Identitatea magazinului, asa cum o cere lista de pagini. */
+type BusinessPagini = ComponentProps<typeof PagesListClient>["business"];
+
+/**
+ * Cadrul pleaca imediat; lista de pagini curge dupa el.
+ *
+ * Identitatea magazinului se stie dupa PRIMA interogare; lista de pagini si
+ * setarile magazinului (din care se desface designul publicat, ca sa se vada
+ * care pagini de sistem sunt pagini adevarate) sunt partea grea. Sub
+ * `<Suspense>` comerciantul vede cadrul cat timp acelea se aduna.
+ */
 export default async function PagesPage() {
   const supabase = await createClient();
   const user = await getCachedUser();
@@ -19,6 +32,43 @@ export default async function PagesPage() {
     .limit(1)
     .single();
   if (!business) redirect("/dashboard");
+
+  return (
+    <Suspense fallback={<ScheletPagini />}>
+      <ListaPagini business={business} />
+    </Suspense>
+  );
+}
+
+function ScheletPagini() {
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-6 sm:py-8">
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-4 w-80 max-w-full" />
+        </div>
+        <Skeleton className="h-11 w-36 shrink-0" />
+      </div>
+      <div className="flex items-center gap-2 mb-6">
+        <Skeleton className="h-7 w-24" />
+        <Skeleton className="h-7 w-20" />
+      </div>
+      <div className="mb-8 space-y-2">
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-16" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-16 rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function ListaPagini({ business }: { business: BusinessPagini }) {
+  const supabase = await createClient();
 
   const [{ data: pages }, { data: ss }] = await Promise.all([
     supabase

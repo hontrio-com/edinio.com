@@ -1,8 +1,11 @@
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
 import { createClient } from "@/lib/supabase/server";
+import { Skeleton, SkeletonRanduri } from "@/components/ui/skeleton";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
@@ -132,12 +135,6 @@ export default async function CustomPage({ params }: Props) {
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   const blocks = prepareBlocksForPublic((page.blocks as unknown as Block[]) ?? []);
-  // Resolve each products-block server-side with a hard cap (scales to huge catalogs).
-  // Respecta setarea de vizibilitate a catalogului (ascunde fara imagini / fara stoc).
-  const productsByBlock = await resolveAllProductsBlocks(supabase, business.id, blocks, {
-    hideNoImage: pageContent.hide_products_without_images === true,
-    hideOutOfStock: pageContent.hide_out_of_stock_products === true,
-  });
   const color = business.primary_color ?? "#1AB554";
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
@@ -176,6 +173,15 @@ export default async function CustomPage({ params }: Props) {
     },
   });
 
+  /*
+   * Identitatea magazinului pleaca IMEDIAT; blocurile curg dupa ea.
+   *
+   * Fiecare bloc de produse de pe pagina isi face propria interogare, deci o
+   * pagina cu trei randuri de produse tinea header-ul, bara de anunt si subsolul
+   * blocate pana raspundea si ultimul. Toate verificarile de mai sus — magazin
+   * inexistent, nepublicat, suspendat, pagina lipsa sau ciorna — s-au decis
+   * deja, deci sub `<Suspense>` nu mai poate ajunge niciun `notFound()`.
+   */
   return (
     <StorefrontThemeScope style={resolved.style}>
       {pageCss ? <style dangerouslySetInnerHTML={{ __html: pageCss }} /> : null}
@@ -186,12 +192,70 @@ export default async function CustomPage({ params }: Props) {
           </div>
         )}
         <main id={`edinio-page-${page.id}`} className="flex-1">
-          <BlockRenderer
-            blocks={blocks}
-            ctx={{ color, basePath, storeSlug: business.slug, social, products: [], productsByBlock, forms, businessId: business.id, pageId: page.id }}
-          />
+          <Suspense fallback={<ScheletBlocuri />}>
+            <BlocuriPagina
+              supabase={supabase}
+              businessId={business.id}
+              blocks={blocks}
+              hideNoImage={pageContent.hide_products_without_images === true}
+              hideOutOfStock={pageContent.hide_out_of_stock_products === true}
+              color={color}
+              basePath={basePath}
+              storeSlug={business.slug}
+              social={social}
+              forms={forms}
+              pageId={page.id}
+            />
+          </Suspense>
         </main>
       </StorePageShell>
     </StorefrontThemeScope>
+  );
+}
+
+/**
+ * Forma unei pagini construite din blocuri: o banda lata sus (hero sau imagine),
+ * apoi titlu si cateva randuri de continut.
+ */
+function ScheletBlocuri() {
+  return (
+    <div aria-hidden="true">
+      <Skeleton className="h-[320px] rounded-none" />
+      <div className="max-w-5xl mx-auto px-4 py-10">
+        <Skeleton className="h-8 w-64" />
+        <SkeletonRanduri randuri={3} inaltime="h-28" className="mt-6" />
+      </div>
+    </div>
+  );
+}
+
+async function BlocuriPagina({
+  supabase, businessId, blocks, hideNoImage, hideOutOfStock,
+  color, basePath, storeSlug, social, forms, pageId,
+}: {
+  supabase: SupabaseClient<Database>;
+  businessId: string;
+  blocks: Block[];
+  hideNoImage: boolean;
+  hideOutOfStock: boolean;
+  color: string;
+  basePath: string;
+  storeSlug: string;
+  social: Record<string, string>;
+  forms: PublicForm[];
+  pageId: string;
+}) {
+  // Resolve each products-block server-side with a hard cap (scales to huge catalogs).
+  // Respecta setarea de vizibilitate a catalogului (ascunde fara imagini / fara stoc).
+  const productsByBlock = await resolveAllProductsBlocks(supabase, businessId, blocks, {
+    hideNoImage,
+    hideOutOfStock,
+  });
+
+  return (
+    <BlockRenderer
+      blocks={blocks}
+      ctx={{ color, basePath, storeSlug, social, products: [], productsByBlock, forms, businessId, pageId }}
+    />
   );
 }

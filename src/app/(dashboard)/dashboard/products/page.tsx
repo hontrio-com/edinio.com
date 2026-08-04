@@ -1,10 +1,21 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { ProductsClient } from "@/components/dashboard/ProductsClient";
 import { getProductLimit } from "@/lib/plan-limits";
+import { Skeleton } from "@/components/ui/skeleton";
 
+/**
+ * Cadrul pleaca imediat; catalogul curge dupa el.
+ *
+ * `fetchAllRows` cere baza in ferestre de cate 1000 de randuri, deci la un
+ * catalog mare pagina statea in mai multe dus-intors inainte sa trimita ceva
+ * spre browser, iar `loading.tsx` tinea tot ecranul gri pana la ultima fereastra.
+ * Identitatea magazinului, planul si limita de produse se stiu insa dupa PRIMA
+ * interogare, deci sub `<Suspense>` intra doar lista.
+ */
 export default async function ProductsPage({
   searchParams,
 }: {
@@ -28,6 +39,71 @@ export default async function ProductsPage({
 
   if (!bizRow) redirect("/dashboard");
 
+  const plan = profile?.plan ?? "free";
+  const productLimit = getProductLimit(plan);
+
+  const olxSettings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] : bizRow.store_settings;
+  const olxConnected = !!(olxSettings?.olx_config as { connected?: boolean } | null)?.connected;
+
+  return (
+    <div className="p-4 sm:p-6">
+      <Suspense fallback={<ScheletProduse />}>
+        <ListaProduse
+          businessId={bizRow.id}
+          initialSearch={searchQuery ?? ""}
+          initialPage={Math.max(1, parseInt(pageParam ?? "1", 10) || 1)}
+          productLimit={productLimit}
+          plan={plan}
+          olxConnected={olxConnected}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+function ScheletProduse() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-28" />
+          <Skeleton className="h-4 w-44" />
+        </div>
+        <Skeleton className="h-9 w-36 rounded-xl" />
+      </div>
+      {/*
+        * Doua forme, fiindca `ProductsClient` randeaza doua lucruri diferite:
+        * carduri pe telefon (`sm:hidden`) si TABEL pe desktop (`hidden sm:block`).
+        * Un singur schelet de carduri ar fi parut corect pe telefon si ar fi sarit
+        * pe desktop — greseala era mostenita din vechiul `loading.tsx`.
+        */}
+      <div className="grid grid-cols-1 gap-4 sm:hidden">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-72 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="hidden sm:block h-[520px] rounded-xl" />
+    </div>
+  );
+}
+
+async function ListaProduse({
+  businessId,
+  initialSearch,
+  initialPage,
+  productLimit,
+  plan,
+  olxConnected,
+}: {
+  businessId: string;
+  initialSearch: string;
+  initialPage: number;
+  productLimit: number;
+  plan: string;
+  olxConnected: boolean;
+}) {
+  const supabase = await createClient();
+
   // Windowed reads: embedded selects (businesses -> products(...)) cap silently
   // at 1000 rows (PostgREST), so a bigger catalog looked truncated to exactly
   // 1000 in the list and the merchant read it as a plan limit.
@@ -36,7 +112,7 @@ export default async function ProductsPage({
       supabase
         .from("products")
         .select("id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id")
-        .eq("business_id", bizRow.id)
+        .eq("business_id", businessId)
         .order("id")
         .range(from, to)
     ),
@@ -44,7 +120,7 @@ export default async function ProductsPage({
       supabase
         .from("categories")
         .select("id, name, parent_id, sort_order")
-        .eq("business_id", bizRow.id)
+        .eq("business_id", businessId)
         .order("sort_order")
         .order("id")
         .range(from, to)
@@ -61,25 +137,17 @@ export default async function ProductsPage({
   const categories = [...categoriesRaw]
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
 
-  const plan = profile?.plan ?? "free";
-  const productLimit = getProductLimit(plan);
-
-  const olxSettings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] : bizRow.store_settings;
-  const olxConnected = !!(olxSettings?.olx_config as { connected?: boolean } | null)?.connected;
-
   return (
-    <div className="p-4 sm:p-6">
-      <ProductsClient
-        products={products}
-        businessId={bizRow.id}
-        initialSearch={searchQuery ?? ""}
-        initialPage={Math.max(1, parseInt(pageParam ?? "1", 10) || 1)}
-        categories={categories}
-        productLimit={productLimit}
-        productCount={products.length}
-        plan={plan}
-        olxConnected={olxConnected}
-      />
-    </div>
+    <ProductsClient
+      products={products}
+      businessId={businessId}
+      initialSearch={initialSearch}
+      initialPage={initialPage}
+      categories={categories}
+      productLimit={productLimit}
+      productCount={products.length}
+      plan={plan}
+      olxConnected={olxConnected}
+    />
   );
 }

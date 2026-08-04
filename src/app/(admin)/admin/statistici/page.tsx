@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminStatsClient } from "@/components/admin/AdminStatsClient";
 import { PLAN_PRICES } from "@/lib/plans";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const metadata = { title: "Statistici" };
 
@@ -21,7 +23,52 @@ function buildMonthLabels(count = 12) {
   return months;
 }
 
-export default async function AdminStatsPage() {
+/**
+ * Coaja paginii pleaca imediat; graficele curg dupa ele.
+ *
+ * Aici sunt zece citiri platform-wide, iar sase dintre ele sunt `fetchAllRows`
+ * — adica mai multe dus-intors pana se termina ferestrele de 1000 de randuri.
+ * Nimic nu ajungea la browser pana nu se strangeau TOATE. Sub `<Suspense>`,
+ * cadrul se trimite imediat si scheletul tine locul doar tablourilor.
+ */
+export default function AdminStatsPage() {
+  return (
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+      <Suspense fallback={<ScheletStatistici />}>
+        <Tablouri />
+      </Suspense>
+    </div>
+  );
+}
+
+function ScheletStatistici() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-36 rounded-xl" />
+
+      {/* cardurile de sus: MRR / ARR / ARPU / LTV */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-[136px] rounded-2xl" />
+        ))}
+      </div>
+
+      {/* doua grafice pe rand */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Skeleton className="h-[280px] rounded-2xl" />
+        <Skeleton className="h-[280px] rounded-2xl" />
+      </div>
+
+      {/* grafic lat plus panoul lateral */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Skeleton className="h-[260px] rounded-2xl lg:col-span-2" />
+        <Skeleton className="h-[260px] rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
+async function Tablouri() {
   const admin = createAdminClient();
 
   const twelveMonthsAgo = new Date();
@@ -159,24 +206,22 @@ export default async function AdminStatsPage() {
     .slice(0, 10);
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
-      <AdminStatsClient
-        usersByMonth={usersByMonth}
-        ordersByMonth={ordersByMonth}
-        invoicesByMonth={invoicesByMonth}
-        ticketsByMonth={ticketsByMonth}
-        planCounts={planCounts}
-        nicheCounts={nicheCounts}
-        topBusinesses={topBusinesses}
-        mrr={mrr}
-        arr={arr}
-        mrrByPlan={mrrByPlan}
-        arpu={Math.round(arpu)}
-        ltv={Math.round(ltv)}
-        churnRate={Math.max(0, churnRate)}
-        totalPaidUsers={paidActive}
-        totalFreeUsers={freeUsers.length}
-      />
-    </div>
+    <AdminStatsClient
+      usersByMonth={usersByMonth}
+      ordersByMonth={ordersByMonth}
+      invoicesByMonth={invoicesByMonth}
+      ticketsByMonth={ticketsByMonth}
+      planCounts={planCounts}
+      nicheCounts={nicheCounts}
+      topBusinesses={topBusinesses}
+      mrr={mrr}
+      arr={arr}
+      mrrByPlan={mrrByPlan}
+      arpu={Math.round(arpu)}
+      ltv={Math.round(ltv)}
+      churnRate={Math.max(0, churnRate)}
+      totalPaidUsers={paidActive}
+      totalFreeUsers={freeUsers.length}
+    />
   );
 }

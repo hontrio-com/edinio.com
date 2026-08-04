@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ORDERS_PAGE_SIZE, firstParam, pageParam, orSafeTerm } from "@/lib/orders/pagination";
 import { ORDER_STATUS } from "@/lib/orders/status";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -18,6 +20,13 @@ import type { SamedayConfig } from "@/lib/sameday";
 // span dozens of orders, so give this route's server actions ample headroom.
 export const maxDuration = 300;
 
+/**
+ * Ce facturier si ce curieri sunt gata se stie dupa PRIMA interogare; lista de
+ * comenzi si numaratoarea pe stari cer inca doua drumuri la baza (cautarea cu
+ * `ilike` pe cinci coloane e cea mai lenta dintre ele). Cadrul si butoanele in
+ * bloc depind doar de setari, deci pleaca imediat, iar sub `<Suspense>` ramane
+ * doar tabelul.
+ */
 export default async function OrdersPage({
   searchParams,
 }: {
@@ -45,13 +54,112 @@ export default async function OrdersPage({
   const business = { id: bizRow.id, business_name: bizRow.business_name };
   const settings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] ?? null : bizRow.store_settings ?? null;
 
+  const smartbillEnabled =
+    (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
+  const wc = settings?.woot_config as WootConfig | null;
+  const wootEnabled = !!(wc?.enabled && wc?.public_key && wc?.secret_key);
+  const cc = settings?.colete_config as COConfig | null;
+  const coleteEnabled = !!(cc?.enabled && cc?.client_id && cc?.client_secret);
+  const oc = settings?.oblio_config as OblioConfig | null;
+  const oblioEnabled = !!(oc?.enabled && oc?.client_id && oc?.cif && oc?.series_invoice);
+  const fc = settings?.fgo_config as FgoConfig | null;
+  const fgoEnabled = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
+  const cg = settings?.cargus_config as CargusConfig | null;
+  const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
+  const dg = settings?.dpd_config as DpdConfig | null;
+  const dpdEnabled = !!(dg?.enabled && dg?.username && dg?.client_id);
+  const fg = settings?.fan_courier_config as FanCourierConfig | null;
+  const fanCourierEnabled = !!(fg?.enabled && fg?.username && fg?.client_id);
+  const sg = settings?.sameday_config as SamedayConfig | null;
+  const samedayEnabled = !!(sg?.enabled && sg?.username && sg?.pickup_point_id);
+
+  const integrari: Integrari = {
+    smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled,
+    cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled,
+    fanPickup: { lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null },
+  };
+
+  return (
+    <div className="p-6">
+      <Suspense fallback={<ScheletComenzi />}>
+        <ListaComenzi
+          businessId={business.id}
+          q={q}
+          status={status}
+          page={page}
+          integrari={integrari}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+/** Steagurile derivate din `store_settings` — se calculeaza o data, in parinte. */
+type Integrari = {
+  smartbillEnabled: boolean;
+  wootEnabled: boolean;
+  coleteEnabled: boolean;
+  oblioEnabled: boolean;
+  fgoEnabled: boolean;
+  cargusEnabled: boolean;
+  dpdEnabled: boolean;
+  fanCourierEnabled: boolean;
+  samedayEnabled: boolean;
+  fanPickup: { lastDate: string | null; lastId: string | null };
+};
+
+function ScheletComenzi() {
+  return (
+    <>
+      <div className="flex items-center justify-between mb-5">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <Skeleton className="h-9 w-40 rounded-xl" />
+      </div>
+      {/*
+        * Opt file: cele sapte stari din `ORDER_STATUS` plus „Toate" — vezi
+        * `STATUS_TABS` din OrdersClient. Numarul era 5, preluat dintr-un
+        * `loading.tsx` vechi, si randul chiar se reaseza cand soseau datele.
+        */}
+      <div className="flex gap-2 mb-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-8 w-24" />
+        ))}
+      </div>
+      <Skeleton className="h-12 rounded-t-xl rounded-b-none" />
+      <div className="space-y-px">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-14 rounded-none" />
+        ))}
+      </div>
+    </>
+  );
+}
+
+async function ListaComenzi({
+  businessId,
+  q,
+  status,
+  page,
+  integrari,
+}: {
+  businessId: string;
+  q: string;
+  status: string;
+  page: number;
+  integrari: Integrari;
+}) {
+  const supabase = await createClient();
+
   // Paginare/cautare/filtrare in SQL: aducem DOAR pagina curenta de comenzi,
   // niciodata tot istoricul (PostgREST trunchiaza silentios la 1000 de
   // randuri, iar la volum mare payload-ul ar fi oricum inutilizabil).
   let listQuery = supabase
     .from("orders")
     .select("*", { count: "exact" })
-    .eq("business_id", business.id);
+    .eq("business_id", businessId);
   if (status !== "all") listQuery = listQuery.eq("status", status);
   const term = orSafeTerm(q);
   if (term) {
@@ -77,35 +185,14 @@ export default async function OrdersPage({
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .range(fromIdx, fromIdx + ORDERS_PAGE_SIZE - 1),
-    supabase.rpc("orders_status_counts", { bid: business.id }),
+    supabase.rpc("orders_status_counts", { bid: businessId }),
   ]);
 
   const statusCounts: Record<string, number> = {};
   for (const r of statusRows ?? []) statusCounts[r.status] = Number(r.cnt);
   const pendingCount = statusCounts.pending ?? 0;
 
-  const smartbillEnabled =
-    (settings?.smartbill_config as SmartbillConfig | null)?.enabled === true;
-  const wc = settings?.woot_config as WootConfig | null;
-  const wootEnabled = !!(wc?.enabled && wc?.public_key && wc?.secret_key);
-  const cc = settings?.colete_config as COConfig | null;
-  const coleteEnabled = !!(cc?.enabled && cc?.client_id && cc?.client_secret);
-  const oc = settings?.oblio_config as OblioConfig | null;
-  const oblioEnabled = !!(oc?.enabled && oc?.client_id && oc?.cif && oc?.series_invoice);
-  const fc = settings?.fgo_config as FgoConfig | null;
-  const fgoEnabled = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
-  const cg = settings?.cargus_config as CargusConfig | null;
-  const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
-  const dg = settings?.dpd_config as DpdConfig | null;
-  const dpdEnabled = !!(dg?.enabled && dg?.username && dg?.client_id);
-  const fg = settings?.fan_courier_config as FanCourierConfig | null;
-  const fanCourierEnabled = !!(fg?.enabled && fg?.username && fg?.client_id);
-  const sg = settings?.sameday_config as SamedayConfig | null;
-  const samedayEnabled = !!(sg?.enabled && sg?.username && sg?.pickup_point_id);
-
   return (
-    <div className="p-6">
-      <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} pendingCount={pendingCount} smartbillEnabled={smartbillEnabled} wootEnabled={wootEnabled} coleteEnabled={coleteEnabled} oblioEnabled={oblioEnabled} fgoEnabled={fgoEnabled} cargusEnabled={cargusEnabled} dpdEnabled={dpdEnabled} fanCourierEnabled={fanCourierEnabled} samedayEnabled={samedayEnabled} businessId={business.id} fanPickup={{ lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null }} />
-    </div>
+    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
   );
 }

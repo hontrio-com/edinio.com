@@ -1,9 +1,54 @@
+import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminOverview } from "@/components/admin/AdminOverview";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const metadata = { title: "Prezentare generala" };
 
-export default async function AdminPage() {
+/**
+ * Coaja paginii pleaca imediat; cifrele curg dupa ea.
+ *
+ * Cele 14 interogari stateau direct in corpul paginii, deci nimic nu ajungea la
+ * browser pana nu raspundea si cea mai lenta dintre ele — inclusiv citirea
+ * INTEGRALA a facturilor platite, care creste cu vechimea platformei.
+ * Sub `<Suspense>`, cadrul pleaca acum si scheletul tine locul doar panoului.
+ */
+export default function AdminPage() {
+  return (
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+      <Suspense fallback={<ScheletPrezentare />}>
+        <PrezentareGenerala />
+      </Suspense>
+    </div>
+  );
+}
+
+function ScheletPrezentare() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-48 rounded-xl" />
+
+      {/* randul de carduri mari */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-[136px] rounded-2xl" />
+        ))}
+      </div>
+
+      {/* grila de statistici */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-[136px] rounded-2xl" />
+        ))}
+      </div>
+
+      {/* graficul de venituri */}
+      <Skeleton className="h-72 rounded-2xl" />
+    </div>
+  );
+}
+
+async function PrezentareGenerala() {
   const admin = createAdminClient();
 
   const now = new Date();
@@ -80,29 +125,27 @@ export default async function AdminPage() {
   }));
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
-      <AdminOverview
-        stats={{
-          totalUsers: totalUsers ?? 0,
-          newUsersThisMonth: newUsersThisMonth ?? 0,
-          newUsersLastMonth: newUsersLastMonth ?? 0,
-          totalRevenue,
-          revenueThisMonth,
-          mrr,
-          arr,
-          activeBusinesses: activeBusinesses ?? 0,
-          totalBusinesses: totalBusinesses ?? 0,
-          pendingSupport: pendingSupport ?? 0,
-          pastDueCount: pastDueUsers?.length ?? 0,
-          failedInvoicesCount: failedInvoices?.length ?? 0,
-        }}
-        recentUsers={recentUsers ?? []}
-        recentTickets={recentTickets ?? []}
-        revenueChart={revenueChart}
-        usersByPlan={usersByPlan}
-        allInvoices={subscriptionInvoices.map((i) => ({ amount: i.amount, created_at: i.created_at }))}
-        recentAudit={(recentAudit ?? []).map((a) => ({ action: a.action, target_type: a.target_type, created_at: a.created_at }))}
-      />
-    </div>
+    <AdminOverview
+      stats={{
+        totalUsers: totalUsers ?? 0,
+        newUsersThisMonth: newUsersThisMonth ?? 0,
+        newUsersLastMonth: newUsersLastMonth ?? 0,
+        totalRevenue,
+        revenueThisMonth,
+        mrr,
+        arr,
+        activeBusinesses: activeBusinesses ?? 0,
+        totalBusinesses: totalBusinesses ?? 0,
+        pendingSupport: pendingSupport ?? 0,
+        pastDueCount: pastDueUsers?.length ?? 0,
+        failedInvoicesCount: failedInvoices?.length ?? 0,
+      }}
+      recentUsers={recentUsers ?? []}
+      recentTickets={recentTickets ?? []}
+      revenueChart={revenueChart}
+      usersByPlan={usersByPlan}
+      allInvoices={subscriptionInvoices.map((i) => ({ amount: i.amount, created_at: i.created_at }))}
+      recentAudit={(recentAudit ?? []).map((a) => ({ action: a.action, target_type: a.target_type, created_at: a.created_at }))}
+    />
   );
 }

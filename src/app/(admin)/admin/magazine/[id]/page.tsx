@@ -1,22 +1,69 @@
+import { Suspense, type ComponentProps } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminBusinessDetailClient } from "@/components/admin/AdminBusinessDetailClient";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const metadata = { title: "Detalii magazin" };
 
+type Magazin = ComponentProps<typeof AdminBusinessDetailClient>["business"];
+
+/**
+ * Randul magazinului se citeste AICI, nu sub `<Suspense>`.
+ *
+ * E o cautare dupa cheia primara, deci ieftina, si de ea atarna `notFound()`:
+ * daca ar sta in copil, coaja ar fi plecat deja spre browser si 404-ul ar veni
+ * dupa un antet care nu trebuia sa existe. Restul — 200 de comenzi, toate
+ * produsele, setarile, domeniile si contul de autentificare al proprietarului —
+ * curge dupa cadru.
+ */
 export default async function AdminBusinessDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const admin = createAdminClient();
 
-  const [{ data: business }, { data: orders }, { data: products }, { data: settings }, { data: domains }] = await Promise.all([
-    admin.from("businesses").select("*").eq("id", id).single(),
+  const { data: business } = await admin.from("businesses").select("*").eq("id", id).single();
+
+  if (!business) notFound();
+
+  return (
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+      <Suspense fallback={<ScheletMagazin />}>
+        <DetaliiMagazin id={id} business={business} />
+      </Suspense>
+    </div>
+  );
+}
+
+function ScheletMagazin() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-5 w-32" />
+
+      {/* antetul magazinului */}
+      <Skeleton className="h-[188px] rounded-2xl" />
+
+      {/* taburile */}
+      <div className="flex gap-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-9 w-24" />
+        ))}
+      </div>
+
+      {/* tabelul din tab */}
+      <Skeleton className="h-[440px] rounded-2xl" />
+    </div>
+  );
+}
+
+async function DetaliiMagazin({ id, business }: { id: string; business: Magazin }) {
+  const admin = createAdminClient();
+
+  const [{ data: orders }, { data: products }, { data: settings }, { data: domains }] = await Promise.all([
     admin.from("orders").select("id, order_number, customer_name, customer_email, customer_phone, total, status, payment_method, created_at, shipping_address").eq("business_id", id).order("created_at", { ascending: false }).limit(200),
     admin.from("products").select("id, name, price, is_active, created_at").eq("business_id", id).order("created_at", { ascending: false }),
     admin.from("store_settings").select("*").eq("business_id", id).single(),
     admin.from("domains").select("*").eq("business_id", id),
   ]);
-
-  if (!business) notFound();
 
   // Coloanele `*_config` din store_settings contin credentialele TERTILOR ale
   // comerciantului, in text clar: token SmartBill, client_secret Oblio, api_key
@@ -77,16 +124,14 @@ export default async function AdminBusinessDetailPage({ params }: { params: Prom
   const { data: authUser } = await admin.auth.admin.getUserById(business.user_id);
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto">
-      <AdminBusinessDetailClient
-        business={business}
-        orders={orders ?? []}
-        products={products ?? []}
-        owner={profile ?? null}
-        ownerEmail={authUser?.user?.email ?? ""}
-        settings={settingsSigure}
-        domains={domains ?? []}
-      />
-    </div>
+    <AdminBusinessDetailClient
+      business={business}
+      orders={orders ?? []}
+      products={products ?? []}
+      owner={profile ?? null}
+      ownerEmail={authUser?.user?.email ?? ""}
+      settings={settingsSigure}
+      domains={domains ?? []}
+    />
   );
 }

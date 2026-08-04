@@ -17,7 +17,7 @@ import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEnt
 import { formatPrice } from "@/lib/utils/format";
 import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
 import type { ShippingClass, ShippingRule } from "@/lib/shipping/rules";
-import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
+import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail, schimbaParola } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
 import { EmailSettingsClient, type EmailSettingsInitial } from "@/components/dashboard/EmailSettingsClient";
@@ -339,6 +339,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [savingGeneral, startGeneralTransition] = useTransition();
 
   // Password
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [deleteConfirmPassword, setDeleteConfirmPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
@@ -778,14 +780,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     if (newPassword !== confirmPassword) { toast.error("Parolele nu coincid."); return; }
     if (newPassword.length < 8) { toast.error("Parola trebuie sa aiba cel putin 8 caractere."); return; }
     setSavingPassword(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    // Trece prin server, care cere parola ACTUALA. Varianta de dinainte chema
+    // updateUser direct din browser, deci orice sesiune imprumutata schimba
+    // parola — iar GoTrue inchide apoi toate celelalte sesiuni, adica
+    // proprietarul real era dat afara si nu mai putea intra.
+    const result = await schimbaParola(currentPassword, newPassword);
     setSavingPassword(false);
-    if (error) toast.error("Nu am putut schimba parola.");
-    else {
-      toast.success("Parola a fost schimbata cu succes.");
-      setNewPassword(""); setConfirmPassword("");
-    }
+    if ("error" in result) { toast.error(result.error); return; }
+    toast.success("Parola a fost schimbata cu succes.");
+    setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
   }
 
   async function startEnableMfa() {
@@ -2391,6 +2394,17 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
                 <div className="px-5 py-5 space-y-4">
                   <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Parola actuala</label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className={inputCls}
+                      autoComplete="current-password"
+                      placeholder="Parola cu care te-ai conectat"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">Parola noua</label>
                     <input
                       type="password"
@@ -2409,7 +2423,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       className={inputCls}
                     />
                   </div>
-                  <Button onClick={changePassword} disabled={savingPassword || !newPassword || !confirmPassword}>
+                  <Button onClick={changePassword} disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}>
                     {savingPassword && <Loader2 className="animate-spin" />}
                     {savingPassword ? "Se schimba..." : "Schimba parola"}
                   </Button>
@@ -2564,16 +2578,31 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           placeholder={email}
                         />
                       </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5">
+                          Introdu parola contului
+                        </label>
+                        <input
+                          type="password"
+                          value={deleteConfirmPassword}
+                          onChange={(e) => setDeleteConfirmPassword(e.target.value)}
+                          className={inputCls}
+                          autoComplete="current-password"
+                        />
+                        <p className="mt-1.5 text-[11px] text-muted-foreground">
+                          Daca ai un abonament activ, va fi anulat automat.
+                        </p>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmEmail(""); }}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmEmail(""); setDeleteConfirmPassword(""); }}>
                           Anuleaza
                         </Button>
                         <Button
                           size="sm"
-                          disabled={deletingAccount || deleteConfirmEmail !== email}
+                          disabled={deletingAccount || deleteConfirmEmail !== email || !deleteConfirmPassword}
                           onClick={() => {
                             startDeleteTransition(async () => {
-                              const result = await deleteAccount();
+                              const result = await deleteAccount(deleteConfirmPassword);
                               if (result && "error" in result) toast.error(result.error);
                             });
                           }}

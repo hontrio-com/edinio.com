@@ -10,6 +10,7 @@ import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanner";
 import { getInactiveReason } from "@/lib/subscription";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
+import { mfaInAsteptare } from "@/lib/auth/mfa";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
@@ -23,9 +24,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const esteImpersonare = (await cookies()).get("impersonare")?.value != null;
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
-    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at").eq("id", user.id).single(),
+    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at, mfa_email_enabled, mfa_otp, mfa_otp_expires_at").eq("id", user.id).single(),
     supabase.from("businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
   ]);
+
+  /*
+   * Poarta MFA, verificata pe SERVER.
+   *
+   * Pana acum starea „al doilea factor neterminat" statea doar in cookie-ul
+   * `mfa_pending`, iar middleware-ul se uita la el. Cookie-ul e trimis de client:
+   * cine avea parola primea deja sesiune valida de la signInWithPassword si ii
+   * ajungea sa NU trimita cookie-ul ca sa intre in panou.
+   *
+   * Sursa de adevar e provocarea din baza (`mfa_otp`, stearsa la verificarea
+   * reusita). Nu costa nicio interogare in plus: profilul e citit oricum aici.
+   */
+  if (mfaInAsteptare(profile)) redirect("/login/mfa");
 
   if (!profile?.onboarding_completed) redirect("/onboarding/details");
 

@@ -9,6 +9,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { sendMfaOtpEmail, sendAccountWelcomeEmail } from "@/lib/email";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita, reseteazaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
+import { mfaInAsteptare } from "@/lib/auth/mfa";
 
 /**
  * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
@@ -333,6 +334,67 @@ export async function resetPassword(password: string) {
   return { success: true };
 }
 
+
+/**
+ * Schimbarea parolei din Setari.
+ *
+ * Cerea DOAR sesiunea, si se facea direct din browser cu
+ * `supabase.auth.updateUser({ password })`. Orice sesiune imprumutata — laptop
+ * lasat deschis, cookie exfiltrat, XSS — devenea preluare DEFINITIVA: atacatorul
+ * punea alta parola, iar GoTrue inchide automat toate celelalte sesiuni, deci
+ * proprietarul real era dat afara pe loc si nu mai putea intra.
+ *
+ * Acum: parola veche e obligatorie, iar o provocare MFA neterminata blocheaza
+ * operatiunea.
+ */
+export async function schimbaParola(
+  parolaVeche: string,
+  parolaNoua: string,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return { error: "Neautorizat" };
+
+  if (parolaNoua.length < 8) return { error: "Parola noua trebuie sa aiba cel putin 8 caractere." };
+  if (!parolaVeche) return { error: "Introdu parola actuala." };
+
+  const lim = await consumaLimita(`schimba-parola:${user.id}`, 5, 900, 900);
+  if (!lim.permis) return { error: mesajLimita(lim, "Prea multe incercari. Incearca mai tarziu.") };
+
+  const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
+  const { data: profil } = await getAdmin()
+    .from("users_profile")
+    .select("mfa_email_enabled, mfa_otp, mfa_otp_expires_at")
+    .eq("id", user.id)
+    .single();
+  if (mfaInAsteptare(profil)) {
+    return { error: "Finalizeaza autentificarea in doi pasi inainte de a schimba parola." };
+  }
+
+  /*
+   * Verificarea parolei vechi se face pe un client SEPARAT, fara cookie-uri.
+   * Cu clientul obisnuit, `signInWithPassword` ar rescrie sesiunea curenta — iar
+   * la parola gresita ar putea chiar sa o strice.
+   */
+  const { createClient: clientCurat } = await import("@supabase/supabase-js");
+  const verificator = clientCurat(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { error: eroareParola } = await verificator.auth.signInWithPassword({
+    email: user.email,
+    password: parolaVeche,
+  });
+  if (eroareParola) return { error: "Parola actuala este incorecta." };
+
+  const { error } = await supabase.auth.updateUser({ password: parolaNoua });
+  if (error) return { error: "Nu am putut schimba parola." };
+
+  await reseteazaLimita(`schimba-parola:${user.id}`);
+  return { success: true };
+}
+
 export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
@@ -344,13 +406,64 @@ export async function logout() {
   redirect("/login");
 }
 
-export async function deleteAccount() {
+/**
+ * Stergerea definitiva a contului.
+ *
+ * Doua lipsuri, amandoua cu consecinte reale:
+ *
+ *  1. Nu cerea NIMIC in plus fata de sesiune. O sesiune imprumutata putea sterge
+ *     ireversibil contul, magazinele si comenzile. Acum cere parola.
+ *  2. Nu anula abonamentul Stripe. Contul disparea din baza, dar abonamentul
+ *     ramanea activ si clientul continua sa fie taxat luni la rand, fara sa mai
+ *     aiba unde sa se conecteze ca sa-l opreasca.
+ */
+export async function deleteAccount(parola?: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Neautorizat" };
+  if (!user?.email) return { error: "Neautorizat" };
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) return { error: "Stergerea contului nu este disponibila momentan. Contactati suportul." };
+
+  const lim = await consumaLimita(`sterge-cont:${user.id}`, 3, 900, 900);
+  if (!lim.permis) return { error: mesajLimita(lim, "Prea multe incercari. Incearca mai tarziu.") };
+
+  // Reconfirmarea parolei: operatiunea e IREVERSIBILA.
+  if (!parola) return { error: "Introdu parola pentru a confirma stergerea." };
+  const { createClient: clientCurat } = await import("@supabase/supabase-js");
+  const verificator = clientCurat(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { error: eroareParola } = await verificator.auth.signInWithPassword({
+    email: user.email,
+    password: parola,
+  });
+  if (eroareParola) return { error: "Parola este incorecta." };
+
+  const admin0 = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  // Anuleaza abonamentul INAINTE de stergere: dupa ce randul dispare nu mai
+  // exista de unde afla `stripe_customer_id`, si clientul ramane taxat.
+  const { data: profilPlata } = await admin0
+    .from("users_profile").select("stripe_customer_id").eq("id", user.id).single();
+  if (profilPlata?.stripe_customer_id) {
+    try {
+      const { stripe } = await import("@/lib/stripe");
+      const abonamente = await stripe.subscriptions.list({
+        customer: profilPlata.stripe_customer_id, status: "active", limit: 100,
+      });
+      for (const ab of abonamente.data) {
+        await stripe.subscriptions.cancel(ab.id).catch(() => {});
+      }
+    } catch {
+      // Stripe cazut nu trebuie sa blocheze stergerea contului; ramane in loguri.
+      console.error("[deleteAccount] anularea abonamentului Stripe a esuat", { userId: user.id });
+    }
+  }
 
   // Delete user data from public schema (cascade handles related tables)
   await supabase.from("users_profile").delete().eq("id", user.id);

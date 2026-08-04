@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  cacheComponents: true,
   poweredByHeader: false,
   serverExternalPackages: ["@aws-sdk/client-s3", "sanitize-html", "sharp"],
   experimental: {

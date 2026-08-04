@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyState, exchangeCode } from "@/lib/olx/oauth";
 import { getMe, isOlxError } from "@/lib/olx/client";
@@ -12,6 +12,9 @@ function back(req: NextRequest, query: string): NextResponse {
 }
 
 export async function GET(req: NextRequest) {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   const url = new URL(req.url);
   if (url.searchParams.get("error") || !url.searchParams.get("code") || !url.searchParams.get("state")) {
     return back(req, "olx=error");

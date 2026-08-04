@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { buildCatalogItems, serializeCatalogFeed, type CatalogBusiness, type CatalogProduct } from "@/lib/facebook/catalog-feed";
 
-export const dynamic = "force-dynamic";
+import { connection } from "next/server";
 
 // Meta (Facebook) Catalog product feed, per store, at {storeBaseUrl}/facebook-catalog.xml.
 // One route serves both domain types: a custom domain reaches it because proxy.ts
@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
 // (it is NOT special-cased like /sitemap.xml); an edinio.com/{slug} store is served
 // directly. The feed links use the store's canonical base (storeBaseUrl).
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   const { slug } = await params;
   const admin = createAdminClient();
 

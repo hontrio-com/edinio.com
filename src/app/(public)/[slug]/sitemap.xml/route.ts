@@ -7,7 +7,7 @@ import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 
-export const dynamic = "force-dynamic";
+import { connection } from "next/server";
 
 // Max URLs per sitemap file (Google limit) — over it, the whole file is rejected.
 const SITEMAP_URL_LIMIT = 50000;
@@ -18,6 +18,9 @@ const SITEMAP_URL_LIMIT = 50000;
 // host-aware root app/sitemap.ts (proxy.ts serves /sitemap.xml directly on the
 // domain, and redirects edinio.com/{slug}/sitemap.xml -> their domain for them).
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   const { slug } = await params;
   const admin = createAdminClient();
 

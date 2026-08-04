@@ -16,6 +16,13 @@ import { MigrationPains } from "@/components/landing/MigrationPains";
 import { MigrationOffer } from "@/components/landing/MigrationOffer";
 import { MigrationFormSection } from "@/components/landing/MigrationFormSection";
 
+import { anulCurent } from "@/lib/an-curent";
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 export const metadata: Metadata = {
   title: "Migrare gratuita magazin online in 24 de ore",
   description:
@@ -74,7 +81,7 @@ const COMPARISON = [
   { label: "Suport", edinio: "7 zile din 7", other: "Program limitat" },
 ];
 
-export default function MigrarePage() {
+export default async function MigrarePage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Announcement bar */}
@@ -209,7 +216,7 @@ export default function MigrarePage() {
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <Logo size="sm" />
           <p className="text-xs text-gray-400">
-            &copy; {new Date().getFullYear()} Edinio.com. Toate drepturile rezervate.
+            &copy; {await anulCurent()} Edinio.com. Toate drepturile rezervate.
           </p>
           <div className="flex items-center gap-4 text-xs text-gray-500">
             <Link href="/termeni" className="hover:text-primary transition-colors">Termeni</Link>

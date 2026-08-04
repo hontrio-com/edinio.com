@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dueSources } from "@/lib/import/stock-feed/sources";
@@ -36,6 +36,9 @@ function verifyCron(req: NextRequest): boolean {
 }
 
 export async function GET(req: NextRequest) {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   if (!verifyCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const deadline = Date.now() + BUDGET_MS;

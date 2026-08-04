@@ -3,6 +3,12 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

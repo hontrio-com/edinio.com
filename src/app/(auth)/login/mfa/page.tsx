@@ -5,6 +5,7 @@ import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { verifyMfaLogin } from "@/lib/actions/auth.actions";
 
+
 export default function MfaPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);

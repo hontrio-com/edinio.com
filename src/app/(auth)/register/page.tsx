@@ -11,6 +11,7 @@ import { registerSchema, type RegisterInput } from "@/lib/validations/auth";
 import { register as registerAction } from "@/lib/actions/auth.actions";
 import { GoogleAuthButton } from "@/components/ui/GoogleAuthButton";
 
+
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
     { label: "Minim 8 caractere", valid: password.length >= 8 },

@@ -1,8 +1,11 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse, connection } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getDpdAwbPdf, type DpdConfig } from "@/lib/dpd";
 
 export async function GET(req: NextRequest) {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   const { searchParams } = new URL(req.url);
   const orderId = searchParams.get("orderId");
   const businessId = searchParams.get("businessId");

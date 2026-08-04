@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeNoticePhone } from "@/lib/notice";
 
-export const dynamic = "force-dynamic";
 
 // notice.ro calls this endpoint for INBOUND events: delivery reports (DLR) for the
 // SMS/WhatsApp we sent, customer replies, and voice callbacks. The merchant pastes
@@ -150,5 +149,8 @@ export async function POST(req: NextRequest) {
 
 // Some providers verify a webhook with a GET first — answer 200.
 export async function GET() {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   return ok();
 }

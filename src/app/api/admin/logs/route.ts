@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdminApi } from "@/lib/admin-guard";
 
 export async function GET(req: NextRequest) {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   // Era singura ruta /api/admin/** cu verificare proprie, scrisa inline si
   // bazata pe o singura sursa. Trece acum prin aceeasi garda ca restul.
   if (!(await requireAdminApi())) {

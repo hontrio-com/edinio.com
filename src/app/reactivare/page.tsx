@@ -5,6 +5,13 @@ import { getInactiveReason } from "@/lib/subscription";
 import { ReactivateClient } from "./ReactivateClient";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
 
+import { connection } from "next/server";
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 export const metadata: Metadata = {
   title: "Reactiveaza-ti contul",
   robots: { index: false, follow: false },
@@ -15,6 +22,10 @@ export default async function ReactivarePage({
 }: {
   searchParams: Promise<{ success?: string }>;
 }) {
+  // Pagina citeste date necachuite la fiecare cerere — exact ca pana acum.
+  // `connection()` spune asta explicit, ca prerandarea sa nu incerce sa o
+  // execute in timpul build-ului. Comportamentul la rulare e neschimbat.
+  await connection();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");

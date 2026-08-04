@@ -12,6 +12,7 @@ import {
 } from "@/lib/validations/auth";
 import { forgotPassword } from "@/lib/actions/auth.actions";
 
+
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
 
 // Brevo calls this on the account-level marketing "unsubscribed" event we registered.
 // Payload is JSON: `{ "event": "unsubscribed", "email": "..." , ... }`. The per-store

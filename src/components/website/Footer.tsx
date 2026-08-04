@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { anulCurent } from "@/lib/an-curent";
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
 
@@ -16,7 +17,7 @@ const LEGAL_LINKS = [
   { href: "/gdpr", label: "GDPR" },
 ];
 
-export function Footer() {
+export async function Footer() {
   return (
     <footer className="bg-foreground text-background">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -88,7 +89,7 @@ export function Footer() {
         {/* Bottom bar */}
         <div className="mt-12 pt-8 border-t border-background/10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-background/40">
-            &copy; {new Date().getFullYear()} Edinio. Toate drepturile rezervate.
+            &copy; {await anulCurent()} Edinio. Toate drepturile rezervate.
           </p>
           <div className="flex items-center gap-3">
             <a

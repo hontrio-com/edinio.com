@@ -12,6 +12,12 @@ import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-c
 import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo } from "@/lib/seo";
 import type { Metadata } from "next";
 
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 interface Props {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;

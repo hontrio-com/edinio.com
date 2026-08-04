@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Loader2, AlertTriangle, AlertCircle, Info, ChevronLeft, ChevronRight, Search, RefreshCw } from "lucide-react";
 
+
 interface LogEntry {
   id: string;
   created_at: string;

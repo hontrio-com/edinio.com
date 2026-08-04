@@ -1,9 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, connection } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getCOToken, getCOOrderAwb, type COConfig } from "@/lib/colete";
 
 export async function GET(request: NextRequest) {
+  // Ruta citeste date la fiecare cerere — ca pana acum. `connection()` spune
+  // asta explicit, ca prerandarea sa nu o execute in timpul build-ului.
+  await connection();
   const { searchParams } = request.nextUrl;
   const orderId = searchParams.get("orderId");
   const businessId = searchParams.get("businessId");

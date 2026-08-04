@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
 
 // Mailchimp calls this on audience events (we register it for unsubscribe/cleaned/
 // subscribe). Payload is form-encoded: `type=unsubscribe&data[email]=...&data[list_id]=...`.

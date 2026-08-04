@@ -14,6 +14,7 @@ import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { platformFbq } from "@/components/platform/PlatformMetaPixel";
 import { platformTtq } from "@/components/platform/PlatformTikTokPixel";
 
+
 const schema = z.object({
   business_name: z.string().min(2, "Minim 2 caractere").max(100),
   phone: z.string().regex(/^07[0-9]{8}$/, "Format invalid: 07XXXXXXXX"),

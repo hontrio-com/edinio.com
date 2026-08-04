@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 export const metadata: Metadata = {
   title: "Politica de confidențialitate",
   description:

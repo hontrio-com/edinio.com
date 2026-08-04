@@ -4,6 +4,12 @@ import Link from "next/link";
 import { Check, Zap, Rocket, Crown, ArrowRight, ShieldCheck, Star, Clock, CreditCard, FileText, Truck } from "lucide-react";
 import { HeroMockups } from "@/components/website/HeroMockups";
 
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 export const metadata: Metadata = {
   title: "Creeaza magazin online - de la 99 lei/luna",
   description:

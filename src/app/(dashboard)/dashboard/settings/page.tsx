@@ -10,11 +10,22 @@ import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl }
 import { parseEmailConfig } from "@/lib/email/config";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 
+import { connection } from "next/server";
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
 }
 
 export default async function SettingsPage({ searchParams }: Props) {
+  // Pagina citeste date necachuite la fiecare cerere — exact ca pana acum.
+  // `connection()` spune asta explicit, ca prerandarea sa nu incerce sa o
+  // execute in timpul build-ului. Comportamentul la rulare e neschimbat.
+  await connection();
   const { plan_success, domain_success } = await searchParams;
   const supabase = await createClient();
   const user = await getCachedUser();

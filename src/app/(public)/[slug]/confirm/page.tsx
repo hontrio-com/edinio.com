@@ -15,6 +15,13 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { Metadata } from "next";
 
+import { connection } from "next/server";
+// Validarea „instant" e amanata pentru aceasta ruta: `cacheComponents` a fost
+// activat pe tot proiectul deodata, iar rutele se convertesc pe rand. Cand
+// ruta e pregatita (date cachuite cu `use cache` sau invelite in `Suspense`),
+// linia de mai jos se sterge si ruta incepe sa se prerandeze.
+export const instant = false;
+
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
 // cardul de marketing al Edinio din layout-ul radacina.
@@ -26,6 +33,10 @@ interface Props {
 }
 
 export default async function ConfirmPage({ params, searchParams }: Props) {
+  // Pagina citeste date necachuite la fiecare cerere — exact ca pana acum.
+  // `connection()` spune asta explicit, ca prerandarea sa nu incerce sa o
+  // execute in timpul build-ului. Comportamentul la rulare e neschimbat.
+  await connection();
   const { slug } = await params;
   const { orderId, name, total, status, motiv } = await searchParams;
 

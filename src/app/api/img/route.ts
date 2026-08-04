@@ -3,7 +3,6 @@ import sharp from "sharp";
 import { getFromR2, uploadToR2 } from "@/lib/r2";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 
-export const runtime = "nodejs";
 
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL ?? "";
 

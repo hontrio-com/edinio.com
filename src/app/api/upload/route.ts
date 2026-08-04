@@ -18,7 +18,6 @@ function curataFolder(brut: string | null): string | null {
   return curat.length > 0 && curat.length <= 40 ? curat : null;
 }
 
-export const runtime = "nodejs";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 const ALL_ALLOWED_TYPES = [...IMAGE_TYPES, "application/pdf", "image/gif"];

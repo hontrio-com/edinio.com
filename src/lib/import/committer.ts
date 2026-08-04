@@ -4,7 +4,7 @@
 // Driven by processImport(), which both the server action and the cron call.
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getProductLimit } from "@/lib/plan-limits";
+import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import type {
   ImportOptions,
   ImportStatus,
@@ -130,11 +130,8 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
   // Plan limit + current usage.
   const { data: profile } = await admin.from("users_profile").select("plan").eq("id", job.user_id).single();
   const limit = getProductLimit(profile?.plan ?? "free");
-  const { count: countRaw } = await admin
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", businessId);
-  let currentCount = countRaw ?? 0;
+  // Pe CONT, nu pe magazin: altfel al doilea magazin dubla limita la import.
+  let currentCount = await numaraProduseleContului(admin, job.user_id);
 
   // Preload existing slugs + category tree for in-memory dedupe/upsert.
   const slugSet = await loadSlugs(admin, businessId);

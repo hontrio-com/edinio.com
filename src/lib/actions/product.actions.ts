@@ -5,7 +5,7 @@ import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib
 import { maybeSyncBrevoProduct, maybeSyncBrevoProductsBulk } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoProduct, maybeSyncKlaviyoProductsBulk } from "@/lib/klaviyo-sync";
 import { createClient } from "@/lib/supabase/server";
-import { getProductLimit } from "@/lib/plan-limits";
+import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
@@ -147,12 +147,11 @@ export async function createProduct(businessId: string, data: ProductData) {
   const plan = profile?.plan ?? "free";
   const limit = getProductLimit(plan);
 
-  const { count } = await supabase
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", businessId);
+  // Numaram pe CONT, nu pe magazin: planul e per cont, iar numaratoarea pe
+  // magazin insemna ca al doilea magazin dubla limita. Vezi plan-limits.ts.
+  const count = await numaraProduseleContului(supabase, user.id);
 
-  if (limit !== Infinity && (count ?? 0) >= limit) {
+  if (limit !== Infinity && count >= limit) {
     return { error: `Ai atins limita de ${limit} produse pentru planul tau. Upgradeaza planul pentru mai multe produse.` };
   }
 
@@ -303,12 +302,11 @@ export async function duplicateProduct(productId: string, businessId: string) {
   const plan = profile?.plan ?? "free";
   const limit = getProductLimit(plan);
 
-  const { count } = await supabase
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", businessId);
+  // Numaram pe CONT, nu pe magazin: planul e per cont, iar numaratoarea pe
+  // magazin insemna ca al doilea magazin dubla limita. Vezi plan-limits.ts.
+  const count = await numaraProduseleContului(supabase, user.id);
 
-  if (limit !== Infinity && (count ?? 0) >= limit) {
+  if (limit !== Infinity && count >= limit) {
     return { error: `Ai atins limita de ${limit} produse. Upgradeaza planul.` };
   }
 

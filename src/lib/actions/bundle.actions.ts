@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { hasVariants } from "@/lib/storefront/variants";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { getProductLimit } from "@/lib/plan-limits";
+import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
@@ -201,9 +201,9 @@ export async function createBundle(
 
   const { data: profile } = await supabase.from("users_profile").select("plan").eq("id", user.id).single();
   const limit = getProductLimit(profile?.plan ?? "free");
-  const { count } = await supabase
-    .from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId);
-  if (limit !== Infinity && (count ?? 0) >= limit) {
+  // Pe CONT, nu pe magazin: planul e per cont. Vezi plan-limits.ts.
+  const count = await numaraProduseleContului(supabase, user.id);
+  if (limit !== Infinity && count >= limit) {
     return { error: `Ai atins limita de ${limit} produse pentru planul tau. Upgradeaza planul.` };
   }
 

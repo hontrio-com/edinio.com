@@ -454,3 +454,16 @@
 .policy-content a  { color: var(--primary); text-decoration: underline; }
 .policy-content blockquote { border-left: 3px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); margin: 0.75em 0; }
 .policy-content code { font-family: monospace; font-size: 0.85em; background: var(--muted); border-radius: 4px; padding: 0.1em 0.35em; }
+/*
+ * `pre` e singura eticheta din lista sanitizatorului care nu se rupe singura.
+ * Implicit e `white-space: pre`, iar preflight-ul Tailwind ii da doar fontul, nu
+ * si ruperea; `img`, `table`, `iframe` si `video` sunt aruncate de
+ * `sanitize-html.ts`, deci nu ajung aici. Masurat: o singura linie de o suta de
+ * caractere lipita de comerciant in descriere ducea latimea documentului de la
+ * 384 la 898 pe un telefon — descrierea nu iesea doar ea din coloana, ci scotea
+ * toata pagina din ecran. `overflow-x` ramane ca plasa pentru arta ASCII, unde
+ * ruperea la spatii n-ar ajunge. Priveste toate cele patru locuri care poarta
+ * clasa: descrierile din ambele pagini de produs, paginile de politici, blocurile
+ * paginilor proprii si anunturile.
+ */
+.policy-content pre { white-space: pre-wrap; overflow-x: auto; }

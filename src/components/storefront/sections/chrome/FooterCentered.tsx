@@ -8,6 +8,7 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { FooterCredit, FooterLegal } from "@/components/storefront/sections/_shared/FooterLegal";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { stilSigla } from "@/lib/storefront/logo-box";
 
 /**
  * Footer centrat, varianta „centered".
@@ -42,7 +43,7 @@ export function FooterCentered({ settings }: { settings?: Record<string, unknown
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                style={{ height: logoSize, maxWidth: logoSize * 5 }}
+                style={stilSigla(logoSize)}
                 className="w-auto object-contain" />
             ) : (
               <span className="text-2xl font-black tracking-tight">{nume}</span>

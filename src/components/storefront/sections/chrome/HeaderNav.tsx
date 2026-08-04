@@ -15,6 +15,7 @@ import { CartControl } from "@/components/storefront/sections/_shared/CartContro
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { radacinaMagazin, hrefCategorie } from "@/lib/storefront/category-href";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
+import { stilSigla } from "@/lib/storefront/logo-box";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -86,8 +87,8 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
               <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity lg:mr-6" aria-label={nume}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                  style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                  className="w-auto max-w-full object-contain" />
+                  style={stilSigla(logoSize)}
+                  className="w-auto object-contain" />
               </a>
             ) : (
               <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity lg:mr-6" aria-label={nume}>

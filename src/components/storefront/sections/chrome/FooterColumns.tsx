@@ -10,6 +10,7 @@ import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/S
 import { FooterCredit, FooterLegal, type TonFooter } from "@/components/storefront/sections/_shared/FooterLegal";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
 import { hrefCategorie } from "@/lib/storefront/category-href";
+import { stilSigla } from "@/lib/storefront/logo-box";
 
 /**
  * Footer deschis, pe coloane, varianta „columns".
@@ -67,7 +68,7 @@ export function FooterColumns({ ton = "deschis", settings }: { ton?: TonFooter; 
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={cdnImage(business.logo_url, 320)} alt={nume}
-                  style={{ height: logoSize, maxWidth: logoSize * 5 }}
+                  style={stilSigla(logoSize)}
                   className="w-auto object-contain" />
               ) : (
                 <span className="text-lg font-black tracking-tight truncate">{nume}</span>

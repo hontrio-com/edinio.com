@@ -768,9 +768,16 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
       {/* Hero: o singura grila, cu asezarea comutata din CSS. Galeria ramane in
           doua variante (banda care culiseaza pe telefon, diapozitive suprapuse pe
-          desktop), dar zona de cumparare e una singura. */}
+          desktop), dar zona de cumparare e una singura.
+
+          `grid-cols-1` pentru acelasi motiv ca la varianta „detaliat": pista
+          implicita de pe telefon e `auto`, iar minimul ei e min-content-ul
+          copiilor, nu latimea containerului — un singur copil mai lat (o sina
+          derulabila, un tabel, o imagine lipita in descriere) intinde pista si
+          scoate toata pagina din ecran. `lg:grid-cols-2` inseamna deja
+          `minmax(0,1fr)`, deci desktopul avea plafonul; telefonul nu-l avea. */}
       <div className="px-4 pt-3 pb-8 lg:px-6 lg:pt-8 lg:pb-16">
-        <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-2 lg:gap-16 lg:items-start">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-16 lg:items-start">
           <div>
             <div className="lg:hidden">
               <Gallery mobile slides={slides} activeSlide={activeSlide} goTo={goTo} color={color}
@@ -920,7 +927,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
               <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Pachet</p>
               <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Ce conține pachetul</h2>
             </motion.div>
-            <div className="grid sm:grid-cols-2 gap-3">
+            {/* `grid-cols-1` ca la grila eroului: numele componentelor se rup
+                aici la spatii, deci pista nu se umfla azi, dar plafonul costa
+                o clasa si inchide cazul. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {bundleComponents.map((c) => (
                 <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-surface shadow-sm">
                   <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted/40 border border-border shrink-0">

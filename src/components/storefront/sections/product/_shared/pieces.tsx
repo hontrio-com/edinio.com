@@ -120,16 +120,38 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
 
   const disabled = isOutOfStock || needsVariant;
 
+  /*
+   * Halo-ul de puls se face din `box-shadow`, ca la `glow`, nu dintr-un dreptunghi
+   * asezat in spate si marit cu `scale`.
+   *
+   * Cum era: un `<div absolute inset-0>` peste toata latimea butonului, animat
+   * `scale: [1, 1.15]`. Butonul e `w-full`, deci pe telefon inelul avea latimea
+   * coloanei (352px) si la varf iesea cu ~27px de fiecare parte, adica pana la
+   * 394px la o fereastra de 384. O cutie transformata intra in regiunea de
+   * derulare a paginii, deci pagina culisa laterala IN RITMUL animatiei, la
+   * infinit. Marginea de 16px a containerului nu ajungea: ar fi permis cel mult
+   * `scale` 1,09.
+   *
+   * De ce `box-shadow` e echivalent, nu un compromis: inelul statea IN SPATELE
+   * butonului, care il acopera complet, deci singurul lucru care se vedea era
+   * franjurul din afara. Umbra deseneaza exact acel franjur — si, in plus, nu
+   * intra niciodata in regiunea de derulare, la nicio latime. Urmareste si raza
+   * colturilor butonului, deci varianta „detaliat", care isi da butonul cu
+   * `rounded-md`, nu mai primeste un halo `rounded-xl` peste el.
+   *
+   * Umbra de asezare din `base` intra in cadrele animatiei: altfel animarea lui
+   * `box-shadow` ar fi sters-o.
+   */
   if (effect === "pulse") return (
-    <div className="relative">
-      <motion.div
-        className="absolute inset-0 rounded-xl pointer-events-none"
-        style={{ backgroundColor: color }}
-        animate={{ opacity: [0.7, 0], scale: [1, 1.15] }}
-        transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
-      />
-      <button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}>{label}</button>
-    </div>
+    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls}
+      style={{ backgroundColor: color }}
+      animate={{ boxShadow: [
+        `0px 4px 16px ${color}55, 0px 0px 0px 0px ${color}B3`,
+        `0px 4px 16px ${color}55, 0px 0px 0px 18px ${color}00`,
+      ] }}
+      transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}>
+      {label}
+    </motion.button>
   );
 
   if (effect === "shake") return (

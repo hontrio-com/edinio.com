@@ -618,8 +618,22 @@ export function ProductPageDetailed({
       <div className="max-w-6xl mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
         {/* Doua randuri pe desktop: galeria sus-stanga, datele sub ea, iar
             coloana de cumparare intinsa peste amandoua. Pe telefon grila are o
-            singura coloana si totul curge in ordinea din marcaj. */}
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start">
+            singura coloana si totul curge in ordinea din marcaj.
+
+            `grid-cols-1` pe telefon nu e decorativ, e chiar plafonul latimii.
+            Fara el pista de pe telefon ramanea implicita, adica `auto`, iar
+            minimul unei piste `auto` e min-content-ul elementelor din ea, nu
+            latimea containerului. Sina de miniaturi de sub imagine e derulabila
+            lateral, dar `overflow-x` nu anuleaza min-content-ul unei cutii-bloc:
+            la 72 de fotografii cerea 5176px, deci pista se facea de 5176px si
+            tragea dupa ea galeria patrata si coloana de cumparare. Pagina
+            culisa lateral si fotografia iesea din ecran. `grid-cols-1` inseamna
+            `minmax(0, 1fr)`: minimul devine 0, sina isi deruleaza continutul in
+            interiorul ei, iar restul incape. `lg:` de mai jos avea deja
+            `minmax(0, ...)` pe amandoua coloanele, de aceea desktopul era
+            intreg si nimeni nu vedea nimic in editor, unde produsul
+            demonstrativ are trei poze. */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start">
           <div className="lg:col-start-1 lg:row-start-1">
             <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
               hasDiscount={!!hasDiscount} discountPct={discountPct} color={color}
@@ -968,7 +982,13 @@ export function ProductPageDetailed({
           {product.is_bundle && bundleComponents.length > 0 && (
             <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
               <h2 className="text-lg font-bold text-foreground mb-4">Pachetul conține</h2>
-              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {/* `grid-cols-1` din acelasi motiv ca la grila eroului, dar aici
+                  numele componentei e cel care umfla pista: `truncate` inseamna
+                  `white-space: nowrap`, iar `overflow: hidden` nu taie
+                  min-content-ul unei cutii-bloc, doar ce se vede din ea. Fara
+                  plafon, un nume de patruzeci de caractere cerea 529px intr-o
+                  coloana de 352 si scotea pagina din ecran. */}
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {bundleComponents.map((c) => (
                   <li key={c.id} className="flex items-center gap-3 rounded-md border border-border p-3">
                     <div className="relative w-14 h-14 shrink-0 rounded-md overflow-hidden bg-muted/20">
@@ -1002,7 +1022,10 @@ export function ProductPageDetailed({
           {benefitsSection?.enabled && (benefitsSection.items?.length ?? 0) > 0 && (
             <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
               <h2 className="text-lg font-bold text-foreground mb-4">{benefitsSection.title}</h2>
-              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* `grid-cols-1` ca peste tot in fisier: textele de aici se rup
+                  la spatii, deci azi nu umfla pista, dar un singur sir fara
+                  spatii scris de comerciant (o adresa, un cod) ar face-o. */}
+              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {benefitsSection.items.map((b, i) => (
                   <li key={i} className="rounded-md border border-border p-4">
                     <p className="font-semibold text-foreground text-sm mb-1">{b.title}</p>
@@ -1017,7 +1040,7 @@ export function ProductPageDetailed({
           {howItWorksSection?.enabled && (howItWorksSection.steps?.length ?? 0) > 0 && (
             <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
               <h2 className="text-lg font-bold text-foreground mb-4">{howItWorksSection.title}</h2>
-              <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {howItWorksSection.steps.map((s, i) => (
                   <li key={i} className="rounded-md border border-border p-4">
                     <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold text-white mb-2"

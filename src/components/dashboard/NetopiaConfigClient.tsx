@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -35,18 +36,18 @@ export default function NetopiaConfigClient({
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
-  const isConfigured = !!initialConfig?.pos_signature && !!initialConfig?.api_key;
+  const isConfigured = (!!initialConfig?.pos_signature || secretulEsteSalvat(initialConfig, "pos_signature")) && (!!initialConfig?.api_key || secretulEsteSalvat(initialConfig, "api_key"));
 
   function set<K extends keyof NetopiaConfig>(key: K, value: NetopiaConfig[K]) {
     setCfg(c => ({ ...c, [key]: value }));
   }
 
   function save() {
-    if (!cfg.pos_signature.trim()) {
+    if ((!cfg.pos_signature.trim() && !secretulEsteSalvat(initialConfig, "pos_signature"))) {
       toast.error("POS Signature este obligatoriu.");
       return;
     }
-    if (!cfg.api_key.trim()) {
+    if ((!cfg.api_key.trim() && !secretulEsteSalvat(initialConfig, "api_key"))) {
       toast.error("API Key este obligatoriu.");
       return;
     }
@@ -175,7 +176,7 @@ export default function NetopiaConfigClient({
                 type="text"
                 value={cfg.pos_signature}
                 onChange={e => set("pos_signature", e.target.value)}
-                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+                placeholder={secretulEsteSalvat(initialConfig, "pos_signature") ? PLACEHOLDER_SECRET_SALVAT : ""}
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 Gasesti Signature-ul in Netopia → Puncte de vanzare → Setari tehnice
@@ -192,7 +193,7 @@ export default function NetopiaConfigClient({
                 type="password"
                 value={cfg.api_key}
                 onChange={e => set("api_key", e.target.value)}
-                placeholder="Introdu API Key-ul Netopia"
+                placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : ""}
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 Genereaza un API Key din Netopia → Profil → Securitate (nu din Setari tehnice)

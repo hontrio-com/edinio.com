@@ -66,6 +66,10 @@ export async function updateNoticeConfig(
     // state is owned entirely by the connect/disconnect/poll actions (a stale client
     // copy could otherwise flip it off on save), and the webhook secret persists.
     webhook_secret: config.webhook_secret || current.webhook_secret || randomUUID(),
+    // `api_token` ajunge in formular MASCAT (gol), deci trebuie pastrat la fel ca
+    // `webhook_secret`. Fara linia asta, prima salvare obisnuita il sterge si se
+    // opresc SMS-urile si WhatsApp-ul catre clientii magazinului.
+    api_token: config.api_token || current.api_token,
     whatsapp: current.whatsapp,
   }));
   if ("error" in saved) return saved;

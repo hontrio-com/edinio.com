@@ -93,3 +93,23 @@ export function pastreazaSecretele(
   }
   return noua;
 }
+
+/**
+ * Formularul stie ca un secret EXISTA, chiar daca nu-l primeste.
+ *
+ * `mascheazaConfig` trimite campul gol plus harta `_completate`. Fara helperul
+ * asta, componentele vedeau doar campul gol si isi declansau propriile validari
+ * („Tokenul API este obligatoriu"), deci un comerciant cu integrarea deja
+ * configurata NU mai putea salva nicio modificare — nici macar un comutator.
+ *
+ * Regula peste tot: un camp secret e acceptabil gol DACA e deja salvat.
+ *   if (!valoare.trim() && !secretulEsteSalvat(initialConfig, "token")) { eroare }
+ */
+export function secretulEsteSalvat(config: unknown, camp: string): boolean {
+  if (!config || typeof config !== "object") return false;
+  const harta = (config as ConfigMascat)._completate;
+  return harta?.[camp] === true;
+}
+
+/** Text pentru campul de formular: arata ca exista o valoare, fara sa o dezvaluie. */
+export const PLACEHOLDER_SECRET_SALVAT = "••••••••  (salvat — completeaza doar ca sa schimbi)";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -32,7 +33,7 @@ export default function KlarnaConfigClient({
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
-  const isConfigured = !!initialConfig?.username && !!initialConfig?.password;
+  const isConfigured = !!initialConfig?.username && (!!initialConfig?.password || secretulEsteSalvat(initialConfig, "password"));
 
   function set<K extends keyof KlarnaConfig>(key: K, value: KlarnaConfig[K]) {
     setCfg((c) => ({ ...c, [key]: value }));
@@ -40,7 +41,7 @@ export default function KlarnaConfigClient({
 
   function save() {
     if (!cfg.username.trim()) { toast.error("Utilizatorul API este obligatoriu."); return; }
-    if (!cfg.password.trim()) { toast.error("Parola API este obligatorie."); return; }
+    if ((!cfg.password.trim() && !secretulEsteSalvat(initialConfig, "password"))) { toast.error("Parola API este obligatorie."); return; }
     startSave(async () => {
       const result = await saveKlarnaConfig(businessId, {
         ...cfg,
@@ -156,7 +157,7 @@ export default function KlarnaConfigClient({
                 Parola API
               </label>
               <Input type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
-                placeholder="Parola API Klarna" autoComplete="new-password" />
+                placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
             </div>
           </div>
 

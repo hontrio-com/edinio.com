@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -119,7 +120,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   }
 
   async function testConnection() {
-    if (!config.api_token.trim()) { toast.error("Introdu tokenul API."); return; }
+    if ((!config.api_token.trim() && !secretulEsteSalvat(initialConfig, "api_token"))) { toast.error("Introdu tokenul API."); return; }
     setTesting(true);
     setTestResult(null);
     const res = await testNoticeConnection(config.api_token);
@@ -150,7 +151,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   }
 
   function save() {
-    if (config.enabled && !config.api_token.trim()) { toast.error("Tokenul API este obligatoriu."); return; }
+    if (config.enabled && (!config.api_token.trim() && !secretulEsteSalvat(initialConfig, "api_token"))) { toast.error("Tokenul API este obligatoriu."); return; }
     startSave(async () => {
       const res = await updateNoticeConfig(businessId, config);
       if ("error" in res) toast.error(res.error);
@@ -264,7 +265,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
               type="password"
               value={config.api_token}
               onChange={e => setConfig(c => ({ ...c, api_token: e.target.value }))}
-              placeholder="Tokenul tau API de la notice.ro"
+              placeholder={secretulEsteSalvat(initialConfig, "api_token") ? PLACEHOLDER_SECRET_SALVAT : ""}
             />
           </div>
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -406,16 +407,21 @@ export async function updateSmsoConfig(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+    .from("store_settings").select("id, smso_config").eq("business_id", businessId).single();
+
+  // Formularul primeste `api_key` MASCAT (gol), deci o salvare obisnuita
+  // trebuie sa pastreze valoarea existenta. Fara asta, prima salvare o STERGE —
+  // exact greseala impotriva careia avertizeaza comentariul din secrete.ts.
+  const configFinal = pastreazaSecretele("smso_config", config, existing?.smso_config);
 
   let error;
   if (existing) {
     ({ error } = await supabase.from("store_settings")
-      .update({ smso_config: config as never, updated_at: new Date().toISOString() })
+      .update({ smso_config: configFinal as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId));
   } else {
     ({ error } = await supabase.from("store_settings")
-      .insert({ business_id: businessId, smso_config: config as never }));
+      .insert({ business_id: businessId, smso_config: configFinal as never }));
   }
 
   if (error) return { error: "Eroare la salvare." };
@@ -437,16 +443,21 @@ export async function updateSmartbillConfig(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+    .from("store_settings").select("id, smartbill_config").eq("business_id", businessId).single();
+
+  // Formularul primeste `token` MASCAT (gol), deci o salvare obisnuita
+  // trebuie sa pastreze valoarea existenta. Fara asta, prima salvare o STERGE —
+  // exact greseala impotriva careia avertizeaza comentariul din secrete.ts.
+  const configFinal = pastreazaSecretele("smartbill_config", config, existing?.smartbill_config);
 
   let error;
   if (existing) {
     ({ error } = await supabase.from("store_settings")
-      .update({ smartbill_config: config as never, updated_at: new Date().toISOString() })
+      .update({ smartbill_config: configFinal as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId));
   } else {
     ({ error } = await supabase.from("store_settings")
-      .insert({ business_id: businessId, smartbill_config: config as never }));
+      .insert({ business_id: businessId, smartbill_config: configFinal as never }));
   }
 
   if (error) return { error: "Eroare la salvare." };

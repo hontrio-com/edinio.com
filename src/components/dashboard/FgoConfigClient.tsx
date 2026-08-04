@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, Loader2, Unplug, ExternalLink } from "lucide-react";
@@ -47,10 +48,10 @@ export function FgoConfigClient({
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
-  const isActive = !!(initialConfig?.enabled && initialConfig?.cod_unic && initialConfig?.private_key && initialConfig?.serie);
+  const isActive = !!(initialConfig?.enabled && initialConfig?.cod_unic && (initialConfig?.private_key || secretulEsteSalvat(initialConfig, "private_key")) && initialConfig?.serie);
 
   async function handleTest() {
-    if (!form.cod_unic.trim() || !form.private_key.trim()) {
+    if (!form.cod_unic.trim() || (!form.private_key.trim() && !secretulEsteSalvat(initialConfig, "private_key"))) {
       toast.error("Completeaza CUI si Cheia privata");
       return;
     }
@@ -67,7 +68,7 @@ export function FgoConfigClient({
 
   async function handleSave() {
     if (!form.cod_unic.trim()) return toast.error("CUI-ul firmei este obligatoriu");
-    if (!form.private_key.trim()) return toast.error("Cheia privata este obligatorie");
+    if ((!form.private_key.trim() && !secretulEsteSalvat(initialConfig, "private_key"))) return toast.error("Cheia privata este obligatorie");
     if (!form.serie.trim()) return toast.error("Seria documentelor este obligatorie");
     if (!form.platforma_url.trim()) return toast.error("URL-ul platformei este obligatoriu");
 
@@ -144,7 +145,7 @@ export function FgoConfigClient({
             type="password"
             value={form.private_key}
             onChange={e => set("private_key", e.target.value.trim())}
-            placeholder="Cheia generata in fGO → Setari → Utilizatori"
+            placeholder={secretulEsteSalvat(initialConfig, "private_key") ? PLACEHOLDER_SECRET_SALVAT : ""}
             className="font-mono"
           />
         </Field>
@@ -152,7 +153,7 @@ export function FgoConfigClient({
         <Button
           variant="outline"
           onClick={handleTest}
-          disabled={testing || !form.cod_unic.trim() || !form.private_key.trim()}
+          disabled={testing || !form.cod_unic.trim() || (!form.private_key.trim() && !secretulEsteSalvat(initialConfig, "private_key"))}
         >
           {testing ? <Loader2 className="animate-spin" /> : tested ? <CheckCircle className="text-success" /> : null}
           {testing ? "Se verifica..." : tested ? "Conexiune reusita" : "Testeaza conexiunea"}

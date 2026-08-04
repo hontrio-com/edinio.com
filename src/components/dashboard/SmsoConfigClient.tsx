@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -25,7 +26,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
 
   function save() {
-    if (smso.enabled && !smso.api_key.trim()) { toast.error("Cheia API este obligatorie."); return; }
+    if (smso.enabled && (!smso.api_key.trim() && !secretulEsteSalvat(initialConfig, "api_key"))) { toast.error("Cheia API este obligatorie."); return; }
     if (smso.enabled && !smso.sender_id.trim()) { toast.error("Sender ID este obligatoriu."); return; }
     startSave(async () => {
       const result = await updateSmsoConfig(businessId, smso);
@@ -151,7 +152,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
                 type="password"
                 value={smso.api_key}
                 onChange={e => setSmso(s => ({ ...s, api_key: e.target.value }))}
-                placeholder="Cheia ta API de la app.smso.ro"
+                placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : ""}
               />
             </div>
             <div>

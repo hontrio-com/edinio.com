@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -31,14 +32,14 @@ export default function RevolutConfigClient({
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
-  const isConfigured = !!initialConfig?.secret_key;
+  const isConfigured = (!!initialConfig?.secret_key || secretulEsteSalvat(initialConfig, "secret_key"));
 
   function set<K extends keyof RevolutConfigInput>(key: K, value: RevolutConfigInput[K]) {
     setCfg((c) => ({ ...c, [key]: value }));
   }
 
   function save() {
-    if (!cfg.secret_key.trim()) { toast.error("Cheia secreta API este obligatorie."); return; }
+    if ((!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) { toast.error("Cheia secreta API este obligatorie."); return; }
     startSave(async () => {
       const result = await saveRevolutConfig(businessId, {
         ...cfg,
@@ -144,7 +145,7 @@ export default function RevolutConfigClient({
                 Cheie secreta API (Merchant)
               </label>
               <Input type="password" value={cfg.secret_key} onChange={(e) => set("secret_key", e.target.value)}
-                placeholder="sk_..." autoComplete="new-password" />
+                placeholder={secretulEsteSalvat(initialConfig, "secret_key") ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
               <p className="mt-1 text-xs text-muted-foreground">Din Revolut Business &rarr; Merchant &rarr; APIs. Se pastreaza doar pe server.</p>
             </div>
           </div>

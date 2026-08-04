@@ -33,6 +33,12 @@
 -- listare nu rupe niciun ecran.
 -- ============================================================================
 
+-- APLICAT 04.08.2026. Fata de varianta initiala s-au adaugat DOUA politici pe
+-- care verificarea de dupa aplicare le-a scos la iveala: `auth_users_upload_support`
+-- si `Authenticated users can upload logos` aveau tot conditia „doar sa fii
+-- logat", deci orice cont putea scrie in dosarul altuia. Sunt legate acum de
+-- dosarul propriu, ca restul.
+
 begin;
 
 -- 1. Stergerea si incarcarea in `business-images`: doar in propriul dosar.
@@ -69,6 +75,20 @@ update storage.buckets
    set file_size_limit = 10485760,  -- 10 MB
        allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','image/gif','image/avif']
  where id in ('images','business-images','logos','covers','gallery','products','avatars');
+
+-- 5. Incarcarile care nu verificau proprietarul (gasite la verificarea de dupa).
+drop policy if exists "auth_users_upload_support" on storage.objects;
+create policy "support_attachments_upload_propriu" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'support-attachments' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Authenticated users can upload logos" on storage.objects;
+create policy "upload_imagini_dosar_propriu" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = ANY (ARRAY['logos','covers','gallery','products','avatars'])
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 commit;
 

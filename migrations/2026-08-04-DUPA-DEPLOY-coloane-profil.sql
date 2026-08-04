@@ -25,8 +25,32 @@
 
 begin;
 
-revoke select (admin_notes, mfa_otp, mfa_otp_expires_at, stripe_customer_id)
-  on table public.users_profile from authenticated, anon;
+-- APLICAT 04.08.2026, dar ALTFEL decat scria aici initial. Doua corecturi:
+--
+-- 1. Revocarea pe COLOANA e FARA EFECT cat timp exista grantul pe TABEL: acela
+--    acopera toate coloanele. Trebuie revocat tabelul si re-acordate coloanele
+--    permise — acelasi tipar ca la UPDATE.
+--
+-- 2. `mfa_otp`, `mfa_otp_expires_at` si `stripe_customer_id` NU se revoca inca.
+--    Verificarea de zbor a aratat ca sunt citite cu clientul UTILIZATORULUI in
+--    sase locuri din codul LIVE: layout-ul de dashboard, trei cai din
+--    auth.actions (verifyMfaLogin, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail)
+--    si rutele stripe portal / checkout / retry-payment. Revocate acum, ar fi
+--    rupt autentificarea cu MFA si portalul de facturare.
+--    `stripe_customer_id` oricum nu e o scurgere reala (e id-ul propriu, iar
+--    SCRIEREA lui — aia era gaura — e deja blocata). Ramane `mfa_otp`: conteaza
+--    (un atacator cu parola putea citi hash-ul si sparge 6 cifre offline), dar
+--    cere intai mutarea celor trei citiri pe service role.
+revoke select on table public.users_profile from authenticated;
+
+grant select (
+  id, full_name, avatar_url, created_at, updated_at,
+  plan, plan_interval, plan_expires_at, payment_failed_at, stripe_customer_id,
+  role, suspended_until,
+  onboarding_completed, onboarding_step,
+  announcements_seen_at, orders_seen_at,
+  mfa_email_enabled, mfa_otp, mfa_otp_expires_at
+) on table public.users_profile to authenticated;
 
 commit;
 

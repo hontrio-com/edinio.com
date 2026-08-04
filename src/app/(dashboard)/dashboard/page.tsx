@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
   ShoppingCart, Wallet, Package, Clock, AlertCircle, Megaphone,
@@ -136,6 +138,56 @@ export default async function DashboardPage() {
 
   if (!business) redirect("/onboarding/details");
 
+  const publicUrl = business.custom_domain
+    ? `https://${business.custom_domain}`
+    : `${process.env.NEXT_PUBLIC_SITE_URL}/${business.slug}`;
+
+  /*
+   * Bara de stare pleaca IMEDIAT; cifrele curg dupa ea.
+   *
+   * Panoul facea noua interogari inainte sa trimita ceva catre browser, iar
+   * `loading.tsx` tinea toata pagina gri pana se termina si cea mai lenta. Dar
+   * lucrul cel mai cerut de aici — daca magazinul e publicat si adresa lui — se
+   * stie dupa PRIMA interogare.
+   *
+   * Asa, comerciantul vede bara de stare si isi poate deschide magazinul cat
+   * timp statisticile inca se aduna.
+   */
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <SiteStatusBar
+        isPublished={business.is_published}
+        businessId={business.id}
+        publicUrl={publicUrl}
+      />
+      <Suspense fallback={<ScheletPanou />}>
+        <ContinutPanou business={business} userId={user.id} publicUrl={publicUrl} />
+      </Suspense>
+    </div>
+  );
+}
+
+function ScheletPanou() {
+  return (
+    <div className="mt-6 space-y-6">
+      <Skeleton className="h-28 rounded-2xl" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+      </div>
+      <Skeleton className="h-64 rounded-2xl" />
+    </div>
+  );
+}
+
+type BusinessPanou = {
+  id: string; slug: string; custom_domain: string | null;
+  business_name: string; is_published: boolean; logo_url: string | null;
+};
+
+async function ContinutPanou({
+  business, userId, publicUrl,
+}: { business: BusinessPanou; userId: string; publicUrl: string }) {
+  const supabase = await createClient();
   const now = new Date();
   const today     = now.toISOString().split("T")[0];
   const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
@@ -146,9 +198,6 @@ export default async function DashboardPage() {
 
   const sevenDaysAgo = new Date(now.getTime() - 6 * 86400000).toISOString().split("T")[0];
 
-  const publicUrl = business.custom_domain
-    ? `https://${business.custom_domain}`
-    : `${process.env.NEXT_PUBLIC_SITE_URL}/${business.slug}`;
 
   // Vanzarile nu includ comenzile anulate/rambursate — aceeasi regula ca in
   // Analytics (VALID_STATUSES) si paginile de admin. Lista "Comenzi recente"
@@ -194,7 +243,7 @@ export default async function DashboardPage() {
       .eq("business_id", business.id),
     supabase.from("orders").select("*", { count: "exact", head: true })
       .eq("business_id", business.id),
-    supabase.from("users_profile").select("plan, plan_expires_at").eq("id", user.id).maybeSingle(),
+    supabase.from("users_profile").select("plan, plan_expires_at").eq("id", userId).maybeSingle(),
   ]);
 
   const fmt = (n: number) => new Intl.NumberFormat("ro-RO").format(n);
@@ -238,12 +287,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <SiteStatusBar
-        isPublished={business.is_published}
-        businessId={business.id}
-        publicUrl={publicUrl}
-      />
+    <>
 
       <ActivationChecklist
         steps={activationSteps}
@@ -382,6 +426,6 @@ export default async function DashboardPage() {
           <AnnouncementArticle data={announcementToArticle(latestAnnouncement)} />
         </div>
       )}
-    </div>
+    </>
   );
 }

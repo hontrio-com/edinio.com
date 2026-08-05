@@ -4,6 +4,11 @@ import Link from "next/link";
 import { ArrowRight, Shield, Headset, Wrench } from "lucide-react";
 import { Hero } from "@/components/website/sections/Hero";
 import { Problem } from "@/components/website/sections/Problem";
+/* TEMPORAR: cele doua propuneri pentru sectiunea Problema, plus despartitorul
+   dintre ele. Se sterg importurile si apelurile odata cu variantele care pierd. */
+import { ProblemProof } from "@/components/website/sections/ProblemProof";
+import { ProblemEditorial } from "@/components/website/sections/ProblemEditorial";
+import { VariantLabel } from "@/components/website/sections/VariantLabel";
 import { Features } from "@/components/website/sections/Features";
 import { HowItWorksSection } from "@/components/website/HowItWorksSection";
 import { DemoSection } from "@/components/website/DemoSection";
@@ -149,7 +154,16 @@ export default function LandingPage() {
       />
       <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
       <Hero />
+
+      {/* TEMPORAR: trei variante ale sectiunii Problema, una sub alta, pentru
+          ales. Raman una singura si despartitoarele dispar. */}
+      <VariantLabel letter="Varianta 0" title="Acum pe site — norul de plangeri" />
       <Problem />
+      <VariantLabel letter="Varianta A" title="Dovada — artefacte desenate" />
+      <ProblemProof />
+      <VariantLabel letter="Varianta B" title="Editoriala — tabel sobru" />
+      <ProblemEditorial />
+
       <Features />
       <HowItWorksSection />
       <DemoSection />

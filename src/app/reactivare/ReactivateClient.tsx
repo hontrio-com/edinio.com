@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Loader2, Check, ShieldCheck, Infinity as InfinityIcon, LogOut, Zap, Crown, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
-import { logout } from "@/lib/actions/auth.actions";
 import {
   type BillingInterval,
   PLAN_PRICES,
@@ -238,7 +237,7 @@ export function ReactivateClient({ reason, success, currentPlan, userEmail }: Pr
         {/* Footer: cont + delogare + suport */}
         <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-4">
-            <form action={logout}>
+            <form action="/api/auth/iesire" method="post">
               <button type="submit" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive transition-colors">
                 <LogOut className="h-4 w-4" />
                 Deconecteaza-te

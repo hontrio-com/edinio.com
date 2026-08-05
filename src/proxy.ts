@@ -55,7 +55,7 @@ export async function proxy(request: NextRequest) {
    *      deci rutele REST nu ajungeau nici macar aici. Cu doar parola:
    *      GET /api/products/export dadea tot catalogul, /api/smartbill/pdf
    *      dadea facturile, POST /api/domains/connect muta magazinul.
-   *   2. Actiunile de server — un POST cu antetul `Next-Action`. Layout-ul NU se
+   *   2. Actiunile de server — un POST catre o cale de pagina. Layout-ul NU se
    *      randeaza inaintea actiunii, deci `updateOrder`, `deleteProduct`,
    *      `getCustomerOrders` s.a.m.d. rulau nestingherite.
    *
@@ -63,6 +63,9 @@ export async function proxy(request: NextRequest) {
    * platit doar de cine trebuie: fara cookie de sesiune Supabase poarta iese
    * imediat, deci webhook-urile, cronurile si vizitatorii anonimi nu ating nici
    * serverul de autentificare, nici baza.
+   *
+   * De retinut ca e a DOUA plasa: reparatia de fond e ca sesiunea nu se mai
+   * emite deloc inainte de cod (src/lib/auth/sesiune-asteptare.ts).
    */
   const { pathname: caleCerere } = request.nextUrl;
 

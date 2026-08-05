@@ -3090,7 +3090,7 @@ export type Database = {
           mfa_email_enabled: boolean
           mfa_otp: string | null
           mfa_otp_expires_at: string | null
-          mfa_sesiune_confirmata: string | null
+          mfa_sesiuni_confirmate: Json
           onboarding_completed: boolean
           onboarding_step: string
           orders_seen_at: string | null
@@ -3114,7 +3114,7 @@ export type Database = {
           mfa_email_enabled?: boolean
           mfa_otp?: string | null
           mfa_otp_expires_at?: string | null
-          mfa_sesiune_confirmata?: string | null
+          mfa_sesiuni_confirmate?: Json
           onboarding_completed?: boolean
           onboarding_step?: string
           orders_seen_at?: string | null
@@ -3138,7 +3138,7 @@ export type Database = {
           mfa_email_enabled?: boolean
           mfa_otp?: string | null
           mfa_otp_expires_at?: string | null
-          mfa_sesiune_confirmata?: string | null
+          mfa_sesiuni_confirmate?: Json
           onboarding_completed?: boolean
           onboarding_step?: string
           orders_seen_at?: string | null

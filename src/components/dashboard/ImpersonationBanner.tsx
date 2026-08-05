@@ -1,7 +1,6 @@
 "use client";
 
 import { ShieldAlert } from "lucide-react";
-import { logout } from "@/lib/actions/auth.actions";
 
 /**
  * Bara care arata ca sesiunea curenta e IMPRUMUTATA prin impersonare din panoul
@@ -15,7 +14,7 @@ export function ImpersonationBanner() {
         <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
         Esti conectat ca acest utilizator, prin impersonare din panoul de administrare.
       </span>
-      <form action={logout}>
+      <form action="/api/auth/iesire" method="post">
         <button
           type="submit"
           className="rounded-full bg-amber-950/15 px-3 py-0.5 underline underline-offset-2 transition hover:bg-amber-950/25"

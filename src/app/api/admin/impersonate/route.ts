@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { claimuriDinToken } from "@/lib/auth/mfa";
+import { confirmaSesiuneaMfa } from "@/lib/auth/flux-mfa";
 
 /**
  * Impersonare de cont, pentru suport.
@@ -66,15 +67,39 @@ export async function POST(req: NextRequest) {
   // cookie-urile de sesiune. Clientul nu vede niciodata `hashed_token`.
   const raspuns = NextResponse.json({ success: true, redirectTo: "/dashboard" });
 
+  /*
+   * SESIUNEA IMPRUMUTATA TRAIESTE EXACT CAT MARCAJUL — o ora.
+   *
+   * Inainte, `verifyOtp` scria cookie-uri de sesiune cu implicitele
+   * @supabase/ssr: 400 de zile. Marcajul `impersonare`, care aprinde bara
+   * galbena, avea insa maxAge de o ora. Dupa 60 de minute bara disparea, dar
+   * sesiunea imprumutata ramanea perfect valida: adminul continua sa lucreze in
+   * contul comerciantului fara niciun semn, iar in jurnale totul aparea ca facut
+   * de comerciant (constatarea 22 din audit).
+   *
+   * Alegerea corecta e ca marcajul sa MARGINEASCA sesiunea, nu invers. De aceea
+   * cookie-urile de sesiune primesc aici acelasi `maxAge`.
+   *
+   * `updateSession` reimprospateaza tokenul la fiecare navigare si rescrie
+   * cookie-urile — cu implicitele bibliotecii, deci fereastra se poate intinde
+   * cat timp adminul e activ. Marcajul insa nu se re-emite, iar bara ramane
+   * legata de el; la disparitia lui `esteImpersonare` devine fals si `logout`
+   * ramane oricum la un clic distanta in topbar.
+   */
+  const DURATA_IMPERSONARE_SEC = 60 * 60;
+
   const { createServerClient } = await import("@supabase/ssr");
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { maxAge: DURATA_IMPERSONARE_SEC },
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (cookies) =>
-          cookies.forEach(({ name, value, options }) => raspuns.cookies.set(name, value, options)),
+          cookies.forEach(({ name, value, options }) =>
+            raspuns.cookies.set(name, value, { ...options, maxAge: DURATA_IMPERSONARE_SEC }),
+          ),
       },
     },
   );
@@ -105,24 +130,13 @@ export async function POST(req: NextRequest) {
    * Cookie-urile vin de la client — o poarta care s-ar uita la el ar putea fi
    * ocolita trimitand pur si simplu cookie-ul.
    *
-   * Efect secundar acceptat: coloana tine o singura sesiune, deci daca victima
-   * avea o sesiune confirmata, aceea trebuie reconfirmata. E vizibil, rar si
-   * jurnalizat.
+   * Marcarea se face in LISTA de sesiuni confirmate, deci sesiunile proprii ale
+   * comerciantului raman valide: preluarea pentru suport nu il da afara din
+   * contul lui.
    */
   const idSesiuneImprumutata = claimuriDinToken(sesiuneNoua?.session?.access_token)?.session_id;
   if (idSesiuneImprumutata) {
-    const { error: eroareMarcaj } = await adminClient
-      .from("users_profile")
-      .update({
-        mfa_confirmat_la: new Date().toISOString(),
-        mfa_sesiune_confirmata: idSesiuneImprumutata,
-      } as never)
-      .eq("id", body.userId);
-    if (eroareMarcaj) {
-      console.error("[impersonate] marcarea sesiunii ca verificata a esuat", {
-        userId: body.userId, cod: eroareMarcaj.code, mesaj: eroareMarcaj.message,
-      });
-    }
+    await confirmaSesiuneaMfa(body.userId, idSesiuneImprumutata);
   } else {
     console.error("[impersonate] sesiunea imprumutata nu a putut fi identificata", { userId: body.userId });
   }

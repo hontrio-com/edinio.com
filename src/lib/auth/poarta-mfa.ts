@@ -7,6 +7,12 @@ import { MESAJ_REFUZ, sesiuneNeconfirmataPentru } from "./stare-mfa";
 /**
  * Poarta MFA aplicata pe cererea BRUTA, din `src/proxy.ts`.
  *
+ * E A DOUA plasa, nu apararea principala: din 05.08.2026 sesiunea nici nu se mai
+ * emite inainte de al doilea factor (src/lib/auth/sesiune-asteptare.ts), deci in
+ * mod normal nu exista sesiuni neconfirmate pe care sa le opreasca. Rostul ei e
+ * sa prinda doua lucruri: sesiunile deschise INAINTE de aceasta schimbare, si
+ * orice regresie viitoare care ar reintroduce o sesiune inainte de cod.
+ *
  * Doua suprafete treceau complet pe langa vechea poarta (care statea in
  * layout-ul de /dashboard): rutele /api/** — scoase explicit din `config.matcher`
  * — si actiunile de server, inaintea carora niciun layout nu se randeaza.
@@ -16,10 +22,6 @@ import { MESAJ_REFUZ, sesiuneNeconfirmataPentru } from "./stare-mfa";
  * Pentru cod care ruleaza in interiorul unei cereri Next.js exista `./cere-mfa.ts`.
  */
 
-// ---------------------------------------------------------------------------
-// Aplicarea pe cereri brute (proxy): rute /api/** si actiuni de server
-// ---------------------------------------------------------------------------
-
 function areCookieDeSesiune(request: NextRequest): boolean {
   // Cookie-urile @supabase/ssr se numesc `sb-<ref>-auth-token`, eventual taiate
   // in bucati `.0`, `.1`. Fara niciunul nu exista sesiune de utilizator, deci
@@ -28,6 +30,30 @@ function areCookieDeSesiune(request: NextRequest): boolean {
   return request.cookies
     .getAll()
     .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+}
+
+/**
+ * Raspunsul de refuz, potrivit cu ce a cerut clientul.
+ *
+ * O redirectare pentru navigatiile de browser (aterizarile de la Stripe, un
+ * formular trimis fara JS): altfel omul ar vedea un JSON crud in pagina. JSON
+ * pentru tot restul — actiuni de server si apeluri `fetch` — fiindca acolo un
+ * 303 catre HTML ar produce o eroare de parsare fara niciun inteles.
+ */
+function refuz(request: NextRequest): NextResponse {
+  const accepta = request.headers.get("accept") ?? "";
+  const eNavigare =
+    request.headers.get("sec-fetch-mode") === "navigate" ||
+    (accepta.includes("text/html") && !request.headers.has("next-action"));
+
+  if (eNavigare) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login/mfa";
+    url.search = "";
+    // 303: chiar si dupa un POST, browserul continua cu GET.
+    return NextResponse.redirect(url, 303);
+  }
+  return NextResponse.json({ error: MESAJ_REFUZ, mfa: "neconfirmat" }, { status: 403 });
 }
 
 /**
@@ -70,34 +96,40 @@ async function evalueazaCerere(
     return { refuz: null, trecere };
   }
 
-  return {
-    refuz: NextResponse.json({ error: MESAJ_REFUZ, mfa: "neconfirmat" }, { status: 403 }),
-    trecere,
-  };
+  return { refuz: refuz(request), trecere };
 }
 
 /**
  * Prefixele de sub /api care NU trec prin poarta.
  *
- * Toate au acelasi lucru in comun: apelantul NU e utilizatorul din browser, deci
- * nu exista sesiune de confirmat, iar o poarta acolo ar insemna doar riscul de a
- * rupe incasari sau sincronizari.
+ * Doua feluri de rute, cu acelasi lucru in comun — apelantul NU e un comerciant
+ * cu sesiune de confirmat:
  *
  *   - webhook-uri (Stripe, Netopia, Revolut, Klarna, Notice, Brevo, Mailchimp,
  *     Google Merchant, AboutYou, Trendyol) — vin de la furnizor, cu semnatura
- *     proprie;
- *   - cronuri — vin de la Vercel, cu secretul lor;
- *   - pornirea si intoarcerea de la plata — le foloseste CUMPARATORUL, care nu
- *     are cont pe platforma;
- *   - callback-urile OAuth (Google, OLX) si intoarcerile Stripe Connect — sunt
- *     aterizari dintr-un flux inceput DIN panou (deci deja confirmat); un refuz
- *     aici ar lasa integrarea pe jumatate conectata;
- *   - /api/img si dezabonarea — publice prin natura lor.
+ *     proprie; cronuri — vin de la Vercel, cu secretul lor; pornirea si
+ *     intoarcerea de la plata — le foloseste CUMPARATORUL, care nu are cont;
+ *     /api/img, personalizarile si dezabonarea — publice prin natura lor;
+ *   - /api/auth/** — chiar pasii care SCOT omul dintr-o sesiune neconfirmata:
+ *     verificarea codului, retrimiterea lui si iesirea din cont. Fara ei ar
+ *     exista o fundatura perfecta: poarta ar bloca inclusiv singurul lucru care
+ *     o poate deschide.
+ *
+ * CE NU MAI E PE LISTA, si de ce: `/api/stripe/connect/refresh` si
+ * `/api/stripe/connect/return` fusesera trecute drept „aterizari de redirectare".
+ * Nu sunt: amandoua cer sesiune, verifica proprietatea magazinului si intorc,
+ * respectiv, un link de onboarding Stripe. Sunt navigatii de browser cu cookie
+ * de sesiune, adica exact ce trebuie sa treaca prin poarta.
+ *
+ * Callback-urile OAuth au ramas: sunt aterizari dintr-un flux inceput DIN panou
+ * (deci dintr-o sesiune deja confirmata), iar un refuz acolo ar lasa integrarea
+ * pe jumatate conectata, cu tokenul pierdut.
  *
  * O ruta noua uitata de pe lista NU se rupe: fara cookie de sesiune poarta iese
  * imediat. Uitarea greseste, deci, in directia buna.
  */
 const API_FARA_POARTA = [
+  "/api/auth/",
   "/api/img",
   "/api/cron/",
   "/api/upload-customization",
@@ -109,8 +141,6 @@ const API_FARA_POARTA = [
   "/api/stripe/connect/webhook",
   "/api/stripe/order-checkout",
   "/api/stripe/return",
-  "/api/stripe/connect/return",
-  "/api/stripe/connect/refresh",
   "/api/netopia/start",
   "/api/netopia/notify",
   "/api/ipay/start",
@@ -143,44 +173,44 @@ export function apiFaraPoarta(pathname: string): boolean {
  *
  * Asta e „punctul comun" cerut de audit: rutele API nu au layout si nu treceau
  * prin proxy (matcher-ul excludea `api/`), deci nu exista niciun loc in care sa
- * pui o singura verificare. Acum exista.
+ * pui o singura verificare pentru cele ~86 de rute. Acum exista.
  */
 export async function poartaMfaApi(request: NextRequest): Promise<NextResponse> {
   if (apiFaraPoarta(request.nextUrl.pathname)) return NextResponse.next({ request });
-  const { refuz, trecere } = await evalueazaCerere(request);
-  return refuz ?? trecere;
-}
-
-/**
- * Caile pe care o sesiune NECONFIRMATA are voie sa ruleze actiuni de server.
- *
- * Altfel omul ramane inchis afara: chiar verificarea codului (`verifyMfaLogin`),
- * retrimiterea lui (`sendMfaOtp`) si deconectarea (`logout`) sunt tot actiuni de
- * server, si se apeleaza de pe /login/mfa.
- */
-function caleAuth(pathname: string): boolean {
-  return (
-    pathname === "/login" ||
-    pathname.startsWith("/login/") ||
-    pathname.startsWith("/register") ||
-    pathname.startsWith("/forgot-password") ||
-    pathname.startsWith("/reset-password") ||
-    pathname.startsWith("/auth/")
-  );
+  const { refuz: r, trecere } = await evalueazaCerere(request);
+  return r ?? trecere;
 }
 
 /**
  * Poarta pentru actiunile de server.
  *
- * O actiune de server e un POST cu antetul `Next-Action` catre o cale de PAGINA.
- * Layout-ul NU se randeaza inaintea ei, deci poarta din layout-ul de dashboard nu
- * o atingea niciodata: cu doar parola se puteau chema `updateOrder`,
- * `deleteProduct`, `getCustomerOrders` s.a.m.d.
+ * DE CE ORICE POST, si nu doar cererile cu antetul `Next-Action`: Next.js are
+ * TREI feluri de a invoca o actiune, si numai unul poarta antetul. Calea MPA
+ * (`<form action>` fara JS) trimite identificatorul in CORPUL multipart, ca
+ * `$ACTION_REF_n` / `$ACTION_ID_<id>`; exista si o forma urlencoded. Verificat in
+ * node_modules/next/dist/server/lib/server-action-request-meta.js:
+ *   isPossibleServerAction = POST && (antet Next-Action || multipart || urlencoded)
+ * O poarta pe antet lasa deci deschisa calea multipart: un POST multipart catre
+ * /dashboard/settings ajungea la `deleteAccount`. Iar actiunea ruleaza INAINTE de
+ * orice randare, deci nici poarta din layout nu apuca sa existe.
+ *
+ * Regula „orice POST catre o cale de pagina" nu depinde de forma cererii, deci nu
+ * se poate ocoli schimband codificarea si nu se strica la urmatoarea versiune de
+ * Next.
+ *
+ * DE CE NU EXISTA NICIO SCUTIRE DE CALE (nici macar /login/mfa): id-ul actiunii
+ * se rezolva dintr-un manifest GLOBAL, nu unul pe pagina
+ * (action-handler.js:1027, `serverModuleMap[actionId]`). Adica un POST catre o
+ * cale scutita, cu id-ul oricarei alte actiuni din aplicatie, ar fi executat-o.
+ * O scutire de cale ar fi fost o usa lasata deschisa cu numele scris pe ea.
+ * Pasii care TREBUIE sa mearga cu sesiunea neconfirmata sunt de aceea rute
+ * /api/auth/**, nu actiuni de server.
+ *
+ * Cererile fara sesiune (cumparatorul anonim care plaseaza o comanda, formularul
+ * de contact, autentificarea insasi) ies din `evalueazaCerere` pe prima linie.
  */
 export async function poartaMfaActiuneServer(request: NextRequest): Promise<NextResponse | null> {
   if (request.method !== "POST") return null;
-  if (!request.headers.has("next-action")) return null;
-  if (caleAuth(request.nextUrl.pathname)) return null;
-  const { refuz } = await evalueazaCerere(request);
-  return refuz;
+  const { refuz: r } = await evalueazaCerere(request);
+  return r;
 }

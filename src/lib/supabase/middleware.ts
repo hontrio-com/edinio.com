@@ -65,6 +65,26 @@ export async function updateSession(request: NextRequest) {
   // Unauthenticated → redirect to login
   if ((isDashboard || isOnboarding) && !user) {
     const url = request.nextUrl.clone();
+    /*
+     * „Neautentificat" are acum doua intelesuri diferite, si merita despartite.
+     *
+     * De la 05.08.2026, cine a trecut de parola dar nu si de codul din email NU
+     * are sesiune deloc — asta E reparatia. Fara ramura de mai jos, un asemenea
+     * om ar fi trimis la /login, ar reintroduce parola si ar primi alt cod, la
+     * nesfarsit. Cookie-ul `mfa_pending` spune ca exista o autentificare in curs,
+     * deci il ducem unde trebuie: la pasul doi.
+     *
+     * Cookie-ul e doar un indiciu de rutare. Nu decide nimic: sigiliul cu
+     * tokenurile e separat, cifrat, si numai el poate deveni sesiune.
+     */
+    const areAutentificareInCurs =
+      request.cookies.get("mfa_pending")?.value === "1" ||
+      request.cookies.has("mfa_asteptare");
+    if (areAutentificareInCurs) {
+      url.pathname = "/login/mfa";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
     url.pathname = "/login";
     if (isDashboard) url.searchParams.set("redirect", pathname);
     const res = NextResponse.redirect(url);
@@ -79,7 +99,7 @@ export async function updateSession(request: NextRequest) {
    *
    * E un cookie trimis de client, cu maxAge 10 minute: expira singur, si oricine
    * il putea pur si simplu sa nu-l trimita. Adevarul sta acum in baza, in
-   * `mfa_sesiune_confirmata`, si se verifica in poarta comuna (proxy pentru
+   * `mfa_sesiuni_confirmate`, si se verifica in poarta comuna (proxy pentru
    * /api si actiuni, layout-ul de dashboard pentru pagini, `requireAdmin` pentru
    * /admin). Cookie-ul ramane doar ca SCURTATURA: trimite omul direct la pagina
    * de cod, fara sa mai atinga baza. Nu mai decide nimic singur.

@@ -3,50 +3,63 @@
 import { useState } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { verifyMfaLogin, sendMfaOtp, logout } from "@/lib/actions/auth.actions";
 
 /*
- * DE CE AU APARUT „Trimite alt cod" SI „Iesi din cont" (05.08.2026)
+ * DE CE PAGINA ASTA CHEAMA RUTE /api SI NU ACTIUNI DE SERVER (05.08.2026)
  *
- * De cand poarta MFA intreaba „sesiunea ASTA e confirmata?" si nu „exista un cod
- * in curs?", pagina se poate deschide si fara ca vreun cod sa fi fost trimis
- * chiar atunci: sesiune confirmata pe alt dispozitiv si invalidata de o
- * autentificare noua, intoarcere din resetarea de parola, cod expirat de mult.
- * Fara un buton de retrimitere, omul ar fi ramas pe un ecran care cere un cod pe
- * care nu-l are, fara nicio iesire. Actiunile astea DOUA sunt printre putinele
- * care au voie sa ruleze cu sesiunea neconfirmata (vezi `caleAuth` din
- * src/lib/auth/poarta-mfa.ts) — tocmai ca sa nu existe fundatura.
+ * Cei trei pasi de aici — verifica codul, cere altul, iesi din cont — sunt
+ * singurii care trebuie sa functioneze CU SESIUNEA NECONFIRMATA. Poarta MFA
+ * opreste orice actiune de server intr-o astfel de sesiune, iar o scutire pe
+ * calea /login/mfa ar fi fost o usa deschisa: id-ul unei actiuni se rezolva
+ * dintr-un manifest GLOBAL, deci un POST catre calea scutita cu id-ul oricarei
+ * alte actiuni ar fi executat-o. Detaliile in src/lib/auth/poarta-mfa.ts.
+ *
+ * DE CE EXISTA „Trimite alt cod" SI „Iesi din cont": pagina se poate deschide si
+ * fara ca vreun cod sa fi fost trimis chiar atunci (cod expirat, alta fila,
+ * sesiune veche). Fara ele, omul ar ramane pe un ecran care cere un cod pe care
+ * nu-l are, fara nicio iesire.
  */
 export default function MfaPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [retrimite, setRetrimite] = useState(false);
 
-  async function onRetrimite() {
-    setRetrimite(true);
-    try {
-      const rezultat = await sendMfaOtp();
-      if (rezultat && "error" in rezultat) toast.error(rezultat.error);
-      else toast.success("Ti-am trimis un cod nou pe email.");
-    } catch {
-      toast.error("Nu am putut trimite codul. Incearca din nou.");
-    } finally {
-      setRetrimite(false);
-    }
-  }
-
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (code.length < 6) return;
     setLoading(true);
     try {
-      const result = await verifyMfaLogin(code);
-      if (result && "error" in result) {
-        toast.error(result.error);
+      const raspuns = await fetch("/api/auth/mfa/verifica", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cod: code }),
+      });
+      const date = (await raspuns.json().catch(() => ({}))) as { catre?: string; error?: string };
+      if (!raspuns.ok) {
+        toast.error(date.error ?? "Nu am putut verifica codul. Incearca din nou.");
         setLoading(false);
+        return;
       }
+      // Navigare completa, nu `router.push`: sesiunea tocmai a fost emisa in
+      // acest raspuns, si vrem ca urmatoarea cerere sa plece cu cookie-urile ei.
+      window.location.href = date.catre ?? "/dashboard";
     } catch {
+      toast.error("Nu am putut verifica codul. Incearca din nou.");
       setLoading(false);
+    }
+  }
+
+  async function onRetrimite() {
+    setRetrimite(true);
+    try {
+      const raspuns = await fetch("/api/auth/mfa/retrimite", { method: "POST" });
+      const date = (await raspuns.json().catch(() => ({}))) as { error?: string };
+      if (!raspuns.ok) toast.error(date.error ?? "Nu am putut trimite codul.");
+      else toast.success("Ti-am trimis un cod nou pe email.");
+    } catch {
+      toast.error("Nu am putut trimite codul. Incearca din nou.");
+    } finally {
+      setRetrimite(false);
     }
   }
 
@@ -102,16 +115,13 @@ export default function MfaPage() {
         >
           {retrimite ? "Se trimite..." : "Trimite alt cod"}
         </button>
-        <button
-          type="button"
-          // `logout()` se termina cu `redirect()`, care in Server Actions se
-          // propaga ca o exceptie speciala tratata de router. O prindem ca sa nu
-          // ramana o respingere de promisiune netratata in consola.
-          onClick={async () => { try { await logout(); } catch { /* redirect */ } }}
-          className="text-xs text-muted-foreground hover:underline"
-        >
-          Iesi din cont
-        </button>
+        {/* Formular obisnuit, nu `fetch`: iesirea din cont trebuie sa mearga si
+            daca JavaScript-ul paginii a crapat. */}
+        <form action="/api/auth/iesire" method="post">
+          <button type="submit" className="text-xs text-muted-foreground hover:underline">
+            Iesi din cont
+          </button>
+        </form>
       </div>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">

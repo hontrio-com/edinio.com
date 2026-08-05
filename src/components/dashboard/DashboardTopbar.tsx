@@ -10,7 +10,6 @@ import {
   ShoppingBag, LifeBuoy, ShieldCheck, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { logout } from "@/lib/actions/auth.actions";
 import { markNotificationsRead, markOrderNotificationsSeen } from "@/lib/actions/notification.actions";
 import { Logo } from "@/components/ui/Logo";
 import { BusinessCard } from "@/components/dashboard/Sidebar";
@@ -436,7 +435,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                 Setari cont
               </Link>
               <div className="border-t border-border">
-                <form action={logout}>
+                <form action="/api/auth/iesire" method="post">
                   <button type="submit" className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 transition-colors">
                     <LogOut className="h-4 w-4" />
                     Deconecteaza-te
@@ -616,7 +615,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
               </div>
               <span className="text-xs font-medium text-foreground truncate">{userFullName || "Contul meu"}</span>
             </div>
-            <form action={logout}>
+            <form action="/api/auth/iesire" method="post">
               <button type="submit" className="text-muted-foreground hover:text-destructive transition-colors" aria-label="Deconecteaza-te">
                 <LogOut className="h-4 w-4" />
               </button>

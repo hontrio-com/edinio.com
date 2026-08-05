@@ -1,9 +1,9 @@
 -- ============================================================================
--- RIDICAT — Al doilea factor devine o proprietate a SESIUNII, nu un cod in curs
+-- RIDICAT — Sesiunea nu se mai emite inainte de al doilea factor
 --
 -- PROBLEMA (audit 05.08.2026, constatarile 1 si 2):
---   `login()` cheama `signInWithPassword` INAINTE de a cere codul, deci
---   cookie-urile de sesiune Supabase sunt deja valide cand omul e trimis la
+--   `login()` chema `signInWithPassword` INAINTE de a cere codul, deci
+--   cookie-urile de sesiune Supabase erau deja valide cand omul era trimis la
 --   /login/mfa. Singura poarta reala statea in layout-ul de /dashboard si
 --   raspundea la intrebarea gresita: „exista o provocare MFA neexpirata?".
 --   De aici trei gauri:
@@ -13,22 +13,31 @@
 --        atacatorul cu parola astepta si intra;
 --     3. /admin e alt grup de rute, unde poarta din layout nu ruleaza deloc.
 --
--- SEMANTICA NOUA: „sesiunea ACEASTA a fost confirmata cu al doilea factor?".
---   `mfa_confirmat_la`       — CAND s-a confirmat (urma pentru operatiuni/audit)
---   `mfa_sesiune_confirmata` — CARE sesiune a fost confirmata (`session_id` din
---                              JWT-ul Supabase)
+-- REPARATIA DE FOND e in cod, nu aici: cand contul are MFA pornit, cookie-urile
+-- de sesiune NU se mai scriu la parola. Tokenurile stau sigilate (AES-256-GCM)
+-- intr-un cookie, iar sesiunea se emite abia dupa verificarea codului. Vezi
+-- src/lib/auth/sesiune-asteptare.ts.
 --
--- DE CE DOUA COLOANE, si nu doar data: o data singura raspunde la „s-a confirmat
--- vreodata", nu la „s-a confirmat sesiunea asta". O confirmare veche de trei luni
--- ar valida o sesiune deschisa azi de un atacator cu parola — adica exact atacul
--- pe care MFA il apara. `session_id` e stabil pe toata durata sesiunii (se pastreaza
--- peste reimprospatarile de token), deci leaga confirmarea de sesiunea reala.
+-- COLOANELE DE MAI JOS sunt a doua plasa: raspund la „sesiunea ACEASTA a trecut
+-- de al doilea factor?" si alimenteaza poarta din proxy / layout / requireAdmin,
+-- ca o regresie viitoare sa nu redeschida in tacere aceeasi gaura.
+--   `mfa_confirmat_la`        — cand s-a confirmat ultima data (urma pentru suport)
+--   `mfa_sesiuni_confirmate`  — CARE sesiuni au fost confirmate
 --
--- ORDINEA DE LIVRARE: migratia asta e ADITIVA (adauga doua coloane, nu revoca
--- nimic existent), deci se aplica INAINTE de deploy fara sa strice codul vechi —
--- care pur si simplu ignora coloanele noi. Invers NU merge: codul nou citeste
--- coloanele si, cat timp lipsesc, conturile cu MFA raman blocate.
--- Vezi incidentul din 04.08.2026 (migratii-si-cod-impreuna).
+-- DE CE O LISTA, si nu un singur `session_id`: un singur id ar insemna o singura
+-- sesiune confirmata pe cont — autentificarea de pe telefon ar scoate laptopul
+-- din priza. Lista tine ultimele 10, curatate la 30 de zile.
+--
+-- DE CE `session_id` SI NU `last_sign_in_at`: acela e un camp pe UTILIZATOR si
+-- arata ultima autentificare, oricare ar fi ea. Atacatorul se autentifica la T1,
+-- proprietarul la T2 si confirma; de la T2 cele doua date coincid, deci si
+-- sesiunea VECHE a atacatorului ar trece poarta — exact atacul pe care il
+-- inchidem s-ar redeschide la fiecare login legitim.
+--
+-- ORDINEA DE LIVRARE: migratia e ADITIVA, deci se aplica INAINTE de deploy fara
+-- sa strice codul vechi, care pur si simplu ignora coloanele noi. Invers NU
+-- merge: codul nou citeste coloanele si, cat timp lipsesc, conturile cu MFA
+-- raman blocate. Vezi incidentul din 04.08.2026 (migratii-si-cod-impreuna).
 -- ============================================================================
 
 begin;
@@ -38,12 +47,12 @@ begin;
 -- ---------------------------------------------------------------------------
 alter table public.users_profile
   add column if not exists mfa_confirmat_la       timestamptz,
-  add column if not exists mfa_sesiune_confirmata text;
+  add column if not exists mfa_sesiuni_confirmate jsonb not null default '[]'::jsonb;
 
 comment on column public.users_profile.mfa_confirmat_la is
-  'Cand a fost confirmat ultima data al doilea factor. Se pune pe NULL la fiecare login cu MFA pornit si pe now() la verificarea reusita. Scriere DOAR prin service role.';
-comment on column public.users_profile.mfa_sesiune_confirmata is
-  'session_id-ul (din JWT) sesiunii care a trecut de al doilea factor. Poarta compara aceasta valoare cu sesiunea cererii curente. Scriere DOAR prin service role.';
+  'Cand a fost confirmat ultima data al doilea factor. Scriere DOAR prin service role.';
+comment on column public.users_profile.mfa_sesiuni_confirmate is
+  'Sesiunile care au trecut de al doilea factor: [{"s": session_id, "t": epoch_ms}]. Ultimele 10, curatate la 30 de zile. Poarta cauta aici sesiunea cererii curente. Scriere DOAR prin service role.';
 
 -- ---------------------------------------------------------------------------
 -- 2. Coloane PRIVILEGIATE — clientul nu le scrie si nu le citeste
@@ -58,11 +67,11 @@ comment on column public.users_profile.mfa_sesiune_confirmata is
 -- Revocarile de mai jos sunt, in starea de azi, fara efect practic (nu exista
 -- grant de sters). Le pastram fiindca documenteaza intentia si fiindca daca
 -- cineva re-acorda vreodata grantul pe TABEL, prezenta lor aici arata clar ca
--- aceste doua coloane nu au voie sa intre in el.
+-- aceste coloane nu au voie sa intre in el.
 -- ---------------------------------------------------------------------------
-revoke select (mfa_confirmat_la, mfa_sesiune_confirmata)
+revoke select (mfa_confirmat_la, mfa_sesiuni_confirmate)
   on table public.users_profile from authenticated, anon;
-revoke update (mfa_confirmat_la, mfa_sesiune_confirmata)
+revoke update (mfa_confirmat_la, mfa_sesiuni_confirmate)
   on table public.users_profile from authenticated, anon;
 
 -- ---------------------------------------------------------------------------
@@ -73,11 +82,8 @@ revoke update (mfa_confirmat_la, mfa_sesiune_confirmata)
 -- de compatibilitate). Fara triggerul asta, o astfel de re-acordare ar da
 -- utilizatorului posibilitatea sa-si scrie singur, cu cheia anon din browser:
 --     update users_profile
---        set mfa_confirmat_la = now(),
---            mfa_sesiune_confirmata = <session_id-ul lui, citibil din JWT>
+--        set mfa_sesiuni_confirmate = '[{"s":"<session_id-ul lui>","t":0}]'
 -- adica sa-si confirme singur al doilea factor fara sa vada vreun cod.
--- Lista de mai jos e cea din 2026-08-04-DUPA-DEPLOY-restrange.sql plus cele doua
--- coloane noi.
 -- ---------------------------------------------------------------------------
 create or replace function public.blocheaza_escaladare_users_profile()
 returns trigger language plpgsql set search_path = public, pg_temp as $$
@@ -96,7 +102,7 @@ begin
   or new.mfa_otp_expires_at is distinct from old.mfa_otp_expires_at
   or new.mfa_email_enabled is distinct from old.mfa_email_enabled
   or new.mfa_confirmat_la is distinct from old.mfa_confirmat_la
-  or new.mfa_sesiune_confirmata is distinct from old.mfa_sesiune_confirmata
+  or new.mfa_sesiuni_confirmate is distinct from old.mfa_sesiuni_confirmate
   or new.id is distinct from old.id then
     raise exception 'Camp privilegiat modificat din client (rol/plan/suspendare/facturare/MFA). Operatiune respinsa.'
       using errcode = '42501';
@@ -134,7 +140,7 @@ NOTIFY pgrst, 'reload schema';
 --     BEGIN UPDATE public.users_profile SET mfa_confirmat_la = now() WHERE id=uid;
 --       rez:=rez||'auto_confirmare=DESCHIS(GRAV) ';
 --     EXCEPTION WHEN others THEN rez:=rez||'auto_confirmare=BLOCAT '; END;
---     BEGIN UPDATE public.users_profile SET mfa_sesiune_confirmata='x' WHERE id=uid;
+--     BEGIN UPDATE public.users_profile SET mfa_sesiuni_confirmate='[]' WHERE id=uid;
 --       rez:=rez||'auto_sesiune=DESCHIS(GRAV) ';
 --     EXCEPTION WHEN others THEN rez:=rez||'auto_sesiune=BLOCAT '; END;
 --     BEGIN PERFORM mfa_confirmat_la FROM public.users_profile WHERE id=uid;
@@ -147,4 +153,5 @@ NOTIFY pgrst, 'reload schema';
 --   END $t$;
 --
 -- Asteptat: auto_confirmare=BLOCAT auto_sesiune=BLOCAT citire=BLOCAT nume=OK
+-- APLICATA in productie pe 05.08.2026, cu exact acest rezultat.
 -- ============================================================================

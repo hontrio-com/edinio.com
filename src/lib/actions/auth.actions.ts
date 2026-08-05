@@ -1,16 +1,30 @@
 "use server";
 
-import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { sendMfaOtpEmail, sendAccountWelcomeEmail } from "@/lib/email";
+import type { Database } from "@/types/database.types";
+import { sendAccountWelcomeEmail } from "@/lib/email";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita, reseteazaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
-import { idSesiuneCurenta } from "@/lib/auth/stare-mfa";
+import { idSesiuneCurenta, uitaStareaMfa } from "@/lib/auth/stare-mfa";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
+import {
+  citesteCampuriMfa,
+  confirmaSesiuneaMfa,
+  scrieCampuriMfa,
+  trimiteCodMfa,
+  verificaCodMfa,
+} from "@/lib/auth/flux-mfa";
+import {
+  COOKIE_ASTEPTARE,
+  DURATA_ASTEPTARE_SEC,
+  optiuniCookieAsteptare,
+  sigileazaSesiune,
+} from "@/lib/auth/sesiune-asteptare";
 
 /**
  * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
@@ -40,121 +54,20 @@ const LIMITE = {
   register:   { limita: 3,  fereastra: 3600, blocare: 3600 },
   // Resetarea trimite un email catre orice adresa data.
   forgot:     { limita: 3,  fereastra: 3600, blocare: 3600 },
-  // Codul MFA are 6 cifre: fara plafon se ghiceste prin forta bruta.
-  mfa:        { limita: 5,  fereastra: 900,  blocare: 900 },
 } as const;
 
-function generateOtp(): { otp: string; otpHash: string; expiresAt: string } {
-  const otp = crypto.randomInt(100000, 1000000).toString();
-  const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  return { otp, otpHash, expiresAt };
-}
-
-function verifyOtpHash(code: string, storedHash: string, expiresAt: string): boolean {
-  if (new Date() > new Date(expiresAt)) return false;
-  const hash = crypto.createHash("sha256").update(code).digest("hex");
-  const a = Buffer.from(hash);
-  const b = Buffer.from(storedHash);
-  // `timingSafeEqual` ARUNCA daca lungimile difera. Un `mfa_otp` stricat sau
-  // gol in baza transforma o verificare esuata intr-o eroare 500 neprinsa.
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-/**
- * Plafon pe incercarile de cod MFA.
+/*
+ * Generarea codului, verificarea lui, plafonul de incercari si citirea/scrierea
+ * campurilor MFA au trecut in `src/lib/auth/flux-mfa.ts`.
  *
- * Codul are 6 cifre (1.000.000 de combinatii) si e valabil 10 minute. Fara
- * plafon, un atacator care are deja parola poate ghici codul prin forta bruta
- * — sesiunea e deja valida in acel punct, doar redirectarea il tine pe loc.
+ * Motivul: pasii care trebuie sa ruleze CU SESIUNEA NECONFIRMATA (verificarea
+ * codului, retrimiterea, iesirea din cont) sunt acum rute /api/auth/**, nu
+ * actiuni de server — vezi comentariul din src/lib/auth/poarta-mfa.ts despre
+ * manifestul GLOBAL de actiuni. Acelasi cod e deci chemat si din rute, si de
+ * aici, iar un modul `"use server"` nu poate gazdui ajutoare interne fara sa le
+ * transforme in endpointuri publice.
  */
-async function limitaMfa(userId: string): Promise<{ error: string } | null> {
-  const lim = await consumaLimita(`mfa:${userId}`, LIMITE.mfa.limita, LIMITE.mfa.fereastra, LIMITE.mfa.blocare);
-  if (lim.permis) return null;
-  return { error: mesajLimita(lim, "Prea multe coduri gresite. Incearca din nou mai tarziu.") };
-}
 
-
-/**
- * Scrierile pe campurile MFA trec OBLIGATORIU prin service role.
- *
- * `mfa_otp`, `mfa_otp_expires_at` si `mfa_email_enabled` sunt pe randul propriu
- * al utilizatorului, deci pana acum si le putea scrie singur cu cheia anon. Iar
- * dupa `signInWithPassword` sesiunea E DEJA valida — al doilea factor doar
- * intarzie redirectarea. Deci un atacator care avea numai parola putea:
- *   update({ mfa_email_enabled: false })                  -> stinge MFA de tot
- *   update({ mfa_otp: sha256("123456"), expires: viitor }) -> isi alege codul
- * si intra. Coloanele sunt acum revocate pentru rolul `authenticated`
- * (migrations/2026-08-04-blindare-mfa.sql), iar scrierile legitime trec pe aici.
- *
- * Acelasi rationament acopera si `mfa_confirmat_la` / `mfa_sesiune_confirmata`
- * (migrations/2026-08-05-poarta-mfa.sql): daca si le-ar putea scrie singur, si-ar
- * confirma al doilea factor fara sa vada vreun cod.
- */
-async function scrieCampuriMfa(
-  userId: string,
-  campuri: {
-    mfa_otp?: string | null;
-    mfa_otp_expires_at?: string | null;
-    mfa_email_enabled?: boolean;
-    mfa_confirmat_la?: string | null;
-    mfa_sesiune_confirmata?: string | null;
-  },
-): Promise<void> {
-  const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
-  const { error } = await getAdmin().from("users_profile").update(campuri as never).eq("id", userId);
-  /*
-   * Eroarea NU se inghite in tacere. Scrierile de aici sunt exact cele care
-   * decid daca omul intra sau nu: daca `mfa_sesiune_confirmata` nu se scrie,
-   * utilizatorul introduce codul corect si tot nu ajunge in panou. Fara log,
-   * asta arata identic cu „cod gresit" — genul de diagnostic care a costat deja
-   * o sesiune intreaga pe 04.08.2026.
-   */
-  if (error) {
-    console.error("[mfa] scrierea campurilor MFA a esuat", {
-      userId,
-      campuri: Object.keys(campuri),
-      cod: error.code,
-      mesaj: error.message,
-    });
-  }
-}
-
-
-/**
- * Citirea campurilor MFA trece prin service role, ca si scrierea.
- *
- * `mfa_otp` e hash-ul codului in curs. Citibil de proprietarul randului, devine
- * o unealta pentru chiar atacul de care MFA ar trebui sa apere: cine are parola
- * primeste o sesiune valida (al doilea factor doar intarzie redirectarea), isi
- * citeste hash-ul si sparge 6 cifre offline in mai putin de o secunda.
- */
-async function citesteCampuriMfa(userId: string): Promise<{
-  mfa_email_enabled: boolean | null; mfa_otp: string | null; mfa_otp_expires_at: string | null;
-  onboarding_completed?: boolean | null;
-} | null> {
-  const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
-  const { data, error } = await getAdmin()
-    .from("users_profile")
-    .select("mfa_email_enabled, mfa_otp, mfa_otp_expires_at, onboarding_completed")
-    .eq("id", userId)
-    .single();
-
-  /*
-   * Eroarea NU se mai inghite.
-   *
-   * Varianta de dinainte facea `const { data } = ...` si returna `data ?? null`.
-   * Cand interogarea esua, apelantii vedeau `profile === null` si raspundeau
-   * „Codul a expirat" — un mesaj complet fals, care a costat o sesiune de
-   * diagnostic. Orice esec aici arata identic cu „nu exista niciun cod".
-   */
-  if (error) {
-    console.error("[mfa] citirea provocarii a esuat", { userId, cod: error.code, mesaj: error.message });
-    return null;
-  }
-  return data ?? null;
-}
 
 export async function login(formData: { email: string; password: string }) {
   const ip = await ipApelant();
@@ -174,18 +87,56 @@ export async function login(formData: { email: string; password: string }) {
   const limEmail = await consumaLimita(`login:email:${email}`, LIMITE.loginEmail.limita, LIMITE.loginEmail.fereastra, LIMITE.loginEmail.blocare);
   if (!limEmail.permis) return { error: mesajLimita(limEmail) };
 
-  const supabase = await createClient();
+  const cookieStore = await cookies();
+
+  /*
+   * ---------------------------------------------------------------------------
+   * CAUZA, si de ce clientul asta STRANGE cookie-urile in loc sa le scrie
+   *
+   * `signInWithPassword` intoarce o sesiune VALIDA. Pana la 05.08.2026
+   * cookie-urile ei se scriau imediat, iar al doilea factor doar intarzia
+   * redirectarea catre panou. Cine avea numai parola era, tehnic, autentificat:
+   * nu trebuia decat sa NU urmeze redirectarea si sa cheme direct /api/**, o
+   * actiune de server sau /admin (constatarile 1 si 2 din audit).
+   *
+   * Clientul de mai jos nu scrie nimic in cookie-uri: pune deoparte ce ar fi
+   * scris. Dupa ce stim daca respectivul cont are al doilea factor, decidem:
+   *   - MFA stins  -> se scriu, exact ca inainte, in aceeasi cerere. Pentru
+   *     conturile fara MFA nu se schimba absolut nimic.
+   *   - MFA pornit -> NU se scriu. Tokenurile pleaca sigilate spre browser
+   *     (AES-256-GCM, cheie care nu paraseste serverul) si redevin sesiune abia
+   *     dupa ce codul din email e verificat.
+   * ---------------------------------------------------------------------------
+   */
+  const cookieuriSesiune: { name: string; value: string; options?: Record<string, unknown> }[] = [];
+  const supabase = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(deScris) { cookieuriSesiune.push(...deScris); },
+      },
+    },
+  );
 
   const { data: authData, error } = await supabase.auth.signInWithPassword({
     email,
     password: formData.password,
   });
 
-  if (error || !authData.user) {
+  if (error || !authData.user || !authData.session) {
     return { error: "Email sau parola incorecta. Incearca din nou." };
   }
 
   const user = authData.user;
+  const sesiune = authData.session;
+
+  function scrieSesiunea() {
+    for (const { name, value, options } of cookieuriSesiune) {
+      cookieStore.set(name, value, options);
+    }
+  }
 
   // Autentificare reusita: stergem contoarele, ca utilizatorul legitim sa nu
   // ramana pedepsit pentru incercarile esuate de dinainte.
@@ -194,114 +145,106 @@ export async function login(formData: { email: string; password: string }) {
     reseteazaLimita(`login:email:${email}`),
   ]);
 
-  const { data: profile } = await supabase
-    .from("users_profile")
-    .select("onboarding_completed, mfa_email_enabled")
-    .eq("id", user.id)
-    .single();
+  /*
+   * Profilul se citeste cu SERVICE ROLE, nu cu clientul utilizatorului.
+   *
+   * Doua motive. Unul: clientul de mai sus nu si-a persistat sesiunea nicaieri,
+   * deci nu ne bazam pe el pentru o citire care decide o poarta de securitate.
+   * Doi: `mfa_email_enabled` nu mai e in lista alba de SELECT a rolului
+   * `authenticated` (2026-08-04-DUPA-DEPLOY-coloane-profil.sql).
+   *
+   * ESECUL E DELIBERAT „deschis" AICI si „inchis" IN POARTA: daca citirea cade,
+   * autentificarea merge mai departe ca inainte (disponibilitate — nu blocam
+   * toata lumea pentru o pana de baza), iar poarta, care are propria ei citire,
+   * opreste sesiunea daca respectivul cont chiar are MFA. Cele doua straturi
+   * gresesc in directii opuse, dinadins.
+   */
+  const profile = await citesteCampuriMfa(user.id);
 
   revalidatePath("/", "layout");
 
   if (profile?.mfa_email_enabled) {
-    const { otp, otpHash, expiresAt } = generateOtp();
     /*
-     * Sesiunea PORNESTE neconfirmata.
-     *
-     * `signInWithPassword` de mai sus a scris deja cookie-urile de sesiune, deci
-     * din acest moment exista o sesiune valida care NU a trecut de al doilea
-     * factor. Marcajul se pune ODATA cu generarea codului, in aceeasi scriere:
-     * daca s-ar pune abia mai tarziu ar exista o fereastra in care sesiune noua
-     * + confirmare veche arata ca o sesiune confirmata.
-     *
-     * Ce NU se mai intampla: expirarea codului nu mai „elibereaza" contul.
-     * Confirmarea se sterge acum si se pune inapoi DOAR de `verifyMfaLogin`.
+     * Sigilam INAINTE de a decide ce facem cu cookie-urile, ca sa nu ramanem
+     * intr-o stare din care omul nu mai poate nici intra, nici astepta.
      */
-    await scrieCampuriMfa(user.id, {
-      mfa_otp: otpHash,
-      mfa_otp_expires_at: expiresAt,
-      mfa_confirmat_la: null,
-      mfa_sesiune_confirmata: null,
-    });
-    await sendMfaOtpEmail(user.email!, otp);
-    const cookieStore = await cookies();
-    cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 10 * 60, secure: process.env.NODE_ENV === "production" });
+    let sigiliu: string | null = null;
+    try {
+      sigiliu = sigileazaSesiune({
+        u: user.id,
+        a: sesiune.access_token,
+        r: sesiune.refresh_token,
+        e: Date.now() + DURATA_ASTEPTARE_SEC * 1000,
+      });
+    } catch (e) {
+      console.error("[mfa] sigilarea sesiunii in asteptare a esuat", e);
+    }
+
+    if (sigiliu) {
+      /*
+       * Sesiunea NU se emite. Stergem si eventualele cookie-uri de sesiune deja
+       * aflate in browser (o autentificare mai veche, sau alt cont): numele lor
+       * sunt exact cele pe care clientul tocmai voia sa le scrie, deci nu
+       * ghicim nimic.
+       */
+      for (const { name } of cookieuriSesiune) cookieStore.delete(name);
+      cookieStore.set(COOKIE_ASTEPTARE, sigiliu, optiuniCookieAsteptare());
+    } else {
+      /*
+       * Plasa de siguranta: fara cheia de sigilare nu putem tine sesiunea
+       * deoparte. O scriem ca inainte si ne bazam pe poarta din proxy, care o va
+       * gasi neconfirmata si o va opri. Mai bine o poarta decat un om blocat
+       * afara din contul lui.
+       */
+      scrieSesiunea();
+    }
+
+    // Codul se trimite DUPA ce sesiunea a fost pusa deoparte: daca trimiterea
+    // esueaza (plafon atins), omul ajunge oricum pe /login/mfa, de unde poate
+    // cere altul — dar fara sesiune valida in mana nimanui.
+    await trimiteCodMfa(user.id, user.email!);
+
+    cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: DURATA_ASTEPTARE_SEC, secure: process.env.NODE_ENV === "production" });
     redirect("/login/mfa");
   }
 
+  // Fara al doilea factor: sesiunea se scrie chiar aici, ca pana acum.
+  scrieSesiunea();
+
   if (!profile?.onboarding_completed) {
-    const cookieStore = await cookies();
     cookieStore.delete("onboarding_done");
     redirect("/onboarding/details");
   }
 
   // Set cookie so proxy middleware skips onboarding DB check on redirect
-  const cookieStore = await cookies();
   cookieStore.set("onboarding_done", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30, secure: process.env.NODE_ENV === "production" });
 
   redirect("/dashboard");
 }
 
-export async function verifyMfaLogin(code: string): Promise<{ error: string } | { success: true }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Sesiune expirata. Autentifica-te din nou." };
+/*
+ * `verifyMfaLogin` si retrimiterea codului de pe /login/mfa NU mai sunt actiuni
+ * de server: sunt rutele POST /api/auth/mfa/verifica si /api/auth/mfa/retrimite.
+ *
+ * DE CE, pe scurt: sunt singurii pasi care trebuie sa ruleze CU SESIUNEA
+ * NECONFIRMATA, iar poarta din proxy opreste orice actiune de server intr-o
+ * astfel de sesiune. O scutire pe calea /login/mfa ar fi fost o usa deschisa:
+ * id-ul unei actiuni se rezolva dintr-un manifest GLOBAL, nu pe pagina, deci un
+ * POST catre calea scutita cu id-ul ORICAREI alte actiuni ar fi executat-o.
+ * Explicatia lunga, cu referinte in node_modules, e in src/lib/auth/poarta-mfa.ts.
+ */
 
-  const profile = await citesteCampuriMfa(user.id);
-
-  const depasit = await limitaMfa(user.id);
-  if (depasit) return depasit;
-
-  if (!profile) return { error: "Nu am putut verifica codul. Incearca din nou in cateva secunde." };
-  if (!profile.mfa_otp || !profile.mfa_otp_expires_at) return { error: "Codul a expirat. Autentifica-te din nou." };
-  if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) {
-    return { error: "Cod incorect sau expirat." };
-  }
-
-  /*
-   * Confirmarea se leaga de SESIUNEA curenta, prin `session_id`-ul din JWT.
-   *
-   * Fara legatura asta, o simpla data „confirmat la" ar raspunde la intrebarea
-   * gresita: o confirmare veche de trei luni ar valida sesiunea deschisa azi de
-   * cineva care are doar parola. `session_id` e stabil pe toata durata sesiunii
-   * (se pastreaza peste reimprospatarile de token), deci e legatura corecta.
-   *
-   * Daca nu putem citi sesiunea, NU scriem o confirmare fara legatura — ar fi o
-   * confirmare care se aplica oricui.
-   */
-  const idSesiune = await idSesiuneCurenta(supabase);
-  if (!idSesiune) {
-    console.error("[mfa] sesiunea curenta nu a putut fi identificata la verificare", { userId: user.id });
-    return { error: "Nu am putut finaliza autentificarea. Incearca din nou." };
-  }
-
-  await reseteazaLimita(`mfa:${user.id}`);
-  await scrieCampuriMfa(user.id, {
-    mfa_otp: null,
-    mfa_otp_expires_at: null,
-    mfa_confirmat_la: new Date().toISOString(),
-    mfa_sesiune_confirmata: idSesiune,
-  });
-  const cookieStore = await cookies();
-  cookieStore.delete("mfa_pending");
-  revalidatePath("/", "layout");
-
-  if (!profile.onboarding_completed) redirect("/onboarding/details");
-  redirect("/dashboard");
-}
-
+/**
+ * Trimite un cod pentru pornirea/oprirea MFA din Setari.
+ *
+ * Aici sesiunea e deja confirmata (altfel nici nu se ajunge in Setari), deci
+ * ramane actiune de server. Retrimiterea de pe /login/mfa e alta cale.
+ */
 export async function sendMfaOtp(): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user?.email) return { error: "Neautorizat" };
-
-  // Retrimiterea codului trimite un email de fiecare data.
-  const lim = await consumaLimita(`mfa-trimite:${user.id}`, 4, 900, 900);
-  if (!lim.permis) return { error: mesajLimita(lim, "Prea multe coduri cerute. Incearca mai tarziu.") };
-
-  const { otp, otpHash, expiresAt } = generateOtp();
-  await scrieCampuriMfa(user.id, { mfa_otp: otpHash, mfa_otp_expires_at: expiresAt });
-  await sendMfaOtpEmail(user.email, otp);
-  return { success: true };
+  return await trimiteCodMfa(user.id, user.email);
 }
 
 export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: string } | { success: true }> {
@@ -309,16 +252,9 @@ export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: st
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const profile = await citesteCampuriMfa(user.id);
+  const rezultat = await verificaCodMfa(user.id, code);
+  if ("error" in rezultat) return rezultat;
 
-  const depasit = await limitaMfa(user.id);
-  if (depasit) return depasit;
-
-  if (!profile) return { error: "Nu am putut verifica codul. Incearca din nou in cateva secunde." };
-  if (!profile.mfa_otp || !profile.mfa_otp_expires_at) return { error: "Codul a expirat. Cere unul nou." };
-  if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
-
-  await reseteazaLimita(`mfa:${user.id}`);
   /*
    * Pornirea MFA din Setari CONFIRMA sesiunea curenta.
    *
@@ -326,15 +262,19 @@ export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: st
    * `mfa_email_enabled` devine true, poarta ar gasi o sesiune fara confirmare si
    * l-ar arunca la /login/mfa — desi tocmai a dovedit ca are acces la email,
    * introducand codul de aici. Asta ESTE al doilea factor, trecut cu succes.
+   *
+   * Daca nu putem citi sesiunea, refuzam pornirea in loc sa lasam contul cu MFA
+   * activ si nicio sesiune confirmata — adica blocat afara.
    */
   const idSesiune = await idSesiuneCurenta(supabase);
-  await scrieCampuriMfa(user.id, {
-    mfa_email_enabled: true,
-    mfa_otp: null,
-    mfa_otp_expires_at: null,
-    mfa_confirmat_la: new Date().toISOString(),
-    mfa_sesiune_confirmata: idSesiune,
-  });
+  if (!idSesiune) {
+    console.error("[mfa] sesiunea curenta nu a putut fi identificata la pornirea MFA", { userId: user.id });
+    return { error: "Nu am putut activa verificarea in doi pasi. Incearca din nou." };
+  }
+
+  await scrieCampuriMfa(user.id, { mfa_email_enabled: true });
+  await confirmaSesiuneaMfa(user.id, idSesiune);
+  uitaStareaMfa(user.id, idSesiune);
   return { success: true };
 }
 
@@ -343,26 +283,20 @@ export async function verifyAndDisableMfaEmail(code: string): Promise<{ error: s
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const profile = await citesteCampuriMfa(user.id);
+  const rezultat = await verificaCodMfa(user.id, code);
+  if ("error" in rezultat) return rezultat;
 
-  const depasit = await limitaMfa(user.id);
-  if (depasit) return depasit;
-
-  if (!profile) return { error: "Nu am putut verifica codul. Incearca din nou in cateva secunde." };
-  if (!profile.mfa_otp || !profile.mfa_otp_expires_at) return { error: "Codul a expirat. Cere unul nou." };
-  if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
-
-  await reseteazaLimita(`mfa:${user.id}`);
-  // Cu MFA stins poarta iese pe prima intrebare, deci confirmarea nu mai
-  // inseamna nimic. O stergem oricum: sa nu ramana o legatura veche care ar
-  // „confirma" din start sesiunea existenta daca MFA se reporneste maine.
+  // Cu MFA stins poarta iese pe prima intrebare, deci confirmarile nu mai
+  // inseamna nimic. Le stergem oricum: sa nu ramana o legatura veche care ar
+  // „confirma" din start sesiunile existente daca MFA se reporneste maine.
   await scrieCampuriMfa(user.id, {
     mfa_email_enabled: false,
     mfa_otp: null,
     mfa_otp_expires_at: null,
     mfa_confirmat_la: null,
-    mfa_sesiune_confirmata: null,
+    mfa_sesiuni_confirmate: [],
   });
+  uitaStareaMfa(user.id, await idSesiuneCurenta(supabase));
   return { success: true };
 }
 
@@ -513,16 +447,15 @@ export async function schimbaParola(
   return { success: true };
 }
 
-export async function logout() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  const cookieStore = await cookies();
-  cookieStore.delete("mfa_pending");
-  cookieStore.delete("onboarding_done");
-  cookieStore.delete("impersonare");
-  revalidatePath("/", "layout");
-  redirect("/login");
-}
+/*
+ * `logout` NU mai e actiune de server: e ruta POST /api/auth/iesire.
+ *
+ * Iesirea din cont trebuie sa functioneze si dintr-o sesiune pe care poarta o
+ * refuza — altfel omul ramane inchis intr-un panou care nu-i raspunde la nimic,
+ * fara nicio usa. Rutele /api/auth/** sunt singurele scutite de poarta, tocmai
+ * pentru asta. Formularele de deconectare trimit direct acolo, deci merg si fara
+ * JavaScript.
+ */
 
 /**
  * Stergerea definitiva a contului.

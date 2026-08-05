@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { claimuriDinToken, sesiuneNeconfirmata, type ProfilMfa } from "./mfa";
 
 /**
@@ -21,10 +22,25 @@ export const MESAJ_REFUZ =
   "Autentificarea in doi pasi nu a fost finalizata pentru aceasta sesiune.";
 
 /**
+ * Cache pentru raspunsul POZITIV („sesiunea poate trece"), 30 de secunde.
+ *
+ * DE CE E NEVOIE: de cand `api/` nu mai e exclus din matcher, poarta ruleaza la
+ * fiecare cerere de API si la fiecare actiune de server. Fara cache, panoul ar
+ * plati o interogare in plus la fiecare clic.
+ *
+ * DE CE SE CACHEAZA DOAR RASPUNSUL POZITIV: un „blocat" tinut minte 30 de
+ * secunde ar insemna ca omul introduce codul corect si tot nu intra imediat.
+ * Invers, un „liber" invechit cu cel mult 30 de secunde nu deschide nimic —
+ * sesiunea era deja confirmata cand a fost pus in cache, iar cheia contine
+ * `session_id`, deci nu se poate refolosi pentru alta sesiune.
+ */
+const cacheTrecere = new CacheScurt<true>(30_000, 2000);
+
+/**
  * Citeste starea MFA cu SERVICE ROLE.
  *
  * De ce service role si nu clientul utilizatorului: `mfa_confirmat_la` si
- * `mfa_sesiune_confirmata` sunt coloane privilegiate — nu sunt in lista alba de
+ * `mfa_sesiuni_confirmate` sunt coloane privilegiate — nu sunt in lista alba de
  * SELECT a rolului `authenticated` (vezi migrations/2026-08-05-poarta-mfa.sql),
  * tocmai ca sa nu poata fi nici citite, nici scrise din browser.
  *
@@ -54,11 +70,11 @@ async function citesteStareaMfa(userId: string): Promise<ProfilMfa | null> {
 
   const { data, error } = await admin
     .from("users_profile")
-    .select("mfa_email_enabled, mfa_confirmat_la, mfa_sesiune_confirmata")
+    .select("mfa_email_enabled, mfa_confirmat_la, mfa_sesiuni_confirmate")
     .eq("id", userId)
     .maybeSingle();
 
-  if (!error) return data as ProfilMfa | null;
+  if (!error) return (data as ProfilMfa | null) ?? null;
 
   console.error("[stare-mfa] citirea starii MFA a esuat", {
     userId,
@@ -86,8 +102,26 @@ export async function sesiuneNeconfirmataPentru(
   userId: string,
   idSesiune: string | null | undefined,
 ): Promise<boolean> {
+  const cheie = `${userId}|${idSesiune ?? ""}`;
+  if (idSesiune && cacheTrecere.get(cheie)) return false;
+
   const profil = await citesteStareaMfa(userId);
-  return sesiuneNeconfirmata(profil, idSesiune);
+  const neconfirmata = sesiuneNeconfirmata(profil, idSesiune);
+
+  if (!neconfirmata && idSesiune) cacheTrecere.set(cheie, true);
+  return neconfirmata;
+}
+
+/**
+ * Sterge din cache raspunsul retinut pentru un utilizator.
+ *
+ * Se cheama cand starea se schimba chiar in cererea curenta (stingerea MFA din
+ * Setari), ca instanta care tocmai a scris sa nu mai raspunda din memorie cu
+ * valoarea de dinainte. Celelalte instante se corecteaza singure in 30 de
+ * secunde.
+ */
+export function uitaStareaMfa(userId: string, idSesiune?: string | null): void {
+  cacheTrecere.sterge(`${userId}|${idSesiune ?? ""}`);
 }
 
 /**
@@ -104,4 +138,3 @@ export async function idSesiuneCurenta(
   const { data: { session } } = await supabase.auth.getSession();
   return claimuriDinToken(session?.access_token)?.session_id ?? null;
 }
-

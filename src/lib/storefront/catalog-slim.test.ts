@@ -54,3 +54,28 @@ test("un produs simplu ramane pe pretul lui", () => {
   const slim = slimCatalogProduct({ price: 49.9, description: null, images: [], page_sections: null });
   assert.deepEqual(slim.price_range, { min: 49.9, max: 49.9, hasRange: false, faraOferta: false });
 });
+
+test("descrierea de cautare pleaca fara marcaj, ca sa nu se rupa cuvintele", () => {
+  // 925 din 1049 de descrieri ale unui magazin real contin HTML. Taiate direct,
+  // bugetul de 300 de caractere se ducea pe etichete, iar cuvintele erau rupte
+  // in doua — deci cautarea nu le mai gasea intregi.
+  const r = slimCatalogProduct({
+    price: 10,
+    description: "<p>Manusi <strong>protectie</strong>   taiere</p>",
+    images: [],
+    page_sections: null,
+  });
+  assert.equal(r.description, "Manusi protectie taiere");
+});
+
+test("descrierea fara marcaj ramane neatinsa", () => {
+  const r = slimCatalogProduct({ price: 10, description: "text simplu", images: [], page_sections: null });
+  assert.equal(r.description, "text simplu");
+});
+
+test("trunchierea se face DUPA curatare, pe text real", () => {
+  const brut = "<p>" + "a".repeat(500) + "</p>";
+  const r = slimCatalogProduct({ price: 10, description: brut, images: [], page_sections: null });
+  assert.equal(r.description?.length, 300, "300 de caractere de text, nu de marcaj");
+  assert.ok(!r.description?.includes("<"), "niciun rest de eticheta");
+});

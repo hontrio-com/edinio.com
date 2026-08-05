@@ -4,6 +4,7 @@ import { PROBLEM_CARDS, PROBLEM_LEAD, PROBLEM_TITLE, type ProblemCard } from "@/
 import { MessagesThread } from "./MessagesThread";
 import { ScatteredProducts } from "./ScatteredProducts";
 import { SectionEyebrow } from "./SectionEyebrow";
+import { TrustedProduct } from "./TrustedProduct";
 
 /**
  * Secțiunea „Problema": trei carduri simple, fiecare cu o imagine și două rânduri
@@ -95,6 +96,8 @@ function Card({ card }: { card: ProblemCard }) {
             <MessagesThread />
           ) : card.art === "channels" ? (
             <ScatteredProducts />
+          ) : card.art === "product" ? (
+            <TrustedProduct />
           ) : card.image?.src ? (
             <Image
               src={card.image.src}

@@ -37,8 +37,9 @@ export interface ProblemCard {
    *
    * - `messages` — firul de întrebări în bule iMessage
    * - `channels` — produsele împrăștiate pe trei rețele
+   * - `product` — o pagină de produs cu tot ce dă încredere
    */
-  art?: "messages" | "channels";
+  art?: "messages" | "channels" | "product";
   image?: {
     /** Lipsește => se afișează substituentul. */
     src?: string;
@@ -160,6 +161,48 @@ export const PROBLEM_CHANNELS: ProblemChannel[] = [
 ];
 
 /**
+ * Produsul din al treilea card: o pagină de produs care are tot ce trebuie.
+ *
+ * Cardul vorbește despre încredere, iar încrederea se vede din DETALII, nu dintr-o
+ * afirmație: preț cu TVA scris lângă el, recenzii cu număr, variantele la vedere,
+ * un buton limpede. De aia ilustrația e o pagină de produs completă, nu un
+ * simbol.
+ *
+ * `image.src` lipsește până vine poza; atunci se vede substituentul.
+ */
+export const PROBLEM_PRODUCT = {
+  name: "Emporio Armani Stronger with You",
+  price: "350,00 lei",
+  priceNote: "TVA inclus",
+  /** Media, pe cinci. Jumătățile se desenează, vezi `TrustedProduct`. */
+  rating: 4.5,
+  reviews: 115,
+  variantLabel: "Volum",
+  variants: ["30 ml", "100 ml", "200 ml"],
+  /** Care variantă e aleasă. O pagină fără nimic ales arată neterminată. */
+  selectedVariant: 1,
+  cta: "Adaugă în coș",
+  /**
+   * Rândul de sub buton.
+   *
+   * ATENȚIE: TBI Bank NU e o integrare Edinio — logo-ul stă în `import_icons`,
+   * nefolosit, iar în cod nu există nicio urmă de el. Rândul ăsta e pus la
+   * cererea clientului (2026-08-06) ca element de ilustrație, dar pe o pagină
+   * comercială se citește ca „Edinio suportă plata în rate cu TBI". Dacă nu e
+   * adevărat, se scoate — e o singură proprietate.
+   */
+  installments: {
+    label: "Plătește în rate cu",
+    logo: "/import_icons/logoTBI.webp",
+  },
+  image: {
+    src: `${PRODUSE}/ProdusDemoCard3.webp` as string | undefined,
+    alt: "Pagină de produs cu preț, recenzii și variante",
+    hint: "Parfum Emporio Armani",
+  },
+};
+
+/**
  * Trei carduri, fiecare pentru altă durere: întrebările care se repetă, produsele
  * împrăștiate, încrederea care lipsește. Nu cinci și nu cincisprezece — trei se
  * rețin.
@@ -183,10 +226,7 @@ export const PROBLEM_CARDS: ProblemCard[] = [
     id: "incredere",
     title: "Clienții au nevoie de încredere ca să comande.",
     description:
-      "Datele firmei, informațiile despre livrare, plata securizată și politica de retur îi ajută să cumpere fără ezitare.",
-    image: {
-      alt: "Semnale de încredere într-un magazin online: livrare, plată securizată, retur",
-      hint: "Date firmă, livrare, plată securizată, retur",
-    },
+      "Dacă produsul, variantele și informațiile importante nu sunt prezentate clar, clientul ezită și poate renunța la comandă.",
+    art: "product",
   },
 ];

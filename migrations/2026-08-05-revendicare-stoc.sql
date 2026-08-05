@@ -42,11 +42,18 @@
 -- platformei, mult mai rau decat cursa. Ramura aceea scrie in `error_logs` cu
 -- severitatea `critical`: cat timp apare in /admin/logs, cursa e inca deschisa.
 
+-- `pg_temp` e listat EXPLICIT, si la sfarsit. Daca nu apare in `search_path`,
+-- Postgres il cauta IMPLICIT PRIMUL — iar intr-o functie `security definer` asta
+-- inseamna ca cine poate crea o tabela temporara numita `products` in aceeasi
+-- sesiune ar putea sa o puna in fata celei reale. Prin API nu se poate ajunge
+-- acolo (functia e acordata doar lui `service_role`, care nu executa SQL
+-- arbitrar), dar forma corecta nu costa nimic. Celelalte functii ale casei
+-- (`decrement_variant_stock_batch`, `eliberare-cupon`) au ramas pe forma veche.
 create or replace function public.revendica_stoc_batch(p_items jsonb)
 returns jsonb
 language plpgsql
 security definer
-set search_path to 'public'
+set search_path to 'public', 'pg_temp'
 as $$
 declare
   v_cerute jsonb;
@@ -132,7 +139,7 @@ create or replace function public.elibereaza_stoc_batch(p_items jsonb)
 returns void
 language plpgsql
 security definer
-set search_path to 'public'
+set search_path to 'public', 'pg_temp'
 as $$
 declare
   r record;

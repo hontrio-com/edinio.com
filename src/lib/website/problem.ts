@@ -34,9 +34,11 @@ export interface ProblemCard {
   description: string;
   /**
    * Desen făcut de noi, în locul unei poze. Cardul cu `art` nu mai are `image`.
-   * Deocamdată există un singur desen: firul de mesaje.
+   *
+   * - `messages` — firul de întrebări în bule iMessage
+   * - `channels` — produsele împrăștiate pe trei rețele
    */
-  art?: "messages";
+  art?: "messages" | "channels";
   image?: {
     /** Lipsește => se afișează substituentul. */
     src?: string;
@@ -114,15 +116,60 @@ export const PROBLEM_MESSAGES: ProblemMessage[] = [
 ];
 
 /**
- * Trei carduri, fiecare pentru altă durere: unde stau comenzile, cine face
- * hârtiile, cum arată magazinul. Nu cinci și nu cincisprezece — trei se rețin.
+ * Canalele din al doilea card: fiecare cu sigla lui și cu două produse.
+ *
+ * Produsele sunt grupate pe categorii, câte una pe canal — scule pe Facebook,
+ * mobilă pe Instagram, electronice pe WhatsApp. Nu e obligatoriu, dar așa se
+ * citește ca trei locuri diferite cu marfă diferită, nu ca aceleași trei poze
+ * mutate dintr-o parte în alta.
+ *
+ * Siglele sunt mărci înregistrate și se folosesc NEATINSE: fără recolorare, fără
+ * efecte, fără chenar care să sugereze parteneriat. Secțiunea descrie o
+ * problemă, nu o colaborare, deci uzul e descriptiv — dar numai cât timp
+ * logo-urile rămân așa cum sunt.
+ */
+export interface ProblemChannel {
+  id: string;
+  name: string;
+  logo: string;
+  /** Exact două. Vezi `ScatteredProducts` pentru de ce nu merge un număr variabil. */
+  products: string[];
+}
+
+const PRODUSE = "/problema/produse";
+
+export const PROBLEM_CHANNELS: ProblemChannel[] = [
+  {
+    id: "facebook",
+    name: "Facebook",
+    logo: "/social/facebook.svg",
+    products: [`${PRODUSE}/ProdusDemoFacebook1.webp`, `${PRODUSE}/ProdusDemoFacebook2.webp`],
+  },
+  {
+    id: "instagram",
+    name: "Instagram",
+    logo: "/social/instagram.svg",
+    products: [`${PRODUSE}/ProdusDemoInstagram1.webp`, `${PRODUSE}/ProdusDemoInstagram2.webp`],
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp",
+    logo: "/social/whatsapp.svg",
+    products: [`${PRODUSE}/ProdusDemoWhatsApp1.webp`, `${PRODUSE}/ProdusDemoWhatsApp2.webp`],
+  },
+];
+
+/**
+ * Trei carduri, fiecare pentru altă durere: întrebările care se repetă, produsele
+ * împrăștiate, încrederea care lipsește. Nu cinci și nu cincisprezece — trei se
+ * rețin.
  */
 export const PROBLEM_CARDS: ProblemCard[] = [
   {
     id: "comenzi",
-    title: "Comenzile trăiesc în conversații.",
+    title: "Aceleași întrebări, în fiecare zi.",
     description:
-      "Răspunzi la aceleași întrebări de zece ori pe zi, iar cine nu primește răspuns pleacă.",
+      "Cum comand? Este în stoc? Pot plăti cu cardul? Totul începe de la zero cu fiecare client.",
     art: "messages",
   },
   {
@@ -130,10 +177,7 @@ export const PROBLEM_CARDS: ProblemCard[] = [
     title: "Produsele tale sunt împrăștiate peste tot.",
     description:
       "Câteva sunt pe Facebook, altele pe Instagram, iar restul sunt trimise doar la cerere prin mesaje.",
-    image: {
-      alt: "Produse răspândite pe Facebook, pe Instagram și în mesaje",
-      hint: "Produse răspândite pe Facebook, Instagram și în mesaje",
-    },
+    art: "channels",
   },
   {
     id: "incredere",

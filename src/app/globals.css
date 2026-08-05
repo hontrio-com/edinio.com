@@ -250,6 +250,37 @@
   }
 }
 
+/* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────
+   Cerut de client: „Facebook" cu albastrul lor si „Instagram" cu culoarea lor.
+
+   Valorile sunt scoase DIN SIGLELE pe care le folosim, nu din memorie:
+   facebook.svg are gradientul #00B2FF → #006AFF (folosim capatul, #0866FF, care
+   e si albastrul de brand curent), iar instagram.svg are trei opriri,
+   #fa8f21 → #d82d7e → #8c3aaa. Daca se schimba siglele, se schimba si aici.
+
+   Instagram nu ARE o culoare plata — marca lor e un degrade. De aceea cuvantul e
+   colorat cu acelasi degrade, taiat pe litere.
+
+   `@supports` nu e de forma: `color: transparent` fara `background-clip: text`
+   inseamna cuvant INVIZIBIL. Culoarea plata de dinaintea blocului e rezerva care
+   se vede daca taierea pe litere nu merge. */
+.brand-facebook {
+  color: #0866ff;
+}
+
+.brand-instagram {
+  color: #d82d7e;
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .brand-instagram {
+    background-image: linear-gradient(95deg, #fa8f21 0%, #d82d7e 55%, #8c3aaa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
 /* ─── Sectiunea Problema: bulele iMessage din primul card ────────────────────
    Valorile nu sunt aproximate: fundalul e #007AFF, adica exact `systemBlue` de la
    Apple — albastrul bulelor din iMessage — textul alb, coltul de 18px.

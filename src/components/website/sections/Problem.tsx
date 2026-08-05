@@ -2,6 +2,7 @@ import Image from "next/image";
 import { ImageIcon } from "lucide-react";
 import { PROBLEM_CARDS, PROBLEM_LEAD, PROBLEM_TITLE, type ProblemCard } from "@/lib/website/problem";
 import { MessagesThread } from "./MessagesThread";
+import { ScatteredProducts } from "./ScatteredProducts";
 import { SectionEyebrow } from "./SectionEyebrow";
 
 /**
@@ -92,6 +93,8 @@ function Card({ card }: { card: ProblemCard }) {
         >
           {card.art === "messages" ? (
             <MessagesThread />
+          ) : card.art === "channels" ? (
+            <ScatteredProducts />
           ) : card.image?.src ? (
             <Image
               src={card.image.src}
@@ -113,15 +116,74 @@ function Card({ card }: { card: ProblemCard }) {
         </div>
       </div>
 
-      <div className="px-5 pb-6 pt-4 sm:pb-7 sm:pt-5">
-        <h3 className="text-[17px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink sm:text-[18px]">
+      {/*
+        `px-4`, nu `px-5`. Cei opt pixeli castigati nu sunt cosmetici: fara ei,
+        titlul cel mai lung nu incape pe un rand. Vezi nota de la `h3`.
+      */}
+      <div className="px-4 pb-6 pt-4 sm:pb-7 sm:pt-5">
+        {/*
+          UN SINGUR RAND, la toate trei. Cerut de client: cardurile 2 si 3 aveau
+          titlurile pe doua randuri si nu se mai citeau ca o serie.
+
+          Masurat in browser, in cei 318px cat are cardul pe desktop: cel mai lung
+          titlu („Clienții au nevoie de încredere ca să comande.", 46 de semne)
+          cere 300px la 14px, 311 la 14,5 si 322 la 15. Deci 15px singur NU
+          incapea. Incape acum din doua schimbari mici puse cap la cap: `px-4` in
+          loc de `px-5` pe blocul de text (+8px) si `tracking` de -0,02em in loc
+          de -0,01 (-7px la un titlu de lungimea asta).
+
+          DE STIUT cand se schimba textele: peste ~46 de semne, titlul trece
+          oricum pe doua randuri. Nu e stricat daca se intampla, dar se pierde
+          alinierea intre carduri. Marimea nu mai poate cobori: la 14px titlul ar
+          ajunge cat descrierea si s-ar duce ierarhia.
+
+          Pe telefoane mici (sub ~370px) si pe tableta, unde cardurile sunt cele
+          mai inguste din toata scara, tot se rup. Acolo nu are ce sa incapa.
+        */}
+        <h3 className="text-[15px] font-semibold leading-[1.35] tracking-[-0.02em] text-ink">
           {card.title}
         </h3>
-        <p className="mt-2 text-[14px] leading-[1.55] text-ink-2 sm:text-[14.5px]">
-          {card.description}
+        <p className="mt-2 text-[13.5px] leading-[1.55] text-ink-2">
+          <BrandedText text={card.description} />
         </p>
       </div>
     </article>
+  );
+}
+
+/**
+ * Numele rețelelor, scrise în culorile lor.
+ *
+ * Doar două cuvinte, și numai când apar exact așa. Culorile stau în
+ * `globals.css`, la `.brand-facebook` și `.brand-instagram`, scoase din siglele
+ * pe care le folosim — nu din memorie.
+ *
+ * Împărțirea se face cu un grup de captură în expresie, ca `split` să păstreze și
+ * separatorii; fără paranteze, cuvintele s-ar pierde din text cu totul.
+ *
+ * Greutatea urcă la `medium` doar la ele: un cuvânt colorat la aceeași grosime cu
+ * restul se citește șters, iar degradeul de la Instagram are nevoie de puțină
+ * grosime ca să nu iasă noroios la 13,5px.
+ */
+const BRAND_CLASS: Record<string, string> = {
+  Facebook: "brand-facebook",
+  Instagram: "brand-instagram",
+};
+
+function BrandedText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(Facebook|Instagram)/g).map((part, index) => {
+        const brand = BRAND_CLASS[part];
+        return brand ? (
+          <span key={index} className={`font-medium ${brand}`}>
+            {part}
+          </span>
+        ) : (
+          part
+        );
+      })}
+    </>
   );
 }
 

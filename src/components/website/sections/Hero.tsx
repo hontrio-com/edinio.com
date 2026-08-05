@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { HeroRays } from "./hero-backgrounds";
+import { HeroMesh } from "./hero-backgrounds";
 
 /**
- * Hero-ul paginii de acasă: totul pe mijloc, peste lumină verde statică.
+ * Hero-ul paginii de acasă: totul pe mijloc, peste un mesh de lumină verde.
  *
  * Verdele stă unde contează: butonul principal, eticheta „Nou" și lumina din
  * spate. Titlul rămâne negru — verdele care sare în ochi dintr-un cuvânt de
@@ -22,7 +22,7 @@ export function Hero() {
      * barei o estompează, ceea ce arată chiar bine.
      */
     <section className="relative isolate -mt-18 overflow-hidden bg-white pt-18">
-      <HeroRays />
+      <HeroMesh />
 
       {/*
         Spatiul de sus e mult mai mic pe telefon decat pe ecran mare. Pe desktop,

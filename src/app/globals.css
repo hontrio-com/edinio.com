@@ -103,10 +103,97 @@
   --sidebar-width: 240px;
 }
 
-/* Lumina hero-ului nu mai are nicio regula aici: pulsatia razelor a fost scoasa
-   la cererea clientului (2026-08-05, „sa fie static"), iar aura si valurile care
-   au luat locul fasciculelor se desenează din gradiente puse direct pe element,
-   in `sections/hero-backgrounds.tsx`. */
+/* ─── Hero: fundal mesh ──────────────────────────────────────────────────────
+   Sase pete de lumina verde care plutesc una peste alta. Ce se misca nu e
+   fiecare pata in parte, ci AMESTECUL dintre ele: cand doua se suprapun, acolo
+   se aprinde, cand se despart, se stinge. De aceea desenul nu se repeta niciodata
+   la vedere, desi fiecare pata isi reia drumul.
+
+   NUMAI TRANSLATIE, fara `scale` si fara `opacity`. Clientul a cerut explicit sa
+   nu pulseze: o pata care isi schimba marimea sau puterea se citeste ca puls,
+   chiar daca o face lent. Una care doar se muta se citeste ca lumina care se
+   plimba.
+
+   Patru drumuri diferite, nu unul. Sase pete pe acelasi drum s-ar misca in
+   formatie si s-ar vedea imediat ca e o singura animatie aplicata de sase ori.
+
+   Miscarea e foarte lenta dinadins, 30-50 de secunde tura: cat sa observi ca
+   traieste daca stai pe pagina, nu cat sa-ti ia ochii de pe titlu.
+
+   COSTUL. `filter: blur()` e scump de recalculat, dar aici nu se recalculeaza:
+   petele isi schimba doar `transform`, iar continutul desenat ramane acelasi,
+   deci stratul deja neclar se muta pe compozitor. `will-change` face promovarea
+   explicita. Cu `scale` sau `opacity` in animatie, blur-ul s-ar fi refacut la
+   fiecare cadru. */
+/* Cursa e in procente din PATA, nu din sectiune, iar petele au 380-640px. La
+   14% inseamna vreo 60-90px de drum pe fiecare cheie: destul cat suprapunerile
+   sa se refaca altfel, prea putin cat sa ramana goluri de alb intre ele. */
+@keyframes hero-mesh-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  33% {
+    transform: translate3d(16%, 11%, 0);
+  }
+  66% {
+    transform: translate3d(-12%, 18%, 0);
+  }
+}
+
+@keyframes hero-mesh-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  30% {
+    transform: translate3d(-18%, 13%, 0);
+  }
+  70% {
+    transform: translate3d(14%, -9%, 0);
+  }
+}
+
+@keyframes hero-mesh-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  40% {
+    transform: translate3d(12%, -14%, 0);
+  }
+  75% {
+    transform: translate3d(-16%, -7%, 0);
+  }
+}
+
+@keyframes hero-mesh-d {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  35% {
+    transform: translate3d(-13%, -12%, 0);
+  }
+  68% {
+    transform: translate3d(18%, 9%, 0);
+  }
+}
+
+.hero-mesh-blob {
+  animation: var(--mesh-path) var(--mesh-duration) ease-in-out var(--mesh-delay)
+    infinite;
+  will-change: transform;
+}
+
+/* Fara miscare, petele raman unde le prinde. Desenul e acelasi, doar ca sta pe
+   loc: nu se ascunde nimic si nu se rearanjeaza nimic. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-mesh-blob {
+    animation: none;
+    will-change: auto;
+  }
+}
 
 /* ─── Cardurile de functii: teanc la derulare ────────────────────────────────
    Cardurile sunt `sticky`, deci fiecare se opreste sub bara si urmatorul urca

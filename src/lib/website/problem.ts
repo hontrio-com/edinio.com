@@ -49,19 +49,22 @@ export interface ProblemCard {
 /**
  * Mesajele din primul card, desenate ca bule iMessage.
  *
- * Toate sunt PRIMITE, deci toate gri. Sunt patru întrebări la care nu răspunde
- * nimeni, nu o conversație — de aia nu există niciun răspuns albastru printre
- * ele. Asta e și ideea cardului: întrebările vin, iar tu ești singurul canal.
+ * TREI, nu patru. A patra a fost scoasă (2026-08-06): umplea cardul până sus și
+ * firul arăta înghesuit. Cu trei, între bule încape aer, iar ideea trece la fel
+ * de bine — nu numărul întrebărilor o duce, ci faptul că nu are cine să le
+ * răspundă.
  *
- * Ordinea contează puțin, dar lungimile da: ultima e cea mai lungă dinadins,
- * fiindcă stă cel mai jos și se vede întreagă la orice lățime. Cele de sus se
- * taie de marginea cardului pe ecrane înguste, ca într-un fir derulat.
+ * Nu există niciun răspuns printre ele, dinadins. Asta e tot cardul: întrebările
+ * vin, iar tu ești singurul canal.
+ *
+ * Lungimile contează mai mult decât ordinea: ultima e cea mai lungă, fiindcă stă
+ * cel mai jos și se vede întreagă la orice lățime. Cele de deasupra se taie de
+ * marginea cardului pe ecrane înguste, ca într-un fir derulat.
  */
 export const PROBLEM_MESSAGES = [
   "Bună ziua! Cum pot comanda?",
   "Aveți produsul acesta pe stoc?",
   "Unde pot vedea mai multe produse?",
-  "Îmi puteți trimite mai multe detalii?",
 ];
 
 /**

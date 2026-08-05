@@ -6,7 +6,7 @@ import { PROBLEM_MESSAGES } from "@/lib/website/problem";
 /**
  * Firul de mesaje din primul card al secțiunii „Problema".
  *
- * Patru întrebări primite, în bule iMessage, care sosesc una câte una când cardul
+ * Trei întrebări primite, în bule iMessage, care sosesc una câte una când cardul
  * ajunge în dreptul ochilor. Desenul bulei, codița și arcul sunt în `globals.css`,
  * la `.imsg`; aici e doar declanșatorul.
  *
@@ -117,7 +117,12 @@ export function MessagesThread() {
               la -18px, iar `overflow-hidden` de deasupra ar tăia-o și ar rămâne un
               bulgăre în loc de vârf.
             */}
-            <div className="flex pl-[22px] pr-3 pt-2.5">
+            {/*
+              `pt-4` e spațiul dintre bule, și e mai mare decât în aplicație
+              dinadins: pe iPhone mesajele stau strânse fiindcă ecranul e plin de
+              ele, aici sunt trei într-un card și trebuie să respire.
+            */}
+            <div className="flex pl-[22px] pr-3 pt-4">
               <p
                 className="imsg text-[15px] leading-[20px] sm:text-[16px] sm:leading-[21px]"
                 style={{

@@ -231,7 +231,14 @@
      vine din perspectiva, deci e cea corecta optic, nu una aleasa de mana. */
   transform: translateZ(calc(var(--covered) * -130px))
     rotateX(calc(var(--covered) * 5deg));
-  opacity: calc(1 - 0.3 * var(--covered));
+  /* Cardul acoperit DISPARE, nu se stinge pe jumatate.
+     Se stingea pana la 0,7 si i se vedea marginea de sus in teanc — arata bine pe
+     desktop, cu doua-trei carduri vizibile, dar pe telefon ieseau patru margini
+     una peste alta cu textul lor transparand prin cardul activ.
+     Inmultirea cu 2,4 tine opacitatea la 1 pana pe la 58% din acoperire, si abia
+     apoi o coboara: asa cardul de dedesubt nu apuca sa dispara inainte ca urmatorul
+     sa-l acopere, ceea ce ar fi lasat o clipa fundalul gol la vedere. */
+  opacity: clamp(0, calc((1 - var(--covered)) * 2.4), 1);
 }
 
 /* Umbra pe trei straturi: contactul apropiat, corpul, si patarea larga de

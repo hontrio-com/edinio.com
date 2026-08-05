@@ -1,7 +1,10 @@
-import Image from "next/image";
 import { ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { FEATURE_CARDS, type FeatureCard } from "@/lib/website/features";
+import {
+  FEATURE_CARDS,
+  FEATURE_IMAGE_WIDTHS,
+  type FeatureCard,
+} from "@/lib/website/features";
 import { FeatureStack } from "./FeatureStack";
 import { SectionEyebrow } from "./SectionEyebrow";
 
@@ -20,9 +23,19 @@ import { SectionEyebrow } from "./SectionEyebrow";
  * perspectiva. De aceea marginile rămân drepte și nu pare o poză scalată.
  */
 
-/* Cat coboara fiecare card fata de cel dinainte, cand se lipeste. */
-const STACK_STEP = 16;
-/* De la ce inaltime incepe teancul: bara de sus plus o respiratie. */
+/**
+ * De la ce înălțime se lipesc cardurile: bara de sus plus o respirație.
+ *
+ * TOATE se lipesc la aceeași înălțime, dinadins. Aveau un decalaj de 16px pe
+ * card, ca să se vadă marginile celor de dedesubt ca un teanc de hârtii — și
+ * arăta bine pe desktop, unde erau doar două-trei vizibile odată. Pe telefon, cu
+ * cardurile mult mai înalte, ieșeau patru margini una peste alta cu textul lor
+ * pe jumătate stins transpărând prin cardul activ. Clientul a trimis captura; nu
+ * era o eroare, era desenul dus la o lățime pentru care nu fusese gândit.
+ *
+ * Acum fiecare card îl acoperă complet pe cel dinainte. Se vede un singur card,
+ * cel activ.
+ */
 const STACK_TOP = 96;
 
 export function Features() {
@@ -55,11 +68,7 @@ export function Features() {
           */}
           <FeatureStack>
             {FEATURE_CARDS.map((card, index) => (
-              <div
-                key={card.id}
-                className="feature-slot sticky"
-                style={{ top: STACK_TOP + index * STACK_STEP }}
-              >
+              <div key={card.id} className="feature-slot sticky" style={{ top: STACK_TOP }}>
                 <Card card={card} last={index === FEATURE_CARDS.length - 1} />
               </div>
             ))}
@@ -135,21 +144,39 @@ function ImagePanel({ card }: { card: FeatureCard }) {
       />
 
       <div className="relative aspect-[4/3] overflow-hidden rounded-[12px] border border-hairline bg-white shadow-[0_14px_36px_-18px_rgba(10,10,10,0.28)]">
-        {card.image.src ? (
-          <Image
-            src={card.image.src}
-            alt={card.image.alt}
-            fill
-            /*
-             * Masurat, nu ghicit. Latimea casetei, pe latimi de ecran:
-             *   360 -> 224   640 -> 464   1023 -> 847 (maximul)
-             *   1024 -> 371  1280 si peste -> 467 (oprit de max-w-[1200px])
-             * Cel mai mare NU e pe desktop, ci chiar sub pragul `lg`, unde
-             * cardul e inca pe o coloana si ocupa toata latimea. Peste 1024
-             * intra a doua coloana si caseta se injumatateste.
-             */
+        {card.image.base ? (
+          /*
+            `<img>` simplu, nu `next/image`, si asta e o decizie, nu o scapare.
+
+            Loader-ul proiectului lasa neatinse imaginile locale — trece prin el
+            doar ce e pe R2 — deci `next/image` nu producea NICIUN `srcset` pentru
+            ele: fiecare telefon descarca masterul intreg si il afisa la 280px.
+            Cu `<img>` scriem noi `srcSet`-ul si browserul alege marimea potrivita.
+
+            `sizes` e masurat, nu ghicit. Latimea casetei, pe scara de ecrane:
+              360 -> 224   640 -> 464   1023 -> 847 (maximul)
+              1024 -> 371  1280 si peste -> 467 (oprit de max-w-[1200px])
+            Cel mai mare NU e pe desktop, ci chiar sub pragul `lg`, unde cardul e
+            inca pe o coloana. Peste 1024 intra a doua coloana si caseta se
+            injumatateste.
+
+            `width`/`height` sunt puse desi caseta are deja `aspect-[4/3]`: fara
+            ele, browserul nu stie raportul pana nu vine fisierul si, la o retea
+            proasta, layoutul sare.
+          */
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`${card.image.base}-1080.webp`}
+            srcSet={FEATURE_IMAGE_WIDTHS.map(
+              (width) => `${card.image.base}-${width}.webp ${width}w`,
+            ).join(", ")}
             sizes="(min-width: 1024px) 470px, (min-width: 640px) 84vw, 70vw"
-            className="object-cover"
+            alt={card.image.alt}
+            width={1440}
+            height={1080}
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">

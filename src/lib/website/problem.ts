@@ -57,14 +57,33 @@ export interface ProblemCard {
  * Nu există niciun răspuns printre ele, dinadins. Asta e tot cardul: întrebările
  * vin, iar tu ești singurul canal.
  *
+ * `face`, `initials` și `photo` se văd doar în varianta cu cercul expeditorului.
+ * Sunt trei oameni diferiți, nu unul care scrie de trei ori — de aia fiecare
+ * mesaj are alt chip.
+ *
+ * `photo` e portița pentru poze adevărate: pui o cale și portretul desenat dispare
+ * singur. `initials` rămâne oricum, ca text pentru cititoarele de ecran. Vezi
+ * `Avatar` din `MessagesThread.tsx` pentru de ce sunt desenate deocamdată.
+ *
  * Lungimile contează mai mult decât ordinea: ultima e cea mai lungă, fiindcă stă
  * cel mai jos și se vede întreagă la orice lățime. Cele de deasupra se taie de
  * marginea cardului pe ecrane înguste, ca într-un fir derulat.
  */
-export const PROBLEM_MESSAGES = [
-  "Bună ziua! Cum pot comanda?",
-  "Aveți produsul acesta pe stoc?",
-  "Unde pot vedea mai multe produse?",
+export interface ProblemMessage {
+  text: string;
+  /** Numele expeditorului, pentru cititoarele de ecran. */
+  name: string;
+  initials: string;
+  /** Care dintre cele trei portrete desenate. */
+  face: 0 | 1 | 2;
+  /** Lipsește => se desenează portretul. */
+  photo?: string;
+}
+
+export const PROBLEM_MESSAGES: ProblemMessage[] = [
+  { text: "Bună ziua! Cum pot comanda?", name: "Andreea M.", initials: "AM", face: 0 },
+  { text: "Aveți produsul acesta pe stoc?", name: "Ionuț P.", initials: "IP", face: 1 },
+  { text: "Unde pot vedea mai multe produse?", name: "Maria D.", initials: "MD", face: 2 },
 ];
 
 /**

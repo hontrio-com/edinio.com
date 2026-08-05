@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ArrowRight, Shield, Headset, Wrench } from "lucide-react";
 import { Hero } from "@/components/website/sections/Hero";
 import { Problem } from "@/components/website/sections/Problem";
+/* TEMPORAR: despartitorul dintre cele doua feluri de fir de mesaje. */
+import { VariantLabel } from "@/components/website/sections/VariantLabel";
 import { Features } from "@/components/website/sections/Features";
 import { HowItWorksSection } from "@/components/website/HowItWorksSection";
 import { DemoSection } from "@/components/website/DemoSection";
@@ -149,7 +151,21 @@ export default function LandingPage() {
       />
       <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
       <Hero />
+
+      {/*
+        TEMPORAR: sectiunea Problema de doua ori, ca sa se vada cele doua feluri
+        de fir de mesaje din primul card. Dupa alegere ramane un singur <Problem />
+        fara prop, iar VariantLabel.tsx, prop-ul `messagesWithAvatars` si prop-ul
+        `withAvatars` din MessagesThread dispar.
+
+        Cat tine comparatia sunt doua `h2` identice pe pagina. Se accepta doar
+        fiindca e pe ramura de preview si dureaza o runda.
+      */}
+      <VariantLabel letter="Varianta A" title="Doar bulele" />
       <Problem />
+      <VariantLabel letter="Varianta B" title="Cu cercul expeditorului, ca in grup pe iPhone" />
+      <Problem messagesWithAvatars />
+
       <Features />
       <HowItWorksSection />
       <DemoSection />

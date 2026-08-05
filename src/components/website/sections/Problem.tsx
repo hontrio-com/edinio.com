@@ -32,7 +32,16 @@ import { SectionEyebrow } from "./SectionEyebrow";
  * în cardurile astea, nu o face. Poza duce mesajul, cardul doar o ține.
  */
 
-export function Problem() {
+export function Problem({
+  /**
+   * TEMPORAR, cât se compară cele două feluri de fir de mesaje. Se trece mai
+   * departe la primul card. După alegere dispare de tot, împreună cu al doilea
+   * apel din `app/(website)/page.tsx`.
+   */
+  messagesWithAvatars = false,
+}: {
+  messagesWithAvatars?: boolean;
+}) {
   return (
     /*
      * Fără spațiu jos: secțiunea de funcții vine imediat și își aduce propriul
@@ -59,7 +68,7 @@ export function Problem() {
 
         <div className="mt-14 grid gap-6 md:grid-cols-3 lg:mt-20 lg:gap-7">
           {PROBLEM_CARDS.map((card) => (
-            <Card key={card.id} card={card} />
+            <Card key={card.id} card={card} messagesWithAvatars={messagesWithAvatars} />
           ))}
         </div>
       </div>
@@ -75,7 +84,13 @@ export function Problem() {
  * minus distanța dintre ele; cu aceeași rază în amândouă părțile, cel din
  * interior arată prea rotund.
  */
-function Card({ card }: { card: ProblemCard }) {
+function Card({
+  card,
+  messagesWithAvatars,
+}: {
+  card: ProblemCard;
+  messagesWithAvatars: boolean;
+}) {
   return (
     <article className="flex flex-col overflow-hidden rounded-[16px] border border-hairline bg-white">
       <div className="p-[5px]">
@@ -91,7 +106,7 @@ function Card({ card }: { card: ProblemCard }) {
           }`}
         >
           {card.art === "messages" ? (
-            <MessagesThread />
+            <MessagesThread withAvatars={messagesWithAvatars} />
           ) : card.image?.src ? (
             <Image
               src={card.image.src}

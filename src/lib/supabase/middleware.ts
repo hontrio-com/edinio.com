@@ -74,17 +74,37 @@ export async function updateSession(request: NextRequest) {
     return res;
   }
 
+  /*
+   * `mfa_pending` a incetat sa mai fie sursa de adevar (05.08.2026).
+   *
+   * E un cookie trimis de client, cu maxAge 10 minute: expira singur, si oricine
+   * il putea pur si simplu sa nu-l trimita. Adevarul sta acum in baza, in
+   * `mfa_sesiune_confirmata`, si se verifica in poarta comuna (proxy pentru
+   * /api si actiuni, layout-ul de dashboard pentru pagini, `requireAdmin` pentru
+   * /admin). Cookie-ul ramane doar ca SCURTATURA: trimite omul direct la pagina
+   * de cod, fara sa mai atinga baza. Nu mai decide nimic singur.
+   */
   const mfaPending = request.cookies.get("mfa_pending")?.value === "1";
 
   // Authenticated on auth pages → redirect to dashboard
   // EXCEPT: /reset-password (user needs session from recovery link to change password)
-  // EXCEPT: /login/mfa when MFA is pending
+  // EXCEPT: /login/mfa — vezi mai jos
   if (isAuth && user) {
     if (pathname.startsWith("/reset-password")) {
       return supabaseResponse; // let through to complete password reset
     }
-    if (mfaPending && pathname.startsWith("/login/mfa")) {
-      return supabaseResponse; // let through to complete MFA
+    /*
+     * /login/mfa se lasa sa treaca INTOTDEAUNA pentru un utilizator autentificat,
+     * nu doar cand exista cookie-ul.
+     *
+     * Altfel apare o bucla de redirectari din care omul nu mai iese: layout-ul de
+     * dashboard vede sesiunea neconfirmata si trimite la /login/mfa, iar de aici
+     * lipsa cookie-ului (expirat dupa 10 minute, sau alt dispozitiv) l-ar trimite
+     * inapoi la /dashboard. Pentru o sesiune DEJA confirmata pagina e inofensiva:
+     * arata un formular de cod, atat.
+     */
+    if (pathname.startsWith("/login/mfa")) {
+      return supabaseResponse;
     }
     return redirectTo(mfaPending ? "/login/mfa" : "/dashboard");
   }

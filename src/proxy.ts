@@ -8,6 +8,7 @@ import type { Database } from "@/types/database.types";
 // src/lib/platform-hosts.ts.
 import { isPlatformHost, bareHost as gazdaFaraPort } from "@/lib/platform-hosts";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
+import { poartaMfaApi, poartaMfaActiuneServer } from "@/lib/auth/poarta-mfa";
 
 /*
  * Proxy-ul ruleaza la FIECARE cerere, iar cele doua cautari de mai jos intrebau
@@ -44,6 +45,37 @@ const NON_STORE_SEGMENTS = new Set([
 ]);
 
 export async function proxy(request: NextRequest) {
+  /*
+   * POARTA CELUI DE-AL DOILEA FACTOR — inaintea oricarei alte logici.
+   *
+   * Pana la 05.08.2026 singura poarta MFA reala statea in layout-ul de
+   * /dashboard. Doua suprafete intregi treceau pe langa ea:
+   *
+   *   1. /api/** — `config.matcher` de la finalul fisierului EXCLUDEA `api/`,
+   *      deci rutele REST nu ajungeau nici macar aici. Cu doar parola:
+   *      GET /api/products/export dadea tot catalogul, /api/smartbill/pdf
+   *      dadea facturile, POST /api/domains/connect muta magazinul.
+   *   2. Actiunile de server — un POST cu antetul `Next-Action`. Layout-ul NU se
+   *      randeaza inaintea actiunii, deci `updateOrder`, `deleteProduct`,
+   *      `getCustomerOrders` s.a.m.d. rulau nestingherite.
+   *
+   * Aici e singurul loc din aplicatie prin care trec AMANDOUA. Pretul e mic si
+   * platit doar de cine trebuie: fara cookie de sesiune Supabase poarta iese
+   * imediat, deci webhook-urile, cronurile si vizitatorii anonimi nu ating nici
+   * serverul de autentificare, nici baza.
+   */
+  const { pathname: caleCerere } = request.nextUrl;
+
+  if (caleCerere.startsWith("/api/")) {
+    // Iesire DEVREME, dinadins: rutele API nu au ce cauta nici in redirectarea
+    // catre domeniul propriu, nici in rescrierea /{slug} de mai jos. Inainte
+    // erau scoase din matcher; acum intra, dar se opresc aici.
+    return await poartaMfaApi(request);
+  }
+
+  const refuzActiune = await poartaMfaActiuneServer(request);
+  if (refuzActiune) return refuzActiune;
+
   const hostname = request.headers.get("host") ?? "";
   // Normalizat (fara port, minuscule): antetul Host vine de la client si poate
   // sosi cu majuscule, caz in care comparatiile exacte de mai jos ratau.
@@ -152,8 +184,17 @@ export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }
 
+/*
+ * `api/` NU mai e exclus.
+ *
+ * Excluderea lui era cauza structurala a constatarii 2 din auditul din
+ * 05.08.2026: nicio cerere catre /api/** nu ajungea in proxy, deci nu exista
+ * niciun punct comun in care sa pui o verificare pentru cele ~86 de rute.
+ * Comportamentul rutelor nu se schimba — `proxy()` iese pe prima linie pentru
+ * ele, dupa poarta MFA — dar acum EXISTA unde sa pui poarta.
+ */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js)$).*)",
   ],
 };

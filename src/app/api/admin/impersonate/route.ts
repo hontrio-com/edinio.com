@@ -3,6 +3,7 @@ import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { claimuriDinToken } from "@/lib/auth/mfa";
 
 /**
  * Impersonare de cont, pentru suport.
@@ -78,12 +79,52 @@ export async function POST(req: NextRequest) {
     },
   );
 
-  const { error: eroareOtp } = await supabase.auth.verifyOtp({
+  const { data: sesiuneNoua, error: eroareOtp } = await supabase.auth.verifyOtp({
     token_hash: data.properties.hashed_token,
     type: "magiclink",
   });
   if (eroareOtp) {
     return NextResponse.json({ error: "Nu am putut porni sesiunea de impersonare." }, { status: 500 });
+  }
+
+  /*
+   * Sesiunea imprumutata se marcheaza ca trecuta de al doilea factor.
+   *
+   * De la 05.08.2026 poarta MFA intreaba „sesiunea ASTA a fost confirmata?".
+   * Sesiunea creata aici e noua (alt `session_id`), deci fara marcajul de mai jos
+   * administratorul ar ateriza pe /login/mfa si i s-ar cere codul trimis pe
+   * emailul VICTIMEI — adica impersonarea ar deveni inutilizabila exact pentru
+   * conturile care au nevoie cel mai des de suport.
+   *
+   * De ce e legitim: al doilea factor a fost deja cerut si trecut — al
+   * administratorului, in `requireAdminApi()` de la inceputul rutei. Preluarea e
+   * o decizie deliberata a unui operator deja verificat, si e scrisa in jurnalul
+   * de audit cateva linii mai sus.
+   *
+   * Ce NU facem: nu deschidem o portita pe baza cookie-ului `impersonare`.
+   * Cookie-urile vin de la client — o poarta care s-ar uita la el ar putea fi
+   * ocolita trimitand pur si simplu cookie-ul.
+   *
+   * Efect secundar acceptat: coloana tine o singura sesiune, deci daca victima
+   * avea o sesiune confirmata, aceea trebuie reconfirmata. E vizibil, rar si
+   * jurnalizat.
+   */
+  const idSesiuneImprumutata = claimuriDinToken(sesiuneNoua?.session?.access_token)?.session_id;
+  if (idSesiuneImprumutata) {
+    const { error: eroareMarcaj } = await adminClient
+      .from("users_profile")
+      .update({
+        mfa_confirmat_la: new Date().toISOString(),
+        mfa_sesiune_confirmata: idSesiuneImprumutata,
+      } as never)
+      .eq("id", body.userId);
+    if (eroareMarcaj) {
+      console.error("[impersonate] marcarea sesiunii ca verificata a esuat", {
+        userId: body.userId, cod: eroareMarcaj.code, mesaj: eroareMarcaj.message,
+      });
+    }
+  } else {
+    console.error("[impersonate] sesiunea imprumutata nu a putut fi identificata", { userId: body.userId });
   }
 
   // Marcaj vizibil pentru UI + urma in loguri ca sesiunea curenta e imprumutata.

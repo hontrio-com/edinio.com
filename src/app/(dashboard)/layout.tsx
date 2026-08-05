@@ -10,7 +10,7 @@ import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanner";
 import { getInactiveReason } from "@/lib/subscription";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
-import { mfaInAsteptare } from "@/lib/auth/mfa";
+import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
@@ -31,34 +31,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
   /*
    * Poarta MFA, verificata pe SERVER.
    *
-   * Pana acum starea „al doilea factor neterminat" statea doar in cookie-ul
-   * `mfa_pending`, iar middleware-ul se uita la el. Cookie-ul e trimis de client:
-   * cine avea parola primea deja sesiune valida de la signInWithPassword si ii
-   * ajungea sa NU trimita cookie-ul ca sa intre in panou.
+   * SEMANTICA NOUA (05.08.2026). Pana acum se intreba „exista o provocare MFA
+   * neexpirata?", iar raspunsul devenea „nu" dupa 10 minute, cand codul expira —
+   * adica „codul a expirat" insemna „liber". Sesiunea Supabase traieste mult
+   * peste 10 minute, deci cine avea doar parola astepta si intra. Acum se
+   * intreba „sesiunea ASTA a fost confirmata cu al doilea factor?", iar raspunsul
+   * nu se schimba singur cu trecerea timpului. Detaliile in src/lib/auth/mfa.ts.
    *
-   * Sursa de adevar e provocarea din baza (`mfa_otp`, stearsa la verificarea
-   * reusita). Nu costa nicio interogare in plus: profilul e citit oricum aici.
+   * Aceeasi poarta ruleaza acum si in proxy (rute /api/** si actiuni de server)
+   * si in `requireAdmin`, nu doar aici.
+   *
+   * Conditia `!== false` in loc de `=== true`: cand `mfa_email_enabled` e citit
+   * cu succes si e FALS, nu mai punem nicio intrebare — conturile fara al doilea
+   * factor nu platesc nimic si se comporta exact ca inainte. Daca insa citirea
+   * profilului a esuat (`profile` e null), intrebam poarta, care are propria ei
+   * citire cu service role. Varianta veche trata „nu stiu" ca „e in regula".
    */
-  /*
-   * Provocarea MFA se citeste cu SERVICE ROLE, si numai cand MFA e chiar pornit.
-   *
-   * `mfa_otp` e hash-ul codului in curs: citibil de proprietarul randului, devine
-   * unealta pentru chiar atacul de care MFA apara (cine are parola isi citeste
-   * hash-ul si sparge 6 cifre offline). Nu poate ramane in interogarea facuta cu
-   * clientul utilizatorului.
-   *
-   * Conditionarea pe `mfa_email_enabled` — camp nesecret, citit oricum mai sus —
-   * face ca interogarea in plus sa apara DOAR pentru conturile cu MFA activ. Cei
-   * fara MFA nu platesc nimic.
-   */
-  if (profile?.mfa_email_enabled) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const { data: provocare } = await createAdminClient()
-      .from("users_profile")
-      .select("mfa_email_enabled, mfa_otp, mfa_otp_expires_at")
-      .eq("id", user.id)
-      .single();
-    if (mfaInAsteptare(provocare)) redirect("/login/mfa");
+  if (profile?.mfa_email_enabled !== false) {
+    if (await sesiuneCurentaNeconfirmata(user.id)) redirect("/login/mfa");
   }
 
   if (!profile?.onboarding_completed) redirect("/onboarding/details");

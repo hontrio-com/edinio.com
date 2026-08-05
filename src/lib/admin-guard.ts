@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { createClient } from "@/lib/supabase/server";
+import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
 
 /**
  * Garda de administrator de platforma.
@@ -49,6 +50,18 @@ async function areRolInProfil(userId: string): Promise<boolean> {
   return data?.role === "admin";
 }
 
+/**
+ * DE CE AL DOILEA FACTOR SE VERIFICA SI AICI (05.08.2026)
+ *
+ * /admin sta intr-un grup de rute separat — (admin) — deci layout-ul de
+ * /dashboard, unde statea singura poarta MFA, nu se randeaza NICIODATA acolo.
+ * Rezultatul: o parola de administrator furata dadea acces imediat la /admin si
+ * la /api/admin/impersonate, care emite cookie-uri de sesiune complete pentru
+ * ORICE cont. Era calea cea mai scurta de la „am o parola" la „am platforma".
+ *
+ * Verificarea sta in garda, nu in layout, tocmai fiindca rutele /api/admin/**
+ * nu randeaza niciun layout.
+ */
 export async function requireAdmin() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -62,6 +75,10 @@ export async function requireAdmin() {
 
   if (data?.role !== "admin" || !areClaimDeAdmin(user)) redirect("/dashboard");
 
+  // Ordinea conteaza: intai rolul, apoi MFA. Cine nu e admin pleaca la
+  // /dashboard fara sa afle nimic despre existenta panoului de platforma.
+  if (await sesiuneCurentaNeconfirmata(user.id)) redirect("/login/mfa");
+
   return { user, profile: data };
 }
 
@@ -70,6 +87,7 @@ export async function requireAdminApi(): Promise<{ id: string; email?: string } 
   if (!user) return null;
   if (!areClaimDeAdmin(user)) return null;
   if (!(await areRolInProfil(user.id))) return null;
+  if (await sesiuneCurentaNeconfirmata(user.id)) return null;
   return user;
 }
 

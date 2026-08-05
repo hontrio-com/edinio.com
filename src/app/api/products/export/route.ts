@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { refuzaDacaMfaNeconfirmat } from "@/lib/auth/cere-mfa";
 import { parseShippingClasses } from "@/lib/shipping/rules";
 
 // Complete product catalogue export → CSV.
@@ -85,6 +86,11 @@ export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
+
+  // Al doilea strat de poarta MFA (primul e in proxy). Ruta scoate TOT catalogul
+  // — preturi, stocuri, SKU/EAN, variante — deci merita verificata de doua ori.
+  const refuz = await refuzaDacaMfaNeconfirmat(user.id);
+  if (refuz) return refuz;
 
   const { data: biz } = await supabase
     .from("businesses")

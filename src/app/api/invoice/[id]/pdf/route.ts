@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { refuzaDacaMfaNeconfirmat } from "@/lib/auth/cere-mfa";
 import { getInvoicePdfUrl, getSmartbillAuthHeader, isSmartbillConfigured } from "@/lib/smartbill";
 
 export async function GET(
@@ -11,6 +12,10 @@ export async function GET(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
+
+  // Al doilea strat de poarta MFA (primul e in proxy): ruta intoarce facturi.
+  const refuz = await refuzaDacaMfaNeconfirmat(user.id);
+  if (refuz) return refuz;
 
   // RLS ensures the invoice belongs to the authenticated user
   const { data: invoice } = await supabase

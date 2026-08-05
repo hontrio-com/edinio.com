@@ -3,11 +3,37 @@
 import { useState } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { verifyMfaLogin } from "@/lib/actions/auth.actions";
+import { verifyMfaLogin, sendMfaOtp, logout } from "@/lib/actions/auth.actions";
 
+/*
+ * DE CE AU APARUT „Trimite alt cod" SI „Iesi din cont" (05.08.2026)
+ *
+ * De cand poarta MFA intreaba „sesiunea ASTA e confirmata?" si nu „exista un cod
+ * in curs?", pagina se poate deschide si fara ca vreun cod sa fi fost trimis
+ * chiar atunci: sesiune confirmata pe alt dispozitiv si invalidata de o
+ * autentificare noua, intoarcere din resetarea de parola, cod expirat de mult.
+ * Fara un buton de retrimitere, omul ar fi ramas pe un ecran care cere un cod pe
+ * care nu-l are, fara nicio iesire. Actiunile astea DOUA sunt printre putinele
+ * care au voie sa ruleze cu sesiunea neconfirmata (vezi `caleAuth` din
+ * src/lib/auth/poarta-mfa.ts) — tocmai ca sa nu existe fundatura.
+ */
 export default function MfaPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [retrimite, setRetrimite] = useState(false);
+
+  async function onRetrimite() {
+    setRetrimite(true);
+    try {
+      const rezultat = await sendMfaOtp();
+      if (rezultat && "error" in rezultat) toast.error(rezultat.error);
+      else toast.success("Ti-am trimis un cod nou pe email.");
+    } catch {
+      toast.error("Nu am putut trimite codul. Incearca din nou.");
+    } finally {
+      setRetrimite(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -67,7 +93,28 @@ export default function MfaPage() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-xs text-muted-foreground">
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={onRetrimite}
+          disabled={retrimite}
+          className="text-xs font-medium text-primary hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {retrimite ? "Se trimite..." : "Trimite alt cod"}
+        </button>
+        <button
+          type="button"
+          // `logout()` se termina cu `redirect()`, care in Server Actions se
+          // propaga ca o exceptie speciala tratata de router. O prindem ca sa nu
+          // ramana o respingere de promisiune netratata in consola.
+          onClick={async () => { try { await logout(); } catch { /* redirect */ } }}
+          className="text-xs text-muted-foreground hover:underline"
+        >
+          Iesi din cont
+        </button>
+      </div>
+
+      <p className="mt-4 text-center text-xs text-muted-foreground">
         Codul este valabil 10 minute. Daca nu ai primit emailul, verifica folderul Spam.
       </p>
     </>

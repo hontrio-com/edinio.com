@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { refuzaDacaMfaNeconfirmat } from "@/lib/auth/cere-mfa";
 import {
   fetchMerchantPdf,
   getMerchantInvoicePdfUrl,
@@ -11,6 +12,11 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
+
+  // Al doilea strat de poarta MFA (primul e in proxy): ruta intoarce documente
+  // fiscale ale comerciantului.
+  const refuz = await refuzaDacaMfaNeconfirmat(user.id);
+  if (refuz) return refuz;
 
   const { searchParams } = req.nextUrl;
   const orderId = searchParams.get("orderId");

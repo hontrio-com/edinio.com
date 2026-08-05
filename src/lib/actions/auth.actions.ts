@@ -9,7 +9,8 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { sendMfaOtpEmail, sendAccountWelcomeEmail } from "@/lib/email";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita, reseteazaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
-import { mfaInAsteptare } from "@/lib/auth/mfa";
+import { idSesiuneCurenta } from "@/lib/auth/stare-mfa";
+import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
 
 /**
  * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
@@ -86,13 +87,38 @@ async function limitaMfa(userId: string): Promise<{ error: string } | null> {
  *   update({ mfa_otp: sha256("123456"), expires: viitor }) -> isi alege codul
  * si intra. Coloanele sunt acum revocate pentru rolul `authenticated`
  * (migrations/2026-08-04-blindare-mfa.sql), iar scrierile legitime trec pe aici.
+ *
+ * Acelasi rationament acopera si `mfa_confirmat_la` / `mfa_sesiune_confirmata`
+ * (migrations/2026-08-05-poarta-mfa.sql): daca si le-ar putea scrie singur, si-ar
+ * confirma al doilea factor fara sa vada vreun cod.
  */
 async function scrieCampuriMfa(
   userId: string,
-  campuri: { mfa_otp?: string | null; mfa_otp_expires_at?: string | null; mfa_email_enabled?: boolean },
+  campuri: {
+    mfa_otp?: string | null;
+    mfa_otp_expires_at?: string | null;
+    mfa_email_enabled?: boolean;
+    mfa_confirmat_la?: string | null;
+    mfa_sesiune_confirmata?: string | null;
+  },
 ): Promise<void> {
   const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
-  await getAdmin().from("users_profile").update(campuri as never).eq("id", userId);
+  const { error } = await getAdmin().from("users_profile").update(campuri as never).eq("id", userId);
+  /*
+   * Eroarea NU se inghite in tacere. Scrierile de aici sunt exact cele care
+   * decid daca omul intra sau nu: daca `mfa_sesiune_confirmata` nu se scrie,
+   * utilizatorul introduce codul corect si tot nu ajunge in panou. Fara log,
+   * asta arata identic cu „cod gresit" — genul de diagnostic care a costat deja
+   * o sesiune intreaga pe 04.08.2026.
+   */
+  if (error) {
+    console.error("[mfa] scrierea campurilor MFA a esuat", {
+      userId,
+      campuri: Object.keys(campuri),
+      cod: error.code,
+      mesaj: error.message,
+    });
+  }
 }
 
 
@@ -178,7 +204,24 @@ export async function login(formData: { email: string; password: string }) {
 
   if (profile?.mfa_email_enabled) {
     const { otp, otpHash, expiresAt } = generateOtp();
-    await scrieCampuriMfa(user.id, { mfa_otp: otpHash, mfa_otp_expires_at: expiresAt });
+    /*
+     * Sesiunea PORNESTE neconfirmata.
+     *
+     * `signInWithPassword` de mai sus a scris deja cookie-urile de sesiune, deci
+     * din acest moment exista o sesiune valida care NU a trecut de al doilea
+     * factor. Marcajul se pune ODATA cu generarea codului, in aceeasi scriere:
+     * daca s-ar pune abia mai tarziu ar exista o fereastra in care sesiune noua
+     * + confirmare veche arata ca o sesiune confirmata.
+     *
+     * Ce NU se mai intampla: expirarea codului nu mai „elibereaza" contul.
+     * Confirmarea se sterge acum si se pune inapoi DOAR de `verifyMfaLogin`.
+     */
+    await scrieCampuriMfa(user.id, {
+      mfa_otp: otpHash,
+      mfa_otp_expires_at: expiresAt,
+      mfa_confirmat_la: null,
+      mfa_sesiune_confirmata: null,
+    });
     await sendMfaOtpEmail(user.email!, otp);
     const cookieStore = await cookies();
     cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 10 * 60, secure: process.env.NODE_ENV === "production" });
@@ -214,8 +257,30 @@ export async function verifyMfaLogin(code: string): Promise<{ error: string } | 
     return { error: "Cod incorect sau expirat." };
   }
 
+  /*
+   * Confirmarea se leaga de SESIUNEA curenta, prin `session_id`-ul din JWT.
+   *
+   * Fara legatura asta, o simpla data „confirmat la" ar raspunde la intrebarea
+   * gresita: o confirmare veche de trei luni ar valida sesiunea deschisa azi de
+   * cineva care are doar parola. `session_id` e stabil pe toata durata sesiunii
+   * (se pastreaza peste reimprospatarile de token), deci e legatura corecta.
+   *
+   * Daca nu putem citi sesiunea, NU scriem o confirmare fara legatura — ar fi o
+   * confirmare care se aplica oricui.
+   */
+  const idSesiune = await idSesiuneCurenta(supabase);
+  if (!idSesiune) {
+    console.error("[mfa] sesiunea curenta nu a putut fi identificata la verificare", { userId: user.id });
+    return { error: "Nu am putut finaliza autentificarea. Incearca din nou." };
+  }
+
   await reseteazaLimita(`mfa:${user.id}`);
-  await scrieCampuriMfa(user.id, { mfa_otp: null, mfa_otp_expires_at: null });
+  await scrieCampuriMfa(user.id, {
+    mfa_otp: null,
+    mfa_otp_expires_at: null,
+    mfa_confirmat_la: new Date().toISOString(),
+    mfa_sesiune_confirmata: idSesiune,
+  });
   const cookieStore = await cookies();
   cookieStore.delete("mfa_pending");
   revalidatePath("/", "layout");
@@ -254,7 +319,22 @@ export async function verifyAndEnableMfaEmail(code: string): Promise<{ error: st
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
   await reseteazaLimita(`mfa:${user.id}`);
-  await scrieCampuriMfa(user.id, { mfa_email_enabled: true, mfa_otp: null, mfa_otp_expires_at: null });
+  /*
+   * Pornirea MFA din Setari CONFIRMA sesiunea curenta.
+   *
+   * Altfel activarea s-ar intoarce impotriva utilizatorului: in clipa in care
+   * `mfa_email_enabled` devine true, poarta ar gasi o sesiune fara confirmare si
+   * l-ar arunca la /login/mfa — desi tocmai a dovedit ca are acces la email,
+   * introducand codul de aici. Asta ESTE al doilea factor, trecut cu succes.
+   */
+  const idSesiune = await idSesiuneCurenta(supabase);
+  await scrieCampuriMfa(user.id, {
+    mfa_email_enabled: true,
+    mfa_otp: null,
+    mfa_otp_expires_at: null,
+    mfa_confirmat_la: new Date().toISOString(),
+    mfa_sesiune_confirmata: idSesiune,
+  });
   return { success: true };
 }
 
@@ -273,7 +353,16 @@ export async function verifyAndDisableMfaEmail(code: string): Promise<{ error: s
   if (!verifyOtpHash(code.trim(), profile.mfa_otp, profile.mfa_otp_expires_at)) return { error: "Cod incorect sau expirat." };
 
   await reseteazaLimita(`mfa:${user.id}`);
-  await scrieCampuriMfa(user.id, { mfa_email_enabled: false, mfa_otp: null, mfa_otp_expires_at: null });
+  // Cu MFA stins poarta iese pe prima intrebare, deci confirmarea nu mai
+  // inseamna nimic. O stergem oricum: sa nu ramana o legatura veche care ar
+  // „confirma" din start sesiunea existenta daca MFA se reporneste maine.
+  await scrieCampuriMfa(user.id, {
+    mfa_email_enabled: false,
+    mfa_otp: null,
+    mfa_otp_expires_at: null,
+    mfa_confirmat_la: null,
+    mfa_sesiune_confirmata: null,
+  });
   return { success: true };
 }
 
@@ -393,8 +482,10 @@ export async function schimbaParola(
   const lim = await consumaLimita(`schimba-parola:${user.id}`, 5, 900, 900);
   if (!lim.permis) return { error: mesajLimita(lim, "Prea multe incercari. Incearca mai tarziu.") };
 
-  const profil = await citesteCampuriMfa(user.id);
-  if (mfaInAsteptare(profil)) {
+  // Semantica noua: nu „exista un cod in curs?", ci „sesiunea asta a trecut de
+  // al doilea factor?". Diferenta conta chiar aici: inainte, dupa 10 minute
+  // provocarea expira si schimbarea parolei se debloca singura.
+  if (await sesiuneCurentaNeconfirmata(user.id)) {
     return { error: "Finalizeaza autentificarea in doi pasi inainte de a schimba parola." };
   }
 

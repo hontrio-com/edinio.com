@@ -55,14 +55,44 @@ const TONES = {
   deep: "14, 155, 116",
 } as const;
 
+/**
+ * Lățimea la care au fost desenate mărimile de mai jos.
+ *
+ * Toate diametrele și neclaritățile sunt scrise ca pixeli pe un ecran de 1440 și
+ * convertite în `vw`, ca desenul să se micșoreze odată cu ecranul.
+ *
+ * ═══ DE CE, ȘI CE S-A STRICAT FĂRĂ ASTA ═══
+ *
+ * Prima versiune avea diametrele în pixeli FICȘI. Poziția e în procente, deci pe
+ * orice lățime petele stau răsfirate la fel — dar mărimea lor nu se schimba. Pe
+ * un telefon de 390px, o pată de 640px e mai lată decât tot ecranul: toate șase
+ * ajungeau una peste alta, iar verdele lor se aduna. Șase straturi de 0,10-0,17
+ * suprapuse dau vreo 0,55, adică de două ori cât pe desktop, unde la orice punct
+ * se suprapun doar două-trei.
+ *
+ * Asta a și reclamat clientul: „pe mobil parcă e prea concentrat tot verdele ăla
+ * pe mijloc, nu e așa subtil ca pe PC". Nu era o problemă de opacitate, ci de
+ * proporție — de aceea nu se rezolva slăbind culoarea, ci micșorând petele.
+ *
+ * Neclaritatea se scalează ODATĂ cu diametrul, nu rămâne în pixeli. Altfel, pe
+ * telefon, un blur de 84px peste o pată de 173px ar fi topit-o de tot.
+ */
+const REF_WIDTH = 1440;
+
+/** Pixeli la 1440 → `vw`, cu o limită sus ca pe ecrane foarte late să nu crească la nesfârșit. */
+function scaled(px: number): string {
+  return `min(${((px / REF_WIDTH) * 100).toFixed(2)}vw, ${Math.round(px * 1.15)}px)`;
+}
+
 interface Blob {
   /** Poziția centrului, în procente din secțiune. */
   x: number;
   y: number;
-  /** Diametrul, în pixeli. */
+  /** Diametrul în pixeli, măsurat pe un ecran de 1440. Se convertește în `vw`. */
   size: number;
   tone: keyof typeof TONES;
   alpha: number;
+  /** Neclaritatea în pixeli, tot la 1440. Se scalează odată cu diametrul. */
   blur: number;
   /** Care dintre cele patru drumuri din `globals.css`. */
   path: "a" | "b" | "c" | "d";
@@ -129,16 +159,23 @@ const FADE =
 
 function blobStyle(blob: Blob): CSSProperties {
   const rgb = TONES[blob.tone];
+  const size = scaled(blob.size);
 
   return {
     left: `${blob.x}%`,
     top: `${blob.y}%`,
-    width: blob.size,
-    height: blob.size,
-    marginLeft: -blob.size / 2,
-    marginTop: -blob.size / 2,
+    width: size,
+    height: size,
+    /*
+      Centrarea pe punctul de ancorare se face din margini negative, nu din
+      `translate(-50%,-50%)`: `transform` e ocupat de animație, iar prima cheie a
+      animației ar șterge centrarea și toate șase ar sări cu jumătate din lățimea
+      lor în momentul în care pornesc.
+    */
+    marginLeft: `calc(${size} * -0.5)`,
+    marginTop: `calc(${size} * -0.5)`,
     background: `radial-gradient(circle, rgba(${rgb},${blob.alpha}) 0%, rgba(${rgb},${(blob.alpha * 0.38).toFixed(3)}) 48%, transparent 72%)`,
-    filter: `blur(${blob.blur}px)`,
+    filter: `blur(${scaled(blob.blur)})`,
     ["--mesh-path" as string]: `hero-mesh-${blob.path}`,
     ["--mesh-duration" as string]: `${blob.duration}s`,
     ["--mesh-delay" as string]: `${blob.delay}s`,
@@ -149,7 +186,12 @@ export function HeroMesh() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 h-[760px] overflow-hidden"
+      /*
+        Înălțimea scade pe telefon odată cu hero-ul: acolo, conținutul se termină
+        pe la 600px, iar o zonă de lumină de 760px ar fi împins stingerea de jos
+        mult sub buton, unde n-o mai vede nimeni.
+      */
+      className="pointer-events-none absolute inset-x-0 top-0 h-[560px] overflow-hidden sm:h-[680px] lg:h-[760px]"
       style={{ maskImage: FADE, WebkitMaskImage: FADE }}
     >
       {/*
@@ -157,11 +199,6 @@ export function HeroMesh() {
         curat prin care se vede că sunt obiecte separate care se plimbă. Cu el,
         tot capul secțiunii stă într-o lumină, iar petele doar o îngroașă pe
         alocuri.
-
-        Poziționarea petelor se face din `left`/`top` plus margini negative, nu
-        din `translate(-50%,-50%)`: `transform` e ocupat de animație, iar dacă i-am
-        pune și centrarea, prima cheie a animației ar șterge-o și toate cele șase
-        ar sări cu jumătate din lățimea lor în momentul în care pornesc.
       */}
       <div
         className="absolute inset-0"

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyState, exchangeCode, hasContentScope } from "@/lib/google-merchant/oauth";
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription } from "@/lib/google-merchant/client";
 import { DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
@@ -35,7 +36,22 @@ export async function GET(req: NextRequest) {
   // the user back to reconnect and keep the Shopping permission ticked.
   if (!hasContentScope(tok.scope)) return back(req, "gmc=noscope");
 
-  const { data: ss } = await supabase
+  /*
+   * Configul existent se citeste cu SERVICE ROLE, nu cu clientul utilizatorului.
+   *
+   * Vederea `store_settings` nu mai decripteaza pentru `authenticated`, iar
+   * obiectul citit aici se scrie INAPOI intreg mai jos. Orice camp secret venit
+   * ca sir `enc.v1.…` ar fi criptat de declansator inca o data peste el insusi,
+   * si nu s-ar mai putea desface. Azi singurul secret al coloanei
+   * (`refresh_token`) se suprascrie oricum, dar regula tine si pentru campurile
+   * care se adauga maine.
+   *
+   * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE verificata
+   * separat — se face mai sus, pe clientul utilizatorului
+   * (`businesses.id = businessId AND businesses.user_id = user.id`).
+   */
+  const admin = createAdminClient();
+  const { data: ss } = await admin
     .from("store_settings").select("id, google_merchant_config").eq("business_id", businessId).single();
   const config: GoogleMerchantConfig = (ss?.google_merchant_config as GoogleMerchantConfig) ?? {};
   config.refresh_token = tok.refreshToken;

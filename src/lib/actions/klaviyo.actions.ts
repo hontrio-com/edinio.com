@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   pingKlaviyo, getLists, subscribeProfiles, toPublicKlaviyoConfig,
   type KlaviyoConfig, type KlaviyoList, type KlaviyoPublicConfig,
@@ -20,8 +21,20 @@ async function requireOwned(businessId: string): Promise<{ supabase: Supa } | { 
   return { supabase };
 }
 
-async function readConfig(supabase: Supa, businessId: string): Promise<KlaviyoConfig | null> {
-  const { data } = await supabase
+/*
+ * Citirea merge cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * Vederea `store_settings` nu mai decripteaza pentru `authenticated`, deci de
+ * acolo `api_key` ar veni ca sir `enc.v1.…` si ar pleca asa catre Klaviyo, care
+ * ar raspunde „cheie invalida". In plus, tot obiectul se scrie inapoi prin
+ * `writeConfig`, deci valoarea cifrata ar fi criptata a doua oara peste ea
+ * insasi si nu s-ar mai putea desface.
+ *
+ * Service role ocoleste RLS: fiecare apelant trece INTAI prin `requireOwned`
+ * (`businesses.id = businessId AND businesses.user_id = auth.uid()`).
+ */
+async function readConfig(businessId: string): Promise<KlaviyoConfig | null> {
+  const { data } = await createAdminClient()
     .from("store_settings").select("klaviyo_config").eq("business_id", businessId).single();
   return (data?.klaviyo_config as KlaviyoConfig | null) ?? null;
 }
@@ -56,7 +69,7 @@ export async function connectKlaviyo(
   const ping = await pingKlaviyo(key);
   if ("error" in ping) return ping;
 
-  const current = await readConfig(owned.supabase, businessId);
+  const current = await readConfig(businessId);
   const next: KlaviyoConfig = {
     ...(current ?? { enabled: false, api_key: "" }),
     enabled: true,
@@ -76,7 +89,7 @@ export async function getKlaviyoLists(
 ): Promise<{ lists: KlaviyoList[] } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
-  const config = await readConfig(owned.supabase, businessId);
+  const config = await readConfig(businessId);
   if (!config?.api_key) return { error: "Conecteaza-ti contul Klaviyo intai." };
   const res = await getLists(config);
   if ("error" in res) return res;
@@ -96,7 +109,7 @@ export async function saveKlaviyoSettings(
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
-  const current = await readConfig(owned.supabase, businessId);
+  const current = await readConfig(businessId);
   if (!current?.api_key) return { error: "Conecteaza-ti contul Klaviyo intai." };
 
   const next: KlaviyoConfig = {
@@ -134,7 +147,7 @@ export async function syncExistingCustomers(
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
-  const config = await readConfig(owned.supabase, businessId);
+  const config = await readConfig(businessId);
   if (!config?.enabled || !config.api_key || !config.list_id) {
     return { error: "Conecteaza contul si alege o lista intai." };
   }

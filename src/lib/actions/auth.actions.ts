@@ -12,7 +12,7 @@ import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita, reseteazaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
 import { idSesiuneCurenta, uitaStareaMfa } from "@/lib/auth/stare-mfa";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
-import { COOKIE_SESIUNE } from "@/lib/supabase/cookie-sesiune";
+import { COOKIE_SESIUNE, cuDurataNoastra } from "@/lib/supabase/cookie-sesiune";
 import {
   citesteCampuriMfa,
   confirmaSesiuneaMfa,
@@ -136,7 +136,7 @@ export async function login(formData: { email: string; password: string }) {
 
   function scrieSesiunea() {
     for (const { name, value, options } of cookieuriSesiune) {
-      cookieStore.set(name, value, options);
+      cookieStore.set(name, value, cuDurataNoastra(options));
     }
   }
 
@@ -150,10 +150,12 @@ export async function login(formData: { email: string; password: string }) {
   /*
    * Profilul se citeste cu SERVICE ROLE, nu cu clientul utilizatorului.
    *
-   * Doua motive. Unul: clientul de mai sus nu si-a persistat sesiunea nicaieri,
-   * deci nu ne bazam pe el pentru o citire care decide o poarta de securitate.
-   * Doi: `mfa_email_enabled` nu mai e in lista alba de SELECT a rolului
-   * `authenticated` (2026-08-04-DUPA-DEPLOY-coloane-profil.sql).
+   * Motivul: clientul de mai sus nu si-a persistat sesiunea nicaieri, deci nu ne
+   * bazam pe el pentru citirea care decide o poarta de securitate. (`mfa_otp` si
+   * `mfa_otp_expires_at`, pe care le intoarce aceeasi functie, chiar sunt scoase
+   * din lista alba de SELECT a rolului `authenticated`;
+   * `mfa_email_enabled` NU e — il citeste si layout-ul de panou cu clientul
+   * utilizatorului.)
    *
    * ESECUL E DELIBERAT „deschis" AICI si „inchis" IN POARTA: daca citirea cade,
    * autentificarea merge mai departe ca inainte (disponibilitate — nu blocam
@@ -174,7 +176,6 @@ export async function login(formData: { email: string; password: string }) {
     try {
       sigiliu = sigileazaSesiune({
         u: user.id,
-        a: sesiune.access_token,
         r: sesiune.refresh_token,
         e: Date.now() + DURATA_ASTEPTARE_SEC * 1000,
       });
@@ -480,6 +481,18 @@ export async function deleteAccount(parola?: string) {
 
   const lim = await consumaLimita(`sterge-cont:${user.id}`, 3, 900, 900);
   if (!lim.permis) return { error: mesajLimita(lim, "Prea multe incercari. Incearca mai tarziu.") };
+
+  /*
+   * Verificare MFA PROPRIE, ca la `schimbaParola`, nu doar poarta din proxy.
+   *
+   * Operatiunea e ireversibila si sterge magazinele si comenzile. Poarta o
+   * acopera deja, dar exact asta a fost problema pe 05.08: o singura poarta,
+   * intr-un singur loc, se dovedeste ocolibila pe o cale la care nu te astepti.
+   * O actiune ireversibila merita sa nu depinda de un singur strat.
+   */
+  if (await sesiuneCurentaNeconfirmata(user.id)) {
+    return { error: "Finalizeaza autentificarea in doi pasi inainte de a sterge contul." };
+  }
 
   // Reconfirmarea parolei: operatiunea e IREVERSIBILA.
   if (!parola) return { error: "Introdu parola pentru a confirma stergerea." };

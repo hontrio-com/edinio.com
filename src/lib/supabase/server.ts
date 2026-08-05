@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/database.types";
-import { COOKIE_SESIUNE } from "./cookie-sesiune";
+import { COOKIE_SESIUNE, cuDurataNoastra } from "./cookie-sesiune";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -20,7 +20,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, cuDurataNoastra(options))
             );
           } catch {
             // Server component context - ignore

@@ -34,6 +34,11 @@ async function checkAccess(businessId: string): Promise<boolean> {
   return !!data;
 }
 
+// Cheile Woot pleaca la furnizor, deci configul se citeste cu service role:
+// clientul utilizatorului le primeste cifrate (`enc.v1.…`) si autentificarea Woot
+// ar esua. Service role OCOLESTE RLS, deci fiecare apelant e OBLIGAT sa treaca
+// intai prin `checkAccess(businessId)` — altfel un comerciant citeste cheile
+// altuia doar schimband businessId-ul.
 async function loadConfig(businessId: string): Promise<WootConfig | null> {
   const admin = adminClient();
   const { data } = await admin
@@ -56,6 +61,9 @@ export async function saveWootConfig(
   // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
   // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
   // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  // Citirea RAMANE pe clientul utilizatorului: valoarea veche doar se scrie la
+  // loc, nu pleaca spre curier. Chiar daca vine cifrata (`enc.v1.…`), criptarea
+  // e idempotenta, deci secretul se pastreaza neatins.
   const { data: vechi } = await supabase
     .from("store_settings").select("woot_config").eq("business_id", businessId).maybeSingle();
   const configFinal = pastreazaSecretele("woot_config", config, vechi?.woot_config);

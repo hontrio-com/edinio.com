@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
@@ -46,16 +47,24 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
     if (!biz) return { error: "Acces interzis" as const };
   }
 
-  const [{ data: settings }, { data: order }] = await Promise.all([
+  // `fgo_config` se citeste separat, cu SERVICE ROLE. Pe calea manuala
+  // `clientFacturare` intoarce clientul utilizatorului, iar pentru `authenticated`
+  // vederea store_settings nu mai decripteaza: `private_key` ar fi ajuns
+  // `enc.v1.…`, adica hash-ul de autentificare fGO calculat pe o cheie gresita.
+  // Cotele de TVA si comanda NU sunt secrete si raman pe clientul de mai sus.
+  // Proprietarul e verificat mai sus (manual) sau e serverul insusi.
+  const admin = createAdminClient();
+  const [{ data: settings }, { data: secrete }, { data: order }] = await Promise.all([
     supabase.from("store_settings")
-      .select("fgo_config, vat_enabled, vat_rate, prices_include_vat")
+      .select("vat_enabled, vat_rate, prices_include_vat")
       .eq("business_id", businessId).single(),
+    admin.from("store_settings").select("fgo_config").eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
   ]);
 
   if (!order) return { error: "Comanda negasita" as const };
 
-  const config = settings?.fgo_config as FgoConfig | null;
+  const config = secrete?.fgo_config as FgoConfig | null;
   if (!config?.enabled || !config.cod_unic || !config.private_key || !config.serie) {
     return { error: "fGO nu este configurat complet" as const };
   }

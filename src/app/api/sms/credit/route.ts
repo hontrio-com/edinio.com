@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { checkCredit } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 
@@ -15,7 +16,12 @@ export async function GET(req: NextRequest) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
 
-  const { data: settings } = await supabase
+  // Cheia pleaca spre SMSO, deci trebuie sa fie in CLAR: vederea `store_settings`
+  // nu mai decripteaza pentru `authenticated`, iar cu clientul utilizatorului
+  // aici ar ajunge sirul `enc.v1.…` si SMSO ar raspunde „neautorizat".
+  // Service role ocoleste RLS — dreptul asupra magazinului e verificat exact
+  // deasupra (`businesses.user_id = user.id`, 403 daca nu e al lui).
+  const { data: settings } = await createAdminClient()
     .from("store_settings").select("smso_config").eq("business_id", businessId).single();
   const config = settings?.smso_config as SmsoConfig | null;
   if (!config?.api_key) return NextResponse.json({ error: "SMSO nu este configurat." }, { status: 400 });

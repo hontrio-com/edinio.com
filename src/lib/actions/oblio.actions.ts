@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
@@ -52,16 +53,24 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
     if (!biz) return { error: "Acces interzis" as const };
   }
 
-  const [{ data: settings }, { data: order }] = await Promise.all([
+  // `oblio_config` se citeste separat, cu SERVICE ROLE. Pe calea manuala
+  // `clientFacturare` intoarce clientul utilizatorului, iar pentru `authenticated`
+  // vederea store_settings nu mai decripteaza: `client_secret` ar fi ajuns
+  // `enc.v1.…` si `getOblioToken` ar fi primit „credentiale invalide". Cotele de
+  // TVA si comanda NU sunt secrete, deci raman pe clientul de mai sus, unde RLS
+  // decide. Proprietarul e verificat mai sus (manual) sau e serverul insusi.
+  const admin = createAdminClient();
+  const [{ data: settings }, { data: secrete }, { data: order }] = await Promise.all([
     supabase.from("store_settings")
-      .select("oblio_config, prices_include_vat, vat_enabled, vat_rate")
+      .select("prices_include_vat, vat_enabled, vat_rate")
       .eq("business_id", businessId).single(),
+    admin.from("store_settings").select("oblio_config").eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
   ]);
 
   if (!order) return { error: "Comanda negasita" as const };
 
-  const config = settings?.oblio_config as OblioConfig | null;
+  const config = secrete?.oblio_config as OblioConfig | null;
   if (!config?.enabled || !config.client_id || !config.client_secret || !config.cif) {
     return { error: "Oblio nu este configurat complet" as const };
   }

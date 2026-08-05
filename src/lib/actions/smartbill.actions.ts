@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
@@ -39,7 +40,12 @@ async function getConfigForBiz(businessId: string): Promise<SmartbillConfig | { 
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
-  const { data: settings } = await supabase
+  // Tokenul se citeste cu SERVICE ROLE: pentru `authenticated`, vederea
+  // store_settings nu mai decripteaza, deci pe clientul utilizatorului am fi
+  // trimis catre SmartBill sirul `enc.v1.…` in loc de token. Proprietatea e deja
+  // verificata mai sus, deci ocolirea RLS de aici nu deschide alt magazin.
+  const admin = createAdminClient();
+  const { data: settings } = await admin
     .from("store_settings").select("smartbill_config").eq("business_id", businessId).single();
 
   const config = settings?.smartbill_config as SmartbillConfig | null;
@@ -490,7 +496,11 @@ export async function getSmartbillTaxes(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
-  const { data: settings } = await supabase
+  // Tokenul se citeste cu service role (vezi `getConfigForBiz`): clientul
+  // utilizatorului primeste `enc.v1.…`, iar nomenclatorul de cote s-ar fi intors
+  // gol cu „credentiale invalide". Proprietarul e verificat mai sus.
+  const admin = createAdminClient();
+  const { data: settings } = await admin
     .from("store_settings").select("smartbill_config").eq("business_id", businessId).single();
   const config = settings?.smartbill_config as SmartbillConfig | null;
   if (!config?.email || !config.token || !config.company_vat_code) {
@@ -778,7 +788,31 @@ export async function maybeAutoGenerateInvoice(
     // peste RLS; fara el ramane clientul cu sesiune, ca pana acum. Vezi
     // `invoicing-context.ts`.
     const supabase = await clientFacturare(sistem);
-    const { data: settings } = await supabase
+    /*
+     * Pe calea manuala, proprietarul se verifica AICI — nu „la apelant".
+     *
+     * Functia e exportata dintr-un modul „use server", deci e ea insasi o actiune
+     * apelabila din browser, cu orice `businessId`. Cat timp configuratia se citea
+     * cu clientul utilizatorului, RLS raspundea in locul nostru; de cand citirea de
+     * mai jos ocoleste RLS, un apel direct ar incarca tokenul ALTUI comerciant in
+     * memoria serverului. Azi nu pleaca nicaieri (comanda se citeste tot pe clientul
+     * cu sesiune si iese `false`), dar garantia nu are voie sa atarne de ordinea
+     * randurilor de mai jos. Acelasi tipar ca in oblio.actions.ts / fgo.actions.ts.
+     */
+    if (!eSistem(sistem)) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      const { data: biz } = await supabase
+        .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+      if (!biz) return false;
+    }
+    // Configuratia se citeste cu SERVICE ROLE pe AMANDOUA caile: pe cea manuala
+    // `clientFacturare` intoarce clientul utilizatorului, iar acela nu mai
+    // primeste tokenul decriptat, ci `enc.v1.…` — factura ar pleca spre SmartBill
+    // cu o parola care nu e parola. Proprietarul e verificat chiar mai sus (calea
+    // manuala) sau e serverul insusi (calea automata).
+    const admin = createAdminClient();
+    const { data: settings } = await admin
       .from("store_settings").select("smartbill_config").eq("business_id", businessId).single();
 
     const config = settings?.smartbill_config as SmartbillConfig | null;

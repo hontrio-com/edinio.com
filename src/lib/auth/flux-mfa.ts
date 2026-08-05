@@ -144,6 +144,17 @@ export async function trimiteCodMfa(
 
   const { otp, otpHash, expiresAt } = generateOtp();
   await scrieCampuriMfa(userId, { mfa_otp: otpHash, mfa_otp_expires_at: expiresAt });
+  /*
+   * Un cod NOU incepe cu bugetul de incercari intreg.
+   *
+   * Contorul de incercari e pe utilizator, deci cineva care are parola putea sa
+   * greseasca de 5 ori si sa blocheze 15 minute chiar contul victimei — care
+   * primea codul corect pe email si nu-l mai putea folosi. Repetabil la
+   * nesfarsit. Resetarea aici desface blocajul fara sa deschida forta bruta:
+   * codurile noi sunt plafonate la 4 la 15 minute, deci maximul ramane 20 de
+   * incercari pe sfert de ora, din 1.000.000 de combinatii.
+   */
+  await reseteazaLimita(`mfa:${userId}`);
   await sendMfaOtpEmail(email, otp);
   return { success: true };
 }

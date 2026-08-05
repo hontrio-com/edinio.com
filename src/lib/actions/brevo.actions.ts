@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { randomUUID } from "node:crypto";
 import {
   pingBrevo, getLists, ensureAttributes, importContacts, splitName, toPublicBrevoConfig,
@@ -22,8 +23,22 @@ async function requireOwned(businessId: string): Promise<{ supabase: Supa } | { 
   return { supabase };
 }
 
-async function readConfig(supabase: Supa, businessId: string): Promise<BrevoConfig | null> {
-  const { data } = await supabase
+/*
+ * Citirea merge cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * Vederea `store_settings` nu mai decripteaza pentru `authenticated`, iar din
+ * config se folosesc doua secrete reale: `api_key`, care pleaca la fiecare apel
+ * catre Brevo, si `webhook_secret`, care intra in URL-ul de webhook si prin care
+ * ne recunoastem magazinul la dezabonari. Citite cifrat, primul ar da „cheie
+ * invalida", al doilea ar inregistra un webhook mort. In plus, tot obiectul se
+ * scrie inapoi prin `writeConfig`, deci un `enc.v1.…` intors aici ar fi criptat
+ * a doua oara peste el insusi si nu s-ar mai putea desface.
+ *
+ * Service role ocoleste RLS: fiecare apelant trece INTAI prin `requireOwned`
+ * (`businesses.id = businessId AND businesses.user_id = auth.uid()`).
+ */
+async function readConfig(businessId: string): Promise<BrevoConfig | null> {
+  const { data } = await createAdminClient()
     .from("store_settings").select("brevo_config").eq("business_id", businessId).single();
   return (data?.brevo_config as BrevoConfig | null) ?? null;
 }
@@ -58,7 +73,7 @@ export async function connectBrevo(
   const ping = await pingBrevo(key);
   if ("error" in ping) return ping;
 
-  const current = await readConfig(owned.supabase, businessId);
+  const current = await readConfig(businessId);
   const next: BrevoConfig = {
     ...(current ?? { enabled: false, api_key: "" }),
     enabled: true,
@@ -82,7 +97,7 @@ export async function getBrevoLists(
 ): Promise<{ lists: BrevoList[] } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
-  const config = await readConfig(owned.supabase, businessId);
+  const config = await readConfig(businessId);
   if (!config?.api_key) return { error: "Conecteaza-ti contul Brevo intai." };
   const res = await getLists(config);
   if ("error" in res) return res;
@@ -102,7 +117,7 @@ export async function saveBrevoSettings(
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
-  const current = await readConfig(owned.supabase, businessId);
+  const current = await readConfig(businessId);
   if (!current?.api_key) return { error: "Conecteaza-ti contul Brevo intai." };
 
   // Make sure our segmentation attributes exist (retry point if connect could not create them).
@@ -139,7 +154,7 @@ export async function disconnectBrevo(
 ): Promise<{ success: true } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
-  const current = await readConfig(owned.supabase, businessId);
+  const current = await readConfig(businessId);
   if (current?.api_key && current.webhook_id) await deleteWebhook(current, current.webhook_id);
   if (!(await writeConfig(owned.supabase, businessId, null))) return { error: "Eroare la salvare." };
   revalidate();
@@ -157,7 +172,7 @@ export async function syncExistingCustomers(
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
-  const config = await readConfig(owned.supabase, businessId);
+  const config = await readConfig(businessId);
   if (!config?.enabled || !config.api_key || !config.list_id) {
     return { error: "Conecteaza contul si alege o lista intai." };
   }

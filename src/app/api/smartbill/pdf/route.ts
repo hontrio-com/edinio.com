@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { refuzaDacaMfaNeconfirmat } from "@/lib/auth/cere-mfa";
 import {
   fetchMerchantPdf,
@@ -39,8 +40,12 @@ export async function GET(req: NextRequest) {
     .from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return NextResponse.json({ error: "Acces interzis." }, { status: 403 });
 
-  // Fetch SmartBill config
-  const { data: settings } = await supabase
+  // Tokenul se citeste cu SERVICE ROLE: vederea store_settings nu mai
+  // decripteaza pentru `authenticated`, deci pe clientul de mai sus am fi cerut
+  // PDF-ul cu sirul `enc.v1.…` pe post de token si SmartBill ar fi raspuns 401.
+  // Ocolirea RLS e acoperita de verificarea de proprietar de deasupra.
+  const admin = createAdminClient();
+  const { data: settings } = await admin
     .from("store_settings").select("smartbill_config").eq("business_id", order.business_id).single();
 
   const config = settings?.smartbill_config as SmartbillConfig | null;

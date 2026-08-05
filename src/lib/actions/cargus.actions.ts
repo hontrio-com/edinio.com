@@ -4,6 +4,7 @@ import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createCargusAwb,
   deleteCargusAwb,
@@ -33,6 +34,9 @@ export async function saveCargusConfig(
   // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
   // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
   // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  // Citirea RAMANE pe clientul utilizatorului: valoarea veche doar se scrie la
+  // loc, nu pleaca spre curier. Chiar daca vine cifrata (`enc.v1.…`), criptarea
+  // e idempotenta, deci secretul se pastreaza neatins.
   const { data: vechi } = await supabase
     .from("store_settings").select("cargus_config").eq("business_id", businessId).maybeSingle();
   const configFinal = pastreazaSecretele("cargus_config", config, vechi?.cargus_config);
@@ -97,8 +101,13 @@ async function getConfigAndOrder(businessId: string, orderId: string) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" as const };
 
+  // Configul se citeste cu service role: vederea public.store_settings nu mai
+  // decripteaza pentru `authenticated`, deci pe clientul utilizatorului parola si
+  // Subscription Key ar veni `enc.v1.…` si Cargus ar respinge orice AWB. Service
+  // role OCOLESTE RLS — de aceea proprietatea magazinului se verifica mai sus.
+  const admin = createAdminClient();
   const [{ data: settings }, { data: order }] = await Promise.all([
-    supabase.from("store_settings")
+    admin.from("store_settings")
       .select("cargus_config")
       .eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
@@ -180,7 +189,11 @@ export async function requestCargusPickupAction(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
-  const { data: settings } = await supabase
+  // Service role, ca in getConfigAndOrder: parola si Subscription Key merg la
+  // Cargus, iar clientul utilizatorului le primeste cifrate. Proprietatea
+  // magazinului e verificata chiar deasupra, fiindca service role sare peste RLS.
+  const admin = createAdminClient();
+  const { data: settings } = await admin
     .from("store_settings").select("cargus_config").eq("business_id", businessId).single();
   const config = settings?.cargus_config as CargusConfig | null;
   if (!config?.enabled || !config.username || !config.password || !config.subscription_key) {

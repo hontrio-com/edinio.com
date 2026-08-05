@@ -47,16 +47,35 @@ export const COOKIE_ASTEPTARE = "mfa_asteptare";
 /** Cat traieste sigiliul. Aceeasi durata ca a codului din email. */
 export const DURATA_ASTEPTARE_SEC = 10 * 60;
 
+/**
+ * DE CE NU E SI ACCESS TOKEN-UL AICI.
+ *
+ * Prima varianta pastra si `access_token`, si se emitea sesiunea cu `setSession`.
+ * Un JWT Supabase are ~1 KB, dar creste cu `user_metadata`; sigilat si trecut prin
+ * base64 inseamna ~1,34x, iar cookie-urile au o limita de 4096 de octeti. Peste ea,
+ * browserul arunca cookie-ul IN TACERE — si cum cookie-urile de sesiune tocmai
+ * fusesera sterse, omul ramanea cu un cod corect pe email si nicio cale de a-l
+ * folosi. La fiecare incercare. Pentru acel cont, permanent.
+ *
+ * Cu doar `refresh_token` (~40 de caractere), sigiliul are cateva sute de octeti
+ * indiferent cat de mare e JWT-ul, si clasa asta de defect dispare. Sesiunea se
+ * emite din el, cu `refreshSession`.
+ */
 export interface SesiuneInAsteptare {
   /** id-ul utilizatorului care a trecut de parola */
   u: string;
-  /** access token-ul sesiunii nescrise */
-  a: string;
   /** refresh token-ul sesiunii nescrise */
   r: string;
   /** cand expira sigiliul, in milisecunde epoch */
   e: number;
 }
+
+/**
+ * Plafon de siguranta. Nu ar trebui atins niciodata (sigiliul are cateva sute de
+ * octeti), dar daca cineva mai adauga vreodata un camp gras aici, prefer o
+ * eroare vizibila la login in locul unei blocari tacute pe viata.
+ */
+export const MAX_OCTETI_SIGILIU = 3500;
 
 function cheie(): Buffer {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -75,9 +94,13 @@ export function sigileazaSesiune(date: SesiuneInAsteptare): string {
     cifru.update(JSON.stringify(date), "utf8"),
     cifru.final(),
   ]);
-  return [iv, cifru.getAuthTag(), continut]
+  const sigiliu = [iv, cifru.getAuthTag(), continut]
     .map((b) => b.toString("base64url"))
     .join(".");
+  if (sigiliu.length > MAX_OCTETI_SIGILIU) {
+    throw new Error(`Sigiliul depaseste limita de cookie (${sigiliu.length} octeti)`);
+  }
+  return sigiliu;
 }
 
 /**
@@ -99,7 +122,6 @@ export function desigileazaSesiune(valoare: string | undefined | null): SesiuneI
     const clar = Buffer.concat([descifru.update(continut), descifru.final()]).toString("utf8");
     const date = JSON.parse(clar) as SesiuneInAsteptare;
     if (typeof date?.u !== "string" || !date.u) return null;
-    if (typeof date?.a !== "string" || !date.a) return null;
     if (typeof date?.r !== "string" || !date.r) return null;
     if (typeof date?.e !== "number" || date.e <= Date.now()) return null;
     return date;

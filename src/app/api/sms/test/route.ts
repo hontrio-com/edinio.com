@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/smso";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
@@ -54,7 +55,12 @@ export async function POST(req: NextRequest) {
     const { data: biz } = await supabase
       .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
     if (biz) {
-      const { data: st } = await supabase
+      // Cheia pleaca spre SMSO, deci trebuie sa fie in CLAR: vederea
+      // `store_settings` nu mai decripteaza pentru `authenticated`, iar cu
+      // clientul utilizatorului aici ar ajunge sirul `enc.v1.…` si SMS-ul de
+      // test ar esua cu „credentiale invalide". Service role ocoleste RLS —
+      // verificarea de proprietate e chiar linia de deasupra.
+      const { data: st } = await createAdminClient()
         .from("store_settings").select("smso_config").eq("business_id", businessId).single();
       cheie = ((st?.smso_config as { api_key?: string } | null)?.api_key ?? "").trim();
     }

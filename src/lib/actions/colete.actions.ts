@@ -53,6 +53,9 @@ export async function saveCOConfig(
   // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
   // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
   // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  // Citirea RAMANE pe clientul utilizatorului: valoarea veche doar se scrie la
+  // loc, nu pleaca spre curier. Chiar daca vine cifrata (`enc.v1.…`), criptarea
+  // e idempotenta, deci secretul se pastreaza neatins.
   const { data: vechi } = await supabase
     .from("store_settings").select("colete_config").eq("business_id", businessId).maybeSingle();
   const configFinal = pastreazaSecretele("colete_config", config, vechi?.colete_config);

@@ -8,7 +8,7 @@ import { claimuriDinToken } from "@/lib/auth/mfa";
 import { idSesiuneCurenta } from "@/lib/auth/stare-mfa";
 import { confirmaSesiuneaMfa, verificaCodMfa } from "@/lib/auth/flux-mfa";
 import { COOKIE_ASTEPTARE, desigileazaSesiune } from "@/lib/auth/sesiune-asteptare";
-import { COOKIE_SESIUNE } from "@/lib/supabase/cookie-sesiune";
+import { COOKIE_SESIUNE, cuDurataNoastra } from "@/lib/supabase/cookie-sesiune";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 
 /**
@@ -73,10 +73,16 @@ export async function POST(req: NextRequest) {
       },
     );
 
-    // Abia ACUM se emite sesiunea. Ordinea nu e negociabila: verificarea codului
-    // e mai sus, deci un cod gresit nu ajunge niciodata sa scrie vreun cookie.
-    const { data, error } = await supabase.auth.setSession({
-      access_token: asteptare.a,
+    /*
+     * Abia ACUM se emite sesiunea. Ordinea nu e negociabila: verificarea codului
+     * e mai sus, deci un cod gresit nu ajunge niciodata sa scrie vreun cookie.
+     *
+     * `refreshSession` si nu `setSession`: sigiliul poarta DOAR refresh tokenul,
+     * ca sa nu depinda de marimea JWT-ului (vezi sesiune-asteptare.ts). Tokenul e
+     * nefolosit — cookie-urile nu s-au scris niciodata — deci rotatia il accepta,
+     * iar `session_id` se pastreaza peste reimprospatare.
+     */
+    const { data, error } = await supabase.auth.refreshSession({
       refresh_token: asteptare.r,
     });
     if (error || !data.session) {
@@ -87,7 +93,11 @@ export async function POST(req: NextRequest) {
         { error: "Sesiune expirata. Autentifica-te din nou." },
         { status: 401 },
       );
+      // Si `mfa_pending`: fara el, omul ar ramane cu un cookie care il trimite
+      // la /login/mfa din orice atingere de panou, dar fara sigiliul care ar
+      // face pagina aceea utila.
       expirat.cookies.delete(COOKIE_ASTEPTARE);
+      expirat.cookies.delete("mfa_pending");
       return expirat;
     }
 
@@ -102,7 +112,7 @@ export async function POST(req: NextRequest) {
     const raspuns = NextResponse.json({
       catre: rezultat.onboardingFinalizat ? "/dashboard" : "/onboarding/details",
     });
-    for (const { name, value, options } of deScris) raspuns.cookies.set(name, value, options);
+    for (const { name, value, options } of deScris) raspuns.cookies.set(name, value, cuDurataNoastra(options));
     raspuns.cookies.delete(COOKIE_ASTEPTARE);
     raspuns.cookies.delete("mfa_pending");
     if (rezultat.onboardingFinalizat) {

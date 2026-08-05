@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import { consumaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import {
   testNoticeToken, getNoticeTemplates, sendNoticeSms, sendNoticeWhatsapp, sendNoticeAudio,
   registerNoticeWaDevice, refreshNoticeWaQr, requestNoticeWaPairing,
@@ -35,12 +37,20 @@ const EMPTY_CONFIG: NoticeConfig = { enabled: false, api_token: "", strip_diacri
 
 // Read-modify-write the store's notice_config jsonb (server-managed fields like
 // whatsapp.device_id / webhook_secret live here and must survive client saves).
+//
+// Partea CITITA merge pe service role: vederea `store_settings` nu mai
+// decripteaza pentru `authenticated`, deci `api_token` si `webhook_secret` ar
+// veni de acolo ca siruri `enc.v1.…` si s-ar scrie inapoi criptate inca o data
+// peste ele insele — tokenul si webhook-ul magazinului s-ar pierde definitiv.
+// Scrierea ramane pe clientul utilizatorului, ca RLS sa se aplice mai departe;
+// service role ocoleste RLS, iar dreptul asupra magazinului l-a verificat deja
+// `requireOwned` in fiecare apelant.
 async function mergeNoticeConfig(
   supabase: Supa,
   businessId: string,
   mutate: (c: NoticeConfig) => NoticeConfig,
 ): Promise<NoticeConfig | { error: string }> {
-  const { data } = await supabase
+  const { data } = await createAdminClient()
     .from("store_settings").select("business_id, notice_config").eq("business_id", businessId).single();
   const current = (data?.notice_config as NoticeConfig | null) ?? EMPTY_CONFIG;
   const next = mutate({ ...current });
@@ -60,23 +70,51 @@ export async function updateNoticeConfig(
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
+  // `_completate` e harta pentru interfata, pusa de `mascheazaConfig` peste config
+  // la incarcarea paginii — nu e un camp al integrarii. Clientul o primeste odata
+  // cu restul formularului si o trimite inapoi la salvare; fara linia asta ajunge
+  // SCRISA in `notice_config` si de acolo se reintoarce la fiecare salvare
+  // urmatoare. (`pastreazaSecretele` o sterge pe celelalte 15 integrari; calea
+  // asta nu trece prin el.)
+  const primit: NoticeConfig = { ...config };
+  delete (primit as { _completate?: unknown })._completate;
+
   const saved = await mergeNoticeConfig(owned.supabase, businessId, (current) => ({
-    ...config,
+    ...primit,
     // Server-managed fields the client must never clobber: the WhatsApp connection
     // state is owned entirely by the connect/disconnect/poll actions (a stale client
     // copy could otherwise flip it off on save), and the webhook secret persists.
-    webhook_secret: config.webhook_secret || current.webhook_secret || randomUUID(),
+    //
+    // `webhook_secret` NU se mai ia deloc de la client, desi pana acum copia lui
+    // avea intaietate. E criptat in baza si formularul il primeste doar ca sa-l
+    // AFISEZE; de cand vederea nu mai decripteaza pentru `authenticated`, ce
+    // trimite clientul inapoi poate fi sirul `enc.v1.…`, iar scris asa ar fi
+    // criptat a doua oara si niciun webhook n-ar mai gasi magazinul. Campul e
+    // oricum „server-managed", cum scrie mai sus — acum si in fapt.
+    webhook_secret: current.webhook_secret || randomUUID(),
     // `api_token` ajunge in formular MASCAT (gol), deci trebuie pastrat la fel ca
     // `webhook_secret`. Fara linia asta, prima salvare obisnuita il sterge si se
     // opresc SMS-urile si WhatsApp-ul catre clientii magazinului.
-    api_token: config.api_token || current.api_token,
+    api_token: primit.api_token || current.api_token,
     whatsapp: current.whatsapp,
   }));
   if ("error" in saved) return saved;
 
   revalidatePath("/dashboard/features/notice");
   revalidatePath("/dashboard/features");
-  return { success: true, config: saved };
+  /*
+   * Raspunsul MERGE LA BROWSER: `NoticeConfigClient` face `setConfig(res.config)`
+   * dupa salvare. Iar `saved` contine tokenul REAL — `current` vine de la
+   * `mergeNoticeConfig`, care din 2026-08-05 citeste cu service role, deci
+   * decriptat, si linia de mai sus il pune la loc tocmai fiindca formularul l-a
+   * trimis gol.
+   *
+   * Deci fara masca de aici, salvarea ar fi trimis in clar exact secretul pe care
+   * pagina si `getNoticeConfig` il ascund cu grija — si l-ar fi trimis la FIECARE
+   * apasare pe „Salveaza", nu doar la incarcare. Aceeasi masca, acelasi
+   * `_completate`, aceeasi forma ca la incarcarea paginii.
+   */
+  return { success: true, config: (mascheazaConfig("notice_config", saved) as NoticeConfig | null) ?? EMPTY_CONFIG };
 }
 
 // Validate the token by making an authenticated call (templates list). Free — no SMS sent.
@@ -267,12 +305,18 @@ export async function disconnectNoticeWhatsapp(
  * Se aplica la TOATE cele sase actiuni care consuma tokenul, nu doar la testele
  * de trimitere: si validarea conexiunii, si lista de sabloane, si imperecherea
  * WhatsApp treceau prin aceeasi valoare.
+ *
+ * Citirea din baza merge pe SERVICE ROLE, fiindca tokenul pleaca spre notice.ro
+ * si trebuie sa fie in clar: vederea `store_settings` nu mai decripteaza pentru
+ * `authenticated`, deci cu clientul utilizatorului am trimite sirul `enc.v1.…` si
+ * am primi „neautorizat" — adica exact simptomul pe care functia asta il repara.
+ * Service role ocoleste RLS, de aceea `requireOwned` ramane INAINTE de citire.
  */
 async function tokenulNotice(businessId: string, primit: string): Promise<string> {
   if (primit.trim()) return primit.trim();
   const owned = await requireOwned(businessId);
   if ("error" in owned) return "";
-  const { data } = await owned.supabase
+  const { data } = await createAdminClient()
     .from("store_settings").select("notice_config").eq("business_id", businessId).single();
   const cfg = (data?.notice_config as NoticeConfig | null) ?? EMPTY_CONFIG;
   return (cfg.api_token ?? "").trim();
@@ -331,10 +375,22 @@ export async function getNoticeInbox(businessId: string): Promise<{ items: Notic
 
 // Re-read the stored config — used by the client to sync server-managed fields
 // (whatsapp device + webhook secret) after a WhatsApp connect/disconnect.
+//
+// Citirea merge pe service role fiindca `webhook_secret` e criptat in baza si
+// clientul chiar are nevoie de valoarea REALA: din ea isi compune URL-ul de
+// webhook pe care comerciantul il lipeste in contul lui de notice.ro. Cu clientul
+// utilizatorului ar primi sirul `enc.v1.…` si ar afisa un URL pe care nicio
+// notificare nu l-ar mai potrivi cu vreun magazin.
+//
+// Fiindca service role decripteaza TOT, raspunsul trece obligatoriu prin
+// `mascheazaConfig`: `api_token` pleaca gol spre browser, insotit de `_completate`,
+// exact ca la incarcarea paginii. Altfel citirea asta ar redeschide, mai larg,
+// chiar gaura pentru care s-a scris migratia.
 export async function getNoticeConfig(businessId: string): Promise<{ config: NoticeConfig } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
-  const { data } = await owned.supabase
+  const { data } = await createAdminClient()
     .from("store_settings").select("notice_config").eq("business_id", businessId).single();
-  return { config: (data?.notice_config as NoticeConfig | null) ?? EMPTY_CONFIG };
+  const mascat = mascheazaConfig("notice_config", data?.notice_config) as NoticeConfig | null;
+  return { config: mascat ?? EMPTY_CONFIG };
 }

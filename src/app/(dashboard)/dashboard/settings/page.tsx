@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -125,7 +126,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -134,6 +135,43 @@ async function ContinutSetari({
   const business = bizRow ? { id: bizRow.id, business_name: bizRow.business_name, address: bizRow.address, city: bizRow.city, county: bizRow.county, phone: bizRow.phone, email: bizRow.email, cui: bizRow.cui, reg_com: bizRow.reg_com, custom_domain: bizRow.custom_domain } : null;
   const rawSettings = bizRow?.store_settings;
   const storeSettings = Array.isArray(rawSettings) ? rawSettings[0] ?? null : rawSettings ?? null;
+
+  /*
+   * Cheia SMSO se citeste separat, cu service role.
+   *
+   * Din 2026-08-05 `privat.decripteaza_config` nu mai decripteaza pentru
+   * `anon`/`authenticated`, deci pe clientul comerciantului campul ar sosi
+   * `enc.v1.…`. Aici nu e doar afisare: fila SMS din SettingsClient trimite
+   * cheia mai departe catre SMSO pentru SMS-ul de test (`/api/sms/test`, cu
+   * `api_key` in corp). Cu textul cifrat in mana, furnizorul raspunde „cheie
+   * invalida" pe o cheie care e, de fapt, corecta in baza — si comerciantul
+   * ajunge sa o schimbe degeaba.
+   *
+   * CE NU SE INTAMPLA, ca sa nu se caute o paguba care nu exista: valoarea
+   * intoarsa in formular NU se pierde la salvare. `privat.cripteaza` sare peste
+   * orice sir care incepe deja cu `enc.v1.` (vezi 2026-08-04-criptare-
+   * credentiale.sql, „marcajul `enc.v1.` face totul IDEMPOTENT"), deci un
+   * dus-intors ar rescrie exact acelasi text cifrat. Se strica APELUL catre
+   * furnizor, nu randul din baza.
+   *
+   * Restul configuratiilor de pe pagina raman pe clientul comerciantului: din
+   * ele se citesc doar steaguri („e configurat?"), iar `enc.v1.…` e un sir
+   * negol, deci raspunsul ramane acelasi.
+   *
+   * PROPRIETATEA, fiindca service role ocoleste RLS: `bizRow` a fost adus mai
+   * sus cu clientul comerciantului, filtrat pe `user_id = userId`, iar `userId`
+   * e chiar sesiunea (`getCachedUser` in parinte). Citirea de mai jos e legata
+   * de `bizRow.id`, deci de un magazin despre care s-a dovedit deja ca e al lui.
+   */
+  let smsoSettings: Record<string, unknown> | null = null;
+  if (bizRow?.id) {
+    const { data: randSmso } = await createAdminClient()
+      .from("store_settings")
+      .select("smso_config")
+      .eq("business_id", bizRow.id)
+      .single();
+    smsoSettings = (randSmso?.smso_config as Record<string, unknown> | null) ?? null;
+  }
 
   // One Product Store (Settings > Tip magazin): current mode + active products picker.
   const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
@@ -242,9 +280,9 @@ async function ContinutSetari({
         new_order: (storeSettings?.notifications_config as Record<string, unknown>)?.new_order !== false,
       }}
       smsoConfig={{
-        enabled: (storeSettings?.smso_config as Record<string, unknown>)?.enabled === true,
-        api_key: (storeSettings?.smso_config as Record<string, unknown>)?.api_key as string ?? "",
-        sender_id: (storeSettings?.smso_config as Record<string, unknown>)?.sender_id as string ?? "",
+        enabled: smsoSettings?.enabled === true,
+        api_key: smsoSettings?.api_key as string ?? "",
+        sender_id: smsoSettings?.sender_id as string ?? "",
       }}
       shippingConfig={{
         shipping_enabled: storeSettings?.shipping_enabled ?? false,

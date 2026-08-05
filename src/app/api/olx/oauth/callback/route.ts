@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyState, exchangeCode } from "@/lib/olx/oauth";
 import { getMe, isOlxError } from "@/lib/olx/client";
 import type { OlxConfig } from "@/lib/olx/types";
@@ -30,7 +31,21 @@ export async function GET(req: NextRequest) {
   if ("error" in tok) return back(req, "olx=error");
   if (!tok.refreshToken) return back(req, "olx=norefresh");
 
-  const { data: ss } = await supabase
+  /*
+   * Configul existent se citeste cu SERVICE ROLE, nu cu clientul utilizatorului.
+   *
+   * Vederea `store_settings` nu mai decripteaza pentru `authenticated`, iar
+   * obiectul citit aici se scrie INAPOI intreg mai jos. Un `access_token` sau un
+   * `refresh_token` venit ca sir `enc.v1.…` ar fi criptat de declansator inca o
+   * data peste el insusi, si nu s-ar mai putea desface — magazinul ar ramane
+   * fara conexiunea OLX, fara nicio eroare.
+   *
+   * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE verificata
+   * separat — se face mai sus, pe clientul utilizatorului
+   * (`businesses.id = businessId AND businesses.user_id = user.id`).
+   */
+  const admin = createAdminClient();
+  const { data: ss } = await admin
     .from("store_settings").select("id, olx_config").eq("business_id", businessId).single();
   const config: OlxConfig = (ss?.olx_config as OlxConfig) ?? {};
   config.connected = true;

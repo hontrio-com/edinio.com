@@ -29,6 +29,23 @@ import type { CookieOptions } from "@supabase/ssr";
  * DE CE 30 DE ZILE nu ii da afara pe cei activi: cookie-ul se rescrie la fiecare
  * reimprospatare de token, adica la fiecare navigare prin proxy. Fereastra se
  * inchide doar pentru cine chiar nu a mai intrat 30 de zile.
+ *
+ * ---------------------------------------------------------------------------
+ * ATENTIE: `maxAge` DE AICI NU AJUNGE LA COOKIE. Nu-l sterge crezand ca merge.
+ *
+ * @supabase/ssr construieste optiunile de scriere asa
+ * (node_modules/@supabase/ssr/dist/main/cookies.js:357-361 si :202-206):
+ *
+ *     { ...DEFAULT_COOKIE_OPTIONS, ...cookieOptions, maxAge: DEFAULT_COOKIE_OPTIONS.maxAge }
+ *
+ * `maxAge` vine ULTIMUL si forteaza implicitul bibliotecii, adica 400 de zile
+ * (utils/constants.js:10). `sameSite`, `path` si `secure` chiar se aplica; durata
+ * nu. De aceea exista `cuDurataNoastra` mai jos, care o pune inapoi in fiecare
+ * `setAll` scris de noi.
+ *
+ * Ce ramane in afara: reimprospatarile facute EXCLUSIV de `createBrowserClient`,
+ * intr-o fila lasata deschisa fara nicio navigare. Acolo scrie biblioteca, nu
+ * noi. Nu se poate corecta fara sa reimplementam adaptorul de cookie-uri.
  */
 export const COOKIE_SESIUNE: CookieOptions = {
   maxAge: 60 * 60 * 24 * 30,
@@ -36,3 +53,15 @@ export const COOKIE_SESIUNE: CookieOptions = {
   path: "/",
   secure: process.env.NODE_ENV === "production",
 };
+
+/**
+ * Pune durata NOASTRA peste ce a decis biblioteca, pastrand restul optiunilor.
+ *
+ * Se cheama in fiecare `setAll` propriu. Cookie-urile de STERGERE (`maxAge: 0`)
+ * se lasa in pace: acolo zero chiar inseamna „sterge acum".
+ */
+export function cuDurataNoastra(optiuni?: CookieOptions): CookieOptions | undefined {
+  if (!optiuni) return { maxAge: COOKIE_SESIUNE.maxAge };
+  if (optiuni.maxAge === 0) return optiuni;
+  return { ...optiuni, maxAge: COOKIE_SESIUNE.maxAge };
+}

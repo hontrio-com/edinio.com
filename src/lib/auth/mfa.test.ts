@@ -118,15 +118,23 @@ test("lista nu creste la nesfarsit si nu are duplicate", () => {
 });
 
 test("sigiliul se desface doar de cine are cheia", () => {
-  const date = { u: "user-1", a: "access", r: "refresh", e: Date.now() + 60_000 };
+  const date = { u: "user-1", r: "refresh", e: Date.now() + 60_000 };
   const sigiliu = sigileazaSesiune(date);
   assert.notEqual(sigiliu, "");
   assert.ok(!sigiliu.includes("refresh"), "tokenurile nu apar in clar in cookie");
   assert.deepEqual(desigileazaSesiune(sigiliu), date);
 });
 
+test("sigiliul incape intr-un cookie, oricat de mare ar fi JWT-ul", () => {
+  // Regresia pe care o apara: prima varianta pastra si access token-ul, iar un
+  // JWT gras impingea sigiliul peste 4096 de octeti. Browserul il arunca in
+  // tacere, iar omul ramanea cu codul corect si nicio cale de a-l folosi.
+  const sigiliu = sigileazaSesiune({ u: "user-1", r: "r".repeat(120), e: Date.now() + 60_000 });
+  assert.ok(sigiliu.length < 1000, `sigiliul are ${sigiliu.length} octeti`);
+});
+
 test("sigiliul modificat e refuzat, nu acceptat partial", () => {
-  const sigiliu = sigileazaSesiune({ u: "user-1", a: "a", r: "r", e: Date.now() + 60_000 });
+  const sigiliu = sigileazaSesiune({ u: "user-1", r: "r", e: Date.now() + 60_000 });
   const [iv, tag, continut] = sigiliu.split(".");
   const stricat = continut.slice(0, -2) + (continut.endsWith("AA") ? "BB" : "AA");
   assert.equal(desigileazaSesiune(`${iv}.${tag}.${stricat}`), null);
@@ -135,6 +143,6 @@ test("sigiliul modificat e refuzat, nu acceptat partial", () => {
 });
 
 test("sigiliul expirat nu mai deschide nimic", () => {
-  const sigiliu = sigileazaSesiune({ u: "user-1", a: "a", r: "r", e: Date.now() - 1 });
+  const sigiliu = sigileazaSesiune({ u: "user-1", r: "r", e: Date.now() - 1 });
   assert.equal(desigileazaSesiune(sigiliu), null);
 });

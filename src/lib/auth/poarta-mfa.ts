@@ -168,7 +168,18 @@ async function evalueazaCerere(
     return { refuz: null, trecere };
   }
 
-  return { refuz: refuz(request), trecere };
+  /*
+   * Refuzul duce mai departe cookie-urile reimprospatate de `getSession()`.
+   *
+   * Fara asta, pe calea de rezerva tokenul se rotea, dar `Set-Cookie` se pierdea
+   * odata cu raspunsul de trecere aruncat — adica exact modul de esec pe care
+   * comentariul lui `claimuriDinCookieuri` il descrie ca evitat: browserul ramane
+   * cu tokenul vechi si urmatoarea reimprospatare porneste de la un refresh token
+   * deja rotit.
+   */
+  const respins = refuz(request);
+  trecere.cookies.getAll().forEach((c) => respins.cookies.set(c));
+  return { refuz: respins, trecere };
 }
 
 /**

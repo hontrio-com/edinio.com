@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { randomUUID } from "node:crypto";
 import {
   pingMailchimp, getAudiences, batchUpsert, splitName, toPublicMailchimpConfig,
@@ -23,8 +24,22 @@ async function requireOwned(businessId: string): Promise<{ supabase: Supa } | { 
   return { supabase };
 }
 
-async function readConfig(supabase: Supa, businessId: string): Promise<MailchimpConfig | null> {
-  const { data } = await supabase
+/*
+ * Citirea merge cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * Vederea `store_settings` nu mai decripteaza pentru `authenticated`, iar din
+ * config se folosesc doua secrete reale: `api_key`, care pleaca la fiecare apel
+ * catre Mailchimp, si `webhook_secret`, care intra in URL-ul de webhook si prin
+ * care ne recunoastem magazinul la dezabonari. Citite cifrat, primul ar da
+ * „cheie invalida", al doilea ar inregistra un webhook mort. In plus, tot
+ * obiectul se scrie inapoi prin `writeConfig`, deci un `enc.v1.…` intors aici ar
+ * fi criptat a doua oara peste el insusi si nu s-ar mai putea desface.
+ *
+ * Service role ocoleste RLS: fiecare apelant trece INTAI prin `requireOwned`
+ * (`businesses.id = businessId AND businesses.user_id = auth.uid()`).
+ */
+async function readConfig(businessId: string): Promise<MailchimpConfig | null> {
+  const { data } = await createAdminClient()
     .from("store_settings").select("mailchimp_config").eq("business_id", businessId).single();
   return (data?.mailchimp_config as MailchimpConfig | null) ?? null;
 }
@@ -59,7 +74,7 @@ export async function connectMailchimp(
   const ping = await pingMailchimp(key);
   if ("error" in ping) return ping;
 
-  const current = await readConfig(owned.supabase, businessId);
+  const current = await readConfig(businessId);
   const next: MailchimpConfig = {
     ...(current ?? { enabled: false, api_key: "", server_prefix: "" }),
     enabled: true,
@@ -82,7 +97,7 @@ export async function getMailchimpAudiences(
 ): Promise<{ audiences: MailchimpAudience[] } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
-  const config = await readConfig(owned.supabase, businessId);
+  const config = await readConfig(businessId);
   if (!config?.api_key || !config?.server_prefix) return { error: "Conecteaza-ti contul Mailchimp intai." };
   const res = await getAudiences(config);
   if ("error" in res) return res;
@@ -104,7 +119,7 @@ export async function saveMailchimpSettings(
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
-  const current = await readConfig(owned.supabase, businessId);
+  const current = await readConfig(businessId);
   if (!current?.api_key) return { error: "Conecteaza-ti contul Mailchimp intai." };
 
   const next: MailchimpConfig = {
@@ -172,7 +187,7 @@ export async function syncExistingCustomers(
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
-  const config = await readConfig(owned.supabase, businessId);
+  const config = await readConfig(businessId);
   if (!config?.enabled || !config.api_key || !config.audience_id) {
     return { error: "Conecteaza contul si alege o audienta intai." };
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyState, exchangeCode } from "@/lib/google-analytics/oauth";
 import { listAccountSummaries, listDataStreams } from "@/lib/google-analytics/client";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
@@ -30,7 +31,21 @@ export async function GET(req: NextRequest) {
   if ("error" in tok) return back(req, "ga=error");
   if (!tok.refreshToken) return back(req, "ga=norefresh");
 
-  const { data: ss } = await supabase
+  /*
+   * Configul existent se citeste cu SERVICE ROLE, nu cu clientul utilizatorului.
+   *
+   * Vederea `store_settings` nu mai decripteaza pentru `authenticated`, deci de
+   * acolo `api_secret` ar veni ca sir `enc.v1.…`. Cum obiectul citit se scrie
+   * INAPOI intreg mai jos, declansatorul l-ar cripta a doua oara peste el insusi
+   * si valoarea s-ar pierde definitiv. `refresh_token` se suprascrie oricum cu
+   * tokenul proaspat, dar `api_secret` doar trece prin obiect.
+   *
+   * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE verificata
+   * separat — se face mai sus, pe clientul utilizatorului
+   * (`businesses.id = businessId AND businesses.user_id = user.id`).
+   */
+  const admin = createAdminClient();
+  const { data: ss } = await admin
     .from("store_settings").select("id, google_analytics_config").eq("business_id", businessId).single();
   const config: GoogleAnalyticsConfig = (ss?.google_analytics_config as GoogleAnalyticsConfig) ?? {};
   config.refresh_token = tok.refreshToken;

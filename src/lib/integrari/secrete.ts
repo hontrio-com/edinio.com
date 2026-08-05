@@ -26,6 +26,14 @@
  * lui de notice.ro. Mascat, formularul nu mai are ce afisa si integrarea devine
  * imposibil de configurat — iar expunerea ar fi oricum aceeasi, fiindca scopul
  * campului este chiar sa fie aratat proprietarului.
+ *
+ * CONSECINTA, din 2026-08-05: fiind singurul camp CRIPTAT care trebuie si CITIT
+ * de om, e si singurul care nu suporta o citire cu clientul comerciantului —
+ * acolo ar sosi `enc.v1.…` si pagina ar afisa un URL de webhook pe care
+ * `/api/notice/webhook` (care cauta pe valoarea decriptata, cu service role) nu-l
+ * mai potriveste cu niciun magazin. De aceea `notice_config` se citeste cu
+ * `createAdminClient()` si abia apoi trece prin `mascheazaConfig`, atat in
+ * features/notice/page.tsx cat si in `getNoticeConfig`.
  */
 
 /** Numele reale ale campurilor, luate din datele de productie si din tipuri. */
@@ -56,6 +64,14 @@ export type ConfigMascat = Record<string, unknown> & {
  * Pregateste o configuratie pentru trimiterea catre browser: campurile secrete
  * pleaca goale, iar `_completate` spune formularului ce sa afiseze
  * („••••••• salvat" in loc de camp gol, ca omul sa nu creada ca s-a pierdut).
+ *
+ * MERGE SI PESTE VALORI CRIPTATE, verificat pentru migratia din 2026-08-05.
+ * De atunci, o citire facuta cu clientul comerciantului primeste `enc.v1.…` in
+ * loc de textul in clar. Raspunsul la „e configurat?" se ia mai jos din
+ * `v.length > 0`, iar `enc.v1.…` e un sir NEGOL — deci interfata arata in
+ * continuare „salvat" acolo unde exista o credentiala si camp gol acolo unde
+ * nu exista. Daca vreodata cineva schimba testul asta intr-unul pe continut
+ * (prefix, lungime, forma), paginile de integrari incep sa minta.
  */
 export function mascheazaConfig(cheie: string, config: unknown): ConfigMascat | null {
   if (!config || typeof config !== "object") return null;
@@ -80,8 +96,24 @@ export function mascheazaConfig(cheie: string, config: unknown): ConfigMascat | 
  * pastreaza valoarea salvata. Scoate si `_completate`, care e doar pentru
  * interfata si n-are ce cauta in baza.
  *
- * `configVeche` se citeste de apelant cu clientul lui (deja verificat pe
- * proprietar), ca sa nu introducem aici inca un drum spre baza.
+ * `configVeche` se citeste de apelant, ca sa nu introducem aici inca un drum
+ * spre baza.
+ *
+ * ATENTIE, din 2026-08-05: `configVeche` trebuie citita cu `createAdminClient()`,
+ * dupa ce apelantul a dovedit proprietatea. Pe clientul comerciantului campurile
+ * secrete sosesc `enc.v1.…`, iar functia asta le-ar „pastra" ca atare.
+ *
+ * IN BAZA nu se pierde nimic: `privat.cripteaza` sare peste orice sir care incepe
+ * deja cu `enc.v1.`, deci rescrierea pune inapoi exact acelasi text cifrat (vezi
+ * 2026-08-04-criptare-credentiale.sql: „recriptarea aceleiasi valori nu o strica").
+ * Se strica tot ce FOLOSESTE rezultatul, si se strica in tacere:
+ *   - configuratia intoarsa formularului (apelantii fac `setConfig(res.config)`),
+ *     deci comerciantul vede `enc.v1.…` in loc de valoarea lui;
+ *   - apelul catre furnizor facut imediat dupa salvare, cu textul cifrat pe post
+ *     de parola — furnizorul raspunde „credentiale invalide";
+ *   - orice valoare INREGISTRATA la furnizor din configul imbinat (URL-uri de
+ *     webhook cu secretul in ele): raman inregistrate cu textul cifrat, iar
+ *     cautarea inversa se face pe valoarea decriptata si nu mai potriveste nimic.
  */
 export function pastreazaSecretele(
   cheie: string,

@@ -406,7 +406,13 @@ export async function updateSmsoConfig(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data: existing } = await supabase
+  // Citit cu SERVICE ROLE: `pastreazaSecretele` are nevoie de valoarea REALA a
+  // cheii, ca sa o scrie la loc. Vederea `store_settings` nu mai decripteaza
+  // pentru `authenticated`, deci cu clientul utilizatorului am lua sirul
+  // `enc.v1.…` si l-am salva peste el insusi — criptat a doua oara, cheia SMSO
+  // nu s-ar mai putea desface, si asta fara nicio eroare la salvare. Service role
+  // ocoleste RLS; dreptul asupra magazinului e verificat exact deasupra.
+  const { data: existing } = await createAdminClient()
     .from("store_settings").select("id, smso_config").eq("business_id", businessId).single();
 
   // Formularul primeste `api_key` MASCAT (gol), deci o salvare obisnuita
@@ -442,7 +448,12 @@ export async function updateSmartbillConfig(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data: existing } = await supabase
+  // Citit cu SERVICE ROLE, din acelasi motiv ca la `updateSmsoConfig`:
+  // `pastreazaSecretele` scrie inapoi valoarea veche, iar cu clientul
+  // utilizatorului aceea ar fi sirul `enc.v1.…`, care ar ajunge criptat a doua
+  // oara si ar rupe tacit facturarea SmartBill. Dreptul asupra magazinului e
+  // verificat exact deasupra; service role ocoleste RLS.
+  const { data: existing } = await createAdminClient()
     .from("store_settings").select("id, smartbill_config").eq("business_id", businessId).single();
 
   // Formularul primeste `token` MASCAT (gol), deci o salvare obisnuita

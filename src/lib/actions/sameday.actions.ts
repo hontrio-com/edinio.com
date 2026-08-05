@@ -4,6 +4,7 @@ import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createSamedayAwb,
   deleteSamedayAwb,
@@ -31,6 +32,9 @@ export async function saveSamedayConfig(
   // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
   // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
   // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  // Citirea RAMANE pe clientul utilizatorului: valoarea veche doar se scrie la
+  // loc, nu pleaca spre curier. Chiar daca vine cifrata (`enc.v1.…`), criptarea
+  // e idempotenta, deci secretul se pastreaza neatins.
   const { data: vechi } = await supabase
     .from("store_settings").select("sameday_config").eq("business_id", businessId).maybeSingle();
   const configFinal = pastreazaSecretele("sameday_config", config, vechi?.sameday_config);
@@ -94,8 +98,13 @@ async function getConfigAndOrder(businessId: string, orderId: string) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" as const };
 
+  // Configul se citeste cu service role: vederea public.store_settings nu mai
+  // decripteaza pentru `authenticated`, deci pe clientul utilizatorului parola ar
+  // veni `enc.v1.…` si Sameday ar respinge orice AWB. Service role OCOLESTE
+  // RLS — de aceea proprietatea magazinului se verifica mai sus.
+  const admin = createAdminClient();
   const [{ data: settings }, { data: order }] = await Promise.all([
-    supabase.from("store_settings")
+    admin.from("store_settings")
       .select("sameday_config")
       .eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),

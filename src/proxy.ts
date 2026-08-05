@@ -53,7 +53,26 @@ export const NON_STORE_SEGMENTS = new Set([
   "confidentialitate", "start", "demo",
 ]);
 
+/**
+ * Extensiile de fisier care, pe o cerere OBISNUITA, inseamna „nu e o pagina".
+ *
+ * Erau in `config.matcher`. Au fost mutate aici fiindca matcher-ul nu vede
+ * METODA, iar diferenta conteaza: `GET /logo.svg` e un fisier din `public/`, dar
+ * `POST /logo.svg` e o cerere pe care Next o poate trata ca actiune de server
+ * (id-ul actiunii vine din antet sau din corp, nu din cale). Filtrul se aplica
+ * deci numai la cererile care NU sunt POST — pentru ele, comportamentul ramane
+ * exact cel de dinainte.
+ */
+const EXTENSII_STATICE = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js)$/i;
+
 export async function proxy(request: NextRequest) {
+  // Fisierele statice din `public/` nu au nevoie de nimic din proxy. Un POST
+  // catre aceeasi cale, insa, nu e un fisier — vezi comentariul de la
+  // `EXTENSII_STATICE` si pe cel de la `config` din coada fisierului.
+  if (request.method !== "POST" && EXTENSII_STATICE.test(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   /*
    * POARTA CELUI DE-AL DOILEA FACTOR — inaintea oricarei alte logici.
    *
@@ -197,16 +216,26 @@ export async function proxy(request: NextRequest) {
 }
 
 /*
- * `api/` NU mai e exclus.
+ * NICI `api/`, NICI EXTENSIILE nu mai sunt excluse. Ambele erau gauri, din
+ * acelasi motiv: matcher-ul decide ce ajunge sa fie verificat, iar ce nu ajunge
+ * nu poate fi aparat.
  *
- * Excluderea lui era cauza structurala a constatarii 2 din auditul din
- * 05.08.2026: nicio cerere catre /api/** nu ajungea in proxy, deci nu exista
- * niciun punct comun in care sa pui o verificare pentru cele ~86 de rute.
- * Comportamentul rutelor nu se schimba — `proxy()` iese pe prima linie pentru
- * ele, dupa poarta MFA — dar acum EXISTA unde sa pui poarta.
+ * `api/`: excluderea lui era cauza structurala a constatarii 2 — nicio cerere
+ * catre /api/** nu ajungea in proxy, deci nu exista niciun punct comun in care
+ * sa pui o verificare pentru cele ~86 de rute.
+ *
+ * EXTENSIILE: `.*\.(svg|png|…|css|js)$` scotea din matcher orice cale terminata
+ * asa. Dar `/x.js` E o cale de PAGINA valida — `src/app/(public)/[slug]/page.tsx`
+ * o prinde cu slug-ul `x.js` — iar o actiune de server ruleaza INAINTE de
+ * randare si isi rezolva id-ul dintr-un manifest GLOBAL. Deci
+ * `POST /orice.js` cu id-ul ORICAREI actiuni o executa, si `poartaMfaActiuneServer`
+ * nu era chemata niciodata. Exact clasa de ocolire pe care o inchidem, intrata
+ * pe alta usa.
+ *
+ * Excluderea utila (sa nu platim proxy pentru fisiere statice) s-a mutat in
+ * `proxy()`, unde se poate uita la METODA cererii — lucru pe care `config.matcher`
+ * nu-l poate face. Vezi `pareFisierStatic`.
  */
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

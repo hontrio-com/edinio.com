@@ -28,7 +28,21 @@ export function CatalogToolbar() {
     headerHasSearch,
     visibleProducts,
     filteredProducts,
+    isHome,
+    pageContent,
   } = useStorefront();
+
+  /*
+   * Sortarea si filtrele se pot stinge, dar NUMAI pe prima pagina.
+   *
+   * Magazinele care au si pagina `/magazin` le au deja acolo, cu tot cu fatete;
+   * aici raman doua controale care ocupa un rand intreg fara sa adauge nimic.
+   * Pe `/magazin` reglajele astea nu se citesc deloc — bara de acolo e alta
+   * componenta, cu setarile ei — iar conditia pe `isHome` face asta explicit,
+   * ca sa nu se stinga din greseala tocmai unde filtrele sunt rostul paginii.
+   */
+  const arataSortarea = !isHome || pageContent.sort_options?.enabled !== false;
+  const arataFiltrele = !isHome || pageContent.filter_options?.enabled !== false;
 
   /*
    * Cate produse se vad acum, cand cautarea sta in header.
@@ -43,6 +57,14 @@ export function CatalogToolbar() {
   const contor = aratate === total
     ? `${total} ${total === 1 ? "produs" : "produse"}`
     : `${aratate} din ${total} ${total === 1 ? "produs" : "produse"}`;
+
+  /*
+   * Cu sortarea si filtrele stinse, si cu cautarea deja in header, in rand nu mai
+   * ramane decat contorul — iar acela e ascuns pe telefon. Randul ar fi ramas o
+   * fasie goala cu marginea lui de jos, adica exact spatiul pe care comerciantul
+   * a vrut sa-l recupereze. Cand nu mai e nimic de aratat, nu se randeaza nimic.
+   */
+  if (headerHasSearch && !arataSortarea && !arataFiltrele) return null;
 
   return (
     <>
@@ -77,6 +99,7 @@ export function CatalogToolbar() {
             parte fixa si una variabila: asa cazul obisnuit da exact marcajul de
             dinainte, iar comparatia cu productia nu semnaleaza o simpla
             reordonare de clase drept diferenta. */}
+        {arataSortarea && (
         <div className={headerHasSearch
           ? "relative flex-1 md:flex-none md:w-auto shrink-0"
           : "relative w-full md:w-auto shrink-0"}>
@@ -98,7 +121,9 @@ export function CatalogToolbar() {
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         </div>
+        )}
 
+        {arataFiltrele && (
         <button type="button" onClick={() => setFiltersOpen(!filtersOpen)}
           className={headerHasSearch
             ? "h-[46px] px-4 shrink-0 justify-center inline-flex items-center gap-2 text-sm border border-border rounded-2xl bg-surface hover:bg-muted transition-colors"
@@ -112,10 +137,11 @@ export function CatalogToolbar() {
             </span>
           )}
         </button>
+        )}
       </div>
 
       {/* Desktop: panou inline */}
-      {filtersOpen && (
+      {arataFiltrele && filtersOpen && (
         <div className="hidden md:block mb-6 rounded-2xl border border-border bg-surface p-4 space-y-4">
           <CatalogFilterFields />
           {activeFilterCount > 0 && (
@@ -127,8 +153,10 @@ export function CatalogToolbar() {
         </div>
       )}
 
-      {/* Mobil: foaie de jos */}
-      {filtersOpen && <FoaieFiltre onClose={() => setFiltersOpen(false)} />}
+      {/* Mobil: foaie de jos. Si ea gateata pe reglaj: filtrele pot ramane
+          deschise in stare de la o navigare anterioara, iar foaia ar fi aparut
+          peste o pagina care nu mai are butonul de inchidere. */}
+      {arataFiltrele && filtersOpen && <FoaieFiltre onClose={() => setFiltersOpen(false)} />}
     </>
   );
 }

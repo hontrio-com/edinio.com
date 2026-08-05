@@ -47,6 +47,7 @@ interface PageContent {
   button_effect?: string;
   show_announcement_on_store?: boolean;
   sort_options?: { enabled: boolean; default_sort?: string; };
+  filter_options?: { enabled: boolean };
   sticky_cart_bar?: { enabled: boolean; };
   new_badge?: { enabled: boolean; days: number; };
   price_range_display?: { enabled: boolean; };
@@ -407,8 +408,13 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     reviews_section: rawPageContent.reviews_section ?? { enabled: false, title: "Ce spun clientii nostri", items: [] },
     checkout_config: rawPageContent.checkout_config ?? { custom_fields: [], extras: [] },
     show_announcement_on_store: rawPageContent.show_announcement_on_store ?? true,
-    // Sorting is always available on the storefront (no per-store toggle); keep any saved default sort.
-    sort_options: { enabled: true, default_sort: rawPageContent.sort_options?.default_sort ?? "newest" },
+    // `enabled` chiar se citeste acum (comutatorul din „Pagina principala").
+    // Pana la 05.08.2026 era scris mereu `true` si ignorat de randare.
+    sort_options: {
+      enabled: rawPageContent.sort_options?.enabled ?? true,
+      default_sort: rawPageContent.sort_options?.default_sort ?? "newest",
+    },
+    filter_options: rawPageContent.filter_options ?? { enabled: true },
     sticky_cart_bar: rawPageContent.sticky_cart_bar ?? { enabled: true },
     new_badge: rawPageContent.new_badge ?? { enabled: true, days: 7 },
     price_range_display: rawPageContent.price_range_display ?? { enabled: true },
@@ -1076,9 +1082,42 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     {
       id: "store_page",
       icon: Home,
-      title: "Pagina magazin",
+      // „Pagina magazin" se confunda cu pagina de catalog `/magazin`, care are
+      // propriile reglaje in editorul de sectiuni. Reglajele de aici sunt ale
+      // paginii principale.
+      title: "Pagina principala",
       content: (
         <div className="px-5 pb-5 space-y-5">
+          {/* Sortarea de deasupra grilei de pe prima pagina */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Sortare pe prima pagina</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Lista „Cele mai noi / Pret crescator...". Pagina Magazin nu e afectata.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, sort_options: { ...p.sort_options, enabled: !(p.sort_options?.enabled !== false) } }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.sort_options?.enabled !== false ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.sort_options?.enabled !== false ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Butonul de filtre de deasupra grilei de pe prima pagina */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Filtre pe prima pagina</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Butonul „Filtre" si panoul lui. Pagina Magazin nu e afectata.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, filter_options: { enabled: !(p.filter_options?.enabled !== false) } }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.filter_options?.enabled !== false ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.filter_options?.enabled !== false ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
           {/* Category badges on product cards */}
           <div className="flex items-center justify-between">
             <div>

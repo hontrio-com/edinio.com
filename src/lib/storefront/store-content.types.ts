@@ -50,7 +50,19 @@ export interface StorePageContent {
     company_fields?: { enabled: boolean };
   };
   show_announcement_on_store?: boolean;
+  /**
+   * Sortarea si filtrele de deasupra grilei de pe PRIMA PAGINA.
+   *
+   * Se pot stinge separat fiindca magazinele care au si pagina `/magazin` le au
+   * deja acolo, cu tot cu fatete — pe prima pagina raman doua controale care
+   * ocupa un rand intreg si nu spun nimic in plus.
+   *
+   * `sort_options.enabled` exista de mult in tip, dar era SCRIS mereu `true` si
+   * nu-l citea nimeni; acum e chiar comutatorul. Ambele conteaza numai pe prima
+   * pagina: pe `/magazin` bara are propriile reglaje.
+   */
   sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };
+  filter_options?: { enabled: boolean };
   sticky_cart_bar?: { enabled: boolean };
   new_badge?: { enabled: boolean; days: number };
   price_range_display?: { enabled: boolean };

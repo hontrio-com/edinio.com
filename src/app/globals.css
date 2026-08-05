@@ -185,6 +185,35 @@
   }
 }
 
+/* ─── Sectiunea Problema: panoul inclinat din card ───────────────────────────
+   Panoul din zona cu fascicule sta putin intors, ca sa aiba adancime.
+
+   Scris aici, nu ca utilitare Tailwind pe element, dintr-un motiv concret:
+   `transform-gpu` pune si el `transform` (translateZ(0)) si castiga in cascada,
+   asa ca inclinarea scrisa cu clasa arbitrara iesea matricea identitate. Cu
+   `perspective` pe parintele DIRECT si transformarea aici, nu se mai bat cap in
+   cap.
+
+   Unghiurile sunt mici dinadins: la 8 si 6 grade se citeste adancimea, iar
+   scrisul de 11,5px ramane clar. Peste vreo 15 grade, textul de pe latura care
+   se departeaza incepe sa se inmoaie. */
+.proof-panel {
+  transform: rotateX(8deg) rotateY(-6deg);
+  transition: transform 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* La trecerea cursorului panoul se indreapta si se ridica: adancimea ramane in
+   umbra, dar continutul devine drept, deci citibil. */
+.proof-card:hover .proof-panel {
+  transform: rotateX(0deg) rotateY(0deg) translateY(-6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proof-panel {
+    transition: none;
+  }
+}
+
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);

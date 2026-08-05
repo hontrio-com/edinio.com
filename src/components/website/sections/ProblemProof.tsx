@@ -162,24 +162,40 @@ function ProofCard({
 }) {
   return (
     <article
-      className="flex flex-col rounded-[16px] border border-hairline bg-white"
+      className="proof-card flex flex-col rounded-[16px] border border-hairline bg-white"
       style={{
         boxShadow:
           "0 1px 1px rgba(10,10,10,0.03), 0 10px 24px -14px rgba(10,10,10,0.14)",
       }}
     >
       <div className="p-1.5">
-        <div className="relative aspect-square overflow-hidden rounded-[10px] bg-tint">
+        {/*
+          `isolate` ține amestecul granulelor înăuntru. Fără el, `mix-blend-mode`
+          de pe stratul de granule caută fundalul până la primul strat de
+          stivuire de deasupra și ar fi înnegrit și pagina din jurul cardului.
+        */}
+        <div className="relative isolate aspect-square overflow-hidden rounded-[10px] bg-tint">
           <Beams seed={beamSeed} />
+          <Grain />
 
           {/*
             Panoul plutește peste lumină, nu stă lipit de fundul zonei. Lăsat
             până la marginile zonei, ar fi acoperit fix partea din perdea care se
-            vede cel mai bine; cu 88% rămân dungi pe lângă el, de o parte și de
+            vede cel mai bine; cu 80% rămân dungi pe lângă el, de o parte și de
             alta.
+
+            `perspective` stă pe părintele DIRECT al panoului. Pusă mai sus, pe
+            zona întreagă, `rotateX` iese turtire, nu înclinare — aceeași
+            capcană ca la teancul de carduri de la funcții.
           */}
-          <div className="absolute inset-0 grid place-items-center p-4 sm:p-5">
-            <div className="w-full max-w-[80%]">{children}</div>
+          <div
+            className="absolute inset-0 grid place-items-center p-4 sm:p-5"
+            style={{ perspective: "900px" }}
+          >
+            {/* Înclinarea și îndreptarea la hover stau în `globals.css`, la
+                `.proof-panel`. Vezi comentariul de acolo: scrise ca utilitare pe
+                element, se băteau cap în cap cu `transform-gpu`. */}
+            <div className="proof-panel w-full max-w-[80%]">{children}</div>
           </div>
         </div>
       </div>
@@ -253,6 +269,34 @@ const BEAM_FIELDS: Beam[][] = [
 
 const BEAM_MASK =
   "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgb(0,0,0) 22%, rgb(0,0,0) 76%, rgba(0,0,0,0) 100%)";
+
+/**
+ * Granulația de peste perdea.
+ *
+ * În referință, fasciculele nu sunt gradiente netede — au granule. Nu e un
+ * ornament: în original lumina e desenată de un shader pe `<canvas>`, iar
+ * zgomotul vine odată cu ea. Fără el, un gradient CSS pe suprafață mare arată
+ * prea curat, ca o suprafață vopsită, și în plus face DUNGI de banding acolo
+ * unde trece de la o nuanță la alta. Granulele rup exact banding-ul ăla.
+ *
+ * Făcută cu `feTurbulence` într-un SVG de 140px pus ca fundal care se repetă, nu
+ * cu o poză: nu aduce nicio cerere în plus și nu are ce se încărca greșit.
+ *
+ * `stitchTiles='stitch'` e obligatoriu. Fără el, zgomotul se taie la marginea
+ * plăcii, iar la repetare se vede o grilă de 140px pe toată zona.
+ *
+ * `feColorMatrix saturate 0` scoate culoarea: `feTurbulence` scoate din fabrică
+ * zgomot COLORAT, iar peste verdele nostru ar fi ieșit puncte roșii și albastre.
+ */
+const GRAIN_TILE = `data:image/svg+xml;utf8,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>" +
+    "<filter id='g'>" +
+    "<feTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/>" +
+    "<feColorMatrix type='saturate' values='0'/>" +
+    "</filter>" +
+    "<rect width='140' height='140' filter='url(%23g)'/>" +
+    "</svg>",
+)}`;
 
 /** Stingerea unei singure dungi, cu vârful acolo unde i s-a cerut. */
 function beamGradient(alpha: number, peak: number) {
@@ -332,6 +376,54 @@ function Beams({ seed }: { seed: number }) {
   );
 }
 
+/**
+ * Stratul de granule.
+ *
+ * Stă peste perdea și peste tot fundalul zonei, dar SUB panou: granulele care
+ * ar trece și peste panou l-ar face să pară murdar, nu texturat.
+ *
+ * `multiply` în loc de o simplă transparență: pe alb, granulele trebuie să
+ * ÎNTUNECE punctual, nu să acopere cu gri. Cu opacitate simplă, zgomotul ar fi
+ * albit fasciculele și ar fi rămas o ceață peste ele.
+ *
+ * OPACITATEA e singurul lucru de reglat aici, `GRAIN_OPACITY`. Prima încercare a
+ * pus 0,32 și a ieșit dezastru: zgomotul din `feTurbulence` are luminanța medie
+ * pe la jumătate, deci înmulțit peste tot a transformat zona într-un câmp cenușiu
+ * și a înecat fasciculele.
+ *
+ * Pe fundal închis, granulația se vede oricât de discretă ar fi. Pe alb nu are
+ * cum: trebuie să stea la limita vizibilului, cât s-o simți ca textură fără s-o
+ * vezi ca puncte.
+ *
+ * MASCA e la fel de importantă ca opacitatea. Întinsă uniform peste toată zona,
+ * granulația cenușea și colțurile care trebuie să rămână albe curate — pe alb,
+ * `multiply` întunecă întotdeauna în medie, n-are cum altfel. Cu `overlay` sau
+ * `soft-light` n-ar întuneca, dar peste un fundal aproape alb formula lor nu mai
+ * face aproape nimic, deci granulația ar dispărea de tot.
+ *
+ * Soluția e să nu fie peste tot: aceeași mască ca la perdea, deci textura stă
+ * doar acolo unde e lumină. Așa arată și în referință — granulele vin din
+ * shaderul care desenează lumina, nu din fundal.
+ */
+const GRAIN_OPACITY = 0.16;
+
+function Grain() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0"
+      style={{
+        backgroundImage: `url("${GRAIN_TILE}")`,
+        backgroundSize: "140px 140px",
+        mixBlendMode: "multiply",
+        opacity: GRAIN_OPACITY,
+        maskImage: BEAM_MASK,
+        WebkitMaskImage: BEAM_MASK,
+      }}
+    />
+  );
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Panourile
    ══════════════════════════════════════════════════════════════════════════
@@ -353,9 +445,15 @@ function Panel({
   return (
     <div
       className="w-full rounded-[10px] border border-hairline bg-white"
+      /*
+        Trei umbre, nu una. Un panou înclinat cu o singură umbră arată lipit pe
+        fundal: prima e contactul, strâns și aproape; a doua e volumul; a treia,
+        lungă și coborâtă, e umbra aruncată pe perdea. Fără cea de-a treia,
+        înclinarea se vede dar panoul nu pare că stă DEASUPRA a ceva.
+      */
       style={{
         boxShadow:
-          "0 2px 4px rgba(10,10,10,0.04), 0 14px 30px -12px rgba(10,10,10,0.22)",
+          "0 1px 2px rgba(10,10,10,0.05), 0 8px 16px -6px rgba(10,10,10,0.12), 0 28px 46px -18px rgba(10,10,10,0.28)",
       }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">

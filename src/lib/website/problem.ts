@@ -32,7 +32,12 @@ export interface ProblemCard {
   id: string;
   title: string;
   description: string;
-  image: {
+  /**
+   * Desen făcut de noi, în locul unei poze. Cardul cu `art` nu mai are `image`.
+   * Deocamdată există un singur desen: firul de mesaje.
+   */
+  art?: "messages";
+  image?: {
     /** Lipsește => se afișează substituentul. */
     src?: string;
     alt: string;
@@ -40,6 +45,24 @@ export interface ProblemCard {
     hint: string;
   };
 }
+
+/**
+ * Mesajele din primul card, desenate ca bule iMessage.
+ *
+ * Toate sunt PRIMITE, deci toate gri. Sunt patru întrebări la care nu răspunde
+ * nimeni, nu o conversație — de aia nu există niciun răspuns albastru printre
+ * ele. Asta e și ideea cardului: întrebările vin, iar tu ești singurul canal.
+ *
+ * Ordinea contează puțin, dar lungimile da: ultima e cea mai lungă dinadins,
+ * fiindcă stă cel mai jos și se vede întreagă la orice lățime. Cele de sus se
+ * taie de marginea cardului pe ecrane înguste, ca într-un fir derulat.
+ */
+export const PROBLEM_MESSAGES = [
+  "Bună ziua! Cum pot comanda?",
+  "Aveți produsul acesta pe stoc?",
+  "Unde pot vedea mai multe produse?",
+  "Îmi puteți trimite mai multe detalii?",
+];
 
 /**
  * Trei carduri, fiecare pentru altă durere: unde stau comenzile, cine face
@@ -50,11 +73,8 @@ export const PROBLEM_CARDS: ProblemCard[] = [
     id: "comenzi",
     title: "Comenzile trăiesc în conversații.",
     description:
-      "Una s-a pierdut între „mai aveți pe stoc?” și „am găsit în altă parte”, iar tu afli abia a doua zi.",
-    image: {
-      alt: "Comenzi amestecate printre mesaje, pe telefon",
-      hint: "Conversație pe telefon, cu comenzi fără răspuns",
-    },
+      "Răspunzi la aceleași întrebări de zece ori pe zi, iar cine nu primește răspuns pleacă.",
+    art: "messages",
   },
   {
     id: "hartii",

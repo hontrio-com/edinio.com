@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { AlertTriangle, ImageIcon } from "lucide-react";
 import { PROBLEM_CARDS, PROBLEM_LEAD, PROBLEM_TITLE, type ProblemCard } from "@/lib/website/problem";
+import { MessagesThread } from "./MessagesThread";
 import { SectionEyebrow } from "./SectionEyebrow";
 
 /**
@@ -78,8 +79,20 @@ function Card({ card }: { card: ProblemCard }) {
   return (
     <article className="flex flex-col overflow-hidden rounded-[16px] border border-hairline bg-white">
       <div className="p-[5px]">
-        <div className="relative aspect-[4/3] overflow-hidden rounded-[11px] bg-tint">
-          {card.image.src ? (
+        {/*
+          Cardul cu firul de mesaje stă pe ALB, nu pe `tint`: codița bulei se
+          desenează dintr-o formă gri și una de culoarea fundalului, iar culoarea
+          aia e scrisă în `globals.css`. Pe alt fundal ar apărea o pată albă lângă
+          fiecare codiță.
+        */}
+        <div
+          className={`relative aspect-[4/3] overflow-hidden rounded-[11px] ${
+            card.art === "messages" ? "bg-white" : "bg-tint"
+          }`}
+        >
+          {card.art === "messages" ? (
+            <MessagesThread />
+          ) : card.image?.src ? (
             <Image
               src={card.image.src}
               alt={card.image.alt}
@@ -95,7 +108,7 @@ function Card({ card }: { card: ProblemCard }) {
               className="object-cover"
             />
           ) : (
-            <Placeholder hint={card.image.hint} />
+            <Placeholder hint={card.image?.hint ?? ""} />
           )}
         </div>
       </div>

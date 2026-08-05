@@ -250,10 +250,161 @@
   }
 }
 
-/* Sectiunea Problema nu mai are nicio regula aici: panourile inclinate cu
-   perdea de lumina au fost inlocuite cu carduri simple, cu imagine. Daca cineva
-   e tentat sa le adauge iar un efect — nu. Poza duce mesajul, cardul doar o
-   tine. */
+/* ─── Sectiunea Problema: bulele iMessage din primul card ────────────────────
+   Valorile nu sunt aproximate: fundalul e #007AFF, adica exact `systemBlue` de la
+   Apple — albastrul bulelor din iMessage — textul alb, coltul de 18px.
+
+   DE STIUT: pe iPhone, albastrul inseamna mesaj TRIMIS si sta intotdeauna la
+   DREAPTA, cu codita in dreapta jos; cele primite sunt gri si stau la stanga.
+   Aici sunt albastre si la stanga fiindca asa s-a cerut (2026-08-05: „fundalul
+   mesajelor albastru exact ca pe iPhone", fara sa se ceara si mutarea lor). Daca
+   se vrea si asezarea autentica, se schimba `align-self` in `flex-end` si se
+   oglindesc cele doua pseudo-elemente in dreapta.
+
+   CODITA. Nu e un triunghi rotit sub bula — aia se vede imediat ca nu e iMessage.
+   Codita adevarata are marginea de afara convexa si pe cea dinauntru concava, si
+   se face din DOUA forme suprapuse:
+     ::before  o bula albastra care iese in stanga-jos din colt
+     ::after   o bula ALBA, mai la stanga, care musca din prima si ii da curbura
+   dinauntru. De aceea culoarea lui `::after` trebuie sa fie exact fundalul pe
+   care stau bulele; daca fundalul cardului se schimba, se schimba si aici, altfel
+   apare o pata alba langa fiecare codita.
+
+   Amandoua ies in AFARA bulei (pana la -18px), deci firul are nevoie de spatiu la
+   stanga. Cu mai putin de 20px, `overflow-hidden` taie muscatura si codita
+   ramane un bulgare.
+
+   Fara `z-index`: pseudo-elementele nu ating textul, care incepe abia dupa cei
+   14px de padding, deci n-au ce acoperi. Cu `z-index: -1` ar fi trebuit un
+   context de stivuire pe parinte, altfel cad in spatele cardului si dispar. */
+.imsg {
+  position: relative;
+  align-self: flex-start;
+  max-width: 84%;
+  padding: 7px 14px 8px;
+  border-radius: 18px;
+  background: #007aff;
+  color: #ffffff;
+}
+
+.imsg::before,
+.imsg::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 20px;
+}
+
+.imsg::before {
+  left: -7px;
+  width: 20px;
+  background: #007aff;
+  border-bottom-right-radius: 15px;
+}
+
+.imsg::after {
+  left: -18px;
+  width: 18px;
+  background: #ffffff;
+  border-bottom-right-radius: 10px;
+}
+
+/* ─── Sosirea mesajelor, una cate una ────────────────────────────────────────
+   Doua lucruri se intampla odata, ca pe iPhone:
+
+   1. RANDUL CRESTE de la inaltime zero, deci mesajele de deasupra sunt IMPINSE
+      in sus. Firul e ancorat jos, asa ca teancul creste in sus, exact ca intr-o
+      conversatie adevarata. Se face cu `grid-template-rows: 0fr -> 1fr`, singurul
+      mod de a anima o inaltime „auto" fara sa o masori cu JavaScript.
+   2. BULA SE UMFLA din coltul cu codita (`transform-origin: 0 100%`), nu din
+      centru. Aici se vede daca cineva a copiat efectul din ochi: pe iPhone bula
+      creste din codita, iar coltul ala ramane pe loc tot timpul.
+
+   ARCUL. Nu e un `ease-out` si nici un `cubic-bezier` de-a gata: iOS foloseste un
+   resort, iar un resort trece PUTIN peste tinta si se aseaza inapoi. Curba de mai
+   jos e un oscilator amortizat calculat punct cu punct — raspuns 0,35s, factor de
+   amortizare 0,72 — si iese cu o depasire de vreo 3,8%. Cu un `ease-out` obisnuit
+   bula se opreste sec si se simte imediat ca nu e iMessage.
+
+   Depasirea creste bula peste inaltimea randului. Nu se taie de `overflow`
+   fiindca deasupra bulei sta spatiul dintre mesaje, si acolo are unde iesi.
+
+   Firul porneste ASCUNS si e dezvaluit de `data-arrive="go"`, pus de
+   `MessagesThread` cand cardul ajunge in dreptul ochilor. Fara JavaScript, blocul
+   `<noscript>` din componenta arata totul dintr-o data. */
+.imsg-row {
+  display: grid;
+  grid-template-rows: 0fr;
+}
+
+.imsg-clip {
+  overflow: hidden;
+}
+
+.imsg {
+  opacity: 0;
+  transform: scale(0.34);
+  transform-origin: 0% 100%;
+}
+
+[data-arrive="go"] .imsg-row {
+  animation-name: imsg-open;
+  animation-duration: 320ms;
+  animation-delay: var(--imsg-delay);
+  animation-fill-mode: forwards;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-arrive="go"] .imsg {
+  animation-name: imsg-pop;
+  animation-duration: 500ms;
+  animation-delay: var(--imsg-delay);
+  animation-fill-mode: forwards;
+  animation-timing-function: linear(
+    0,
+    0.257 10%,
+    0.643 20%,
+    0.9 30%,
+    1.013 40%,
+    1.038 50%,
+    1.029 60%,
+    1.014 70%,
+    1.004 80%,
+    1 90%,
+    1
+  );
+}
+
+@keyframes imsg-open {
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
+@keyframes imsg-pop {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Fara miscare, mesajele sunt pur si simplu acolo. Nu se ascunde niciunul: sunt
+   continut, nu ornament. */
+@media (prefers-reduced-motion: reduce) {
+  .imsg-row {
+    grid-template-rows: 1fr;
+  }
+
+  .imsg {
+    opacity: 1;
+    transform: none;
+  }
+
+  [data-arrive="go"] .imsg-row,
+  [data-arrive="go"] .imsg {
+    animation: none;
+  }
+}
 
 .dark {
   --background: oklch(0.141 0.005 285.823);

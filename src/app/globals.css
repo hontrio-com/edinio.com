@@ -103,32 +103,10 @@
   --sidebar-width: 240px;
 }
 
-/* ─── Hero: raze de lumina ───────────────────────────────────────────────────
-   Fiecare raza isi tine unghiul si opacitatea in variabile proprii, ca sa poata
-   respira fara sa-si piarda rotatia. Sunt lente si decalate intre ele: doua raze
-   care pulseaza la fel arata a banner, nu a lumina.
-   La `prefers-reduced-motion` stau pe loc — desenul rimane, miscarea nu. */
-@keyframes hero-ray {
-  0%,
-  100% {
-    opacity: var(--ray-opacity);
-    transform: translateX(-50%) rotate(var(--ray-angle)) scaleY(1);
-  }
-  50% {
-    opacity: calc(var(--ray-opacity) * 1.4);
-    transform: translateX(-50%) rotate(var(--ray-angle)) scaleY(1.07);
-  }
-}
-
-.hero-ray {
-  animation: hero-ray var(--ray-duration) ease-in-out var(--ray-delay) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-ray {
-    animation: none;
-  }
-}
+/* Lumina hero-ului nu mai are nicio regula aici: pulsatia razelor a fost scoasa
+   la cererea clientului (2026-08-05, „sa fie static"), iar aura si valurile care
+   au luat locul fasciculelor se desenează din gradiente puse direct pe element,
+   in `sections/hero-backgrounds.tsx`. */
 
 /* ─── Cardurile de functii: teanc la derulare ────────────────────────────────
    Cardurile sunt `sticky`, deci fiecare se opreste sub bara si urmatorul urca

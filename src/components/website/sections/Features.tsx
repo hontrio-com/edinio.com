@@ -38,11 +38,11 @@ export function Features() {
           <SectionEyebrow label="Soluția" />
 
           <h2 className="mt-6 text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
-            Tot ce ține un magazin în picioare, la locul lui
+            Un mod mai simplu de a vinde online.
           </h2>
           <p className="mt-5 text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
-            De la primul produs pus în magazin până la coletul ajuns la client,
-            fără să pui nimic cap la cap singur.
+            Edinio pune cap la cap tot ce ai nevoie, astfel încât magazinul tău să
+            funcționeze simplu pentru tine și pentru clienții tăi.
           </p>
         </div>
 

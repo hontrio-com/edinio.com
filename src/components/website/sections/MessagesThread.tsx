@@ -45,9 +45,10 @@ import { PROBLEM_MESSAGES, type ProblemMessage } from "@/lib/website/problem";
  * și una ALBĂ care mușcă din ea, iar cea albă se întinde cu 18px la stânga bulei,
  * adică fix peste cerc. Fără ridicarea asta, cercul ar apărea ciupit pe dreapta.
  *
- * Apropierea (`zoom` + `focus`) e explicată în `lib/website/problem.ts`, acolo
- * unde stau și valorile: pe scurt, pozele sunt portrete întregi, iar într-un cerc
- * de 28px capul trebuie adus în față ca să se distingă cineva.
+ * Poza se arată ÎNTREAGĂ, fără apropiere. Motivul e scris pe larg în
+ * `lib/website/problem.ts`: apropierea reglată per poză, oricât de bine
+ * calculată, tot lăsa cercurile să pară unele mai apropiate și altele mai
+ * depărtate, fiindcă pozele sunt fotografiate de la distanțe diferite.
  *
  * `sizes="28px"` deși poza e de 200: browserul are nevoie de mărimea AFIȘATĂ ca
  * să aleagă densitatea, nu de cea a fișierului. Fără el ar presupune lățimea
@@ -79,10 +80,6 @@ function Avatar({ message }: { message: ProblemMessage }) {
         loading="eager"
         unoptimized
         className="object-cover"
-        style={{
-          transform: `scale(${message.zoom})`,
-          transformOrigin: message.focus,
-        }}
       />
     </span>
   );

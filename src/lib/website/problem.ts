@@ -25,7 +25,7 @@ export const PROBLEM_TITLE = [
 ];
 
 export const PROBLEM_LEAD =
-  "Nu-ți lipsesc clienții. Îți lipsește locul în care să cumpere singuri, fără să te întrebe pe tine. Așa arată o zi obișnuită.";
+  "Un client nu ar trebui să îți scrie pentru fiecare detaliu. Ar trebui să găsească produsele, informațiile și opțiunile de comandă într-un singur loc.";
 
 export interface ProblemCard {
   /** Cheie stabilă pentru `key`, chiar dacă se schimbă titlul. */
@@ -64,48 +64,30 @@ export interface ProblemCard {
  * cel mai jos și se vede întreagă la orice lățime. Cele de deasupra se taie de
  * marginea cardului pe ecrane înguste, ca într-un fir derulat.
  *
- * ═══ DESPRE `zoom` ȘI `focus` ═══
+ * ═══ POZELE SE ARATĂ ÎNTREGI, FĂRĂ APROPIERE ═══
  *
- * Pozele sunt portrete întregi, tăiate pătrat, dar fiecare e încadrat altfel: la
- * unele capul ține jumătate de cadru, la altele se vede tot bustul. Puse așa cum
- * sunt într-un cerc de 28px, chipul iese de vreo zece pixeli și nu se distinge
- * nimic.
+ * A fost o vreme când fiecare avea propria apropiere, calculată ca să iasă toate
+ * capetele cam de aceeași mărime. N-a mers, și motivul merită scris ca să nu se
+ * reia: pozele sunt fotografiate de la distanțe diferite, iar ca să egalezi
+ * capetele trebuie să tai din fiecare altceva. Rezultatul se vede exact ca ce a
+ * reclamat clientul — „unul e mai apropiat, altul mai depărtat".
  *
- * Nu am tăiat fișierele, ci le apropii din CSS: `zoom` e cât se mărește poza, iar
- * `focus` e punctul care rămâne pe loc când se mărește.
+ * Acum toate patru se arată ÎNTREGI, la aceeași scară. Nu mai există nimic de
+ * reglat per poză, deci nu mai are cum să iasă una altfel decât celelalte.
+ * Chipurile sunt mai mici așa, dar la un cerc de 28px oricum se citește doar
+ * silueta — iar patru cercuri care se poartă la fel se văd mult mai bine decât
+ * patru încadrate „optim" fiecare în felul lui.
  *
- * ═══ CUM SE CALCULEAZĂ `focus`, CA SĂ NU SE MAI TAIE CAPETELE ═══
- *
- * Prima încercare a pus `focus` FIX PE MIJLOCUL CAPULUI și a tăiat creștetul la
- * toate patru. Motivul e că mărirea împinge conținutul DEPARTE de punctul fix:
- * dacă punctul fix e chiar capul, capul rămâne unde e și tot restul se împrăștie
- * în afara cercului, inclusiv creștetul.
- *
- * Ca să COBOARE capul în mijlocul cercului, punctul fix trebuie să fie DEASUPRA
- * lui. Formula, cu tot în procente din înălțimea pozei:
- *
- *     50 = focusY · (1 − zoom) + capCentru · zoom
- *
- * de unde `focusY = (capCentru · zoom − 50) / (zoom − 1)`. Iar `zoom` se alege
- * din cât de mare vrei capul: `zoom = 72 / înălțimeaCapului`, unde 72% e cât
- * ocupă un cap bine încadrat într-un cerc de avatar.
- *
- * De aceea valorile de mai jos sunt toate între 0 și 9%, nu pe la 25% cum erau.
- * Verificate una câte una, la 150px, nu la 28: la mărimea de pe site nu se vede
- * dacă un creștet e tăiat cu doi pixeli.
- *
- * Netăierea fișierelor are și un motiv practic: dacă mâine se schimbă mărimea
- * cercului, se ajustează două numere, nu se recomprimă pozele.
+ * Pozele sunt pătrate, cercul e pătrat, deci `object-cover` nu taie nimic din ele
+ * în afară de colțuri. Dacă vreodată intră o poză care NU e pătrată, aici trebuie
+ * revenit: aia chiar s-ar tăia.
  */
 export interface ProblemMessage {
   text: string;
   /** Numele expeditorului, pentru cititoarele de ecran. */
   name: string;
+  /** Pătrată. Se afișează întreagă, fără apropiere — vezi nota de mai sus. */
   photo: string;
-  /** Cât se apropie poza, ca să încapă capul în cerc. */
-  zoom: number;
-  /** Punctul care rămâne pe loc la apropiere, în procente: `x% y%`. */
-  focus: string;
 }
 
 export const PROBLEM_MESSAGES: ProblemMessage[] = [
@@ -113,35 +95,21 @@ export const PROBLEM_MESSAGES: ProblemMessage[] = [
     text: "Bună ziua! Cum pot comanda?",
     name: "Andreea M.",
     photo: "/avatars/avatar1.webp",
-    zoom: 2.15,
-    focus: "50% 4.6%",
   },
   {
     text: "Aveți produsul acesta pe stoc?",
     name: "Ionuț P.",
     photo: "/avatars/avatar2.webp",
-    zoom: 1.92,
-    focus: "50% 0%",
   },
   {
     text: "Pot să plătesc cu cardul?",
     name: "Maria D.",
     photo: "/avatars/avatar4.webp",
-    zoom: 2.06,
-    focus: "50% 1.4%",
   },
   {
     text: "Unde pot vedea mai multe produse?",
     name: "Radu C.",
-    /*
-      Singurul portret în care omul e fotografiat de la distanță, cu tot bustul.
-      De aceea are nevoie de o apropiere mult mai mare decât ceilalți — altfel
-      chipul lui iese vizibil mai mic în șirul de cercuri și se vede că nu sunt
-      din aceeași serie. Peste 3,5 începe să i se taie fruntea.
-    */
     photo: "/avatars/avatar3.webp",
-    zoom: 3.2,
-    focus: "53% 9%",
   },
 ];
 
@@ -158,23 +126,23 @@ export const PROBLEM_CARDS: ProblemCard[] = [
     art: "messages",
   },
   {
-    id: "hartii",
-    title: "Hârtiile le faci noaptea.",
+    id: "imprastiate",
+    title: "Produsele tale sunt împrăștiate peste tot.",
     description:
-      "Vineri, 23:47. Facturile de azi, AWB-urile de mâine, stocul cine știe când.",
+      "Câteva sunt pe Facebook, altele pe Instagram, iar restul sunt trimise doar la cerere prin mesaje.",
     image: {
-      alt: "Facturi făcute manual într-o foaie de calcul, noaptea",
-      hint: "Foaie de calcul cu facturi, seara târziu",
+      alt: "Produse răspândite pe Facebook, pe Instagram și în mesaje",
+      hint: "Produse răspândite pe Facebook, Instagram și în mesaje",
     },
   },
   {
-    id: "viteza",
-    title: "Magazinul se vede după 6,8 secunde.",
+    id: "incredere",
+    title: "Clienții au nevoie de încredere ca să comande.",
     description:
-      "Pe telefon, în mijlocul zilei, pe date mobile. Clientul nu are răbdarea ta.",
+      "Datele firmei, informațiile despre livrare, plata securizată și politica de retur îi ajută să cumpere fără ezitare.",
     image: {
-      alt: "Magazin online care se încarcă greu pe telefon",
-      hint: "Pagină care se încarcă greu pe telefon",
+      alt: "Semnale de încredere într-un magazin online: livrare, plată securizată, retur",
+      hint: "Date firmă, livrare, plată securizată, retur",
     },
   },
 ];

@@ -5,6 +5,12 @@ import { logAudit } from "@/lib/audit";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { claimuriDinToken } from "@/lib/auth/mfa";
 import { confirmaSesiuneaMfa } from "@/lib/auth/flux-mfa";
+import {
+  COOKIE_IMPERSONARE,
+  DURATA_IMPERSONARE_SEC,
+  VIATA_COOKIE_IMPERSONARE_SEC,
+  valoareMarcaj,
+} from "@/lib/auth/marcaj-impersonare";
 
 /**
  * Impersonare de cont, pentru suport.
@@ -80,13 +86,13 @@ export async function POST(req: NextRequest) {
    * Alegerea corecta e ca marcajul sa MARGINEASCA sesiunea, nu invers. De aceea
    * cookie-urile de sesiune primesc aici acelasi `maxAge`.
    *
-   * `updateSession` reimprospateaza tokenul la fiecare navigare si rescrie
-   * cookie-urile — cu implicitele bibliotecii, deci fereastra se poate intinde
-   * cat timp adminul e activ. Marcajul insa nu se re-emite, iar bara ramane
-   * legata de el; la disparitia lui `esteImpersonare` devine fals si `logout`
-   * ramane oricum la un clic distanta in topbar.
+   * MAI IMPORTANT: `maxAge` singur nu ajunge. `updateSession` reimprospateaza
+   * tokenul cand expira — adica exact pe la minutul 60 — si rescrie cookie-ul de
+   * sesiune cu durata normala; marcajul ar fi expirat, bara ar fi disparut, iar
+   * sesiunea imprumutata ar fi mers mai departe. Aceeasi constatare, mutata cu o
+   * ora. De aceea termenul sta si IN VALOAREA marcajului, iar `updateSession`
+   * inchide sesiunea cand il depaseste. Vezi src/lib/auth/marcaj-impersonare.ts.
    */
-  const DURATA_IMPERSONARE_SEC = 60 * 60;
 
   const { createServerClient } = await import("@supabase/ssr");
   const supabase = createServerClient(
@@ -141,12 +147,20 @@ export async function POST(req: NextRequest) {
     console.error("[impersonate] sesiunea imprumutata nu a putut fi identificata", { userId: body.userId });
   }
 
-  // Marcaj vizibil pentru UI + urma in loguri ca sesiunea curenta e imprumutata.
-  raspuns.cookies.set("impersonare", admin.id, {
+  /*
+   * Marcaj vizibil pentru UI + urma in loguri ca sesiunea curenta e imprumutata,
+   * si totodata TERMENUL preluarii.
+   *
+   * Cookie-ul traieste mai mult decat termenul (o zi fata de o ora) TOCMAI ca
+   * `updateSession` sa mai gaseasca ce sa verifice dupa ce termenul a trecut, si
+   * sa poata inchide sesiunea. Un cookie care ar expira odata cu termenul ar
+   * disparea inaintea sesiunii, si nu ar mai avea cine sa o opreasca.
+   */
+  raspuns.cookies.set(COOKIE_IMPERSONARE, valoareMarcaj(admin.id), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60, // o ora, nu 400 de zile ca sesiunea normala
+    maxAge: VIATA_COOKIE_IMPERSONARE_SEC,
     secure: process.env.NODE_ENV === "production",
   });
 

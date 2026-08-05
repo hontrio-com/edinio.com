@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/types/database.types";
 import { COOKIE_SESIUNE, cuDurataNoastra } from "./cookie-sesiune";
+import { COOKIE_IMPERSONARE, citesteMarcaj, secundeRamase } from "@/lib/auth/marcaj-impersonare";
 
 /**
  * Repara steagul `onboarding_completed` ramas pe false desi userul are deja
@@ -25,6 +26,28 @@ async function repairOnboardingFlag(userId: string): Promise<void> {
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
+  /*
+   * IMPERSONAREA SE INCHIDE LA TERMEN, nu doar isi pierde bara galbena.
+   *
+   * Marcajul poarta in valoare momentul pana la care preluarea e valabila. Dupa
+   * el, sesiunea imprumutata se inchide fortat aici — altfel reimprospatarea de
+   * token (care pica fix pe la minutul 60) i-ar fi dat inca 30 de zile, exact
+   * dupa ce semnalul vizual disparuse. Vezi marcaj-impersonare.ts.
+   */
+  const marcaj = citesteMarcaj(request.cookies.get(COOKIE_IMPERSONARE)?.value);
+  if (marcaj && Date.now() >= marcaj.expiraLa) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    const iesire = NextResponse.redirect(url);
+    for (const c of request.cookies.getAll()) {
+      if (c.name.startsWith("sb-") && c.name.includes("auth-token")) iesire.cookies.delete(c.name);
+    }
+    iesire.cookies.delete(COOKIE_IMPERSONARE);
+    iesire.cookies.delete("onboarding_done");
+    return iesire;
+  }
+
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -37,7 +60,12 @@ export async function updateSession(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, cuDurataNoastra(options)));
+          // Intr-o sesiune imprumutata, cookie-ul reimprospatat nu are voie sa
+          // treaca de termenul preluarii: altfel tocmai reimprospatarea ar
+          // prelungi ce incercam sa marginim.
+          const durata = marcaj ? secundeRamase(marcaj) : undefined;
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, cuDurataNoastra(options, durata)));
         },
       },
     }

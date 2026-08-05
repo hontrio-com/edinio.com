@@ -60,8 +60,9 @@ export const COOKIE_SESIUNE: CookieOptions = {
  * Se cheama in fiecare `setAll` propriu. Cookie-urile de STERGERE (`maxAge: 0`)
  * se lasa in pace: acolo zero chiar inseamna „sterge acum".
  */
-export function cuDurataNoastra(optiuni?: CookieOptions): CookieOptions | undefined {
-  if (!optiuni) return { maxAge: COOKIE_SESIUNE.maxAge };
+export function cuDurataNoastra(optiuni?: CookieOptions, durataSec?: number): CookieOptions | undefined {
+  const maxAge = durataSec ?? COOKIE_SESIUNE.maxAge;
+  if (!optiuni) return { maxAge };
   if (optiuni.maxAge === 0) return optiuni;
-  return { ...optiuni, maxAge: COOKIE_SESIUNE.maxAge };
+  return { ...optiuni, maxAge };
 }

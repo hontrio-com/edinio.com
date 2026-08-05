@@ -79,7 +79,7 @@ export function LinkGrid({
   links: { label: string; href: string; description?: string }[];
 }) {
   return (
-    <section className="border-t border-hairline bg-tint">
+    <section className="border-t border-hairline bg-white">
       <div className="mx-auto max-w-[1200px] px-5 py-16 sm:px-6 lg:px-8 lg:py-20">
         <h2 className="text-[26px] font-bold leading-[1.15] tracking-[-0.02em] text-ink sm:text-[32px]">
           {heading}

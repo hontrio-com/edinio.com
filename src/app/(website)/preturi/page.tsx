@@ -25,7 +25,7 @@ export default function PreturiPage() {
     <>
       <PlatformEvent event="ViewContent" data={{ content_name: "Preturi", content_category: "pricing" }} />
       {/* Hero */}
-      <div className="pt-20 pb-8 bg-muted/30">
+      <div className="pt-20 pb-8 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4">
             Preturi

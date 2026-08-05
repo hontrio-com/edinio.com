@@ -48,7 +48,7 @@ export default function DesprePage() {
   return (
     <>
       {/* Hero */}
-      <div className="pt-20 pb-12 bg-muted/30">
+      <div className="pt-20 pb-12 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4">
             Despre Edinio
@@ -83,7 +83,7 @@ export default function DesprePage() {
       </section>
 
       {/* Values */}
-      <section className="py-20 bg-muted/30">
+      <section className="py-20 bg-white">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-foreground mb-10 text-center">
             Ce ne diferentiaza

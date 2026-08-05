@@ -39,7 +39,7 @@ export default function ContactPage() {
   return (
     <>
       {/* Hero */}
-      <div className="pt-20 pb-12 bg-muted/30">
+      <div className="pt-20 pb-12 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4">
             Contact

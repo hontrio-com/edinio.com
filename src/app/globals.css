@@ -185,47 +185,6 @@
   }
 }
 
-/* ─── Sectiunea Problema: norul de nemultumiri, in plutire ───────────────────
-   Fiecare rand isi duce lista de DOUA ori, a doua oara ascunsa de cititoarele de
-   ecran. Cand pista a alunecat cu exact o lista, copia a doua sta fix unde statea
-   prima, deci reluarea nu se vede: nu e o revenire, e acelasi cadru.
-
-   De aceea `-50%` trebuie sa cada EXACT peste o lista. Spatiul dintre pastile e
-   pus INAUNTRUL fiecarei liste (plus un `padding` la coada, cat spatiul), iar
-   intre cele doua liste nu e niciun `gap`. Cu `gap` pe pista, latimea ar fi
-   `2L + g`, iar `-50%` ar cadea cu `g/2` alaturi si randul ar tresari la fiecare
-   tura.
-
-   Fiecare rand are alta durata, alta pornire si alt sens. Trei randuri care
-   aluneca la fel intr-o parte se citesc ca o banda de stiri; alternate si
-   nepotrivite intre ele se citesc ca un nor care se misca. Miscarea e lenta
-   dinadins, cam 20px pe secunda: cat sa se vada ca traieste, nu cat sa te ia cu
-   ochii de pe titlu. */
-@keyframes problem-drift {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-.problem-drift {
-  animation: problem-drift var(--drift-duration) linear var(--drift-delay)
-    infinite;
-  animation-direction: var(--drift-direction, normal);
-  /* Pista are latime proprie, altfel s-ar strange la cat e cardul. */
-  width: max-content;
-}
-
-/* Fara miscare, randurile raman unde le prinde: desenul e acelasi, doar ca sta
-   pe loc. Nu se ascunde nimic si nu se rearanjeaza nimic. */
-@media (prefers-reduced-motion: reduce) {
-  .problem-drift {
-    animation: none;
-  }
-}
-
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);

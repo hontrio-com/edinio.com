@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { HeroBackground, type HeroBackground as HeroBackgroundName } from "./hero-backgrounds";
+import { HeroRays } from "./hero-backgrounds";
 
 /**
  * Hero-ul paginii de acasă: totul pe mijloc, peste lumină verde statică.
@@ -12,22 +12,7 @@ import { HeroBackground, type HeroBackground as HeroBackgroundName } from "./her
 
 const TRUST = "15 zile gratuit, fără card de credit. Anulezi oricând.";
 
-export function Hero({
-  /**
-   * TEMPORAR. Cât timp se aleg fundalurile, hero-ul e randat de mai multe ori,
-   * fiecare cu alt desen. După alegere rămâne unul singur, iar prop-ul dispare
-   * împreună cu `detached` și cu apelurile în plus din `app/(website)/page.tsx`.
-   */
-  background = "aura",
-  /**
-   * TEMPORAR. Copiile de comparație nu stau în capul paginii, deci nu trebuie
-   * urcate sub bara de sus.
-   */
-  detached = false,
-}: {
-  background?: HeroBackgroundName;
-  detached?: boolean;
-}) {
+export function Hero() {
   return (
     /*
      * `-mt-18 pt-18` urcă secțiunea sub bara de sus și îi pune la loc spațiul
@@ -36,12 +21,8 @@ export function Hero({
      * Așa vine din marginea de sus a ferestrei, iar când derulezi, sticla mată a
      * barei o estompează, ceea ce arată chiar bine.
      */
-    <section
-      className={`relative isolate overflow-hidden bg-white ${
-        detached ? "" : "-mt-18 pt-18"
-      }`}
-    >
-      <HeroBackground variant={background} />
+    <section className="relative isolate -mt-18 overflow-hidden bg-white pt-18">
+      <HeroRays />
 
       {/*
         Spatiul de sus e mult mai mic pe telefon decat pe ecran mare. Pe desktop,

@@ -3,12 +3,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Shield, Headset, Wrench } from "lucide-react";
 import { Hero } from "@/components/website/sections/Hero";
-/* TEMPORAR: lista de fundaluri de hero puse la comparat, plus despartitorul. */
-import {
-  HERO_BACKGROUNDS,
-  HERO_BACKGROUND_LABELS,
-} from "@/components/website/sections/hero-backgrounds";
-import { VariantLabel } from "@/components/website/sections/VariantLabel";
 import { ProblemProof } from "@/components/website/sections/ProblemProof";
 import { Features } from "@/components/website/sections/Features";
 import { HowItWorksSection } from "@/components/website/HowItWorksSection";
@@ -154,25 +148,7 @@ export default function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
-      {/*
-        TEMPORAR: toate fundalurile de hero, unul sub altul, pentru ales.
-        Dupa alegere ramane un singur `<Hero />` fara prop, iar despartitoarele,
-        VariantLabel.tsx si variantele nefolosite din hero-backgrounds.tsx dispar.
-
-        Cat tine comparatia, pagina are opt `h1` si opt randuri de butoane. Se
-        accepta doar fiindca e pe ramura de preview si dureaza o runda: pe main
-        ar fi si SEO prost, si navigare la tastatura imposibila.
-      */}
-      {HERO_BACKGROUNDS.map((variant, index) => (
-        <div key={variant}>
-          <VariantLabel
-            letter={`Varianta ${index + 1}`}
-            title={HERO_BACKGROUND_LABELS[variant]}
-          />
-          <Hero background={variant} detached />
-        </div>
-      ))}
-
+      <Hero />
       <ProblemProof />
       <Features />
       <HowItWorksSection />

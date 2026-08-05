@@ -1,7 +1,8 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { uploadToR2, deleteFromR2, r2KeyFromUrl, createPresignedPutUrl } from "@/lib/r2";
+import { uploadToR2, createPresignedPutUrl } from "@/lib/r2";
 import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES, MAX_VIDEO_MB, VIDEO_EXT_BY_TYPE } from "@/lib/pages/video-config";
 import { detectImageMime } from "@/lib/utils/file-signature";
 
@@ -39,7 +40,10 @@ export async function uploadImage(
     }
     const ext = tipReal === "image/jpeg" ? "jpg" : tipReal === "image/png" ? "png" : "webp";
 
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    // Nume imprevizibil: obiectul e servit public din R2, deci numele lui e
+    // singurul lucru care il tine nelistabil. `Math.random()` in V8 nu e
+    // criptografic si isi tradeaza starea prin valorile deja returnate.
+    const filename = `${randomUUID()}.${ext}`;
     const key = folder
       ? `${bucket}/${user.id}/${folder}/${filename}`
       : `${bucket}/${user.id}/${filename}`;
@@ -80,7 +84,9 @@ export async function createVideoUpload(input: { contentType: string; size: numb
   }
 
   const ext = VIDEO_EXT_BY_TYPE[input.contentType] ?? "mp4";
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  // Vezi `uploadImage`: numele e singura piedica in calea ghicirii unui obiect
+  // public, iar `Math.random()` nu e imprevizibil.
+  const filename = `${randomUUID()}.${ext}`;
   const key = `gallery/${user.id}/pages/videos/${filename}`;
 
   try {
@@ -93,18 +99,19 @@ export async function createVideoUpload(input: { contentType: string; size: numb
   }
 }
 
-export async function deleteImage(url: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Nu esti autentificat." };
-
-  const key = r2KeyFromUrl(url);
-  if (!key) return { error: "URL invalid." };
-
-  try {
-    await deleteFromR2(key);
-    return { success: true };
-  } catch {
-    return { error: "Stergerea a esuat." };
-  }
-}
+/*
+ * `deleteImage(url)` a fost stearsa pe 05.08.2026. Nu o readuce asa cum era.
+ *
+ * Cerea doar o sesiune, dupa care deriva cheia R2 din URL-ul primit de la
+ * apelant si o stergea — fara sa verifice al cui e obiectul. Adica orice
+ * comerciant autentificat putea sterge logo-ul, coperta sau pozele de produs
+ * ale oricui, daca stia URL-ul lor (si URL-urile alea sunt publice, stau in
+ * HTML-ul vitrinelor). Nu era exploatabila doar fiindca nu avea niciun apelant
+ * in tot src-ul, deci Turbopack n-o punea in server-reference-manifest.json si
+ * Next respingea apelul inainte de codul aplicatiei; prima componenta care ar fi
+ * chemat-o o transforma in stergere intre chiriasi, fara nicio urma.
+ *
+ * Calea corecta exista deja si e singura autoritate de stergere: `deleteMedia`
+ * din src/lib/actions/media.actions.ts, care trece prin `keyOwnedBy` inainte de
+ * `deleteFromR2`.
+ */

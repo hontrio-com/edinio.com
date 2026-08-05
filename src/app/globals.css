@@ -301,18 +301,6 @@
   100% { transform: translateX(-50%); }
 }
 
-/* ─── /migrare hero: button glow pulse (no gradients) ──────────────────── */
-@keyframes migrare-btn-glow {
-  0%, 100% { box-shadow: 0 10px 28px -10px rgba(26, 181, 84, 0.55); }
-  50% { box-shadow: 0 16px 44px -8px rgba(26, 181, 84, 0.95); }
-}
-.migrare-btn-glow {
-  animation: migrare-btn-glow 2.4s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .migrare-btn-glow { animation: none; }
-}
-
 /* ─── Sertarul de cos: intrarea dinspre marginea din dreapta ─────────────────
    Panoul exista de mult si sta unde trebuie, dar aparea DINTR-O DATA, ca o
    fereastra, nu ca un sertar. Diferenta dintre „a aparut ceva peste pagina" si

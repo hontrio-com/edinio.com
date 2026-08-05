@@ -150,6 +150,31 @@ export async function markRun(
 }
 
 /**
+ * Marcheaza PESIMIST inceputul unei rulari.
+ *
+ * De ce inainte, si nu doar la final: un fisier care umple memoria omoara
+ * PROCESUL, deci nu se prinde in niciun `try/catch` si `markRun` nu se mai
+ * executa niciodata. `last_run_at` ramanea vechi, iar `dueSources` ordoneaza
+ * crescator dupa el — sursa care ucide invocarea revenea PRIMA la fiecare ora,
+ * inaintea celorlalti comercianti din aceeasi tura, iar `consecutive_failures`
+ * nu crestea, deci nici dezactivarea automata nu se declansa vreodata. Scris
+ * inainte, randul spune deja "a rulat la T si a esuat"; o rulare care chiar se
+ * incheie il suprascrie cu adevarul.
+ *
+ * Dezactivarea automata NU se aplica aici, dinadins: ar stinge o sursa care apoi
+ * reuseste in aceeasi rulare, iar ramura de reusita din `markRun` nu reaprinde
+ * nimic. Pragul se verifica la INTRAREA urmatoare in `runSource`.
+ */
+export async function markRunStart(client: AnyClient, source: StockFeedSource): Promise<void> {
+  await patchSource(client, source.id, {
+    last_run_at: new Date().toISOString(),
+    last_status: "error",
+    last_error: "Rularea nu s-a incheiat. Se reincearca la tura urmatoare.",
+    consecutive_failures: source.consecutive_failures + 1,
+  });
+}
+
+/**
  * Sursele care au ce rula acum.
  *
  * Filtrarea se face in cod, nu in SQL, pentru ca regula depinde de ora curenta

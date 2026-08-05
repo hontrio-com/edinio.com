@@ -8,6 +8,7 @@ import { claimuriDinToken } from "@/lib/auth/mfa";
 import { idSesiuneCurenta } from "@/lib/auth/stare-mfa";
 import { confirmaSesiuneaMfa, verificaCodMfa } from "@/lib/auth/flux-mfa";
 import { COOKIE_ASTEPTARE, desigileazaSesiune } from "@/lib/auth/sesiune-asteptare";
+import { COOKIE_SESIUNE } from "@/lib/supabase/cookie-sesiune";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 
 /**
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        cookieOptions: COOKIE_SESIUNE,
         cookies: {
           getAll() { return cookieStore.getAll(); },
           setAll(c) { deScris.push(...c); },

@@ -76,7 +76,7 @@ export default function CookiesPage() {
                 <tr>
                   <td className="py-2 pr-4 font-mono text-xs">sb-*-auth-token</td>
                   <td className="py-2 pr-4">Menținerea sesiunii de autentificare (JWT)</td>
-                  <td className="py-2 pr-4">Sesiune</td>
+                  <td className="py-2 pr-4">30 de zile</td>
                   <td className="py-2">Supabase</td>
                 </tr>
                 <tr>

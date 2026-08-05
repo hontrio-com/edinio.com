@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
@@ -34,7 +35,13 @@ export async function POST(request: NextRequest) {
 
   // Fara plafon, un singur cont putea incarca 10MB la nesfarsit in R2-ul
   // platformei — cost care creste la nesfarsit si nu se recupereaza de nicaieri.
-  if (!rateLimit(`upload:${clientIp(request)}`, 30, 60_000)) {
+  //
+  // Cheia principala e UTILIZATORUL: cheiat doar pe IP (cum era), un comerciant
+  // care isi incarca galeria de produse golea cosul si pentru colegul de la
+  // biroul de alaturi, pe aceeasi iesire NAT. Cheia pe IP ramane, cu buget mai
+  // larg, fiindca doar ea mai conteaza cand cineva isi face conturi noi ca sa
+  // obtina bugete noi.
+  if (!rateLimit(`upload:${user.id}`, 30, 60_000) || !rateLimit(`upload-ip:${clientIp(request)}`, 100, 60_000)) {
     return NextResponse.json({ error: "Prea multe incarcari. Asteapta un minut." }, { status: 429 });
   }
   const lim = await consumaLimita(`upload:${user.id}`, 300, 3600);
@@ -70,7 +77,11 @@ export async function POST(request: NextRequest) {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "webp";
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  // Nume imprevizibil, nu `Date.now()`-`Math.random()`: depozitul e public si
+  // numele tine loc de control de acces. `Math.random()` in V8 nu e criptografic,
+  // iar cine isi vede propriile sufixe poate deduce starea generatorului si numele
+  // incarcarilor facute in paralel de pe aceeasi instanta.
+  const filename = `${randomUUID()}.${ext}`;
   const key = folder
     ? `${bucket}/${user.id}/${folder}/${filename}`
     : `${bucket}/${user.id}/${filename}`;

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/types/database.types";
+import { COOKIE_SESIUNE } from "./cookie-sesiune";
 
 /**
  * Repara steagul `onboarding_completed` ramas pe false desi userul are deja
@@ -28,6 +29,9 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Aceleasi optiuni in toate cele patru locuri unde se face un client; vezi
+      // ./cookie-sesiune.ts pentru ce erau inainte si de ce s-au schimbat.
+      cookieOptions: COOKIE_SESIUNE,
       cookies: {
         getAll() { return request.cookies.getAll(); },
         setAll(cookiesToSet) {

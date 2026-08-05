@@ -1,3 +1,4 @@
+import { COLOANE_BUSINESS_PUBLIC, pentruBrowser } from "@/lib/storefront/business-public";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -169,7 +170,7 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
 export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   const supabase = await createClient();
   const [{ data: business }, { data: { user } }] = await Promise.all([
-    supabase.from("businesses").select("*").eq("slug", slug).single(),
+    supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single(),
     supabase.auth.getUser(),
   ]);
   if (!business) notFound();
@@ -348,7 +349,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   return (
     <MiniStoreRenderer
       surface="shop"
-      business={business}
+      business={pentruBrowser(business)}
       products={products}
       storeSettings={setariDeTrimis as never}
       basePath={basePath}

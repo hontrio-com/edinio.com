@@ -12,9 +12,16 @@ import type {
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
 import type { StoreDesign } from "@/lib/storefront/design/types";
+import { pentruBrowser, type BusinessCitit } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
+/**
+ * Intrarea e randul INTREG (apelantii sunt componente de server, care au nevoie
+ * de `user_id` si `suspended_until` pentru propriile lor verificari), dar ce iese
+ * de aici pleaca la componente de CLIENT — deci se taie, o singura data, in
+ * `pentruBrowser`. Vezi ./business-public.ts pentru ce se taie si de ce.
+ */
+type Business = BusinessCitit;
 
 /**
  * Partea serializabila a identitatii magazinului.
@@ -104,7 +111,7 @@ export function buildChromeData({
   const cosSertar = !!design && cartMode === "link" && !cosPePagina && !!comert;
 
   return {
-    business,
+    business: pentruBrowser(business),
     basePath,
     // Se calculeaza aici, o singura data, ca cele ~12 componente care leaga o
     // categorie sau o pagina de catalog sa nu il mai deduca fiecare din

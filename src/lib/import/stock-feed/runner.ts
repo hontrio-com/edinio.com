@@ -12,7 +12,7 @@ import {
   stageStockPlan,
   type StockTotals,
 } from "./committer";
-import { markRun, type StockFeedSource } from "./sources";
+import { markRun, markRunStart, patchSource, MAX_FAILURES, type StockFeedSource } from "./sources";
 
 /**
  * Rularea unei surse: citeste adresa, calculeaza planul, scrie.
@@ -43,6 +43,25 @@ export async function runSource(
   source: StockFeedSource,
   deadline: number,
 ): Promise<RunResult> {
+  /*
+   * ── Sursele care ucid invocarea se sting aici ──
+   *
+   * `markRunStart` numara esecurile dar nu dezactiveaza (vezi de ce, acolo), deci
+   * pragul se verifica la intrare. Fara asta, o sursa care omoara procesul de
+   * fiecare data ar fi ramas activa la nesfarsit si ar fi mancat, tura de tura,
+   * bugetul de un minut al cronului inaintea celorlalti comercianti.
+   * Comerciantul o poate reaprinde din ecran (reactivarea pune contorul la zero).
+   */
+  if (source.consecutive_failures >= MAX_FAILURES) {
+    const error = "Sursa a fost oprita dupa prea multe rulari esuate la rand.";
+    await patchSource(admin, source.id, { enabled: false, last_status: "error", last_error: error });
+    return { ok: false, error };
+  }
+
+  /* Pesimist, INAINTE de citire si parsare: un fisier care umple memoria nu lasa
+     in urma nicio exceptie de prins. */
+  await markRunStart(admin, source);
+
   /* ── Citirea adresei ── */
   const fetched = await safeFetchFile(source.url);
   if ("error" in fetched) {

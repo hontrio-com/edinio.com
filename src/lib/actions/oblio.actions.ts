@@ -555,16 +555,19 @@ export async function maybeAutoGenerateInvoice(
     const result = await generateOblioInvoice(businessId, orderId, sistem);
     /*
      * Pe calea automata esecul e MUT (dispecerul inghite `false`), deci o comanda
-     * pe care garda de reconciliere o refuza ar ramane tacit nefacturata. Se scrie
-     * cu clientul de SISTEM: `logError` merge pe clientul de cerere, iar aici nu
-     * exista sesiune.
+     * pe care garda de reconciliere o refuza ar ramane tacit nefacturata.
+     *
+     * Se scrie prin `logError`, nu cu un insert propriu — vezi explicatia din
+     * fgo.actions.ts: motivul invocat inainte („logError merge pe clientul de
+     * cerere") nu mai e adevarat, iar insertul direct era ultimul care avea nevoie
+     * de politica INSERT deschisa pe error_logs.
      */
     if ("error" in result) {
-      await supabase.from("error_logs").insert({
+      await logError({
         action: "oblio.autoInvoiceEsuat",
         message: result.error,
-        details: { orderId } as never,
-        business_id: businessId,
+        details: { orderId },
+        businessId,
         severity: "critical",
       });
       return false;

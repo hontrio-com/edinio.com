@@ -15,8 +15,16 @@ export async function POST(req: NextRequest) {
    * inainte de a o salva. Dar fara plafon devine o unealta de bombardare cu
    * SMS-uri (pe cheia lui, sau pe una furata) — cateva teste pe ora sunt
    * suficiente pentru scopul real.
+   *
+   * AMANDOUA cheile, nu doar una. Numai pe IP (cum era) doi comercianti din
+   * acelasi birou sau din spatele aceluiasi NAT isi impart cosul de 3 si se
+   * blocheaza reciproc, cu un mesaj care da vina pe cine nu trebuie. Numai pe
+   * user.id ar fi si mai rau: inregistrarea e self-serve, deci zece conturi
+   * gratuite = zece bugete noi. Bugetul de IP ramane, dar mai larg, cat sa
+   * incapa cativa oameni reali pe aceeasi iesire. Tiparul e cel din
+   * `api/admin/impersonate`.
    */
-  if (!rateLimit(`sms-test:${clientIp(req)}`, 3, 60_000)) {
+  if (!rateLimit(`sms-test:${user.id}`, 3, 60_000) || !rateLimit(`sms-test-ip:${clientIp(req)}`, 10, 60_000)) {
     return NextResponse.json({ error: "Prea multe incercari." }, { status: 429 });
   }
   const lim = await consumaLimita(`sms-test:${user.id}`, 5, 3600, 3600);

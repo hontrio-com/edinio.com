@@ -1,3 +1,4 @@
+import { COLOANE_BUSINESS_PUBLIC, pentruBrowser } from "@/lib/storefront/business-public";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -156,7 +157,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
   const supabase = await createClient();
 
   const [{ data: business }, { data: { user } }] = await Promise.all([
-    supabase.from("businesses").select("*").eq("slug", slug).single(),
+    supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single(),
     supabase.auth.getUser(),
   ]);
 
@@ -359,7 +360,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
               <ProductPageSection
                 variant={opsResolved.design.product.page.variant}
                 setari={opsResolved.design.product.page.settings}
-                business={business}
+                business={pentruBrowser(business)}
                 product={product}
                 storeSettings={setariDeTrimis as never}
                 basePath={basePath}
@@ -459,7 +460,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         dangerouslySetInnerHTML={{ __html: jsonLdSafe(storeJsonLd) }}
       />
       <MiniStoreRenderer
-        business={business}
+        business={pentruBrowser(business)}
         products={products}
         storeSettings={setariDeTrimis}
         basePath={basePath}

@@ -27,7 +27,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Contul tau nu are o adresa de email." }, { status: 400 });
   }
 
-  if (!rateLimit(`notif-test:${clientIp(req)}`, 5, 60_000)) {
+  // Cheia principala e UTILIZATORUL, nu IP-ul: doar pe IP, doi comercianti din
+  // acelasi birou sau NAT isi imparteau cosul si se blocau reciproc. Cheia pe IP
+  // ramane, cu buget mai larg — singura care mai conteaza cand cineva isi face
+  // zece conturi gratuite ca sa obtina zece bugete noi.
+  if (!rateLimit(`notif-test:${user.id}`, 5, 60_000) || !rateLimit(`notif-test-ip:${clientIp(req)}`, 15, 60_000)) {
     return NextResponse.json({ error: "Prea multe incercari." }, { status: 429 });
   }
 

@@ -37,11 +37,20 @@ function clientAnonim() {
 
 // First path segments on the platform host that are app/website routes (not
 // storefront slugs). The custom-domain redirect below skips these.
-const NON_STORE_SEGMENTS = new Set([
+//
+// EXPORTAT dinadins: aceeasi lista e si lista de adrese REZERVATE la crearea
+// magazinului (createBusiness, src/lib/actions/business.actions.ts). O copie a
+// ei acolo s-ar fi despartit de asta la prima ruta noua de aplicatie, iar un
+// magazin cu slug egal cu o ruta a platformei e un magazin la care nu se poate
+// ajunge niciodata: ruta aplicatiei castiga.
+//
+// „migrare" a fost scos pe 05.08.2026 odata cu restul paginii /migrare, care nu
+// mai exista de mult.
+export const NON_STORE_SEGMENTS = new Set([
   "dashboard", "login", "register", "forgot-password", "reset-password",
   "onboarding", "admin",
   "despre", "preturi", "contact", "termeni", "cookies", "gdpr",
-  "confidentialitate", "start", "migrare", "demo",
+  "confidentialitate", "start", "demo",
 ]);
 
 export async function proxy(request: NextRequest) {

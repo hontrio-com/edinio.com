@@ -158,6 +158,127 @@ async function emitSubscriptionInvoice(
   }
 }
 
+// Factura fiscala Smartbill + notificarea catre admin pentru o comanda de
+// domeniu PLATITA. Rulata DEFERAT (dupa raspunsul catre Stripe) prin `after()`:
+// facut inline, apelul Smartbill (lib/smartbill.ts — fetch fara timeout, care
+// inghite erorile) tinea handlerul agatat pana expira functia, iar Stripe relua
+// acelasi checkout.session.completed. Asa se emitea A DOUA factura fiscala pe
+// aceeasi incasare, care cere storno la ANAF.
+// Idempotenta, ca la abonamente: daca incasarea are deja factura emisa, nu se
+// mai emite nimic si nu se mai trimite emailul.
+type DomainInvoiceMeta = {
+  userId: string;
+  businessId: string;
+  orderId: string | null;
+  domain: string;
+  tld: string;
+  period: number;
+  totalPrice: number;
+  contactInfo: Record<string, string>;
+  paymentIntentId: string | null;
+  sessionEmail: string | null;
+};
+
+async function emitDomainOrderInvoice(admin: SupabaseClient, o: DomainInvoiceMeta): Promise<void> {
+  let existingInvoice: { id: string; smartbill_series: string | null } | null = null;
+  if (o.paymentIntentId) {
+    const { data } = await admin
+      .from("invoices")
+      .select("id, smartbill_series")
+      .eq("stripe_invoice_id", o.paymentIntentId)
+      .maybeSingle();
+    existingInvoice = data ?? null;
+    if (existingInvoice?.smartbill_series) {
+      console.log("[webhook] domain: factura deja emisa pentru aceasta incasare, sar:", o.paymentIntentId);
+      return;
+    }
+  }
+
+  const [{ data: bizData }, { data: profileData }, { data: authUserData }] = await Promise.all([
+    admin.from("businesses").select("business_name, address, city, county, cui").eq("id", o.businessId).maybeSingle(),
+    admin.from("users_profile").select("full_name").eq("id", o.userId).maybeSingle(),
+    admin.auth.admin.getUserById(o.userId),
+  ]);
+
+  const userEmail = authUserData?.user?.email ?? "";
+  const clientName = bizData?.business_name || profileData?.full_name || userEmail || "Client";
+
+  let sbSeries: string | null = null;
+  let sbNumber: string | null = null;
+  let sbError: string | null = null;
+
+  const sbResult = await createSmartbillInvoice(
+    {
+      name: clientName,
+      email: userEmail,
+      vatCode: bizData?.cui ?? undefined,
+      address: bizData?.address ?? undefined,
+      city: bizData?.city ?? undefined,
+      county: bizData?.county ?? undefined,
+    },
+    {
+      name: `Domeniu ${o.domain} (${o.period} ${o.period === 1 ? "an" : "ani"})`,
+      price: o.totalPrice,
+      quantity: 1,
+    },
+  );
+
+  if (sbResult.error) {
+    sbError = sbResult.error;
+    console.error("[webhook] domain Smartbill failed:", sbError);
+  } else {
+    sbSeries = sbResult.series ?? null;
+    sbNumber = sbResult.number ?? null;
+  }
+
+  if (existingInvoice) {
+    // Randul exista dintr-o incercare anterioara in care Smartbill a esuat;
+    // il actualizam in loc sa inseram al doilea rand pe aceeasi incasare.
+    await admin.from("invoices").update({
+      smartbill_series: sbSeries,
+      smartbill_number: sbNumber,
+      smartbill_error: sbError,
+    }).eq("id", existingInvoice.id);
+  } else {
+    const { error: invoiceError } = await admin.from("invoices").insert({
+      user_id: o.userId,
+      plan: "domain",
+      amount: o.totalPrice,
+      currency: "RON",
+      smartbill_series: sbSeries,
+      smartbill_number: sbNumber,
+      smartbill_error: sbError,
+      stripe_invoice_id: o.paymentIntentId,
+      status: "paid",
+    });
+    if (invoiceError) {
+      console.error("[webhook] domain invoice insert failed:", invoiceError);
+    } else {
+      console.log("[webhook] domain invoice saved:", { domain: o.domain, sbSeries, sbNumber });
+    }
+  }
+
+  const { sendDomainOrderToAdmin } = await import("@/lib/email");
+  const ci = o.contactInfo;
+  // Titularul poate fi persoana fizica (nume) sau juridica (firma).
+  const registrantName = ci.entityType === "pj"
+    ? (ci.companyname || "").trim()
+    : (ci.fullname || `${ci.firstname ?? ""} ${ci.lastname ?? ""}`).trim();
+  await sendDomainOrderToAdmin({
+    orderId: o.orderId ?? o.domain,
+    domain: o.domain,
+    tld: o.tld,
+    period: o.period,
+    totalPrice: o.totalPrice,
+    customerName: registrantName || ci.email || "N/A",
+    customerEmail: ci.email ?? o.sessionEmail ?? "",
+    businessName: bizData?.business_name ?? "N/A",
+    entityType: ci.entityType === "pj" ? "pj" : "pf",
+    cnp: ci.cnp ?? "",
+    cui: ci.cui ?? "",
+  }).catch((err) => console.error("[webhook] domain admin email failed:", err));
+}
+
 // Metadata + starea abonamentului din spatele unei facturi. Metadata (user_id,
 // plan, interval) vine din subscription_details (ambele forme de billing) sau,
 // in lipsa, de pe abonament. Statusul e citit MEREU de pe abonament: facturile
@@ -208,6 +329,31 @@ async function resolveSubUserId(admin: SupabaseClient, sub: Stripe.Subscription)
   return data?.id ?? null;
 }
 
+// Revendica evenimentul in registrul `stripe_events`. Stripe livreaza
+// AT-LEAST-ONCE si retrimite ACELASI event.id la orice raspuns non-2xx sau
+// timeout; fara registru, relivrarea rejoaca tot handlerul (a doua comanda de
+// domeniu, a doua factura fiscala pe aceeasi incasare, inca un email).
+// `event_id` e PRIMARY KEY, deci a doua scriere se loveste de 23505.
+// NU tratam orice eroare drept duplicat: daca tabelul inca lipseste (migratia se
+// aplica separat) sau baza e indisponibila, lasam evenimentul sa treaca — un
+// duplicat rar e mai putin grav decat pierderea tacuta a TUTUROR platilor.
+async function revendicaEveniment(admin: SupabaseClient, event: Stripe.Event): Promise<boolean> {
+  const { error } = await admin.from("stripe_events").insert({ event_id: event.id, type: event.type });
+  if (!error) return true;
+  if (error.code === "23505") return false;
+  console.error("[webhook] registrul de evenimente indisponibil, procesez fara dedupe:", error.message);
+  return true;
+}
+
+// Sterge revendicarea cand evenimentul NU a fost dus la capat. Obligatoriu:
+// un raspuns non-2xx (sau o exceptie) ii cere lui Stripe sa reia evenimentul,
+// iar reluarea ar fi respinsa ca duplicat — adica o plata reusita ar ramane
+// neprocesata pentru totdeauna, tacut.
+async function elibereazaEveniment(admin: SupabaseClient, eventId: string): Promise<void> {
+  const { error } = await admin.from("stripe_events").delete().eq("event_id", eventId);
+  if (error) console.error("[webhook] eliberarea evenimentului a esuat:", eventId, error.message);
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
@@ -227,6 +373,24 @@ export async function POST(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
+  // Dedupe INAINTE de orice scriere sau apel extern.
+  if (!(await revendicaEveniment(admin, event))) {
+    console.log("[webhook] eveniment deja procesat, ignorat:", event.id, event.type);
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
+  let res: NextResponse;
+  try {
+    res = await proceseazaEveniment(admin, event);
+  } catch (err) {
+    await elibereazaEveniment(admin, event.id);
+    throw err;
+  }
+  if (!res.ok) await elibereazaEveniment(admin, event.id);
+  return res;
+}
+
+async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): Promise<NextResponse> {
   // ── checkout.session.completed ─────────────────────────────────────────────
   // Fires once when a new subscription is created via Checkout.
   // We update the plan, store the Stripe customer ID, and clear any suspension.
@@ -247,109 +411,75 @@ export async function POST(req: NextRequest) {
       let contactInfo = {};
       try { contactInfo = JSON.parse(contact ?? "{}"); } catch { /* ignore */ }
 
-      const { data: createdOrder, error: orderError } = await admin.from("domain_orders").insert({
+      const domainPrice = Number(total_price) || 0;
+      const periodYears = Number(period) || 1;
+
+      // A doua plasa dupa registrul de evenimente, pe cheia platii: aceeasi
+      // sesiune de checkout nu poate produce doua comenzi, indiferent din cate
+      // evenimente diferite ajunge aici.
+      const { data: existingOrder, error: lookupError } = await admin
+        .from("domain_orders")
+        .select("id")
+        .eq("stripe_session_id", session.id)
+        .maybeSingle();
+
+      if (lookupError) {
+        console.error("[webhook] domain_order: cautarea dupa stripe_session_id a esuat:", lookupError.message);
+      } else if (existingOrder) {
+        console.log("[webhook] domain_order exista deja pentru sesiunea:", session.id);
+        return NextResponse.json({ received: true });
+      }
+
+      const orderRow = {
         user_id,
         business_id,
         domain,
         tld,
-        period: Number(period) || 1,
+        period: periodYears,
         price_per_year: Number(price_per_year) || 0,
-        total_price: Number(total_price) || 0,
+        total_price: domainPrice,
         status: "pending",
         contact_info: contactInfo,
-      }).select("id").single();
+      };
+
+      let { data: createdOrder, error: orderError } = await admin
+        .from("domain_orders")
+        .insert({ ...orderRow, stripe_session_id: session.id })
+        .select("id")
+        .single();
+
+      // Migratia care adauga `stripe_session_id` se aplica separat de deploy. Cat
+      // timp coloana lipseste, PostgREST respinge insertul INTREG (PGRST204/42703)
+      // si o comanda de domeniu PLATITA ar disparea fara urma. Reincercam fara
+      // coloana: mai bine fara dedupe decat fara comanda.
+      if (orderError && (orderError.code === "PGRST204" || orderError.code === "42703")) {
+        console.error("[webhook] domain_order: stripe_session_id lipseste din schema — migratia nu e aplicata");
+        ({ data: createdOrder, error: orderError } = await admin
+          .from("domain_orders").insert(orderRow).select("id").single());
+      }
 
       if (orderError) {
         console.error("[webhook] domain_order insert failed:", orderError);
-      } else {
-        console.log("[webhook] domain_order created:", domain, createdOrder?.id);
-
-        // Fetch business info for admin email + invoice
-        const [{ data: bizData }, { data: profileData }, { data: authUserData }] = await Promise.all([
-          admin.from("businesses")
-            .select("business_name, address, city, county, cui")
-            .eq("id", business_id)
-            .single(),
-          admin.from("users_profile")
-            .select("full_name")
-            .eq("id", user_id)
-            .maybeSingle(),
-          admin.auth.admin.getUserById(user_id),
-        ]);
-
-        const userEmail = authUserData?.user?.email ?? "";
-        const clientName = bizData?.business_name || profileData?.full_name || userEmail || "Client";
-        const domainPrice = Number(total_price) || 0;
-
-        // Emit SmartBill invoice for domain purchase
-        let sbSeries: string | null = null;
-        let sbNumber: string | null = null;
-        let sbError: string | null = null;
-
-        const sbResult = await createSmartbillInvoice(
-          {
-            name: clientName,
-            email: userEmail,
-            vatCode: bizData?.cui ?? undefined,
-            address: bizData?.address ?? undefined,
-            city: bizData?.city ?? undefined,
-            county: bizData?.county ?? undefined,
-          },
-          {
-            name: `Domeniu ${domain} (${period} ${Number(period) === 1 ? "an" : "ani"})`,
-            price: domainPrice,
-            quantity: 1,
-          }
-        );
-
-        if (sbResult.error) {
-          sbError = sbResult.error;
-          console.error("[webhook] domain Smartbill failed:", sbError);
-        } else {
-          sbSeries = sbResult.series ?? null;
-          sbNumber = sbResult.number ?? null;
-        }
-
-        // Save invoice record
-        const { error: invoiceError } = await admin.from("invoices").insert({
-          user_id,
-          plan: "domain",
-          amount: domainPrice,
-          currency: "RON",
-          smartbill_series: sbSeries,
-          smartbill_number: sbNumber,
-          smartbill_error: sbError,
-          stripe_invoice_id: session.payment_intent as string ?? null,
-          status: "paid",
-        });
-
-        if (invoiceError) {
-          console.error("[webhook] domain invoice insert failed:", invoiceError);
-        } else {
-          console.log("[webhook] domain invoice saved:", { domain, sbSeries, sbNumber });
-        }
-
-        // Send admin notification
-        const { sendDomainOrderToAdmin } = await import("@/lib/email");
-        const ci = contactInfo as Record<string, string>;
-        // Titularul poate fi persoana fizica (nume) sau juridica (firma).
-        const registrantName = ci.entityType === "pj"
-          ? (ci.companyname || "").trim()
-          : (ci.fullname || `${ci.firstname ?? ""} ${ci.lastname ?? ""}`).trim();
-        sendDomainOrderToAdmin({
-          orderId: createdOrder?.id ?? domain,
-          domain,
-          tld,
-          period: Number(period) || 1,
-          totalPrice: domainPrice,
-          customerName: registrantName || ci.email || "N/A",
-          customerEmail: ci.email ?? session.customer_email ?? "",
-          businessName: bizData?.business_name ?? "N/A",
-          entityType: ci.entityType === "pj" ? "pj" : "pf",
-          cnp: ci.cnp ?? "",
-          cui: ci.cui ?? "",
-        }).catch((err) => console.error("[webhook] domain admin email failed:", err));
+        return NextResponse.json({ received: true });
       }
+
+      console.log("[webhook] domain_order created:", domain, createdOrder?.id);
+
+      // Factura fiscala + emailul catre admin DEFERAT, ca la abonamente: comanda
+      // (starea care conteaza) e deja salvata sincron, iar Stripe primeste 200
+      // fara sa astepte apelul lent Smartbill.
+      after(() => emitDomainOrderInvoice(admin, {
+        userId: user_id,
+        businessId: business_id,
+        orderId: createdOrder?.id ?? null,
+        domain,
+        tld,
+        period: periodYears,
+        totalPrice: domainPrice,
+        contactInfo: contactInfo as Record<string, string>,
+        paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+        sessionEmail: session.customer_email ?? null,
+      }));
 
       return NextResponse.json({ received: true });
     }

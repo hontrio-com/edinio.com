@@ -12,6 +12,7 @@ import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita, reseteazaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
 import { idSesiuneCurenta, uitaStareaMfa } from "@/lib/auth/stare-mfa";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
+import { COOKIE_SESIUNE } from "@/lib/supabase/cookie-sesiune";
 import {
   citesteCampuriMfa,
   confirmaSesiuneaMfa,
@@ -113,6 +114,7 @@ export async function login(formData: { email: string; password: string }) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: COOKIE_SESIUNE,
       cookies: {
         getAll() { return cookieStore.getAll(); },
         setAll(deScris) { cookieuriSesiune.push(...deScris); },

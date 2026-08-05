@@ -1,4 +1,5 @@
 import type { MenuItem } from "@/lib/pages/menu";
+import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -10,7 +11,9 @@ import type { Database } from "@/types/database.types";
  * cel putin randarea are acum o singura copie.
  */
 
-export type Business = Database["public"]["Tables"]["businesses"]["Row"];
+// Randul TAIAT, nu cel intreg: tipul asta descrie ce primesc sectiunile de
+// client. Vezi src/lib/storefront/business-public.ts.
+export type Business = BusinessPublic;
 export type Product = Database["public"]["Tables"]["products"]["Row"];
 export type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
 

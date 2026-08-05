@@ -1,3 +1,4 @@
+import { pentruBrowser } from "@/lib/storefront/business-public";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
@@ -236,7 +237,7 @@ export default async function ProductDetailPage({ params }: Props) {
           <ProductPageSection
             variant={resolved.design.product.page.variant}
                 setari={resolved.design.product.page.settings}
-            business={business as never}
+            business={pentruBrowser(business) as never}
             product={product}
             storeSettings={storeSettings as never}
             basePath={basePath}

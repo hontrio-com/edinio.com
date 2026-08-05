@@ -66,12 +66,27 @@ const STATUS_MAP: Record<number, string> = {
   429: "Prea multe cereri catre Mailchimp. Incearca din nou in cateva momente.",
 };
 
+/*
+ * Forma REALA a prefixului de datacenter: 2-4 litere si pana la 3 cifre ("us21").
+ *
+ * Verificarea nu e cosmetica. Prefixul intra direct in AUTORITATEA URL-ului, iar
+ * pana acum `serverPrefixFromKey` intorcea tot ce urmeaza dupa ultima cratima,
+ * orice ar fi fost: cheia `oricce-evil.com:8443/` dadea
+ * `https://evil.com:8443/.api.mailchimp.com/3.0/...`, adica o cerere iesita catre
+ * orice gazda si orice port, din IP-ul platformei, ocolind complet
+ * `lib/import/ssrf.ts`. Si nu era nevoie sa apese nimeni „salveaza":
+ * `connectMailchimp` cheama `pingMailchimp` INAINTE de scriere, deci cererea
+ * pleaca la simpla lipire a cheii in formular.
+ */
+const RE_PREFIX_DC = /^[a-z]{2,4}\d{1,3}$/;
+
 /** Datacenter/server prefix is the part after the last dash of the API key. */
 export function serverPrefixFromKey(apiKey: string): string | null {
   const key = (apiKey ?? "").trim();
   const dash = key.lastIndexOf("-");
   if (dash === -1 || dash === key.length - 1) return null;
-  return key.slice(dash + 1);
+  const prefix = key.slice(dash + 1);
+  return RE_PREFIX_DC.test(prefix) ? prefix : null;
 }
 
 /** Mailchimp identifies members by the MD5 of the lowercased, trimmed email. */
@@ -103,6 +118,26 @@ export async function mcRequest<T = unknown>(
   body?: unknown,
 ): Promise<{ data: T } | { error: string }> {
   if (!creds.api_key || !creds.server_prefix) return { error: "Mailchimp nu este configurat." };
+  /*
+   * A doua verificare, pe prefixul DEJA SALVAT. Prima (`serverPrefixFromKey`)
+   * apara conectarea; asta apara configurarile scrise inainte de reparatie, care
+   * stau in `store_settings.mailchimp_config` si sunt refolosite la fiecare
+   * checkout, de webhook si de cron — fara ea, un prefix ostil ramas in baza ar
+   * continua sa trimita cereri, declansate de trafic obisnuit.
+   */
+  if (!RE_PREFIX_DC.test(creds.server_prefix)) {
+    return { error: "Prefixul de server Mailchimp este invalid. Reconecteaza contul cu o cheie API valida." };
+  }
+  /*
+   * Termen si interzicerea redirectarilor, ca in `lib/import/ssrf.ts`.
+   *
+   * Fara `redirect: "error"`, o gazda care raspunde 302 catre
+   * `http://127.0.0.1:6379/` era urmata de undici inclusiv la coborare de schema.
+   * Fara termen, apelul putea atarna la nesfarsit — iar `pingMailchimp` ruleaza
+   * pe calea sincrona a formularului de conectare.
+   */
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
   try {
     const res = await fetch(`${baseUrl(creds.server_prefix)}${path}`, {
       method,
@@ -112,6 +147,8 @@ export async function mcRequest<T = unknown>(
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",
+      redirect: "error",
+      signal: controller.signal,
     });
     const text = await res.text();
     let json: unknown = null;
@@ -122,6 +159,8 @@ export async function mcRequest<T = unknown>(
     return { data: json as T };
   } catch {
     return { error: "Eroare de retea la conectarea cu Mailchimp." };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -130,7 +169,9 @@ export async function pingMailchimp(
   apiKey: string,
 ): Promise<{ account_id: string; account_name: string; server_prefix: string } | { error: string }> {
   const prefix = serverPrefixFromKey(apiKey);
-  if (!prefix) return { error: "Cheia API Mailchimp este invalida (lipseste sufixul de tip -us21)." };
+  if (!prefix) {
+    return { error: "Cheia API Mailchimp este invalida: trebuie sa se termine cu sufixul de datacenter, de forma -us21." };
+  }
   const res = await mcRequest<{ account_id?: string; account_name?: string }>(
     { api_key: apiKey.trim(), server_prefix: prefix },
     "GET",

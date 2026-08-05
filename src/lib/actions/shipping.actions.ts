@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { CacheScurt } from "@/lib/utils/cache-scurt";
+import { logError } from "@/lib/error-logger";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday";
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
@@ -33,6 +35,25 @@ function cityMatches(lockerCity: string, needle: string): boolean {
     (rawNeedle !== foldedNeedle && haystack.includes(rawNeedle)) ||
     haystackFolded.includes(foldedNeedle)
   );
+}
+
+/**
+ * Depasirea plafonului PE MAGAZIN nu mai opreste cumparatorul (vezi
+ * `getShippingOptions`), deci trebuie sa lase macar o urma: altfel comerciantul
+ * ar putea sta o zi intreaga pe tarife fixe fara sa afle niciodata de ce.
+ *
+ * Cel mult o alerta pe ora pe magazin — contorul durabil folosit pe dos, ca
+ * `error_logs` sa nu se umple exact in timpul abuzului pe care il semnaleaza.
+ */
+async function alertaPlafonMagazin(actiune: string, businessId: string, mesaj: string): Promise<void> {
+  if (!(await consumaLimita(`alerta:${actiune}:${businessId}`, 1, 3600)).permis) return;
+  await logError({
+    action: actiune,
+    message: mesaj,
+    details: { businessId },
+    businessId,
+    severity: "warning",
+  });
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -156,11 +177,6 @@ export async function getShippingOptions(
    */
   const ip = clientIpFromHeaders(await headers());
   if (!rateLimit(`shipQuote:${ip}`, 20, 60_000)) return [];
-  const [limIp, limBiz] = await Promise.all([
-    consumaLimita(`ship:ip:${ip}`, 60, 600),
-    consumaLimita(`ship:biz:${businessId}`, 600, 600),
-  ]);
-  if (!limIp.permis || !limBiz.permis) return [];
 
   // Service role: anonymous customers trigger this; courier secrets are read
   // server-side only and never returned to the client (only computed prices are).
@@ -178,6 +194,61 @@ export async function getShippingOptions(
 
   // No courier enabled in shipping_zones — nothing to show
   if (enabledZones.length === 0) return [];
+
+  // Ridicate deasupra plafoanelor: de destinatie depinde CARE apel platit poate
+  // pleca, deci si daca e ceva de plafonat. Vezi comentariul de mai jos.
+  const iso2 = destination.country?.toUpperCase();
+  const esteIntl = !!iso2 && iso2 !== "RO";
+
+  /*
+   * Plafoanele DURABILE se consuma abia AICI, si depasirea lor nu mai refuza.
+   *
+   * Doua lucruri erau gresite. (1) Se consumau INAINTE de citirea setarilor,
+   * deci taiau si magazinele care ofera numai zone manuale — „Ridicare
+   * personala", tarif fix — desi acelea nu ating niciun API platit si n-au deci
+   * nicio cota de aparat. (2) La depasire se raspundea cu lista GOALA, iar
+   * contorul pe magazin e COMUN tuturor cumparatorilor: ~10 IP-uri il goleau in
+   * cateva secunde, si de acolo inainte cumparatorul REAL nu mai primea nicio
+   * metoda de livrare si nu mai putea trimite comanda — fara niciun mesaj,
+   * fiindca selectorul isi ascunde sectiunea cand lista e goala. Adica exact
+   * capcana consemnata in `page.actions.ts`: plafonul pe magazin intors impotriva
+   * comerciantului.
+   *
+   * Plafonul NU se sterge — el apara bani reali (cota de cotatii a
+   * comerciantului la Sameday/FAN/DPD/Cargus/Woot). Peste el se raspunde cu
+   * tarifele FIXE din `shipping_zones`, exact ca atunci cand API-ul curierului
+   * cade, si nu mai pleaca niciun apel platit. Checkout-ul ramane functional,
+   * atacatorul nu mai obtine nimic.
+   */
+  /*
+   * ATENTIE la ramura internationala: ea NU se uita deloc la `auto_price`.
+   * Cotatia DPD intl de mai jos pleaca ori de cate ori zona `dpd` e activa si
+   * configurarea e completa, chiar daca pe zona comerciantul a pus „Pret fix".
+   * Daca s-ar numara aici dupa aceeasi regula ca internul, un magazin cu DPD pe
+   * tarif fix (si fara alt curier cu API) ar iesi cu `atingeApiPlatit === false`
+   * — deci fara NICIUN plafon durabil — si totusi ar chema API-ul DPD la fiecare
+   * cerere. Poarta se pune pe apelul care chiar pleaca, nu pe steagul din zona.
+   */
+  const atingeApiPlatit = esteIntl
+    ? !!zones["dpd"]?.enabled
+    : enabledZones.some(
+        ([courierId, z]) => courierId !== "pickup" && courierId !== "own" && z.auto_price !== false,
+      );
+  let doarTarifeFixe = false;
+  if (atingeApiPlatit) {
+    const [limIp, limBiz] = await Promise.all([
+      consumaLimita(`ship:ip:${ip}`, 60, 600),
+      consumaLimita(`ship:biz:${businessId}`, 600, 600),
+    ]);
+    doarTarifeFixe = !limIp.permis || !limBiz.permis;
+    if (!limBiz.permis) {
+      await alertaPlafonMagazin(
+        "getShippingOptions.plafonMagazin",
+        businessId,
+        "Plafonul de cotatii pe magazin e epuizat; se raspunde cu tarifele fixe din shipping_zones",
+      );
+    }
+  }
 
   // Cart-derived shipping context (weight/classes/categories/quantity). Loaded once,
   // authoritative from the DB. Feeds both the domestic weight (below) and the rules
@@ -197,8 +268,6 @@ export async function getShippingOptions(
    * dintr-o harta cu TOT catalogul, trimisa in pagina de cos la fiecare afisare
    * — zeci de mii de randuri in HTML pentru un cos de doua linii.
    */
-  const iso2 = destination.country?.toUpperCase();
-  const esteIntl = !!iso2 && iso2 !== "RO";
   /*
    * Regimul in care se cere TOT lotul de preturi de mai jos.
    *
@@ -238,6 +307,14 @@ export async function getShippingOptions(
   // International (EU): only DPD international applies. Short-circuit here so the
   // domestic courier loop below stays completely unchanged for RO orders.
   if (esteIntl) {
+    /*
+     * Internationalul NU are tarif fix de rezerva, deci aici degradarea de mai
+     * sus nu se aplica: pretul iese EXCLUSIV din apelul DPD si pleaca semnat, iar
+     * a semna pretul zonei interne (18 lei) pentru un colet in Germania cotat
+     * 95,84 il costa pe comerciant mai mult decat refuzul. Peste plafon se
+     * raspunde tot cu lista goala.
+     */
+    if (doarTarifeFixe) return [];
     const eu = euCountryByIso2(iso2);
     const dpdCfg = settings.dpd_config as DpdConfig | null;
     const ready = !!(
@@ -290,7 +367,10 @@ export async function getShippingOptions(
   const promises: Promise<void>[] = [];
 
   for (const [courierId, zone] of enabledZones) {
-    const useAutoPrice = zone.auto_price !== false; // default true
+    // `doarTarifeFixe` trece fiecare curier pe ramura de pret manual de mai jos,
+    // adica exact drumul pe care merg deja magazinele fara API configurat. Nu
+    // exista o a doua implementare a rezervei, deci nu se poate desincroniza.
+    const useAutoPrice = !doarTarifeFixe && zone.auto_price !== false; // default true
 
     if (courierId === "sameday") {
       const samedayConfig = settings.sameday_config as SamedayConfig | null;
@@ -787,6 +867,28 @@ async function buildColeteOptions(
 
 // ─── Get lockers ─────────────────────────────────────────────────────────────
 
+/*
+ * Lista de lockere e IDENTICA pentru toti cumparatorii unui magazin si se schimba
+ * rar, deci se tine cateva minute in memoria instantei. Doua castiguri, amandoua
+ * legate de acelasi defect: apelul platit se face o data la zece minute in loc de
+ * o data pe cumparator (deci plafonul de mai jos aproape nu mai e atins de trafic
+ * cinstit), iar cand plafonul E totusi epuizat mai exista ceva de livrat in loc de
+ * lista goala.
+ *
+ * Per instanta, ca orice `CacheScurt`: cel mai rau caz e ca doua instante fac
+ * fiecare cate un apel. Numarul de intrari e mic dinadins — o intrare poate tine
+ * cateva mii de lockere si sunt cateva magazine calde pe instanta.
+ */
+const CACHE_LOCKERE = new CacheScurt<LockerItem[]>(10 * 60_000, 40);
+
+/** Filtrarea pe oras se face DUPA cache: cache-ul tine lista intreaga a magazinului. */
+function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
+  return city ? lockere.filter((l) => cityMatches(l.city, city)) : lockere;
+}
+
+/** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus"]);
+
 export async function getLockers(
   businessId: string,
   courier: string,
@@ -798,11 +900,46 @@ export async function getLockers(
   // credentialele comerciantului. Vezi comentariul din getShippingOptions.
   const ip = clientIpFromHeaders(await headers());
   if (!rateLimit(`lockers:${ip}`, 10, 60_000)) return [];
+
+  /*
+   * `cod` intra in cheia de cache fiindca la Cargus punctele care nu accepta
+   * ramburs se scot INAINTE de cache: steagul `serviceCod` nu supravietuieste in
+   * `LockerItem`, deci o comanda cu ramburs si una fara nu pot imparti aceeasi
+   * lista.
+   */
+  const cheieCache = `${businessId}:${courier}:${codAmount && codAmount > 0 ? "cod" : "-"}`;
+
+  /*
+   * Cache-ul se consulta INAINTE de plafon, si asta e jumatate din reparatie: un
+   * raspuns care nu costa niciun apel platit n-are ce buget sa consume. Altfel
+   * cumparatorii cinstiti epuizau chiar ei contorul care apara apelul, iar apoi
+   * ramaneau fara niciun locker de ales — tacut, fiindca lista goala nu produce
+   * niciun mesaj in interfata.
+   */
+  const dinCache = CACHE_LOCKERE.get(cheieCache);
+  if (dinCache) return filtreazaOras(dinCache, city);
+
+  // Un nume de curier necunoscut nu ajunge la niciun API mai jos, deci nu trebuie
+  // sa consume bugetul magazinului: `courier` vine de la client si e liber.
+  if (!CURIERI_CU_LOCKERE.has(courier)) return [];
+
   const [limIp, limBiz] = await Promise.all([
     consumaLimita(`lockers:ip:${ip}`, 30, 600),
     consumaLimita(`lockers:biz:${businessId}`, 300, 600),
   ]);
-  if (!limIp.permis || !limBiz.permis) return [];
+  if (!limIp.permis || !limBiz.permis) {
+    // Cache-ul e verificat mai sus, deci aici chiar nu exista ce livra. Ramane un
+    // esec, dar unul in care cumparatorul are in continuare optiunile de livrare
+    // la adresa — spre deosebire de cotatii, unde lista goala inseamna fundatura.
+    if (!limBiz.permis) {
+      await alertaPlafonMagazin(
+        "getLockers.plafonMagazin",
+        businessId,
+        "Plafonul de lockere pe magazin e epuizat; lista de lockere nu mai poate fi reimprospatata",
+      );
+    }
+    return [];
+  }
 
   const supabase = createAdminClient();
   const { data: settings } = await supabase
@@ -817,20 +954,24 @@ export async function getLockers(
     const config = settings.sameday_config as SamedayConfig | null;
     if (!config?.enabled) return [];
     try {
-      const lockers = await getSamedayLockers(config);
-      let filtered = lockers;
-      if (city) {
-        filtered = lockers.filter((l) => cityMatches(l.city, city));
-      }
-      return filtered.map((l) => ({
-        id: String(l.lockerId),
-        name: l.name,
-        address: l.address,
-        city: l.city,
-        county: l.county,
-        lat: l.lat,
-        lng: l.lng,
-      }));
+      // TTL scurt la lista goala: un raspuns gol e de obicei o configurare
+      // tocmai reparata, nu adevarul despre magazin.
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          (await getSamedayLockers(config)).map((l) => ({
+            id: String(l.lockerId),
+            name: l.name,
+            address: l.address,
+            city: l.city,
+            county: l.county,
+            lat: l.lat,
+            lng: l.lng,
+          })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] Sameday lockers failed:", (e as Error).message);
       return [];
@@ -841,20 +982,22 @@ export async function getLockers(
     const config = settings.fan_courier_config as FanCourierConfig | null;
     if (!config?.enabled) return [];
     try {
-      const points = await getFanCourierPickupPoints(config.username, config.password, "fanbox");
-      let filtered = points;
-      if (city) {
-        filtered = points.filter((p) => cityMatches(p.address.locality, city));
-      }
-      return filtered.map((p) => ({
-        id: p.id,
-        name: p.name,
-        address: `${p.address.street} ${p.address.streetNo}, ${p.address.locality}`,
-        city: p.address.locality,
-        county: p.address.county,
-        lat: Number(p.latitude),
-        lng: Number(p.longitude),
-      }));
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          (await getFanCourierPickupPoints(config.username, config.password, "fanbox")).map((p) => ({
+            id: p.id,
+            name: p.name,
+            address: `${p.address.street} ${p.address.streetNo}, ${p.address.locality}`,
+            city: p.address.locality,
+            county: p.address.county,
+            lat: Number(p.latitude),
+            lng: Number(p.longitude),
+          })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] FanCourier pickup points failed:", (e as Error).message);
       return [];
@@ -865,20 +1008,22 @@ export async function getLockers(
     const config = settings.dpd_config as DpdConfig | null;
     if (!config?.enabled) return [];
     try {
-      const offices = await getDpdOffices(config);
-      let filtered = offices;
-      if (city) {
-        filtered = offices.filter((o) => cityMatches(o.city, city));
-      }
-      return filtered.map((o) => ({
-        id: String(o.id),
-        name: o.name,
-        address: o.address,
-        city: o.city,
-        county: "",
-        lat: 0,
-        lng: 0,
-      }));
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          (await getDpdOffices(config)).map((o) => ({
+            id: String(o.id),
+            name: o.name,
+            address: o.address,
+            city: o.city,
+            county: "",
+            lat: 0,
+            lng: 0,
+          })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] DPD pickup points failed:", (e as Error).message);
       return [];
@@ -889,24 +1034,27 @@ export async function getLockers(
     const config = settings.cargus_config as CargusConfig | null;
     if (!config?.enabled) return [];
     try {
-      const points = await getCargusPudoPoints(config);
-      let filtered = points;
-      // Ramburs orders can only go to Ship & Go points that accept COD.
-      if (codAmount && codAmount > 0) {
-        filtered = filtered.filter((p) => p.serviceCod);
-      }
-      if (city) {
-        filtered = filtered.filter((p) => cityMatches(p.city, city));
-      }
-      return filtered.map((p) => ({
-        id: String(p.id),
-        name: p.name,
-        address: [p.address, p.city].filter(Boolean).join(", "),
-        city: p.city,
-        county: p.county,
-        lat: p.lat,
-        lng: p.lng,
-      }));
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () => {
+          const points = await getCargusPudoPoints(config);
+          // Ramburs orders can only go to Ship & Go points that accept COD.
+          // Filtrat INAINTE de cache — de aici si `cod` in cheia de cache.
+          const acceptate = codAmount && codAmount > 0 ? points.filter((p) => p.serviceCod) : points;
+          return acceptate.map((p) => ({
+            id: String(p.id),
+            name: p.name,
+            address: [p.address, p.city].filter(Boolean).join(", "),
+            city: p.city,
+            county: p.county,
+            lat: p.lat,
+            lng: p.lng,
+          }));
+        },
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] Cargus Ship & Go points failed:", (e as Error).message);
       return [];

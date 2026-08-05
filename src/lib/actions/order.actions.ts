@@ -5,6 +5,7 @@ import { scrieStatisticiOferte } from "@/lib/offers/statistici";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { computeVat, vatBase } from "@/lib/utils/vat";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -42,6 +43,7 @@ import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, verificaMetodaPlata, isCodPaymentMethod, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
+import { ORDER_STATUS } from "@/lib/orders/status";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
@@ -461,6 +463,180 @@ async function scadeStoculVariantelor(
   await admin.rpc("decrement_variant_stock_batch" as never, { p_items: items } as never);
 }
 
+/**
+ * Cate comenzi pe minut si pe acelasi magazin mai sunt trafic si nu rafala.
+ *
+ * NU e un plafon dur si nu trebuie facut unul: un plafon dur pe magazin se
+ * intoarce impotriva comerciantului — atacatorul ii umple cota si comenzile REALE
+ * nu mai intra (vezi comentariul de la `submitPageForm`, page.actions.ts). Peste
+ * pragul asta comanda se salveaza in continuare si se vede in panou; se opresc
+ * doar instiintarile. Cel mai incarcat magazin din productie n-a trecut niciodata
+ * de o comanda pe minut, deci 30 lasa loc si unei campanii adevarate.
+ */
+const PRAG_RAFALA_MAGAZIN = 30;
+
+/**
+ * Si pe ORA, nu doar pe minut.
+ *
+ * Cu o singura fereastra de un minut, pragul se ocoleste tinand ritmul sub el:
+ * 29 de comenzi pe minut nu-l ating NICIODATA si fac totusi 1.740 de comenzi pe
+ * ora, adica 1.740 de SMS-uri din creditul comerciantului si de doua ori pe atat
+ * emailuri. Iar comentariul de mai sus spune chiar el ca asta e frana care ramane
+ * dupa ce plafonul pe IP e ocolit cu o lista de proxy-uri — deci trebuie sa tina
+ * si la ritm constant, nu doar la rafala.
+ *
+ * 600 e de zece ori peste cel mai incarcat magazin masurat (o comanda pe minut),
+ * deci o campanie adevarata incape; si ramane sub pragul de minut inmultit cu 60,
+ * deci fereastra scurta continua sa prinda varfurile.
+ */
+const PRAG_ORAR_MAGAZIN = 600;
+
+/**
+ * Magazinul asta primeste chiar acum o rafala de comenzi?
+ *
+ * Peste prag nu mai pleaca nici emailul catre comerciant, nici cel catre client,
+ * nici SMS-ul — care se plateste din creditul comerciantului. Plafonul pe IP se
+ * ocoleste cu o lista de proxy-uri, si atunci asta e singura frana care ramane:
+ * fara ea, fiecare comanda falsa mai ardea un SMS si mai ingropa o comanda reala
+ * in casuta comerciantului.
+ *
+ * Cele doua numarari pleaca IMPREUNA: a doua fereastra nu adauga nicio
+ * intarziere pe drumul raspunsului, doar inca o cerere in paralel.
+ */
+async function pesteRafalaMagazinului(
+  admin: SupabaseClient<Database>, businessId: string, actiune: string,
+): Promise<boolean> {
+  const acum = Date.now();
+  const numara = async (deLa: number) => {
+    const { count } = await admin
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .gte("created_at", new Date(acum - deLa).toISOString());
+    return count ?? 0;
+  };
+  const [peMinut, peOra] = await Promise.all([numara(60_000), numara(3_600_000)]);
+  const pesteMinut = peMinut > PRAG_RAFALA_MAGAZIN;
+  const pesteOra = peOra > PRAG_ORAR_MAGAZIN;
+  if (!pesteMinut && !pesteOra) return false;
+  /*
+   * Alerta se scrie doar pe trecerea pragului, nu la fiecare comanda de dupa.
+   *
+   * Peste prag ajung AICI toate comenzile urmatoare — la fereastra de o ora,
+   * sute — si un rand de fiecare ar umple `error_logs` cu copii ale aceleiasi
+   * stiri. Banda de trei valori, nu una singura: cu inserari in paralel
+   * numaratoarea poate sari peste exact prag+1.
+   */
+  const laTrecere = (n: number, prag: number) => n > prag && n <= prag + 3;
+  if (laTrecere(peMinut, PRAG_RAFALA_MAGAZIN) || laTrecere(peOra, PRAG_ORAR_MAGAZIN)) {
+    logError({
+      action: `${actiune}.rafalaMagazin`,
+      message: pesteMinut
+        ? `${peMinut} comenzi intr-un minut pe acelasi magazin — emailurile si SMS-ul s-au oprit`
+        : `${peOra} comenzi intr-o ora pe acelasi magazin — emailurile si SMS-ul s-au oprit`,
+      details: { businessId, peMinut, peOra },
+      severity: "warning",
+    });
+  }
+  return true;
+}
+
+/**
+ * Ce s-a intamplat cu rezervarea de stoc a unei comenzi.
+ *
+ * `nerevendicat` nu e o eroare pentru client: inseamna ca revendicarea atomica nu
+ * s-a putut face si se cade inapoi pe scaderea de dupa insert, adica purtarea de
+ * dinainte. Vezi `revendicaStocul`.
+ */
+type Revendicare =
+  | { fel: "revendicat" }
+  | { fel: "nerevendicat" }
+  | { fel: "refuzat"; error: string };
+
+/**
+ * Verdictul de stoc si scaderea lui, in ACEEASI instructiune din baza.
+ *
+ * Pana acum erau doua drumuri: `expandBundleStock` citea stocul si compara in
+ * aplicatie, iar `decrement_stock_batch` scadea abia DUPA ce comanda era scrisa —
+ * si scadea cu `greatest(0, ...)`, deci supravanzarea nu lasa nici macar urma unui
+ * numar negativ. Intre citire si scadere incap trei-patru dus-intorsuri la baza,
+ * adica sute de milisecunde: cinci cereri in aceeasi clipa treceau toate cinci de
+ * verificare si vindeau toate acelasi ultim produs.
+ *
+ * `revendica_stoc_batch` incuie randurile, da verdictul peste tot si abia apoi
+ * scade: ori rezerva tot, ori nu atinge nimic si spune care produs a picat. Se
+ * cheama INAINTE de inserarea comenzii, iar la esecul insertului stocul se da
+ * inapoi cu `elibereazaStocul` — acelasi model ca la cupoane
+ * (`claim_discount_use` / `release_discount_use`).
+ *
+ * `expandBundleStock` ramane inaintea ei si nu se scoate: ea desface pachetele in
+ * componente si formuleaza mesajele omenesti („scoate pachetul din cos"), pe care
+ * un verdict venit din baza nu le poate da.
+ */
+async function revendicaStocul(
+  admin: SupabaseClient<Database>,
+  decrements: { product_id: string; quantity: number }[],
+): Promise<Revendicare> {
+  if (decrements.length === 0) return { fel: "revendicat" };
+  const { data, error } = await admin.rpc("revendica_stoc_batch" as never, { p_items: decrements } as never);
+  /*
+   * Cand functia nu raspunde, comanda MERGE MAI DEPARTE pe drumul vechi.
+   *
+   * Pana la aplicarea migratiei `2026-08-05-revendicare-stoc.sql` functia nici nu
+   * exista, iar un refuz aici ar opri TOATE comenzile din platforma — mult mai
+   * rau decat cursa pe care o repara. Acelasi rationament ca la
+   * `release_order_discount` (migratia de eliberare a cuponului): pana se aplica,
+   * purtarea ramane exact cea de azi. Jurnalul e `critical` tocmai ca sa nu treaca
+   * neobservat: daca ramura asta apare in `/admin/logs`, cursa e inca deschisa.
+   */
+  if (error) {
+    logError({
+      action: "revendicaStocul", message: error.message,
+      details: { code: error.code, hint: error.hint, produse: decrements.length },
+      severity: "critical",
+    });
+    return { fel: "nerevendicat" };
+  }
+  const rez = data as unknown as { ok?: boolean; nume?: string | null; disponibil?: number | null } | null;
+  if (rez?.ok === true) return { fel: "revendicat" };
+  if (rez?.ok === false) {
+    // Mesajul se scrie aici, nu in baza: numele produsului e singurul lucru pe
+    // care functia nu-l poate formula in tonul celorlalte refuzuri din checkout.
+    const nume = String(rez.nume ?? "produsul cerut").slice(0, 60);
+    const disponibil = Number(rez.disponibil) || 0;
+    return {
+      fel: "refuzat",
+      error: disponibil <= 0
+        ? `„${nume}" tocmai s-a epuizat. Scoate-l din cos si incearca din nou.`
+        : `Din „${nume}" au mai ramas ${disponibil} bucati. Scade cantitatea si incearca din nou.`,
+    };
+  }
+  /*
+   * Raspuns de alta forma: se cade tot pe drumul vechi, nu se presupune „gata".
+   *
+   * Un `revendicat` pe ghicite ar sari si scaderea de dupa insert, si comanda ar
+   * pleca fara sa fi scazut stocul nicaieri — adica invers decat supravanzarea, si
+   * la fel de tacut.
+   */
+  logError({ action: "revendicaStocul", message: "raspuns de forma neasteptata", details: { produse: decrements.length }, severity: "critical" });
+  return { fel: "nerevendicat" };
+}
+
+/** Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
+ *  `revendicaStocul`, ca `release_discount_use` pentru cupon. */
+async function elibereazaStocul(
+  admin: SupabaseClient<Database>,
+  decrements: { product_id: string; quantity: number }[],
+): Promise<void> {
+  if (decrements.length === 0) return;
+  const { error } = await admin.rpc("elibereaza_stoc_batch" as never, { p_items: decrements } as never);
+  if (error) {
+    // Marfa ramane rezervata pentru o comanda care nu exista. Se repara de mana,
+    // deci trebuie sa se vada: fara jurnal, stocul scade in gol si nimeni nu stie.
+    logError({ action: "elibereazaStocul", message: error.message, details: { code: error.code, produse: decrements.length }, severity: "critical" });
+  }
+}
+
 export async function placeOrder(data: {
   business_id: string;
   cart_session_id?: string;
@@ -536,9 +712,34 @@ export async function placeOrder(data: {
   if (!rateLimit(`placeOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
+  /*
+   * Al doilea strat, DURABIL. Cel de deasupra e o harta in memoria instantei:
+   * limita reala se inmulteste cu numarul de instante calde de pe Vercel si se
+   * pierde la fiecare deploy, deci pe hartie sunt 10 pe minut si in fapt nu e
+   * niciun plafon. Contorul asta sta in Postgres, deci e unul singur pentru toate
+   * instantele. Cheia e comuna celor doua cai de comanda: altfel se comuta intre
+   * formularul de produs si cos si se ia plafonul de doua ori.
+   */
+  if (!(await consumaLimita(`comanda:ip:${ip}`, 40, 3600)).permis) {
+    return { error: "Prea multe comenzi trimise de pe aceasta conexiune. Te rugam incearca mai tarziu." };
+  }
 
   // Use admin client for order creation — customers are anonymous, RLS requires service role
   const admin = createAdminClient();
+
+  /*
+   * Numele clientului, TAIAT la 120 de caractere.
+   *
+   * Venea din browser doar cu `.trim()`, adica nelimitat, iar actiunea e export
+   * „use server", deci endpoint public. Acelasi sir ajunge in `orders`, in
+   * subiectul emailului catre comerciant („Comanda noua X - NUME"), in SMS si mai
+   * departe pe AWB si pe factura. Numele de produs sunt de mult taiate la fel;
+   * asta era singurul camp de text al comenzii ramas fara plafon.
+   *
+   * Se taie o singura data, aici, si se foloseste peste tot: plafonat doar la
+   * inserare, emailul ar fi plecat in continuare cu sirul intreg.
+   */
+  const numeClient = data.customer_name.trim().slice(0, 120);
 
   // Reload product + store config and recompute every price server-side.
   const [{ data: product, error: eroareProdus }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
@@ -980,10 +1181,20 @@ export async function placeOrder(data: {
     }
   }
 
+  // Si stocul se revendica atomic, tot inainte de inserare — `expandBundleStock`
+  // de mai sus a citit doar, iar intre citire si scaderea de dupa insert incapeau
+  // patru cereri paralele care vindeau toate acelasi ultim produs. Vezi
+  // `revendicaStocul`.
+  const stoc = await revendicaStocul(admin, stockExp.decrements);
+  if (stoc.fel === "refuzat") {
+    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    return { error: stoc.error };
+  }
+
   const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
-    customer_name: data.customer_name.trim(),
+    customer_name: numeClient,
     customer_phone: data.customer_phone.trim(),
     customer_email: data.customer_email?.trim() || null,
     shipping_address: {
@@ -1055,8 +1266,11 @@ export async function placeOrder(data: {
   }).select("id, order_number").single();
 
   if (error) {
-    // Comanda n-a intrat, deci utilizarea revendicata se da inapoi.
+    // Comanda n-a intrat, deci utilizarea revendicata si stocul rezervat se dau
+    // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
+    // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements);
     logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
@@ -1079,8 +1293,12 @@ export async function placeOrder(data: {
   }
 
 
-  // Atomic stock decrement — bundle components when ordering a bundle, else the product itself.
-  await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+  // Stocul de produs e DEJA scazut, odata cu verdictul, inainte de insert.
+  // Ramura de mai jos e doar pentru cazul in care revendicarea n-a putut rula
+  // (migratia neaplicata): atunci se scade ca inainte, dupa insert.
+  if (stoc.fel === "nerevendicat") {
+    await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+  }
   // Si stocul marimii vandute, nu doar al produsului intreg. `liniiCuVarianta`
   // e aceeasi lista pe care a verificat-o `eroareStocPeVarianta` mai sus, deci
   // ce s-a masurat se si scade.
@@ -1105,6 +1323,12 @@ export async function placeOrder(data: {
     orderId: order.id,
   });
 
+  // Peste pragul moale pe magazin comanda ramane scrisa si vizibila in panou, dar
+  // instiintarile nu mai pleaca: plafonul pe IP se ocoleste cu proxy-uri, iar
+  // fiecare comanda falsa mai arde un SMS din creditul comerciantului si mai
+  // ingroapa o comanda reala in casuta lui. Vezi `pesteRafalaMagazinului`.
+  const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeOrder");
+
   // Send emails
   try {
     const { data: settings } = await admin
@@ -1128,7 +1352,7 @@ export async function placeOrder(data: {
 
       const emailPayload = {
         order_number: order.order_number,
-        customer_name: data.customer_name,
+        customer_name: numeClient,
         customer_phone: data.customer_phone,
         customer_email: data.customer_email,
         total,
@@ -1187,24 +1411,28 @@ export async function placeOrder(data: {
         custom_fields: data.custom_fields,
         billing_company: billingCompany,
       };
+      // `!pesteRafala` pe amandoua: sub rafala comanda ramane scrisa, doar
+      // instiintarile tac. Alternativa — sa refuzam comanda — ar fi facut din
+      // rafala o negare de serviciu asupra vanzarilor comerciantului.
       const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([
-        config.new_order !== false && notifyEmail
+        !pesteRafala && config.new_order !== false && notifyEmail
           ? sendNewOrderEmail(notifyEmail, emailPayload, emailSender)
           : null,
-        data.customer_email
+        !pesteRafala && data.customer_email
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload, emailSender)
           : null,
       ].filter(Boolean));
 
       // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
-      void maybeSendNoticeNotification({
+      // Se opreste primul sub rafala: se plateste din creditul comerciantului.
+      if (!pesteRafala) void maybeSendNoticeNotification({
         businessId: data.business_id,
         orderId: order.id,
         triggerKey: "pending",
         phone: data.customer_phone,
         vars: {
-          order: order.order_number, name: data.customer_name, total: formatPrice(total),
+          order: order.order_number, name: numeClient, total: formatPrice(total),
           awb: "", store: businessName,
           phone: data.customer_phone, email: data.customer_email ?? "",
           address: data.customer_address, city: data.customer_city, region: data.customer_county,
@@ -1221,7 +1449,7 @@ export async function placeOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
         });
@@ -1233,7 +1461,7 @@ export async function placeOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -1246,7 +1474,7 @@ export async function placeOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -1261,7 +1489,7 @@ export async function placeOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           currency: "RON",
           total,
           financial_status: "pending",
@@ -1293,7 +1521,7 @@ export async function placeOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           total,
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))
@@ -1332,10 +1560,70 @@ function defaultStatusSms(status: string, opts: { orderNumber: string; businessN
   }
 }
 
+/*
+ * Instiintarile de schimbare de stare — plafonate. Schimbarea de stare, NU.
+ *
+ * `sendCustomerNotification` si `sendCustomerSms` si-au primit plafoanele, dar
+ * `updateOrder` trimite pe EXACT aceleasi doua canale si n-avea niciunul: emailul
+ * de stare pleaca tot pe domeniul PLATFORMEI cand magazinul n-are SMTP propriu,
+ * SMS-ul tot pe cheia magazinului, iar destinatarul e tot cel scris in comanda —
+ * pe care apelantul si-l alege singur cu `updateOrderDetails`. Plimbata intre
+ * doua stari valide (`pending` <-> `confirmed`), aceeasi comanda trimitea la
+ * nesfarsit, si inca cu o bucata de text ales de apelant in mesaj: `awb` intra si
+ * in corpul SMS-ului, si in email. Fara plafonul asta, cel de la mesajele manuale
+ * se ocolea pur si simplu schimband functia apelata.
+ *
+ * Se opreste DOAR instiintarea: starea se salveaza oricum, facturarea automata si
+ * marcarea „platit" in Mailchimp/Brevo nu se ating. Un plafon care refuza
+ * actualizarea i-ar fi luat comerciantului panoul in loc sa apere pe cineva —
+ * aceeasi regula ca la pragul de rafala pe magazin.
+ *
+ * Bugete separate de cele ale mesajelor manuale si mult mai largi: o comanda
+ * adevarata trece prin cateva stari, nu prin douazeci, iar un comerciant care
+ * bifeaza comenzi una cate una din panou nu ajunge la 200 pe ora. Cel pe comanda
+ * e cel care taie bucla; cel pe cont opreste plimbarea intre comenzi.
+ */
+const STARI_PE_ORA = 200;
+const STARI_PE_COMANDA = 20;
+
+async function poateInstiintaStarea(userId: string, orderId: string): Promise<boolean> {
+  const peOra = await consumaLimita(`stare-mesaj:${userId}`, STARI_PE_ORA, 3600);
+  const peComanda = peOra.permis
+    ? await consumaLimita(`stare-comanda:${orderId}`, STARI_PE_COMANDA, 86400)
+    : { permis: false };
+  if (peOra.permis && peComanda.permis) return true;
+  // Alerta, de cel mult trei ori pe ora si pe cont: peste plafon ajung aici toate
+  // incercarile urmatoare, si un rand de fiecare ar umple jurnalul.
+  if ((await consumaLimita(`alerta-stare:${userId}`, 3, 3600)).permis) {
+    logError({
+      action: "updateOrder.instiintariOprite",
+      message: "Plafon atins: starea s-a salvat, instiintarea catre client nu a mai plecat",
+      details: { orderId, peOra: peOra.permis, peComanda: peComanda.permis },
+      userId,
+      severity: "warning",
+    });
+  }
+  return false;
+}
+
 export async function updateOrder(orderId: string, data: { status: string; payment_status: string; awb?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
+
+  /*
+   * Statusul se verifica pe lista, si AWB-ul se taie: amandoua ajung in TEXTUL
+   * mesajelor care pleaca spre client.
+   *
+   * `defaultStatusSms` scrie `STATUS_SMS_LABELS[status] ?? status`, deci un status
+   * nerecunoscut se copiaza ca atare in corpul SMS-ului; `awb` intra si in SMS, si
+   * in emailul de stare, si nu-l trimite NICIUN apelant din panou — vine doar
+   * dintr-un POST direct pe actiune. Adica exact cele doua bucati de text pe care
+   * si le-ar alege cineva care vrea sa foloseasca instiintarile ca releu.
+   * `bulkUpdateOrderStatus` verifica statusul de mult, pe aceeasi lista.
+   */
+  if (!(data.status in ORDER_STATUS)) return { error: "Status invalid." };
+  const awb = data.awb?.trim().slice(0, 64) || undefined;
 
   const { data: order } = await supabase
     .from("orders")
@@ -1429,8 +1717,17 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     }
   }
 
+  /*
+   * Bugetul instiintarilor se consuma o singura data pe apel, si numai cand chiar
+   * ar pleca ceva: o comanda fara email si fara telefon n-are de ce sa arda din
+   * el, iar un apel care nu schimba nimic nu trimite oricum nimic.
+   */
+  const poateInstiinta = (statusChanged || paymentChanged) && (order.customer_email || order.customer_phone)
+    ? await poateInstiintaStarea(user.id, orderId)
+    : false;
+
   // Send status change email to customer
-  if (statusChanged && order.customer_email) {
+  if (poateInstiinta && statusChanged && order.customer_email) {
     const emailSender = await getStoreEmailSender(createAdminClient(), order.business_id);
     sendOrderStatusToCustomer(order.customer_email, {
       order_number: order.order_number,
@@ -1438,13 +1735,13 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       total: order.total,
       status: data.status,
       business_name: storeName,
-      awb: data.awb,
+      awb,
       store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
     }, emailSender).catch(() => {});
   }
 
   // Send status change SMS to customer (opt-in per store via SMSO)
-  if (statusChanged && order.customer_phone) {
+  if (poateInstiinta && statusChanged && order.customer_phone) {
     const { data: st } = await supabase
       .from("store_settings")
       .select("smso_config")
@@ -1458,7 +1755,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
         body: defaultStatusSms(data.status, {
           orderNumber: order.order_number,
           businessName: storeName,
-          awb: data.awb,
+          awb,
         }),
         type: "transactional",
       });
@@ -1483,7 +1780,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       order: order.order_number,
       name: order.customer_name,
       total: formatPrice(Number(order.total)),
-      awb: data.awb ?? "",
+      awb: awb ?? "",
       store: storeName,
       phone: order.customer_phone ?? "",
       email: order.customer_email ?? "",
@@ -1497,13 +1794,15 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
       date_added: order.created_at ? formatDate(order.created_at as string) : "",
     };
+    // `poateInstiinta` doar pe SMS-urile platite; marcarea „platit" din
+    // Mailchimp/Brevo de mai jos NU e o instiintare si ramane neatinsa.
     if (statusChanged) {
       const tk = noticeTriggerForStatus(data.status);
-      if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+      if (poateInstiinta && tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
     }
     if (paymentChanged) {
       const tk = noticeTriggerForPayment(data.payment_status);
-      if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+      if (poateInstiinta && tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
       if (data.payment_status === "paid") { void maybeMarkMailchimpOrderPaid(orderId); void maybeMarkBrevoOrderPaid(orderId); }
     }
   }
@@ -1646,7 +1945,21 @@ export async function updateOrderDetails(orderId: string, data: {
     return { error: "Comenzile anulate sau rambursate nu pot fi editate." };
   }
 
-  const name = data.customer_name.trim();
+  /*
+   * Numele clientului, taiat la 120 — dar NUMAI cand chiar se schimba.
+   *
+   * Ambele cai de comanda il taie de la intrare (vezi `placeOrder`); aici era
+   * singura scriere ramasa fara plafon, si de aici numele pleaca mai departe pe
+   * AWB, pe factura si in emailuri, exact ca de acolo.
+   *
+   * Conditia nu e cosmetica: taiat neconditionat, un nume vechi de peste 120 de
+   * caractere ar fi fost SCURTAT tacit pe o comanda careia comerciantul ii repara
+   * doar telefonul — si scurtat exact pe comenzile cu factura Oblio, unde garda de
+   * mai jos exista tocmai ca titularul sa nu se schimbe. Nemiscat, se scrie
+   * inapoi aceeasi valoare; miscat, se scrie una plafonata.
+   */
+  const numeCerut = data.customer_name.trim();
+  const name = numeCerut === order.customer_name ? numeCerut : numeCerut.slice(0, 120);
   const phone = data.customer_phone.trim();
   const address = data.address.trim();
   const city = data.city.trim();
@@ -1939,6 +2252,13 @@ export async function updateOrderDetails(orderId: string, data: {
     ...(etichetaNoua ? { courier_label: etichetaNoua } : {}),
   };
 
+  // Stocul liniilor adaugate se revendica atomic INAINTE de scriere, ca la ambele
+  // cai de comanda: `expandBundleStock` de mai sus doar citeste, iar scaderea de
+  // dupa update lasa aceeasi fereastra — doi comercianti care adauga in acelasi
+  // timp acelasi ultim produs treceau amandoi. Vezi `revendicaStocul`.
+  const stoc = await revendicaStocul(admin, decrements);
+  if (stoc.fel === "refuzat") return { error: stoc.error };
+
   const { error } = await supabase.from("orders").update({
     customer_name: name,
     customer_phone: phone,
@@ -1958,13 +2278,17 @@ export async function updateOrderDetails(orderId: string, data: {
   } as never).eq("id", orderId);
 
   if (error) {
+    // Comanda n-a fost salvata, deci stocul rezervat pentru liniile adaugate se
+    // da inapoi — altfel marfa ramane scazuta pentru linii care nu exista.
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements);
     logError({ action: "updateOrderDetails", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
     return { error: "Eroare la salvarea modificarilor." };
   }
 
-  // Stock decrement + Google Merchant availability sync for the added items
-  // (mirrors placeOrder; runs only after the order update committed).
-  if (decrements.length > 0) {
+  // Google Merchant availability sync for the added items (mirrors placeOrder).
+  // Stocul de produs e deja scazut de revendicare; ramura veche ramane doar cat
+  // timp migratia nu e aplicata.
+  if (decrements.length > 0 && stoc.fel === "nerevendicat") {
     await admin.rpc("decrement_stock_batch" as never, { p_items: decrements } as never);
   }
   // Stocul declarat pe fiecare marime vanduta scade si el, ca la ambele cai de
@@ -2024,10 +2348,34 @@ export async function deleteOrder(orderId: string) {
   return { success: true };
 }
 
+/*
+ * Plafoanele mesajelor catre client — email si SMS.
+ *
+ * Destinatarul e ales de apelant: comanda ii apartine, iar `updateOrderDetails`
+ * ii rescrie `customer_email` cu ce vrea. Fara plafon, un cont nou isi publica un
+ * magazin, isi plaseaza singur o comanda si trimite in bucla emailuri arbitrare
+ * catre orice adresa — semnate SPF/DKIM de domeniul PLATFORMEI, fiindca fara SMTP
+ * propriu se pleaca pe Resend-ul nostru. Reputatia arsa nu-l atinge pe el, ci
+ * trimite in spam emailurile reale ale tuturor celorlalti comercianti. Exact
+ * abuzul pentru care s-a inasprit /api/notifications/test („ERA UN RELEU DE EMAIL
+ * DESCHIS"), doar ca acolo destinatarul e fixat si aici nu poate fi.
+ *
+ * Doua chei, nu una: pe UTILIZATOR se plafoneaza volumul, pe COMANDA se opreste
+ * tinta unica — o comanda reala nu are nevoie de zeci de mesaje, iar altfel se
+ * comuta intre comenzi si plafonul pe utilizator ramane singurul zid.
+ */
+const MESAJE_PE_ORA = 50;
+const MESAJE_PE_COMANDA = 10;
+
 export async function sendCustomerNotification(orderId: string, subject: string, message: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
+  // Prima linie, in memorie: taie bucla fara sa atinga baza. Cheia e pe cont, deci
+  // cine o consuma se opreste singur pe el.
+  if (!rateLimit(`mesajClient:${user.id}`, 10, 60_000)) {
+    return { error: "Prea multe mesaje trimise. Asteapta un minut si incearca din nou." };
+  }
 
   if (!subject.trim() || !message.trim()) return { error: "Completeaza subiectul si mesajul." };
 
@@ -2042,6 +2390,20 @@ export async function sendCustomerNotification(orderId: string, subject: string,
   if (!biz) return { error: "Acces interzis" };
 
   if (!order.customer_email) return { error: "Clientul nu a lasat o adresa de email." };
+
+  /*
+   * Plafoanele durabile se consuma DUPA verificarea de proprietate.
+   *
+   * Puse mai sus, oricine putea arde contorul unei comenzi straine trimitand
+   * cereri pe id-uri care nu-i apartin, si comerciantul adevarat ramanea fara
+   * dreptul de a-si anunta clientul.
+   */
+  if (!(await consumaLimita(`mesaj-client:${user.id}`, MESAJE_PE_ORA, 3600)).permis) {
+    return { error: "Ai trimis prea multe mesaje in ultima ora. Incearca mai tarziu." };
+  }
+  if (!(await consumaLimita(`mesaj-comanda:${orderId}`, MESAJE_PE_COMANDA, 86400)).permis) {
+    return { error: "Prea multe mesaje pe aceasta comanda. Incearca maine." };
+  }
 
   const emailSender = await getStoreEmailSender(createAdminClient(), order.business_id);
   const res = await sendCustomerMessage(order.customer_email, {
@@ -2058,6 +2420,12 @@ export async function sendCustomerSms(orderId: string, message: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
+  // Aceeasi prima linie ca la mesajul pe email, si acelasi buget pe cont mai jos:
+  // numarul destinatarului vine tot dintr-o comanda pe care apelantul si-o poate
+  // face singur, iar fiecare SMS pleaca pe cheia SMSO a magazinului.
+  if (!rateLimit(`mesajClient:${user.id}`, 10, 60_000)) {
+    return { error: "Prea multe mesaje trimise. Asteapta un minut si incearca din nou." };
+  }
 
   if (!message.trim()) return { error: "Scrie mesajul SMS." };
 
@@ -2081,6 +2449,16 @@ export async function sendCustomerSms(orderId: string, message: string) {
   const smso = st?.smso_config as SmsoConfig | null;
   if (!smso?.enabled || !smso.api_key || !smso.sender_id) {
     return { error: "SMSO nu este activat. Conecteaza-l din Integrari." };
+  }
+
+  // Plafoanele durabile, dupa verificarea de proprietate — vezi
+  // `sendCustomerNotification`. Bugetul pe cont e COMUN celor doua canale: cine
+  // il consuma pe email nu trebuie sa mai aiba unul intreg pe SMS.
+  if (!(await consumaLimita(`mesaj-client:${user.id}`, MESAJE_PE_ORA, 3600)).permis) {
+    return { error: "Ai trimis prea multe mesaje in ultima ora. Incearca mai tarziu." };
+  }
+  if (!(await consumaLimita(`sms-comanda:${orderId}`, MESAJE_PE_COMANDA, 86400)).permis) {
+    return { error: "Prea multe SMS-uri pe aceasta comanda. Incearca maine." };
   }
 
   const res = await sendSms(smso.api_key, {
@@ -2157,6 +2535,12 @@ export async function placeCartOrder(data: {
   if (!rateLimit(`placeCartOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
+  // Al doilea strat, DURABIL, pe ACEEASI cheie ca la comanda din formular: vezi
+  // `placeOrder`. Cele doua cai duc amandoua la aceleasi doua emailuri si acelasi
+  // SMS platit, deci n-au voie sa aiba doua bugete separate.
+  if (!(await consumaLimita(`comanda:ip:${ip}`, 40, 3600)).permis) {
+    return { error: "Prea multe comenzi trimise de pe aceasta conexiune. Te rugam incearca mai tarziu." };
+  }
   // An empty cart passes every check below (`some` on [] is false, subtotal 0),
   // so a direct call would insert a phantom order, send both emails and burn a
   // discount use. Only the UI guarded this; the action must guard it too.
@@ -2164,6 +2548,10 @@ export async function placeCartOrder(data: {
 
   // Use admin client — customers are anonymous
   const admin = createAdminClient();
+
+  // Numele clientului, taiat la 120 de caractere ca pe calea directa — acelasi
+  // sir ajunge in baza, in subiectul emailului si in SMS. Vezi `placeOrder`.
+  const numeClient = data.customer_name.trim().slice(0, 120);
 
   // Reload every product + store config; recompute all prices server-side.
   const productIds = [...new Set(data.items.map((i) => i.product_id))];
@@ -2477,10 +2865,18 @@ export async function placeCartOrder(data: {
     }
   }
 
+  // Ca la comanda din formular: stocul se revendica atomic inainte de inserare,
+  // fiindca `expandBundleStock` doar citeste. Vezi `revendicaStocul`.
+  const stoc = await revendicaStocul(admin, stockExp.decrements);
+  if (stoc.fel === "refuzat") {
+    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    return { error: stoc.error };
+  }
+
   const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
-    customer_name: data.customer_name.trim(),
+    customer_name: numeClient,
     customer_phone: data.customer_phone.trim(),
     customer_email: data.customer_email?.trim() || null,
     shipping_address: {
@@ -2541,8 +2937,10 @@ export async function placeCartOrder(data: {
   }).select("id, order_number, total").single();
 
   if (error) {
-    // Comanda n-a intrat, deci utilizarea revendicata se da inapoi.
+    // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
+    // rezervat. Vezi `placeOrder`.
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements);
     logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
@@ -2557,8 +2955,11 @@ export async function placeCartOrder(data: {
     } catch { /* fara context de cerere (scripturi, teste) */ }
   }
 
-  // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.
-  await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+  // Stocul de produs e deja scazut inainte de insert; ramura asta ramane doar
+  // pentru cazul in care revendicarea n-a putut rula. Vezi `placeOrder`.
+  if (stoc.fel === "nerevendicat") {
+    await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+  }
   // Si stocul marimii vandute, pe aceleasi linii pe care le-a verificat
   // `eroareStocPeVarianta` la intrare — cu cantitatea plafonata, cea incasata.
   await scadeStoculVariantelor(admin, liniiCerute);
@@ -2568,6 +2969,9 @@ export async function placeCartOrder(data: {
   void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
+  // Acelasi prag moale pe magazin ca la comanda din formular: peste el comanda se
+  // salveaza, dar emailurile si SMS-ul nu mai pleaca. Vezi `pesteRafalaMagazinului`.
+  const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeCartOrder");
 
   // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
   // by transaction_id; captures the conversion even when the browser tag is blocked.
@@ -2605,7 +3009,7 @@ export async function placeCartOrder(data: {
 
       const emailPayload = {
         order_number: order.order_number,
-        customer_name: data.customer_name,
+        customer_name: numeClient,
         customer_phone: data.customer_phone,
         customer_email: data.customer_email,
         total,
@@ -2664,24 +3068,28 @@ export async function placeCartOrder(data: {
         custom_fields: data.custom_fields,
         billing_company: billingCompany,
       };
+      // `!pesteRafala` pe amandoua: sub rafala comanda ramane scrisa, doar
+      // instiintarile tac. Alternativa — sa refuzam comanda — ar fi facut din
+      // rafala o negare de serviciu asupra vanzarilor comerciantului.
       const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([
-        config.new_order !== false && notifyEmail
+        !pesteRafala && config.new_order !== false && notifyEmail
           ? sendNewOrderEmail(notifyEmail, emailPayload, emailSender)
           : null,
-        data.customer_email
+        !pesteRafala && data.customer_email
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload, emailSender)
           : null,
       ].filter(Boolean));
 
       // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
-      void maybeSendNoticeNotification({
+      // Se opreste primul sub rafala: se plateste din creditul comerciantului.
+      if (!pesteRafala) void maybeSendNoticeNotification({
         businessId: data.business_id,
         orderId: order.id,
         triggerKey: "pending",
         phone: data.customer_phone,
         vars: {
-          order: order.order_number, name: data.customer_name, total: formatPrice(total),
+          order: order.order_number, name: numeClient, total: formatPrice(total),
           awb: "", store: businessName,
           phone: data.customer_phone, email: data.customer_email ?? "",
           address: data.customer_address, city: data.customer_city, region: data.customer_county,
@@ -2698,7 +3106,7 @@ export async function placeCartOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
         });
@@ -2710,7 +3118,7 @@ export async function placeCartOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -2723,7 +3131,7 @@ export async function placeCartOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -2738,7 +3146,7 @@ export async function placeCartOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           currency: "RON",
           total,
           financial_status: "pending",
@@ -2770,7 +3178,7 @@ export async function placeCartOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           total,
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))

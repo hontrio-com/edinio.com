@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
   createSession, createHppSession, klarnaReady, toKlarnaOrderInput, type KlarnaConfig,
 } from "@/lib/klarna";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 
 /**
  * Starts a Klarna payment: creates a payment session + a Hosted Payment Page for
@@ -10,6 +12,21 @@ import {
  * which redirects back to /api/klarna/return on success.
  */
 export async function POST(request: NextRequest) {
+  /*
+   * Ruta e publica si nu cere sesiune, iar cele trei verificari de mai jos
+   * (comanda exista / neplatita / neanulata) raman adevarate la infinit — deci o
+   * bucla pe acelasi orderId nu se rupea niciodata singura, si fiecare cerere
+   * deschidea o sesiune Klarna NOUA (plus un HPP) pe contul comerciantului.
+   * Doua linii: asta taie rafala pe IP fara sa atinga baza; cea durabila de mai
+   * jos (pe comanda) e singura care tine intre instantele serverless.
+   */
+  if (!rateLimit(`pay-start:${clientIp(request)}`, 10, 60_000)) {
+    return NextResponse.json(
+      { error: "Prea multe incercari de plata. Te rugam asteapta un minut si incearca din nou." },
+      { status: 429 },
+    );
+  }
+
   const { orderId, businessId } = (await request.json()) as { orderId: string; businessId: string };
   if (!orderId || !businessId) {
     return NextResponse.json({ error: "Missing orderId or businessId" }, { status: 400 });
@@ -38,6 +55,20 @@ export async function POST(request: NextRequest) {
   const cfg = settings?.klarna_config as KlarnaConfig | null;
   if (!klarnaReady(cfg)) {
     return NextResponse.json({ error: "Klarna not configured for this business" }, { status: 400 });
+  }
+
+  /*
+   * Plafon DURABIL pe COMANDA, nu pe magazin: o comanda reala are nevoie de
+   * cateva reincercari de plata, nu de mii, iar o cheie pe businessId ar fi
+   * lasat un atacator sa blocheze plata pentru toti ceilalti cumparatori ai
+   * magazinului. Se consuma abia aici, dupa ce stim ca `orderId` chiar exista,
+   * ca sa nu se umple tabela de limite cu chei inventate.
+   */
+  if (!(await consumaLimita(`pay-start:${orderId}`, 5, 3600)).permis) {
+    return NextResponse.json(
+      { error: "Ai incercat de prea multe ori sa platesti aceasta comanda. Incearca din nou peste o ora sau scrie magazinului." },
+      { status: 429 },
+    );
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com";

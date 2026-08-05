@@ -1,3 +1,4 @@
+import { COLOANE_BUSINESS_PUBLIC } from "@/lib/storefront/business-public";
 import { cache, Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -28,7 +29,7 @@ interface Props {
 // Deduplicated per request: generateMetadata + the page share one set of queries.
 const loadPage = cache(async (slug: string, pageSlug: string) => {
   const supabase = await createClient();
-  const { data: business } = await supabase.from("businesses").select("*").eq("slug", slug).single();
+  const { data: business } = await supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single();
   if (!business) return null;
   // RLS: published pages are public; owners can also read their own drafts.
   const { data: page } = await supabase

@@ -1,8 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 
 export async function POST(request: NextRequest) {
+  /*
+   * Ruta e publica si nu cere sesiune, iar cele trei verificari de mai jos
+   * (comanda exista / neplatita / neanulata) raman adevarate la infinit — deci o
+   * bucla pe acelasi orderId nu se rupea niciodata singura, si fiecare cerere
+   * deschidea o sesiune NOUA pe contul CONECTAT al comerciantului. La depasirea
+   * cotei, Stripe intoarce 429 si pentru platile lui REALE.
+   * Doua linii: asta taie rafala pe IP fara sa atinga baza; cea durabila de mai
+   * jos (pe comanda) e singura care tine intre instantele serverless.
+   */
+  if (!rateLimit(`pay-start:${clientIp(request)}`, 10, 60_000)) {
+    return NextResponse.json(
+      { error: "Prea multe incercari de plata. Te rugam asteapta un minut si incearca din nou." },
+      { status: 429 },
+    );
+  }
+
   const { orderId, businessId } = await request.json() as { orderId: string; businessId: string };
 
   if (!orderId || !businessId) {
@@ -36,6 +54,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Stripe not connected for this business" }, { status: 400 });
   }
 
+  /*
+   * Plafon DURABIL pe COMANDA, nu pe magazin: o comanda reala are nevoie de
+   * cateva reincercari de plata, nu de mii, iar o cheie pe businessId ar fi
+   * lasat un atacator sa blocheze plata pentru toti ceilalti cumparatori ai
+   * magazinului. Se consuma abia aici, dupa ce stim ca `orderId` chiar exista,
+   * ca sa nu se umple tabela de limite cu chei inventate.
+   */
+  if (!(await consumaLimita(`pay-start:${orderId}`, 5, 3600)).permis) {
+    return NextResponse.json(
+      { error: "Ai incercat de prea multe ori sa platesti aceasta comanda. Incearca din nou peste o ora sau scrie magazinului." },
+      { status: 429 },
+    );
+  }
+
+  const asteptat = Math.round(Number(order.total) * 100);
+
+  /*
+   * Reincercarea REFOLOSESTE sesiunea deschisa, nu mai creeaza una noua: asa,
+   * clientul care da refresh sau se intoarce din checkout nu mai consuma din
+   * cota contului conectat. Conditia pe suma nu e decorativa — comanda poate fi
+   * editata dupa initierea platii, iar o sesiune veche ar incasa vechiul total.
+   */
+  const sesiuneVeche = order.stripe_session_id as string | null;
+  if (sesiuneVeche) {
+    try {
+      // Al doilea argument ramane gol: tipurile SDK-ului separa parametrii de
+      // optiunile cererii, iar sesiunea traieste pe contul conectat.
+      const veche = await stripe.checkout.sessions.retrieve(sesiuneVeche, {}, { stripeAccount: stripeConfig.account_id });
+      if (veche.status === "open" && veche.url && veche.amount_total === asteptat) {
+        return NextResponse.json({ url: veche.url });
+      }
+    } catch (e) {
+      // Sesiunea nu mai poate fi citita (stearsa, alt cont conectat) — cream una noua.
+      console.warn("[stripe/order-checkout] sesiunea veche nu a putut fi citita:", { orderId, error: e });
+    }
+  }
+
   const slug = business?.slug ?? "";
   // Always build redirect URLs from the fixed platform host (like Netopia/iPay),
   // never the request origin. If the customer is on a store's custom domain, the
@@ -53,7 +108,7 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: "ron",
             product_data: { name: `Comanda ${order.order_number}` },
-            unit_amount: Math.round(Number(order.total) * 100),
+            unit_amount: asteptat,
           },
           quantity: 1,
         },

@@ -10,6 +10,7 @@ import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { parseProductSections, resolveSectionProducts } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 import { VariantQuickAdd, type QuickAddLine } from "./VariantQuickAdd";
 import { parseVariants } from "@/lib/storefront/variants";
@@ -44,7 +45,9 @@ import type {
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
 
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
+// Randul TAIAT, nu cel intreg: componenta e "use client", deci tot ce primeste
+// ajunge in HTML. Vezi src/lib/storefront/business-public.ts.
+type Business = BusinessPublic;
 // Forma produsului a fost mutata in lib/storefront/product.types.ts, ca sa poata
 // fi importata si de sectiunile extrase din acest fisier.
 type Product = StorefrontProduct;

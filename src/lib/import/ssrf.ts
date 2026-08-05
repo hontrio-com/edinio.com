@@ -4,6 +4,7 @@
 // Server-only (uses node:dns / node:net).
 
 import dns from "node:dns/promises";
+import http from "node:http";
 import net from "node:net";
 
 const MAX_BYTES = 12 * 1024 * 1024; // 12MB / image
@@ -61,26 +62,34 @@ const PORTURI_PERMISE = new Set(["", "80", "443", "8080", "8443"]);
  * deci ramura respectiva pare moarta), dar tocmai ele trimit adresa pe drumul
  * prin `dns.lookup`, care o intoarce in forma canonica (`::1`) — singura pe care
  * `isPrivateIp` o recunoaste. Taiate, s-ar pierde normalizarea.
+ *
+ * Intoarce adresa verificata de care trebuie legata conexiunea, sau `null` cand
+ * gazda era deja un IP scris in clar (acolo nu se rezolva nimic, deci nu are ce
+ * sa se schimbe intre verificare si conectare).
  */
-async function assertAdresaPermisa(u: URL): Promise<void> {
+async function assertAdresaPermisa(u: URL): Promise<string | null> {
   if (!PORTURI_PERMISE.has(u.port)) throw new Error("blocked:port");
-  await assertPublicHost(u.hostname);
+  return assertPublicHost(u.hostname);
 }
 
-async function assertPublicHost(hostname: string): Promise<void> {
+async function assertPublicHost(hostname: string): Promise<string | null> {
   const host = hostname.toLowerCase();
   if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) {
     throw new Error("blocked:host");
   }
   if (net.isIP(host)) {
     if (isPrivateIp(host)) throw new Error("blocked:ip");
-    return;
+    return null;
   }
   const records = await dns.lookup(host, { all: true });
   if (!records.length) throw new Error("blocked:dns");
   for (const r of records) {
     if (isPrivateIp(r.address)) throw new Error("blocked:ip");
   }
+  /* IPv4 cand exista: legand conexiunea de o singura adresa pierdem trecerea
+     automata a lui Node pe cealalta familie, iar un AAAA pe care functia nu il
+     poate rula ar rupe importuri care mergeau. */
+  return (records.find((r) => r.family === 4) ?? records[0]).address;
 }
 
 const MAX_TEXT_BYTES = 8 * 1024 * 1024; // 8MB / feed, cat si incarcarea manuala
@@ -198,17 +207,113 @@ export async function safeFetchFile(rawUrl: string): Promise<FetchFileResult> {
   }
 }
 
+/**
+ * Cerere `http:` legata de adresa DEJA verificata.
+ *
+ * DE CE nu `fetch`: `assertAdresaPermisa` rezolva numele o data, iar `fetch` il
+ * rezolva A DOUA OARA cand deschide conexiunea. Un DNS ostil cu TTL 0 poate da
+ * intre cele doua o adresa interna (rebinding). Pe `https:` nu conteaza,
+ * certificatul se valideaza pe NUME si conexiunea cade singura; pe `http:` nu
+ * exista nimic care sa lege conexiunea de numele verificat.
+ *
+ * Solutia e `lookup` fixat: `node:http` intreaba o singura data si primeste exact
+ * adresa verificata, iar antetul `Host` ramane cel cerut, deci gazdele virtuale
+ * merg mai departe. Cu `fetch` nu se poate: undici sterge un `Host` pus de noi
+ * (verificat cu Node), deci varianta "adresa cu IP in loc de gazda" nu tine.
+ *
+ * Se leaga de O SINGURA adresa verificata (vezi alegerea din `assertPublicHost`):
+ * daca gazda are mai multe, nu le mai incercam pe rand — o pierdere mica fata de
+ * a trimite cererea unde nu trebuie.
+ */
+function cereHttpLegatDeIp(u: URL, ip: string, semnal: AbortSignal): Promise<FetchImageResult> {
+  const familie = net.isIPv6(ip) ? 6 : 4;
+
+  return new Promise((resolve) => {
+    let raspuns = false;
+    const gata = (r: FetchImageResult) => {
+      if (raspuns) return;
+      raspuns = true;
+      resolve(r);
+    };
+
+    const cerere = http.request(
+      {
+        hostname: u.hostname.replace(/^\[|\]$/g, ""),
+        port: u.port || 80,
+        path: `${u.pathname}${u.search}`,
+        method: "GET",
+        signal: semnal,
+        setHost: false,
+        headers: { Host: u.host, "User-Agent": USER_AGENT, Accept: "image/*" },
+        /* Node cere forma de tablou cand intreaba cu `all`. */
+        lookup: (_gazda, optiuni, cheama) =>
+          optiuni && optiuni.all
+            ? cheama(null, [{ address: ip, family: familie }])
+            : cheama(null, ip, familie),
+      },
+      (mesaj) => {
+        const stare = mesaj.statusCode ?? 0;
+        /* Redirectarile nu se urmeaza: o gazda publica ne-ar putea trimite cu ele
+           spre o tinta interna. `node:http` oricum nu le urmeaza singur. */
+        if (stare !== 200) {
+          mesaj.resume();
+          gata({ error: `HTTP ${stare}` });
+          return;
+        }
+
+        const contentType = (mesaj.headers["content-type"] ?? "")
+          .split(";")[0]
+          .trim()
+          .toLowerCase();
+        if (!contentType.startsWith("image/")) {
+          mesaj.destroy();
+          gata({ error: "Continut non-imagine" });
+          return;
+        }
+
+        const bucati: Buffer[] = [];
+        let total = 0;
+        mesaj.on("data", (bucata: Buffer) => {
+          total += bucata.byteLength;
+          if (total > MAX_BYTES) {
+            mesaj.destroy();
+            gata({ error: "Imagine prea mare" });
+            return;
+          }
+          bucati.push(bucata);
+        });
+        mesaj.on("end", () => {
+          if (total === 0) gata({ error: "Imagine goala" });
+          else gata({ buffer: Buffer.concat(bucati), contentType });
+        });
+        mesaj.on("error", () => gata({ error: "Descarcare esuata" }));
+      },
+    );
+
+    cerere.on("error", (e: Error) =>
+      gata({ error: e.name === "AbortError" ? "Timeout" : "Descarcare esuata" }),
+    );
+    cerere.end();
+  });
+}
+
 /** Download a remote image with SSRF protection, size/time/content-type limits. */
 export async function safeFetchImage(rawUrl: string): Promise<FetchImageResult> {
   try {
     const u = new URL(rawUrl);
     if (u.protocol !== "http:" && u.protocol !== "https:") return { error: "Protocol invalid" };
-    await assertAdresaPermisa(u);
+    const ipVerificat = await assertAdresaPermisa(u);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     let res: Response;
     try {
+      /* Fara TLS, conexiunea trebuie legata de adresa verificata; vezi de ce, la
+         `cereHttpLegatDeIp`. Gazdele scrise ca IP nu au ce rezolva a doua oara. */
+      if (u.protocol === "http:" && ipVerificat) {
+        return await cereHttpLegatDeIp(u, ipVerificat, controller.signal);
+      }
+
       res = await fetch(u, {
         // Refuse redirects: prevents a public host from bouncing us to an internal IP.
         redirect: "error",

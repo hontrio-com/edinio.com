@@ -12,6 +12,7 @@ import type {
   StorePageContent,
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
+import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -28,7 +29,9 @@ import type { Database } from "@/types/database.types";
  * categorii, paginare — si exista doar pe pagina de magazin.
  */
 
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
+// Randul TAIAT, nu cel intreg: valoarea asta traverseaza granita catre client.
+// Vezi src/lib/storefront/business-public.ts.
+type Business = BusinessPublic;
 
 /**
  * Ce face butonul de cos, dupa pagina pe care ne aflam si dupa designul ales.

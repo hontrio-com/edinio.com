@@ -115,12 +115,18 @@ function baseTemplate(content: string): string {
  * scrie.
  */
 async function sendStoreOrEdinio(sender: StoreEmailSender | undefined, to: string, subject: string, content: string): Promise<void> {
+  // Curatarea sta AICI, nu la fiecare apelant, fiindca subiectele care trec pe
+  // aici sunt compuse din text scris de cumparator (`customer_name`) sau de
+  // comerciant (sablonul lui cu `{{nume_client}}`, randat de `renderTemplate`,
+  // care nu curata nimic). Un singur punct acopera si valoarea implicita, si
+  // suprascrierea din sablon.
+  const subiect = subiectSigur(subject);
   if (sender) {
-    await deliverStoreEmail(sender, { to, subject, html: storeEmailShell(sender.branding, content) });
+    await deliverStoreEmail(sender, { to, subject: subiect, html: storeEmailShell(sender.branding, content) });
     return;
   }
   if (!process.env.RESEND_API_KEY) return;
-  await getResend().emails.send({ from: FROM, to, subject, html: baseTemplate(content) });
+  await getResend().emails.send({ from: FROM, to, subject: subiect, html: baseTemplate(content) });
 }
 
 export function buildAdminNotifyHtml(name: string, message: string): string {
@@ -389,7 +395,7 @@ export async function sendWelcomeEmail(
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `Magazinul tau ${data.business_name} este live!`,
+    subject: subiectSigur(`Magazinul tau ${data.business_name} este live!`),
     html: baseTemplate(content),
   });
 }
@@ -436,49 +442,24 @@ export async function sendPageFormEmail(
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `Mesaj nou de pe ${data.storeName}`,
+    subject: `Mesaj nou de pe ${subiectSigur(data.storeName)}`,
     html: baseTemplate(content),
   });
 }
 
 const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.com";
 
-export async function sendMigrationLeadToAdmin(data: {
-  name: string;
-  phone: string;
-  platform: string;
-  productsCount: string;
-}) {
-  if (!process.env.RESEND_API_KEY) return;
-  const field = (label: string, value: string) => `
-    <tr>
-      <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
-        <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">${esc(label)}</span>
-        <p style="margin:3px 0 0 0;font-size:15px;color:#18181b;font-weight:500;">${esc(value) || "-"}</p>
-      </td>
-    </tr>`;
-  const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cerere noua de migrare</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Un client doreste sa migreze magazinul la Edinio. Suna-l cat mai repede.</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
-      ${field("Nume complet", data.name)}
-      ${field("Numar de telefon", data.phone)}
-      ${field("Platforma actuala", data.platform)}
-      ${field("Numar aproximativ de produse", data.productsCount)}
-    </table>
-    <div style="text-align:center;margin-top:24px;">
-      <a href="${escapeUrl(`tel:${data.phone.replace(/\s/g, "")}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
-        Suna clientul
-      </a>
-    </div>
-  `;
-  await getResend().emails.send({
-    from: FROM,
-    to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Migrare] ${data.name} — ${data.phone} (${data.platform})`,
-    html: baseTemplate(content),
-  });
-}
+/*
+ * `sendMigrationLeadToAdmin` a fost stearsa pe 05.08.2026, odata cu restul
+ * paginii /migrare (src/lib/actions/migration.actions.ts si
+ * src/components/landing/Migration*). Nu o readuce fara sa aduci si plafoanele:
+ * singurul ei apelant era `submitMigrationLead`, o actiune de server PUBLICA,
+ * fara autentificare si fara nicio limita, care trimitea email pe cheia Resend a
+ * platformei. Nu era exploatabila doar fiindca modulul ramasese orfan (0
+ * aparitii in server-reference-manifest.json, deci Next nu-i dadea niciun id de
+ * actiune) — adica se repara singura din intamplare, si s-ar fi rupt la loc, in
+ * tacere, in ziua in care cineva refacea pagina.
+ */
 
 /**
  * Subiect curatat pentru antetul `Subject:`.
@@ -487,6 +468,14 @@ export async function sendMigrationLeadToAdmin(data: {
  * Aceeasi clasa pe care proiectul a tratat-o deja la `fromLine`: un CR sau LF
  * strecurat acolo inseamna injectie de anteturi de email. Taiem si lungimea, ca
  * un subiect de 10.000 de caractere sa nu ajunga in antet.
+ *
+ * Cat valoreaza, exact: injectia propriu-zisa e INCHISA de ambele transporturi —
+ * nodemailer inlocuieste CR/LF cu spatiu inainte de a scrie antetul, iar Resend
+ * primeste subiectul ca sir intr-un JSON si compune MIME-ul la el. Garda asta e
+ * deci igiena si consecventa (un subiect ramane un subiect, de o linie si de
+ * lungime rezonabila), nu bariera care opreste un atac. Pana pe 05.08.2026 era
+ * chemata doar pe doua din caile de suport, desi restul primeau la fel de mult
+ * text de la utilizator; acum trece prin ea tot ce contine text strain.
  */
 function subiectSigur(brut: string): string {
   return (brut ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 180);
@@ -610,7 +599,7 @@ export async function sendAgentReplyToUser(data: {
   await getResend().emails.send({
     from: FROM,
     to: data.to,
-    subject: `Raspuns la tichetul tau: ${data.subject}`,
+    subject: `Raspuns la tichetul tau: ${subiectSigur(data.subject)}`,
     html: baseTemplate(emailContent),
   });
 }
@@ -692,7 +681,7 @@ export async function sendDomainOrderToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Domeniu] Comanda noua: ${data.domain} — ${data.customerName}`,
+    subject: subiectSigur(`[Domeniu] Comanda noua: ${data.domain} — ${data.customerName}`),
     html: baseTemplate(content),
   });
 }
@@ -716,7 +705,7 @@ export async function sendAdminNewUserNotification(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Edinio] Cont nou: ${data.name} (${data.email})`,
+    subject: `[Edinio] Cont nou: ${subiectSigur(data.name)} (${data.email})`,
     html: baseTemplate(content),
   });
 }
@@ -742,7 +731,7 @@ export async function sendAdminNewStoreNotification(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Edinio] Magazin nou: ${data.businessName} (${data.ownerEmail})`,
+    subject: `[Edinio] Magazin nou: ${subiectSigur(data.businessName)} (${data.ownerEmail})`,
     html: baseTemplate(content),
   });
 }
@@ -1318,7 +1307,7 @@ export async function sendReturnRequestToMerchant(
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `Cerere de retur ${data.order_number} - ${data.customer_name ?? ""}`.trim(),
+    subject: subiectSigur(`Cerere de retur ${data.order_number} - ${data.customer_name ?? ""}`),
     html: baseTemplate(content),
   });
 }

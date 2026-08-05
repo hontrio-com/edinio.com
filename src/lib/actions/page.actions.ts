@@ -191,14 +191,30 @@ export async function deletePage(pageId: string): Promise<{ error: string } | { 
   if (!user) return { error: "Neautorizat" };
 
   const { data: page } = await supabase
-    .from("custom_pages").select("id, business_id, slug, businesses(slug)").eq("id", pageId).single();
+    .from("custom_pages").select("id, business_id, slug").eq("id", pageId).single();
   if (!page) return { error: "Pagina negasita" };
 
-  const { error } = await supabase.from("custom_pages").delete().eq("id", pageId);
-  if (error) return { error: "Eroare la stergerea paginii." };
+  /*
+   * Singura din familie care nu cerea proprietarul (createPage, updatePage,
+   * duplicatePage si updateStoreMenu il cer toate). Citirea de mai sus reuseste
+   * si pentru pagina PUBLICATA a altui magazin — exista politica publica de
+   * SELECT — deci autorizarea atarna doar de RLS. Azi RLS chiar tine, dar in
+   * clipa in care apare o politica DELETE mai larga sau cineva trece pe clientul
+   * de admin (cum s-a intamplat in deleteSubmission), linia asta e tot ce mai
+   * sta intre chiriasi.
+   */
+  const ctx = await getUserAndBusiness(supabase, page.business_id);
+  if (!ctx) return { error: "Neautorizat" };
 
-  const bizSlug = (page as unknown as { businesses: { slug: string | null } | null }).businesses?.slug ?? null;
-  revalidatePage(bizSlug, page.slug);
+  // `.select("id")` nu e decorativ: un DELETE care nu potriveste niciun rand nu
+  // da eroare, iar functia raspundea {success:true} pentru o stergere care NU
+  // s-a intamplat — confirmare falsa in interfata.
+  const { data: sterse, error } = await supabase
+    .from("custom_pages").delete().eq("id", pageId).select("id");
+  if (error) return { error: "Eroare la stergerea paginii." };
+  if (!sterse || sterse.length === 0) return { error: "Neautorizat" };
+
+  revalidatePage(ctx.slug, page.slug);
   return { success: true };
 }
 

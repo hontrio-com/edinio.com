@@ -7,6 +7,7 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
@@ -22,6 +23,25 @@ type CartRow = Database["public"]["Tables"]["abandoned_carts"]["Row"];
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/*
+ * Plafonul pe magazin nu mai e un refuz complet tacut: cand se atinge,
+ * comerciantul chiar pierde cosuri reale (si emailurile de recuperare care ar fi
+ * plecat din ele), deci trebuie sa ramana o urma undeva.
+ *
+ * Cel mult o alerta pe ora pe magazin — contorul durabil folosit pe dos, ca
+ * `error_logs` sa nu se umple exact in timpul abuzului pe care il semnaleaza.
+ */
+async function alertaPlafonCosuri(businessId: string, cosuriRecente: number): Promise<void> {
+  if (!(await consumaLimita(`alerta:cart:${businessId}`, 1, 3600)).permis) return;
+  await logError({
+    action: "trackAbandonedCart.plafonMagazin",
+    message: "Plafonul de cosuri noi pe magazin a fost atins; sesiunile noi nu se mai inregistreaza",
+    details: { businessId, cosuriRecente },
+    businessId,
+    severity: "warning",
+  });
 }
 
 // ── Capture (storefront, anonymous customers — admin client) ───────────────────
@@ -60,17 +80,8 @@ export async function trackAbandonedCart(input: {
 
     const admin = createAdminClient();
 
-    // Plafon si PER MAGAZIN, ca o retea de IP-uri sa nu poata umple cosurile unui
-    // magazin anume (acelasi tipar ca in submitPageForm).
-    const deLa = new Date(Date.now() - 3_600_000).toISOString();
-    const { count: cosuriRecente } = await admin
-      .from("abandoned_carts")
-      .select("id", { count: "exact", head: true })
-      .eq("business_id", input.businessId)
-      .gte("created_at", deLa);
-    if ((cosuriRecente ?? 0) >= 200) return;
-
-    // Respect the per-store opt-in flag.
+    // Respect the per-store opt-in flag. Citit primul: pe magazinele fara optiunea
+    // activa (implicit toate) nu are rost nici numaratoarea de mai jos.
     const { data: settings } = await admin
       .from("store_settings").select("abandoned_cart_enabled").eq("business_id", input.businessId).single();
     if (!settings?.abandoned_cart_enabled) return;
@@ -80,6 +91,34 @@ export async function trackAbandonedCart(input: {
       .from("abandoned_carts").select("status")
       .eq("business_id", input.businessId).eq("session_id", input.sessionId).maybeSingle();
     if (existing?.status === "converted") return;
+
+    /*
+     * Plafon si PER MAGAZIN, ca o retea de IP-uri sa nu poata umple cosurile unui
+     * magazin anume (acelasi tipar ca in submitPageForm) — dar numai pe randurile
+     * NOI, si abia dupa ce stim ca sesiunea chiar e noua.
+     *
+     * Se aplica pana acum pe TOATE scrierile si respingea tacut orice cos peste
+     * 200 pe ora. Contorul e comun tuturor cumparatorilor, iar limita pe IP e de
+     * 30/ora, deci sapte IP-uri il umpleau; din acel moment cosurile
+     * cumparatorilor REALI nu se mai inregistrau deloc. Fara rand, cronul de
+     * recuperare nu vede nimic si emailurile de recuperare nu mai pleaca: venit
+     * pierdut pentru comerciant, invizibil, provocat de un tert.
+     *
+     * Cine revine pe o sesiune care ARE deja rand trece mai departe: acolo
+     * upsertul nu creeaza nimic, deci nu exista ce inunda.
+     */
+    if (!existing) {
+      const deLa = new Date(Date.now() - 3_600_000).toISOString();
+      const { count: cosuriRecente } = await admin
+        .from("abandoned_carts")
+        .select("id", { count: "exact", head: true })
+        .eq("business_id", input.businessId)
+        .gte("created_at", deLa);
+      if ((cosuriRecente ?? 0) >= 200) {
+        await alertaPlafonCosuri(input.businessId, cosuriRecente ?? 0);
+        return;
+      }
+    }
 
     // Cantitatea se normalizeaza si aici, desi cosul o normalizeaza deja: actiunea
     // e endpoint public si scrie cu client de admin. `item_count` e coloana

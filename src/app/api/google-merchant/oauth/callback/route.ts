@@ -66,7 +66,15 @@ export async function GET(req: NextRequest) {
       if (!("error" in created)) dataSourceName = created.data.name;
     }
     if (dataSourceName && !config.notification_subscription_name) {
-      const sub = await createNotificationSubscription(tok.accessToken, acc.id, `${PLATFORM_ORIGIN}/api/google-merchant/webhook`);
+      // Tokenul TREBUIE sa fie in URL-ul de callback, la fel ca in
+      // connectMerchant (src/lib/actions/google-merchant.actions.ts):
+      // /api/google-merchant/webhook cere acum secretul si confirma-si-ignora
+      // orice notificare fara el. Inregistrat fara token, abonamentul creat aici
+      // ar fi mort pentru totdeauna — nu se mai recreeaza nimic, fiindca
+      // `notification_subscription_name` ramane setat.
+      const webhookSecret = process.env.GMC_WEBHOOK_SECRET;
+      const callbackUri = `${PLATFORM_ORIGIN}/api/google-merchant/webhook${webhookSecret ? `?token=${encodeURIComponent(webhookSecret)}` : ""}`;
+      const sub = await createNotificationSubscription(tok.accessToken, acc.id, callbackUri);
       if (!("error" in sub)) config.notification_subscription_name = sub.data.name;
     }
     config.connected = !!dataSourceName;

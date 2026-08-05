@@ -1,3 +1,4 @@
+import { COLOANE_BUSINESS_PUBLIC } from "@/lib/storefront/business-public";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
@@ -46,7 +47,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   if (!kind || !sectionMeta(kind) || !variantParam || !variantMeta(kind, variantParam)) notFound();
 
   const supabase = await createClient();
-  const { data: business } = await supabase.from("businesses").select("*").eq("slug", slug).single();
+  const { data: business } = await supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single();
   if (!business) notFound();
 
   const { data: storeSettings } = await createAdminClient()

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { uploadToR2 } from "@/lib/r2";
 import { detectImageMime, isAllowedImage } from "@/lib/utils/file-signature";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
@@ -75,7 +76,18 @@ export async function POST(request: NextRequest) {
   }
 
   const ext = EXT_BY_MIME[detected] ?? "jpg";
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  /*
+   * Numele e SINGURUL control de acces al fisierului: depozitul e public, iar
+   * `/api/img` accepta si el prefixul `products`. Continutul e tocmai poza
+   * personala a unui cumparator — pentru o cana, o gravura, un cadou.
+   *
+   * Era `Date.now()`-`Math.random()`: `Math.random()` in V8 e xorshift128+, nu
+   * criptografic, deci cine incarca el insusi cateva fisiere isi vede sufixele in
+   * raspuns si poate deduce starea generatorului, adica numele urmatoarelor
+   * incarcari facute de pe ACEEASI instanta. `randomUUID` scoate cu totul
+   * problema si e oricum conventia proiectului.
+   */
+  const filename = `${randomUUID()}.${ext}`;
   const key = `products/customizations/${businessId}/${filename}`;
 
   try {

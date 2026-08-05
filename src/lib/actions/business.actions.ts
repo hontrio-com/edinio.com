@@ -5,6 +5,48 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWelcomeEmail } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
+import { NON_STORE_SEGMENTS } from "@/proxy";
+
+/*
+ * Adresa magazinului se valideaza AICI, pe server, nu doar in formular.
+ *
+ * Pana pe 05.08.2026 singura validare (zod + slugify) traia in componenta de
+ * onboarding, adica in browser, iar apelantul citeste slug-ul din
+ * sessionStorage — deci nici nu era nevoie de un apel brut de actiune, era
+ * destul devtools. Migratia din 04.08 a inchis doar UPDATE-ul pe `slug`;
+ * INSERT-ul a ramas deschis.
+ *
+ * Ce scapa apoi din aplicatie: rutele de intoarcere de la plata construiesc
+ * `new URL(`/${slug}/confirm...`, baseUrl)`. Un slug care incepe cu „/" face din
+ * asta „//evil.com/confirm..." — adica schimba GAZDA, nu calea. Rezultatul e ca
+ * https://www.edinio.com/api/stripe/return?... raspunde 307 catre alt domeniu:
+ * redirectare deschisa, gazduita pe domeniul platformei, buna de phishing cu
+ * marca Edinio. Cine scoate verificarea de mai jos redeschide exact asta.
+ *
+ * Regula e mai stricta decat cea din formular (care accepta si „---"): minim 3,
+ * maxim 50, fara liniuta la capete. Lista de segmente rezervate NU se copiaza
+ * aici — vine din proxy, unde traiesc oricum rutele de aplicatie.
+ *
+ * Liniutele de la capete se TAIE, nu se refuza. `slugify` le taie deja, dar
+ * formularul scurteaza rezultatul la 50 de caractere DUPA aceea, si taietura
+ * poate cadea exact pe o liniuta. Un refuz acolo ar pica in ultimul pas al
+ * onboarding-ului, pe un slug pe care omul nu l-a scris el.
+ */
+const SLUG_MAGAZIN = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
+
+function normalizeazaSlug(brut: string): string {
+  return (brut ?? "").trim().replace(/^-+|-+$/g, "");
+}
+
+function motivSlugRespins(slug: string): string | null {
+  if (!SLUG_MAGAZIN.test(slug)) {
+    return "Adresa magazinului trebuie sa aiba intre 3 si 50 de caractere, doar litere mici, cifre si liniute, si sa nu inceapa sau sa se termine cu liniuta.";
+  }
+  if (NON_STORE_SEGMENTS.has(slug)) {
+    return "Aceasta adresa este rezervata de platforma. Alege alta.";
+  }
+  return null;
+}
 
 export async function createBusiness(data: {
   business_name: string;
@@ -29,12 +71,16 @@ export async function createBusiness(data: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
 
+  const slug = normalizeazaSlug(data.slug);
+  const motiv = motivSlugRespins(slug);
+  if (motiv) return { error: motiv };
+
   const { data: business, error: bizError } = await supabase
     .from("businesses")
     .insert({
       user_id: user.id,
       type: "ministore",
-      slug: data.slug,
+      slug,
       business_name: data.business_name,
       tagline: data.tagline || null,
       phone: data.phone,
@@ -57,7 +103,7 @@ export async function createBusiness(data: {
     if (bizError.code === "23505") {
       return { error: "Aceasta adresa de magazin este deja folosita. Alege alta." };
     }
-    logError({ action: "createBusiness", message: bizError.message, details: { code: bizError.code, hint: bizError.hint, slug: data.slug }, userId: user.id, severity: "critical" });
+    logError({ action: "createBusiness", message: bizError.message, details: { code: bizError.code, hint: bizError.hint, slug }, userId: user.id, severity: "critical" });
     return { error: "Nu am putut crea magazinul. Incearca din nou." };
   }
 
@@ -236,13 +282,38 @@ export async function getUserBusiness() {
 }
 
 export async function checkSlugAvailability(slug: string): Promise<boolean> {
+  /*
+   * Aceleasi reguli ca la INSERT, si pe aceeasi valoare NORMALIZATA.
+   *
+   * Pasul 1 al onboarding-ului e ULTIMUL loc in care omul mai poate schimba
+   * adresa: dupa el vine alegerea planului, iar pentru planurile platite
+   * `createBusiness` ruleaza abia la INTOARCEREA de la Stripe, cu abonamentul
+   * deja incasat (onboarding/plan/page.tsx: `finalizeBusiness` din ramura
+   * `?success=1`). Orice „liber" mincinos aici se plateste acolo: toast de
+   * eroare, niciun magazin, si nicio cale inapoi in afara de a relua plata.
+   *
+   * Doua feluri de minciuna, amandoua aparute odata cu verificarea de pe server:
+   *   - segment rezervat („demo", „start", „contact") — oracolul zicea „liber",
+   *     serverul refuza;
+   *   - forma nenormalizata — „florarie-" chiar nu exista in tabel, dar se
+   *     insereaza „florarie", care poate fi luata, deci 23505 dupa plata.
+   *     (Liniuta terminala nu e ipotetica: formularul taie la 50 de caractere
+   *     DUPA slugify, iar taietura poate cadea pe o liniuta.)
+   *
+   * Raspunsul ramane boolean, deci un slug rezervat apare in interfata drept
+   * „deja folosita". Nu e formularea ideala, dar e adevarata — adresa e luata,
+   * de platforma — si opreste omul INAINTE de plata, ceea ce conteaza.
+   */
+  const normalizat = normalizeazaSlug(slug);
+  if (motivSlugRespins(normalizat)) return false;
+
   // Use admin client to bypass RLS — unpublished businesses are hidden from anon
   // but the UNIQUE constraint still blocks the INSERT
   const admin = createAdminClient();
   const { data } = await admin
     .from("businesses")
     .select("id")
-    .eq("slug", slug)
+    .eq("slug", normalizat)
     .maybeSingle();
   return !data;
 }

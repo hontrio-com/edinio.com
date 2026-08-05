@@ -4,6 +4,7 @@
 
 import { uploadToR2 } from "@/lib/r2";
 import { isOurR2Url } from "@/lib/r2-url";
+import { detectImageMime } from "@/lib/utils/file-signature";
 import { safeFetchImage } from "./ssrf";
 
 const EXT_BY_TYPE: Record<string, string> = {
@@ -14,6 +15,26 @@ const EXT_BY_TYPE: Record<string, string> = {
   "image/gif": "gif",
   "image/avif": "avif",
 };
+
+/**
+ * Tipul REAL al fisierului, citit din primii octeti.
+ *
+ * `detectImageMime` nu cunoaste AVIF (lista lui de marci ISO-BMFF se opreste la
+ * HEIC), iar AVIF e in `EXT_BY_TYPE` de la inceput. Fara ramura de mai jos, orice
+ * furnizor care serveste .avif ar ramane brusc negazduit — de aceea completarea
+ * sta aici, si nu prin schimbarea helperului comun folosit de incarcarile din
+ * formular.
+ */
+function tipRealImagine(buffer: Buffer): string | null {
+  const detectat = detectImageMime(buffer);
+  if (detectat) return detectat;
+
+  if (buffer.length >= 12 && buffer.toString("ascii", 4, 8) === "ftyp") {
+    const marca = buffer.toString("ascii", 8, 12).toLowerCase();
+    if (marca === "avif" || marca === "avis") return "image/avif";
+  }
+  return null;
+}
 
 /** True if a URL already points at our own R2 bucket (already rehosted). */
 export function isR2Url(url: string): boolean {
@@ -43,16 +64,25 @@ export async function rehostImageUrl(
   const result = await safeFetchImage(url);
   if ("error" in result) return { url, ok: false };
 
-  // SVG is intentionally not in EXT_BY_TYPE (can carry scripts); skip rehosting it.
-  const ext = EXT_BY_TYPE[result.contentType];
-  if (!ext) return { url, ok: false };
+  /*
+   * Tipul se ia din OCTETI, nu din antetul serverului strain — exact ca la
+   * incarcarile prin formular (/api/upload). Antetul e ales de cel care serveste
+   * fisierul: cu `Content-Type: image/png` peste orice continut, comerciantul isi
+   * putea gazdui octeti arbitrari pe CDN-ul platformei, cu eticheta pusa de el.
+   * Tot tipul detectat se scrie si in R2.
+   *
+   * SVG lipseste dinadins din EXT_BY_TYPE (poate purta scripturi).
+   */
+  const tipReal = tipRealImagine(result.buffer);
+  const ext = tipReal ? EXT_BY_TYPE[tipReal] : undefined;
+  if (!tipReal || !ext) return { url, ok: false };
 
   const key = `products/${businessId}/imported/${importId}/${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 9)}.${ext}`;
 
   try {
-    const r2Url = await uploadToR2(result.buffer, key, result.contentType);
+    const r2Url = await uploadToR2(result.buffer, key, tipReal);
     cache.set(url, r2Url);
     return { url: r2Url, ok: true };
   } catch {

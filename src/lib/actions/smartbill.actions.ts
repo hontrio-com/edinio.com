@@ -819,16 +819,19 @@ export async function maybeAutoGenerateInvoice(
     );
     /*
      * Pe calea automata esecul e MUT (`return false`, iar dispecerul inghite), deci
-     * o comanda care nu se reconciliaza ar ramane tacit nefacturata. Se scrie in
-     * jurnal cu clientul de SISTEM — `logError` merge pe clientul de cerere, iar
-     * aici nu exista sesiune, deci RLS l-ar taia.
+     * o comanda care nu se reconciliaza ar ramane tacit nefacturata.
+     *
+     * Se scrie prin `logError`, nu cu un insert propriu — vezi explicatia din
+     * fgo.actions.ts: motivul invocat inainte („logError merge pe clientul de
+     * cerere, deci RLS l-ar taia") nu mai e adevarat, iar insertul direct era
+     * ultimul care avea nevoie de politica INSERT deschisa pe error_logs.
      */
     if ("error" in params) {
-      await supabase.from("error_logs").insert({
+      await logError({
         action: "smartbill.reconcileRefuzat",
         message: params.error,
-        details: { orderId } as never,
-        business_id: businessId,
+        details: { orderId },
+        businessId,
         severity: "critical",
       });
       return false;

@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/types/database.types";
-import { claimuriDinToken } from "./mfa";
+import { COOKIE_SESIUNE } from "@/lib/supabase/cookie-sesiune";
+import { claimuriDinToken, type ClaimuriSesiune } from "./mfa";
 import { MESAJ_REFUZ, sesiuneNeconfirmataPentru } from "./stare-mfa";
 
 /**
@@ -22,14 +23,64 @@ import { MESAJ_REFUZ, sesiuneNeconfirmataPentru } from "./stare-mfa";
  * Pentru cod care ruleaza in interiorul unei cereri Next.js exista `./cere-mfa.ts`.
  */
 
+/**
+ * Numele cookie-ului de sesiune, eventual taiat in bucati `.0`, `.1`.
+ *
+ * `-code-verifier` e exclus dinadins: e cookie-ul PKCE, nu sesiunea. Cine il
+ * confunda ajunge sa creada ca exista sesiune acolo unde nu e.
+ */
+const NUME_COOKIE_SESIUNE = /^sb-.*-auth-token(\.\d+)?$/;
+
 function areCookieDeSesiune(request: NextRequest): boolean {
-  // Cookie-urile @supabase/ssr se numesc `sb-<ref>-auth-token`, eventual taiate
-  // in bucati `.0`, `.1`. Fara niciunul nu exista sesiune de utilizator, deci
+  // Fara niciun cookie de sesiune nu exista utilizator de verificat, deci
   // webhook-urile, cronurile si vizitatorii anonimi ies de aici fara sa atinga
   // nici serverul de autentificare, nici baza.
-  return request.cookies
+  return request.cookies.getAll().some((c) => NUME_COOKIE_SESIUNE.test(c.name));
+}
+
+/**
+ * Citeste `sub` si `session_id` DIRECT din cookie, fara supabase-js.
+ *
+ * DE CE, si de ce merita cei ~20 de randuri: `auth.getSession()` REIMPROSPATEAZA
+ * tokenul cand a expirat. In poarta asta, cookie-urile rezultate ajungeau pe un
+ * raspuns pe care, pe calea actiunilor de server, il aruncam — deci browserul
+ * ramanea cu tokenul vechi, iar refresh-ul urmator pornea de la un refresh token
+ * deja rotit. Fereastra de reutilizare a Supabase (10 secunde) ascundea problema
+ * de cele mai multe ori, dar nu intotdeauna, si esecul ar fi aratat ca o
+ * deconectare la intamplare — genul de defect pe care nu-l reproduce nimeni.
+ *
+ * Poarta nu are nevoie de un token PROASPAT: are nevoie de identitatea celui care
+ * a trimis cererea. Aceea e in tokenul prezentat, expirat sau nu. Reimprospatarea
+ * ramane treaba lui `updateSession` si a rutei de dedesubt, unde a fost mereu.
+ *
+ * Formatul e cel al @supabase/ssr: valoarea e sesiunea in JSON, eventual
+ * prefixata cu `base64-` si taiata in bucati `.0`, `.1` (utils/chunker.js).
+ * Daca formatul se schimba vreodata, `evalueazaCerere` cade inapoi pe
+ * `getSession()`, deci poarta nu se rupe — doar redevine mai scumpa.
+ */
+function claimuriDinCookieuri(request: NextRequest): ClaimuriSesiune | null {
+  // Ordonare NUMERICA dupa indicele bucatii, nu alfabetica: cu 10 bucati sau mai
+  // multe, `.10` ar veni inaintea lui `.2` si JSON-ul s-ar reasambla gresit.
+  const indice = (nume: string) => Number(nume.match(/\.(\d+)$/)?.[1] ?? -1);
+  const bucati = request.cookies
     .getAll()
-    .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+    .filter((c) => NUME_COOKIE_SESIUNE.test(c.name))
+    .sort((a, b) => indice(a.name) - indice(b.name));
+  if (bucati.length === 0) return null;
+
+  try {
+    let brut = bucati.map((c) => c.value).join("");
+    if (brut.startsWith("base64-")) {
+      const b64 = brut.slice("base64-".length).replace(/-/g, "+").replace(/_/g, "/");
+      const umplut = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+      const binar = atob(umplut);
+      brut = new TextDecoder().decode(Uint8Array.from(binar, (c) => c.charCodeAt(0)));
+    }
+    const sesiune = JSON.parse(brut) as { access_token?: unknown };
+    return typeof sesiune.access_token === "string" ? claimuriDinToken(sesiune.access_token) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -66,14 +117,35 @@ function refuz(request: NextRequest): NextResponse {
 async function evalueazaCerere(
   request: NextRequest,
 ): Promise<{ refuz: NextResponse | null; trecere: NextResponse }> {
-  let trecere = NextResponse.next({ request });
+  const trecereSimpla = NextResponse.next({ request });
 
-  if (!areCookieDeSesiune(request)) return { refuz: null, trecere };
+  if (!areCookieDeSesiune(request)) return { refuz: null, trecere: trecereSimpla };
+
+  // Calea normala: identitatea se citeste local, din cookie. Nicio cerere de
+  // retea, niciun token reimprospatat pe care sa-l pierdem.
+  const dinCookie = claimuriDinCookieuri(request);
+  if (dinCookie) {
+    if (!(await sesiuneNeconfirmataPentru(dinCookie.sub, dinCookie.session_id))) {
+      return { refuz: null, trecere: trecereSimpla };
+    }
+    return { refuz: refuz(request), trecere: trecereSimpla };
+  }
+
+  /*
+   * Rezerva, pentru cazul in care formatul cookie-ului se schimba intr-o versiune
+   * viitoare de @supabase/ssr. Costa un drum in plus si poate reimprospata
+   * tokenul, dar e mai bine decat o poarta care nu mai stie pe cine verifica.
+   */
+  let trecere = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Poarta poate reimprospata tokenul, deci rescrie cookie-ul de sesiune:
+      // trebuie sa foloseasca aceleasi optiuni ca restul, altfel ar reintroduce
+      // pe usa din dos cei 400 de zile impliciti ai bibliotecii.
+      cookieOptions: COOKIE_SESIUNE,
       cookies: {
         getAll() { return request.cookies.getAll(); },
         setAll(cookiesToSet) {

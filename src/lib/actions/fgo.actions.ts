@@ -322,16 +322,22 @@ export async function maybeAutoGenerateInvoice(
     const result = await generateFgoInvoice(businessId, orderId, sistem);
     /*
      * Pe calea automata esecul e MUT (dispecerul inghite `false`), deci o comanda
-     * pe care garda de reconciliere o refuza ar ramane tacit nefacturata. Se scrie
-     * cu clientul de SISTEM: `logError` merge pe clientul de cerere, iar aici nu
-     * exista sesiune.
+     * pe care garda de reconciliere o refuza ar ramane tacit nefacturata.
+     *
+     * Se scrie prin `logError`, nu cu un insert propriu. Motivul din comentariul
+     * de dinainte („logError merge pe clientul de cerere, iar aici nu exista
+     * sesiune") nu mai era adevarat: `logError` foloseste de mult clientul de
+     * SISTEM. Insertul direct ramasese ultimul scriitor care trece prin RLS, deci
+     * singurul motiv pentru care politica de INSERT `TO authenticated WITH CHECK
+     * (true)` mai trebuia sa existe — iar ea lasa orice comerciant sa scrie
+     * incidente CRITICE pe seama altui magazin, direct prin PostgREST.
      */
     if ("error" in result) {
-      await supabase.from("error_logs").insert({
+      await logError({
         action: "fgo.autoInvoiceEsuat",
         message: result.error,
-        details: { orderId } as never,
-        business_id: businessId,
+        details: { orderId },
+        businessId,
         severity: "critical",
       });
       return false;

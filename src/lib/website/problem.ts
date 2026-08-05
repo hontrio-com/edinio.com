@@ -185,11 +185,17 @@ export const PROBLEM_PRODUCT = {
   /**
    * Rândul de sub buton.
    *
-   * ATENȚIE: TBI Bank NU e o integrare Edinio — logo-ul stă în `import_icons`,
-   * nefolosit, iar în cod nu există nicio urmă de el. Rândul ăsta e pus la
-   * cererea clientului (2026-08-06) ca element de ilustrație, dar pe o pagină
-   * comercială se citește ca „Edinio suportă plata în rate cu TBI". Dacă nu e
-   * adevărat, se scoate — e o singură proprietate.
+   * ═══ DEPINDE DE O INTEGRARE CARE ÎNCĂ NU EXISTĂ ═══
+   *
+   * La data la care a fost scris (2026-08-06), TBI Bank NU era integrat în
+   * platformă: logo-ul stătea nefolosit în `import_icons` și în cod nu exista
+   * nicio urmă de el. Clientul a confirmat că integrarea vine ȘI că va fi
+   * disponibilă înainte de lansarea noului site de prezentare.
+   *
+   * Deci rândul rămâne — dar ORDINEA contează: pe o pagină comercială, „plătește
+   * în rate cu tbi bank" se citește ca o promisiune că platforma o poate face.
+   * Dacă la momentul unirii cu `main` integrarea încă nu e gata, rândul se scoate
+   * până atunci; e o singură proprietate.
    */
   installments: {
     label: "Plătește în rate cu",

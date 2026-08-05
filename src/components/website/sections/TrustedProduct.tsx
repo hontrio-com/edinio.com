@@ -123,6 +123,9 @@ export function TrustedProduct() {
               Rândul cu plata în rate, sub buton — acolo îl pun și magazinele
               adevărate: după ce omul s-a hotărât să cumpere, nu înainte.
 
+              Depinde de o integrare care încă nu era gata când s-a scris. Vezi
+              nota de la `installments` din `lib/website/problem.ts`.
+
               Fără blocurile negru-portocaliu din bannerele TBI. Ele sunt făcute
               pentru un banner de 600x150; aici avem 158px lățime, iar două
               dreptunghiuri colorate ar fi tras tot ochiul din card către o marcă

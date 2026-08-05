@@ -280,7 +280,11 @@
 .imsg {
   position: relative;
   align-self: flex-start;
-  max-width: 84%;
+  /* 88%, nu 84. Masurat pe un ecran de 390px: cel mai lung mesaj cere 269px si
+     are loc 282, dar plafonul de 84% il taia la 267 — se rupea in doua randuri
+     din cauza plafonului, nu din lipsa de spatiu, si ii lipseau DOI pixeli.
+     Pe ecran lat plafonul oricum nu se atinge, deci nu se schimba nimic acolo. */
+  max-width: 88%;
   padding: 7px 14px 8px;
   border-radius: 18px;
   background: #007aff;

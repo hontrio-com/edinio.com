@@ -72,12 +72,30 @@ export interface ProblemCard {
  * nimic.
  *
  * Nu am tăiat fișierele, ci le apropii din CSS: `zoom` e cât se mărește poza, iar
- * `focus` e punctul care rămâne pe loc când se mărește — adică mijlocul capului.
- * Sunt reglate una câte una, uitându-mă la ele; o valoare comună ar fi tăiat
- * creștetul la unele și ar fi lăsat prea mult aer la altele.
+ * `focus` e punctul care rămâne pe loc când se mărește.
  *
- * Netăierea are și un motiv practic: dacă mâine se schimbă mărimea cercului sau
- * încadrarea, se ajustează două numere, nu se recomprimă pozele.
+ * ═══ CUM SE CALCULEAZĂ `focus`, CA SĂ NU SE MAI TAIE CAPETELE ═══
+ *
+ * Prima încercare a pus `focus` FIX PE MIJLOCUL CAPULUI și a tăiat creștetul la
+ * toate patru. Motivul e că mărirea împinge conținutul DEPARTE de punctul fix:
+ * dacă punctul fix e chiar capul, capul rămâne unde e și tot restul se împrăștie
+ * în afara cercului, inclusiv creștetul.
+ *
+ * Ca să COBOARE capul în mijlocul cercului, punctul fix trebuie să fie DEASUPRA
+ * lui. Formula, cu tot în procente din înălțimea pozei:
+ *
+ *     50 = focusY · (1 − zoom) + capCentru · zoom
+ *
+ * de unde `focusY = (capCentru · zoom − 50) / (zoom − 1)`. Iar `zoom` se alege
+ * din cât de mare vrei capul: `zoom = 72 / înălțimeaCapului`, unde 72% e cât
+ * ocupă un cap bine încadrat într-un cerc de avatar.
+ *
+ * De aceea valorile de mai jos sunt toate între 0 și 9%, nu pe la 25% cum erau.
+ * Verificate una câte una, la 150px, nu la 28: la mărimea de pe site nu se vede
+ * dacă un creștet e tăiat cu doi pixeli.
+ *
+ * Netăierea fișierelor are și un motiv practic: dacă mâine se schimbă mărimea
+ * cercului, se ajustează două numere, nu se recomprimă pozele.
  */
 export interface ProblemMessage {
   text: string;
@@ -95,29 +113,35 @@ export const PROBLEM_MESSAGES: ProblemMessage[] = [
     text: "Bună ziua! Cum pot comanda?",
     name: "Andreea M.",
     photo: "/avatars/avatar1.webp",
-    zoom: 2.1,
-    focus: "50% 26%",
+    zoom: 2.15,
+    focus: "50% 4.6%",
   },
   {
     text: "Aveți produsul acesta pe stoc?",
     name: "Ionuț P.",
     photo: "/avatars/avatar2.webp",
-    zoom: 1.9,
-    focus: "50% 28%",
+    zoom: 1.92,
+    focus: "50% 0%",
   },
   {
     text: "Pot să plătesc cu cardul?",
     name: "Maria D.",
     photo: "/avatars/avatar4.webp",
-    zoom: 2.0,
-    focus: "50% 27%",
+    zoom: 2.06,
+    focus: "50% 1.4%",
   },
   {
     text: "Unde pot vedea mai multe produse?",
     name: "Radu C.",
+    /*
+      Singurul portret în care omul e fotografiat de la distanță, cu tot bustul.
+      De aceea are nevoie de o apropiere mult mai mare decât ceilalți — altfel
+      chipul lui iese vizibil mai mic în șirul de cercuri și se vede că nu sunt
+      din aceeași serie. Peste 3,5 începe să i se taie fruntea.
+    */
     photo: "/avatars/avatar3.webp",
-    zoom: 2.9,
-    focus: "52% 21%",
+    zoom: 3.2,
+    focus: "53% 9%",
   },
 ];
 

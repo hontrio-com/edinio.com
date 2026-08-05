@@ -183,8 +183,20 @@ export function MessagesThread() {
             <div className="flex items-end gap-2 pl-2.5 pr-3 pt-4">
               <Avatar message={message} />
 
+              {/*
+                O SINGURĂ mărime, 15px, pe tot ecranul.
+
+                Erau 15px pe telefon și 16 de la `sm` în sus, iar rezultatul era
+                pe dos decât te-ai aștepta: pe telefon toate patru mesajele
+                încăpeau pe câte un rând, iar pe desktop ultimul se rupea în două.
+                Cardul e mai LAT pe desktop (363px față de ~350), dar nu destul cât
+                să acopere creșterea textului.
+
+                Cu o singură mărime, ce se vede pe telefon e ce se vede și pe
+                calculator.
+              */}
               <p
-                className="imsg text-[15px] leading-[20px] sm:text-[16px] sm:leading-[21px]"
+                className="imsg text-[15px] leading-[20px]"
                 style={{
                   /*
                     Teancul de fonturi de sistem. Pe iPhone și pe Mac iese chiar

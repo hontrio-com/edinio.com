@@ -18,14 +18,28 @@
  * pierdere: perechea se citea din formă, nu din ton, iar acum sunt literalmente
  * identice.
  *
- * Valorile sunt cele de la titlurile de coloană din mega menu (`ColumnHeading`
- * din `site-header/MenuPieces.tsx`), cerute explicit ca reper: 11px, semibold,
- * majuscule, `tracking` 0.08em, `text-ink-3`. Când se schimbă acolo, se schimbă
- * și aici — altfel site-ul are două feluri de supratitlu.
+ * Desenul e cel de la titlurile de coloană din mega menu (`ColumnHeading` din
+ * `site-header/MenuPieces.tsx`), cerut explicit ca reper.
+ *
+ * Două valori sunt însă ALTELE decât acolo, dinadins (2026-08-06: „mărește puțin
+ * mai mult, sunt mult prea mici, și fă o spațiere între litere"):
+ *
+ * - **13px, nu 11.** În mega menu, titlul stă lipit deasupra unei liste, într-un
+ *   panou îngust, și are lângă el la ce se raporta. Aici stă singur peste o
+ *   coloană de 720px, sub un titlu de 44px — la 11px arăta a scăpare, nu a
+ *   decizie.
+ * - **`tracking` 0.18em, nu 0.08.** Depărtarea literelor e ce face un cuvânt
+ *   scurt cu majuscule să se citească drept etichetă și nu drept text strigat.
+ *   Cu cât cuvântul e mai scurt, cu atât are nevoie de mai multă.
+ *
+ * `pe-[0.18em]` compensează spațierea de după ULTIMA literă. `letter-spacing` o
+ * adaugă și acolo unde nu urmează nimic, iar la un rând centrat asta împinge tot
+ * cuvântul cu o jumătate de spațiere spre stânga. La 0.08em nu se vedea; la
+ * 0.18em, da.
  */
 export function SectionEyebrow({ label }: { label: string }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+    <p className="pe-[0.18em] text-[13px] font-semibold uppercase tracking-[0.18em] text-ink-3">
       {label}
     </p>
   );

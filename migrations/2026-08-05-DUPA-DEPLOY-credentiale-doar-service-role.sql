@@ -141,3 +141,5 @@ NOTIFY pgrst, 'reload schema';
 --   -- 3. Emite un AWB real pe un magazin de test. Daca partenerul raspunde
 --   --    „credentiale invalide", a ramas o citire pe clientul utilizatorului.
 -- ============================================================================
+
+-- APLICATA in productie pe 05.08.2026, dupa deploy, cu verificarea de mai sus rulata.

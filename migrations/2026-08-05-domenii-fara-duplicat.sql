@@ -28,3 +28,5 @@
 
 create unique index if not exists domains_business_domain_key
   on public.domains (business_id, domain);
+
+-- APLICATA in productie pe 05.08.2026, dupa deploy, cu verificarea de mai sus rulata.

@@ -71,3 +71,5 @@ NOTIFY pgrst, 'reload schema';
 --   --    publica (o comanda cu un produs inexistent) si verifica in /admin/logs
 --   --    ca randul a aparut. Fara pasul asta nu stii daca ai rupt jurnalul.
 -- ============================================================================
+
+-- APLICATA in productie pe 05.08.2026, dupa deploy, cu verificarea de mai sus rulata.

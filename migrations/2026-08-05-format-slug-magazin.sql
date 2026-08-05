@@ -49,3 +49,5 @@ comment on constraint businesses_slug_format on public.businesses is
 -- DUPA curatare, ca sa acopere si trecutul:
 --
 --   alter table public.businesses validate constraint businesses_slug_format;
+
+-- APLICATA in productie pe 05.08.2026, dupa deploy, cu verificarea de mai sus rulata.

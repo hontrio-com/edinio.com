@@ -53,8 +53,31 @@
 
 begin;
 
-revoke select (lat, lng, niche_id, created_at)
-  on table public.businesses from anon;
+-- ATENTIE LA FORMA. Prima varianta era:
+--
+--     revoke select (lat, lng, niche_id, created_at) on public.businesses from anon;
+--
+-- si NU a scazut nimic. Pe `businesses`, `anon` avea SELECT la nivel de TABEL
+-- (`relacl` = `anon=ardDxtm/postgres`), iar un revoke pe COLOANE nu poate scadea
+-- dintr-un grant pe TABEL — aplicata, migratia a raportat succes si a lasat
+-- coloanele citibile mai departe. Aceeasi capcana ca pe 04.08.2026
+-- (rls-privilegii-pe-coloane): „GRANT pe tabel anuleaza REVOKE pe coloana".
+--
+-- Forma care functioneaza e cea folosita si la `users_profile`: se ia grantul de
+-- pe TABEL si se re-acorda o LISTA ALBA. Are si un avantaj: o coloana adaugata
+-- in viitor ramane inaccesibila pana cand cineva o pune explicit pe lista.
+--
+-- Lista de mai jos trebuie sa ramana in oglinda cu `COLOANE_BUSINESS_PUBLIC` din
+-- src/lib/storefront/business-public.ts.
+revoke select on table public.businesses from anon;
+
+grant select (
+  id, user_id, slug, business_name, store_name, tagline, description,
+  phone, whatsapp, email, website, address, city, county, cui, reg_com,
+  store_address, store_city, store_county, logo_url, cover_url, gallery,
+  primary_color, is_published, suspended_until, custom_domain, social,
+  features, type, updated_at
+) on table public.businesses to anon;
 
 commit;
 
@@ -86,3 +109,5 @@ NOTIFY pgrst, 'reload schema';
 --   -- 3. Deschide un magazin publicat in fereastra incognito. Daca da 404 sau
 --   --    eroare, a ramas undeva un select("*") — cauta-l inainte de a reveni.
 -- ============================================================================
+
+-- APLICATA in productie pe 05.08.2026, dupa deploy, cu verificarea de mai sus rulata.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useOptimistic, useTransition, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -61,6 +61,24 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   const [priceAmount, setPriceAmount] = useState("");
   const [bulkCategory, setBulkCategory] = useState("");
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const [, startBulkTransition] = useTransition();
+
+  // Doar schimbarile al caror rezultat il stim dinainte: activ/inactiv, recomandat
+  // si categoria pusa pe o valoare aleasa de utilizator. Pretul NU intra aici
+  // (rotunjirea o face serverul), nici stergerea (dezactiveaza si pachetele care
+  // contin produsele, deci lista de dupa nu e complet previzibila).
+  const [produse, aplicaOptimist] = useOptimistic(
+    products,
+    (stare: Product[], a: Extract<BulkAction, { kind: "active" | "featured" | "category" }> & { ids: string[] }) => {
+      const vizate = new Set(a.ids);
+      return stare.map((p) => {
+        if (!vizate.has(p.id)) return p;
+        if (a.kind === "active") return { ...p, is_active: a.value };
+        if (a.kind === "featured") return { ...p, is_featured: a.value };
+        return { ...p, category: a.value };
+      });
+    },
+  );
 
   const bulkBtn = "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-foreground border border-border bg-surface hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
   const bulkSelect = "px-2.5 py-1.5 text-xs border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
@@ -124,7 +142,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const catNames = categoryFilter ? (subtreeByName[categoryFilter] ?? [categoryFilter]) : null;
-    return products.filter(p => {
+    return produse.filter(p => {
       if (q && !(
         p.name.toLowerCase().includes(q) ||
         (p.category ?? "").toLowerCase().includes(q) ||
@@ -140,7 +158,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
       }
       return true;
     });
-  }, [products, searchQuery, categoryFilter, statusFilter, stockFilter, subtreeByName]);
+  }, [produse, searchQuery, categoryFilter, statusFilter, stockFilter, subtreeByName]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -173,16 +191,22 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   }
   function clearSelection() { setSelected(new Set()); setBulkPanel(null); setConfirmBulkDelete(false); }
 
-  async function runBulk(action: BulkAction, successMsg: string) {
+  function runBulk(action: BulkAction, successMsg: string) {
+    const ids = [...selected];
     setBulkBusy(true);
-    const res = await bulkProductAction(businessId, [...selected], action);
-    setBulkBusy(false);
-    if ("error" in res) { toast.error(res.error); return; }
-    toast.success(successMsg.replace("{n}", String(res.count)));
-    clearSelection();
-    setPriceAmount("");
-    setBulkCategory("");
-    router.refresh();
+    startBulkTransition(async () => {
+      if (action.kind === "active" || action.kind === "featured" || action.kind === "category") {
+        aplicaOptimist({ ...action, ids });
+      }
+      const res = await bulkProductAction(businessId, ids, action);
+      setBulkBusy(false);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(successMsg.replace("{n}", String(res.count)));
+      clearSelection();
+      setPriceAmount("");
+      setBulkCategory("");
+      router.refresh();
+    });
   }
   function applyPrice() {
     const amt = Number(priceAmount);

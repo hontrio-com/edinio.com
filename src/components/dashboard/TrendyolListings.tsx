@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, Send, X } from "lucide-react";
@@ -92,9 +92,22 @@ export function TrendyolListings({
     aplicaRezultatul(await getTrendyolProductPage(businessId, { q: cautare, category: categorie, status, page: pagina }));
   }, [businessId, cautare, categorie, status, pagina, aplicaRezultatul]);
 
+  // Eliminarea sterge listarea, deci produsul ramane sigur "Nelistat". O aratam pe
+  // loc, ca sa nu astepte doua drumuri la server (actiunea + reincarcarea paginii).
+  // Trimiterea in masa si "Reincearca" nu intra aici: acolo raspunsul serverului
+  // spune ce s-a intamplat, nu-l putem ghici.
+  const [datePagina, aplicaOptimistElimina] = useOptimistic(
+    date,
+    (stare: TrendyolProductPage | null, productId: string) => stare && {
+      ...stare,
+      items: stare.items.map((i) => (i.id === productId ? { ...i, status: null, error: null } : i)),
+    },
+  );
+
   const remove = (productId: string) => {
     if (!window.confirm("Elimini această listare de pe Trendyol?")) return;
     startTransition(async () => {
+      aplicaOptimistElimina(productId);
       const res = await removeTrendyolListing(businessId, productId);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Listare eliminată.");
@@ -281,7 +294,7 @@ export function TrendyolListings({
       )}
 
       <div className={`divide-y divide-border ${incarca ? "opacity-60" : ""}`}>
-        {(date?.items ?? []).map((p) => {
+        {(datePagina?.items ?? []).map((p) => {
           const status = p.status ? (STATUS_LABEL[p.status] ?? { text: p.status, cls: "bg-muted text-muted-foreground" }) : null;
           const isOpen = openId === p.id;
           return (

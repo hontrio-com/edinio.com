@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
@@ -43,6 +43,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [carrierCode, setCarrierCode] = useState(status?.defaultCarrierCode ?? "");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
   const [addresses, setAddresses] = useState<TrendyolSupplierAddress[]>([]);
+  // Eticheta si butonul de webhook se schimba instant; actiunea reuseste sau nu,
+  // nu are alt rezultat de aratat. La eroare React readuce singur starea reala.
+  const [webhookActiv, aplicaWebhook] = useOptimistic(status?.webhookActive ?? false, (_stare, nou: boolean) => nou);
 
   useEffect(() => {
     if (!status?.connected) return;
@@ -120,7 +123,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const handleSubscribeWebhook = () => {
     setActiune("webhook");
     startTransition(async () => {
+      aplicaWebhook(true);
       const res = await subscribeTrendyolWebhook(businessId);
+      // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Webhook comenzi activat.");
       router.refresh();
@@ -130,7 +135,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const handleUnsubscribeWebhook = () => {
     setActiune("webhook");
     startTransition(async () => {
+      aplicaWebhook(false);
       const res = await unsubscribeTrendyolWebhook(businessId);
+      // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Webhook dezactivat.");
       router.refresh();
@@ -352,12 +359,12 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   {status.ordersSyncedAt ? ` · ultima sincronizare ${new Date(status.ordersSyncedAt).toLocaleString("ro-RO")}` : ""}
                 </p>
               </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0 ${status.webhookActive ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-                {status.webhookActive ? "Webhook activ" : "Webhook inactiv"}
+              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0 ${webhookActiv ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                {webhookActiv ? "Webhook activ" : "Webhook inactiv"}
               </span>
             </div>
             <div className="mt-3">
-              {status.webhookActive ? (
+              {webhookActiv ? (
                 <button onClick={handleUnsubscribeWebhook} disabled={pending}
                   className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60">
                   {ruleaza("webhook") ? "Se procesează..." : "Dezactivează webhook"}

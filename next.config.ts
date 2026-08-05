@@ -29,6 +29,14 @@ const nextConfig: NextConfig = {
     loader: "custom",
     loaderFile: "./src/lib/supabase-image-loader.ts",
   },
+  async redirects() {
+    return [
+      // Pagina de migrare a fost scoasa odata cu refacerea site-ului de prezentare.
+      // Redirectie, nu 404: adresa poate fi inca in reclame sau in emailuri trimise,
+      // iar un 301 pastreaza si vizitatorul, si semnalul de SEO.
+      { source: "/migrare", destination: "/", permanent: true },
+    ];
+  },
   async headers() {
     // Permissive where third parties need it (Stripe, Netopia, FB/TikTok/Google
     // pixels, Supabase realtime), but locks the dangerous directives: no plugins,

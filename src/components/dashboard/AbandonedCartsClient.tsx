@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -138,6 +138,13 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
   const [sending, startSend] = useTransition();
   const [togglingOff, startToggleOff] = useTransition();
 
+  // Stergerea unui cos are un singur rezultat posibil: randul dispare. Il aratam
+  // pe loc; daca serverul refuza, React readuce randul si ramane doar toastul.
+  const [cosuri, aplicaOptimistSterge] = useOptimistic(
+    data.carts,
+    (stare: AbandonedCartRow[], id: string) => stare.filter((c) => c.id !== id),
+  );
+
   function openRecover(cart: AbandonedCartRow, channel: "email" | "sms") {
     setRecover({ cart, channel });
     setDiscountCode("");
@@ -163,6 +170,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
 
   function remove(cart: AbandonedCartRow) {
     startSend(async () => {
+      aplicaOptimistSterge(cart.id);
       const res = await deleteAbandonedCart(businessId, cart.id);
       if ("error" in res) { toast.error(res.error); return; }
       router.refresh();
@@ -250,11 +258,11 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
             <Clock className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold text-foreground">Activitate recentă</h2>
           </div>
-          {data.carts.length === 0 ? (
+          {cosuri.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">Nicio activitate încă.</p>
           ) : (
             <ol className="relative border-l border-border ml-1 space-y-4">
-              {data.carts.slice(0, 8).map((c) => (
+              {cosuri.slice(0, 8).map((c) => (
                 <li key={c.id} className="ml-4">
                   <span className="absolute -left-1.5 w-3 h-3 rounded-full border-2 border-card bg-primary" />
                   <p className="text-sm text-foreground">
@@ -274,10 +282,10 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
           <ShoppingBag className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Coșuri abandonate</h2>
-          <span className="text-xs text-muted-foreground">({data.carts.length})</span>
+          <span className="text-xs text-muted-foreground">({cosuri.length})</span>
         </div>
 
-        {data.carts.length === 0 ? (
+        {cosuri.length === 0 ? (
           <div className="py-16 text-center px-4">
             <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
               <ShoppingBag className="h-6 w-6 text-muted-foreground" />
@@ -289,7 +297,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {data.carts.map((c) => (
+            {cosuri.map((c) => (
               <div key={c.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -339,7 +347,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         )}
       </div>
 
-      {!data.smsEnabled && data.carts.length > 0 && (
+      {!data.smsEnabled && cosuri.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-muted-foreground rounded-xl border border-border bg-muted/40 p-3">
           <Bell className="h-4 w-4 shrink-0 mt-0.5" />
           <span>Activează SMSO sau notice.ro (coș abandonat) din Integrări ca să poți recupera coșurile și prin SMS, nu doar prin email.</span>

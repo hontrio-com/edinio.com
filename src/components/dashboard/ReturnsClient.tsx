@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -37,12 +37,32 @@ const REFUND_LABELS: Record<string, string> = {
   card: "Pe card",
 };
 
+/** Cele trei schimbari al caror rezultat il stim dinainte, fara sa intrebam serverul. */
+type ActiuneOptimista =
+  | { tip: "status"; id: string; status: string }
+  | { tip: "citit"; id: string; isRead: boolean }
+  | { tip: "sterge"; id: string };
+
 export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  // Statusul, marcajul citit/necitit si stergerea au rezultat previzibil: se vad
+  // pe loc, iar daca serverul refuza React readuce singur starea de la el.
+  const [randuri, aplicaOptimist] = useOptimistic(
+    returns,
+    (stare: ReturnRow[], a: ActiuneOptimista) => {
+      if (a.tip === "sterge") return stare.filter((r) => r.id !== a.id);
+      return stare.map((r) => {
+        if (r.id !== a.id) return r;
+        return a.tip === "status" ? { ...r, status: a.status } : { ...r, isRead: a.isRead };
+      });
+    },
+  );
+
   function changeStatus(r: ReturnRow, status: string) {
     startTransition(async () => {
+      aplicaOptimist({ tip: "status", id: r.id, status });
       const res = await updateReturnStatus(r.id, status);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Status actualizat.");
@@ -52,6 +72,7 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
 
   function toggleRead(r: ReturnRow) {
     startTransition(async () => {
+      aplicaOptimist({ tip: "citit", id: r.id, isRead: !r.isRead });
       const res = await toggleReturnRead(r.id, !r.isRead);
       if ("error" in res) { toast.error(res.error); return; }
       router.refresh();
@@ -61,6 +82,7 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
   function handleDelete(r: ReturnRow) {
     if (!confirm("Stergi aceasta cerere de retur definitiv?")) return;
     startTransition(async () => {
+      aplicaOptimist({ tip: "sterge", id: r.id });
       const res = await deleteReturnRequest(r.id);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cerere stearsa.");
@@ -80,7 +102,7 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
         </div>
       </div>
 
-      {returns.length === 0 ? (
+      {randuri.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-border rounded-2xl">
           <Undo2 className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-sm font-medium text-foreground mb-1">Nicio cerere de retur inca</p>
@@ -88,7 +110,7 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {returns.map((r) => {
+          {randuri.map((r) => {
             const meta = STATUS_META[r.status] ?? STATUS_META.nou;
             return (
               <div key={r.id} className={`p-4 border rounded-xl ${r.isRead ? "bg-surface border-border" : "bg-primary/[0.03] border-primary/30"}`}>

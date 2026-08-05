@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Package, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
@@ -94,6 +94,28 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [invoiceProvider, setInvoiceProvider] = useState<InvoiceProvider>("auto");
   const [awbCourier, setAwbCourier] = useState<BulkCourier>("auto");
   const [bulkStatus, setBulkStatus] = useState("");
+  const [, startStatusTransition] = useTransition();
+
+  /*
+   * Doar schimbarea de status merge optimist: valoarea noua e aleasa din lista, deci
+   * o stim inainte sa raspunda serverul si eticheta din tabel se poate misca imediat.
+   * Facturile si AWB-urile NU intra aici — numarul documentului vine de la furnizor,
+   * nu avem ce afisa pana nu raspunde.
+   *
+   * DOUA EXCEPTII, si nu sunt cosmetice. „Anulata" si „Rambursata" nu sunt simple
+   * etichete: pe server declanseaza emiterea automata a unui document fiscal si
+   * eliberarea cuponului folosit (bulk-orders.actions.ts). Nu aratam „Rambursata"
+   * inainte sa stim ca s-a intamplat.
+   */
+  const STATUSURI_CU_EFECTE = new Set(["cancelled", "refunded"]);
+  const [comenzi, aplicaOptimistStatus] = useOptimistic(
+    orders,
+    (stare: Order[], a: { ids: string[]; status: string }) => {
+      if (STATUSURI_CU_EFECTE.has(a.status)) return stare;
+      const vizate = new Set(a.ids);
+      return stare.map((o) => (vizate.has(o.id) ? { ...o, status: a.status } : o));
+    },
+  );
 
   const invoiceProviders = useMemo(() => {
     const list: { key: InvoiceProvider; label: string }[] = [];
@@ -165,9 +187,12 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   function runBulkStatus() {
     if (!bulkStatus) { toast.error("Alege un status."); return; }
     const label = ORDER_STATUS[bulkStatus as OrderStatus]?.label ?? bulkStatus;
+    const ids = [...selected];
     setBulkBusy(true);
     setBulkResult(null);
-    bulkUpdateOrderStatus(businessId!, [...selected], bulkStatus).then((res) => {
+    startStatusTransition(async () => {
+      aplicaOptimistStatus({ ids, status: bulkStatus });
+      const res = await bulkUpdateOrderStatus(businessId!, ids, bulkStatus);
       setBulkBusy(false);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(`${res.updated} comenzi → ${label}`);
@@ -598,7 +623,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
 
       {/* Table */}
       <div className={cn("bg-surface border border-border rounded-xl overflow-hidden transition-opacity", isPending && "opacity-60")}>
-        {orders.length > 0 ? (
+        {comenzi.length > 0 ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -650,7 +675,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {orders.map((order) => {
+                  {comenzi.map((order) => {
                     const status = orderStatus(order.status);
                     return (
                       <tr

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
@@ -31,6 +31,9 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
   const [shipCountries, setShipCountries] = useState((status?.shipCountries ?? []).join(", "));
   const [countryOfOrigin, setCountryOfOrigin] = useState(status?.defaultCountryOfOrigin ?? "RO");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
+  // Comutatorul de notificari se muta instant; actiunea nu are alt rezultat de
+  // aratat in afara de activ/inactiv, iar la eroare React readuce starea reala.
+  const [notificariActive, aplicaNotificari] = useOptimistic(status?.webhookActive ?? false, (_stare, noua: boolean) => noua);
 
   if (!status) {
     return <p className="text-sm text-red-600">Nu am putut încărca starea integrării. Reîncarcă pagina.</p>;
@@ -90,12 +93,18 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
   };
 
   const toggleWebhook = () => {
+    // Directia se deriva din valoarea pe care o VEDE utilizatorul, nu din prop:
+    // altfel eticheta („Dezactiveaza") si actiunea trimisa pot diverge cat timp
+    // tranzitia e in curs. Azi butonul e `disabled`, dar legatura ar fi accidentala.
+    const noua = !notificariActive;
     startTransition(async () => {
-      const res = status.webhookActive
-        ? await unsubscribeAboutYouWebhook(businessId)
-        : await subscribeAboutYouWebhook(businessId);
+      aplicaNotificari(noua);
+      const res = noua
+        ? await subscribeAboutYouWebhook(businessId)
+        : await unsubscribeAboutYouWebhook(businessId);
+      // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success(status.webhookActive ? "Notificări dezactivate." : "Notificări activate.");
+      toast.success(noua ? "Notificări activate." : "Notificări dezactivate.");
       router.refresh();
     });
   };
@@ -280,7 +289,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
               <div>
                 <p className="text-sm font-medium text-foreground">Notificări About You (stoc)</p>
                 <p className="text-xs text-muted-foreground">
-                  {status.webhookActive ? "Active — stocul se sincronizează în ambele sensuri." : "Inactive."}
+                  {notificariActive ? "Active — stocul se sincronizează în ambele sensuri." : "Inactive."}
                 </p>
               </div>
               <button
@@ -288,7 +297,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
                 disabled={pending}
                 className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-60"
               >
-                {status.webhookActive ? "Dezactivează" : "Activează"}
+                {notificariActive ? "Dezactivează" : "Activează"}
               </button>
             </div>
 

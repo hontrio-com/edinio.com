@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -33,11 +33,20 @@ export function AboutYouListings({
   const [pending, startTransition] = useTransition();
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const byProduct = new Map(listings.map((l) => [l.product_id, l]));
+  // Eliminarea sterge listarea, deci randul trece sigur pe "Nelistat": o aratam
+  // imediat. Restul butoanelor (trimite / publica / reincearca) pun treaba la coada
+  // pe server si nu au un rezultat pe care sa-l putem ghici, deci raman ca inainte.
+  const [listariAfisate, aplicaOptimistElimina] = useOptimistic(
+    listings,
+    (stare: AboutYouListingRow[], productId: string) => stare.filter((l) => l.product_id !== productId),
+  );
+
+  const byProduct = new Map(listariAfisate.map((l) => [l.product_id, l]));
 
   const remove = (productId: string) => {
     if (!window.confirm("Elimini această listare de pe About You?")) return;
     startTransition(async () => {
+      aplicaOptimistElimina(productId);
       const res = await removeAboutYouListing(businessId, productId);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Listare eliminată.");

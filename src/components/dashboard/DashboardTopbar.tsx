@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useTransition } from "react";
+import { useState, useRef, useEffect, useTransition, useOptimistic } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -84,6 +84,10 @@ const PLAN_BADGE_STYLES: Record<string, string> = {
   ultra:   "bg-warning/10 text-warning",
 };
 
+// Referinta stabila pentru baza stratului optimist: adevarul despre citit sta in
+// `notifications[].is_read`, deci suprapunerea porneste mereu goala.
+const FARA_CITIRI_LOCALE: ReadonlySet<string> = new Set<string>();
+
 interface Props {
   userFullName: string;
   plan: string;
@@ -108,6 +112,16 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
   const [readOrderIds, setReadOrderIds] = useState<Set<string>>(new Set());
   const [notifTab, setNotifTab] = useState<"all" | "orders" | "platform">("all");
   const [, startMarkRead] = useTransition();
+
+  // Anunturile isi tin starea de citit in baza (`is_read`). Pana acum bulina se
+  // stingea abia dupa dus-intors la server + refresh, deci clicul parea fara efect.
+  // Suprapunerea de mai jos o stinge instant; se goleste singura cand tranzitia se
+  // incheie — moment in care randurile vin deja citite de la server. Daca actiunea
+  // esueaza, React repune bulina: adevarul ramane al serverului.
+  const [cititeOptimist, marcheazaCititeOptimist] = useOptimistic<ReadonlySet<string>, string[]>(
+    FARA_CITIRI_LOCALE,
+    (stare, ids) => new Set([...stare, ...ids]),
+  );
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
@@ -163,7 +177,8 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
     new Date(o.created_at).getTime() > ordersSeenTime && !readOrderIds.has(o.id);
 
   const unreadOrderCount = recentOrders.filter(isOrderUnread).length;
-  const unreadPlatformCount = notifications.filter(n => !n.is_read).length;
+  const isPlatformUnread = (n: PlatformNotif) => !n.is_read && !cititeOptimist.has(n.id);
+  const unreadPlatformCount = notifications.filter(isPlatformUnread).length;
   const totalUnread = unreadOrderCount + unreadPlatformCount;
 
   // Build unified notification list
@@ -184,7 +199,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
       title: n.title,
       subtitle: n.message.length > 80 ? n.message.slice(0, 80) + "..." : n.message,
       created_at: n.created_at,
-      isUnread: !n.is_read,
+      isUnread: isPlatformUnread(n),
       notifData: n,
     })),
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -204,9 +219,12 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
     // exist, whose is_read must be reflected back from the DB.
     const unreadPlatformIds = notifications.filter(n => !n.is_read).map(n => n.id);
     startMarkRead(async () => {
+      // Si anunturile isi sting bulina instant (setter-ul optimist cere tranzitie).
+      marcheazaCititeOptimist(unreadPlatformIds);
       await markOrderNotificationsSeen();
       if (unreadPlatformIds.length > 0) {
-        await markNotificationsRead(unreadPlatformIds);
+        const rezultat = await markNotificationsRead(unreadPlatformIds);
+        if ("error" in rezultat) return; // fara refresh: React repune bulinele
         router.refresh();
       }
     });
@@ -345,7 +363,12 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                       <div key={notif.id}
                         onClick={() => {
                           if (notif.isUnread && notif.notifData) {
-                            startMarkRead(async () => { await markNotificationsRead([notif.id]); router.refresh(); });
+                            startMarkRead(async () => {
+                              marcheazaCititeOptimist([notif.id]); // bulina dispare la clic
+                              const rezultat = await markNotificationsRead([notif.id]);
+                              if ("error" in rezultat) return; // fara refresh: React repune bulina
+                              router.refresh();
+                            });
                           }
                         }}
                         className="flex items-start gap-3.5 px-5 py-3.5 hover:bg-accent transition-colors border-b border-border/50 last:border-0 cursor-default">

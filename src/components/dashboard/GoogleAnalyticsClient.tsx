@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -271,6 +271,9 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
   const [togglingTracking, startTracking] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
   const [busy, startBusy] = useTransition();
+  // Comutatorul se misca instant, nu dupa dus-intors la server; daca serverul
+  // refuza, React readuce singur valoarea reala.
+  const [masurareActiva, aplicaMasurare] = useOptimistic(status.trackingEnabled, (_stare, noua: boolean) => noua);
 
   return (
     <div className="space-y-6">
@@ -300,12 +303,14 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
           </p>
         </div>
         <label className="flex shrink-0 cursor-pointer items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">{status.trackingEnabled ? "Activă" : "Oprită"}</span>
+          <span className="text-xs font-medium text-muted-foreground">{masurareActiva ? "Activă" : "Oprită"}</span>
           <Switch
-            checked={status.trackingEnabled}
+            checked={masurareActiva}
             disabled={togglingTracking}
             onCheckedChange={(v) => startTracking(async () => {
+              aplicaMasurare(v);
               const res = await setGaTracking(businessId, v);
+              // La eroare NU dam refresh: React face singur revenirea la starea reala.
               if ("error" in res) { toast.error(res.error); return; }
               toast.success(v ? "Măsurarea pe magazin este activă." : "Măsurarea pe magazin a fost oprită.");
               router.refresh();
@@ -454,6 +459,9 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
   const [togglingTracking, startTracking] = useTransition();
   const [rescanning, startRescan] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
+  // Comutatorul se misca instant, nu dupa dus-intors la server; daca serverul
+  // refuza, React readuce singur valoarea reala.
+  const [masurareActiva, aplicaMasurare] = useOptimistic(status.trackingEnabled, (_stare, noua: boolean) => noua);
   const rtTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function loadDashboard(days: 7 | 28 | 90, force = false) {
@@ -511,12 +519,14 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
             </p>
           </div>
           <label className="flex shrink-0 cursor-pointer items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">{status.trackingEnabled ? "Activă" : "Oprită"}</span>
+            <span className="text-xs font-medium text-muted-foreground">{masurareActiva ? "Activă" : "Oprită"}</span>
             <Switch
-              checked={status.trackingEnabled}
+              checked={masurareActiva}
               disabled={togglingTracking}
               onCheckedChange={(v) => startTracking(async () => {
+                aplicaMasurare(v);
                 const res = await setGaTracking(businessId, v);
+                // La eroare NU dam refresh: React face singur revenirea la starea reala.
                 if ("error" in res) { toast.error(res.error); return; }
                 toast.success(v ? "Măsurarea pe magazin este activă." : "Măsurarea pe magazin a fost oprită.");
                 router.refresh();

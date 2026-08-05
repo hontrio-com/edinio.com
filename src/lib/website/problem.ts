@@ -49,41 +49,76 @@ export interface ProblemCard {
 /**
  * Mesajele din primul card, desenate ca bule iMessage.
  *
- * TREI, nu patru. A patra a fost scoasă (2026-08-06): umplea cardul până sus și
- * firul arăta înghesuit. Cu trei, între bule încape aer, iar ideea trece la fel
- * de bine — nu numărul întrebărilor o duce, ci faptul că nu are cine să le
- * răspundă.
+ * Patru. Au fost trei o vreme, după ce a patra fusese scoasă fiindcă firul arăta
+ * înghesuit — dar aia era lungă și se rupea în două rânduri. Cea de acum, „Pot să
+ * plătesc cu cardul?", încape pe un rând, deci intră fără să strângă nimic.
+ * Măsurat: firul ajunge la 213px într-un slot de 261.
  *
  * Nu există niciun răspuns printre ele, dinadins. Asta e tot cardul: întrebările
  * vin, iar tu ești singurul canal.
  *
- * `face`, `initials` și `photo` se văd doar în varianta cu cercul expeditorului.
- * Sunt trei oameni diferiți, nu unul care scrie de trei ori — de aia fiecare
- * mesaj are alt chip.
- *
- * `photo` e portița pentru poze adevărate: pui o cale și portretul desenat dispare
- * singur. `initials` rămâne oricum, ca text pentru cititoarele de ecran. Vezi
- * `Avatar` din `MessagesThread.tsx` pentru de ce sunt desenate deocamdată.
+ * Patru oameni diferiți, nu unul care scrie de patru ori — de aia fiecare mesaj
+ * are alt chip.
  *
  * Lungimile contează mai mult decât ordinea: ultima e cea mai lungă, fiindcă stă
  * cel mai jos și se vede întreagă la orice lățime. Cele de deasupra se taie de
  * marginea cardului pe ecrane înguste, ca într-un fir derulat.
+ *
+ * ═══ DESPRE `zoom` ȘI `focus` ═══
+ *
+ * Pozele sunt portrete întregi, tăiate pătrat, dar fiecare e încadrat altfel: la
+ * unele capul ține jumătate de cadru, la altele se vede tot bustul. Puse așa cum
+ * sunt într-un cerc de 28px, chipul iese de vreo zece pixeli și nu se distinge
+ * nimic.
+ *
+ * Nu am tăiat fișierele, ci le apropii din CSS: `zoom` e cât se mărește poza, iar
+ * `focus` e punctul care rămâne pe loc când se mărește — adică mijlocul capului.
+ * Sunt reglate una câte una, uitându-mă la ele; o valoare comună ar fi tăiat
+ * creștetul la unele și ar fi lăsat prea mult aer la altele.
+ *
+ * Netăierea are și un motiv practic: dacă mâine se schimbă mărimea cercului sau
+ * încadrarea, se ajustează două numere, nu se recomprimă pozele.
  */
 export interface ProblemMessage {
   text: string;
   /** Numele expeditorului, pentru cititoarele de ecran. */
   name: string;
-  initials: string;
-  /** Care dintre cele trei portrete desenate. */
-  face: 0 | 1 | 2;
-  /** Lipsește => se desenează portretul. */
-  photo?: string;
+  photo: string;
+  /** Cât se apropie poza, ca să încapă capul în cerc. */
+  zoom: number;
+  /** Punctul care rămâne pe loc la apropiere, în procente: `x% y%`. */
+  focus: string;
 }
 
 export const PROBLEM_MESSAGES: ProblemMessage[] = [
-  { text: "Bună ziua! Cum pot comanda?", name: "Andreea M.", initials: "AM", face: 0 },
-  { text: "Aveți produsul acesta pe stoc?", name: "Ionuț P.", initials: "IP", face: 1 },
-  { text: "Unde pot vedea mai multe produse?", name: "Maria D.", initials: "MD", face: 2 },
+  {
+    text: "Bună ziua! Cum pot comanda?",
+    name: "Andreea M.",
+    photo: "/avatars/avatar1.webp",
+    zoom: 2.1,
+    focus: "50% 26%",
+  },
+  {
+    text: "Aveți produsul acesta pe stoc?",
+    name: "Ionuț P.",
+    photo: "/avatars/avatar2.webp",
+    zoom: 1.9,
+    focus: "50% 28%",
+  },
+  {
+    text: "Pot să plătesc cu cardul?",
+    name: "Maria D.",
+    photo: "/avatars/avatar4.webp",
+    zoom: 2.0,
+    focus: "50% 27%",
+  },
+  {
+    text: "Unde pot vedea mai multe produse?",
+    name: "Radu C.",
+    photo: "/avatars/avatar3.webp",
+    zoom: 2.9,
+    focus: "52% 21%",
+  },
 ];
 
 /**

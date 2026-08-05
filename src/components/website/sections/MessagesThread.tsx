@@ -7,9 +7,14 @@ import { PROBLEM_MESSAGES, type ProblemMessage } from "@/lib/website/problem";
 /**
  * Firul de mesaje din primul card al secțiunii „Problema".
  *
- * Trei întrebări primite, în bule iMessage, care sosesc una câte una când cardul
- * ajunge în dreptul ochilor. Desenul bulei, codița și arcul sunt în `globals.css`,
- * la `.imsg`; aici e doar declanșatorul.
+ * Patru întrebări primite, fiecare de la alt om, în bule iMessage care sosesc una
+ * câte una când cardul ajunge în dreptul ochilor. Desenul bulei, codița și arcul
+ * sunt în `globals.css`, la `.imsg`; aici e doar declanșatorul.
+ *
+ * Cercul cu chipul expeditorului e ce se vede într-o conversație de GRUP pe
+ * iPhone. Într-una în doi, iOS nu îl arată deloc — poza contactului stă doar în
+ * antet. Aici are sens: sunt patru oameni diferiți care întreabă, nu unul care
+ * scrie de patru ori.
  *
  * ═══ DE CE E COMPONENTĂ DE CLIENT ═══
  *
@@ -34,65 +39,51 @@ import { PROBLEM_MESSAGES, type ProblemMessage } from "@/lib/website/problem";
  */
 
 /**
- * Cele trei chipuri.
- *
- * ═══ DE CE SUNT DESENATE, NU POZE ═══
- *
- * S-au cerut poze de profil. Nu am pus poze de stoc cu oameni adevărați, și nu
- * din lene: o fotografie folosită pe un site comercial, în care persoana pare a
- * fi clientul tău, are nevoie de acord de imagine de la cel fotografiat. Licența
- * de pe Unsplash sau Pexels acoperă folosirea comercială a POZEI, dar nu îți dă
- * și dreptul asupra chipului. E fix cazul în care se ajunge la reclamații.
- *
- * Deci sunt portrete desenate. La 28 de pixeli, un portret din patru forme —
- * fundal, umeri, păr, față — nu se deosebește de o miniatură fotografică; ce se
- * vede la mărimea asta e doar silueta și culorile.
- *
- * Dacă ai poze pe care ai dreptul să le folosești, pui calea în `photo` la
- * mesajul respectiv și desenul dispare singur.
- */
-const FACES = [
-  { bg: "#E9DCD2", shirt: "#C0736C", skin: "#E9B792", hair: "#3A2A22", long: true },
-  { bg: "#D7DFE9", shirt: "#415C7B", skin: "#DBA57B", hair: "#241C17", long: false },
-  { bg: "#DCE6DA", shirt: "#7A6A9B", skin: "#F1C49E", hair: "#6B4A2F", long: true },
-] as const;
-
-/**
  * Cercul cu chipul expeditorului.
  *
  * `z-index: 1` NU e de ornament. Codița bulei se desenează dintr-o formă albastră
  * și una ALBĂ care mușcă din ea, iar cea albă se întinde cu 18px la stânga bulei,
  * adică fix peste cerc. Fără ridicarea asta, cercul ar apărea ciupit pe dreapta.
+ *
+ * Apropierea (`zoom` + `focus`) e explicată în `lib/website/problem.ts`, acolo
+ * unde stau și valorile: pe scurt, pozele sunt portrete întregi, iar într-un cerc
+ * de 28px capul trebuie adus în față ca să se distingă cineva.
+ *
+ * `sizes="28px"` deși poza e de 200: browserul are nevoie de mărimea AFIȘATĂ ca
+ * să aleagă densitatea, nu de cea a fișierului. Fără el ar presupune lățimea
+ * ferestrei și ar cere cea mai mare variantă degeaba.
  */
 function Avatar({ message }: { message: ProblemMessage }) {
-  const face = FACES[message.face];
-
   return (
     <span
-      className="relative z-[1] h-7 w-7 shrink-0 overflow-hidden rounded-full"
+      className="relative z-[1] h-7 w-7 shrink-0 overflow-hidden rounded-full bg-tint-2"
       title={message.name}
     >
-      {message.photo ? (
-        <Image src={message.photo} alt={message.name} fill sizes="28px" className="object-cover" />
-      ) : (
-        <svg viewBox="0 0 40 40" className="h-full w-full" role="img" aria-label={message.name}>
-          <rect width="40" height="40" fill={face.bg} />
-          {/* Umerii: o elipsă care iese pe jumătate din cadru, ca la orice
-              portret tăiat la piept. */}
-          <ellipse cx="20" cy="43" rx="15.5" ry="12.5" fill={face.shirt} />
-          {/* Părul stă SUB față: din el rămâne vizibilă doar coroana de sus. */}
-          <circle cx="20" cy="18.4" r="9.3" fill={face.hair} />
-          <circle cx="20" cy="20.4" r="8" fill={face.skin} />
-          {/* Șuvițele laterale se desenează PESTE față, altfel n-ar avea ce
-              acoperi și părul ar părea tuns la fel la toți trei. */}
-          {face.long ? (
-            <>
-              <ellipse cx="11.6" cy="24.5" rx="2.3" ry="5.4" fill={face.hair} />
-              <ellipse cx="28.4" cy="24.5" rx="2.3" ry="5.4" fill={face.hair} />
-            </>
-          ) : null}
-        </svg>
-      )}
+      <Image
+        src={message.photo}
+        alt={message.name}
+        fill
+        sizes="28px"
+        /*
+          `eager`, nu leneș. Bulele pornesc cu rândul strâns la înălțime ZERO, iar
+          o poză într-o cutie de zero pixeli nu are cum să intre în raza
+          încărcării leneșe: browserul o amână, iar când rândul se deschide,
+          cercul e gol o clipă. Sunt patru fișiere de 3KB, deci n-are ce
+          încetini — și nu sunt `priority`, ca să nu se bage în fața LCP-ului.
+
+          `unoptimized` fiindcă sunt deja exact la mărimea bună (200px pentru un
+          cerc de 28) și fiindcă loader-ul proiectului oricum lasă neatinse
+          imaginile locale — trece doar cele de pe R2. Fără el, Next se plânge în
+          consolă că loader-ul nu implementează `width`.
+        */
+        loading="eager"
+        unoptimized
+        className="object-cover"
+        style={{
+          transform: `scale(${message.zoom})`,
+          transformOrigin: message.focus,
+        }}
+      />
     </span>
   );
 }
@@ -103,19 +94,7 @@ const GAP = 0.62;
 /** Prima nu pleacă instant: altfel pare că era deja acolo, nu că tocmai a venit. */
 const FIRST = 0.18;
 
-export function MessagesThread({
-  /**
-   * TEMPORAR, cât se compară cele două variante.
-   *
-   * Cercul cu inițialele expeditorului, ca într-o conversație de GRUP pe iPhone.
-   * Într-o conversație în doi, iOS nu îl arată deloc: poza contactului stă doar
-   * în antet. Aici are sens, fiindcă sunt trei oameni diferiți care întreabă,
-   * nu unul care scrie de trei ori.
-   */
-  withAvatars = false,
-}: {
-  withAvatars?: boolean;
-}) {
+export function MessagesThread() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -194,20 +173,15 @@ export function MessagesThread({
               pe iPhone mesajele stau strânse fiindcă ecranul e plin de ele, aici
               sunt trei într-un card și trebuie să respire.
 
-              Spațiul din stânga diferă între variante. Fără cerc trebuie 22px,
-              fiindcă codița iese din bulă până la -18px și `overflow-hidden` de
-              deasupra ar tăia-o. Cu cerc, cercul însuși împinge bula destul, deci
-              rămâne un pas mic.
+              Spațiul din stânga e mic fiindcă cercul îl aduce el pe al lui:
+              codița iese din bulă până la -18px, iar `overflow-hidden` de
+              deasupra ar tăia-o dacă bula ar sta lipită de margine.
 
               `items-end`: cercul se aliniază cu FUNDUL bulei, ca pe iPhone, nu cu
               mijlocul ei.
             */}
-            <div
-              className={`flex items-end pr-3 pt-4 ${
-                withAvatars ? "gap-2 pl-2.5" : "pl-[22px]"
-              }`}
-            >
-              {withAvatars ? <Avatar message={message} /> : null}
+            <div className="flex items-end gap-2 pl-2.5 pr-3 pt-4">
+              <Avatar message={message} />
 
               <p
                 className="imsg text-[15px] leading-[20px] sm:text-[16px] sm:leading-[21px]"

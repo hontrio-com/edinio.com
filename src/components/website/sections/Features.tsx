@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Check, ImageIcon } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { FEATURE_CARDS, type FeatureCard } from "@/lib/website/features";
 import { FeatureStack } from "./FeatureStack";
@@ -35,7 +35,7 @@ export function Features() {
             citeste ca sectiunea asta raspunde la cea dinainte, nu ca incepe alt
             subiect. De aceea nu mai scrie „Ce face platforma".
           */}
-          <SectionEyebrow tone="brand" icon={Check} label="Soluția" />
+          <SectionEyebrow label="Soluția" />
 
           <h2 className="mt-6 text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
             Tot ce ține un magazin în picioare, la locul lui

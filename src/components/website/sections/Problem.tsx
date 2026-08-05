@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { AlertTriangle, ImageIcon } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { PROBLEM_CARDS, PROBLEM_LEAD, PROBLEM_TITLE, type ProblemCard } from "@/lib/website/problem";
 import { MessagesThread } from "./MessagesThread";
 import { SectionEyebrow } from "./SectionEyebrow";
@@ -32,16 +32,7 @@ import { SectionEyebrow } from "./SectionEyebrow";
  * în cardurile astea, nu o face. Poza duce mesajul, cardul doar o ține.
  */
 
-export function Problem({
-  /**
-   * TEMPORAR, cât se compară cele două feluri de fir de mesaje. Se trece mai
-   * departe la primul card. După alegere dispare de tot, împreună cu al doilea
-   * apel din `app/(website)/page.tsx`.
-   */
-  messagesWithAvatars = false,
-}: {
-  messagesWithAvatars?: boolean;
-}) {
+export function Problem() {
   return (
     /*
      * Fără spațiu jos: secțiunea de funcții vine imediat și își aduce propriul
@@ -51,7 +42,7 @@ export function Problem({
     <section className="bg-white">
       <div className="mx-auto max-w-[1200px] px-5 pt-20 sm:px-6 lg:px-8 lg:pt-28">
         <div className="mx-auto max-w-[720px] text-center">
-          <SectionEyebrow tone="alarm" icon={AlertTriangle} label="Problema" />
+          <SectionEyebrow label="Problema" />
 
           <h2 className="mt-6 text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
             {PROBLEM_TITLE.map((line) => (
@@ -68,7 +59,7 @@ export function Problem({
 
         <div className="mt-14 grid gap-6 md:grid-cols-3 lg:mt-20 lg:gap-7">
           {PROBLEM_CARDS.map((card) => (
-            <Card key={card.id} card={card} messagesWithAvatars={messagesWithAvatars} />
+            <Card key={card.id} card={card} />
           ))}
         </div>
       </div>
@@ -84,13 +75,7 @@ export function Problem({
  * minus distanța dintre ele; cu aceeași rază în amândouă părțile, cel din
  * interior arată prea rotund.
  */
-function Card({
-  card,
-  messagesWithAvatars,
-}: {
-  card: ProblemCard;
-  messagesWithAvatars: boolean;
-}) {
+function Card({ card }: { card: ProblemCard }) {
   return (
     <article className="flex flex-col overflow-hidden rounded-[16px] border border-hairline bg-white">
       <div className="p-[5px]">
@@ -106,7 +91,7 @@ function Card({
           }`}
         >
           {card.art === "messages" ? (
-            <MessagesThread withAvatars={messagesWithAvatars} />
+            <MessagesThread />
           ) : card.image?.src ? (
             <Image
               src={card.image.src}

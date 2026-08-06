@@ -1,8 +1,15 @@
 <?xml version="1.0" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20010904//EN"
  "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<!--
+ viewBox strans pe conturul desenului (2026-08-06). Era "0 0 162 50", dar
+ literele ocupau doar 116.91x26.49 din el; restul era gol. Din cauza asta sigla
+ iesea vizibil mai mica decat vecinele in orice cutie cu `object-contain`, iar
+ pagina de functii din dashboard compensa cu un `scale(1.3)` pus de mana.
+ Desenul NU a fost atins, doar cadrul din jurul lui.
+-->
 <svg version="1.0" xmlns="http://www.w3.org/2000/svg"
- width="162.000000pt" height="50.000000pt" viewBox="0 0 162.000000 50.000000"
+ viewBox="3.11 23.11 116.91 26.49"
  preserveAspectRatio="xMidYMid meet">
 
 <g transform="translate(0.000000,50.000000) scale(0.100000,-0.100000)"

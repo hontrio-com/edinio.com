@@ -62,7 +62,9 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "SMS",
     integrations: [
       { name: "Notice.ro", logo: "/integrations/notice.ro.png", id: "notice" },
-      { name: "Smso.ro", logo: "/integrations/smso.svg", scale: 1.3, id: "smso" },
+      /* Avea `scale: 1.3`, ca sa compenseze marginile goale din smso.svg. Acum
+         viewBox-ul e strans pe litere, deci `object-contain` umple singur cutia. */
+      { name: "Smso.ro", logo: "/integrations/smso.svg", id: "smso" },
     ],
   },
   {

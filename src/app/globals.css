@@ -392,6 +392,46 @@
   }
 }
 
+/* ─── Benzile de sigle care curg (varianta 1 de integrari) ───────────────────
+
+   Doua randuri care aluneca in sensuri opuse. Trucul e ca fiecare rand isi
+   contine continutul de DOUA ori, iar animatia il muta cu exact -50%: cand ajunge
+   la capat, a doua copie e fix in locul in care era prima, deci saritura nu se
+   vede. De aceea `IntegrationsBenzi` randeaza lista de doua ori — nu e o
+   scapare, e conditia ca bucla sa fie continua.
+
+   Se misca `transform`, deci totul sta pe compozitor: nu se recalculeaza nici
+   aranjarea, nici pictura, la niciun cadru.
+
+   `prefers-reduced-motion` opreste banda. Nu o ascunde: continutul ramane acolo,
+   doar nemiscat, iar masca de la margini il taie curat. */
+@keyframes banda-stanga {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes banda-dreapta {
+  from { transform: translate3d(-50%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+.banda {
+  display: flex;
+  width: max-content;
+  animation-duration: var(--banda-durata, 70s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.banda-stanga { animation-name: banda-stanga; }
+.banda-dreapta { animation-name: banda-dreapta; }
+
+@media (prefers-reduced-motion: reduce) {
+  .banda {
+    animation: none;
+  }
+}
+
 /* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────
    Cerut de client: „Facebook" cu albastrul lor si „Instagram" cu culoarea lor.
 

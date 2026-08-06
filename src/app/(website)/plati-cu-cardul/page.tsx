@@ -13,7 +13,7 @@ export default function PlatiCuCardulPage() {
     <PageShell
       eyebrow="Plăți"
       title="Încasează cu cardul din prima zi"
-      lead="Stripe, Netopia, BT iPay, Klarna și Revolut, plus plata ramburs și ridicarea din magazin. Le pornești dintr-un comutator, cu datele contului tău."
+      lead="Stripe, Netopia, BT iPay, Klarna și Revolut, plus plata ramburs și ridicarea din magazin. Le pornești cu un comutator, cu datele contului tău."
     />
   );
 }

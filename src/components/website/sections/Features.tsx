@@ -202,30 +202,25 @@ function Card({
         cardurile intoarse imaginea nimerea in coloana ingusta si iesea mai mica
         decat textul. Deci se intoarce si sablonul.
       */}
+      {/*
+        A DOUA LINIE PUNCTATA sta AICI, pe blocul intreg, nu pe jumatatea cu text.
+        Adica doua dreptunghiuri punctate concentrice in jurul cardului, la 7px
+        unul de altul, si nimic intre cele doua jumatati.
+      */}
       <div
         className={cn(
-          "grid overflow-hidden rounded-[10px]",
+          "grid overflow-hidden rounded-[10px] border border-dashed",
           flipped
             ? "lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]"
             : "lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]",
         )}
+        style={{ borderColor: DASH_ON_WHITE }}
       >
         {/* ── Textul ── */}
         {/*
-          A DOUA LINIE PUNCTATA, ceruta de client dupa model: inca un dreptunghi
-          punctat la 7px in interiorul ramei cardului.
-
-          Sta pe jumatatea cu TEXT, nu pe blocul intreg, si asa e si la model —
-          altfel n-ar exista linia verticala de la cusatura. Imaginea ramane fara
-          chenar, pana in margine.
-
-          Colturile sunt scrise pe fiecare in parte, nu cu `rounded-l` peste
-          `rounded-t-none`: doua utilitare Tailwind de aceeasi specificitate care
-          se bat pe acelasi colt se rezolva dupa ordinea din foaia GENERATA, nu
-          dupa ordinea din `className`. Cu un utilitar pe colt nu se bate nimeni.
-            telefon      - rotunjit sus (textul e deasupra imaginii)
-            lg           - rotunjit pe partea dinspre marginea cardului
-            lg + intors  - pe cealalta parte
+          Fara chenar si fara colturi proprii: linia punctata interioara e pe
+          blocul din jur, iar tot el taie colturile. Asa rotunjirea trece singura
+          de la stanga/dreapta la sus/jos cand jumatatile se aseaza una sub alta.
         */}
         <div
           data-card-text
@@ -233,12 +228,9 @@ function Card({
             /* Marginea scade in doi pasi pe masura ce ecranul se ingusteaza, ca
                bifele sa nu se rupa: 32px de la `sm`, 20 pe telefon, 16 sub 360px.
                Fiecare pixel luat de aici se duce in latimea textului. */
-            "flex flex-col justify-between rounded-tl-[10px] rounded-tr-[10px] border border-dashed bg-white p-4 min-[360px]:p-5 sm:p-8",
-            flipped
-              ? "lg:order-2 lg:rounded-tl-none lg:rounded-br-[10px]"
-              : "lg:rounded-tr-none lg:rounded-bl-[10px]",
+            "flex flex-col justify-between bg-white p-4 min-[360px]:p-5 sm:p-8",
+            flipped && "lg:order-2",
           )}
-          style={{ borderColor: DASH_ON_WHITE }}
         >
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-[0.09em] text-ink-3">

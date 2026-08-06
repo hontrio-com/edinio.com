@@ -50,20 +50,20 @@ export interface FeatureCard {
    * Butonul cardului. Fiecare card trimite la pagina LUI, nu la una comună —
    * altfel butonul e ornament, nu o cale mai departe.
    *
-   * ═══ ETICHETA E NUMELE PAGINII, LUAT DIN MENIU ═══
+   * ═══ TEXTELE SUNT ALE CLIENTULUI, ȘI AU FOST PUSE LA LOC ═══
    *
-   * Nu „Vezi mai multe detalii" sau „Vezi cum optimizăm magazinul". Erau cinci
-   * butoane care începeau toate cu „Vezi", deci cuvântul care le deosebea stătea
-   * la sfârșit — exact unde ochiul nu ajunge când scanează. Și aveau lățimi între
-   * 171 și 278px, adică arătau ca cinci componente diferite.
+   * S-au încercat o dată etichetele scurte din mega-meniu — „Magazin online",
+   * „Integrări", „Curieri și AWB" — cu argumentul că site-ul ar trebui să spună un
+   * singur nume per pagină. Clientul le-a respins (2026-08-06) și a cerut înapoi
+   * formele lungi. Nu le schimba din nou fără să întrebi.
    *
-   * Acum poartă exact numele pe care pagina îl are în mega-meniu
-   * (`SOLUTION_COLUMNS` din `nav.ts`), ca omul să învețe UN nume per pagină și
-   * să-l regăsească. Sincronizarea e ținută de o probă, în `features.test.ts`.
+   * Ce a rămas din încercarea aia e partea care chiar aranja butoanele: toate au
+   * ACEEAȘI lățime, socotită după cea mai lungă etichetă. Vezi `Features.tsx`.
    *
-   * Efect secundar bun: „Vezi mai multe detalii" e link fără sens scos din
-   * context — un cititor de ecran care listează linkurile paginii citea atât.
-   * Numele paginii se susține singur.
+   * Un lucru de știut, ca să nu se piardă: „Vezi mai multe detalii" e link fără
+   * sens scos din context — un cititor de ecran care listează linkurile paginii
+   * citește atât. Nu e o eroare de reparat peste decizia clientului, e un cost
+   * pe care merită să-l știe cine se uită aici.
    */
   cta: { label: string; href: string };
   image: {
@@ -91,7 +91,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
       "Mobile Friendly",
       "Conform legislației în vigoare",
     ],
-    cta: { label: "Magazin online", href: "/magazin-online" },
+    cta: { label: "Vezi mai multe detalii", href: "/magazin-online" },
     image: {
       base: "/features/magazin",
       alt: "Magazin online Edinio pe desktop și pe telefon",
@@ -110,7 +110,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
       "Integrare Marketplace",
       "Integrare soft de facturare",
     ],
-    cta: { label: "Integrări", href: "/integrari" },
+    cta: { label: "Vezi toate integrările", href: "/integrari" },
     image: {
       base: "/features/integrari",
       alt: "Integrările Edinio, conectate între ele",
@@ -131,7 +131,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
     ],
     /* Nu exista pagina „Automatizari". `/curieri` e cea mai apropiata: AWB-ul
        generat automat e chiar prima automatizare din lista. */
-    cta: { label: "Curieri și AWB", href: "/curieri" },
+    cta: { label: "Vezi toți curierii", href: "/curieri" },
     image: {
       base: "/features/automatizari",
       alt: "Fluxul automat: comandă, factură, AWB, livrare",
@@ -155,7 +155,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
        `/optimizare` e despre pagini rapide si Google. Nu exista o pagina despre
        unelte de crestere; asta e cea mai apropiata din coloana „Creste" a
        meniului. Daca se face vreodata o pagina de marketing, aici se schimba. */
-    cta: { label: "Optimizare", href: "/optimizare" },
+    cta: { label: "Vezi cum optimizăm magazinul", href: "/optimizare" },
     image: {
       base: "/features/vanzari",
       alt: "Panoul de marketing din Edinio",
@@ -174,7 +174,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
       "Securitate",
       "Actualizări constante",
     ],
-    cta: { label: "Mentenanță gratuită", href: "/mentenanta-gratuita" },
+    cta: { label: "Vezi ce include mentenanța", href: "/mentenanta-gratuita" },
     image: {
       base: "/features/mentenanta",
       alt: "Mentenanță, securitate și asistență Edinio",

@@ -309,24 +309,27 @@ function Card({
 
               ═══ TOATE CINCI AU ACEEASI LATIME ═══
 
-              `min-w` plus `justify-between`: textul se aseaza la stanga, sageata
-              se lipeste de marginea din dreapta, si iese acelasi buton pe toate
-              cardurile. Fara asta aveau 171, 207, 210, 255 si 278px — la derulare
-              pareau cinci componente diferite.
+              Fara `min-w` aveau 171, 207, 210, 255 si 278px. Un spread de 107px,
+              iar cum le vezi una dupa alta la derulare, aratau ca cinci componente
+              diferite. Acum toate ies la 288.
 
-              212px nu e o cifra rotunda aleasa la intamplare, e cea mai lunga
-              eticheta („Mentenanta gratuita") plus marginile si sageata. Daca
-              vreodata o eticheta o depaseste, butonul ei creste si iese din rand:
-              `min-w` nu taie textul, doar il ridica la un minim. Etichetele vin
-              din meniu (vezi `cta` in `features.ts`), deci raman scurte.
+              288 e cea mai lunga eticheta de acum („Vezi cum optimizam magazinul",
+              masurata la 278px) plus o rezerva de 10. E socotit, nu rotunjit: daca
+              o eticheta o depaseste, butonul ei creste si iese singur din rand —
+              `min-w` nu taie textul, doar ridica un minim. Praguri in
+              `features.test.ts`.
 
-              Pe telefon nu se aplica: acolo cardul are 300px de continut, iar un
-              buton de 212 cu textul lipit stanga si sageata in celalalt capat ar
-              arata gaunos. Se strange pe continut, ca inainte.
+              Continutul e CENTRAT, nu impins in capete. La etichete atat de
+              diferite ca lungime (18-28 caractere), `justify-between` ar fi lasat
+              peste 100px de gol intre text si sageata la cea mai scurta, si n-ar
+              mai fi aratat a buton. Centrat, sageata sta lipita de text la toate.
+
+              Pe telefon nu se aplica: acolo cardul are 300px de continut si un
+              buton de 288 l-ar umple cap la cap. Se strange pe continut.
             */}
             <Link
               href={card.cta.href}
-              className="group mt-8 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2 sm:min-w-[212px] sm:justify-between"
+              className="group mt-8 inline-flex h-11 items-center justify-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2 sm:min-w-[288px]"
             >
               {card.cta.label}
               <ArrowRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />

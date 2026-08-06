@@ -426,51 +426,123 @@
 .banda-stanga { animation-name: banda-stanga; }
 .banda-dreapta { animation-name: banda-dreapta; }
 
-/* Granulatia de pe fondul casetelor.
+/* ─── Cele patru tratamente de caseta (sectiunea Integrari) ──────────────────
 
-   ═══ DE CE E CENTRATA PE CULOAREA CASETEI, SI NU PUSA PESTE EA ═══
+   Patru feluri in care poate arata caseta unei sigle, de ales unul. Cand se
+   alege, celelalte trei se STERG de aici cu tot cu prop-ul `stil` din
+   `IntegrationsBenzi` — nu se lasa „pentru mai tarziu".
 
-   Prima incercare de granulatie din proiect a inecat cardul in gri, si merita
-   stiut de ce: un `feTurbulence` scoate zgomot cu media gri-mediu, iar orice
-   `multiply` peste alb doar innegreste. Nici `overlay` nu merge: pe un fond
-   aproape alb, formula lui comprima totul: masurat, la o abatere de 4,6 in
-   zgomot ramanea 0,36 pe caseta — adica nimic.
+   Toate patru respecta aceleasi doua conditii, si merita spuse o data pentru
+   toate:
+   1. Fondul ramane DESCHIS. Sigla sta deasupra si multe dintre ele sunt inchise
+      la culoare; o caseta intunecata le-ar inghiti.
+   2. Textura sta in `background`, deci SUB sigla. Niciun tratament nu texturaza
+      logo-urile — ar fi si urat, si o modificare a unor marci inregistrate.
 
-   Aici zgomotul NU se pune peste fond, zgomotul ESTE fondul. `feComponentTransfer`
-   il striveste intr-un interval ingust centrat chiar pe #F5F5F7, deci media iese
-   244,5 fata de tinta 245 — culoarea casetei nu se misca, indiferent cat de tare
-   e granulatia.
+   Culoarea de plecare e peste tot #F5F5F7, aceeasi ca inainte, ca sa se compare
+   intre ele si nu cu altceva. */
 
-   `slope` e SINGURUL buton, si e usor de rasucit: e in cele trei `feFunc*` de mai
-   jos, dar `intercept` trebuie recalculat odata cu el, altfel se pierde centrarea.
-   Formula: intercept = tinta/255 - slope/2, unde tinta e 245 pentru R si G, 247
-   pentru B (#F5F5F7 are albastrul cu doua trepte mai sus).
-     slope 0,09 -> abatere ~2,2 niveluri (0,9%), abia se simte
-     slope 0,14 -> abatere ~3,4 niveluri (1,4%), cea de acum
-     slope 0,22 -> abatere ~5,3 niveluri (2,2%), incepe sa para murdar
-   Fiindca media ramane pe loc oricat, mai tare NU inseamna mai gri — inseamna
-   doar textura mai aspra.
+/* 1. MESH + GRANULE — mat, cu o variatie moale de culoare si zgomot vizibil.
 
-   `color-interpolation-filters='sRGB'` NU e de forma. Filtrele SVG lucreaza
-   implicit in linearRGB, iar acolo mijlocul nu e 128: masurat, aceeasi retea de
-   valori dadea media 187 in loc de 128, si toata centrarea cadea.
+   Doua straturi de fond, in ordinea in care le scrie CSS-ul (primul e DEASUPRA):
+   granulele, apoi meshul. Meshul e din doua pete radiale foarte slabe, una cu o
+   idee de verde si una rece — atat cat caseta sa nu mai fie o suprafata moarta,
+   nu atat cat sa se vada ca e colorata.
 
-   `stitchTiles='stitch'` face placa de 160px sa se imbine cu ea insasi, altfel
-   s-ar vedea cusatura la fiecare repetare.
+   Granulele sunt SEMITRANSPARENTE dinadins, ca meshul sa se vada prin ele. Ca sa
+   nu mute culoarea, RGB-ul zgomotului e centrat chiar pe #F5F5F7 — masurat, media
+   iese 244,2 fata de tinta 245, iar abaterea 6,15 niveluri, adica 2,5%.
 
-   `background-color` ramane ca plasa: daca data-URI-ul nu se randeaza undeva,
-   caseta e tot #F5F5F7, doar neteda. */
-.granule-caseta {
+   Prima incercare a fost la 1,4% si clientul n-a vazut-o deloc. De aceea e acum
+   la 2,5%: media ramanand fixa prin constructie, mai tare NU inseamna mai gri,
+   inseamna doar textura mai prezenta. */
+.caseta-granule {
   background-color: #F5F5F7;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch' seed='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.14' intercept='0.8908'/%3E%3CfeFuncG type='linear' slope='0.14' intercept='0.8908'/%3E%3CfeFuncB type='linear' slope='0.14' intercept='0.8986'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
-  background-size: 160px 160px;
-  background-repeat: repeat;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch' seed='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.32' intercept='0.8008'/%3E%3CfeFuncG type='linear' slope='0.32' intercept='0.8008'/%3E%3CfeFuncB type='linear' slope='0.32' intercept='0.8008'/%3E%3CfeFuncA type='linear' slope='0' intercept='0.85'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E"),
+    radial-gradient(80% 90% at 18% 12%, rgba(26, 181, 84, 0.09) 0%, transparent 70%),
+    radial-gradient(75% 85% at 88% 92%, rgba(90, 110, 190, 0.08) 0%, transparent 72%);
+  background-size: 160px 160px, 100% 100%, 100% 100%;
+  background-repeat: repeat, no-repeat, no-repeat;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .banda {
-    animation: none;
-  }
+/* 2. LIQUID GLASS — sticla mata, cu muchia de sus aprinsa si o sclipire oblica.
+
+   `backdrop-filter` NU e folosit, si e o decizie: in spatele casetei e pagina
+   alba si nimic altceva, deci n-ar avea ce estompa. Efectul de sticla se obtine
+   din lumina, nu din blur — asa arata si pe un fundal gol.
+
+   Trei lucruri il fac sa se citeasca drept sticla:
+   - un degrade oblic de la aproape alb la un gri-albastrui, ca o placa inclinata;
+   - o sclipire ingusta pe diagonala, la 20% opacitate, care taie placa;
+   - muchii interioare: sus alb aprins, jos o umbra foarte slaba. Combinatia asta
+     spune ochiului „obiect gros", nu „dreptunghi colorat".
+   Umbra exterioara e mica si aproape, ca placa sa para asezata pe pagina, nu
+   plutind deasupra ei. */
+.caseta-sticla {
+  background-image:
+    linear-gradient(112deg, transparent 34%, rgba(255, 255, 255, 0.85) 46%, transparent 58%),
+    linear-gradient(158deg, #FFFFFF 0%, #F7F8FB 42%, #EDEFF5 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    inset 0 -1.5px 2px rgba(16, 20, 40, 0.05),
+    0 1px 2px rgba(16, 20, 40, 0.05),
+    0 6px 14px -8px rgba(16, 20, 40, 0.22);
+}
+
+/* 3. LIQUID METAL — crom deschis, cu benzi de reflexie si o textura fina.
+
+   Cromul nu e un degrade de la deschis la inchis; e o SUCCESIUNE de benzi
+   deschis-inchis-deschis, fiindca o suprafata curbata si lucioasa reflecta cerul
+   si pamantul alternativ. De aceea sunt sapte opriri si nu doua — cu doua ar fi
+   iesit doar un gri inclinat.
+
+   Peste ele, granule mult mai fine si mai slabe decat la varianta 1 (frecventa
+   1,7 fata de 0,9, opacitate 0,35 fata de 0,85): metalul periat are o textura
+   marunta, nu nisip.
+
+   Ramane DESCHIS. Un crom adevarat ar avea benzi aproape negre, dar acolo siglele
+   inchise la culoare ar disparea. Cea mai inchisa banda de aici e #DDE0E7. */
+.caseta-metal {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.7' numOctaves='4' stitchTiles='stitch' seed='11'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.22' intercept='0.8508'/%3E%3CfeFuncG type='linear' slope='0.22' intercept='0.8508'/%3E%3CfeFuncB type='linear' slope='0.22' intercept='0.8508'/%3E%3CfeFuncA type='linear' slope='0' intercept='0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E"),
+    linear-gradient(
+      128deg,
+      #FCFCFD 0%,
+      #E6E9EF 16%,
+      #FDFDFE 30%,
+      #DDE0E7 46%,
+      #F8F9FB 62%,
+      #E2E5EC 80%,
+      #FBFBFD 100%
+    );
+  background-size: 160px 160px, 100% 100%;
+  background-repeat: repeat, no-repeat;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(16, 20, 40, 0.06),
+    0 2px 6px -3px rgba(16, 20, 40, 0.16);
+}
+
+/* 4. RELIEF (3D) — caseta pare ridicata de pe pagina, luminata de sus-stanga.
+
+   Toata iluzia sta in COERENTA sursei de lumina, nu in umbre puternice. Lumina
+   vine din sus-stanga, deci: degradeul e mai deschis in coltul ala, muchia
+   interioara de sus e alba, cea de jos e umbrita, iar umbra exterioara cade in
+   jos si putin la dreapta. Daca una dintre ele se schimba fara celelalte, obiectul
+   se turteste imediat.
+
+   Umbra e pe doua straturi: una scurta si apropiata, care da contactul cu pagina,
+   si una lunga si difuza, care da inaltimea. Una singura arata lipita. */
+.caseta-relief {
+  background-image: linear-gradient(145deg, #FFFFFF 0%, #F4F5F8 55%, #E9EBF1 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 1px 0 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 3px rgba(16, 20, 40, 0.06),
+    0 1px 2px rgba(16, 20, 40, 0.06),
+    0 10px 20px -8px rgba(16, 20, 40, 0.2);
 }
 
 /* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────

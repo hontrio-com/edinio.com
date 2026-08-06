@@ -2,9 +2,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
 import {
-  ALL_LOGOS,
   LOGO_AREA,
-  LOGO_GROUPS,
   LOGOS_CASETA,
   type LogoKey,
 } from "@/lib/website/logos";
@@ -58,6 +56,22 @@ const GREEN_TEXT = "#12874A";
   scoatere din oferta: About You ramane in `LOGO_GROUPS` si se numara mai jos, la
   „integrari" — doar nu se deseneaza intr-un patrat.
 */
+/**
+ * Cele patru tratamente de caseta, de ales unul.
+ *
+ * Clientul le compara pe pagina si alege (2026-08-07). Cand alege, din harta de
+ * mai jos ramane o singura intrare, `stil` dispare din componente, iar celelalte
+ * trei clase se sterg din `globals.css`. Desenul fiecareia e explicat acolo.
+ */
+export type StilCaseta = "granule" | "sticla" | "metal" | "relief";
+
+const CLASA_STIL: Record<StilCaseta, string> = {
+  granule: "caseta-granule",
+  sticla: "caseta-sticla",
+  metal: "caseta-metal",
+  relief: "caseta-relief",
+};
+
 const BANDA_SUS = LOGOS_CASETA.filter((_, i) => i % 2 === 0);
 const BANDA_JOS = LOGOS_CASETA.filter((_, i) => i % 2 === 1);
 
@@ -109,12 +123,22 @@ function numarDeCopii(nrSigle: number): number {
 const MASCA =
   "linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%)";
 
-export function IntegrationsBenzi() {
+export function IntegrationsBenzi({ stil = "granule" }: { stil?: StilCaseta }) {
   return (
     <section className="bg-white py-20 lg:py-28">
       {/* ── Antetul, ingust si centrat ────────────────────────────────────── */}
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[640px] text-center">
+        {/*
+          720, nu 640, si numarul e MASURAT. Titlul are 1054px la 44px bold, deci
+          se rupe oricum in doua randuri; intrebarea e UNDE. La 640 se rupea la
+          „de care ai / nevoie", adica in mijlocul unei expresii. Prima parte,
+          pana la virgula, cere 689px — deci de la 700 in sus taietura cade
+          singura pe virgula, unde si trebuie. 720 lasa 31px de rezerva, pentru
+          cand un alt sistem randeaza fontul cu o idee mai lat.
+          A doua parte are 356px, deci randul doi ramane vizibil mai scurt: lung
+          apoi scurt, ceea ce se citeste ca decizie, nu ca text care s-a rupt.
+        */}
+        <div className="mx-auto max-w-[720px] text-center">
           {/*
             NU e `SectionEyebrow`, si e o decizie: aceea are culoarea fixata pe
             `text-ink-3`, iar aici eticheta trebuie sa fie verde. Schimbata la
@@ -134,7 +158,21 @@ export function IntegrationsBenzi() {
           </p>
 
           {/*
-            Doua propozitii, doua randuri, si al doilea se stinge: acelasi corp
+            TEXTELE SUNT ALE CLIENTULUI, date cuvant cu cuvant (2026-08-07). I s-au
+            propus cinci perechi de titlu si descriere si le-a respins pe toate.
+            Nu le rescrie.
+
+            Ce a ramas din desen e stingerea celei de-a doua parti: propozitia se
+            rupe la virgula, iar „intr-un singur loc." trece in `text-ink-3` si
+            `font-medium`. Nu e `<br />`, ci un `<span>` in curgerea textului —
+            asa taietura se muta singura la ecran ingust, in loc sa ramana batuta
+            in cuie unde n-are ce cauta.
+
+            Sub 400px titlul se rupe oricum in patru randuri; nu incape altfel,
+            iar prescurtarea lui ar insemna schimbarea textului clientului.
+
+            Ce era inainte aici: doua propozitii scurte, si al doilea rand stins.
+            Acelasi corp
             de litera, dar greutate mai mica si `text-ink-3`. Diferenta de ton
             face treaba pe care in machetele de referinta o face un font cu
             serife — proiectul n-are asa ceva, si nu se adauga unul pentru un
@@ -149,13 +187,13 @@ export function IntegrationsBenzi() {
             ~254px si incape intreaga incepand de la 320.
           */}
           <h2 className="mt-6 text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
-            <span className="block">Nu schimbi nimic.</span>
-            <span className="block font-medium text-ink-3">Doar conectezi.</span>
+            Toate integrările de care ai nevoie,{" "}
+            <span className="font-medium text-ink-3">într-un singur loc.</span>
           </h2>
 
-          <p className="mx-auto mt-5 max-w-[470px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
-            FAN Courier, Sameday, Stripe, SmartBill și peste 25 de servicii sunt
-            deja în platformă. Le pornești cu un comutator, fără programator.
+          <p className="mx-auto mt-5 max-w-[520px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
+            Curieri, plăți online, facturare, marketing și marketplace-uri. Totul
+            se activează direct din Edinio.
           </p>
         </div>
       </div>
@@ -172,6 +210,7 @@ export function IntegrationsBenzi() {
           sens="stanga"
           durata="92s"
           eticheta="Servicii integrate, partea întâi"
+          stil={stil}
         />
         {/*
           Durata ALTA, nu din capriciu: la aceeasi durata cele doua benzi ar avea
@@ -184,6 +223,7 @@ export function IntegrationsBenzi() {
           sens="dreapta"
           durata="76s"
           eticheta="Servicii integrate, partea a doua"
+          stil={stil}
           decalata
         />
       </div>
@@ -201,18 +241,19 @@ export function IntegrationsBenzi() {
         */}
         <p className="mt-10 text-center text-[14px] leading-[1.6] text-ink-2 sm:mt-12">
           {/*
-            Numerele vin din `logos.ts`, ca sa nu ramana in urma cand se adauga
-            o sigla. „de" inaintea substantivului e corect pentru numerele ale
-            caror ultime doua cifre sunt intre 20 si 99 („27 de integrari"), iar
-            lista n-a fost niciodata sub 20 si n-are cum sa treaca de 99.
+            Text dat de client (2026-08-07), cu „peste 25" in loc de numarul exact.
+            Numaratoarea venea inainte din `logos.ts`, ca sa nu ramana in urma cand
+            se adauga o sigla; clientul a cerut sa nu mai apara nicio cifra exacta.
+            „Peste 25" e si formularea din restul site-ului (`/integrari`, meniul),
+            deci nu se contrazic intre ele.
           */}
-          {ALL_LOGOS.length} de integrări în {LOGO_GROUPS.length} categorii.{" "}
+          Peste 25 de integrări disponibile.{" "}
           <Link
             href="/integrari"
             className="font-medium underline decoration-1 underline-offset-[5px] transition-opacity duration-200 hover:opacity-70"
             style={{ color: GREEN_TEXT }}
           >
-            Vezi lista completă
+            Vezi toate integrările
           </Link>
         </p>
       </div>
@@ -236,6 +277,7 @@ function Banda({
   sens,
   durata,
   eticheta,
+  stil,
   decalata,
 }: {
   chei: LogoKey[];
@@ -244,6 +286,8 @@ function Banda({
   durata: string;
   /** Ce aude cine nu vede banda. Doar prima copie e anuntata. */
   eticheta: string;
+  /** Tratamentul casetelor. Vezi `StilCaseta`. */
+  stil: StilCaseta;
   decalata?: boolean;
 }) {
   /* Per banda, nu global: cele doua au lungimi diferite (14 si 13), deci pot
@@ -300,7 +344,7 @@ function Banda({
                   */
                   className="pr-3 sm:pr-4"
                 >
-                  <Caseta cheie={cheie} />
+                  <Caseta cheie={cheie} stil={stil} />
                 </li>
               ))}
             </ul>
@@ -320,15 +364,20 @@ function Banda({
  * `object-contain`, siglele foarte late se micsoreaza singure pana intra.
  * Se schimba DOAR odata cu latimea casetei de pe telefon.
  */
-function Caseta({ cheie }: { cheie: LogoKey }) {
+function Caseta({ cheie, stil }: { cheie: LogoKey; stil: StilCaseta }) {
   return (
     /*
-      `granule-caseta` inlocuieste `bg-tint-2`, nu se adauga peste el: clasa
-      ADUCE culoarea #F5F5F7, sub forma de zgomot centrat exact pe ea. Socoteala
-      si capcanele sunt in globals.css. Granulatia sta in `background-image`, deci
-      e sub sigla, nu peste — nu texturaza logo-urile.
+      Clasa de stil INLOCUIESTE `bg-tint-2`, nu se adauga peste el: fiecare dintre
+      cele patru isi aduce singura fondul. Socoteala si capcanele fiecareia sunt
+      in globals.css. Textura sta peste tot in `background`, deci SUB sigla — nu
+      texturaza logo-urile.
     */
-    <div className="granule-caseta flex h-[68px] w-[68px] items-center justify-center rounded-[16px] sm:h-[84px] sm:w-[84px]">
+    <div
+      className={cn(
+        "flex h-[68px] w-[68px] items-center justify-center rounded-[16px] sm:h-[84px] sm:w-[84px]",
+        CLASA_STIL[stil],
+      )}
+    >
       <Logo k={cheie} area={LOGO_AREA.tile} maxWidth={56} />
     </div>
   );

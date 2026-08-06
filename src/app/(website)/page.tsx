@@ -5,7 +5,7 @@ import { ArrowRight, Shield, Headset, Wrench } from "lucide-react";
 import { Hero } from "@/components/website/sections/Hero";
 import { Problem } from "@/components/website/sections/Problem";
 import { Features } from "@/components/website/sections/Features";
-import { IntegrationsBenzi } from "@/components/website/sections/integrations/IntegrationsBenzi";
+import { StiluriCaseta } from "@/components/website/sections/integrations/StiluriCaseta";
 import { DemoSection } from "@/components/website/DemoSection";
 import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
@@ -154,7 +154,7 @@ export default function LandingPage() {
       <Features />
       {/* A luat locul lui `HowItWorksSection`, stearsa odata cu asta. Ancora ei,
           `#cum-functioneaza`, nu era tintita de niciun link — verificat. */}
-      <IntegrationsBenzi />
+      <StiluriCaseta />
       <DemoSection />
       <PricingSection />
       <FAQSection />

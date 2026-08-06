@@ -51,6 +51,17 @@ const FULL_COVER = 0.72;
  */
 const WATCH_MARGIN = "50% 0px";
 
+/**
+ * De unde in sus exista teanc.
+ *
+ * Trebuie sa fie ACEEASI valoare cu pragul `lg` al lui Tailwind, fiindca acolo se
+ * aprinde `lg:sticky` pe sloturi. Fara lipire nu exista acoperire, deci n-ar avea
+ * ce sa calculeze bucata asta: pe telefon ar citi cinci dreptunghiuri la fiecare
+ * cadru ca sa scrie de fiecare data zero. Motivul pentru care teancul nu merge pe
+ * telefon e scris la `STACK_TOP`, in `Features.tsx`.
+ */
+const STACK_FROM = "(min-width: 1024px)";
+
 export function FeatureStack({ children }: { children: React.ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -147,30 +158,56 @@ export function FeatureStack({ children }: { children: React.ReactNode }) {
        nu e pe ecran, iar la intoarcere trebuie sa fie deja bune. */
     window.addEventListener("resize", onResize, { passive: true });
 
-    /* Fara `IntersectionObserver` (browsere foarte vechi) ascultam tot timpul,
-       adica exact comportamentul de dinainte. Nimic nu se strica, doar ca se
-       lucreaza si cand n-ar trebui. */
-    if (typeof IntersectionObserver === "undefined") {
-      startListening();
-      return () => {
-        stopListening();
-        window.removeEventListener("resize", onResize);
-      };
+    /*
+     * Sub `lg` sloturile nu sunt lipite, deci cardurile nu se acopera niciodata si
+     * n-ar iesi decat zerouri. Curatam si ce-a ramas scris, fiindca se poate ajunge
+     * aici prin redimensionare de la o fereastra lata la una ingusta — cu un card
+     * lasat `visibility: hidden` ar disparea de tot.
+     */
+    function teardownCards() {
+      cards.forEach((card, index) => {
+        card.style.removeProperty("--covered");
+        card.style.visibility = "";
+        written[index] = -1;
+        hidden[index] = false;
+      });
     }
 
-    const watcher = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) startListening();
-          else stopListening();
-        }
-      },
-      { rootMargin: WATCH_MARGIN },
-    );
-    watcher.observe(root);
+    const watcher =
+      typeof IntersectionObserver === "undefined"
+        ? null
+        : new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (entry.isIntersecting) startListening();
+                else stopListening();
+              }
+            },
+            { rootMargin: WATCH_MARGIN },
+          );
+
+    const wide = window.matchMedia(STACK_FROM);
+
+    function applyWidth() {
+      if (wide.matches) {
+        /* Fara `IntersectionObserver` (browsere foarte vechi) ascultam tot timpul,
+           adica exact comportamentul de dinainte. Nimic nu se strica, doar ca se
+           lucreaza si cand n-ar trebui. */
+        if (watcher) watcher.observe(root!);
+        else startListening();
+      } else {
+        if (watcher) watcher.disconnect();
+        stopListening();
+        teardownCards();
+      }
+    }
+
+    applyWidth();
+    wide.addEventListener("change", applyWidth);
 
     return () => {
-      watcher.disconnect();
+      wide.removeEventListener("change", applyWidth);
+      watcher?.disconnect();
       stopListening();
       window.removeEventListener("resize", onResize);
     };

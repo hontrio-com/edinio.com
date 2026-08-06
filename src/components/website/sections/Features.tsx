@@ -36,6 +36,23 @@ import { SectionEyebrow } from "./SectionEyebrow";
  *
  * Acum fiecare card îl acoperă complet pe cel dinainte. Se vede un singur card,
  * cel activ.
+ *
+ * ═══ TEANCUL E DOAR DE LA `lg` ÎN SUS ═══
+ *
+ * Pe telefon cardurile curg normal, una sub alta, și NU e o simplificare de
+ * comoditate: un card pinat care e mai înalt decât fereastra nu poate fi văzut
+ * întreg, oricât ai derula. Stă agățat la `top`, iar tot ce trece de marginea de
+ * jos rămâne acolo. Măsurat, cu cardurile așa cum arată acum:
+ *   iPhone 14 (390x844)  — 91px sub ecran
+ *   Android (360x800)    — 113px
+ *   iPhone SE (375x667)  — 257px
+ * De fiecare dată ce se pierdea era exact butonul cardului.
+ *
+ * Nu se rezolvă strângând spațierea: pe ecranul mic ar însemna să tai un sfert din
+ * card. Și nu se rezolvă nici coborând `top`, fiindcă 96px nu acoperă nici măcar
+ * cazul cel mai bun. Singurul lucru care le rezolvă pe toate deodată, la orice
+ * mărime de telefon de acum și de mai târziu, e ca pe telefon cardul să nu fie
+ * pinat. Efectul rămâne unde chiar funcționează.
  */
 const STACK_TOP = 96;
 
@@ -80,7 +97,11 @@ export function Features() {
           */}
           <FeatureStack>
             {FEATURE_CARDS.map((card, index) => (
-              <div key={card.id} className="feature-slot sticky" style={{ top: STACK_TOP }}>
+              <div
+                key={card.id}
+                className="feature-slot lg:sticky"
+                style={{ top: STACK_TOP }}
+              >
                 <Card
                   card={card}
                   last={index === FEATURE_CARDS.length - 1}

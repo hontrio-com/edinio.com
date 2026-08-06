@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Check, ImageIcon } from "lucide-react";
+import { ArrowRight, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   FEATURE_CARDS,
@@ -40,15 +40,6 @@ import { SectionEyebrow } from "./SectionEyebrow";
 const STACK_TOP = 96;
 
 /**
- * Verdele bifelor.
- *
- * NU verdele de brand. #1AB554 are pe alb un contrast de 2,6:1; la o bifă de
- * 14px iese un semn pe care abia îl vezi. #12874A e același ton, dus la 4,6:1.
- * Aceeași valoare ca la prețul din cardul de produs al secțiunii Problema.
- */
-const CHECK_GREEN = "#12874A";
-
-/**
  * Culoarea ramei punctate din jurul cardului.
  *
  * NU `--color-hairline` (#EAEAEE), deși aia e culoarea liniilor noastre de 1px.
@@ -56,25 +47,8 @@ const CHECK_GREEN = "#12874A";
  * cântărește vizibil mai puțin decât una continuă și se pierde pe alb. #DCDCE3 e
  * același ton, dus destul de închis cât să ajungă la aceeași diferență de
  * luminanță pe care o are rama modelului, ~36.
- *
- * Inelul pastilelor de la bife e o altă poveste și stă în `globals.css`, la
- * `.feature-check-ring`: acolo linia e pe un CERC, unde se pierde mult mai mult,
- * și are nevoie de două valori după densitatea ecranului.
  */
 const DASH_ON_WHITE = "#DCDCE3";
-
-/**
- * Fondul jumătății cu text.
- *
- * NU `--color-tint-2` (#F5F5F7), deși ăla era la îndemână. E cu doar 10/255 sub
- * alb, adică 4%, iar la atât pastilele albe ale bifelor DISPAR — rămâne doar bifa
- * verde plutind, verificat pe captură. Modelul își ține panoul la 7% sub cardul
- * din jur (#EEEAE6 pe #F7F5F3) și tocmai de aia i se văd pastilele.
- *
- * #F0F0F4 e același ton rece ca restul scării noastre, dus la 6% sub alb: destul
- * cât să se desprindă pastilele, și tot 94% alb.
- */
-const PANEL = "#F0F0F4";
 
 export function Features() {
   return (
@@ -131,8 +105,8 @@ export function Features() {
  *
  *   1. Rama punctata, alba, cu colturi de 16px. Doar o rama - nu are continut.
  *   2. La 7px inauntru, un bloc cu colturi de 10px, taiat (`overflow-hidden`).
- *   3. In bloc, doua jumatati LIPITE: textul pe fond gri, imaginea pana in
- *      margine. Nu au colturi proprii; le taie blocul de deasupra.
+ *   3. In bloc, doua jumatati LIPITE: textul si imaginea pana in margine. Nu au
+ *      colturi proprii; le taie blocul de deasupra.
  *
  * Razele sunt concentrice, nu alese de mana: 16 afara, minus 7 de spatiu, da 9
  * inauntru (rotunjit la 10). Cand raportul asta se strica, coltul interior pare
@@ -142,12 +116,14 @@ export function Features() {
  * jumatatile se aseaza una sub alta, iar rotunjirea trece de la stanga/dreapta la
  * sus/jos fara nicio regula in plus.
  *
- * ═══ DE CE FONDUL GRI PE JUMATATEA CU TEXT ═══
+ * ═══ TOTUL E ALB ═══
  *
- * Fara el nu se vede nimic din desen: rama e alba, cardul e alb, pagina e alba.
- * Griul (`--color-tint-2`, #F5F5F7) e cu 4% mai inchis decat albul - exact
- * distanta pe care o are si modelul intre panoul lui si cardul din jur. Tot el
- * face sa se vada pastilele albe ale bifelor.
+ * Modelul isi pune panoul cu text pe un gri, si o vreme l-am avut si noi. Clientul
+ * l-a scos (2026-08-06): din model raman DOAR rama punctata si insignele bifelor,
+ * restul revine la alb, ca in tot site-ul. Deci nu cauta separarea intre cele doua
+ * jumatati - nu exista, o face doar imaginea. Si nu pune inapoi pastila alba de
+ * sub bife: fara fond gri n-ar avea pe ce sa se vada, iar acum insigna verde e ea
+ * insasi semnul.
  *
  * ═══ BIFELE STAU JOS ═══
  *
@@ -203,10 +179,9 @@ function Card({
         <div
           data-card-text
           className={cn(
-            "flex flex-col justify-between p-6 sm:p-8",
+            "flex flex-col justify-between bg-white p-6 sm:p-8",
             flipped && "lg:order-2",
           )}
-          style={{ backgroundColor: PANEL }}
         >
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-[0.09em] text-ink-3">
@@ -224,26 +199,35 @@ function Card({
 
           <div className="mt-10 lg:mt-8">
             {/*
-              Bifa sta intr-o pastila alba rotunda cu chenar punctat, ca la model.
-              Pastila e alba pe fondul gri al panoului - de aia panoul TREBUIE sa
-              fie gri, altfel pastilele dispar si raman niste bife plutind.
+              Insigna verde e un fisier, nu o pictograma desenata de noi: e ceea ce
+              a ales clientul (icons8, „verify"). A fost taiata pe contur - venea
+              cu 4px de gol pe fiecare latura din 60, iar cu golul pastrat s-ar fi
+              afisat mai mica decat cutia ei si n-ar mai fi cazut la 20px exact.
 
-              `items-start`, nu `items-center`: pastila are 20px, un rand de text
+              Ramane 52px in fisier desi se afiseaza la 20: sunt 1KB, iar la 52 e
+              curata si pe ecranele cu densitate dubla sau tripla. `next/image`
+              n-ar avea ce optimiza - loaderul proiectului lasa neatinse fisierele
+              locale.
+
+              `items-start`, nu `items-center`: insigna are 20px, un rand de text
               are 21px, deci la o linie ies aliniate oricum, iar cand textul se
-              rupe in doua randuri pe telefon pastila ramane langa PRIMUL rand, nu
+              rupe in doua randuri pe telefon insigna ramane langa PRIMUL rand, nu
               se centreaza pe bloc.
             */}
             <ul className="space-y-3.5">
               {card.checks.map((check) => (
                 <li key={check} className="flex items-start gap-3">
-                  <span className="feature-check-ring flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-dashed bg-white">
-                    <Check
-                      className="h-3 w-3"
-                      style={{ color: CHECK_GREEN }}
-                      strokeWidth={3.5}
-                      aria-hidden
-                    />
-                  </span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/features/bifa.png"
+                    alt=""
+                    width={52}
+                    height={52}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-5 w-5 shrink-0"
+                    aria-hidden
+                  />
                   <span className="text-[14.5px] leading-[1.45] text-ink-2">
                     {check}
                   </span>
@@ -255,13 +239,10 @@ function Card({
               Butonul e cu chenar, nu verde plin. Cinci butoane verzi, unul sub
               altul la derulare, ar fi concurat cu butonul principal din hero — iar
               ala trebuie sa ramana singurul lucru verde plin de pe pagina.
-
-              Are `bg-white` acum: pe fondul gri al panoului, un buton transparent
-              cu chenar arata ca o gaura, nu ca un buton.
             */}
             <Link
               href={card.cta.href}
-              className="group mt-8 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline bg-white px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint"
+              className="group mt-8 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2"
             >
               {card.cta.label}
               <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />

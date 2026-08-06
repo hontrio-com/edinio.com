@@ -5,7 +5,7 @@ import { ArrowRight, Shield, Headset, Wrench } from "lucide-react";
 import { Hero } from "@/components/website/sections/Hero";
 import { Problem } from "@/components/website/sections/Problem";
 import { Features } from "@/components/website/sections/Features";
-import { VarianteIntegrari } from "@/components/website/sections/integrations/VarianteIntegrari";
+import { IntegrationsBenzi } from "@/components/website/sections/integrations/IntegrationsBenzi";
 import { DemoSection } from "@/components/website/DemoSection";
 import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
@@ -152,10 +152,9 @@ export default function LandingPage() {
 
       <Problem />
       <Features />
-      {/* Schela cu cele cinci variante de „Integrări", pana alege clientul una.
-          A luat locul lui `HowItWorksSection`, care nu mai e legata nicaieri —
-          ancora ei, `#cum-functioneaza`, nu era tintita de niciun link. */}
-      <VarianteIntegrari />
+      {/* A luat locul lui `HowItWorksSection`, stearsa odata cu asta. Ancora ei,
+          `#cum-functioneaza`, nu era tintita de niciun link — verificat. */}
+      <IntegrationsBenzi />
       <DemoSection />
       <PricingSection />
       <FAQSection />

@@ -426,6 +426,47 @@
 .banda-stanga { animation-name: banda-stanga; }
 .banda-dreapta { animation-name: banda-dreapta; }
 
+/* Granulatia de pe fondul casetelor.
+
+   ═══ DE CE E CENTRATA PE CULOAREA CASETEI, SI NU PUSA PESTE EA ═══
+
+   Prima incercare de granulatie din proiect a inecat cardul in gri, si merita
+   stiut de ce: un `feTurbulence` scoate zgomot cu media gri-mediu, iar orice
+   `multiply` peste alb doar innegreste. Nici `overlay` nu merge: pe un fond
+   aproape alb, formula lui comprima totul: masurat, la o abatere de 4,6 in
+   zgomot ramanea 0,36 pe caseta — adica nimic.
+
+   Aici zgomotul NU se pune peste fond, zgomotul ESTE fondul. `feComponentTransfer`
+   il striveste intr-un interval ingust centrat chiar pe #F5F5F7, deci media iese
+   244,5 fata de tinta 245 — culoarea casetei nu se misca, indiferent cat de tare
+   e granulatia.
+
+   `slope` e SINGURUL buton, si e usor de rasucit: e in cele trei `feFunc*` de mai
+   jos, dar `intercept` trebuie recalculat odata cu el, altfel se pierde centrarea.
+   Formula: intercept = tinta/255 - slope/2, unde tinta e 245 pentru R si G, 247
+   pentru B (#F5F5F7 are albastrul cu doua trepte mai sus).
+     slope 0,09 -> abatere ~2,2 niveluri (0,9%), abia se simte
+     slope 0,14 -> abatere ~3,4 niveluri (1,4%), cea de acum
+     slope 0,22 -> abatere ~5,3 niveluri (2,2%), incepe sa para murdar
+   Fiindca media ramane pe loc oricat, mai tare NU inseamna mai gri — inseamna
+   doar textura mai aspra.
+
+   `color-interpolation-filters='sRGB'` NU e de forma. Filtrele SVG lucreaza
+   implicit in linearRGB, iar acolo mijlocul nu e 128: masurat, aceeasi retea de
+   valori dadea media 187 in loc de 128, si toata centrarea cadea.
+
+   `stitchTiles='stitch'` face placa de 160px sa se imbine cu ea insasi, altfel
+   s-ar vedea cusatura la fiecare repetare.
+
+   `background-color` ramane ca plasa: daca data-URI-ul nu se randeaza undeva,
+   caseta e tot #F5F5F7, doar neteda. */
+.granule-caseta {
+  background-color: #F5F5F7;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch' seed='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.14' intercept='0.8908'/%3E%3CfeFuncG type='linear' slope='0.14' intercept='0.8908'/%3E%3CfeFuncB type='linear' slope='0.14' intercept='0.8986'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  background-repeat: repeat;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .banda {
     animation: none;

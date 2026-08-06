@@ -322,7 +322,13 @@ function Banda({
  */
 function Caseta({ cheie }: { cheie: LogoKey }) {
   return (
-    <div className="flex h-[68px] w-[68px] items-center justify-center rounded-[16px] bg-tint-2 sm:h-[84px] sm:w-[84px]">
+    /*
+      `granule-caseta` inlocuieste `bg-tint-2`, nu se adauga peste el: clasa
+      ADUCE culoarea #F5F5F7, sub forma de zgomot centrat exact pe ea. Socoteala
+      si capcanele sunt in globals.css. Granulatia sta in `background-image`, deci
+      e sub sigla, nu peste — nu texturaza logo-urile.
+    */
+    <div className="granule-caseta flex h-[68px] w-[68px] items-center justify-center rounded-[16px] sm:h-[84px] sm:w-[84px]">
       <Logo k={cheie} area={LOGO_AREA.tile} maxWidth={56} />
     </div>
   );

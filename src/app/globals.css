@@ -510,17 +510,30 @@
   inset: -20% -5%;
   pointer-events: none;
   background-image:
-    radial-gradient(38% 130% at 10% 50%, rgba(26, 181, 84, 0.34) 0%, transparent 70%),
-    radial-gradient(32% 130% at 38% 42%, rgba(78, 120, 220, 0.28) 0%, transparent 72%),
-    radial-gradient(30% 130% at 64% 58%, rgba(26, 181, 84, 0.3) 0%, transparent 72%),
-    radial-gradient(36% 130% at 90% 46%, rgba(120, 90, 210, 0.24) 0%, transparent 70%);
-  filter: blur(22px);
+    radial-gradient(11% 62% at 6% 34%, rgba(26, 181, 84, 0.5) 0%, transparent 68%),
+    radial-gradient(9% 58% at 17% 70%, rgba(78, 120, 220, 0.44) 0%, transparent 70%),
+    radial-gradient(12% 64% at 29% 30%, rgba(120, 90, 210, 0.4) 0%, transparent 68%),
+    radial-gradient(10% 60% at 41% 68%, rgba(26, 181, 84, 0.46) 0%, transparent 70%),
+    radial-gradient(11% 62% at 54% 32%, rgba(60, 160, 200, 0.42) 0%, transparent 68%),
+    radial-gradient(9% 58% at 66% 70%, rgba(26, 181, 84, 0.44) 0%, transparent 70%),
+    radial-gradient(12% 64% at 79% 34%, rgba(120, 90, 210, 0.38) 0%, transparent 68%),
+    radial-gradient(10% 60% at 92% 66%, rgba(60, 160, 200, 0.44) 0%, transparent 70%);
+  /* 9px, nu 22. Petele trebuie sa se schimbe INAUNTRUL unei casete de 84px, nu
+     de-a lungul benzii: refractia deplaseaza pixelii cu cativa zeci, iar daca
+     fundalul e la fel peste tot pe distanta aia, deplasarea nu se vede. Cu opt
+     pete mici si o estompare scurta, fiecare caseta are un degrade propriu, si
+     abia atunci sticla are ce indoi. */
+  filter: blur(9px);
 }
 
 /* Transparenta e MICA dinadins: la 0,42 caseta era practic alba si lumina de
    dedesubt nu razbatea deloc — adica exact defectul pe care fundalul trebuia
    sa-l repare. La 0,20 se vede prin ea, iar siglele raman lizibile fiindca
    fundalul e oricum deschis. */
+/* Refractia (`backdrop-filter: url(#sticla-refractie)`) NU e aici, ci pe element,
+   in `IntegrationsBenzi`. Nu din neglijenta: pusa aici, e STEARSA de build —
+   verificat, regula ajunge in pagina fara nicio urma de `backdrop-filter`, in
+   timp ce aceeasi valoare pe element supravietuieste. Motivul e scris si acolo. */
 .caseta-sticla {
   background-color: rgba(255, 255, 255, 0.2);
   background-image: linear-gradient(

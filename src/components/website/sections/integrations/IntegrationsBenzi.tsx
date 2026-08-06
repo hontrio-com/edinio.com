@@ -123,9 +123,64 @@ function numarDeCopii(nrSigle: number): number {
 const MASCA =
   "linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%)";
 
+/**
+ * Filtrul care face refractia sticlei. Se randeaza o SINGURA data pe sectiune;
+ * toate casetele il cheama prin `backdrop-filter: url(#sticla-refractie)`.
+ *
+ * ═══ ASTA E REFRACTIE ADEVARATA, NU O IMITATIE ═══
+ *
+ * `feDisplacementMap` deplaseaza fiecare pixel din spatele casetei cu o distanta
+ * luata dintr-o harta de zgomot — exact ce face o placa de sticla imperfecta cu
+ * lumina care trece prin ea. E aceeasi constructie ca in exemplul trimis de
+ * client (turbulenta → estompare → deplasare).
+ *
+ * VERIFICAT IN BROWSER ca merge: `CSS.supports` raspunde „da" si la browserele
+ * care ignora `url()` in `backdrop-filter`, deci nu e o proba. Proba a fost o
+ * casuta peste un fundal in dungi de 6px: cu filtrul, dungile ies rasucite in
+ * valuri; fara el, raman drepte.
+ *
+ * `scale` e 26, nu 70 ca in exemplu, si e o regula de trei: acolo placa avea
+ * ~200px latime, aici caseta are 84. La 70 pe o caseta de 84px, deplasarea ar
+ * lua pixeli de dincolo de marginea ei si ar iesi o pata, nu o sticla.
+ */
+function FiltruSticla() {
+  return (
+    <svg aria-hidden width="0" height="0" className="absolute">
+      <defs>
+        <filter
+          id="sticla-refractie"
+          x="0%"
+          y="0%"
+          width="100%"
+          height="100%"
+          colorInterpolationFilters="sRGB"
+        >
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.045"
+            numOctaves="1"
+            seed="4"
+            result="zgomot"
+          />
+          {/* Fara estompare, deplasarea iese granuloasa in loc de unduita. */}
+          <feGaussianBlur in="zgomot" stdDeviation="2" result="zgomotMoale" />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="zgomotMoale"
+            scale="26"
+            xChannelSelector="R"
+            yChannelSelector="B"
+          />
+        </filter>
+      </defs>
+    </svg>
+  );
+}
+
 export function IntegrationsBenzi({ stil = "granule" }: { stil?: StilCaseta }) {
   return (
     <section className="bg-white py-20 lg:py-28">
+      {stil === "sticla" && <FiltruSticla />}
       {/* ── Antetul, ingust si centrat ────────────────────────────────────── */}
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         {/*
@@ -392,6 +447,23 @@ function Caseta({ cheie, stil }: { cheie: LogoKey; stil: StilCaseta }) {
         "flex h-[68px] w-[68px] items-center justify-center rounded-[16px] sm:h-[84px] sm:w-[84px]",
         CLASA_STIL[stil],
       )}
+      /*
+        REFRACTIA STA INLINE, NU IN CLASA, si nu din lene.
+        Pusa in `globals.css`, `backdrop-filter: url(#…)` e STEARSA de build —
+        verificat: regula ajunge in pagina cu `background-color`,
+        `background-image` si `box-shadow`, si fara nicio urma de
+        `backdrop-filter`. Aceeasi valoare pusa pe element supravietuieste si
+        chiar deformeaza. Deci nu o muta inapoi in clasa „ca sa fie curat";
+        se pierde tacut si ramane doar o caseta translucida.
+      */
+      style={
+        stil === "sticla"
+          ? {
+              backdropFilter: "url(#sticla-refractie)",
+              WebkitBackdropFilter: "url(#sticla-refractie)",
+            }
+          : undefined
+      }
     >
       <Logo k={cheie} area={LOGO_AREA.tile} maxWidth={56} />
     </div>

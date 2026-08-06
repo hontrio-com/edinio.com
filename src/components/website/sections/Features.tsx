@@ -187,23 +187,22 @@ function Card({
       style={{ borderColor: DASH_ON_WHITE }}
     >
       {/*
-        Coloanele NU sunt egale: imaginii ii revine 1,12 din 2, textului 0,88.
-        Motivul e la `ImagePanel` - imaginile noastre sunt 4:3 si trebuie sa
-        incapa intregi pe inaltimea data de textul de langa.
+        Coloane EGALE, si asta s-a schimbat de doua ori, deci merita spus de ce.
 
-        Sabloanele sunt DOUA, si asta a fost o eroare pe care am prins-o abia
-        masurand: `order` schimba unde se ASEAZA jumatatile, nu cat de late sunt
-        coloanele. Pe cardurile intoarse imaginea nimerea in coloana ingusta si
-        iesea mai mica decat textul. Deci se intoarce si sablonul.
+        Imaginea trebuie sa incapa intreaga pe inaltimea data de textul de langa
+        (motivul e la `ImagePanel`), iar inaltimea aia depinde de cat text e.
+        Cand bifele erau pe o coloana, cardul era inalt si imaginea avea nevoie de
+        1,12 din 2 ca sa iasa 4:3. Odata trecute doua pe rand, cardul s-a scurtat
+        cu 60-90px si raportul s-a inversat: coloana lata a ramas prea lata, iar
+        imaginea nu mai umplea marginile. La egalitate cade aproape exact pe 4:3
+        pentru toate cinci.
+
+        Bonus: la coloane egale nu mai e nevoie de doua sabloane. Cat au fost
+        inegale, `flipped` trebuia sa intoarca SI sablonul, nu doar `order` — o
+        eroare pe care am prins-o abia masurand, fiindca `order` schimba unde se
+        aseaza jumatatile, nu cat de late sunt coloanele.
       */}
-      <div
-        className={cn(
-          "grid overflow-hidden rounded-[10px]",
-          flipped
-            ? "lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]"
-            : "lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]",
-        )}
-      >
+      <div className="grid overflow-hidden rounded-[10px] lg:grid-cols-2">
         {/* ── Textul ── */}
         <div
           data-card-text
@@ -243,7 +242,19 @@ function Card({
               rupe in doua randuri pe telefon insigna ramane langa PRIMUL rand, nu
               se centreaza pe bloc.
             */}
-            <ul className="space-y-3.5">
+            {/*
+              Doua pe rand, cerut de client ca sa ramana loc. Toate cardurile au
+              exact PATRU bife, deci lista iese mereu 2x2 - nu e o intamplare, e
+              conditia ca aranjarea sa arate intreaga. Daca vreodata un card
+              primeste 3 sau 5, ultimul rand ramane pe jumatate gol.
+
+              O coloana pe telefon, doua de la `sm` in sus. Pe un ecran de 390px
+              coloana de text are 278px, deci doua coloane ar da 132px fiecare -
+              la 14,5px inseamna vreo 15 caractere pe rand, iar „Integrare soft de
+              facturare" s-ar rupe in trei. Inaltimea ar iesi aceeasi, doar ca
+              zdrentuita. Deci se strange acolo unde chiar e loc.
+            */}
+            <ul className="grid grid-cols-1 gap-x-6 gap-y-3.5 sm:grid-cols-2">
               {card.checks.map((check) => (
                 <li key={check} className="flex items-start gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -330,14 +341,14 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
           ele: fiecare telefon descarca masterul intreg si il afisa la 280px.
           Cu `<img>` scriem noi `srcSet`-ul si browserul alege marimea potrivita.
 
-          `sizes` e SOCOTIT, nu ghicit, si s-a schimbat odata cu desenul: imaginea
-          nu mai sta intr-o caseta cu marginile ei, ci ia 56% din latimea cardului.
+          `sizes` e SOCOTIT, nu ghicit: imaginea nu sta intr-o caseta cu marginile
+          ei, ci ia jumatate din latimea cardului.
             latime continut = min(100vw, 1200) - marginile paginii
-            latime imagine  = (continut - 14) x 0,56   la `lg`, sau tot randul sub el
+            latime imagine  = (continut - 14) / 2   la `lg`, sau tot randul sub el
           Marginile paginii: 40px sub 640, 48px pana la 1024, 64px peste. Cei 14px
           sunt rama punctata a cardului, 7 de fiecare parte.
           Iese: 306px pe un telefon de 360, 961px la 1023 (cel mai lat, cardul e
-          inca pe o coloana), 628px de la 1280 in sus.
+          inca pe o coloana), 561px de la 1280 in sus.
 
           `width`/`height` raman puse: fara ele browserul nu stie raportul pana nu
           vine fisierul si, la o retea proasta, layoutul sare.
@@ -348,7 +359,7 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
           srcSet={FEATURE_IMAGE_WIDTHS.map(
             (width) => `${card.image.base}-${width}.webp ${width}w`,
           ).join(", ")}
-          sizes="(min-width: 1280px) 628px, (min-width: 1024px) 53vw, (min-width: 640px) calc(100vw - 62px), calc(100vw - 54px)"
+          sizes="(min-width: 1280px) 561px, (min-width: 1024px) 47vw, (min-width: 640px) calc(100vw - 62px), calc(100vw - 54px)"
           alt={card.image.alt}
           width={1440}
           height={1080}

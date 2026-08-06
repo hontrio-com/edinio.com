@@ -37,9 +37,13 @@ export interface FeatureCard {
    * Lista cu bife de sub descriere.
    *
    * Erau pastile într-un rând care se rupea. Clientul le-a cerut scoase
-   * (2026-08-06): o listă cu bife spune același lucru, dar se citește de sus în
-   * jos, într-o singură trecere, în loc să oblige ochiul să sară de la o pastilă
-   * la alta. Textele au rămas neatinse.
+   * (2026-08-06): o listă cu bife spune același lucru, dar se citește dintr-o
+   * privire, în loc să oblige ochiul să sară de la o pastilă la alta.
+   *
+   * PATRU, exact, la fiecare card. Se afișează două pe rând (vezi `Features.tsx`),
+   * deci patru înseamnă un pătrat plin. Cu trei sau cu cinci, ultimul rând rămâne
+   * pe jumătate gol și se vede. Dacă un card chiar are nevoie de a cincea funcție,
+   * se schimbă mai întâi aranjarea, nu se adaugă doar în listă.
    */
   checks: string[];
   /**
@@ -66,8 +70,13 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Lansează un magazin online complet în doar câteva minute.",
     description:
       "Tot ce ai nevoie pentru a începe să vinzi online este deja pregătit: produse, categorii, variante, checkout și administrare simplă.",
-    checks: ["Magazin complet", "Design modern", "Mobile Friendly", "Gata de vânzare"],
-    cta: { label: "Vezi magazinul online", href: "/magazin-online" },
+    checks: [
+      "Magazin „la cheie”",
+      "Design modern",
+      "Mobile Friendly",
+      "Conform legislației în vigoare",
+    ],
+    cta: { label: "Vezi mai multe detalii", href: "/magazin-online" },
     image: {
       base: "/features/magazin",
       alt: "Magazin online Edinio pe desktop și pe telefon",
@@ -83,9 +92,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     checks: [
       "Curieri",
       "Plată cu cardul",
-      "Facturare",
-      "Integrare cu marketplace-urile tale preferate",
-      "Marketing",
+      "Integrare Marketplace",
+      "Integrare soft de facturare",
     ],
     cta: { label: "Vezi toate integrările", href: "/integrari" },
     image: {
@@ -100,10 +108,15 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Economisește timp cu automatizări inteligente.",
     description:
       "Facturile, AWB-urile, notificările și multe alte procese repetitive se realizează automat.",
-    checks: ["AWB automat", "Facturi automate", "Email", "SMS", "Automatizări"],
+    checks: [
+      "Generare factură automat",
+      "Generare AWB automat",
+      "Trimitere automată mail",
+      "Trimitere notificări prin SMS",
+    ],
     /* Nu exista pagina „Automatizari". `/curieri` e cea mai apropiata: AWB-ul
        generat automat e chiar prima automatizare din lista. */
-    cta: { label: "Vezi curierii și AWB automat", href: "/curieri" },
+    cta: { label: "Vezi toți curierii", href: "/curieri" },
     image: {
       base: "/features/automatizari",
       alt: "Fluxul automat: comandă, factură, AWB, livrare",
@@ -117,11 +130,10 @@ export const FEATURE_CARDS: FeatureCard[] = [
     description:
       "Folosește funcții dedicate comerțului online pentru a atrage clienți și pentru a crește rata de conversie.",
     checks: [
-      "Coșuri abandonate",
-      "Cupoane",
+      "Recuperare coșuri abandonate",
+      "Cupoane de reducere",
       "Email Marketing",
       "SMS Marketing",
-      "Wheel of Fortune",
     ],
     /* CEA MAI SLABA POTRIVIRE din cele cinci, si merita stiut. Cardul e despre
        unelte de vanzare — cosuri abandonate, cupoane, marketing — iar
@@ -141,7 +153,12 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Tu vinzi. Noi ne ocupăm de restul.",
     description:
       "Actualizările, securitatea, mentenanța și asistența sunt incluse permanent, fără costuri suplimentare.",
-    checks: ["Mentenanță gratuită", "Actualizări", "Backup", "Securitate", "Suport"],
+    checks: [
+      "Mentenanță gratuită",
+      "Asistență non-stop",
+      "Securitate",
+      "Actualizări constante",
+    ],
     cta: { label: "Vezi ce include mentenanța", href: "/mentenanta-gratuita" },
     image: {
       base: "/features/mentenanta",

@@ -187,29 +187,58 @@ function Card({
       style={{ borderColor: DASH_ON_WHITE }}
     >
       {/*
-        Coloane EGALE, si asta s-a schimbat de doua ori, deci merita spus de ce.
+        Coloanele NU sunt egale: imaginii ii revine 1,12 din 2, textului 0,88.
 
         Imaginea trebuie sa incapa intreaga pe inaltimea data de textul de langa
-        (motivul e la `ImagePanel`), iar inaltimea aia depinde de cat text e.
-        Cand bifele erau pe o coloana, cardul era inalt si imaginea avea nevoie de
-        1,12 din 2 ca sa iasa 4:3. Odata trecute doua pe rand, cardul s-a scurtat
-        cu 60-90px si raportul s-a inversat: coloana lata a ramas prea lata, iar
-        imaginea nu mai umplea marginile. La egalitate cade aproape exact pe 4:3
-        pentru toate cinci.
+        (motivul e la `ImagePanel`), iar inaltimea aia depinde de cat text e. Cu
+        bifele pe o coloana pe PC, cardul are ~490px, iar la coloane egale imaginea
+        ramanea cu 28px de gol sus si jos. La 1,12 cade aproape exact pe 4:3.
 
-        Bonus: la coloane egale nu mai e nevoie de doua sabloane. Cat au fost
-        inegale, `flipped` trebuia sa intoarca SI sablonul, nu doar `order` — o
-        eroare pe care am prins-o abia masurand, fiindca `order` schimba unde se
-        aseaza jumatatile, nu cat de late sunt coloanele.
+        Daca se schimba vreodata cate bife stau pe rand, se remasoara si asta —
+        raportul depinde direct de inaltimea cardului.
+
+        Sabloanele sunt DOUA, si a fost o eroare prinsa doar masurand: `order`
+        schimba unde se ASEAZA jumatatile, nu cat de late sunt coloanele. Pe
+        cardurile intoarse imaginea nimerea in coloana ingusta si iesea mai mica
+        decat textul. Deci se intoarce si sablonul.
       */}
-      <div className="grid overflow-hidden rounded-[10px] lg:grid-cols-2">
+      <div
+        className={cn(
+          "grid overflow-hidden rounded-[10px]",
+          flipped
+            ? "lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]"
+            : "lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]",
+        )}
+      >
         {/* ── Textul ── */}
+        {/*
+          A DOUA LINIE PUNCTATA, ceruta de client dupa model: inca un dreptunghi
+          punctat la 7px in interiorul ramei cardului.
+
+          Sta pe jumatatea cu TEXT, nu pe blocul intreg, si asa e si la model —
+          altfel n-ar exista linia verticala de la cusatura. Imaginea ramane fara
+          chenar, pana in margine.
+
+          Colturile sunt scrise pe fiecare in parte, nu cu `rounded-l` peste
+          `rounded-t-none`: doua utilitare Tailwind de aceeasi specificitate care
+          se bat pe acelasi colt se rezolva dupa ordinea din foaia GENERATA, nu
+          dupa ordinea din `className`. Cu un utilitar pe colt nu se bate nimeni.
+            telefon      - rotunjit sus (textul e deasupra imaginii)
+            lg           - rotunjit pe partea dinspre marginea cardului
+            lg + intors  - pe cealalta parte
+        */}
         <div
           data-card-text
           className={cn(
-            "flex flex-col justify-between bg-white p-6 sm:p-8",
-            flipped && "lg:order-2",
+            /* Marginea scade in doi pasi pe masura ce ecranul se ingusteaza, ca
+               bifele sa nu se rupa: 32px de la `sm`, 20 pe telefon, 16 sub 360px.
+               Fiecare pixel luat de aici se duce in latimea textului. */
+            "flex flex-col justify-between rounded-tl-[10px] rounded-tr-[10px] border border-dashed bg-white p-4 min-[360px]:p-5 sm:p-8",
+            flipped
+              ? "lg:order-2 lg:rounded-tl-none lg:rounded-br-[10px]"
+              : "lg:rounded-tr-none lg:rounded-bl-[10px]",
           )}
+          style={{ borderColor: DASH_ON_WHITE }}
         >
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-[0.09em] text-ink-3">
@@ -243,20 +272,24 @@ function Card({
               se centreaza pe bloc.
             */}
             {/*
-              Doua pe rand, cerut de client ca sa ramana loc. Toate cardurile au
-              exact PATRU bife, deci lista iese mereu 2x2 - nu e o intamplare, e
-              conditia ca aranjarea sa arate intreaga. Daca vreodata un card
-              primeste 3 sau 5, ultimul rand ramane pe jumatate gol.
+              O SINGURA COLOANA, PESTE TOT. Clientul a cerut intai doua pe rand pe
+              telefon, apoi ca fiecare bifa sa incapa pe UN rand, pe orice telefon.
+              Cele doua nu pot coexista, si e o socoteala, nu o parere:
 
-              O coloana pe telefon, doua de la `sm` in sus. Pe un ecran de 390px
-              coloana de text are 278px, deci doua coloane ar da 132px fiecare -
-              la 14,5px inseamna vreo 15 caractere pe rand, iar „Integrare soft de
-              facturare" s-ar rupe in trei. Inaltimea ar iesi aceeasi, doar ca
-              zdrentuita. Deci se strange acolo unde chiar e loc.
+                telefon de 390px, doua coloane -> 111px pentru textul unei bife
+                „Recuperare cosuri abandonate" cere 211px la 14,5px
+                ca sa incapa in 111px ar trebui scris cu 7,6px
+
+              Deci s-a pastrat cerinta a doua, care e si cea mai recenta si cea mai
+              vizibila: pe o coloana fiecare bifa are 258px la 390px, si nu se rupe
+              niciuna. Masurat pe 360, 375, 390, 414 si 430: zero randuri sparte.
+
+              Sub 360px (iPhone 5/SE prima generatie, iesit din suport in 2018) nu
+              mai incape la 14,5px — acolo scade textul si marginea, vezi mai jos.
             */}
-            <ul className="grid grid-cols-1 gap-x-6 gap-y-3.5 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-x-2 gap-y-3.5 sm:gap-x-6">
               {card.checks.map((check) => (
-                <li key={check} className="flex items-start gap-3">
+                <li key={check} className="flex items-start gap-2 sm:gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/features/bifa.png"
@@ -268,7 +301,9 @@ function Card({
                     className="h-5 w-5 shrink-0"
                     aria-hidden
                   />
-                  <span className="text-[14.5px] leading-[1.45] text-ink-2">
+                  {/* Sub 360px textul scade la 13px: la 14,5 „Recuperare cosuri
+                      abandonate" cere 211px si are doar 196, deci s-ar rupe. */}
+                  <span className="text-[13px] leading-[1.45] text-ink-2 min-[360px]:text-[14.5px]">
                     {check}
                   </span>
                 </li>
@@ -342,13 +377,13 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
           Cu `<img>` scriem noi `srcSet`-ul si browserul alege marimea potrivita.
 
           `sizes` e SOCOTIT, nu ghicit: imaginea nu sta intr-o caseta cu marginile
-          ei, ci ia jumatate din latimea cardului.
+          ei, ci ia 56% din latimea cardului.
             latime continut = min(100vw, 1200) - marginile paginii
-            latime imagine  = (continut - 14) / 2   la `lg`, sau tot randul sub el
+            latime imagine  = (continut - 14) x 0,56   la `lg`, sau tot randul sub el
           Marginile paginii: 40px sub 640, 48px pana la 1024, 64px peste. Cei 14px
           sunt rama punctata a cardului, 7 de fiecare parte.
           Iese: 306px pe un telefon de 360, 961px la 1023 (cel mai lat, cardul e
-          inca pe o coloana), 561px de la 1280 in sus.
+          inca pe o coloana), 628px de la 1280 in sus.
 
           `width`/`height` raman puse: fara ele browserul nu stie raportul pana nu
           vine fisierul si, la o retea proasta, layoutul sare.
@@ -359,7 +394,7 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
           srcSet={FEATURE_IMAGE_WIDTHS.map(
             (width) => `${card.image.base}-${width}.webp ${width}w`,
           ).join(", ")}
-          sizes="(min-width: 1280px) 561px, (min-width: 1024px) 47vw, (min-width: 640px) calc(100vw - 62px), calc(100vw - 54px)"
+          sizes="(min-width: 1280px) 628px, (min-width: 1024px) 53vw, (min-width: 640px) calc(100vw - 62px), calc(100vw - 54px)"
           alt={card.image.alt}
           width={1440}
           height={1080}

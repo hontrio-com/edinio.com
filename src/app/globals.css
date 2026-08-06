@@ -426,208 +426,47 @@
 .banda-stanga { animation-name: banda-stanga; }
 .banda-dreapta { animation-name: banda-dreapta; }
 
-/* ─── Cele patru tratamente de caseta (sectiunea Integrari) ──────────────────
+/* ─── Caseta unei sigle (sectiunea Integrari) ────────────────────────────────
 
-   Patru feluri in care poate arata caseta unei sigle, de ales unul. Cand se
-   alege, celelalte trei se STERG de aici cu tot cu prop-ul `stil` din
-   `IntegrationsBenzi` — nu se lasa „pentru mai tarziu".
+   Alba, ridicata de pe pagina. Si aici e toata dificultatea: pagina e tot alba,
+   deci caseta nu se poate deosebi prin CULOARE. Se deosebeste doar prin UMBRA.
 
-   Toate patru respecta aceleasi doua conditii, si merita spuse o data pentru
-   toate:
-   1. Fondul ramane DESCHIS. Sigla sta deasupra si multe dintre ele sunt inchise
-      la culoare; o caseta intunecata le-ar inghiti.
-   2. Textura sta in `background`, deci SUB sigla. Niciun tratament nu texturaza
-      logo-urile — ar fi si urat, si o modificare a unor marci inregistrate.
+   S-au incercat inainte patru tratamente — granule, sticla cu refractie, crom si
+   relief — si clientul le-a respins pe toate (2026-08-07). A cerut alb curat cu
+   „o tenta 3D". Deci nimic in fond: nici textura, nici degrade, nici transparenta.
 
-   Culoarea de plecare e peste tot #F5F5F7, aceeasi ca inainte, ca sa se compare
-   intre ele si nu cu altceva. */
+   ═══ CE FACE UMBRA SA PARA VOLUM SI NU O PATA ═══
 
-/* 1. MESH + GRANULE — mat, cu o variatie moale de culoare si zgomot vizibil.
+   Patru straturi, fiecare cu rolul lui, si niciunul nu poate lipsi:
 
-   Doua straturi de fond, in ordinea in care le scrie CSS-ul (primul e DEASUPRA):
-   granulele, apoi meshul. Meshul e din doua pete radiale foarte slabe, una cu o
-   idee de verde si una rece — atat cat caseta sa nu mai fie o suprafata moarta,
-   nu atat cat sa se vada ca e colorata.
+   1. Un CONTUR de un pixel, foarte slab. Fara el, muchia casetei albe pe pagina
+      alba nu exista deloc acolo unde umbra e cea mai subtire — adica sus. Nu e o
+      linie care se vede, e o linie care se simte.
+   2. Umbra de CONTACT, scurta si aproape: spune ca obiectul atinge pagina.
+   3. Umbra de INALTIME, larga si difuza: spune cat de sus e ridicat.
+      Una singura, oricat de bine aleasa, arata lipita — contactul si inaltimea
+      sunt doua informatii diferite si ochiul le cere pe amandoua.
+   4. O muchie interioara jos, abia vizibila: da grosime placii. Fara ea, caseta
+      pare o foaie taiata, nu un obiect.
 
-   Granulele sunt SEMITRANSPARENTE dinadins, ca meshul sa se vada prin ele. Ca sa
-   nu mute culoarea, RGB-ul zgomotului e centrat chiar pe #F5F5F7 — masurat, media
-   iese 244,2 fata de tinta 245, iar abaterea 6,15 niveluri, adica 2,5%.
-
-   Prima incercare a fost la 1,4% si clientul n-a vazut-o deloc. De aceea e acum
-   la 2,5%: media ramanand fixa prin constructie, mai tare NU inseamna mai gri,
-   inseamna doar textura mai prezenta. */
-.caseta-granule {
-  background-color: #F5F5F7;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch' seed='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.32' intercept='0.8008'/%3E%3CfeFuncG type='linear' slope='0.32' intercept='0.8008'/%3E%3CfeFuncB type='linear' slope='0.32' intercept='0.8008'/%3E%3CfeFuncA type='linear' slope='0' intercept='0.85'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E"),
-    radial-gradient(80% 90% at 18% 12%, rgba(26, 181, 84, 0.09) 0%, transparent 70%),
-    radial-gradient(75% 85% at 88% 92%, rgba(90, 110, 190, 0.08) 0%, transparent 72%);
-  background-size: 160px 160px, 100% 100%, 100% 100%;
-  background-repeat: repeat, no-repeat, no-repeat;
-}
-
-/* 2. LIQUID GLASS — placa de sticla peste o lumina, ca la Apple.
-
-   ═══ DE CE ARE NEVOIE DE FUNDAL ═══
-
-   Sticla nu are aspect propriu. Se vede pentru ca refracta, estompeaza si
-   coloreaza ce e IN SPATELE ei. Peste alb curat, o placa de sticla arata exact
-   ca albul — de asta prima incercare a iesit doar „un dreptunghi cu o dunga".
-   Toate exemplele trimise de client pun sticla peste o fotografie.
-
-   De aceea banda primeste dedesubt `.caseta-sticla-fundal`, o lumina foarte
-   slaba din trei pete. Caseta e apoi SEMITRANSPARENTA si lasa lumina sa treaca
-   prin ea: acolo unde trece peste o pata, se coloreaza; intre pete, se stinge.
-   Cum banda aluneca, fiecare caseta trece prin toate petele — iar refractia se
-   vede tocmai pentru ca se schimba.
-
-   ═══ DE CE NU `backdrop-filter` ═══
-
-   Exemplul clientului foloseste `backdrop-filter` cu un filtru SVG de
-   displacement. Aici NU se foloseste, si sunt doua motive, ambele solide:
-
-   1. N-ar face aproape nimic. Fundalul de dedesubt e un degrade NETED. A
-      estompa un degrade neted da inapoi acelasi degrade neted; a-l deforma cu
-      `feDisplacementMap` il muta cu cativa pixeli intr-o zona in care oricum
-      arata la fel. Efectul se vede pe fotografii, care au detaliu. Al nostru
-      n-are.
-   2. Ar costa enorm. Sunt 104 casete pe pagina, intr-o banda care se misca
-      permanent; fiecare `backdrop-filter` ar cere o resamplare a fundalului la
-      fiecare cadru. Pe telefon ar omori derularea.
-
-   Deci refractia se face din transparenta si din muchii, nu din filtre. Se vede
-   la fel si nu costa nimic.
-
-   ═══ MUCHIILE ═══
-
-   Teancul de umbre interioare e luat din exemplul clientului si repotrivit
-   pentru o caseta de 84px pe fond deschis: doua muchii aprinse in sus-stanga
-   (unde bate lumina), doua stinse in jos-dreapta, si un halou interior care
-   ingroasa placa. Combinatia asta e cea care spune ochiului „obiect de sticla
-   gros", nu „dreptunghi transparent". */
-.caseta-sticla-fundal {
-  position: absolute;
-  inset: -20% -5%;
-  pointer-events: none;
-  background-image:
-    radial-gradient(11% 62% at 6% 34%, rgba(26, 181, 84, 0.5) 0%, transparent 68%),
-    radial-gradient(9% 58% at 17% 70%, rgba(78, 120, 220, 0.44) 0%, transparent 70%),
-    radial-gradient(12% 64% at 29% 30%, rgba(120, 90, 210, 0.4) 0%, transparent 68%),
-    radial-gradient(10% 60% at 41% 68%, rgba(26, 181, 84, 0.46) 0%, transparent 70%),
-    radial-gradient(11% 62% at 54% 32%, rgba(60, 160, 200, 0.42) 0%, transparent 68%),
-    radial-gradient(9% 58% at 66% 70%, rgba(26, 181, 84, 0.44) 0%, transparent 70%),
-    radial-gradient(12% 64% at 79% 34%, rgba(120, 90, 210, 0.38) 0%, transparent 68%),
-    radial-gradient(10% 60% at 92% 66%, rgba(60, 160, 200, 0.44) 0%, transparent 70%);
-  /* 9px, nu 22. Petele trebuie sa se schimbe INAUNTRUL unei casete de 84px, nu
-     de-a lungul benzii: refractia deplaseaza pixelii cu cativa zeci, iar daca
-     fundalul e la fel peste tot pe distanta aia, deplasarea nu se vede. Cu opt
-     pete mici si o estompare scurta, fiecare caseta are un degrade propriu, si
-     abia atunci sticla are ce indoi. */
-  filter: blur(9px);
-}
-
-/* Transparenta e MICA dinadins: la 0,42 caseta era practic alba si lumina de
-   dedesubt nu razbatea deloc — adica exact defectul pe care fundalul trebuia
-   sa-l repare. La 0,20 se vede prin ea, iar siglele raman lizibile fiindca
-   fundalul e oricum deschis. */
-/* Refractia (`backdrop-filter: url(#sticla-refractie)`) NU e aici, ci pe element,
-   in `IntegrationsBenzi`. Nu din neglijenta: pusa aici, e STEARSA de build —
-   verificat, regula ajunge in pagina fara nicio urma de `backdrop-filter`, in
-   timp ce aceeasi valoare pe element supravietuieste. Motivul e scris si acolo. */
-.caseta-sticla {
-  background-color: rgba(255, 255, 255, 0.2);
-  background-image: linear-gradient(
-    128deg,
-    rgba(255, 255, 255, 0.46) 0%,
-    rgba(255, 255, 255, 0.04) 46%,
-    rgba(255, 255, 255, 0.4) 100%
-  );
+   Toate umbrele trag IN JOS si putin la dreapta, adica lumina vine din stanga-sus.
+   Daca vreodata se schimba una, se schimba toate: incoerenta sursei de lumina e
+   exact ce face un obiect desenat sa para fals. */
+/* Valorile sunt MASURATE, nu alese din ochi, si merita spus cum. Prima incercare
+   parea rezonabila pe hartie si nu se vedea deloc: sub caseta, cel mai inchis
+   pixel iesea 247 din 255, adica opt trepte sub alb, pe doi pixeli. Pe un ecran
+   obisnuit, nimic.
+   Tinta e ~237, adica vreo 18 trepte, care se citeste ca ridicare fara sa para o
+   pata. Socoteala: o umbra de culoarea #101428 (luminanta 21) la opacitatea
+   efectiva `a` da peste alb 255 - 234a, deci pentru 237 trebuie a ≈ 0,08 chiar
+   sub muchie. De acolo ies valorile de mai jos. */
+.caseta-sigla {
+  background-color: #FFFFFF;
   box-shadow:
-    inset 3px 3px 0.5px -3px rgba(255, 255, 255, 0.95),
-    inset -3px -3px 0.5px -3px rgba(16, 20, 40, 0.35),
-    inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.85),
-    inset -1px -1px 1px -0.5px rgba(16, 20, 40, 0.22),
-    inset 0 0 8px 8px rgba(255, 255, 255, 0.16),
-    inset 0 0 2px 2px rgba(255, 255, 255, 0.1),
-    0 0 6px rgba(16, 20, 40, 0.04),
-    0 2px 8px rgba(16, 20, 40, 0.1),
-    0 0 14px rgba(255, 255, 255, 0.55);
-}
-
-/* 3. LIQUID METAL — inel de metal in jurul unei fete deschise.
-
-   ═══ CE FACE METALUL SA PARA METAL ═══
-
-   Exemplul clientului (`MetalButton`) construieste butonul din TREI straturi
-   suprapuse: un inel exterior aproape negru, un bizou care merge deschis →
-   inchis → deschis pe verticala, si abia apoi fata. Aspectul de metal vine din
-   BIZOU, nu din fata: acel deschis-inchis-deschis pe 2px e o muchie sanfrenata
-   care prinde lumina sus si o pierde jos. Un degrade plat pe toata suprafata,
-   ca in incercarea de dinainte, da un gri inclinat, nu metal.
-
-   ═══ CUM SE FACE INTR-UN SINGUR ELEMENT ═══
-
-   Trei `<div>`-uri imbricate ori de 104 casete ar fi 312 de noduri degeaba.
-   Acelasi rezultat se obtine din doua fonduri si doua zone de decupare:
-     - fondul cu `padding-box` umple doar interiorul chenarului — deci e FATA;
-     - fondul cu `border-box` umple si sub chenar, iar chenarul fiind transparent
-       se vede exact acolo — deci e BIZOUL.
-   Spre deosebire de `border-image`, trucul asta respecta `border-radius`, deci
-   inelul urmareste coltul rotunjit.
-
-   ═══ DE CE FATA RAMANE DESCHISA ═══
-
-   La client fata e gri-mediu (#B9B9B9 → #969696) fiindca textul de deasupra e
-   alb. La noi deasupra stau sigle, multe dintre ele inchise la culoare — pe gri
-   mediu, FAN Courier sau Klarna ar deveni ilizibile. Deci inelul e metal
-   adevarat, cu tot contrastul lui, iar fata ramane deschisa. Metalul se citeste
-   din rama, care e si locul unde se uita ochiul. */
-.caseta-metal {
-  border: 3px solid transparent;
-  background-image:
-    linear-gradient(168deg, #FCFCFD 0%, #F2F3F7 46%, #E7E9F0 100%),
-    linear-gradient(
-      180deg,
-      #FFFFFF 0%,
-      #DDE1E8 14%,
-      #6C7280 34%,
-      #383D49 50%,
-      #6C7280 66%,
-      #D6DAE2 86%,
-      #FDFDFE 100%
-    );
-  background-origin: padding-box, border-box;
-  background-clip: padding-box, border-box;
-  box-shadow:
-    /* Inelul exterior, aproape negru, pe TOATE laturile. Fara el, bizoul se
-       intuneca doar pe stanga si pe dreapta (acolo unde degradeul vertical trece
-       prin mijloc), iar sus si jos ramane alb pe alb — deci rama dispare exact
-       la muchia care se vede prima. La client rolul asta il face invelisul
-       `from-[#000] to-[#A0A0A0]` de sub bizou. */
-    0 0 0 1px rgba(26, 30, 40, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 1px 2px rgba(16, 20, 40, 0.1),
-    0 5px 12px -4px rgba(16, 20, 40, 0.22);
-}
-
-/* 4. RELIEF (3D) — caseta pare ridicata de pe pagina, luminata de sus-stanga.
-
-   Toata iluzia sta in COERENTA sursei de lumina, nu in umbre puternice. Lumina
-   vine din sus-stanga, deci: degradeul e mai deschis in coltul ala, muchia
-   interioara de sus e alba, cea de jos e umbrita, iar umbra exterioara cade in
-   jos si putin la dreapta. Daca una dintre ele se schimba fara celelalte, obiectul
-   se turteste imediat.
-
-   Umbra e pe doua straturi: una scurta si apropiata, care da contactul cu pagina,
-   si una lunga si difuza, care da inaltimea. Una singura arata lipita. */
-.caseta-relief {
-  background-image: linear-gradient(145deg, #FFFFFF 0%, #F4F5F8 55%, #E9EBF1 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 1px 0 0 rgba(255, 255, 255, 0.7),
-    inset 0 -2px 3px rgba(16, 20, 40, 0.06),
-    0 1px 2px rgba(16, 20, 40, 0.06),
-    0 10px 20px -8px rgba(16, 20, 40, 0.2);
+    0 0 0 1px rgba(16, 20, 40, 0.06),
+    0 2px 4px rgba(16, 20, 40, 0.08),
+    0 10px 22px -8px rgba(16, 20, 40, 0.3),
+    inset 0 -1px 0 rgba(16, 20, 40, 0.06);
 }
 
 /* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────

@@ -56,22 +56,6 @@ const GREEN_TEXT = "#12874A";
   scoatere din oferta: About You ramane in `LOGO_GROUPS` si se numara mai jos, la
   „integrari" — doar nu se deseneaza intr-un patrat.
 */
-/**
- * Cele patru tratamente de caseta, de ales unul.
- *
- * Clientul le compara pe pagina si alege (2026-08-07). Cand alege, din harta de
- * mai jos ramane o singura intrare, `stil` dispare din componente, iar celelalte
- * trei clase se sterg din `globals.css`. Desenul fiecareia e explicat acolo.
- */
-export type StilCaseta = "granule" | "sticla" | "metal" | "relief";
-
-const CLASA_STIL: Record<StilCaseta, string> = {
-  granule: "caseta-granule",
-  sticla: "caseta-sticla",
-  metal: "caseta-metal",
-  relief: "caseta-relief",
-};
-
 const BANDA_SUS = LOGOS_CASETA.filter((_, i) => i % 2 === 0);
 const BANDA_JOS = LOGOS_CASETA.filter((_, i) => i % 2 === 1);
 
@@ -123,64 +107,9 @@ function numarDeCopii(nrSigle: number): number {
 const MASCA =
   "linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%)";
 
-/**
- * Filtrul care face refractia sticlei. Se randeaza o SINGURA data pe sectiune;
- * toate casetele il cheama prin `backdrop-filter: url(#sticla-refractie)`.
- *
- * ═══ ASTA E REFRACTIE ADEVARATA, NU O IMITATIE ═══
- *
- * `feDisplacementMap` deplaseaza fiecare pixel din spatele casetei cu o distanta
- * luata dintr-o harta de zgomot — exact ce face o placa de sticla imperfecta cu
- * lumina care trece prin ea. E aceeasi constructie ca in exemplul trimis de
- * client (turbulenta → estompare → deplasare).
- *
- * VERIFICAT IN BROWSER ca merge: `CSS.supports` raspunde „da" si la browserele
- * care ignora `url()` in `backdrop-filter`, deci nu e o proba. Proba a fost o
- * casuta peste un fundal in dungi de 6px: cu filtrul, dungile ies rasucite in
- * valuri; fara el, raman drepte.
- *
- * `scale` e 26, nu 70 ca in exemplu, si e o regula de trei: acolo placa avea
- * ~200px latime, aici caseta are 84. La 70 pe o caseta de 84px, deplasarea ar
- * lua pixeli de dincolo de marginea ei si ar iesi o pata, nu o sticla.
- */
-function FiltruSticla() {
-  return (
-    <svg aria-hidden width="0" height="0" className="absolute">
-      <defs>
-        <filter
-          id="sticla-refractie"
-          x="0%"
-          y="0%"
-          width="100%"
-          height="100%"
-          colorInterpolationFilters="sRGB"
-        >
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.045"
-            numOctaves="1"
-            seed="4"
-            result="zgomot"
-          />
-          {/* Fara estompare, deplasarea iese granuloasa in loc de unduita. */}
-          <feGaussianBlur in="zgomot" stdDeviation="2" result="zgomotMoale" />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="zgomotMoale"
-            scale="26"
-            xChannelSelector="R"
-            yChannelSelector="B"
-          />
-        </filter>
-      </defs>
-    </svg>
-  );
-}
-
-export function IntegrationsBenzi({ stil = "granule" }: { stil?: StilCaseta }) {
+export function IntegrationsBenzi() {
   return (
     <section className="bg-white py-20 lg:py-28">
-      {stil === "sticla" && <FiltruSticla />}
       {/* ── Antetul, ingust si centrat ────────────────────────────────────── */}
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         {/*
@@ -265,7 +194,6 @@ export function IntegrationsBenzi({ stil = "granule" }: { stil?: StilCaseta }) {
           sens="stanga"
           durata="92s"
           eticheta="Servicii integrate, partea întâi"
-          stil={stil}
         />
         {/*
           Durata ALTA, nu din capriciu: la aceeasi durata cele doua benzi ar avea
@@ -278,7 +206,6 @@ export function IntegrationsBenzi({ stil = "granule" }: { stil?: StilCaseta }) {
           sens="dreapta"
           durata="76s"
           eticheta="Servicii integrate, partea a doua"
-          stil={stil}
           decalata
         />
       </div>
@@ -296,13 +223,17 @@ export function IntegrationsBenzi({ stil = "granule" }: { stil?: StilCaseta }) {
         */}
         <p className="mt-10 text-center text-[14px] leading-[1.6] text-ink-2 sm:mt-12">
           {/*
-            Text dat de client (2026-08-07), cu „peste 25" in loc de numarul exact.
-            Numaratoarea venea inainte din `logos.ts`, ca sa nu ramana in urma cand
-            se adauga o sigla; clientul a cerut sa nu mai apara nicio cifra exacta.
-            „Peste 25" e si formularea din restul site-ului (`/integrari`, meniul),
-            deci nu se contrazic intre ele.
+            Text dat de client, cuvant cu cuvant (2026-08-07), si e a treia forma:
+            intai numarul exact derivat din `logos.ts`, apoi „peste 25", acum fara
+            nicio cifra. A cerut de fiecare data mai putina precizie, deci nu o
+            duce inapoi la un numar.
+
+            De stiut: restul site-ului (`/integrari`, mega-meniul) spune inca
+            „peste 25 de integrari". Nu se contrazic — „zeci" le cuprinde — dar
+            daca se uniformizeaza vreodata, aici e locul care s-a schimbat ultima
+            data.
           */}
-          Peste 25 de integrări disponibile.{" "}
+          Zeci de integrări disponibile pentru magazinul tău online.{" "}
           <Link
             href="/integrari"
             className="font-medium underline decoration-1 underline-offset-[5px] transition-opacity duration-200 hover:opacity-70"
@@ -332,7 +263,6 @@ function Banda({
   sens,
   durata,
   eticheta,
-  stil,
   decalata,
 }: {
   chei: LogoKey[];
@@ -341,8 +271,6 @@ function Banda({
   durata: string;
   /** Ce aude cine nu vede banda. Doar prima copie e anuntata. */
   eticheta: string;
-  /** Tratamentul casetelor. Vezi `StilCaseta`. */
-  stil: StilCaseta;
   decalata?: boolean;
 }) {
   /* Per banda, nu global: cele doua au lungimi diferite (14 si 13), deci pot
@@ -351,24 +279,9 @@ function Banda({
 
   return (
     <div
-      className="relative overflow-hidden"
+      className="overflow-hidden"
       style={{ maskImage: MASCA, WebkitMaskImage: MASCA }}
     >
-      {/*
-        FUNDALUL DE SUB BANDA, si exista numai pentru sticla.
-
-        Fara el, „liquid glass" e o imposibilitate fizica: sticla se vede pentru
-        ca refracta si coloreaza ce e IN SPATELE ei, iar in spatele casetelor
-        noastre e alb curat. Sticla peste alb arata exact ca albul. Toate
-        exemplele trimise de client pun placa de sticla peste o fotografie.
-
-        Deci banda primeste o lumina foarte slaba dedesubt — trei pete moi, verde
-        si rece — peste care casetele chiar au ce refracta. Restul paginii ramane
-        alb; se coloreaza doar fasia de sub sigle, si inca foarte putin.
-      */}
-      {stil === "sticla" && (
-        <div aria-hidden className="caseta-sticla-fundal" />
-      )}
       <div
         className={cn(
           "relative",
@@ -414,7 +327,7 @@ function Banda({
                   */
                   className="pr-3 sm:pr-4"
                 >
-                  <Caseta cheie={cheie} stil={stil} />
+                  <Caseta cheie={cheie} />
                 </li>
               ))}
             </ul>
@@ -434,37 +347,17 @@ function Banda({
  * `object-contain`, siglele foarte late se micsoreaza singure pana intra.
  * Se schimba DOAR odata cu latimea casetei de pe telefon.
  */
-function Caseta({ cheie, stil }: { cheie: LogoKey; stil: StilCaseta }) {
+function Caseta({ cheie }: { cheie: LogoKey }) {
   return (
     /*
-      Clasa de stil INLOCUIESTE `bg-tint-2`, nu se adauga peste el: fiecare dintre
-      cele patru isi aduce singura fondul. Socoteala si capcanele fiecareia sunt
-      in globals.css. Textura sta peste tot in `background`, deci SUB sigla — nu
-      texturaza logo-urile.
+      `caseta-sigla` ADUCE albul si umbrele; nu se pune `bg-white` langa ea.
+      Socoteala umbrei — de ce patru straturi si nu unul — e in globals.css.
+
+      S-au incercat aici patru tratamente (granule, sticla cu refractie, crom,
+      relief) si clientul le-a respins pe toate (2026-08-07). A cerut alb curat,
+      deosebit de pagina doar prin umbra. Deci nimic in fond.
     */
-    <div
-      className={cn(
-        "flex h-[68px] w-[68px] items-center justify-center rounded-[16px] sm:h-[84px] sm:w-[84px]",
-        CLASA_STIL[stil],
-      )}
-      /*
-        REFRACTIA STA INLINE, NU IN CLASA, si nu din lene.
-        Pusa in `globals.css`, `backdrop-filter: url(#…)` e STEARSA de build —
-        verificat: regula ajunge in pagina cu `background-color`,
-        `background-image` si `box-shadow`, si fara nicio urma de
-        `backdrop-filter`. Aceeasi valoare pusa pe element supravietuieste si
-        chiar deformeaza. Deci nu o muta inapoi in clasa „ca sa fie curat";
-        se pierde tacut si ramane doar o caseta translucida.
-      */
-      style={
-        stil === "sticla"
-          ? {
-              backdropFilter: "url(#sticla-refractie)",
-              WebkitBackdropFilter: "url(#sticla-refractie)",
-            }
-          : undefined
-      }
-    >
+    <div className="caseta-sigla flex h-[68px] w-[68px] items-center justify-center rounded-[16px] sm:h-[84px] sm:w-[84px]">
       <Logo k={cheie} area={LOGO_AREA.tile} maxWidth={56} />
     </div>
   );

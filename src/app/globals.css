@@ -250,84 +250,145 @@
     0 34px 64px -28px rgba(10, 10, 10, 0.28);
 }
 
-/* ─── Pe telefon: cardul se retrage cand iese pe sus ─────────────────────────
+/* ─── Pe telefon: rândul. Un singur card e „la rând", și se vede care ────────
 
-   Pe telefon nu exista teanc - un card pinat mai inalt decat ecranul isi pierde
-   permanent partea de jos, socoteala e la `STACK_TOP` in `Features.tsx`. Dar
-   miscarea nu trebuie pierduta odata cu lipirea: cardul se poate micsora si stinge
-   in timp ce iese pe sus, cat derulezi normal peste el. Se citeste inrudit cu
-   teancul de pe desktop, doar ca nu agata nimic, deci nu taie nimic.
+   Pe telefon nu există teanc: un card pinat mai înalt decât fereastra își pierde
+   permanent partea de jos, socoteala e la `STACK_TOP` în `Features.tsx`. Aici nu
+   se pinează nimic și nu se atinge niciodată poziția derulării.
 
-   ═══ AICI CHIAR MERGE `view()`, SI DE ASTA ═══
+   ═══ DE CE S-A SCHIMBAT MECANISMUL, NU DOAR VALORILE ═══
 
-   `animation-timeline: view()` a fost incercat de la inceput pentru teanc si nu
-   mergea: pe un element PINAT cronologia ramane inghetata, iar mutata pe un
-   container din jur rupe lipirea. Nota lunga e mai sus. Pe telefon insa cardul NU
-   mai e pinat, deci exact obstacolul ala a disparut si cronologia merge nativ.
-   Zero JavaScript la derulare, si totul pe compozitor.
+   Aici a fost înainte o cronologie de derulare (`animation-timeline: view()`) care
+   micșora și stingea cardul cât ieșea pe sus. Clientul: „nu prea se vede".
+   Avea dreptate din trei motive, și doar unul era de calibrare:
 
-   ═══ DE UNDE PANA UNDE ═══
+   1. BROWSERUL, și ăsta e cel mare. `animation-timeline` cere Chrome 115+ sau
+      Safari 26+. Pe orice iPhone rămas în urmă cu actualizările nu se întâmpla
+      NIMIC. Nu era discret, era absent. Aici nu se mai folosește deloc pe telefon:
+      un prag citit în JavaScript plus o tranziție merg din Safari 12.1 și Chrome
+      51, adică practic tot traficul.
+   2. LOCUL. Rula pe cardul care PLEACĂ. Un card care se stinge cât iese pe sus e
+      de nedeosebit de derulare simplă — ochiul urmărește cardul care VINE, iar
+      acela n-avea nicio stare. Acum evenimentul cade în banda de mijloc.
+   3. CEASUL. O cronologie de derulare e trasă de deget: efectul merge cu viteza
+      derulării și n-are bătaie. O tranziție declanșată la prag are ÎNTOTDEAUNA
+      200ms. De acolo vine caracterul decis cerut de client, și el nu poate ieși
+      dintr-o cronologie de derulare.
 
-   `exit` incepe cand marginea de sus a cardului atinge marginea de sus a
-   ferestrei si se termina cand ii trece si marginea de jos - adica exact cat ii
-   ia cardului sa iasa complet pe sus.
+   ═══ CE SE VEDE, MĂSURAT ═══
 
-   Nu se stinge pe tot intervalul, ci de la 40% incolo. Cardul are pe telefon cam
-   cat un ecran intreg; daca ar incepe sa se stinga de la 0% ar palii chiar in
-   timp ce e citit. La 40% jumatate din el a plecat deja si urmatorul se vede bine
-   de sub el - abia atunci se citeste ca „pleaca", nu ca „se strica".
-   Se opreste la 95%, nu la 100%, ca stingerea sa se si vada; ultima faramitura
-   e oricum sub bara de sus.
+   Pe alb, singurul reper între două carduri e CUSĂTURA dintre ele. Distanța de
+   repaus e 32px (`mb-8`). Cu un singur card ridicat la un moment dat:
+     cardul de sus e la rând → 32 + 16 = 48px
+     cardul de jos e la rând → 32 − 16 = 16px
+   Deci golul se strânge la o treime, în 200ms, la mijlocul ecranului. Amândouă
+   cardurile se mișcă: unul coboară la loc, celălalt urcă. În aceeași bătaie se
+   aprinde și umbra adâncă a cardului nou — iar umbrele noastre au deplasare în
+   JOS, deci se văd tocmai la cusătură. Două semnale, în același loc, deodată.
 
-   Micsorarea e 0,93, nu o valoare aleasa din ochi: pe desktop cardul acoperit se
-   duce 130px in spate intr-o perspectiva de 1600, ceea ce inseamna 1600/1730 =
-   0,925. Deci se micsoreaza cu exact cat pe desktop. Ce NU se pastreaza e
-   inclinarea de 5 grade: pe desktop cardul e mic si inclinarea da adancime, pe
-   telefon ar roti un dreptunghi cat tot ecranul si ar iesi o deformare.
+   ═══ CE NU SE ATINGE NICIODATĂ ═══
 
-   Origine la mijloc: cardul se strange spre centrul lui, care la momentul ala e
-   deja deasupra ferestrei, deci bucata ramasa vizibila urca odata cu micsorarea.
-   Asta se citeste ca „se departeaza", nu ca „se turteste pe loc".
+   Numai ÎNVELIȘUL se schimbă: ridicarea și umbra. NU opacitatea conținutului, nu
+   scara. Motivul e măsurat, nu de principiu: `--color-ink-2` (#52525B) la o
+   opacitate de 0,34 dă 1,74:1 pe alb, iar pragul e 4,5:1. Orice variantă care
+   decolorează un card produce în același timp text ilizibil și un buton-fantomă
+   încă apăsabil. Categoria asta de defecte nu există aici prin construcție.
 
-   ═══ CE SE INTAMPLA UNDE NU E SUPORTAT ═══
+   ═══ STAREA IMPLICITĂ E CEA BUNĂ ═══
 
-   `@supports` fiindca `animation-timeline` e Chrome 115+ si Safari 26+. Pe un
-   telefon mai vechi nu se intampla nimic: cardurile curg normal, intregi, exact ca
-   inainte de regula asta. E podoaba, nu structura, deci nu se pierde nimic. */
-@keyframes feature-leave {
-  from {
-    transform: scale(1);
-    opacity: 1;
-  }
-  to {
-    transform: scale(0.93);
-    opacity: 0;
-  }
-}
+   Fără `data-rand` și fără `.rand-live` — adică fără JavaScript, înainte de
+   hidratare, sau dacă ceva crapă — toate cardurile au umbra deplină și niciunul
+   nu e ridicat. Exact cum arăta pagina înainte de regula asta. JavaScript-ul doar
+   SCADE accentul de pe cardurile care nu sunt la rând; nu poate ascunde nimic.
+
+   ═══ DE CE NU SCROLL-SNAP ═══
+
+   Evaluat și respins, ca decizie înregistrată, să nu se repropună: singurul
+   scroller e rădăcina paginii, deci `scroll-snap-type` ar prinde și hero, și
+   Problema, și Prețuri; iar meniul face derulare lină la ancore
+   (`SiteHeader.tsx:173`, `Navbar.tsx:65`), pe care snap-ul o smucește. Un
+   scroller propriu ar însemna derulare imbricată pe telefon. Aici nu se atinge
+   NICIODATĂ poziția derulării: deplasarea maximă e 16px și e `transform`, deci
+   nu mișcă aranjarea și niciun buton nu poate deveni de neatins.
+   ─────────────────────────────────────────────────────────────────────────── */
 
 @media (max-width: 1023.98px) {
-  @supports (animation-timeline: view()) {
-    .feature-card {
-      transform-origin: 50% 50%;
-      /* Longhand, nu scurtatura `animation`: scurtatura RESETEAZA
-         `animation-timeline` la `auto`, deci ar sterge exact linia de dedesubt.
-         E o capcana tacuta - nu da nicio eroare, doar nu se intampla nimic. */
-      animation-name: feature-leave;
-      animation-timing-function: linear;
-      animation-fill-mode: both;
-      animation-timeline: view();
-      animation-range: exit 40% exit 95%;
-    }
+  /* Fără teanc nu e nevoie de adâncime. Un `translateZ` într-o perspectivă ține
+     cardul pe un strat 3D, iar pe iOS textul de pe un strat 3D se rasterizează
+     mai moale — de cinci ori, degeaba. */
+  .feature-slot {
+    perspective: none;
+  }
+
+  .feature-card {
+    /* Ancoră pentru umbra de pe `::after`. */
+    position: relative;
+    /* Context de stivuire fără `transform`, ca `::after` cu `z-index: -1` să
+       rămână ÎN card în loc să coboare sub fundalul secțiunii. */
+    isolation: isolate;
+    /* Anulează `translateZ/rotateX` de pe desktop. `--covered` e oricum 0 aici,
+       dar un transform identitate tot promovează un strat. */
+    transform: none;
+    /* Plasă: dacă `--covered` ar supraviețui vreodată unei treceri
+       desktop → telefon, regula de bază de mai sus ar da carduri INVIZIBILE. */
+    opacity: 1;
+  }
+
+  /* Umbra pleacă de pe card pe un pseudo-element, ca să se poată stinge ieftin:
+     `opacity` merge pe compozitor, un `box-shadow` animat repictează la fiecare
+     cadru. Aceleași trei straturi ca pe desktop. */
+  .feature-card-shadow {
+    box-shadow: none;
+  }
+
+  .feature-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow:
+      0 1px 1px rgba(10, 10, 10, 0.04),
+      0 8px 20px -8px rgba(10, 10, 10, 0.1),
+      0 34px 64px -28px rgba(10, 10, 10, 0.28);
+  }
+
+  /* `.rand-live` se pune abia după prima așezare, ca o reîncărcare în mijlocul
+     secțiunii să nu pornească o bătaie gratuită la încărcare. */
+  .rand-live .feature-card,
+  .rand-live .feature-card::after {
+    transition:
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .rand-live .feature-card[data-rand="activ"] {
+    transform: translateY(-16px);
+  }
+
+  /* Nu zero: un card fără nicio umbră arată lipit pe pagină, nu „în spate". */
+  .rand-live .feature-card[data-rand="inert"]::after {
+    opacity: 0.2;
   }
 }
 
+/* Blocul ăsta e ULTIMUL dinadins, și selectorii sunt scriși lung dinadins.
+   `.rand-live .feature-card[data-rand="inert"]::after` are specificitatea (0,3,1);
+   un simplu `.feature-card` (0,1,0) ar fi pierdut în fața lui și cardul ar fi
+   rămas stins pentru cine a cerut mai puțină mișcare. */
 @media (prefers-reduced-motion: reduce) {
-  .feature-card {
+  .feature-card,
+  .rand-live .feature-card[data-rand="activ"] {
     transform: none;
     opacity: 1;
-    /* Si cronologia de derulare de mai sus: o animatie bate o declaratie
-       obisnuita, deci fara asta cardul s-ar stinge in continuare pe telefon. */
     animation-name: none;
+    transition: none;
+  }
+
+  .feature-card::after,
+  .rand-live .feature-card[data-rand="inert"]::after {
+    opacity: 1;
+    transition: none;
   }
 }
 

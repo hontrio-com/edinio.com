@@ -173,8 +173,16 @@ function Card({
       data-feature-card
       className={cn(
         "feature-card feature-card-shadow rounded-[16px] border border-dashed bg-white p-[7px]",
-        /* Distanta dintre carduri da si distanta de derulare dintre ele. */
-        !last && "mb-6 lg:mb-8",
+        /*
+          Distanta dintre carduri da si distanta de derulare dintre ele.
+
+          Era 24px pe telefon si 32 pe desktop; acum 32 peste tot, si nu din
+          simetrie. Pe telefon cardul la rand se ridica 16px, deci cusatura dintre
+          doua carduri oscileaza intre 32+16 si 32-16. La 24 de baza ar fi coborat
+          la 8px, iar doua rame punctate la 8px una de alta arata inghesuit.
+          Vezi `.rand-live` in globals.css.
+        */
+        !last && "mb-8",
       )}
       style={{ borderColor: DASH_ON_WHITE }}
     >

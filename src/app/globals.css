@@ -250,10 +250,84 @@
     0 34px 64px -28px rgba(10, 10, 10, 0.28);
 }
 
+/* ─── Pe telefon: cardul se retrage cand iese pe sus ─────────────────────────
+
+   Pe telefon nu exista teanc - un card pinat mai inalt decat ecranul isi pierde
+   permanent partea de jos, socoteala e la `STACK_TOP` in `Features.tsx`. Dar
+   miscarea nu trebuie pierduta odata cu lipirea: cardul se poate micsora si stinge
+   in timp ce iese pe sus, cat derulezi normal peste el. Se citeste inrudit cu
+   teancul de pe desktop, doar ca nu agata nimic, deci nu taie nimic.
+
+   ═══ AICI CHIAR MERGE `view()`, SI DE ASTA ═══
+
+   `animation-timeline: view()` a fost incercat de la inceput pentru teanc si nu
+   mergea: pe un element PINAT cronologia ramane inghetata, iar mutata pe un
+   container din jur rupe lipirea. Nota lunga e mai sus. Pe telefon insa cardul NU
+   mai e pinat, deci exact obstacolul ala a disparut si cronologia merge nativ.
+   Zero JavaScript la derulare, si totul pe compozitor.
+
+   ═══ DE UNDE PANA UNDE ═══
+
+   `exit` incepe cand marginea de sus a cardului atinge marginea de sus a
+   ferestrei si se termina cand ii trece si marginea de jos - adica exact cat ii
+   ia cardului sa iasa complet pe sus.
+
+   Nu se stinge pe tot intervalul, ci de la 40% incolo. Cardul are pe telefon cam
+   cat un ecran intreg; daca ar incepe sa se stinga de la 0% ar palii chiar in
+   timp ce e citit. La 40% jumatate din el a plecat deja si urmatorul se vede bine
+   de sub el - abia atunci se citeste ca „pleaca", nu ca „se strica".
+   Se opreste la 95%, nu la 100%, ca stingerea sa se si vada; ultima faramitura
+   e oricum sub bara de sus.
+
+   Micsorarea e 0,93, nu o valoare aleasa din ochi: pe desktop cardul acoperit se
+   duce 130px in spate intr-o perspectiva de 1600, ceea ce inseamna 1600/1730 =
+   0,925. Deci se micsoreaza cu exact cat pe desktop. Ce NU se pastreaza e
+   inclinarea de 5 grade: pe desktop cardul e mic si inclinarea da adancime, pe
+   telefon ar roti un dreptunghi cat tot ecranul si ar iesi o deformare.
+
+   Origine la mijloc: cardul se strange spre centrul lui, care la momentul ala e
+   deja deasupra ferestrei, deci bucata ramasa vizibila urca odata cu micsorarea.
+   Asta se citeste ca „se departeaza", nu ca „se turteste pe loc".
+
+   ═══ CE SE INTAMPLA UNDE NU E SUPORTAT ═══
+
+   `@supports` fiindca `animation-timeline` e Chrome 115+ si Safari 26+. Pe un
+   telefon mai vechi nu se intampla nimic: cardurile curg normal, intregi, exact ca
+   inainte de regula asta. E podoaba, nu structura, deci nu se pierde nimic. */
+@keyframes feature-leave {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.93);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  @supports (animation-timeline: view()) {
+    .feature-card {
+      transform-origin: 50% 50%;
+      /* Longhand, nu scurtatura `animation`: scurtatura RESETEAZA
+         `animation-timeline` la `auto`, deci ar sterge exact linia de dedesubt.
+         E o capcana tacuta - nu da nicio eroare, doar nu se intampla nimic. */
+      animation-name: feature-leave;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: view();
+      animation-range: exit 40% exit 95%;
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .feature-card {
     transform: none;
     opacity: 1;
+    /* Si cronologia de derulare de mai sus: o animatie bate o declaratie
+       obisnuita, deci fara asta cardul s-ar stinge in continuare pe telefon. */
+    animation-name: none;
   }
 }
 

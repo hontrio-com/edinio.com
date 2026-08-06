@@ -6,7 +6,6 @@ import {
   FEATURE_IMAGE_WIDTHS,
   type FeatureCard,
 } from "@/lib/website/features";
-import { PROVIDER_LOGOS, logoHeight, type LogoKey } from "@/lib/website/logos";
 import { FeatureStack } from "./FeatureStack";
 import { SectionEyebrow } from "./SectionEyebrow";
 
@@ -125,20 +124,16 @@ function Card({ card, last }: { card: FeatureCard; last: boolean }) {
             aliniata cu prima linie de text, nu centrata pe randul intreg — la
             elementele care se rup in doua randuri se vedea diferenta.
           */}
-          <ul className="mt-6 space-y-3">
+          <ul className="mt-6 space-y-2">
             {card.checks.map((check) => (
-              <li key={check.text}>
-                <span className="flex gap-2 text-[14.5px] leading-[1.45] text-ink-2">
-                  <Check
-                    className="mt-[3px] h-3.5 w-3.5 shrink-0"
-                    style={{ color: CHECK_GREEN }}
-                    strokeWidth={3}
-                    aria-hidden
-                  />
-                  {check.text}
-                </span>
-
-                {check.logos ? <LogoRow keys={check.logos} /> : null}
+              <li key={check} className="flex gap-2 text-[14.5px] leading-[1.45] text-ink-2">
+                <Check
+                  className="mt-[3px] h-3.5 w-3.5 shrink-0"
+                  style={{ color: CHECK_GREEN }}
+                  strokeWidth={3}
+                  aria-hidden
+                />
+                {check}
               </li>
             ))}
           </ul>
@@ -161,43 +156,6 @@ function Card({ card, last }: { card: FeatureCard; last: boolean }) {
         <ImagePanel card={card} />
       </div>
     </article>
-  );
-}
-
-/**
- * Rândul de sigle de sub o bifă.
- *
- * Fiecare siglă își primește ÎNĂLȚIMEA din raportul ei, nu una comună. Motivul e
- * explicat pe larg în `lib/website/logos.ts`; pe scurt: ochiul compară suprafața
- * ocupată, nu înălțimea, iar la înălțime egală un cuvânt lung pare de câteva ori
- * mai mare decât o siglă pătrată.
- *
- * Rândul e indentat cât bifa plus spațiul ei, ca siglele să înceapă sub text, nu
- * sub bifă.
- *
- * `<img>` simplu, ca la imaginile cardurilor: loader-ul proiectului oricum lasă
- * neatinse fișierele locale, iar aici nici n-ar avea ce optimiza — sunt SVG-uri
- * și WebP-uri de 3-6KB, deja la mărimea potrivită.
- */
-function LogoRow({ keys }: { keys: LogoKey[] }) {
-  return (
-    <span className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 ps-[22px]">
-      {keys.map((key) => {
-        const logo = PROVIDER_LOGOS[key];
-        return (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={key}
-            src={logo.src}
-            alt={logo.name}
-            style={{ height: logoHeight(logo.ratio) }}
-            loading="lazy"
-            decoding="async"
-            className="w-auto"
-          />
-        );
-      })}
-    </span>
   );
 }
 

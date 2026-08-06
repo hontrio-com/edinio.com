@@ -1,5 +1,3 @@
-import { CURIERI, EMAIL, FACTURARE, PLATI, SMS, type LogoKey } from "./logos";
-
 /**
  * Cardurile de funcții de pe pagina de acasă.
  *
@@ -28,12 +26,6 @@ import { CURIERI, EMAIL, FACTURARE, PLATI, SMS, type LogoKey } from "./logos";
  * aceeași redimensionare în trei pași. Cât `base` lipsește, se vede `hint`-ul.
  */
 
-export interface FeatureCheck {
-  text: string;
-  /** Siglele furnizorilor de langa bifa. Vezi `lib/website/logos.ts`. */
-  logos?: LogoKey[];
-}
-
 export interface FeatureCard {
   /** Cheie stabilă pentru `key`, chiar dacă se schimbă titlul. */
   id: string;
@@ -49,7 +41,7 @@ export interface FeatureCard {
    * jos, într-o singură trecere, în loc să oblige ochiul să sară de la o pastilă
    * la alta. Textele au rămas neatinse.
    */
-  checks: FeatureCheck[];
+  checks: string[];
   /**
    * Butonul cardului. Fiecare card trimite la pagina LUI, nu la una comună —
    * altfel butonul e ornament, nu o cale mai departe.
@@ -74,12 +66,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Lansează un magazin online complet în doar câteva minute.",
     description:
       "Tot ce ai nevoie pentru a începe să vinzi online este deja pregătit: produse, categorii, variante, checkout și administrare simplă.",
-    checks: [
-      { text: "Magazin complet" },
-      { text: "Design modern" },
-      { text: "Mobile Friendly" },
-      { text: "Gata de vânzare" },
-    ],
+    checks: ["Magazin complet", "Design modern", "Mobile Friendly", "Gata de vânzare"],
     cta: { label: "Vezi magazinul online", href: "/magazin-online" },
     image: {
       base: "/features/magazin",
@@ -94,11 +81,11 @@ export const FEATURE_CARDS: FeatureCard[] = [
     description:
       "Curieri, plăți online, facturare, marketplace-uri și marketing. Totul este integrat direct în Edinio.",
     checks: [
-      { text: "Curieri", logos: CURIERI },
-      { text: "Plată cu cardul", logos: PLATI },
-      { text: "Facturare", logos: FACTURARE },
-      { text: "Integrare cu marketplace-urile tale preferate" },
-      { text: "Marketing", logos: EMAIL },
+      "Curieri",
+      "Plată cu cardul",
+      "Facturare",
+      "Integrare cu marketplace-urile tale preferate",
+      "Marketing",
     ],
     cta: { label: "Vezi toate integrările", href: "/integrari" },
     image: {
@@ -113,13 +100,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Economisește timp cu automatizări inteligente.",
     description:
       "Facturile, AWB-urile, notificările și multe alte procese repetitive se realizează automat.",
-    checks: [
-      { text: "AWB automat", logos: CURIERI },
-      { text: "Facturi automate", logos: FACTURARE },
-      { text: "Email", logos: EMAIL },
-      { text: "SMS", logos: SMS },
-      { text: "Automatizări" },
-    ],
+    checks: ["AWB automat", "Facturi automate", "Email", "SMS", "Automatizări"],
     /* Nu exista pagina „Automatizari". `/curieri` e cea mai apropiata: AWB-ul
        generat automat e chiar prima automatizare din lista. */
     cta: { label: "Vezi curierii și AWB automat", href: "/curieri" },
@@ -136,11 +117,11 @@ export const FEATURE_CARDS: FeatureCard[] = [
     description:
       "Folosește funcții dedicate comerțului online pentru a atrage clienți și pentru a crește rata de conversie.",
     checks: [
-      { text: "Coșuri abandonate" },
-      { text: "Cupoane" },
-      { text: "Email Marketing", logos: EMAIL },
-      { text: "SMS Marketing", logos: SMS },
-      { text: "Wheel of Fortune" },
+      "Coșuri abandonate",
+      "Cupoane",
+      "Email Marketing",
+      "SMS Marketing",
+      "Wheel of Fortune",
     ],
     /* CEA MAI SLABA POTRIVIRE din cele cinci, si merita stiut. Cardul e despre
        unelte de vanzare — cosuri abandonate, cupoane, marketing — iar
@@ -160,13 +141,7 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Tu vinzi. Noi ne ocupăm de restul.",
     description:
       "Actualizările, securitatea, mentenanța și asistența sunt incluse permanent, fără costuri suplimentare.",
-    checks: [
-      { text: "Mentenanță gratuită" },
-      { text: "Actualizări" },
-      { text: "Backup" },
-      { text: "Securitate" },
-      { text: "Suport" },
-    ],
+    checks: ["Mentenanță gratuită", "Actualizări", "Backup", "Securitate", "Suport"],
     cta: { label: "Vezi ce include mentenanța", href: "/mentenanta-gratuita" },
     image: {
       base: "/features/mentenanta",

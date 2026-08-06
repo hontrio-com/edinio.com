@@ -48,6 +48,34 @@ const STACK_TOP = 96;
  */
 const CHECK_GREEN = "#12874A";
 
+/**
+ * Culoarea ramei punctate din jurul cardului.
+ *
+ * NU `--color-hairline` (#EAEAEE), deși aia e culoarea liniilor noastre de 1px.
+ * O linie PUNCTATĂ are cam jumătate din lungime goală, deci la aceeași culoare
+ * cântărește vizibil mai puțin decât una continuă și se pierde pe alb. #DCDCE3 e
+ * același ton, dus destul de închis cât să ajungă la aceeași diferență de
+ * luminanță pe care o are rama modelului, ~36.
+ *
+ * Inelul pastilelor de la bife e o altă poveste și stă în `globals.css`, la
+ * `.feature-check-ring`: acolo linia e pe un CERC, unde se pierde mult mai mult,
+ * și are nevoie de două valori după densitatea ecranului.
+ */
+const DASH_ON_WHITE = "#DCDCE3";
+
+/**
+ * Fondul jumătății cu text.
+ *
+ * NU `--color-tint-2` (#F5F5F7), deși ăla era la îndemână. E cu doar 10/255 sub
+ * alb, adică 4%, iar la atât pastilele albe ale bifelor DISPAR — rămâne doar bifa
+ * verde plutind, verificat pe captură. Modelul își ține panoul la 7% sub cardul
+ * din jur (#EEEAE6 pe #F7F5F3) și tocmai de aia i se văd pastilele.
+ *
+ * #F0F0F4 e același ton rece ca restul scării noastre, dus la 6% sub alb: destul
+ * cât să se desprindă pastilele, și tot 94% alb.
+ */
+const PANEL = "#F0F0F4";
+
 export function Features() {
   return (
     <section className="bg-white">
@@ -79,7 +107,12 @@ export function Features() {
           <FeatureStack>
             {FEATURE_CARDS.map((card, index) => (
               <div key={card.id} className="feature-slot sticky" style={{ top: STACK_TOP }}>
-                <Card card={card} last={index === FEATURE_CARDS.length - 1} />
+                <Card
+                  card={card}
+                  last={index === FEATURE_CARDS.length - 1}
+                  /* Al doilea, al patrulea... au imaginea in stanga. Vezi `Card`. */
+                  flipped={index % 2 === 1}
+                />
               </div>
             ))}
           </FeatureStack>
@@ -89,141 +122,239 @@ export function Features() {
   );
 }
 
-function Card({ card, last }: { card: FeatureCard; last: boolean }) {
+/**
+ * Un card de funcție.
+ *
+ * ═══ DESENUL ═══
+ *
+ * Sunt trei straturi, unul in altul, si asta e tot secretul:
+ *
+ *   1. Rama punctata, alba, cu colturi de 16px. Doar o rama - nu are continut.
+ *   2. La 7px inauntru, un bloc cu colturi de 10px, taiat (`overflow-hidden`).
+ *   3. In bloc, doua jumatati LIPITE: textul pe fond gri, imaginea pana in
+ *      margine. Nu au colturi proprii; le taie blocul de deasupra.
+ *
+ * Razele sunt concentrice, nu alese de mana: 16 afara, minus 7 de spatiu, da 9
+ * inauntru (rotunjit la 10). Cand raportul asta se strica, coltul interior pare
+ * ori prea ascutit, ori umflat fata de cel exterior.
+ *
+ * Faptul ca blocul din mijloc taie totul rezolva singur si telefonul: acolo
+ * jumatatile se aseaza una sub alta, iar rotunjirea trece de la stanga/dreapta la
+ * sus/jos fara nicio regula in plus.
+ *
+ * ═══ DE CE FONDUL GRI PE JUMATATEA CU TEXT ═══
+ *
+ * Fara el nu se vede nimic din desen: rama e alba, cardul e alb, pagina e alba.
+ * Griul (`--color-tint-2`, #F5F5F7) e cu 4% mai inchis decat albul - exact
+ * distanta pe care o are si modelul intre panoul lui si cardul din jur. Tot el
+ * face sa se vada pastilele albe ale bifelor.
+ *
+ * ═══ BIFELE STAU JOS ═══
+ *
+ * `justify-between`: titlul si descrierea sus, bifele si butonul jos. Nu e o
+ * asezare decorativa - inaltimea jumatatii cu text o da imaginea de langa, iar
+ * daca lista ar curge imediat sub descriere ar ramane un gol mare dedesubt.
+ * Asa golul e la mijloc, unde se citeste ca aer, nu ca spatiu ramas.
+ *
+ * ═══ SE SCHIMBA PARTEA LA FIECARE AL DOILEA ═══
+ *
+ * `flipped` muta imaginea in stanga. Doar de la `lg` in sus; pe telefon textul
+ * ramane INTOTDEAUNA primul, altfel unele carduri s-ar deschide cu o poza fara
+ * sa spuna despre ce e vorba.
+ */
+function Card({
+  card,
+  last,
+  flipped,
+}: {
+  card: FeatureCard;
+  last: boolean;
+  flipped: boolean;
+}) {
   return (
     <article
       data-feature-card
       className={cn(
-        "feature-card feature-card-shadow overflow-hidden rounded-[24px] border border-hairline bg-white",
+        "feature-card feature-card-shadow rounded-[16px] border border-dashed bg-white p-[7px]",
         /* Distanta dintre carduri da si distanta de derulare dintre ele. */
         !last && "mb-6 lg:mb-8",
       )}
+      style={{ borderColor: DASH_ON_WHITE }}
     >
-      <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center lg:gap-14 lg:p-10">
-        {/* ── Stânga: textul ── */}
-        <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.09em] text-ink-3">
-            {card.kicker}
-          </p>
+      {/*
+        Coloanele NU sunt egale: imaginii ii revine 1,12 din 2, textului 0,88.
+        Motivul e la `ImagePanel` - imaginile noastre sunt 4:3 si trebuie sa
+        incapa intregi pe inaltimea data de textul de langa.
 
-          <h3 className="mt-4 text-[26px] font-bold leading-[1.14] tracking-[-0.03em] text-ink sm:text-[32px]">
-            {card.title}
-          </h3>
+        Sabloanele sunt DOUA, si asta a fost o eroare pe care am prins-o abia
+        masurand: `order` schimba unde se ASEAZA jumatatile, nu cat de late sunt
+        coloanele. Pe cardurile intoarse imaginea nimerea in coloana ingusta si
+        iesea mai mica decat textul. Deci se intoarce si sablonul.
+      */}
+      <div
+        className={cn(
+          "grid overflow-hidden rounded-[10px]",
+          flipped
+            ? "lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]"
+            : "lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]",
+        )}
+      >
+        {/* ── Textul ── */}
+        <div
+          data-card-text
+          className={cn(
+            "flex flex-col justify-between p-6 sm:p-8",
+            flipped && "lg:order-2",
+          )}
+          style={{ backgroundColor: PANEL }}
+        >
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.09em] text-ink-3">
+              {card.kicker}
+            </p>
 
-          <p className="mt-4 max-w-[480px] text-[15px] leading-[1.6] text-ink-2 sm:text-[16px]">
-            {card.description}
-          </p>
+            <h3 className="mt-4 text-[26px] font-bold leading-[1.14] tracking-[-0.03em] text-ink sm:text-[32px]">
+              {card.title}
+            </h3>
 
-          {/*
-            Bife, nu pastile. Pastilele se rupeau pe mai multe randuri si obligau
-            ochiul sa sara de la una la alta; lista se citeste de sus in jos,
-            intr-o singura trecere.
+            <p className="mt-4 text-[15px] leading-[1.6] text-ink-2 sm:text-[16px]">
+              {card.description}
+            </p>
+          </div>
 
-            Bifa e verde inchis, nu verdele de brand: #1AB554 are pe alb 2,6:1, iar
-            la 14px iese o bifa pe care abia o vezi. `shrink-0` si `mt-[3px]` o tin
-            aliniata cu prima linie de text, nu centrata pe randul intreg — la
-            elementele care se rup in doua randuri se vedea diferenta.
-          */}
-          <ul className="mt-6 space-y-2">
-            {card.checks.map((check) => (
-              <li key={check} className="flex gap-2 text-[14.5px] leading-[1.45] text-ink-2">
-                <Check
-                  className="mt-[3px] h-3.5 w-3.5 shrink-0"
-                  style={{ color: CHECK_GREEN }}
-                  strokeWidth={3}
-                  aria-hidden
-                />
-                {check}
-              </li>
-            ))}
-          </ul>
+          <div className="mt-10 lg:mt-8">
+            {/*
+              Bifa sta intr-o pastila alba rotunda cu chenar punctat, ca la model.
+              Pastila e alba pe fondul gri al panoului - de aia panoul TREBUIE sa
+              fie gri, altfel pastilele dispar si raman niste bife plutind.
 
-          {/*
-            Butonul e cu chenar, nu verde plin. Cinci butoane verzi, unul sub
-            altul la derulare, ar fi concurat cu butonul principal din hero — iar
-            ala trebuie sa ramana singurul lucru verde plin de pe pagina.
-          */}
-          <Link
-            href={card.cta.href}
-            className="group mt-7 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2"
-          >
-            {card.cta.label}
-            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-          </Link>
+              `items-start`, nu `items-center`: pastila are 20px, un rand de text
+              are 21px, deci la o linie ies aliniate oricum, iar cand textul se
+              rupe in doua randuri pe telefon pastila ramane langa PRIMUL rand, nu
+              se centreaza pe bloc.
+            */}
+            <ul className="space-y-3.5">
+              {card.checks.map((check) => (
+                <li key={check} className="flex items-start gap-3">
+                  <span className="feature-check-ring flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-dashed bg-white">
+                    <Check
+                      className="h-3 w-3"
+                      style={{ color: CHECK_GREEN }}
+                      strokeWidth={3.5}
+                      aria-hidden
+                    />
+                  </span>
+                  <span className="text-[14.5px] leading-[1.45] text-ink-2">
+                    {check}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            {/*
+              Butonul e cu chenar, nu verde plin. Cinci butoane verzi, unul sub
+              altul la derulare, ar fi concurat cu butonul principal din hero — iar
+              ala trebuie sa ramana singurul lucru verde plin de pe pagina.
+
+              Are `bg-white` acum: pe fondul gri al panoului, un buton transparent
+              cu chenar arata ca o gaura, nu ca un buton.
+            */}
+            <Link
+              href={card.cta.href}
+              className="group mt-8 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline bg-white px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint"
+            >
+              {card.cta.label}
+              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+            </Link>
+          </div>
         </div>
 
-        {/* ── Dreapta: imaginea ── */}
-        <ImagePanel card={card} />
+        {/* ── Imaginea ── */}
+        <ImagePanel card={card} flipped={flipped} />
       </div>
     </article>
   );
 }
 
 /**
- * Panoul din dreapta: lumina verde a hero-ului, adusă în mic, cu imaginea
- * ridicată deasupra ei.
+ * Jumătatea cu imaginea: fără casetă, fără chenar, fără lumina verde de
+ * dedesubt — ca la model, imaginea E jumătatea, nu ceva pus într-o ramă.
+ *
+ * ═══ DE CE `object-contain` ȘI NU `object-cover` ═══
+ *
+ * La model imaginea umple jumătatea până în toate cele patru margini, iar prima
+ * variantă făcea la fel. Măsurat însă, tăia 22% din lățimea imaginii — la cardul
+ * cu integrări dispărea eticheta „+25 Integrări". Nu e o alegere de reglaj, e o
+ * ciocnire de formate: imaginea lor e PORTRET (960x1200) într-o casetă lată, deci
+ * pierde de sus și de jos, unde un peisaj nu are nimic de spus. Ale noastre sunt
+ * 4:3 ORIZONTALE într-o casetă mai înaltă decât lată, deci pierd din laturi — iar
+ * acolo stă tot ce arată macheta. Verificat pe fișiere: la patru din cinci
+ * conținutul ajunge până în muchie, nu există margine de sacrificat.
+ *
+ * Așa că imaginea intră întreagă. Coloana ei e făcută dinadins mai lată (1,12 din
+ * 2), ca 4:3 să iasă aproape exact pe înălțimea dată de textul de alături: rămân
+ * ~19px sus și ~19px jos. Banda e ALBĂ fiindcă toate cele cinci imagini au
+ * muchiile aproape albe (#FA–#FF măsurat), deci nu se vede unde se termină
+ * imaginea și începe cardul.
+ *
+ * `aspect-[4/3]` rămâne pe telefon, unde jumătățile stau una sub alta și nimic
+ * n-ar da înălțimea; acolo imaginea umple caseta exact, fără bandă.
  *
  * Cât imaginea lipsește, caseta scrie ce trebuie să conțină, ca ideea să nu se
  * piardă până vine fișierul.
  */
-function ImagePanel({ card }: { card: FeatureCard }) {
+function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) {
   return (
-    <div className="relative isolate overflow-hidden rounded-[18px] bg-tint p-5 sm:p-7">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(85% 75% at 28% 15%, rgba(26,181,84,0.22) 0%, transparent 72%), radial-gradient(70% 65% at 80% 85%, rgba(26,181,84,0.14) 0%, transparent 74%)",
-          filter: "blur(18px)",
-        }}
-      />
+    <div
+      className={cn(
+        "relative aspect-[4/3] bg-white lg:aspect-auto",
+        flipped && "lg:order-1",
+      )}
+    >
+      {card.image.base ? (
+        /*
+          `<img>` simplu, nu `next/image`, si asta e o decizie, nu o scapare.
 
-      <div className="relative aspect-[4/3] overflow-hidden rounded-[12px] border border-hairline bg-white shadow-[0_14px_36px_-18px_rgba(10,10,10,0.28)]">
-        {card.image.base ? (
-          /*
-            `<img>` simplu, nu `next/image`, si asta e o decizie, nu o scapare.
+          Loader-ul proiectului lasa neatinse imaginile locale — trece prin el
+          doar ce e pe R2 — deci `next/image` nu producea NICIUN `srcset` pentru
+          ele: fiecare telefon descarca masterul intreg si il afisa la 280px.
+          Cu `<img>` scriem noi `srcSet`-ul si browserul alege marimea potrivita.
 
-            Loader-ul proiectului lasa neatinse imaginile locale — trece prin el
-            doar ce e pe R2 — deci `next/image` nu producea NICIUN `srcset` pentru
-            ele: fiecare telefon descarca masterul intreg si il afisa la 280px.
-            Cu `<img>` scriem noi `srcSet`-ul si browserul alege marimea potrivita.
+          `sizes` e SOCOTIT, nu ghicit, si s-a schimbat odata cu desenul: imaginea
+          nu mai sta intr-o caseta cu marginile ei, ci ia 56% din latimea cardului.
+            latime continut = min(100vw, 1200) - marginile paginii
+            latime imagine  = (continut - 14) x 0,56   la `lg`, sau tot randul sub el
+          Marginile paginii: 40px sub 640, 48px pana la 1024, 64px peste. Cei 14px
+          sunt rama punctata a cardului, 7 de fiecare parte.
+          Iese: 306px pe un telefon de 360, 961px la 1023 (cel mai lat, cardul e
+          inca pe o coloana), 628px de la 1280 in sus.
 
-            `sizes` e masurat, nu ghicit. Latimea casetei, pe scara de ecrane:
-              360 -> 224   640 -> 464   1023 -> 847 (maximul)
-              1024 -> 371  1280 si peste -> 467 (oprit de max-w-[1200px])
-            Cel mai mare NU e pe desktop, ci chiar sub pragul `lg`, unde cardul e
-            inca pe o coloana. Peste 1024 intra a doua coloana si caseta se
-            injumatateste.
-
-            `width`/`height` sunt puse desi caseta are deja `aspect-[4/3]`: fara
-            ele, browserul nu stie raportul pana nu vine fisierul si, la o retea
-            proasta, layoutul sare.
-          */
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={`${card.image.base}-1080.webp`}
-            srcSet={FEATURE_IMAGE_WIDTHS.map(
-              (width) => `${card.image.base}-${width}.webp ${width}w`,
-            ).join(", ")}
-            sizes="(min-width: 1024px) 470px, (min-width: 640px) 84vw, 70vw"
-            alt={card.image.alt}
-            width={1440}
-            height={1080}
-            loading="lazy"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
-            <ImageIcon className="h-6 w-6 text-ink-3" strokeWidth={1.5} />
-            <span className="text-[13px] font-medium text-ink-2">
-              {card.image.hint}
-            </span>
-            <span className="text-[11px] text-ink-3">4:3 orizontal</span>
-          </div>
-        )}
-      </div>
+          `width`/`height` raman puse: fara ele browserul nu stie raportul pana nu
+          vine fisierul si, la o retea proasta, layoutul sare.
+        */
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`${card.image.base}-1080.webp`}
+          srcSet={FEATURE_IMAGE_WIDTHS.map(
+            (width) => `${card.image.base}-${width}.webp ${width}w`,
+          ).join(", ")}
+          sizes="(min-width: 1280px) 628px, (min-width: 1024px) 53vw, (min-width: 640px) calc(100vw - 62px), calc(100vw - 54px)"
+          alt={card.image.alt}
+          width={1440}
+          height={1080}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-contain"
+        />
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+          <ImageIcon className="h-6 w-6 text-ink-3" strokeWidth={1.5} />
+          <span className="text-[13px] font-medium text-ink-2">
+            {card.image.hint}
+          </span>
+          <span className="text-[11px] text-ink-3">4:3 orizontal</span>
+        </div>
+      )}
     </div>
   );
 }

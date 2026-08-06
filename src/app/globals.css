@@ -257,6 +257,36 @@
   }
 }
 
+/* Inelul punctat al pastilelor de la bife.
+
+   Sta aici, nu langa celelalte culori din `Features.tsx`, fiindca are nevoie de
+   o interogare de media - si merita explicat de ce.
+
+   Un chenar punctat de 1px pe un CERC pierde mult mai mult decat unul pe o linie
+   dreapta: fiecare liniuta cade oblic pe grila de pixeli si se intinde pe doi,
+   la jumatate de intensitate fiecare. MASURAT pe captura, la un ecran obisnuit:
+   culoarea ceruta avea luminanta 198 pe un panou de 240, deci o diferenta de 42,
+   dar cel mai inchis pixel desenat a iesit 221 - adica 19. Sub jumatate. De aia
+   inelul era invizibil si ramanea doar bifa verde plutind pe un disc alb.
+
+   Pe un ecran cu densitate dubla problema dispare, fiindca liniuta primeste doi
+   pixeli reali si se deseneaza aproape la culoarea ei. Deci nu e o culoare de
+   ales, sunt doua:
+     - la 1x se cere mai inchis, ca sa ramana ~25 dupa ce se pierde jumatate;
+     - de la 2x in sus se revine la valoarea modelului, altfel inelul ar iesi
+       de doua ori mai apasat decat trebuie.
+
+   Culoarea de referinta e cea a modelului: o diferenta de ~26 fata de panou. */
+.feature-check-ring {
+  border-color: #B8B8CB;
+}
+
+@media (min-resolution: 2dppx) {
+  .feature-check-ring {
+    border-color: #D2D2DC;
+  }
+}
+
 /* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────
    Cerut de client: „Facebook" cu albastrul lor si „Instagram" cu culoarea lor.
 

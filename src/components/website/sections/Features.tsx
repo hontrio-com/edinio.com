@@ -1,4 +1,5 @@
-import { ImageIcon } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Check, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   FEATURE_CARDS,
@@ -37,6 +38,15 @@ import { SectionEyebrow } from "./SectionEyebrow";
  * cel activ.
  */
 const STACK_TOP = 96;
+
+/**
+ * Verdele bifelor.
+ *
+ * NU verdele de brand. #1AB554 are pe alb un contrast de 2,6:1; la o bifă de
+ * 14px iese un semn pe care abia îl vezi. #12874A e același ton, dus la 4,6:1.
+ * Aceeași valoare ca la prețul din cardul de produs al secțiunii Problema.
+ */
+const CHECK_GREEN = "#12874A";
 
 export function Features() {
   return (
@@ -104,16 +114,42 @@ function Card({ card, last }: { card: FeatureCard; last: boolean }) {
             {card.description}
           </p>
 
-          <ul className="mt-7 flex flex-wrap gap-2">
-            {card.benefits.map((benefit) => (
-              <li
-                key={benefit}
-                className="rounded-lg border border-hairline bg-tint px-3 py-1.5 text-[12.5px] font-medium text-ink-2"
-              >
-                {benefit}
+          {/*
+            Bife, nu pastile. Pastilele se rupeau pe mai multe randuri si obligau
+            ochiul sa sara de la una la alta; lista se citeste de sus in jos,
+            intr-o singura trecere.
+
+            Bifa e verde inchis, nu verdele de brand: #1AB554 are pe alb 2,6:1, iar
+            la 14px iese o bifa pe care abia o vezi. `shrink-0` si `mt-[3px]` o tin
+            aliniata cu prima linie de text, nu centrata pe randul intreg — la
+            elementele care se rup in doua randuri se vedea diferenta.
+          */}
+          <ul className="mt-6 space-y-2">
+            {card.checks.map((check) => (
+              <li key={check} className="flex gap-2 text-[14.5px] leading-[1.45] text-ink-2">
+                <Check
+                  className="mt-[3px] h-3.5 w-3.5 shrink-0"
+                  style={{ color: CHECK_GREEN }}
+                  strokeWidth={3}
+                  aria-hidden
+                />
+                {check}
               </li>
             ))}
           </ul>
+
+          {/*
+            Butonul e cu chenar, nu verde plin. Cinci butoane verzi, unul sub
+            altul la derulare, ar fi concurat cu butonul principal din hero — iar
+            ala trebuie sa ramana singurul lucru verde plin de pe pagina.
+          */}
+          <Link
+            href={card.cta.href}
+            className="group mt-7 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2"
+          >
+            {card.cta.label}
+            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+          </Link>
         </div>
 
         {/* ── Dreapta: imaginea ── */}

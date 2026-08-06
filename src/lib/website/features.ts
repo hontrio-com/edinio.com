@@ -33,7 +33,20 @@ export interface FeatureCard {
   kicker: string;
   title: string;
   description: string;
-  benefits: string[];
+  /**
+   * Lista cu bife de sub descriere.
+   *
+   * Erau pastile într-un rând care se rupea. Clientul le-a cerut scoase
+   * (2026-08-06): o listă cu bife spune același lucru, dar se citește de sus în
+   * jos, într-o singură trecere, în loc să oblige ochiul să sară de la o pastilă
+   * la alta. Textele au rămas neatinse.
+   */
+  checks: string[];
+  /**
+   * Butonul cardului. Fiecare card trimite la pagina LUI, nu la una comună —
+   * altfel butonul e ornament, nu o cale mai departe.
+   */
+  cta: { label: string; href: string };
   image: {
     /** Radacina, fara sufixul de marime. Lipseste => se afiseaza substituentul. */
     base?: string;
@@ -53,7 +66,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Lansează un magazin online complet în doar câteva minute.",
     description:
       "Tot ce ai nevoie pentru a începe să vinzi online este deja pregătit: produse, categorii, variante, checkout și administrare simplă.",
-    benefits: ["Magazin complet", "Design modern", "Mobile Friendly", "Gata de vânzare"],
+    checks: ["Magazin complet", "Design modern", "Mobile Friendly", "Gata de vânzare"],
+    cta: { label: "Vezi magazinul online", href: "/magazin-online" },
     image: {
       base: "/features/magazin",
       alt: "Magazin online Edinio pe desktop și pe telefon",
@@ -66,13 +80,14 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Activează toate integrările în doar câteva click-uri.",
     description:
       "Curieri, plăți online, facturare, marketplace-uri și marketing. Totul este integrat direct în Edinio.",
-    benefits: [
+    checks: [
       "Curieri",
       "Plată cu cardul",
       "Facturare",
       "Integrare cu marketplace-urile tale preferate",
       "Marketing",
     ],
+    cta: { label: "Vezi toate integrările", href: "/integrari" },
     image: {
       base: "/features/integrari",
       alt: "Integrările Edinio, conectate între ele",
@@ -85,7 +100,10 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Economisește timp cu automatizări inteligente.",
     description:
       "Facturile, AWB-urile, notificările și multe alte procese repetitive se realizează automat.",
-    benefits: ["AWB automat", "Facturi automate", "Email", "SMS", "Automatizări"],
+    checks: ["AWB automat", "Facturi automate", "Email", "SMS", "Automatizări"],
+    /* Nu exista pagina „Automatizari". `/curieri` e cea mai apropiata: AWB-ul
+       generat automat e chiar prima automatizare din lista. */
+    cta: { label: "Vezi curierii și AWB automat", href: "/curieri" },
     image: {
       base: "/features/automatizari",
       alt: "Fluxul automat: comandă, factură, AWB, livrare",
@@ -98,13 +116,19 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Instrumente construite pentru mai multe vânzări.",
     description:
       "Folosește funcții dedicate comerțului online pentru a atrage clienți și pentru a crește rata de conversie.",
-    benefits: [
+    checks: [
       "Coșuri abandonate",
       "Cupoane",
       "Email Marketing",
       "SMS Marketing",
       "Wheel of Fortune",
     ],
+    /* CEA MAI SLABA POTRIVIRE din cele cinci, si merita stiut. Cardul e despre
+       unelte de vanzare — cosuri abandonate, cupoane, marketing — iar
+       `/optimizare` e despre pagini rapide si Google. Nu exista o pagina despre
+       unelte de crestere; asta e cea mai apropiata din coloana „Creste" a
+       meniului. Daca se face vreodata o pagina de marketing, aici se schimba. */
+    cta: { label: "Vezi cum optimizăm magazinul", href: "/optimizare" },
     image: {
       base: "/features/vanzari",
       alt: "Panoul de marketing din Edinio",
@@ -117,7 +141,8 @@ export const FEATURE_CARDS: FeatureCard[] = [
     title: "Tu vinzi. Noi ne ocupăm de restul.",
     description:
       "Actualizările, securitatea, mentenanța și asistența sunt incluse permanent, fără costuri suplimentare.",
-    benefits: ["Mentenanță gratuită", "Actualizări", "Backup", "Securitate", "Suport"],
+    checks: ["Mentenanță gratuită", "Actualizări", "Backup", "Securitate", "Suport"],
+    cta: { label: "Vezi ce include mentenanța", href: "/mentenanta-gratuita" },
     image: {
       base: "/features/mentenanta",
       alt: "Mentenanță, securitate și asistență Edinio",

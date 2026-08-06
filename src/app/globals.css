@@ -466,63 +466,135 @@
   background-repeat: repeat, no-repeat, no-repeat;
 }
 
-/* 2. LIQUID GLASS — sticla mata, cu muchia de sus aprinsa si o sclipire oblica.
+/* 2. LIQUID GLASS — placa de sticla peste o lumina, ca la Apple.
 
-   `backdrop-filter` NU e folosit, si e o decizie: in spatele casetei e pagina
-   alba si nimic altceva, deci n-ar avea ce estompa. Efectul de sticla se obtine
-   din lumina, nu din blur — asa arata si pe un fundal gol.
+   ═══ DE CE ARE NEVOIE DE FUNDAL ═══
 
-   Trei lucruri il fac sa se citeasca drept sticla:
-   - un degrade oblic de la aproape alb la un gri-albastrui, ca o placa inclinata;
-   - o sclipire ingusta pe diagonala, la 20% opacitate, care taie placa;
-   - muchii interioare: sus alb aprins, jos o umbra foarte slaba. Combinatia asta
-     spune ochiului „obiect gros", nu „dreptunghi colorat".
-   Umbra exterioara e mica si aproape, ca placa sa para asezata pe pagina, nu
-   plutind deasupra ei. */
-.caseta-sticla {
+   Sticla nu are aspect propriu. Se vede pentru ca refracta, estompeaza si
+   coloreaza ce e IN SPATELE ei. Peste alb curat, o placa de sticla arata exact
+   ca albul — de asta prima incercare a iesit doar „un dreptunghi cu o dunga".
+   Toate exemplele trimise de client pun sticla peste o fotografie.
+
+   De aceea banda primeste dedesubt `.caseta-sticla-fundal`, o lumina foarte
+   slaba din trei pete. Caseta e apoi SEMITRANSPARENTA si lasa lumina sa treaca
+   prin ea: acolo unde trece peste o pata, se coloreaza; intre pete, se stinge.
+   Cum banda aluneca, fiecare caseta trece prin toate petele — iar refractia se
+   vede tocmai pentru ca se schimba.
+
+   ═══ DE CE NU `backdrop-filter` ═══
+
+   Exemplul clientului foloseste `backdrop-filter` cu un filtru SVG de
+   displacement. Aici NU se foloseste, si sunt doua motive, ambele solide:
+
+   1. N-ar face aproape nimic. Fundalul de dedesubt e un degrade NETED. A
+      estompa un degrade neted da inapoi acelasi degrade neted; a-l deforma cu
+      `feDisplacementMap` il muta cu cativa pixeli intr-o zona in care oricum
+      arata la fel. Efectul se vede pe fotografii, care au detaliu. Al nostru
+      n-are.
+   2. Ar costa enorm. Sunt 104 casete pe pagina, intr-o banda care se misca
+      permanent; fiecare `backdrop-filter` ar cere o resamplare a fundalului la
+      fiecare cadru. Pe telefon ar omori derularea.
+
+   Deci refractia se face din transparenta si din muchii, nu din filtre. Se vede
+   la fel si nu costa nimic.
+
+   ═══ MUCHIILE ═══
+
+   Teancul de umbre interioare e luat din exemplul clientului si repotrivit
+   pentru o caseta de 84px pe fond deschis: doua muchii aprinse in sus-stanga
+   (unde bate lumina), doua stinse in jos-dreapta, si un halou interior care
+   ingroasa placa. Combinatia asta e cea care spune ochiului „obiect de sticla
+   gros", nu „dreptunghi transparent". */
+.caseta-sticla-fundal {
+  position: absolute;
+  inset: -20% -5%;
+  pointer-events: none;
   background-image:
-    linear-gradient(112deg, transparent 34%, rgba(255, 255, 255, 0.85) 46%, transparent 58%),
-    linear-gradient(158deg, #FFFFFF 0%, #F7F8FB 42%, #EDEFF5 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
-    inset 0 -1.5px 2px rgba(16, 20, 40, 0.05),
-    0 1px 2px rgba(16, 20, 40, 0.05),
-    0 6px 14px -8px rgba(16, 20, 40, 0.22);
+    radial-gradient(38% 130% at 10% 50%, rgba(26, 181, 84, 0.34) 0%, transparent 70%),
+    radial-gradient(32% 130% at 38% 42%, rgba(78, 120, 220, 0.28) 0%, transparent 72%),
+    radial-gradient(30% 130% at 64% 58%, rgba(26, 181, 84, 0.3) 0%, transparent 72%),
+    radial-gradient(36% 130% at 90% 46%, rgba(120, 90, 210, 0.24) 0%, transparent 70%);
+  filter: blur(22px);
 }
 
-/* 3. LIQUID METAL — crom deschis, cu benzi de reflexie si o textura fina.
-
-   Cromul nu e un degrade de la deschis la inchis; e o SUCCESIUNE de benzi
-   deschis-inchis-deschis, fiindca o suprafata curbata si lucioasa reflecta cerul
-   si pamantul alternativ. De aceea sunt sapte opriri si nu doua — cu doua ar fi
-   iesit doar un gri inclinat.
-
-   Peste ele, granule mult mai fine si mai slabe decat la varianta 1 (frecventa
-   1,7 fata de 0,9, opacitate 0,35 fata de 0,85): metalul periat are o textura
-   marunta, nu nisip.
-
-   Ramane DESCHIS. Un crom adevarat ar avea benzi aproape negre, dar acolo siglele
-   inchise la culoare ar disparea. Cea mai inchisa banda de aici e #DDE0E7. */
-.caseta-metal {
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.7' numOctaves='4' stitchTiles='stitch' seed='11'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.22' intercept='0.8508'/%3E%3CfeFuncG type='linear' slope='0.22' intercept='0.8508'/%3E%3CfeFuncB type='linear' slope='0.22' intercept='0.8508'/%3E%3CfeFuncA type='linear' slope='0' intercept='0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E"),
-    linear-gradient(
-      128deg,
-      #FCFCFD 0%,
-      #E6E9EF 16%,
-      #FDFDFE 30%,
-      #DDE0E7 46%,
-      #F8F9FB 62%,
-      #E2E5EC 80%,
-      #FBFBFD 100%
-    );
-  background-size: 160px 160px, 100% 100%;
-  background-repeat: repeat, no-repeat;
+/* Transparenta e MICA dinadins: la 0,42 caseta era practic alba si lumina de
+   dedesubt nu razbatea deloc — adica exact defectul pe care fundalul trebuia
+   sa-l repare. La 0,20 se vede prin ea, iar siglele raman lizibile fiindca
+   fundalul e oricum deschis. */
+.caseta-sticla {
+  background-color: rgba(255, 255, 255, 0.2);
+  background-image: linear-gradient(
+    128deg,
+    rgba(255, 255, 255, 0.46) 0%,
+    rgba(255, 255, 255, 0.04) 46%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -1px 0 rgba(16, 20, 40, 0.06),
-    0 2px 6px -3px rgba(16, 20, 40, 0.16);
+    inset 3px 3px 0.5px -3px rgba(255, 255, 255, 0.95),
+    inset -3px -3px 0.5px -3px rgba(16, 20, 40, 0.35),
+    inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.85),
+    inset -1px -1px 1px -0.5px rgba(16, 20, 40, 0.22),
+    inset 0 0 8px 8px rgba(255, 255, 255, 0.16),
+    inset 0 0 2px 2px rgba(255, 255, 255, 0.1),
+    0 0 6px rgba(16, 20, 40, 0.04),
+    0 2px 8px rgba(16, 20, 40, 0.1),
+    0 0 14px rgba(255, 255, 255, 0.55);
+}
+
+/* 3. LIQUID METAL — inel de metal in jurul unei fete deschise.
+
+   ═══ CE FACE METALUL SA PARA METAL ═══
+
+   Exemplul clientului (`MetalButton`) construieste butonul din TREI straturi
+   suprapuse: un inel exterior aproape negru, un bizou care merge deschis →
+   inchis → deschis pe verticala, si abia apoi fata. Aspectul de metal vine din
+   BIZOU, nu din fata: acel deschis-inchis-deschis pe 2px e o muchie sanfrenata
+   care prinde lumina sus si o pierde jos. Un degrade plat pe toata suprafata,
+   ca in incercarea de dinainte, da un gri inclinat, nu metal.
+
+   ═══ CUM SE FACE INTR-UN SINGUR ELEMENT ═══
+
+   Trei `<div>`-uri imbricate ori de 104 casete ar fi 312 de noduri degeaba.
+   Acelasi rezultat se obtine din doua fonduri si doua zone de decupare:
+     - fondul cu `padding-box` umple doar interiorul chenarului — deci e FATA;
+     - fondul cu `border-box` umple si sub chenar, iar chenarul fiind transparent
+       se vede exact acolo — deci e BIZOUL.
+   Spre deosebire de `border-image`, trucul asta respecta `border-radius`, deci
+   inelul urmareste coltul rotunjit.
+
+   ═══ DE CE FATA RAMANE DESCHISA ═══
+
+   La client fata e gri-mediu (#B9B9B9 → #969696) fiindca textul de deasupra e
+   alb. La noi deasupra stau sigle, multe dintre ele inchise la culoare — pe gri
+   mediu, FAN Courier sau Klarna ar deveni ilizibile. Deci inelul e metal
+   adevarat, cu tot contrastul lui, iar fata ramane deschisa. Metalul se citeste
+   din rama, care e si locul unde se uita ochiul. */
+.caseta-metal {
+  border: 3px solid transparent;
+  background-image:
+    linear-gradient(168deg, #FCFCFD 0%, #F2F3F7 46%, #E7E9F0 100%),
+    linear-gradient(
+      180deg,
+      #FFFFFF 0%,
+      #DDE1E8 14%,
+      #6C7280 34%,
+      #383D49 50%,
+      #6C7280 66%,
+      #D6DAE2 86%,
+      #FDFDFE 100%
+    );
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  box-shadow:
+    /* Inelul exterior, aproape negru, pe TOATE laturile. Fara el, bizoul se
+       intuneca doar pe stanga si pe dreapta (acolo unde degradeul vertical trece
+       prin mijloc), iar sus si jos ramane alb pe alb — deci rama dispare exact
+       la muchia care se vede prima. La client rolul asta il face invelisul
+       `from-[#000] to-[#A0A0A0]` de sub bizou. */
+    0 0 0 1px rgba(26, 30, 40, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(16, 20, 40, 0.1),
+    0 5px 12px -4px rgba(16, 20, 40, 0.22);
 }
 
 /* 4. RELIEF (3D) — caseta pare ridicata de pe pagina, luminata de sus-stanga.

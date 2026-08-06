@@ -296,9 +296,24 @@ function Banda({
 
   return (
     <div
-      className="overflow-hidden"
+      className="relative overflow-hidden"
       style={{ maskImage: MASCA, WebkitMaskImage: MASCA }}
     >
+      {/*
+        FUNDALUL DE SUB BANDA, si exista numai pentru sticla.
+
+        Fara el, „liquid glass" e o imposibilitate fizica: sticla se vede pentru
+        ca refracta si coloreaza ce e IN SPATELE ei, iar in spatele casetelor
+        noastre e alb curat. Sticla peste alb arata exact ca albul. Toate
+        exemplele trimise de client pun placa de sticla peste o fotografie.
+
+        Deci banda primeste o lumina foarte slaba dedesubt — trei pete moi, verde
+        si rece — peste care casetele chiar au ce refracta. Restul paginii ramane
+        alb; se coloreaza doar fasia de sub sigle, si inca foarte putin.
+      */}
+      {stil === "sticla" && (
+        <div aria-hidden className="caseta-sticla-fundal" />
+      )}
       <div
         className={cn(
           "relative",

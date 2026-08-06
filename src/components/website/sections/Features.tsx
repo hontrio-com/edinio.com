@@ -306,13 +306,30 @@ function Card({
               Butonul e cu chenar, nu verde plin. Cinci butoane verzi, unul sub
               altul la derulare, ar fi concurat cu butonul principal din hero — iar
               ala trebuie sa ramana singurul lucru verde plin de pe pagina.
+
+              ═══ TOATE CINCI AU ACEEASI LATIME ═══
+
+              `min-w` plus `justify-between`: textul se aseaza la stanga, sageata
+              se lipeste de marginea din dreapta, si iese acelasi buton pe toate
+              cardurile. Fara asta aveau 171, 207, 210, 255 si 278px — la derulare
+              pareau cinci componente diferite.
+
+              212px nu e o cifra rotunda aleasa la intamplare, e cea mai lunga
+              eticheta („Mentenanta gratuita") plus marginile si sageata. Daca
+              vreodata o eticheta o depaseste, butonul ei creste si iese din rand:
+              `min-w` nu taie textul, doar il ridica la un minim. Etichetele vin
+              din meniu (vezi `cta` in `features.ts`), deci raman scurte.
+
+              Pe telefon nu se aplica: acolo cardul are 300px de continut, iar un
+              buton de 212 cu textul lipit stanga si sageata in celalalt capat ar
+              arata gaunos. Se strange pe continut, ca inainte.
             */}
             <Link
               href={card.cta.href}
-              className="group mt-8 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2"
+              className="group mt-8 inline-flex h-11 items-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2 sm:min-w-[212px] sm:justify-between"
             >
               {card.cta.label}
-              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+              <ArrowRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
             </Link>
           </div>
         </div>

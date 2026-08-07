@@ -188,7 +188,17 @@ export function IntegrationsBenzi() {
         fara niciun risc de depasire orizontala: latimea lor e chiar latimea
         paginii, iar ce iese din ele e taiat de `overflow-hidden`.
       */}
-      <div className="mt-12 space-y-3 sm:mt-14 sm:space-y-4">
+      {/*
+        Fara `space-y`: distanta dintre benzi o dau acum marginile lor interioare
+        (28 jos + 8 sus = 36px), care exista oricum ca sa incapa umbra.
+        Adaugat peste ele, `space-y` ar fi impins randurile la peste 50px.
+
+        Si conteaza sa NU fie mai mica de atat: umbra randului de sus coboara 24px.
+        Daca randul al doilea ar veni mai aproape, tile-urile lui ar fi desenate
+        PESTE umbra aia — banda a doua vine dupa in document — si umbra ar aparea
+        doar prin golurile dintre casete, patat.
+      */}
+      <div className="mt-10 sm:mt-12">
         <Banda
           chei={BANDA_SUS}
           sens="stanga"
@@ -279,7 +289,23 @@ function Banda({
 
   return (
     <div
-      className="overflow-hidden"
+      /*
+        `pt-2 pb-7` NU e spatiere, e LOC PENTRU UMBRA, si repara un defect pe care
+        clientul l-a vazut imediat: umbra casetelor se termina brusc, cu o linie
+        dreapta, de-a lungul intregii benzi.
+
+        Cauza: containerul are `overflow-hidden`, de care banda are nevoie ca sa-si
+        taie continutul care curge. Fara padding, inaltimea lui era exact cat o
+        caseta, iar umbra — care iese sub caseta — cadea in afara cutiei si era
+        retezata. Nu era umbra prost aleasa, era umbra taiata.
+
+        Cati pixeli: umbra de inaltime e `0 10px 22px -8px`, deci coboara sub
+        caseta 10 + 22 - 8 = 24px. 28 (`pb-7`) acopera si mai lasa o rezerva. Sus
+        iese doar 4px (-10 + 22 - 8), deci 8 ajung.
+        Daca se schimba vreodata umbra din `.caseta-sigla`, se recalculeaza si
+        astea — altfel taietura revine, si e greu de banuit de unde vine.
+      */
+      className="overflow-hidden pt-2 pb-7"
       style={{ maskImage: MASCA, WebkitMaskImage: MASCA }}
     >
       <div

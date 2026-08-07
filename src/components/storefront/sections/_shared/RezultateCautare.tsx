@@ -44,10 +44,6 @@ export function RezultateCautare({
   inFlux?: boolean;
 }) {
   const catalog = useStorefrontOptional();
-  // A sasea formulare a aceleiasi reguli. Contextul o are deja, si de acum stie
-  // si de pachete: fara ea, „Pachet Femei" apare in rezultate cu „In stoc" scris
-  // cu verde, in timp ce pagina lui are butonul stins.
-  const esteFaraStoc = catalog?.isProductOutOfStock;
   const produse = catalog?.visibleProducts;
 
   const index = useMemo(
@@ -57,21 +53,44 @@ export function RezultateCautare({
     [produse],
   );
 
+  /*
+   * O SINGURA interogare per tastare, si numarul iese din ea.
+   *
+   * Numarul total se lua dintr-un al doilea `queryProductSearchIndex` chemat in
+   * corpul randarii, cu ACELASI index si acelasi text — deci fiecare litera
+   * tastata platea de doua ori cautarea peste tot catalogul. La 3351 de produse
+   * asta e partea grea a scrisului, nu randarea.
+   *
+   * Lista taiata si numarul intreg ies acum din acelasi memo: numarul e cat a
+   * gasit cautarea, lista e ce incape in panou.
+   */
   const gasite = useMemo(() => {
     if (!produse || text.trim().length < MIN_LITERE) return null;
     const potriviri = queryProductSearchIndex(index, text);
     if (!potriviri) return null;
-    return produse
+    const lista = produse
       .filter((p) => potriviri.has(p.id))
-      .sort((a, b) => (potriviri.get(b.id) ?? 0) - (potriviri.get(a.id) ?? 0))
+      // Departajare pe id: scoruri egale sunt banale, iar fara ea panoul putea
+      // arata alta ordine decat grila pentru aceeasi cautare. Vezi
+      // lib/storefront/catalog/sortare.ts.
+      .sort((a, b) =>
+        ((potriviri.get(b.id) ?? 0) - (potriviri.get(a.id) ?? 0))
+        || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
       .slice(0, MAX_REZULTATE);
+    return { lista, total: potriviri.size };
   }, [produse, index, text]);
 
   // Fara catalog incarcat nu avem ce cauta pe loc: acolo panoul nu se arata
   // deloc, iar Enter duce la catalog cu termenul in adresa.
   if (!catalog || gasite === null) return null;
 
-  const total = queryProductSearchIndex(index, text)?.size ?? 0;
+  // Dupa paza de mai sus `catalog` exista sigur, deci regula de stoc se ia de-a
+  // dreptul din context — a SASEA formulare a aceleiasi intrebari avea o rezerva
+  // locala care nu stia de pachete, si numai tipurile o cereau. Cu ea, „Pachet
+  // Femei" aparea in rezultate cu „In stoc" scris cu verde, in timp ce pagina lui
+  // avea butonul stins.
+  const esteFaraStoc = catalog.isProductOutOfStock;
+  const { lista, total } = gasite;
 
   return (
     <div className={inFlux
@@ -84,19 +103,19 @@ export function RezultateCautare({
         </span>
       </div>
 
-      {gasite.length === 0 ? (
+      {lista.length === 0 ? (
         <p className="px-3.5 py-6 text-sm text-[var(--st-muted)] text-center">
           Nimic pentru „{text.trim()}”. Incearca alt cuvant.
         </p>
       ) : (
         <ul className="max-h-[22rem] overflow-y-auto">
-          {gasite.map((p) => {
+          {lista.map((p) => {
             // Coercit la sir aici: `images` e jsonb, deci `unknown[]`, iar un
             // `unknown` folosit direct ca fiu JSX nu trece de tipuri.
             const imagini = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
             const imagine = imagini.length > 0 ? String(imagini[0]) : "";
             const interval = p.price_range;
-            const faraStoc = esteFaraStoc ? esteFaraStoc(p) : !!(p.track_inventory && (p.stock_quantity ?? 0) <= 0);
+            const faraStoc = esteFaraStoc(p);
             return (
               <li key={p.id} className="border-b border-[var(--st-border)] last:border-0">
                 <a href={`${basePath}/product/${p.slug ?? p.id}`} onClick={onAlege}
@@ -132,7 +151,7 @@ export function RezultateCautare({
         </ul>
       )}
 
-      {total > gasite.length && (
+      {total > lista.length && (
         <div className="px-3.5 py-2 border-t border-[var(--st-border)] bg-[var(--st-bg)] text-center">
           <span className="text-[12px] text-[var(--st-muted)]">
             Apasa Enter ca sa le vezi pe toate {total}

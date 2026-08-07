@@ -6,7 +6,7 @@ import { ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
-import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
+import { esteFaraStocInCatalog } from "@/lib/storefront/stoc-catalog";
 import { parseProductSections, resolveSectionProducts } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
@@ -271,22 +271,13 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * componente sterse.
    */
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
-  const isProductOutOfStock = useCallback((p: Product): boolean => {
-    if (p.is_bundle) {
-      const cfg = readBundleConfig(p.page_sections);
-      const componente = (cfg?.items ?? []).map((it) => {
-        const comp = productById.get(it.product_id);
-        return {
-          quantity: it.quantity,
-          vandabila: !!comp,
-          track_inventory: !!comp?.track_inventory,
-          stock_quantity: comp?.stock_quantity ?? null,
-        };
-      });
-      return !disponibilitatePachet(componente).inStock;
-    }
-    return !!(p.track_inventory && p.stock_quantity === 0);
-  }, [productById]);
+  // Regula sta in lib/storefront/stoc-catalog.ts, ca sa aiba UN singur loc:
+  // filtrul „In stoc" si panoul de cautare aveau fiecare formularea lui, si
+  // niciuna nu stia de pachete.
+  const isProductOutOfStock = useCallback(
+    (p: Product): boolean => esteFaraStocInCatalog(p, productById),
+    [productById],
+  );
 
   // Product filters (price range, variant options, on-sale, in-stock)
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -695,7 +686,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       const price = p.price_range.min;
       const matchesPrice = (pMin == null || price >= pMin) && (pMax == null || price <= pMax);
       const matchesSale = !onSaleOnly || (p.compare_at_price != null && Number(p.compare_at_price) > price);
-      const matchesStock = !inStockOnly || !p.track_inventory || (p.stock_quantity ?? 0) > 0;
+      // Aceeasi regula ca insigna „Stoc epuizat" de pe card, adica si pentru
+      // pachete. Formularea de dinainte (`!p.track_inventory || stock > 0`) nu
+      // stia de ele: un pachet se scrie cu `track_inventory: false` (bundles.ts),
+      // deci PRIMA ramura era adevarata pentru FIECARE pachet si toate treceau
+      // neconditionat filtrul — inclusiv „Pachet Femei", cu toate cele trei
+      // componente sterse. Exact defectul pe care docblock-ul din bundles.ts a
+      // fost scris ca sa-l incheie, supravietuit intr-a patra formulare.
+      const matchesStock = !inStockOnly || !isProductOutOfStock(p);
       let matchesOptions = true;
       if (activeOpts.length) {
         const ps = p.page_sections as { variants?: { options?: { name: string; values: string[] }[] } } | null;
@@ -715,7 +713,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // scris acolo. "relevance" exista doar cat timp se cauta (vezi effectiveSort).
     list.sort(comparatorSortare(effectiveSort as CheieSortare, searchMatches));
     return list;
-  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici]);
+  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici, isProductOutOfStock]);
 
   /*
    * Cate produse intra pe o pagina, si cum se ajunge la urmatoarele.

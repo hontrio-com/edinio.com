@@ -42,6 +42,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [returningAddressId, setReturningAddressId] = useState(status?.returningAddressId != null ? String(status.returningAddressId) : "");
   const [carrierCode, setCarrierCode] = useState(status?.defaultCarrierCode ?? "");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
+  const [autoPublish, setAutoPublish] = useState(status?.autoPublish ?? false);
   const [addresses, setAddresses] = useState<TrendyolSupplierAddress[]>([]);
   // Eticheta si butonul de webhook se schimba instant; actiunea reuseste sau nu,
   // nu are alt rezultat de aratat. La eroare React readuce singur starea reala.
@@ -113,6 +114,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
         shipment_address_id: ship, returning_address_id: ret,
         default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
         auto_sync: autoSync,
+        // Publicarea automata nu are sens fara sincronizare: fara ea nimic nu
+        // ajunge in coada, deci nici produsele noi.
+        auto_publish: autoSync && autoPublish,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
@@ -336,6 +340,22 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
             <label className="mt-4 flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} className="rounded" />
               Sincronizează automat schimbările de produs, stoc și preț
+            </label>
+
+            <label className="mt-3 flex items-start gap-2 text-sm text-foreground cursor-pointer">
+              <input
+                type="checkbox" checked={autoPublish}
+                onChange={(e) => setAutoPublish(e.target.checked)}
+                disabled={!autoSync}
+                className="rounded mt-0.5 disabled:opacity-50"
+              />
+              <span>
+                Publicare automată
+                <span className="block text-[11px] text-muted-foreground">
+                  Fiecare produs nou din magazin pleacă singur pe Trendyol, folosind categoria mapată și brandul ei.
+                  Produsele cu categoria nemapată rămân pe loc și îți apar ca eroare aici.
+                </span>
+              </span>
             </label>
 
             <div className="mt-4">

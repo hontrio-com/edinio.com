@@ -128,7 +128,37 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
   if (!product) return removeProductNow(admin, ctx, productId);
 
-  const listing = await getListing(admin, ctx.businessId, productId);
+  /*
+   * Publicare automata: produsul nou nu mai asteapta o trecere prin editor.
+   *
+   * Cu `auto_publish` pornit, listarea se construieste din maparea categoriei —
+   * categoria si brandul vin din `category_map`, barcode-urile din variantele
+   * produsului. Fara ea, comportamentul ramane cel de dinainte: un produs
+   * nelistat nu pleaca nicaieri.
+   *
+   * Produsele dezactivate nu se auto-publica: n-are sens sa creezi pe Trendyol
+   * ceva ce in magazin e ascuns.
+   */
+  let listing = await getListing(admin, ctx.businessId, productId);
+  const activ = (product as { is_active?: boolean }).is_active !== false;
+  // Un produs nelistat si inactiv n-are ce cauta pe Trendyol: nu-l creem doar ca
+  // sa-i punem imediat stocul pe zero.
+  if (!listing && !activ) return { ok: true, action: "skipped" };
+  if (!listing && ctx.config.auto_publish) {
+    const pregatit = await ensureListingFromMapping(admin, ctx, product as unknown as MappableProduct);
+    if ("error" in pregatit) {
+      /*
+       * Categorie nemapata sau barcode lipsa nu se repara singure prin
+       * reincercare. Tratate ca esec, ar arde cele cinci incercari ale cozii si
+       * apoi elementul s-ar sterge — deci nici macar n-ar ramane o urma. Iesim
+       * curat: produsul ramane „Nelistat" in tabel, iar categoriile nemapate se
+       * vad in sectiunea de mapare, unde se si rezolva.
+       */
+      console.warn("[trendyol] auto-publicare sarita", productId, pregatit.error);
+      return { ok: true, action: "skipped" };
+    }
+    listing = await getListing(admin, ctx.businessId, productId);
+  }
   if (!listing) return { ok: false, error: "Produsul nu are configurare Trendyol. Completează detaliile de listare mai întâi." };
 
   // Deactivated in Edinio -> zero the stock on Trendyol instead of relisting.

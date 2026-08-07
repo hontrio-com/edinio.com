@@ -169,6 +169,12 @@ export interface TrendyolConfig {
   webhook_id?: string;
   webhook_secret?: string;
   auto_sync?: boolean;
+  /**
+   * Publica pe Trendyol orice produs nou din magazin, fara trecere prin editor.
+   * Listarea se construieste din maparea categoriei; produsele cu categoria
+   * nemapata esueaza vizibil in coada, nu pleaca gresit.
+   */
+  auto_publish?: boolean;
   last_sync_at?: string;
   orders_synced_at?: string;
   needs_reconnect?: boolean;

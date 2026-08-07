@@ -107,6 +107,7 @@ export interface TrendyolStatus {
   brandId?: number;
   brandName?: string;
   autoSync: boolean;
+  autoPublish: boolean;
   lastSyncAt?: string;
   webhookActive: boolean;
   ordersSyncedAt?: string;
@@ -151,6 +152,7 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     brandId: config.brand_id,
     brandName: config.brand_name,
     autoSync: config.auto_sync !== false,
+    autoPublish: config.auto_publish === true,
     lastSyncAt: config.last_sync_at,
     webhookActive: !!config.webhook_id && !!config.webhook_secret,
     ordersSyncedAt: config.orders_synced_at,
@@ -241,6 +243,7 @@ export interface TrendyolSettingsInput {
   brand_id?: number | null;
   brand_name?: string | null;
   auto_sync?: boolean;
+  auto_publish?: boolean;
 }
 
 export async function saveTrendyolSettings(
@@ -269,6 +272,7 @@ export async function saveTrendyolSettings(
     brand_name: input.brand_name === null ? undefined : (input.brand_name ?? config.brand_name),
     currency: infoVitrina(config.storefront).moneda,
     auto_sync: input.auto_sync ?? config.auto_sync,
+    auto_publish: input.auto_publish ?? config.auto_publish,
   };
   const ok = await saveConfig(g.supabase, businessId, next);
   if (!ok) return { error: "Eroare la salvare." };

@@ -183,7 +183,7 @@ export async function createProduct(businessId: string, data: ProductData) {
   if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
   if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
   if (created?.id) void enqueueAboutYouSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueTrendyolSync(businessId, created.id, created.id, "upsert");
+  if (created?.id) void enqueueTrendyolSync(businessId, created.id, created.id, "upsert", true);
   if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });

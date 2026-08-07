@@ -9,6 +9,15 @@ export async function enqueueTrendyolSync(
   productId: string | null,
   offerId: string,
   op: "upsert" | "delete",
+  /**
+   * Produs abia creat in magazin. DOAR asa se poate declansa publicarea automata.
+   *
+   * Fara distinctia asta, „Publicare automată" ar insemna cu totul altceva decat
+   * scrie pe eticheta: orice atingere a unui produs — o marire de pret in masa, o
+   * schimbare de categorie, o activare — ar trimite pe Trendyol tot ce a atins,
+   * adica intreg catalogul dintr-o apasare.
+   */
+  produsNou = false,
 ): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -17,8 +26,17 @@ export async function enqueueTrendyolSync(
     const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
     if (!config.connected || !config.api_key) return;
     if (config.auto_sync === false) return;
-    // Only enqueue an upsert for products that already have a Trendyol listing.
-    if (op === "upsert" && productId) {
+    /*
+     * In mod normal se pun la coada doar produsele care au deja o listare pe
+     * Trendyol: un produs nou nu se trimite nicaieri pana nu-l pregateste
+     * comerciantul.
+     *
+     * Cu „Publicare automată" pornita, regula se inverseaza — produsul nou intra
+     * in coada, iar `syncProductNow` ii construieste listarea din maparea
+     * categoriei. Daca nu are categoria mapata, elementul esueaza cu un mesaj
+     * clar si e vizibil in coada; nu se trimite nimic gresit la Trendyol.
+     */
+    if (op === "upsert" && productId && !(config.auto_publish && produsNou)) {
       const { count } = await admin
         .from("trendyol_listings").select("id", { count: "exact", head: true })
         .eq("business_id", businessId).eq("product_id", productId);
@@ -42,10 +60,13 @@ async function enqueueMany(businessId: string, productIds: (string | null | unde
       .from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
     const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
     if (!config.connected || !config.api_key || config.auto_sync === false) return;
+    // Actiunile in masa NU auto-publica: ele ating produse existente, iar
+    // „publicare automată" e despre produsele noi. Vezi comentariul de mai sus.
     const { data: listed } = await admin
       .from("trendyol_listings").select("product_id").eq("business_id", businessId).in("product_id", ids);
     const listedIds = new Set((listed ?? []).map((r) => r.product_id).filter(Boolean) as string[]);
-    const rows = ids.filter((id) => listedIds.has(id)).map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
+    const rows = ids.filter((id) => listedIds.has(id))
+      .map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
     if (rows.length === 0) return;
     await admin.from("trendyol_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
   } catch {

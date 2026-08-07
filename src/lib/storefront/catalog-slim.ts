@@ -38,7 +38,7 @@ const SEARCH_DESCRIPTION_CHARS = 300;
  * Descrierea afisata pe pagina de produs NU trece pe aici — acolo se face fetch
  * complet, cu marcaj cu tot.
  */
-function descriereDeCautare(brut: string): string {
+export function descriereDeCautare(brut: string): string {
   const text = brut.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   return text.length > SEARCH_DESCRIPTION_CHARS ? text.slice(0, SEARCH_DESCRIPTION_CHARS) : text;
 }

@@ -129,7 +129,7 @@ export interface RandPentruFatete {
   page_sections?: unknown;
 }
 
-interface PerecheBruta {
+export interface PerecheBruta {
   cheie: string;
   eticheta: string;
   grup: GrupFateta;
@@ -137,7 +137,7 @@ interface PerecheBruta {
 }
 
 /** Toate perechile (fateta, valoare) ale unui produs, inainte de filtrare. */
-function perechileProdusului(rand: RandPentruFatete): PerecheBruta[] {
+export function perechileProdusului(rand: RandPentruFatete): PerecheBruta[] {
   const out: PerecheBruta[] = [];
   const ps = (rand.page_sections ?? null) as {
     variants?: { enabled?: boolean; options?: unknown } | null;

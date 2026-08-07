@@ -47,6 +47,22 @@ export async function GET(req: NextRequest) {
   // altfel tabela ar creste la nesfarsit.
   await admin.rpc("curata_limite").then(() => {}, () => {});
 
+  /*
+   * Alarma de drift a modelului de citire al catalogului.
+   *
+   * Sta aici din acelasi motiv ca `curata_limite`, si dintr-unul mai serios:
+   * repo-ul n-are CI, deci un test nu pazeste nimic in productie. Cronul orar plus
+   * `error_logs` sunt singurul mecanism de aplicare nesupravegheat care exista.
+   *
+   * `catalog_produs` si `products` sunt doua surse de adevar; cand diverg, nimic
+   * nu tipa — catalogul arata doar gresit. Functia compara un esantion si scrie in
+   * `error_logs` la nepotrivire, deci divergenta apare in /admin/logs.
+   *
+   * Inghitit: o alarma care nu poate rula n-are voie sa opreasca eliberarea
+   * cupoanelor, care e treaba adevarata a acestui cron.
+   */
+  await admin.rpc("catalog_verifica", { p_esantion: 300 }).then(() => {}, () => {});
+
   // `?ore=` largeste sau stramteaza pragul pentru o verificare manuala; rularea
   // programata foloseste implicitul.
   const ore = Math.min(Math.max(Number(req.nextUrl.searchParams.get("ore")) || ORE_PANA_LA_ELIBERARE, 1), 24 * 30);

@@ -42,6 +42,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/catalog-proiector",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/stock-feeds",
       "schedule": "0 * * * *"
     },

@@ -17,7 +17,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { AboutYouSyncContext } from "./sync";
 import { getOrders, isAboutYouError } from "./client";
-import type { AboutYouOrder } from "./types";
+import { cancelOrderItems, returnOrderItems } from "./client";
+import type { AboutYouOrder, AboutYouOrderStatus } from "./types";
 
 type Db = SupabaseClient<Database>;
 
@@ -34,16 +35,69 @@ function edinioStatusFor(ayStatus: string | undefined): string {
   return "pending";
 }
 
+/*
+ * Tara comenzii. `GetOrderSchema` NU are `shop_country` — are `shop`, care e un
+ * intreg (id-ul magazinului About You), si `shipping_country_code`. Codul citea
+ * `shop_country` si scria mereu null, deci tara in care s-a vandut se pierdea.
+ * Tara de livrare e informatia utila si o avem.
+ */
+function shopCountry(order: AboutYouOrder): string | null {
+  const o = order as unknown as Record<string, unknown>;
+  const c = o.shipping_country_code ?? o.billing_country_code;
+  return typeof c === "string" && c !== "" ? c.toUpperCase() : null;
+}
+
 interface ParsedAddress { name: string; phone: string; email: string | null; raw: Record<string, unknown> }
 
+/*
+ * Adresa de livrare NU vine ca obiect.
+ *
+ * `GetOrderSchema` are campurile PLATE pe comanda: `shipping_street`,
+ * `shipping_zip_code`, `shipping_city`, `shipping_country_code`,
+ * `shipping_recipient_first_name`, `customer_phone`, `customer_email`. Codul
+ * cauta un `shipping_address` care nu exista nicaieri in schema, gasea un obiect
+ * gol si scria „Client About You" cu telefon gol pe fiecare comanda — adica
+ * nimeni nu putea nici sa livreze, nici sa sune clientul.
+ *
+ * Cand adresa de livrare lipseste, cadem pe cea de facturare: e mai bine decat
+ * o comanda fara adresa. Livrarea la punct de colectare (`easybox` si echivalente)
+ * vine prin `shipping_collection_point_*` si o pastram in forma pe care restul
+ * aplicatiei o citeste deja: `delivery_type` + `locker_id`.
+ */
 function parseAddress(order: AboutYouOrder): ParsedAddress {
-  const a = (order.shipping_address ?? order.address ?? order.customer ?? {}) as Record<string, unknown>;
-  const str = (k: string) => (typeof a[k] === "string" ? (a[k] as string) : undefined);
-  const name = [str("first_name"), str("last_name")].filter(Boolean).join(" ")
-    || str("name") || str("full_name") || "Client About You";
-  const phone = str("phone") || str("phone_number") || "";
-  const email = str("email") || null;
-  return { name, phone, email, raw: a };
+  const o = order as unknown as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" && o[k] !== "" ? (o[k] as string) : undefined);
+
+  const nume = [str("shipping_recipient_first_name"), str("shipping_recipient_last_name")].filter(Boolean).join(" ")
+    || [str("billing_recipient_first_name"), str("billing_recipient_last_name")].filter(Boolean).join(" ")
+    || "Client About You";
+
+  const strada = [str("shipping_street"), str("shipping_additional")].filter(Boolean).join(", ")
+    || [str("billing_street"), str("billing_additional")].filter(Boolean).join(", ")
+    || "";
+
+  const punctColectare = str("shipping_collection_point_key");
+  const raw: Record<string, unknown> = {
+    address: strada,
+    city: str("shipping_city") ?? str("billing_city") ?? "",
+    postal_code: str("shipping_zip_code") ?? str("billing_zip_code") ?? "",
+    country: str("shipping_country_code") ?? str("billing_country_code") ?? "",
+    ...(punctColectare
+      ? {
+        delivery_type: "locker",
+        locker_id: punctColectare,
+        locker_name: str("shipping_collection_point_description") ?? null,
+        collection_point_type: str("shipping_collection_point_type") ?? null,
+      }
+      : {}),
+  };
+
+  return {
+    name: nume,
+    phone: str("customer_phone") ?? "",
+    email: str("customer_email") ?? null,
+    raw,
+  };
 }
 
 function toAyItems(order: AboutYouOrder) {
@@ -103,19 +157,42 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     }
   }
 
+  /*
+   * Articolele anulate si returnate NU intra nici in total, nici in stoc.
+   *
+   * `GET /orders/` intoarce comanda cu toate liniile ei, inclusiv cele pe care
+   * clientul le-a anulat sau returnat. Numarate, comanda arata o valoare pe care
+   * nimeni n-a platit-o (raportarile ies umflate) si scadeam din stoc marfa care
+   * s-a intors pe raft.
+   */
+  const activeItems = items.filter((it) => it.status !== "cancelled" && it.status !== "returned");
+
   const qtyByProduct = new Map<string, number>();
   const edinioItems = items.map((it) => {
     const meta = info.get(it.sku);
     const q = (it as { quantity?: number }).quantity;
     const qty = typeof q === "number" ? q : 1;
-    if (meta?.productId) qtyByProduct.set(meta.productId, (qtyByProduct.get(meta.productId) ?? 0) + qty);
-    return { product_id: meta?.productId ?? null, name: meta?.name ?? `SKU ${it.sku}`, sku: it.sku, price: money(it.price_with_tax), quantity: qty };
+    const activ = it.status !== "cancelled" && it.status !== "returned";
+    if (activ && meta?.productId) qtyByProduct.set(meta.productId, (qtyByProduct.get(meta.productId) ?? 0) + qty);
+    return {
+      product_id: meta?.productId ?? null,
+      name: meta?.name ?? `SKU ${it.sku}`,
+      sku: it.sku,
+      price: money(it.price_with_tax),
+      quantity: qty,
+      ...(activ ? {} : { status: it.status }),
+    };
   });
 
-  const subtotal = money(items.reduce((s, it) => s + num(it.price_without_tax), 0));
-  const total = money(items.reduce((s, it) => s + num(it.price_with_tax), 0));
+  const subtotal = money(activeItems.reduce((s, it) => s + num(it.price_without_tax), 0));
+  const total = money(activeItems.reduce((s, it) => s + num(it.price_with_tax), 0));
   const vatAmount = Math.round((total - subtotal) * 100) / 100;
   const addr = parseAddress(order);
+  // Comenzile de pe About You sunt in EURO, iar `orders.total` e citit peste tot
+  // ca lei. Marcam moneda in `order_source` ca sa nu para o comanda de 40 de lei.
+  const moneda = typeof (order as unknown as Record<string, unknown>).currency_code === "string"
+    ? ((order as unknown as Record<string, unknown>).currency_code as string).toUpperCase()
+    : "EUR";
 
   const { data: created, error } = await admin.from("orders").insert({
     business_id: ctx.businessId,
@@ -123,7 +200,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     customer_name: addr.name,
     customer_phone: addr.phone,
     customer_email: addr.email,
-    shipping_address: { ...addr.raw, source: "aboutyou", shop_country: order.shop_country ?? null } as never,
+    shipping_address: { ...addr.raw, source: "aboutyou", shop_country: shopCountry(order) } as never,
     items: edinioItems as never,
     subtotal,
     total,
@@ -131,18 +208,27 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     payment_method: "aboutyou",
     payment_status: "paid",
     status: edinioStatusFor(order.status),
-    order_source: { marketplace: "aboutyou", order_number: ayNumber } as never,
+    order_source: { marketplace: "aboutyou", order_number: ayNumber, currency: moneda } as never,
   } as never).select("id").single();
 
-  // Recover from a prior/partial ingest: order_number is unique per business, so a
-  // failed insert means the order already exists — link to it instead of dropping
-  // the marketplace order, and skip the stock decrement (already applied once).
+  /*
+   * Recuperare dintr-un ingest partial: `order_number` e unic per magazin, deci
+   * un insert cazut pe duplicat inseamna ca ordinea exista deja — ne legam de ea
+   * si sarim scaderea de stoc, aplicata o data.
+   *
+   * ORICE ALT ESEC insa (retea, timeout, constrangere) nu inseamna „exista deja".
+   * Inainte, si acolo raspundeam „skipped": comanda se pierdea definitiv, pentru
+   * ca `pollOrders` avanseaza fereastra si nu se mai intoarce dupa ea. Acum
+   * aruncam, iar apelantul o reia la urmatoarea trecere.
+   */
   let orderId: string;
   let isNew = true;
   if (error || !created) {
     const { data: found } = await admin.from("orders").select("id")
       .eq("business_id", ctx.businessId).eq("order_number", `AY-${ayNumber}`).maybeSingle();
-    if (!found) return "skipped";
+    if (!found) {
+      throw new Error(`Comanda About You ${ayNumber} nu a putut fi salvată: ${error?.message ?? "motiv necunoscut"}`);
+    }
     orderId = (found as { id: string }).id;
     isNew = false;
   } else {
@@ -153,7 +239,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     business_id: ctx.businessId,
     order_id: orderId,
     aboutyou_order_number: ayNumber,
-    shop_country: order.shop_country ?? null,
+    shop_country: shopCountry(order),
     fulfillment_type: (typeof order.fulfillment_type === "string" ? order.fulfillment_type : null),
     status: order.status ?? "open",
     items: ayItems as never,
@@ -171,36 +257,152 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   return isNew ? "created" : "updated";
 }
 
-// Fetch a single order by its About You number and ingest it (webhook path).
+/**
+ * Aduce o comanda dupa numarul ei si o ingereaza (calea de webhook).
+ *
+ * NU arunca: ruta de webhook trebuie sa raspunda 200 orice s-ar intampla, altfel
+ * About You reincearca din ora in ora, doua zile. O comanda care nu s-a putut
+ * salva ramane oricum pe seama cronului, care intreaba direct `GET /orders/`.
+ */
 export async function ingestOrderByNumber(admin: Db, ctx: AboutYouSyncContext, orderNumber: string): Promise<void> {
   const res = await getOrders(ctx.auth, { order_number: orderNumber, per_page: 5 });
   if (isAboutYouError(res)) return;
   const order = (res.data?.items ?? []).find((o) => o.order_number === orderNumber) ?? res.data?.items?.[0];
-  if (order) await ingestOrder(admin, ctx, order);
+  if (!order) return;
+  try {
+    await ingestOrder(admin, ctx, order);
+  } catch (e) {
+    console.error("[aboutyou] ingest comanda esuat", orderNumber, e instanceof Error ? e.message : e);
+  }
 }
 
-// Poll new/open orders for one business and ingest them (cron safety net).
+/*
+ * Aduce comenzile unui magazin (plasa de siguranta pentru webhookuri pierdute).
+ *
+ * DOUA CORECTURI FATA DE VARIANTA ANTERIOARA:
+ *
+ * 1. Se cer TOATE statusurile, nu doar `open`. Cerand doar comenzile deschise, o
+ *    anulare sau un retur nu ajungeau niciodata in Edinio: comanda ramanea „in
+ *    asteptare" pentru totdeauna, comerciantul o pregatea si o expedia degeaba.
+ *
+ * 2. `ok` devine `false` si cand paginarea s-a oprit inainte de ultima pagina.
+ *    Apelantul avanseaza fereastra doar pe `ok`, iar inainte o avansa si dupa o
+ *    parcurgere incompleta: comenzile din paginile neatinse nu mai erau cerute
+ *    niciodata.
+ */
+// 40 x 50 = 2000 de comenzi per status intr-o singura trecere. Plafonul vechi de
+// 5 pagini (250) putea bloca fereastra LA NESFARSIT: peste el, `ok` ramanea fals,
+// filigranul nu avansa, si la minutul urmator se cereau exact aceleasi comenzi.
+const MAX_PAGINI_COMENZI = 40;
+const STATUSURI_DE_ADUS: AboutYouOrderStatus[] = ["open", "shipped", "cancelled", "returned", "mixed"];
+
 export async function pollOrders(admin: Db, ctx: AboutYouSyncContext, since?: string): Promise<{ ingested: number; ok: boolean }> {
   let ingested = 0;
   let ok = true;
-  for (let page = 1; page <= 5; page++) {
-    const res = await getOrders(ctx.auth, { order_status: "open", orders_from: since, page, per_page: 50 });
-    if (isAboutYouError(res)) { ok = false; break; }
-    const orders = res.data?.items ?? [];
-    if (orders.length === 0) break;
-    for (const o of orders) {
-      if ((await ingestOrder(admin, ctx, o)) === "created") ingested++;
+
+  for (const status of STATUSURI_DE_ADUS) {
+    for (let page = 1; page <= MAX_PAGINI_COMENZI; page++) {
+      const res = await getOrders(ctx.auth, { order_status: status, orders_from: since, page, per_page: 50 });
+      if (isAboutYouError(res)) { ok = false; break; }
+      const orders = res.data?.items ?? [];
+      if (orders.length === 0) break;
+      for (const o of orders) {
+        try {
+          if ((await ingestOrder(admin, ctx, o)) === "created") ingested++;
+        } catch {
+          // O comanda care nu s-a putut salva nu are voie sa mute fereastra.
+          ok = false;
+        }
+      }
+      const total = Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1);
+      if (page >= total) break;
+      if (page === MAX_PAGINI_COMENZI && total > MAX_PAGINI_COMENZI) {
+        // Peste 2000 de comenzi intr-o fereastra: nu blocam filigranul (l-am
+        // bloca pentru totdeauna), dar lasam urma in jurnal.
+        console.warn("[aboutyou] fereastra de comenzi depaseste plafonul de pagini", { status, total });
+      }
     }
-    const total = Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1);
-    if (page >= total) break;
+    // Un status cazut NU-i mai opreste pe ceilalti: inainte, un esec pe „open"
+    // insemna ca anularile si retururile nu se mai cereau deloc in tura aceea.
   }
   return { ingested, ok };
 }
 
-// Best-effort extraction of the order number from a webhook payload.
+/*
+ * Anulare si retur pornite din Edinio.
+ *
+ * Existau in API (`POST /orders/cancel`, `POST /orders/return`) dar nu erau
+ * implementate nicaieri: comerciantul care nu mai avea marfa era nevoit sa intre
+ * in Seller Center, iar Edinio ramanea cu o comanda pe care o credea in lucru.
+ */
+export async function cancelOrderNow(
+  admin: Db, ctx: AboutYouSyncContext, orderId: string,
+): Promise<{ ok: true; batchRequestId?: string } | { ok: false; error: string }> {
+  const ids = await idsArticoleActive(admin, ctx, orderId);
+  if ("error" in ids) return { ok: false, error: ids.error };
+  const res = await cancelOrderItems(ctx.auth, ids.ids.map((id) => ({ id })));
+  if (isAboutYouError(res)) return { ok: false, error: res.error };
+  await marcheazaSideRow(admin, ctx, orderId, "cancel_pending");
+  return { ok: true, batchRequestId: res.data?.batchRequestId };
+}
+
+export async function returnOrderNow(
+  admin: Db, ctx: AboutYouSyncContext, orderId: string, returnTrackingKey: string,
+): Promise<{ ok: true; batchRequestId?: string } | { ok: false; error: string }> {
+  const cheie = returnTrackingKey.trim();
+  if (!cheie) return { ok: false, error: "Completează numărul AWB de retur." };
+  const ids = await idsArticoleActive(admin, ctx, orderId);
+  if ("error" in ids) return { ok: false, error: ids.error };
+  const res = await returnOrderItems(ctx.auth, [{ order_items: ids.ids, return_tracking_key: cheie }]);
+  if (isAboutYouError(res)) return { ok: false, error: res.error };
+  await marcheazaSideRow(admin, ctx, orderId, "return_pending");
+  return { ok: true, batchRequestId: res.data?.batchRequestId };
+}
+
+async function idsArticoleActive(
+  admin: Db, ctx: AboutYouSyncContext, orderId: string,
+): Promise<{ ids: number[] } | { error: string }> {
+  const { data } = await admin
+    .from("aboutyou_orders").select("items")
+    .eq("business_id", ctx.businessId).eq("order_id", orderId).maybeSingle();
+  if (!data) return { error: "Comanda nu este o comandă About You." };
+  const items = Array.isArray((data as { items?: unknown }).items)
+    ? ((data as { items: { order_item_id?: number; status?: string }[] }).items)
+    : [];
+  const ids = items
+    .filter((i) => i.status !== "cancelled" && i.status !== "returned")
+    .map((i) => i.order_item_id)
+    .filter((x): x is number => typeof x === "number");
+  if (ids.length === 0) return { error: "Comanda nu mai are articole active." };
+  return { ids };
+}
+
+async function marcheazaSideRow(admin: Db, ctx: AboutYouSyncContext, orderId: string, status: string): Promise<void> {
+  const now = new Date().toISOString();
+  await admin.from("aboutyou_orders")
+    .update({ status, last_synced_at: now, updated_at: now } as never)
+    .eq("business_id", ctx.businessId).eq("order_id", orderId);
+}
+
+/*
+ * Numarul comenzii dintr-un webhook.
+ *
+ * Plicul About You e `{id, event, timestamp, message, subscription_id}` — sarcina
+ * utila sta in `message`, nu in `data`. Codul citea `data`, nu gasea nimic, cadea
+ * pe plic si nici acolo nu gasea `order_number`: nicio comanda nu a intrat
+ * vreodata pe calea webhook. Se salva doar cronul, care intreaba direct
+ * `GET /orders/`, cu intarzierea lui de pana la un minut.
+ *
+ * `data` si radacina raman ca alternative: nu costa nimic si ne acopera daca
+ * plicul difera de spec la vreun eveniment.
+ */
 export function extractOrderNumber(event: unknown): string | undefined {
   const e = (event ?? {}) as Record<string, unknown>;
-  const data = (e.data as Record<string, unknown>) ?? e;
-  const n = data.order_number ?? data.orderNumber ?? e.order_number;
-  return typeof n === "string" ? n : undefined;
+  const candidati = [e.message, e.data, e].filter((x): x is Record<string, unknown> =>
+    !!x && typeof x === "object" && !Array.isArray(x));
+  for (const c of candidati) {
+    const n = c.order_number ?? c.orderNumber;
+    if (typeof n === "string" && n !== "") return n;
+  }
+  return undefined;
 }

@@ -47,6 +47,12 @@ export interface AboutYouConfig {
   // Webhook subscription (created via API; client_secret verifies signatures).
   webhook_subscription_id?: string;
   webhook_secret?: string;
+  /**
+   * Secret propriu, pus in URL-ul de abonare. Schema de semnatura a lui About You
+   * nu e publicata, deci verificarea semnaturii e o deductie; tokenul asta e a
+   * doua incuietoare, care nu depinde de nimic ghicit.
+   */
+  webhook_token?: string;
   // Fulfillment.
   fulfillment_type?: AboutYouFulfillmentType;
   default_carrier_key?: string;
@@ -56,6 +62,10 @@ export interface AboutYouConfig {
   brand_id?: number;                    // merchant's primary brand
   brand_name?: string;
   ship_countries?: string[];            // About You country codes to list in
+  // Publicul magazinului. About You imparte arborele pe Women/Men/Girls/Boys, iar
+  // categoriile romanesti („Genti") rareori spun pentru cine sunt — fara asta,
+  // maparea automata n-ar avea cum sa aleaga intre ramuri.
+  target_audience?: "women" | "men" | "girls" | "boys";
   // Pricing.
   price_mode?: "fx_from_ron" | "manual_eur";
   fx?: AboutYouFxConfig;
@@ -146,12 +156,20 @@ export interface AboutYouMaterialCluster { cluster_id: number; components: About
 export type AboutYouReadStatus =
   | "draft" | "pending_approval" | "pending_active" | "active" | "rejected" | "inactive" | "problem";
 export interface AboutYouRejectionReason { key?: string; type?: string; name?: string; description?: string }
+// GET /products/ (GetProductItemSchema). Deliberately does NOT carry rejection
+// data — that lives only on GET /products/rejected and on the
+// `product_master.status_updated` webhook.
 export interface AboutYouGetProductItem {
   style_key: string | null;
   sku: string;
   status: AboutYouReadStatus | string;
+}
+// GET /products/rejected (RejectedProductSchema).
+export interface AboutYouRejectedProduct {
+  style_key: string | null;
   rejection_reasons?: AboutYouRejectionReason[] | null;
   rejection_message?: string | null;
+  rejected_product_ids_hint?: unknown;
 }
 
 // ── Product / variant payload (what we SEND on POST /products) ─────────────────
@@ -175,7 +193,9 @@ export interface AboutYouProductItem {
   hs_code?: string;
   name?: string;
   descriptions?: Record<string, string>; // by locale
-  size?: number;
+  // Required by the schema even though the value may be null: a missing key is a
+  // 400 on the whole request. Typed as required so TypeScript enforces it.
+  size: number | null;
   second_size?: number;
   quantity?: number;
   material_composition_textile?: AboutYouMaterialCluster[];

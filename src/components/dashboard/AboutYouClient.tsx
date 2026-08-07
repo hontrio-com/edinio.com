@@ -1,14 +1,23 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
 import {
-  connectAboutYou, disconnectAboutYou, saveAboutYouSettings,
-  subscribeAboutYouWebhook, unsubscribeAboutYouWebhook,
+  connectAboutYou, disconnectAboutYou, getAboutYouBrands, getAboutYouCountries,
+  saveAboutYouSettings, subscribeAboutYouWebhook, unsubscribeAboutYouWebhook,
   type AboutYouStatus,
 } from "@/lib/actions/aboutyou.actions";
+import type { AboutYouBrand, AboutYouCountry } from "@/lib/aboutyou/types";
+import type { PublicTinta } from "@/lib/aboutyou/ro-taxonomy";
+
+const PUBLICURI: { valoare: PublicTinta; eticheta: string }[] = [
+  { valoare: "women", eticheta: "Femei" },
+  { valoare: "men", eticheta: "Bărbați" },
+  { valoare: "girls", eticheta: "Fete" },
+  { valoare: "boys", eticheta: "Băieți" },
+];
 
 const PREREQUISITES = [
   "Cont About You Seller Center aprobat (contract + verificare). Integrarea folosește cheia ta API.",
@@ -28,9 +37,45 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
   const [fxRate, setFxRate] = useState(status?.fxRate != null ? String(status.fxRate) : "");
   const [fxMargin, setFxMargin] = useState(status?.fxMarginPct != null ? String(status.fxMarginPct) : "");
   const [brandId, setBrandId] = useState(status?.brandId != null ? String(status.brandId) : "");
-  const [shipCountries, setShipCountries] = useState((status?.shipCountries ?? []).join(", "));
+  const [shipCountries, setShipCountries] = useState<string[]>(status?.shipCountries ?? []);
   const [countryOfOrigin, setCountryOfOrigin] = useState(status?.defaultCountryOfOrigin ?? "RO");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
+  const [targetAudience, setTargetAudience] = useState<PublicTinta>(status?.targetAudience ?? "women");
+
+  /*
+   * Brandurile si tarile se citesc de la About You, nu se scriu de mana.
+   *
+   * Inainte, ambele erau campuri libere: un numar pentru brand („ID brand About
+   * You") si o lista de coduri separate prin virgula pentru tari. Nimeni nu are
+   * de unde sti ca brandul lui e 178225, iar o tara scrisa gresit trece de
+   * validare si cade abia la publicare. Ambele sunt liste scurte si venite de
+   * la furnizor — deci sunt selectii, nu dictari.
+   */
+  const [brands, setBrands] = useState<AboutYouBrand[] | null>(null);
+  const [countries, setCountries] = useState<AboutYouCountry[] | null>(null);
+  // Moneda fiecarei tari. About You citeste pretul in moneda tarii, iar noi
+  // trimitem euro — deci tarile non-euro nu se pot selecta inca.
+  const [monede, setMonede] = useState<Record<string, string>>({});
+  const conectat = !!status?.connected;
+
+  useEffect(() => {
+    if (!conectat) return;
+    let activ = true;
+    (async () => {
+      const [b, c] = await Promise.all([getAboutYouBrands(businessId), getAboutYouCountries(businessId)]);
+      if (!activ) return;
+      if ("brands" in b) setBrands(b.brands); else setBrands([]);
+      if ("data" in c) {
+        setCountries(c.data.countries ?? []);
+        setMonede(Object.fromEntries((c.data.currencies ?? []).map((m) => [m.country_code, m.code])));
+      } else setCountries([]);
+      // Un singur mesaj, nu doua: cauza e aceeasi (conexiunea), iar doua
+      // notificari suprapuse pentru acelasi lucru sperie degeaba.
+      const eroare = "error" in b ? b.error : "error" in c ? c.error : null;
+      if (eroare) toast.error(eroare);
+    })();
+    return () => { activ = false; };
+  }, [businessId, conectat]);
   // Comutatorul de notificari se muta instant; actiunea nu are alt rezultat de
   // aratat in afara de activ/inactiv, iar la eroare React readuce starea reala.
   const [notificariActive, aplicaNotificari] = useOptimistic(status?.webhookActive ?? false, (_stare, noua: boolean) => noua);
@@ -74,17 +119,18 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
     if (rate != null && (!Number.isFinite(rate) || rate <= 0)) { toast.error("Cursul RON -> EUR trebuie să fie un număr pozitiv."); return; }
     if (margin != null && (!Number.isFinite(margin) || margin < 0)) { toast.error("Marja trebuie să fie un număr pozitiv."); return; }
     const bId = brandId.trim() === "" ? null : Number(brandId);
-    if (bId != null && !Number.isInteger(bId)) { toast.error("ID-ul de brand trebuie să fie un număr întreg."); return; }
-    const countries = shipCountries.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean);
+    if (bId != null && !Number.isInteger(bId)) { toast.error("Alege un brand din listă."); return; }
 
     startTransition(async () => {
       const res = await saveAboutYouSettings(businessId, {
         fx_rate: rate,
         fx_margin_pct: margin,
         brand_id: bId,
-        ship_countries: countries,
+        brand_name: bId == null ? null : (brands?.find((b) => b.id === bId)?.name ?? null),
+        ship_countries: shipCountries,
         default_country_of_origin: countryOfOrigin.trim().toUpperCase() || "RO",
         auto_sync: autoSync,
+        target_audience: targetAudience,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
@@ -252,13 +298,21 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">ID brand About You</label>
-                <input
-                  type="number" min="0" inputMode="numeric"
-                  value={brandId} onChange={(e) => setBrandId(e.target.value)}
-                  placeholder="selector cu branduri în pasul următor"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                />
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Brand About You</label>
+                <select
+                  value={brandId}
+                  onChange={(e) => setBrandId(e.target.value)}
+                  disabled={brands === null}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
+                >
+                  <option value="">{brands === null ? "Se încarcă..." : "Alege brandul"}</option>
+                  {(brands ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                {brands !== null && brands.length === 0 && (
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    Contul tău About You nu are încă niciun brand aprobat. Adaugă-l în Seller Center.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Țară de origine (ISO2)</label>
@@ -269,14 +323,64 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm uppercase"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Public țintă</label>
+                <select
+                  value={targetAudience}
+                  onChange={(e) => setTargetAudience(e.target.value as PublicTinta)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  {PUBLICURI.map((p) => <option key={p.valoare} value={p.valoare}>{p.eticheta}</option>)}
+                </select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  About You împarte catalogul pe Femei / Bărbați / Copii. Folosim asta la maparea automată a categoriilor.
+                </p>
+              </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Țări de listare (coduri ISO2, separate prin virgulă)</label>
-                <input
-                  type="text"
-                  value={shipCountries} onChange={(e) => setShipCountries(e.target.value)}
-                  placeholder="ex. RO, DE, AT"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm uppercase"
-                />
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Țări de listare</label>
+                {countries === null ? (
+                  <p className="text-xs text-muted-foreground">Se încarcă...</p>
+                ) : countries.length === 0 ? (
+                  <p className="text-xs text-amber-700">
+                    Contul tău About You nu are nicio țară de vânzare activată. Verifică în Seller Center.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {countries.map((c) => {
+                        const bifat = shipCountries.includes(c.code);
+                        const moneda = monede[c.code];
+                        const euro = !moneda || moneda === "EUR";
+                        // O tara non-euro deja bifata (mostenita dintr-o salvare
+                        // veche) trebuie sa poata fi SCOASA: altfel serverul refuza
+                        // orice salvare de setari si comerciantul ramane blocat.
+                        return (
+                          <button
+                            key={c.code}
+                            type="button"
+                            disabled={!euro && !bifat}
+                            title={euro ? undefined : `Prețurile se trimit în euro, iar ${c.name} vinde în ${moneda}.`}
+                            onClick={() => setShipCountries((prev) =>
+                              bifat ? prev.filter((x) => x !== c.code) : [...prev, c.code])}
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                              bifat
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:bg-muted"
+                            } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+                          >
+                            {c.name} ({c.code}){euro ? "" : ` · ${moneda}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {countries.some((c) => monede[c.code] && monede[c.code] !== "EUR") && (
+                      <p className="text-[11px] text-muted-foreground mt-2">
+                        Țările cu altă monedă decât euro sunt indisponibile deocamdată: prețul se trimite în euro
+                        și acolo ar fi citit în moneda locală.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -312,7 +416,6 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
             </div>
             <p className="text-[11px] text-muted-foreground mt-3">
               Livrarea folosește curierii tăi din Edinio (dropshipping); tracking-ul se trimite automat către About You.
-              Selectoarele cu branduri, categorii și curieri live vin în pasul următor.
             </p>
           </div>
         </>

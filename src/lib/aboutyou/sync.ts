@@ -8,16 +8,18 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import type { AboutYouAuth } from "./client";
+import type { AboutYouAuth, AboutYouResult } from "./client";
 import {
-  getPriceBatchResults, getProductBatchResults, getProducts, getShipBatchResults,
+  getPriceBatchResults, getProductBatchResults, getProducts, getRejectedProducts, getShipBatchResults,
   getStatusBatchResults, getStockBatchResults, isAboutYouError, shipOrderItems, updatePrice,
   updateProductStatus, updateStock, upsertProducts,
 } from "./client";
 import {
-  buildAboutYouItems, buildVariantPrices, type AboutYouListingEnrichment,
-  type AboutYouStoredMaterial, type AboutYouVariantData, type MappableProduct,
+  atasezaPreturileRon, buildAboutYouItems, buildVariantPrices, stocVarianta,
+  type AboutYouListingEnrichment, type AboutYouStoredMaterial, type AboutYouVariantData,
+  type MappableProduct,
 } from "./mapping";
+import type { AboutYouBatchAck } from "./types";
 import type { AboutYouConfig, AboutYouRejectionReason } from "./types";
 
 type Db = SupabaseClient<Database>;
@@ -33,7 +35,15 @@ export interface AboutYouSyncContext {
 
 export type SyncOutcome =
   | { ok: true; action: "submitted" | "published" | "removed" | "skipped"; batchRequestId?: string }
-  | { ok: false; error: string };
+  /**
+   * `status` = codul HTTP de la About You, cand esecul vine de acolo.
+   *
+   * Cronul decide din el daca elementul merita reincercat fara sa consume o
+   * incercare (429, 5xx, retea). Ghicit din textul mesajului, ar depinde de un
+   * sir pe care About You il poate schimba oricand — si atunci coada s-ar goli
+   * exact cand nu trebuie.
+   */
+  | { ok: false; error: string; status?: number };
 
 export function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -60,12 +70,14 @@ interface ListingRow {
   material_composition: unknown;
   country_of_origin: string | null;
   hs_code: string | null;
+  /** Momentul in care produsul chiar a plecat spre About You. `null` = doar local. */
+  last_synced_at: string | null;
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -73,7 +85,7 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
 async function getListingByStyleKey(admin: Db, businessId: string, styleKey: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at")
     .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -128,8 +140,19 @@ async function recordBatch(
 
 // ── Upsert (create/update on About You) ─────────────────────────────────────────
 export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
-  const { data: product } = await admin
+  /*
+   * `data: null` inseamna DOUA lucruri diferite, si le confundam.
+   *
+   * Produs sters (`error === null`) — atunci da, il scoatem si de pe About You.
+   * Dar o citire cazuta (timeout de instructiune, conexiune pierduta) intoarce
+   * tot `data: null`, cu `error` completat. Pe acea ramura codul chema
+   * `removeProductNow`: trecea produsul pe `inactive` la About You si stergea
+   * randul din `aboutyou_listings`, cu tot cu variante. Un hop de retea rupea
+   * definitiv o listare bine configurata.
+   */
+  const { data: product, error: eroareProdus } = await admin
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
+  if (eroareProdus) return { ok: false, error: eroareProdus.message };
   if (!product) return removeProductNow(admin, ctx, productId);
 
   const listing = await getListing(admin, ctx.businessId, productId);
@@ -143,10 +166,11 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
     return { ok: true, action: "skipped" };
   }
 
-  const variants = await getVariantData(admin, listing.id);
+  const produs = product as unknown as MappableProduct;
+  const variants = atasezaPreturileRon(produs, await getVariantData(admin, listing.id));
   const built = buildAboutYouItems({
     config: ctx.config,
-    product: product as unknown as MappableProduct,
+    product: produs,
     listing: toEnrichment(listing),
     variants,
   });
@@ -155,15 +179,25 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
     return { ok: false, error: built.error };
   }
 
-  const res = await upsertProducts(ctx.auth, built.items);
-  if (isAboutYouError(res)) {
-    await setListingStatus(admin, listing.id, "error", { error: res.error });
-    return { ok: false, error: res.error };
+  // POST /products/ accepta cel mult 100 de articole (`maxItems`), iar depasirea
+  // respinge cererea INTREAGA, nu doar surplusul. Un produs cu peste 100 de
+  // variante nu s-ar fi putut lista deloc.
+  let batchRequestId: string | undefined;
+  for (let i = 0; i < built.items.length; i += 100) {
+    const res = await upsertProducts(ctx.auth, built.items.slice(i, i + 100));
+    if (isAboutYouError(res)) {
+      await setListingStatus(admin, listing.id, "error", { error: res.error });
+      return { ok: false, error: res.error, status: res.status };
+    }
+    const id = res.data?.batchRequestId;
+    if (id) {
+      batchRequestId = batchRequestId ?? id;
+      await recordBatch(admin, ctx.businessId, id, "product", [listing.style_key]);
+    }
+    if (i + 100 < built.items.length) await pause(300);
   }
-  const batchRequestId = res.data?.batchRequestId;
   const now = new Date().toISOString();
   await setListingStatus(admin, listing.id, "pending", { error: null, last_synced_at: now });
-  if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "product", [listing.style_key]);
   return { ok: true, action: "submitted", batchRequestId };
 }
 
@@ -176,7 +210,7 @@ async function setRemoteStatus(
   const res = await updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }]);
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", { error: res.error });
-    return { ok: false, error: res.error };
+    return { ok: false, error: res.error, status: res.status };
   }
   const batchRequestId = res.data?.batchRequestId;
   await setListingStatus(admin, listing.id, status === "published" ? "pending" : "inactive", { error: null });
@@ -191,25 +225,52 @@ export function unpublishProductNow(admin: Db, ctx: AboutYouSyncContext, product
   return setRemoteStatus(admin, ctx, productId, "inactive");
 }
 
-// Deactivate on About You (best-effort) then drop the local rows.
-export async function removeProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
-  const listing = await getListing(admin, ctx.businessId, productId);
-  if (!listing) return { ok: true, action: "skipped" };
-  if (listing.status !== "draft" && listing.status !== "error") {
-    await updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status: "inactive" }]);
+/*
+ * Dezactiveaza pe About You, apoi sterge randurile locale.
+ *
+ * ORDINEA CONTEAZA, si esecul dezactivarii NU se poate inghiti: randul local e
+ * singura urma ca produsul exista pe About You. Sters dupa o dezactivare esuata,
+ * produsul ramane ACTIV pe marketplace, se vinde in continuare, iar noi nu mai
+ * avem nici macar `style_key`-ul ca sa-l oprim. De aceea, daca About You nu
+ * confirma dezactivarea, pastram randul si intoarcem eroare: elementul se
+ * reincearca la urmatoarea trecere a cronului.
+ */
+async function stergeListare(
+  admin: Db, ctx: AboutYouSyncContext, listing: ListingRow,
+): Promise<SyncOutcome> {
+  /*
+   * „Exista pe About You?" se citeste din `last_synced_at`, nu din `status`.
+   *
+   * Pe `status` era o capcana care se inchidea singura: cand dezactivarea esua,
+   * scriam `status = "error"` — iar „error" era tocmai una din valorile citite ca
+   * „exista doar local". A doua incercare sarea peste dezactivare si stergea randul,
+   * lasand produsul ACTIV pe About You si fara nicio urma la noi. `last_synced_at`
+   * se scrie o singura data, cand produsul chiar a plecat, si nu se mai retrage.
+   */
+  const eDoarLocala = listing.last_synced_at == null;
+  if (!eDoarLocala) {
+    const res = await updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status: "inactive" }]);
+    if (isAboutYouError(res)) {
+      await setListingStatus(admin, listing.id, "error", {
+        error: `Nu am putut dezactiva produsul pe About You: ${res.error}`,
+      });
+      return { ok: false, error: res.error, status: res.status };
+    }
   }
   await admin.from("aboutyou_listings").delete().eq("id", listing.id);
   return { ok: true, action: "removed" };
 }
 
+export async function removeProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
+  const listing = await getListing(admin, ctx.businessId, productId);
+  if (!listing) return { ok: true, action: "skipped" };
+  return stergeListare(admin, ctx, listing);
+}
+
 export async function removeByStyleKey(admin: Db, ctx: AboutYouSyncContext, styleKey: string): Promise<SyncOutcome> {
   const listing = await getListingByStyleKey(admin, ctx.businessId, styleKey);
   if (!listing) return { ok: true, action: "skipped" };
-  if (listing.status !== "draft" && listing.status !== "error") {
-    await updateProductStatus(ctx.auth, [{ style_key: styleKey, status: "inactive" }]);
-  }
-  await admin.from("aboutyou_listings").delete().eq("id", listing.id);
-  return { ok: true, action: "removed" };
+  return stergeListare(admin, ctx, listing);
 }
 
 // ── Batch polling (cron) ────────────────────────────────────────────────────────
@@ -242,7 +303,36 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
     }
     const result = res.data;
     if (!result || result.status === "pending" || result.status === "processing" || result.status === "retry") {
-      await admin.from("aboutyou_batches").update({ attempts: b.attempts + 1, polled_at: now } as never).eq("id", b.id);
+      /*
+       * Un lot care nu se aseaza NU poate ramane deschis la nesfarsit.
+       *
+       * Selectia de mai sus ia cele mai vechi loturi deschise, in limita `limit`.
+       * Un lot ramas „pending" era numarat la fiecare trecere si, fiind cel mai
+       * vechi, ocupa un loc pentru totdeauna: cu destule astfel de loturi, cele
+       * noi nu mai ajungeau niciodata sa fie interogate. Cronul ruleaza din minut
+       * in minut, deci 120 de incercari inseamna ca About You a avut doua ore sa
+       * raspunda. Dupa atat, lotul se inchide ca esuat si eliberam locul.
+       */
+      const incercari = b.attempts + 1;
+      const abandonat = incercari >= 120;
+      await admin.from("aboutyou_batches").update({
+        attempts: incercari,
+        polled_at: now,
+        ...(abandonat
+          ? { status: "failed", result_summary: { status: result?.status ?? "necunoscut", abandonat: true } as never }
+          : {}),
+      } as never).eq("id", b.id);
+      if (abandonat && (b.kind === "product" || b.kind === "status")) {
+        const styleKeys = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+        for (const sk of styleKeys) {
+          const listing = await getListingByStyleKey(admin, ctx.businessId, sk);
+          if (listing && listing.status === "pending") {
+            await setListingStatus(admin, listing.id, "error", {
+              error: "About You nu a finalizat procesarea. Încearcă din nou.",
+            });
+          }
+        }
+      }
       continue;
     }
 
@@ -250,6 +340,27 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
     const styleKeys = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
     const errors = (result.items ?? []).filter((it) => !it.success).flatMap((it) => it.errors ?? []);
     const hardFail = result.status === "failed" || errors.length > 0;
+
+    /*
+     * Loturile de expediere isi aseaza propria comanda.
+     *
+     * `shipOrderNow` lasa comanda pe `ship_pending`; abia aici stim daca About
+     * You a acceptat. Fara pasul asta, o expediere respinsa ramanea marcata ca
+     * reusita si nimeni n-o mai relua — clientul astepta un colet despre care
+     * marketplace-ul nu stia nimic.
+     */
+    if (b.kind === "ship") {
+      const orderIds = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+      for (const oid of orderIds) {
+        await admin.from("aboutyou_orders")
+          .update({
+            status: hardFail ? "ship_failed" : "shipped",
+            last_synced_at: now,
+            updated_at: now,
+          } as never)
+          .eq("business_id", ctx.businessId).eq("order_id", oid);
+      }
+    }
 
     // Only catalog batches (product create/update, status) reflect onto the
     // listing status; stock/price batches are transient and just settle.
@@ -271,8 +382,20 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
   }
 }
 
-// ── Status reconcile (cron): read products back for approval/rejection ──────────
+/*
+ * ── Reconciliere (cron): citim inapoi statusurile de la About You ─────────────
+ *
+ * DOUA APELURI, nu unul, pentru ca sunt doua raspunsuri diferite.
+ *
+ * `GET /products/` da statusul, dar NU si motivul respingerii — schema lui nici
+ * nu are campurile alea. Codul le citea totusi de acolo, primea `undefined` si
+ * scria peste ce stia deja: dupa fiecare trecere a cronului, un produs respins
+ * ramanea „respins" cu lista de motive golita. Motivele vin de la
+ * `GET /products/rejected`, si doar de acolo le scriem.
+ */
 export async function reconcileStatuses(admin: Db, ctx: AboutYouSyncContext, maxPages = 5): Promise<void> {
+  const respinse: string[] = [];
+
   for (let page = 1; page <= maxPages; page++) {
     const res = await getProducts(ctx.auth, { page, per_page: 100 });
     if (isAboutYouError(res)) return;
@@ -281,13 +404,43 @@ export async function reconcileStatuses(admin: Db, ctx: AboutYouSyncContext, max
     const now = new Date().toISOString();
     for (const it of items) {
       if (!it.style_key) continue;
-      const rejection = (it.rejection_reasons ?? []) as AboutYouRejectionReason[];
+      const eRespins = it.status === "rejected";
+      if (eRespins) respinse.push(it.style_key);
       await admin.from("aboutyou_listings")
         .update({
           status: it.status,
+          last_status_at: now,
+          updated_at: now,
+          // Cand About You retrage respingerea, motivele vechi trebuie sa dispara:
+          // altfel produsul apare aprobat, dar cu o eroare veche lipita de el.
+          ...(eRespins ? {} : { rejection_reasons: [] as never, error: null }),
+        } as never)
+        .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
+    }
+    const total = Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1);
+    if (page >= total) break;
+    await pause(250);
+  }
+
+  if (respinse.length === 0) return;
+  await pause(250);
+
+  // Limita de rata aici e 50/min, de douazeci de ori mai stransa: o singura
+  // trecere paginata, nu cate o cerere per produs respins.
+  const deRespins = new Set(respinse);
+  for (let page = 1; page <= maxPages; page++) {
+    const res = await getRejectedProducts(ctx.auth, { page, per_page: 100 });
+    if (isAboutYouError(res)) return;
+    const items = res.data?.items ?? [];
+    if (items.length === 0) break;
+    const now = new Date().toISOString();
+    for (const it of items) {
+      if (!it.style_key || !deRespins.has(it.style_key)) continue;
+      const rejection = (it.rejection_reasons ?? []) as AboutYouRejectionReason[];
+      await admin.from("aboutyou_listings")
+        .update({
           rejection_reasons: (rejection as unknown) as never,
           error: it.rejection_message ?? null,
-          last_status_at: now,
           updated_at: now,
         } as never)
         .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
@@ -326,62 +479,89 @@ export async function processQueueItem(admin: Db, ctx: AboutYouSyncContext, item
   }
 }
 
-// ── Dedicated stock / price push (Faza 2) ────────────────────────────────────────
-// Edinio tracks stock at the product level. A single-variant listing gets the
-// product's live stock; a multi-variant listing uses the per-variant quantity the
-// merchant set (per-size stock is a later refinement). Untracked products push a
-// nominal "in stock" quantity.
+/*
+ * ── Impingere dedicata de stoc / pret ────────────────────────────────────────
+ *
+ * Stocul se calculeaza cu ACEEASI regula ca la creare (`stocVarianta` din
+ * mapping.ts). Erau doua reguli diferite pentru acelasi lucru — una la creare,
+ * alta aici — iar cele doua puteau devia oricat fara ca nimic sa semnaleze.
+ *
+ * `valid_at` NU se trimite: fara el, About You aplica valoarea imediat, ceea ce
+ * e exact ce vrem dupa o comanda. Cu el am programa o valoare in viitor si o
+ * comanda intre timp ar fi suprascrisa de programare.
+ */
+const MAX_ITEMI_STOC_PRET = 1000;
+
 export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
-  const { data: product } = await admin
-    .from("products").select("id, track_inventory, stock_quantity")
-    .eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
+  const { data: product, error: eroareProdus } = await admin
+    .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
+  if (eroareProdus) return { ok: false, error: eroareProdus.message };
   if (!product) return { ok: true, action: "skipped" };
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: true, action: "skipped" };
-  const variants = (await getVariantData(admin, listing.id)).filter((v) => v.enabled && v.sku);
+  const produs = product as unknown as MappableProduct;
+  const variants = atasezaPreturileRon(produs, await getVariantData(admin, listing.id))
+    .filter((v) => v.enabled && v.sku);
   if (variants.length === 0) return { ok: true, action: "skipped" };
 
-  const single = variants.length === 1;
-  const items = variants.map((v) => {
-    let qty: number;
-    if (single && product.track_inventory) qty = product.stock_quantity ?? 0;
-    else if (v.quantity != null) qty = v.quantity;
-    else if (product.track_inventory) qty = product.stock_quantity ?? 0;
-    else qty = 100;
-    return { sku: v.sku, quantity: Math.max(0, Math.min(1_000_000, Math.round(qty))) };
-  });
+  const items = variants.map((v) => ({
+    sku: v.sku,
+    quantity: Math.max(0, Math.min(1_000_000, Math.round(v.quantity ?? stocVarianta(produs, null).quantity))),
+  }));
 
-  const res = await updateStock(ctx.auth, items);
-  if (isAboutYouError(res)) return { ok: false, error: res.error };
-  const batchRequestId = res.data?.batchRequestId;
-  if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "stock", [listing.style_key]);
+  return trimiteInTranse(admin, ctx, listing.style_key, "stock", items,
+    (lot) => updateStock(ctx.auth, lot));
+}
+
+/**
+ * Trimite in transe de cel mult 1000 (limita `maxItems` a schemelor de stoc si
+ * pret). Peste limita, cererea INTREAGA e respinsa, nu doar surplusul.
+ */
+async function trimiteInTranse<T>(
+  admin: Db, ctx: AboutYouSyncContext, styleKey: string, kind: "stock" | "price",
+  items: T[], trimite: (lot: T[]) => Promise<AboutYouResult<AboutYouBatchAck>>,
+): Promise<SyncOutcome> {
+  if (items.length === 0) return { ok: true, action: "skipped" };
+  let batchRequestId: string | undefined;
+  for (let i = 0; i < items.length; i += MAX_ITEMI_STOC_PRET) {
+    const res = await trimite(items.slice(i, i + MAX_ITEMI_STOC_PRET));
+    if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
+    const id = res.data?.batchRequestId;
+    if (id) {
+      batchRequestId = batchRequestId ?? id;
+      await recordBatch(admin, ctx.businessId, id, kind, [styleKey]);
+    }
+    if (i + MAX_ITEMI_STOC_PRET < items.length) await pause(300);
+  }
   return { ok: true, action: "submitted", batchRequestId };
 }
 
 export async function pushPriceNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
-  const { data: product } = await admin
+  const { data: product, error: eroareProdus } = await admin
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
+  // O citire cazuta nu inseamna „produs sters": elementul trebuie reincercat,
+  // nu sarit tacut, altfel pretul de pe About You ramane vechi la nesfarsit.
+  if (eroareProdus) return { ok: false, error: eroareProdus.message };
   if (!product) return { ok: true, action: "skipped" };
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: true, action: "skipped" };
-  const variants = (await getVariantData(admin, listing.id)).filter((v) => v.enabled && v.sku);
+  const produs = product as unknown as MappableProduct;
+  const variants = atasezaPreturileRon(produs, await getVariantData(admin, listing.id))
+    .filter((v) => v.enabled && v.sku);
   if (variants.length === 0) return { ok: true, action: "skipped" };
 
   const items: { sku: string; price: { country_code: string; retail_price: number; sale_price?: number | null } }[] = [];
   for (const v of variants) {
-    const priced = buildVariantPrices(ctx.config, product as unknown as MappableProduct, v);
+    const priced = buildVariantPrices(ctx.config, produs, v);
     if ("error" in priced) return { ok: false, error: priced.error };
     for (const p of priced.prices) {
       items.push({ sku: v.sku, price: { country_code: p.country_code, retail_price: p.retail_price, sale_price: p.sale_price ?? null } });
     }
   }
-  if (items.length === 0) return { ok: true, action: "skipped" };
-
-  const res = await updatePrice(ctx.auth, items);
-  if (isAboutYouError(res)) return { ok: false, error: res.error };
-  const batchRequestId = res.data?.batchRequestId;
-  if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "price", [listing.style_key]);
-  return { ok: true, action: "submitted", batchRequestId };
+  // Un item PER SKU PER TARA: cu multe marimi si mai multe tari, limita de 1000
+  // se atinge repede.
+  return trimiteInTranse(admin, ctx, listing.style_key, "price", items,
+    (lot) => updatePrice(ctx.auth, lot));
 }
 
 // ── Fulfillment: push AWB tracking to About You (Faza 4, dropshipping) ────────────
@@ -423,8 +603,13 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
   if (!carrierKey) return { ok: false, error: "Mapează curierul la un carrier About You în setări." };
 
   const rawItems = (ayOrder as { items?: unknown }).items;
-  const items = Array.isArray(rawItems) ? (rawItems as { order_item_id?: number }[]) : [];
-  const orderItemIds = items.map((i) => i.order_item_id).filter((x): x is number => typeof x === "number");
+  const items = Array.isArray(rawItems) ? (rawItems as { order_item_id?: number; status?: string }[]) : [];
+  // Articolele deja anulate sau returnate nu se mai expediaza: trimise, About You
+  // respinge intreaga cerere de expediere, deci s-ar bloca si celelalte.
+  const orderItemIds = items
+    .filter((i) => i.status !== "cancelled" && i.status !== "returned")
+    .map((i) => i.order_item_id)
+    .filter((x): x is number => typeof x === "number");
   if (orderItemIds.length === 0) return { ok: true, action: "skipped" };
 
   // return_tracking_key is REQUIRED by the ship endpoint; RO couriers issue a single
@@ -433,12 +618,21 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
     order_items: orderItemIds, carrier_key: carrierKey,
     shipment_tracking_key: tracking, return_tracking_key: tracking,
   }]);
-  if (isAboutYouError(res)) return { ok: false, error: res.error };
+  if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
   const batchRequestId = res.data?.batchRequestId;
   const now = new Date().toISOString();
   if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "ship", [orderId]);
+  /*
+   * Statusul devine „trimis catre About You", nu „expediat".
+   *
+   * Expedierea e asincrona: raspunsul de aici e doar confirmarea ca lotul a fost
+   * primit. Scriind direct „shipped", o expediere pe care About You o respinge
+   * mai tarziu (curier nemapat, articol deja anulat) ramanea marcata ca reusita
+   * si nimeni nu o mai relua. Statusul final il pune `pollOpenBatches`, dupa ce
+   * vede rezultatul lotului.
+   */
   await admin.from("aboutyou_orders")
-    .update({ status: "shipped", last_synced_at: now, updated_at: now } as never)
+    .update({ status: "ship_pending", last_synced_at: now, updated_at: now } as never)
     .eq("id", (ayOrder as { id: string }).id);
   return { ok: true, action: "submitted", batchRequestId };
 }

@@ -2,11 +2,14 @@
 // event handlers. About You returns a `client_secret` when a subscription is
 // created; events are signed with it.
 //
-// SIGNATURE SCHEME: the exact header name + algorithm are confirmed on the sandbox.
-// The most likely form is HMAC-SHA256(client_secret, rawBody) as hex, delivered in
-// a signature header. We accept a few candidate header names / encodings and
-// compare timing-safe. Until confirmed, an event that fails verification is logged
-// and IGNORED — we never act on unverified data (safe by default).
+// SEMNATURA NU E CONFIRMATA. Documentatia About You nu publica nici antetul, nici
+// algoritmul; presupunerea de mai jos (HMAC-SHA256 peste corpul brut, in hex) e
+// dedusa, nu citita. Pana la confirmare, un eveniment care nu trece verificarea
+// este logat si IGNORAT — nu actionam niciodata pe date neverificate.
+//
+// CONSECINTA, de stiut inainte de a te baza pe webhookuri: daca schema difera,
+// TOATE evenimentele cad tacut. Plasa de siguranta e cronul, care intreaba direct
+// `GET /orders/` si aduce comenzile oricum, cu o intarziere de pana la un minut.
 
 import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -45,18 +48,66 @@ export function verifyAboutYouSignature(secret: string | undefined | null, signa
     }));
 }
 
-// stock.updated: reflect About You's stock view onto the local variant so the
-// dashboard shows accurate quantities. Tolerant parse (payload shape TBD).
+/*
+ * stock.updated: aducem starea de stoc de la About You pe variantele locale.
+ *
+ * Plicul e `{id, event, timestamp, message, subscription_id}`, iar la evenimentul
+ * asta `message` e o LISTA de `{sku, quantity, quantity_fbm}` — nu un obiect.
+ * Codul citea `data.sku` de pe un obiect: pe o lista, `sku` e mereu `undefined`,
+ * deci fiecare eveniment se pierdea in tacere.
+ */
 export async function handleStockUpdated(
   admin: SupabaseClient<Database>, businessId: string, payload: unknown,
 ): Promise<void> {
   const root = (payload ?? {}) as Record<string, unknown>;
-  const data = (root.data as Record<string, unknown>) ?? root;
-  const sku = typeof data.sku === "string" ? data.sku : undefined;
-  const qtyRaw = data.quantity ?? data.stock;
-  const qty = typeof qtyRaw === "number" ? qtyRaw : undefined;
-  if (!sku || qty == null) return;
-  await admin.from("aboutyou_variants")
-    .update({ quantity: Math.max(0, Math.round(qty)), updated_at: new Date().toISOString() } as never)
-    .eq("business_id", businessId).eq("sku", sku);
+  const brut = root.message ?? root.data ?? root;
+  const linii = (Array.isArray(brut) ? brut : [brut]) as Record<string, unknown>[];
+
+  const now = new Date().toISOString();
+  for (const linie of linii) {
+    if (!linie || typeof linie !== "object") continue;
+    const sku = typeof linie.sku === "string" ? linie.sku : undefined;
+    // `quantity` e stocul din depozitul comerciantului; `quantity_fbm` e cel din
+    // depozitele About You si nu ne priveste aici.
+    const qtyRaw = linie.quantity ?? linie.stock;
+    const qty = typeof qtyRaw === "number" ? qtyRaw : undefined;
+    if (!sku || qty == null) continue;
+    await admin.from("aboutyou_variants")
+      .update({ quantity: Math.max(0, Math.round(qty)), updated_at: now } as never)
+      .eq("business_id", businessId).eq("sku", sku);
+  }
+}
+
+/*
+ * product_master.status_updated: statusul si MOTIVELE respingerii.
+ *
+ * Evenimentul era abonat, dar aruncat fara handler. E singura cale prin care
+ * motivele ajung la noi fara sa mai intrebam nimic: `GET /products/` nu le are
+ * deloc in schema, iar `GET /products/rejected` inseamna inca o cerere si o
+ * intarziere de pana la un minut.
+ *
+ * `external_reference_key` e `style_key`-ul nostru, adica id-ul produsului Edinio.
+ */
+export async function handleProductMasterStatus(
+  admin: SupabaseClient<Database>, businessId: string, payload: unknown,
+): Promise<void> {
+  const root = (payload ?? {}) as Record<string, unknown>;
+  const msg = (root.message ?? root.data ?? root) as Record<string, unknown>;
+  const styleKey = typeof msg.external_reference_key === "string" ? msg.external_reference_key : null;
+  if (!styleKey) return;
+
+  const status = typeof msg.status === "string" ? msg.status : null;
+  const motive = Array.isArray(msg.rejection_reasons) ? msg.rejection_reasons : [];
+  const mesaj = typeof msg.rejection_message === "string" ? msg.rejection_message : null;
+  const now = new Date().toISOString();
+
+  await admin.from("aboutyou_listings")
+    .update({
+      ...(status ? { status } : {}),
+      rejection_reasons: motive as never,
+      error: mesaj,
+      last_status_at: now,
+      updated_at: now,
+    } as never)
+    .eq("business_id", businessId).eq("style_key", styleKey);
 }

@@ -12,6 +12,7 @@ import type {
   AboutYouAttributeGroup, AboutYouBatchAck, AboutYouBatchResult, AboutYouBrand,
   AboutYouCarrier, AboutYouCategory, AboutYouCountriesResponse, AboutYouEnvironment,
   AboutYouGetProductItem, AboutYouOrder, AboutYouOrderStatus, AboutYouProductItem,
+  AboutYouRejectedProduct,
 } from "./types";
 
 export interface AboutYouAuth {
@@ -27,6 +28,11 @@ export function isAboutYouError<T>(r: AboutYouResult<T>): r is { error: string; 
   return "error" in r;
 }
 
+// Fara termen limita, un raspuns care nu mai vine tine functia ocupata pana o
+// taie platforma, iar utilizatorul ramane cu rotita invartindu-se. Douazeci de
+// secunde e mult peste orice raspuns normal al API-ului.
+const TIMEOUT_MS = 20_000;
+
 async function call<T>(
   auth: AboutYouAuth,
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
@@ -34,16 +40,23 @@ async function call<T>(
   body?: unknown,
 ): Promise<AboutYouResult<T>> {
   if (!auth?.apiKey) return { error: "Cheia API About You lipsește.", status: 0 };
+  // O cheie ajunsa aici necriptata sau cu spatii ar produce un 401 pe care nimeni
+  // nu l-ar lega de sursa lui. Mai bine spunem exact ce e in neregula.
+  const apiKey = auth.apiKey.trim();
+  if (apiKey.startsWith("enc.v1.")) {
+    return { error: "Cheia API About You a fost citită criptat (eroare internă). Reconectează contul.", status: 0 };
+  }
   try {
     const res = await fetch(`${aboutyouBaseUrl(auth.environment)}${path}`, {
       method,
       headers: {
-        "X-API-Key": auth.apiKey,
+        "X-API-Key": apiKey,
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (res.status === 204) return { data: undefined as T };
     const text = await res.text();
@@ -59,9 +72,28 @@ async function call<T>(
       return { error: detail, status: res.status, details: json };
     }
     return { data: json as T };
-  } catch {
-    return { error: "Eroare de rețea către About You.", status: 0 };
+  } catch (e) {
+    const expirat = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    return {
+      error: expirat ? "About You nu a răspuns la timp. Încearcă din nou." : "Eroare de rețea către About You.",
+      status: 0,
+    };
   }
+}
+
+/**
+ * Mesaj pentru comerciant, pornind de la esecul real.
+ *
+ * Are voie sa arate si textul venit de la About You: fara el, „nu a mers" e tot
+ * ce afla omul, iar noi nu avem cum sa aflam mai tarziu ce s-a intamplat.
+ */
+export function mesajEroare(ce: string, error: string, status: number): string {
+  if (status === 401 || status === 403) {
+    return "Cheia API About You nu mai este validă sau nu are permisiunile necesare. Reconectează contul.";
+  }
+  if (status === 429) return "About You a limitat temporar cererile. Încearcă din nou peste un minut.";
+  if (status === 0) return error;
+  return `${ce} (About You: ${error})`;
 }
 
 // ── Connection test ───────────────────────────────────────────────────────────
@@ -102,6 +134,28 @@ export function getProducts(
   if (params.per_page != null) q.set("per_page", String(params.per_page));
   const qs = q.toString();
   return call<{ items: AboutYouGetProductItem[]; pagination?: Record<string, unknown> }>(auth, "GET", `/products/${qs ? `?${qs}` : ""}`);
+}
+
+/*
+ * Motivele de respingere au ENDPOINT PROPRIU.
+ *
+ * `GET /products/` intoarce statusul, dar schema lui (GetProductItemSchema) nu
+ * are nici `rejection_reasons`, nici `rejection_message` — campurile alea exista
+ * doar aici si in webhookul `product_master.status_updated`. Reconcilierea le
+ * citea de pe `/products/`, primea `undefined` si scria peste ele lista goala,
+ * la fiecare trecere: comerciantul vedea „respins" fara sa afle vreodata de ce.
+ * Limita de rata e mult mai stransa decat la /products/ (50/min fata de 1000).
+ */
+export function getRejectedProducts(
+  auth: AboutYouAuth, params: { style_key?: string; page?: number; per_page?: number } = {},
+) {
+  const q = new URLSearchParams();
+  if (params.style_key) q.set("style_key", params.style_key);
+  if (params.page != null) q.set("page", String(params.page));
+  if (params.per_page != null) q.set("per_page", String(params.per_page));
+  const qs = q.toString();
+  return call<{ items: AboutYouRejectedProduct[]; pagination?: Record<string, unknown> }>(
+    auth, "GET", `/products/rejected${qs ? `?${qs}` : ""}`);
 }
 
 // Update Product Status (and publish). Settable statuses: published | inactive | draft.
@@ -155,12 +209,32 @@ export function getShipBatchResults(auth: AboutYouAuth, batchRequestId: string) 
   return call<AboutYouBatchResult>(auth, "GET", `/results/ship-orders?batch_request_id=${encodeURIComponent(batchRequestId)}`);
 }
 
+// Anulare / retur pornite din Edinio. Existau in API, dar nu erau folosite:
+// comerciantul trebuia sa intre in Seller Center, iar Edinio ramanea cu o comanda
+// pe care o credea in lucru.
+// ATENTIE la diferenta fata de retur: `CancelOrderItemSchema` cere `{ id }` — un
+// articol per intrare — pe cand `ReturnItemSchema` cere `{ order_items, return_tracking_key }`.
+export function cancelOrderItems(auth: AboutYouAuth, items: { id: number }[]) {
+  return call<AboutYouBatchAck>(auth, "POST", "/orders/cancel", { items });
+}
+export function getCancelBatchResults(auth: AboutYouAuth, batchRequestId: string) {
+  return call<AboutYouBatchResult>(auth, "GET", `/results/cancel-orders?batch_request_id=${encodeURIComponent(batchRequestId)}`);
+}
+export function returnOrderItems(
+  auth: AboutYouAuth, items: { order_items: number[]; return_tracking_key: string }[],
+) {
+  return call<AboutYouBatchAck>(auth, "POST", "/orders/return", { items });
+}
+export function getReturnBatchResults(auth: AboutYouAuth, batchRequestId: string) {
+  return call<AboutYouBatchResult>(auth, "GET", `/results/return-orders?batch_request_id=${encodeURIComponent(batchRequestId)}`);
+}
+
 // ── Webhooks (subscription management) ────────────────────────────────────────
 export function createWebhookSubscription(
   auth: AboutYouAuth,
   body: { events: string[]; url: string; description?: string },
 ) {
-  return call<{ id?: string; client_secret?: string }>(auth, "POST", "/webhooks/", body);
+  return call<{ id?: number | string | null; client_secret?: string }>(auth, "POST", "/webhooks/", body);
 }
 export function deleteWebhookSubscription(auth: AboutYouAuth, id: string) {
   return call<undefined>(auth, "DELETE", `/webhooks/${encodeURIComponent(id)}`);
@@ -188,6 +262,13 @@ export function listCategories(
 export function listAttributeGroups(auth: AboutYouAuth, categoryId: number) {
   return call<AboutYouAttributeGroup[]>(auth, "GET", `/categories/${categoryId}/attribute-groups`);
 }
-export function getCarriers(auth: AboutYouAuth) {
-  return call<{ items: AboutYouCarrier[]; pagination?: Record<string, unknown> }>(auth, "GET", "/orders/carriers/");
+// `per_page` implicit e 20, iar lista reala are peste atat (fiecare curier x
+// fiecare tara). Fara el, jumatate din curieri lipseau din dropdown si comanda
+// nu se putea expedia cu ei.
+export function getCarriers(auth: AboutYouAuth, params: { page?: number; per_page?: number } = {}) {
+  const q = new URLSearchParams();
+  q.set("per_page", String(params.per_page ?? 100));
+  if (params.page != null) q.set("page", String(params.page));
+  return call<{ items: AboutYouCarrier[]; pagination?: Record<string, unknown> }>(
+    auth, "GET", `/orders/carriers/?${q.toString()}`);
 }

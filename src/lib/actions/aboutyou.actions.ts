@@ -9,24 +9,31 @@
 // other *_config secret). These actions NEVER return the raw key to the client —
 // only a masked preview and booleans.
 
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { aboutyouGloballyEnabled, aboutyouWebhookUrl, maskApiKey } from "@/lib/aboutyou/auth";
 import {
-  createWebhookSubscription, deleteWebhookSubscription, isAboutYouError, testConnection,
+  createWebhookSubscription, deleteWebhookSubscription, isAboutYouError, mesajEroare, testConnection,
   type AboutYouAuth,
 } from "@/lib/aboutyou/client";
 import { ABOUTYOU_WEBHOOK_EVENTS } from "@/lib/aboutyou/webhooks";
 import {
-  getAttributeGroupsCached, getBrandsCached, getCarriersCached, getCategoryChildrenCached,
-  getCountriesCached, searchCategories,
+  getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
+  getCategoryChildrenCached, getCountriesCached, searchCategories,
 } from "@/lib/aboutyou/taxonomy";
+import {
+  potrivesteCategorie, potrivireSigura, type PublicTinta, type SugestieCategorie,
+} from "@/lib/aboutyou/ro-taxonomy";
 import {
   loadAboutYouContext, publishProductNow, removeProductNow, syncProductNow, unpublishProductNow,
 } from "@/lib/aboutyou/sync";
-import { deriveVariantSlots, type AboutYouStoredMaterial, type MappableProduct } from "@/lib/aboutyou/mapping";
+import {
+  atasezaPreturileRon, deriveVariantSlots, validateListing,
+  type AboutYouStoredMaterial, type MappableProduct,
+} from "@/lib/aboutyou/mapping";
 import type {
   AboutYouAttributeGroup, AboutYouBrand, AboutYouCarrier, AboutYouCategory, AboutYouCategoryMapEntry,
   AboutYouConfig, AboutYouCountriesResponse, AboutYouEnvironment, AboutYouFulfillmentType,
@@ -57,22 +64,39 @@ async function guard(businessId: string): Promise<{ supabase: ServerClient; user
   return { supabase, userId: user.id, biz };
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<AboutYouConfig> {
-  const { data } = await supabase
+/*
+ * Configurarea se citeste si se scrie MEREU cu clientul de serviciu, niciodata
+ * cu cel al utilizatorului.
+ *
+ * `public.store_settings` e o vedere care decripteaza campurile sensibile prin
+ * `privat.decripteaza_config`, iar aceea returneaza configul NEDECRIPTAT cand
+ * rolul apelantului e `anon` sau `authenticated` — adica exact rolul cu care
+ * ruleaza actiunile de aici. Citita asa, `api_key` iesea `enc.v1.…`, era trimisa
+ * ca `X-API-Key` si About You raspundea 401 la fiecare cerere. Conectarea parea
+ * sa reuseasca, pentru ca acolo cheia venea din formular, nu din baza.
+ *
+ * Ocolirea RLS e sigura: fiecare apelant trece intai prin `guard()`, care
+ * verifica proprietatea magazinului. E acelasi tipar folosit deja in fisier
+ * pentru tabelele `aboutyou_*`.
+ */
+async function loadConfig(businessId: string): Promise<AboutYouConfig> {
+  const admin = createAdminClient();
+  const { data } = await admin
     .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
   return ((data?.aboutyou_config as AboutYouConfig) ?? {}) || {};
 }
 
-async function saveConfig(supabase: ServerClient, businessId: string, config: AboutYouConfig): Promise<boolean> {
-  const { data: existing } = await supabase
+async function saveConfig(businessId: string, config: AboutYouConfig): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data: existing } = await admin
     .from("store_settings").select("id").eq("business_id", businessId).single();
   if (existing) {
-    const { error } = await supabase.from("store_settings")
+    const { error } = await admin.from("store_settings")
       .update({ aboutyou_config: config as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId);
     return !error;
   }
-  const { error } = await supabase.from("store_settings")
+  const { error } = await admin.from("store_settings")
     .insert({ business_id: businessId, aboutyou_config: config as never });
   return !error;
 }
@@ -107,6 +131,7 @@ export interface AboutYouStatus {
   brandId?: number;
   brandName?: string;
   shipCountries: string[];
+  targetAudience: PublicTinta | null;
   defaultCountryOfOrigin: string;
   defaultCarrierKey?: string;
   carrierMap: Record<string, string>;
@@ -123,11 +148,14 @@ export async function getAboutYouStatus(businessId: string): Promise<AboutYouSta
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const [{ count: listings }, { count: published }, { count: rejected }, { count: variants }, { count: queued }] = await Promise.all([
     supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId),
-    supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "published"),
+    // About You raporteaza produsele publicate cu statusul `active`, nu
+    // `published` — acela e doar valoarea pe care o TRIMITEM la publicare. Numarat
+    // doar pe „published", contorul arata mereu zero.
+    supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).in("status", ["published", "active"]),
     supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "rejected"),
     supabase.from("aboutyou_variants").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("aboutyou_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId),
@@ -149,6 +177,7 @@ export async function getAboutYouStatus(businessId: string): Promise<AboutYouSta
     brandId: config.brand_id,
     brandName: config.brand_name,
     shipCountries: config.ship_countries ?? [],
+    targetAudience: config.target_audience ?? null,
     defaultCountryOfOrigin: config.default_country_of_origin ?? DEFAULT_COUNTRY_OF_ORIGIN,
     defaultCarrierKey: config.default_carrier_key,
     carrierMap: config.carrier_map ?? {},
@@ -180,7 +209,7 @@ export async function connectAboutYou(
   const test = await testConnection({ apiKey, environment: env });
   if (!test.ok) return { error: test.error };
 
-  const prev = await loadConfig(g.supabase, businessId);
+  const prev = await loadConfig(businessId);
   const next: AboutYouConfig = {
     ...prev,
     connected: true,
@@ -195,7 +224,7 @@ export async function connectAboutYou(
     default_country_of_origin: prev.default_country_of_origin ?? DEFAULT_COUNTRY_OF_ORIGIN,
     auto_sync: prev.auto_sync ?? true,
   };
-  const ok = await saveConfig(g.supabase, businessId, next);
+  const ok = await saveConfig(businessId, next);
   if (!ok) {
     logError({ action: "aboutyou.connect", message: "saveConfig failed", details: { businessId }, businessId, userId: g.userId });
     return { error: "Eroare la salvarea conexiunii. Încearcă din nou." };
@@ -207,7 +236,25 @@ export async function connectAboutYou(
 export async function disconnectAboutYou(businessId: string): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  await saveConfig(g.supabase, businessId, {});
+
+  /*
+   * Abonamentul de webhook se sterge INAINTE de a arunca configul.
+   *
+   * Odata sters `webhook_subscription_id`, nu mai avem cum sa-l dezabonam: About
+   * You continua sa trimita evenimente catre o ruta care nu mai are secretul de
+   * verificat, ora de ora, iar comerciantul nu are de unde sa-l opreasca decat
+   * din Seller Center. Esecul stergerii nu blocheaza deconectarea — omul a cerut
+   * sa se deconecteze.
+   */
+  const prev = await loadConfig(businessId);
+  if (prev.api_key && prev.webhook_subscription_id) {
+    await deleteWebhookSubscription(
+      { apiKey: prev.api_key, environment: prev.environment },
+      prev.webhook_subscription_id,
+    );
+  }
+
+  await saveConfig(businessId, {});
   const admin = createAdminClient();
   await admin.from("aboutyou_sync_queue").delete().eq("business_id", businessId);
   await admin.from("aboutyou_variants").delete().eq("business_id", businessId);
@@ -229,6 +276,30 @@ export interface AboutYouSettingsInput {
   default_country_of_origin?: string;
   default_carrier_key?: string | null;
   auto_sync?: boolean;
+  target_audience?: PublicTinta;
+}
+
+/*
+ * Tarile de listare se valideaza pe moneda, nu doar pe cod.
+ *
+ * `PriceSchema` nu are camp de moneda: About You citeste pretul in moneda TARII.
+ * Noi convertim RON in EUR o singura data si trimitem acelasi numar pentru toate
+ * tarile — corect doar acolo unde moneda chiar e euro. Un produs de 100 lei
+ * (≈20 EUR) trimis catre Polonia se citeste 20 PLN, adica sub un sfert din pret,
+ * si se vinde asa la fiecare comanda.
+ *
+ * Pana cand conversia se face per moneda, blocam aici tarile non-euro. Blocajul
+ * sta pe server, nu doar in interfata: alegerea tarii e o decizie despre bani.
+ */
+async function tariNeEuro(auth: AboutYouAuth, coduri: string[]): Promise<string[]> {
+  if (coduri.length === 0) return [];
+  const r = await getCountriesCached(auth);
+  if (!r.ok) return [];   // fara nomenclator nu inventam un blocaj
+  const moneda = new Map((r.data.currencies ?? []).map((c) => [c.country_code, c.code]));
+  return coduri.filter((c) => {
+    const m = moneda.get(c);
+    return m != null && m !== "EUR";
+  });
 }
 
 export async function saveAboutYouSettings(
@@ -236,7 +307,19 @@ export async function saveAboutYouSettings(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
+
+  if (input.ship_countries && input.ship_countries.length > 0) {
+    const auth = authFromConfig(config);
+    if (auth) {
+      const neEuro = await tariNeEuro(auth, input.ship_countries);
+      if (neEuro.length > 0) {
+        return {
+          error: `Momentan putem lista doar în țări cu moneda euro. Scoate din selecție: ${neEuro.join(", ")}.`,
+        };
+      }
+    }
+  }
 
   const fxRate = input.fx_rate == null ? config.fx?.rate : (input.fx_rate > 0 ? input.fx_rate : undefined);
   const fxMargin = input.fx_margin_pct == null ? config.fx?.margin_pct : Math.max(0, input.fx_margin_pct);
@@ -257,8 +340,9 @@ export async function saveAboutYouSettings(
     default_country_of_origin: input.default_country_of_origin?.trim() || config.default_country_of_origin || DEFAULT_COUNTRY_OF_ORIGIN,
     default_carrier_key: input.default_carrier_key === null ? undefined : (input.default_carrier_key ?? config.default_carrier_key),
     auto_sync: input.auto_sync ?? config.auto_sync,
+    target_audience: input.target_audience ?? config.target_audience,
   };
-  const ok = await saveConfig(g.supabase, businessId, next);
+  const ok = await saveConfig(businessId, next);
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -274,50 +358,79 @@ async function guardedAuth(
 ): Promise<{ supabase: ServerClient; userId: string; config: AboutYouConfig; auth: AboutYouAuth } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const auth = authFromConfig(config);
   if (!auth) return { error: "Conectează mai întâi contul About You." };
   return { supabase: g.supabase, userId: g.userId, config, auth };
 }
 
+/*
+ * Un esec de nomenclator ajunge la comerciant cu motivul real, si e si scris in
+ * jurnal. Inainte, toate cadeau pe acelasi „Nu am putut …", indiferent daca era
+ * cheie invalida, limita de rata sau retea — asa a putut sta ascuns un 401 care
+ * lovea absolut fiecare cerere.
+ *
+ * Cand About You raspunde 401/403, marcam si `needs_reconnect`: bannerul din
+ * pagina spune atunci ce e de facut, in loc sa lase omul sa reincerce la infinit.
+ */
+async function esecNomenclator(
+  businessId: string, userId: string, ce: string, actiune: string, r: { error: string; status: number },
+): Promise<{ error: string }> {
+  logError({
+    action: `aboutyou.${actiune}`,
+    message: r.error,
+    details: { businessId, status: r.status },
+    businessId,
+    userId,
+  });
+  if (r.status === 401 || r.status === 403) {
+    const config = await loadConfig(businessId);
+    if (config.api_key && !config.needs_reconnect) {
+      await saveConfig(businessId, { ...config, needs_reconnect: true });
+      revalidatePath(FEATURE_PATH);
+    }
+  }
+  return { error: mesajEroare(ce, r.error, r.status) };
+}
+
 export async function getAboutYouBrands(businessId: string): Promise<{ brands: AboutYouBrand[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const brands = await getBrandsCached(g.auth);
-  if (brands === null) return { error: "Nu am putut încărca brandurile About You." };
-  return { brands };
+  const r = await getBrandsCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca brandurile About You.", "brands", r);
+  return { brands: r.data };
 }
 
 export async function getAboutYouCountries(businessId: string): Promise<{ data: AboutYouCountriesResponse } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const data = await getCountriesCached(g.auth);
-  if (data === null) return { error: "Nu am putut încărca țările About You." };
-  return { data };
+  const r = await getCountriesCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca țările About You.", "countries", r);
+  return { data: r.data };
 }
 
 export async function getAboutYouCategoryChildren(businessId: string, parentId?: number): Promise<{ categories: AboutYouCategory[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const categories = await getCategoryChildrenCached(g.auth, parentId);
-  if (categories === null) return { error: "Nu am putut încărca categoriile About You." };
-  return { categories };
+  const r = await getCategoryChildrenCached(g.auth, parentId);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca categoriile About You.", "categories", r);
+  return { categories: r.data };
 }
 
 export async function searchAboutYouCategories(businessId: string, query: string): Promise<{ categories: AboutYouCategory[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const categories = await searchCategories(g.auth, query);
-  if (categories === null) return { error: "Nu am putut căuta categorii." };
-  return { categories };
+  const r = await searchCategories(g.auth, query, { publicImplicit: g.config.target_audience ?? null });
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut căuta categorii.", "categories.search", r);
+  return { categories: r.data };
 }
 
 export async function getAboutYouAttributeGroups(businessId: string, categoryId: number): Promise<{ groups: AboutYouAttributeGroup[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const groups = await getAttributeGroupsCached(g.auth, categoryId);
-  if (groups === null) return { error: "Nu am putut încărca atributele categoriei." };
-  return { groups };
+  const r = await getAttributeGroupsCached(g.auth, categoryId);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca atributele categoriei.", "attribute-groups", r);
+  return { groups: r.data };
 }
 
 // ── Category mapping (Edinio category -> About You category) ─────────────────────
@@ -326,23 +439,106 @@ export async function saveAboutYouCategoryMapEntry(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];
   else map[edinioCategory] = entry;
-  const ok = await saveConfig(g.supabase, businessId, { ...config, category_map: map });
+  const ok = await saveConfig(businessId, { ...config, category_map: map });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
+}
+
+/*
+ * ── Mapare automata a categoriilor ──────────────────────────────────────────
+ *
+ * Comerciantul are „Genti", About You are `Fashion|Women|Accessories|Bags &
+ * suitcases|Handbag`. Traducem (vezi ro-taxonomy.ts), dam un scor fiecarei
+ * categorii si intoarcem propunerile.
+ *
+ * NU aplicam tot ce gasim. Se aplica singure doar potrivirile exacte, cu scor
+ * mare si cu o a doua varianta vizibil mai slaba; restul raman propuneri pe care
+ * omul le confirma dintr-un clic. O categorie mapata gresit inseamna produse
+ * respinse la aprobare, iar aia se vede abia peste zile.
+ */
+export interface SugestieMapare {
+  edinioCategory: string;
+  /** Deja mapata inainte de rulare — nu se atinge fara „suprascrie". */
+  mapataDeja: boolean;
+  sigura: boolean;
+  optiuni: { category_id: number; label: string; scor: number; motiv: string }[];
+}
+
+function optiuneDinSugestie(s: SugestieCategorie) {
+  return { category_id: s.category_id, label: s.path, scor: Math.round(s.scor * 100) / 100, motiv: s.motiv };
+}
+
+export async function suggestAboutYouCategoryMap(
+  businessId: string, categorii: string[],
+): Promise<{ sugestii: SugestieMapare[] } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+
+  const r = await getAllCategoriesCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca categoriile About You.", "categories.all", r);
+
+  const mapate = g.config.category_map ?? {};
+  const publicImplicit = g.config.target_audience ?? null;
+
+  const sugestii = categorii.slice(0, 500).map((cat) => {
+    const optiuni = potrivesteCategorie(cat, r.data, { publicImplicit, limita: 5 });
+    return {
+      edinioCategory: cat,
+      mapataDeja: !!mapate[cat],
+      sigura: potrivireSigura(optiuni) !== null,
+      optiuni: optiuni.map(optiuneDinSugestie),
+    };
+  });
+  return { sugestii };
+}
+
+/**
+ * Aplica potrivirile sigure. `suprascrie` decide daca se ating si categoriile
+ * deja mapate manual — implicit nu, ca o rulare din greseala sa nu strice o
+ * mapare corecta facuta de om.
+ */
+export async function applyAboutYouCategoryMap(
+  businessId: string, categorii: string[], suprascrie = false,
+): Promise<{ aplicate: number; ramase: number } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+
+  const r = await getAllCategoriesCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca categoriile About You.", "categories.all", r);
+
+  const config = await loadConfig(businessId);
+  const map = { ...(config.category_map ?? {}) };
+  const publicImplicit = config.target_audience ?? null;
+
+  let aplicate = 0;
+  let ramase = 0;
+  for (const cat of categorii.slice(0, 500)) {
+    if (map[cat] && !suprascrie) continue;
+    const sigura = potrivireSigura(potrivesteCategorie(cat, r.data, { publicImplicit, limita: 5 }));
+    if (!sigura) { ramase++; continue; }
+    map[cat] = { category_id: sigura.category_id, label: sigura.path };
+    aplicate++;
+  }
+
+  if (aplicate > 0 && !(await saveConfig(businessId, { ...config, category_map: map }))) {
+    return { error: "Eroare la salvarea mapării." };
+  }
+  revalidatePath(FEATURE_PATH);
+  return { aplicate, ramase };
 }
 
 // ── Carriers (courier -> About You carrier_key mapping) ─────────────────────────
 export async function getAboutYouCarriers(businessId: string): Promise<{ carriers: AboutYouCarrier[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const carriers = await getCarriersCached(g.auth);
-  if (carriers === null) return { error: "Nu am putut încărca curierii About You." };
-  return { carriers };
+  const r = await getCarriersCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca curierii About You.", "carriers", r);
+  return { carriers: r.data };
 }
 
 export async function saveAboutYouCarrierMap(
@@ -350,11 +546,11 @@ export async function saveAboutYouCarrierMap(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.carrier_map ?? {}) };
   if (!carrierKey) delete map[courierCode];
   else map[courierCode] = carrierKey;
-  const ok = await saveConfig(g.supabase, businessId, { ...config, carrier_map: map });
+  const ok = await saveConfig(businessId, { ...config, carrier_map: map });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -371,6 +567,12 @@ export interface AboutYouEditorData {
   category: string | null;
   images: string[];
   mappedCategoryId: number | null;
+  /**
+   * Ce fel de compozitie cere categoria. Vine din taxonomie, nu din ce bifeaza
+   * comerciantul: About You o cere pentru 849 din cele 851 de categorii, iar
+   * textilele au si procente.
+   */
+  materialType: "textile" | "non-textile" | null;
   listing: {
     brand_id: number | null; category_id: number | null; color_id: number | null;
     attributes: number[]; material: AboutYouStoredMaterial | null;
@@ -388,10 +590,11 @@ interface StoredVariantRow {
 export async function getAboutYouListingEditor(businessId: string, productId: string): Promise<AboutYouEditorData | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const { data: product } = await g.supabase
-    .from("products").select("id, name, category, images, price, compare_at_price, sku, page_sections")
+    .from("products")
+    .select("id, name, category, images, price, compare_at_price, sku, page_sections, weight_grams, track_inventory, stock_quantity")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
 
@@ -416,8 +619,12 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
     const ex = bySku.get(s.sku);
     return {
       key: s.key, label: s.label, sku: s.sku, ron_price: s.ron_price,
-      ean: ex?.ean ?? null, size_id: ex?.size_id ?? null, second_size_id: ex?.second_size_id ?? null,
-      color_id: ex?.color_id ?? null, quantity: ex?.quantity ?? null,
+      // Codul de bare completat deja in fisa produsului se preia automat: era
+      // scris in Edinio si totusi comerciantul era pus sa-l retasteze aici.
+      ean: ex?.ean ?? s.gtin ?? null,
+      size_id: ex?.size_id ?? null, second_size_id: ex?.second_size_id ?? null,
+      color_id: ex?.color_id ?? null,
+      quantity: ex?.quantity ?? s.quantity,
       retail_price_eur: ex?.retail_price_eur ?? null, sale_price_eur: ex?.sale_price_eur ?? null,
       enabled: ex?.enabled ?? true,
     };
@@ -425,11 +632,24 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
 
   const mappedCategoryId = product.category ? (config.category_map?.[product.category]?.category_id ?? null) : null;
   const l = listing as (Record<string, unknown> & { id: string }) | null;
+
+  // Tipul compozitiei il decide categoria efectiva, nu comerciantul.
+  const categorieEfectiva = ((l?.category_id as number | null) ?? mappedCategoryId) ?? null;
+  let materialType: "textile" | "non-textile" | null = null;
+  if (categorieEfectiva) {
+    const auth = authFromConfig(config);
+    if (auth) {
+      const tax = await getAllCategoriesCached(auth);
+      if (tax.ok) materialType = tax.data.find((c) => c.id === categorieEfectiva)?.material_composition_type ?? null;
+    }
+  }
+
   return {
     productName: product.name,
     category: product.category,
     images: Array.isArray(product.images) ? (product.images as unknown[]).map(String) : [],
     mappedCategoryId,
+    materialType,
     listing: l ? {
       brand_id: (l.brand_id as number | null) ?? null,
       category_id: (l.category_id as number | null) ?? null,
@@ -457,6 +677,59 @@ export interface AboutYouListingInput {
     color_id: number | null; quantity: number | null; retail_price_eur: number | null;
     sale_price_eur: number | null; enabled: boolean;
   }[];
+}
+
+/*
+ * Tot ce blocheaza listarea, dintr-o singura trecere, INAINTE de trimitere.
+ *
+ * `validateListing` exista de la inceput in mapping.ts, dar nu era apelata de
+ * nicaieri: comerciantul salva, trimitea, si afla peste minute „produs respins",
+ * fara sa i se spuna ce lipseste. Iar cand aflau, aflau cate o problema pe rand,
+ * pentru ca `buildAboutYouItems` se opreste la prima.
+ */
+export async function validateAboutYouListing(
+  businessId: string, productId: string, input: AboutYouListingInput,
+): Promise<{ issues: string[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(businessId);
+
+  const { data: product } = await g.supabase
+    .from("products")
+    .select("id, name, description, category, images, price, compare_at_price, sku, page_sections, weight_grams, track_inventory, stock_quantity")
+    .eq("id", productId).eq("business_id", businessId).maybeSingle();
+  if (!product) return { error: "Produs negăsit." };
+  const produs = product as unknown as MappableProduct;
+
+  const categorie = input.category_id
+    ?? (product.category ? config.category_map?.[product.category]?.category_id ?? null : null);
+  let materialType: "textile" | "non-textile" | null = null;
+  if (categorie) {
+    const auth = authFromConfig(config);
+    if (auth) {
+      const tax = await getAllCategoriesCached(auth);
+      if (tax.ok) materialType = tax.data.find((c) => c.id === categorie)?.material_composition_type ?? null;
+    }
+  }
+
+  const variants = atasezaPreturileRon(produs, input.variants.map((v) => ({
+    sku: v.sku, ean: v.ean, size_id: v.size_id, second_size_id: v.second_size_id,
+    color_id: v.color_id, quantity: v.quantity, retail_price_eur: v.retail_price_eur,
+    sale_price_eur: v.sale_price_eur, enabled: v.enabled,
+  })));
+
+  const issues = validateListing({
+    config,
+    product: produs,
+    listing: {
+      brand_id: input.brand_id, category_id: input.category_id, color_id: input.color_id,
+      attributes: input.attributes, material_composition: input.material,
+      country_of_origin: input.country_of_origin, hs_code: input.hs_code,
+    },
+    variants,
+  }, materialType);
+
+  return { issues };
 }
 
 export async function saveAboutYouListing(
@@ -562,6 +835,81 @@ export interface AboutYouListingRow {
   lastSyncedAt: string | null;
 }
 
+/*
+ * O pagina de produse, cu listarile lor.
+ *
+ * Inainte, pagina incarca 300 de produse si 200 de listari si le imperechea in
+ * memorie. Peste atat, produsele pur si simplu lipseau din lista — iar cele
+ * listate DEJA pe About You, dar aflate dupa prima suta de listari, se afisau ca
+ * „Nelistat": comerciantul apasa „Trimite" pe ceva ce era deja acolo. Fara nicio
+ * cautare si fara paginare, la o mie de produse ecranul era inutilizabil.
+ */
+// Nu se exporta: intr-un fisier „use server" doar functiile async au voie sa fie
+// exporturi, iar o constanta exportata rupe compilarea intregului modul.
+const ABOUTYOU_PAGE_SIZE = 50;
+
+export interface AboutYouProductPage {
+  products: { id: string; name: string; category: string | null; is_active: boolean }[];
+  listings: AboutYouListingRow[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export async function getAboutYouProductPage(
+  businessId: string, page = 1, q = "",
+): Promise<AboutYouProductPage | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+
+  const pagina = Math.max(1, Math.floor(page));
+  const cautare = q.trim().slice(0, 80);
+  const from = (pagina - 1) * ABOUTYOU_PAGE_SIZE;
+
+  let query = g.supabase
+    .from("products").select("id, name, category, is_active", { count: "exact" })
+    .eq("business_id", businessId).eq("is_active", true);
+  if (cautare) query = query.ilike("name", `%${cautare}%`);
+
+  const { data, count } = await query
+    .order("updated_at", { ascending: false })
+    .range(from, from + ABOUTYOU_PAGE_SIZE - 1);
+
+  const products = (data ?? []) as AboutYouProductPage["products"];
+  const total = count ?? products.length;
+
+  // Listarile se cer DOAR pentru produsele de pe pagina: asa nu mai poate exista
+  // un produs listat caruia sa nu-i gasim listarea.
+  let listings: AboutYouListingRow[] = [];
+  if (products.length > 0) {
+    const { data: ls } = await g.supabase
+      .from("aboutyou_listings")
+      .select("product_id, style_key, status, error, rejection_reasons, last_synced_at, products(name)")
+      .eq("business_id", businessId)
+      .in("product_id", products.map((p) => p.id));
+    listings = (ls ?? []).map(randListare);
+  }
+
+  return { products, listings, total, page: pagina, pages: Math.max(1, Math.ceil(total / ABOUTYOU_PAGE_SIZE)) };
+}
+
+function randListare(r: {
+  product_id: string | null; style_key: string; status: string; error: string | null;
+  rejection_reasons: unknown; last_synced_at: string | null; products: unknown;
+}): AboutYouListingRow {
+  const prod = r.products as { name?: string } | { name?: string }[] | null;
+  const name = Array.isArray(prod) ? prod[0]?.name : prod?.name;
+  return {
+    product_id: r.product_id,
+    style_key: r.style_key,
+    name: name ?? "Produs",
+    status: r.status,
+    error: r.error,
+    rejectionCount: Array.isArray(r.rejection_reasons) ? r.rejection_reasons.length : 0,
+    lastSyncedAt: r.last_synced_at,
+  };
+}
+
 export async function getAboutYouListings(businessId: string): Promise<AboutYouListingRow[]> {
   const g = await guard(businessId);
   if ("error" in g) return [];
@@ -592,15 +940,27 @@ export async function getAboutYouListings(businessId: string): Promise<AboutYouL
 export async function subscribeAboutYouWebhook(businessId: string): Promise<{ success: true } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const url = `${aboutyouWebhookUrl()}?businessId=${encodeURIComponent(businessId)}`;
+  /*
+   * Tokenul din URL e a doua incuietoare a rutei de webhook.
+   *
+   * Schema de semnatura a lui About You nu e documentata, deci verificarea ei e o
+   * deductie care poate cadea mereu. Tokenul asta il stie doar About You, pentru
+   * ca doar in URL-ul lui de abonare l-am pus — si nu depinde de nimic ghicit.
+   * Se genereaza la fiecare abonare, deci o reabonare il si roteste.
+   */
+  const token = randomBytes(24).toString("base64url");
+  const url = `${aboutyouWebhookUrl()}?businessId=${encodeURIComponent(businessId)}&token=${token}`;
   const res = await createWebhookSubscription(g.auth, { events: ABOUTYOU_WEBHOOK_EVENTS, url, description: "Edinio sync" });
   if (isAboutYouError(res)) return { error: res.error };
   const next: AboutYouConfig = {
     ...g.config,
-    webhook_subscription_id: res.data?.id ?? g.config.webhook_subscription_id,
+    webhook_token: token,
+    // `id` vine INTREG in raspuns (SecretWebhookSubscriptionSchema), iar noi il
+    // folosim ca segment de cale la dezabonare — deci il pastram ca sir.
+    webhook_subscription_id: res.data?.id != null ? String(res.data.id) : g.config.webhook_subscription_id,
     webhook_secret: res.data?.client_secret ?? g.config.webhook_secret,
   };
-  if (!(await saveConfig(g.supabase, businessId, next))) return { error: "Eroare la salvare." };
+  if (!(await saveConfig(businessId, next))) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -611,8 +971,8 @@ export async function unsubscribeAboutYouWebhook(businessId: string): Promise<{ 
   if (g.config.webhook_subscription_id) {
     await deleteWebhookSubscription(g.auth, g.config.webhook_subscription_id);
   }
-  const next: AboutYouConfig = { ...g.config, webhook_subscription_id: undefined, webhook_secret: undefined };
-  await saveConfig(g.supabase, businessId, next);
+  const next: AboutYouConfig = { ...g.config, webhook_subscription_id: undefined, webhook_secret: undefined, webhook_token: undefined };
+  await saveConfig(businessId, next);
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }

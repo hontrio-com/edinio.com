@@ -1,12 +1,13 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useCallback, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { useCautareIntarziata } from "@/lib/hooks/cautare-intarziata";
 import {
-  publishAllAboutYou, removeAboutYouListing, syncAboutYouProduct, syncAllAboutYou,
-  type AboutYouListingRow,
+  getAboutYouProductPage, publishAllAboutYou, removeAboutYouListing, syncAboutYouProduct,
+  syncAllAboutYou, type AboutYouListingRow, type AboutYouProductPage,
 } from "@/lib/actions/aboutyou.actions";
 import { AboutYouListingEditor, type AboutYouPricing } from "@/components/dashboard/AboutYouListingEditor";
 
@@ -25,20 +26,57 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 };
 
 export function AboutYouListings({
-  businessId, products, listings, pricing,
+  businessId, pagina, pricing,
 }: {
-  businessId: string; products: ProductLite[]; listings: AboutYouListingRow[]; pricing: AboutYouPricing;
+  businessId: string; pagina: AboutYouProductPage; pricing: AboutYouPricing;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [openId, setOpenId] = useState<string | null>(null);
 
+  /*
+   * Paginarea si cautarea se fac pe SERVER: la o mie de produse lista nici nu
+   * incapea in pagina, iar produsele aflate dupa prima suta de listari se afisau
+   * ca „Nelistat" chiar daca erau demult pe About You.
+   *
+   * Prima pagina vine de pe server; de aici incolo componenta isi tine singura
+   * starea si si-o reimprospateaza dupa fiecare actiune. O sincronizare din prop
+   * ar arunca cautarea si pagina curenta la fiecare `router.refresh()`.
+   */
+  const [stare, setStare] = useState<AboutYouProductPage>(pagina);
+  const [seIncarca, setSeIncarca] = useState(false);
+
+  const incarca = useCallback(async (p: number, q: string) => {
+    setSeIncarca(true);
+    try {
+      const res = await getAboutYouProductPage(businessId, p, q);
+      if ("error" in res) { toast.error(res.error); return null; }
+      setStare(res);
+      setOpenId(null);
+      return res;
+    } catch {
+      // O actiune de server poate cadea si din retea, nu doar cu `{error}`.
+      // Fara asta, indicatorul de incarcare ramanea aprins pentru totdeauna.
+      toast.error("Nu am putut încărca lista de produse.");
+      return null;
+    } finally {
+      setSeIncarca(false);
+    }
+  }, [businessId]);
+
+  const { termen: cautare, setTermen: setCautare } = useCautareIntarziata<AboutYouProductPage | null>(
+    (q) => incarca(1, q),
+    { minLungime: 1 },
+  );
+
+  const products: ProductLite[] = stare.products;
+
   // Eliminarea sterge listarea, deci randul trece sigur pe "Nelistat": o aratam
   // imediat. Restul butoanelor (trimite / publica / reincearca) pun treaba la coada
   // pe server si nu au un rezultat pe care sa-l putem ghici, deci raman ca inainte.
   const [listariAfisate, aplicaOptimistElimina] = useOptimistic(
-    listings,
-    (stare: AboutYouListingRow[], productId: string) => stare.filter((l) => l.product_id !== productId),
+    stare.listings,
+    (st: AboutYouListingRow[], productId: string) => st.filter((l) => l.product_id !== productId),
   );
 
   const byProduct = new Map(listariAfisate.map((l) => [l.product_id, l]));
@@ -50,6 +88,7 @@ export function AboutYouListings({
       const res = await removeAboutYouListing(businessId, productId);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Listare eliminată.");
+      await incarca(stare.page, cautare);
       router.refresh();
     });
   };
@@ -58,6 +97,7 @@ export function AboutYouListings({
     const res = await syncAllAboutYou(businessId);
     if ("error" in res) { toast.error(res.error); return; }
     toast.success(res.queued > 0 ? `${res.queued} produse trimise în coadă.` : "Nu există listări de trimis.");
+    await incarca(stare.page, cautare);
     router.refresh();
   });
 
@@ -65,6 +105,7 @@ export function AboutYouListings({
     const res = await publishAllAboutYou(businessId);
     if ("error" in res) { toast.error(res.error); return; }
     toast.success(res.queued > 0 ? `${res.queued} produse programate pentru publicare.` : "Nu există ciorne de publicat.");
+    await incarca(stare.page, cautare);
     router.refresh();
   });
 
@@ -72,10 +113,11 @@ export function AboutYouListings({
     const res = await syncAboutYouProduct(businessId, productId);
     if ("error" in res) { toast.error(res.error); return; }
     toast.success("Retrimis pe About You.");
+    await incarca(stare.page, cautare);
     router.refresh();
   });
 
-  if (products.length === 0) {
+  if (products.length === 0 && !cautare) {
     return (
       <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">
         Nu ai produse de listat încă.
@@ -98,9 +140,31 @@ export function AboutYouListings({
           </button>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground mb-4">
+      <p className="text-sm text-muted-foreground mb-3">
         Completează detaliile de listare pentru fiecare produs, apoi trimite-l pe About You.
       </p>
+
+      <div className="relative mb-3">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <input
+          value={cautare}
+          onChange={(e) => {
+            const v = e.target.value;
+            setCautare(v);
+            // Sub lungimea minima, hook-ul doar anuleaza cautarea in zbor — nu
+            // cere nimic nou. Fara reincarcarea de aici, stergerea termenului
+            // lasa lista filtrata pe vecie, iar la zero rezultate ecranul devenea
+            // o fundatura din care nu se mai putea iesi.
+            if (!v.trim()) void incarca(1, "");
+          }}
+          placeholder="Caută produs după nume"
+          className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm"
+        />
+      </div>
+
+      {products.length === 0 && (
+        <p className="text-sm text-muted-foreground py-3">Niciun produs pentru „{cautare}”.</p>
+      )}
 
       <div className="divide-y divide-border">
         {products.map((p) => {
@@ -159,6 +223,30 @@ export function AboutYouListings({
           );
         })}
       </div>
+
+      {stare.pages > 1 && (
+        <div className="flex items-center justify-between gap-3 pt-4 mt-1 border-t border-border">
+          <span className="text-xs text-muted-foreground">
+            {stare.total} produse · pagina {stare.page} din {stare.pages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => void incarca(stare.page - 1, cautare)}
+              disabled={seIncarca || stare.page <= 1}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
+            >
+              Înapoi
+            </button>
+            <button
+              onClick={() => void incarca(stare.page + 1, cautare)}
+              disabled={seIncarca || stare.page >= stare.pages}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
+            >
+              Înainte
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,7 +7,9 @@ import { AboutYouClient } from "@/components/dashboard/AboutYouClient";
 import { AboutYouCategoryMapping } from "@/components/dashboard/AboutYouCategoryMapping";
 import { AboutYouCarrierMapping } from "@/components/dashboard/AboutYouCarrierMapping";
 import { AboutYouListings } from "@/components/dashboard/AboutYouListings";
-import { getAboutYouStatus, getAboutYouListings } from "@/lib/actions/aboutyou.actions";
+import {
+  getAboutYouProductPage, getAboutYouStatus, type AboutYouProductPage,
+} from "@/lib/actions/aboutyou.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -53,8 +55,7 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
   const connected = !("error" in status) && status.connected;
 
   let categories: string[] = [];
-  let products: { id: string; name: string; category: string | null; is_active: boolean }[] = [];
-  let listings: Awaited<ReturnType<typeof getAboutYouListings>> = [];
+  let paginaProduse: AboutYouProductPage | null = null;
   if (connected) {
     // Distinct product categories, windowed past the 1000-row PostgREST cap.
     const catRows: { category: string | null }[] = [];
@@ -67,12 +68,8 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
     }
     categories = [...new Set(catRows.map((r) => r.category as string).filter(Boolean))].sort();
 
-    const { data: prods } = await supabase
-      .from("products").select("id, name, category, is_active")
-      .eq("business_id", businessId).eq("is_active", true)
-      .order("updated_at", { ascending: false }).limit(300);
-    products = prods ?? [];
-    listings = await getAboutYouListings(businessId);
+    const p = await getAboutYouProductPage(businessId, 1, "");
+    paginaProduse = "error" in p ? null : p;
   }
 
   const st = "error" in status ? null : status;
@@ -84,12 +81,13 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
         <div className="mt-6 space-y-6">
           <AboutYouCategoryMapping businessId={businessId} edinioCategories={categories} mapped={st.categoryMap} />
           <AboutYouCarrierMapping businessId={businessId} carrierMap={st.carrierMap} />
-          <AboutYouListings
-            businessId={businessId}
-            products={products}
-            listings={listings}
-            pricing={{ mode: st.priceMode, rate: st.fxRate, marginPct: st.fxMarginPct }}
-          />
+          {paginaProduse && (
+            <AboutYouListings
+              businessId={businessId}
+              pagina={paginaProduse}
+              pricing={{ mode: st.priceMode, rate: st.fxRate, marginPct: st.fxMarginPct }}
+            />
+          )}
         </div>
       )}
     </>

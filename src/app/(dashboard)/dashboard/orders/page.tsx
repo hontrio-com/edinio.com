@@ -5,6 +5,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ORDERS_PAGE_SIZE, firstParam, pageParam, orSafeTerm } from "@/lib/orders/pagination";
+import { MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
 import { ORDER_STATUS } from "@/lib/orders/status";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
@@ -40,6 +41,10 @@ export default async function OrdersPage({
   const q = (firstParam(sp.q) ?? "").trim().slice(0, 80);
   const statusRaw = firstParam(sp.status) ?? "all";
   const status = statusRaw in ORDER_STATUS ? statusRaw : "all";
+  // Sursa comenzii: „all", „store" (magazinul propriu) sau cheia unui marketplace.
+  // Validata contra listei cunoscute, ca sa nu ajunga text arbitrar in filtru.
+  const sourceRaw = firstParam(sp.source) ?? "all";
+  const source = sourceRaw === "all" || sourceRaw === "store" || sourceRaw in MARKETPLACE_ORIGINI ? sourceRaw : "all";
   const page = pageParam(sp.page);
 
   const { data: bizRow } = await supabase
@@ -86,6 +91,7 @@ export default async function OrdersPage({
           businessId={business.id}
           q={q}
           status={status}
+          source={source}
           page={page}
           integrari={integrari}
         />
@@ -142,12 +148,14 @@ async function ListaComenzi({
   businessId,
   q,
   status,
+  source,
   page,
   integrari,
 }: {
   businessId: string;
   q: string;
   status: string;
+  source: string;
   page: number;
   integrari: Integrari;
 }) {
@@ -161,6 +169,16 @@ async function ListaComenzi({
     .select("*", { count: "exact" })
     .eq("business_id", businessId);
   if (status !== "all") listQuery = listQuery.eq("status", status);
+  /*
+   * Filtrarea dupa sursa se face in SQL, pe `order_source->>marketplace`, nu in
+   * pagina: altfel „doar Trendyol" ar filtra numai comenzile paginii curente si
+   * ar arata gol chiar cand exista comenzi Trendyol mai jos.
+   *
+   * „Magazin" inseamna „fara marker de marketplace" — inclusiv comenzile vechi,
+   * de dinainte de atribuire, care n-au deloc `order_source`.
+   */
+  if (source === "store") listQuery = listQuery.is("order_source->>marketplace", null);
+  else if (source !== "all") listQuery = listQuery.eq("order_source->>marketplace", source);
   const term = orSafeTerm(q);
   if (term) {
     // Denumirea firmei si CUI-ul intra si ele in cautare: lista le AFISEAZA pe
@@ -188,11 +206,23 @@ async function ListaComenzi({
     supabase.rpc("orders_status_counts", { bid: businessId }),
   ]);
 
+  // Cate comenzi are fiecare sursa. Se numara doar sursele care chiar exista,
+  // ca sa nu arate un filtru „Trendyol" unui magazin care n-a vandut acolo.
+  const surseCount: Record<string, number> = {};
+  await Promise.all(["store", ...Object.keys(MARKETPLACE_ORIGINI)].map(async (cheie) => {
+    let cq = supabase.from("orders").select("id", { count: "exact", head: true }).eq("business_id", businessId);
+    cq = cheie === "store"
+      ? cq.is("order_source->>marketplace", null)
+      : cq.eq("order_source->>marketplace", cheie);
+    const { count } = await cq;
+    surseCount[cheie] = count ?? 0;
+  }));
+
   const statusCounts: Record<string, number> = {};
   for (const r of statusRows ?? []) statusCounts[r.status] = Number(r.cnt);
   const pendingCount = statusCounts.pending ?? 0;
 
   return (
-    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
   );
 }

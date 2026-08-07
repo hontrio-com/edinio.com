@@ -12,6 +12,48 @@ export interface OrderOrigin {
   channel: OriginChannel;
   detail?: string;       // campaign / medium / referrer host
   device?: "Mobil" | "Tabletă" | "Desktop";
+  /**
+   * Cheia marketplace-ului (`trendyol`, `aboutyou`), cand comanda vine de acolo.
+   *
+   * `channel` ramane „store" si pentru magazinul propriu, si pentru marketplace —
+   * corect ca notiune (nu e trafic platit, nici cautare), dar inutil cand vrei sa
+   * DEOSEBESTI o comanda Trendyol de una din magazin. De aia cheia sta separat.
+   */
+  marketplace?: string;
+}
+
+/*
+ * Cine sunt marketplace-urile si cum arata.
+ *
+ * Culorile sunt cele ale platformelor, ca eticheta sa se recunoasca dintr-o
+ * privire pe un tabel plin: portocaliul Trendyol, negrul About You. Magazinul
+ * propriu ramane neutru — el e cazul obisnuit, nu are de ce sa strige.
+ */
+export const MARKETPLACE_ORIGINI: Record<string, { label: string; badge: string }> = {
+  trendyol: { label: "Trendyol", badge: "bg-orange-100 text-orange-700 border-orange-200" },
+  aboutyou: { label: "About You", badge: "bg-neutral-900 text-white border-neutral-900" },
+};
+
+const BADGE_IMPLICIT = "bg-muted text-muted-foreground border-transparent";
+
+/** Clasele etichetei de sursa pentru o comanda. */
+export function claseSursa(origin: OrderOrigin): string {
+  if (origin.marketplace) return MARKETPLACE_ORIGINI[origin.marketplace]?.badge ?? "bg-primary/10 text-primary border-primary/20";
+  return BADGE_IMPLICIT;
+}
+
+/*
+ * Moneda in care s-a incasat comanda.
+ *
+ * `orders.total` e citit peste tot ca lei, dar comenzile de pe About You vin in
+ * euro: o comanda de 40 EUR se afisa „40 lei", adica sub jumatate din cat era.
+ * Ingestul noteaza moneda in `order_source`, iar afisarea o foloseste. Lipsa ei
+ * inseamna lei — asa sunt toate comenzile din magazin si toate cele vechi.
+ */
+export function monedaComenzii(raw: unknown): string | null {
+  const src = asSource(raw) as ({ currency?: string } | null);
+  const c = src?.currency;
+  return typeof c === "string" && c.toUpperCase() !== "RON" ? c.toUpperCase() : null;
 }
 
 function asSource(raw: unknown): OrderSource | null {
@@ -75,8 +117,12 @@ export function deriveOrigin(raw: unknown): OrderOrigin {
   // Marketplace orders (About You, Trendyol, ...) carry an explicit channel marker.
   const marketplace = (src as { marketplace?: string }).marketplace;
   if (marketplace) {
-    const MARKETPLACE_LABELS: Record<string, string> = { aboutyou: "About You", trendyol: "Trendyol" };
-    return { label: MARKETPLACE_LABELS[marketplace] ?? titleCase(marketplace), channel: "store", device };
+    return {
+      label: MARKETPLACE_ORIGINI[marketplace]?.label ?? titleCase(marketplace),
+      channel: "store",
+      marketplace,
+      device,
+    };
   }
 
   const medium = (src.utm_medium ?? "").toLowerCase();

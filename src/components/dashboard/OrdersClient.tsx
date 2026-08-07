@@ -6,6 +6,7 @@ import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
+import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
 import {
   bulkGenerateInvoices, bulkGenerateAwbs, bulkUpdateOrderStatus,
   type BulkResult, type InvoiceProvider, type BulkCourier,
@@ -41,7 +42,7 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -51,6 +52,8 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   page: number;
   searchQuery: string;
   statusFilter: string;
+  sourceFilter: string;
+  sourceCounts: Record<string, number>;
   pendingCount: number;
   smartbillEnabled?: boolean;
   wootEnabled?: boolean;
@@ -207,17 +210,19 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const currentPage = Math.min(page, totalPages);
   const allCount = Object.values(statusCounts).reduce((s, n) => s + n, 0);
 
-  const buildUrl = useCallback((next: { q?: string; status?: string; page?: number }) => {
+  const buildUrl = useCallback((next: { q?: string; status?: string; source?: string; page?: number }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? searchQuery;
     const nstatus = next.status ?? statusFilter;
+    const nsource = next.source ?? sourceFilter;
     const npage = next.page ?? page;
     if (nq) params.set("q", nq);
     if (nstatus !== "all") params.set("status", nstatus);
+    if (nsource !== "all") params.set("source", nsource);
     if (npage > 1) params.set("page", String(npage));
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchQuery, statusFilter, page]);
+  }, [pathname, searchQuery, statusFilter, sourceFilter, page]);
 
   // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
   useEffect(() => {
@@ -239,7 +244,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
-  function goTo(next: { q?: string; status?: string; page?: number }) {
+  function goTo(next: { q?: string; status?: string; source?: string; page?: number }) {
     // Selection is per-view — reset it when changing page / filter so a bulk
     // action never spans invisible orders on other pages.
     setSelected(new Set());
@@ -250,6 +255,21 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   function handleFilterChange(key: string) {
     goTo({ status: key, page: 1 });
   }
+
+  function handleSourceChange(key: string) {
+    goTo({ source: key, page: 1 });
+  }
+
+  // Sursele care chiar au comenzi in magazinul asta. „Magazin" intra in lista
+  // doar daca exista si un marketplace de deosebit de el.
+  const marketplacePrezent = Object.keys(MARKETPLACE_ORIGINI).filter((k) => (sourceCounts[k] ?? 0) > 0);
+  // Coloana „Sursă" are rost doar unde exista mai multe surse. Intr-un magazin
+  // fara marketplace ar fi o coloana cu aceeasi valoare pe fiecare rand.
+  const arataSursa = marketplacePrezent.length > 0;
+  const sursePrezente = marketplacePrezent.length === 0 ? [] : [
+    { key: "store", label: "Magazin" },
+    ...marketplacePrezent.map((k) => ({ key: k, label: MARKETPLACE_ORIGINI[k].label })),
+  ];
 
   function handleSearch(q: string) {
     setSearchInput(q);
@@ -486,6 +506,42 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
         })}
       </div>
 
+      {/*
+        * Filtrele de sursa apar DOAR daca magazinul chiar vinde si pe un
+        * marketplace. Pentru cei care vand doar prin magazinul propriu, un rand
+        * de filtre cu un singur buton n-ar spune nimic si ar incarca ecranul.
+        */}
+      {sursePrezente.length > 0 && (
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-4 scrollbar-hide">
+          {[{ key: "all", label: "Toate sursele" }, ...sursePrezente].map((tab) => {
+            const count = tab.key === "all"
+              ? Object.values(sourceCounts).reduce((s, n) => s + n, 0)
+              : (sourceCounts[tab.key] ?? 0);
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => handleSourceChange(tab.key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors",
+                  sourceFilter === tab.key
+                    ? "bg-foreground text-background"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab.label}
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded-full text-[10px] font-bold",
+                  sourceFilter === tab.key ? "bg-background/20 text-background" : "bg-background text-muted-foreground"
+                )}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Search result info */}
       {searchQuery.trim() && (
         <p className="text-sm text-muted-foreground mb-3">
@@ -643,6 +699,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Client</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                    {arataSursa && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Sursă</th>
+                    )}
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Data</th>
                     {wootEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Woot</th>
@@ -677,6 +736,8 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                 <tbody className="divide-y divide-border">
                   {comenzi.map((order) => {
                     const status = orderStatus(order.status);
+                    const origine = deriveOrigin(order.order_source);
+                    const moneda = monedaComenzii(order.order_source);
                     return (
                       <tr
                         key={order.id}
@@ -709,12 +770,26 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                           })()}
                           <div className="text-xs">{order.customer_phone}</div>
                         </td>
-                        <td className="px-5 py-3.5 font-medium text-foreground">{formatPrice(Number(order.total))}</td>
+                        <td className="px-5 py-3.5 font-medium text-foreground whitespace-nowrap">
+                          {/* Comenzile de marketplace vin in moneda lor: „40 lei"
+                              pe o comanda de 40 EUR ar fi mai putin de jumatate. */}
+                          {moneda ? `${Number(order.total).toFixed(2)} ${moneda}` : formatPrice(Number(order.total))}
+                        </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap", status.className)}>
                             {status.label}
                           </span>
                         </td>
+                        {arataSursa && (
+                          <td className="px-5 py-3.5 hidden sm:table-cell">
+                            <span className={cn(
+                              "inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-medium whitespace-nowrap",
+                              claseSursa(origine),
+                            )}>
+                              {origine.label}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-5 py-3.5 text-muted-foreground hidden md:table-cell">
                           {formatDate(new Date(order.created_at))}
                         </td>

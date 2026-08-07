@@ -65,21 +65,29 @@ export async function GET(req: NextRequest) {
     try {
       let status = await getDomainStatus(domain);
 
-      // Ce tine de noi: zona, legarea de proiect, geamanul www.
-      const oursToFix = !status.zone || !status.inProject || !status.wwwInProject;
+      /*
+       * Ce tine de noi: legarea de proiect, geamanul www si zona — dar zona
+       * DOAR cand registrarul chiar deleaga catre Vercel (`zoneMissing`).
+       *
+       * „Fara zona" pur si simplu NU e defect: `caian-textile.ro` sta pe
+       * nameservere ROMARG cu un A catre IP-ul Vercel si merge perfect fara
+       * nicio zona. Daca am trata lipsa zonei ca defect, cronul ar demola in
+       * fiecare ora magazine care functioneaza.
+       */
+      const oursToFix = status.zoneMissing || !status.inProject || !status.wwwInProject;
 
       if (oursToFix) {
         const fix = await repairDomainOnVercel(domain);
         status = await getDomainStatus(domain);
 
-        if (status.zone && status.inProject) {
+        if (!status.zoneMissing && status.inProject) {
           repaired.push(domain);
         } else {
           broken.push({
             store: label,
             domain,
-            problem: !status.zone
-              ? `Fara zona DNS pe Vercel — domeniul e cazut complet. ${fix.error ?? ""}`.trim()
+            problem: status.zoneMissing
+              ? `Delegat catre nameserverele Vercel dar fara zona DNS — domeniul e cazut complet. ${fix.error ?? ""}`.trim()
               : `Nu e atasat proiectului Vercel. ${fix.error ?? ""}`.trim(),
           });
           continue;

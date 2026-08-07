@@ -254,14 +254,21 @@ test("cand totul merge nu se emite niciun avertisment", async () => {
   assert.equal(res.warning, undefined);
 });
 
-test("un domeniu in cont FARA zona e scos si readaugat cu zona", async () => {
-  const { addDomainToVercel } = await import("./vercel");
+/** Randul din cont, cu nameserverele pe care le vede Vercel. */
+function contFaraZona(nameservers: string[], extra: Record<string, unknown> = {}) {
+  return { domain: { name: "magazin.ro", serviceType: "external", nameservers, ...extra } };
+}
+
+const NS_VERCEL = ["ns1.vercel-dns.com", "ns2.vercel-dns.com"];
+const NS_EXTERN = ["ns1.romarg.com", "ns2.romarg.com"];
+
+test("delegat catre Vercel dar fara zona: domeniul e scos din cont si readaugat CU zona", async () => {
+  const { repairDomainOnVercel } = await import("./vercel");
 
   let adaugariInCont = 0;
   reply = (url, method) => {
     if (method === "POST" && url.includes(ACCOUNT_DOMAINS)) {
       adaugariInCont++;
-      // Prima incercare cade: Vercel il are deja, ca DNS extern.
       if (adaugariInCont === 1) {
         return {
           status: 409,
@@ -270,38 +277,60 @@ test("un domeniu in cont FARA zona e scos si readaugat cu zona", async () => {
       }
       return { status: 200 };
     }
-    // Randul din cont: exista, dar zona NU e la Vercel.
     if (method === "GET" && url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
-      return { status: 200, body: { domain: { name: "magazin.ro", serviceType: "external" } } };
+      return { status: 200, body: contFaraZona(NS_VERCEL) };
     }
     return { status: 200 };
   };
 
-  const res = await addDomainToVercel("magazin.ro");
+  const res = await repairDomainOnVercel("magazin.ro");
 
   assert.equal(res.success, true);
   assert.ok(
     calls.some((c) => c.method === "DELETE" && c.url.includes("/v6/domains/magazin.ro")),
-    "domeniul blocat in cont fara zona trebuie scos ca sa poata fi readaugat CU zona — altfel „Repara\" nu-l repara niciodata",
+    "blocat in cont fara zona, cu nameserverele deja pe Vercel = domeniu mort; singura iesire e scoaterea si readaugarea CU zona",
   );
-  assert.equal(adaugariInCont, 2, "trebuie readaugat dupa stergere");
 });
 
-test("un domeniu cumparat PRIN Vercel nu se sterge niciodata din cont", async () => {
-  const { addDomainToVercel } = await import("./vercel");
+test("pe DNS EXTERN, lipsa zonei NU e defect si domeniul nu se atinge", async () => {
+  const { repairDomainOnVercel } = await import("./vercel");
 
   reply = (url, method) => {
     if (method === "POST" && url.includes(ACCOUNT_DOMAINS)) {
       return { status: 409, body: { error: { message: "already in use by one of your projects" } } };
     }
     if (method === "GET" && url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
-      // Fara zona, DAR inregistrat prin Vercel.
-      return { status: 200, body: { domain: { name: "magazin.ro", serviceType: "external", boughtAt: 1700000000000 } } };
+      // Cazul caian-textile.ro: nameservere la registrar, A catre IP-ul Vercel,
+      // merge perfect, si nicio zona la Vercel.
+      return { status: 200, body: contFaraZona(NS_EXTERN) };
     }
     return { status: 200 };
   };
 
-  const res = await addDomainToVercel("magazin.ro");
+  const res = await repairDomainOnVercel("magazin.ro");
+
+  assert.equal(res.success, true);
+  assert.equal(
+    calls.some((c) => c.method === "DELETE"),
+    false,
+    "zona Vercel e una din DOUA metode valide, nu o cerinta — a demola un magazin viu fiindca nu foloseste zona ar fi mai rau decat defectul initial",
+  );
+});
+
+test("un domeniu cumparat PRIN Vercel nu se sterge niciodata din cont", async () => {
+  const { repairDomainOnVercel } = await import("./vercel");
+
+  reply = (url, method) => {
+    if (method === "POST" && url.includes(ACCOUNT_DOMAINS)) {
+      return { status: 409, body: { error: { message: "already in use by one of your projects" } } };
+    }
+    if (method === "GET" && url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
+      return { status: 200, body: contFaraZona(NS_VERCEL, { boughtAt: 1700000000000 }) };
+    }
+    return { status: 200 };
+  };
+
+  const res = await repairDomainOnVercel("magazin.ro");
 
   assert.equal(res.success, false);
   assert.equal(
@@ -336,24 +365,49 @@ test("'already in use by one of your projects' e SUCCES cand proiectul e al nost
   );
 });
 
-test("starea raportata nu poate fi sanatoasa fara zona DNS", async () => {
+test("delegat catre Vercel fara zona = zoneMissing, oricat de verde ar parea proiectul", async () => {
   const { getDomainStatus } = await import("./vercel");
 
   reply = (url) => {
-    // Proiectul are domeniul si DNS-ul arata corect, DAR contul nu are zona.
-    if (url.includes(ACCOUNT_DOMAINS)) return { status: 404 };
-    if (url.includes("/config")) return { status: 200, body: { misconfigured: false } };
+    if (url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
+      return { status: 200, body: contFaraZona(NS_VERCEL) };
+    }
+    if (url.includes("/config")) return { status: 200, body: { misconfigured: true } };
     return { status: 200, body: { verified: true } };
   };
 
   const status = await getDomainStatus("magazin.ro");
 
   assert.equal(status.inProject, true);
-  assert.equal(status.verified, true);
-  assert.equal(status.zone, false, "lipsa zonei trebuie sa se vada");
+  assert.equal(status.zone, false);
+  assert.equal(status.delegated, true);
+  assert.equal(
+    status.zoneMissing,
+    true,
+    "exact starea din 07.08: nameservere pe Vercel, zona inexistenta, domeniul mort de tot",
+  );
+  assert.equal(status.healthy, false);
+});
+
+test("pe DNS extern si configurat corect, domeniul e SANATOS desi n-are zona", async () => {
+  const { getDomainStatus } = await import("./vercel");
+
+  reply = (url) => {
+    if (url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
+      return { status: 200, body: contFaraZona(NS_EXTERN) };
+    }
+    if (url.includes("/config")) return { status: 200, body: { misconfigured: false } };
+    return { status: 200, body: { verified: true } };
+  };
+
+  const status = await getDomainStatus("magazin.ro");
+
+  assert.equal(status.zone, false);
+  assert.equal(status.delegated, false);
+  assert.equal(status.zoneMissing, false, "fara delegare catre Vercel, lipsa zonei e normala");
   assert.equal(
     status.healthy,
-    false,
-    "exact combinatia din 07.08: totul verde in proiect, dar domeniul mort pentru ca nu exista zona",
+    true,
+    "cazul caian-textile.ro: merge prin A/CNAME de la registrar si nu are nimic de reparat",
   );
 });

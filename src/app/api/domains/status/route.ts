@@ -20,35 +20,39 @@ function diagnose(domain: string, s: DomainStatus): { ok: boolean; title: string
       detail: s.error,
     };
   }
-  if (!s.zone) {
+  // Zona lipsa conteaza doar cand registrarul chiar deleaga catre Vercel. Un
+  // domeniu pe DNS extern (A/CNAME de la registrarul clientului) merge perfect
+  // fara zona la Vercel si nu are nimic de reparat.
+  if (s.zoneMissing) {
     return {
       ok: false,
       title: "Domeniul nu are zona DNS pe Vercel",
       detail:
-        `Nameserverele Vercel nu raspund deloc pentru ${domain}, deci nici site-ul ` +
-        `nici emailul nu functioneaza. Apasa „Repara" — inregistram domeniul in cont ` +
-        `si cream zona.`,
+        `Nameserverele sunt indreptate catre Vercel, dar Vercel nu gazduieste inca ` +
+        `zona pentru ${domain} — deci nu raspunde nimeni, nici pentru site nici ` +
+        `pentru email. Apasa „Repara".`,
     };
   }
   if (!s.inProject) {
     return {
       ok: false,
       title: "Domeniul nu e legat de magazin",
-      detail: `Zona DNS exista, dar ${domain} nu e atasat proiectului. Apasa „Repara".`,
+      detail: `${domain} nu e atasat magazinului tau in rutare. Apasa „Repara".`,
     };
   }
   if (s.misconfigured) {
     const ns = s.intendedNameservers.length ? s.intendedNameservers : ["ns1.vercel-dns.com", "ns2.vercel-dns.com"];
     return {
       ok: false,
-      title: "Asteptam nameserverele",
+      title: "Asteptam DNS-ul",
       detail:
         `Totul e pregatit de partea noastra. La registrarul unde ai cumparat ` +
         `${domain} pune nameserverele: ${ns.join(", ")}. ` +
         (s.currentNameservers.length
           ? `Acum sunt setate: ${s.currentNameservers.join(", ")}. `
           : "") +
-        `Dupa schimbare dureaza pana la cateva ore.`,
+        `Daca preferi sa pastrezi DNS-ul acolo unde e, merge si cu inregistrari ` +
+        `A/CNAME catre Vercel. Dupa schimbare dureaza pana la cateva ore.`,
     };
   }
   if (!s.verified) {

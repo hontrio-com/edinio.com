@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getDomainStatus, repairDomainOnVercel } from "@/lib/vercel";
+import { getDomainStatus, addDomainToVercel } from "@/lib/vercel";
 import { sendBrokenDomainsToAdmin } from "@/lib/email";
 
 // Plasa de siguranta pentru domeniile custom.
@@ -13,13 +13,16 @@ import { sendBrokenDomainsToAdmin } from "@/lib/email";
 // Vercel de fapt.
 //
 // Cronul asta face exact comparatia aia, din ora in ora, pentru toate
-// magazinele. Ce poate repara singur (zona lipsa, domeniu nelegat de proiect,
-// geaman www lipsa) repara pe loc — toti pasii sunt idempotenti. Ce ramane
-// stricat ajunge pe email la admin.
+// magazinele. Repara singur DOAR ce se poate repara adaugand: atasarea la
+// proiect si geamanul www. Totul e idempotent, nimic nu e distructiv.
 //
-// Ce NU raporteaza: domeniile care asteapta clientul sa schimbe nameserverele
-// la registrar (`misconfigured`). Aia nu e defectiunea noastra si nu are rost
-// sa sune alarma pentru ea in fiecare ora.
+// Zona lipsa o RAPORTEAZA pe email, nu o repara: recrearea zonei inseamna sa
+// scoti domeniul din cont si sa-l pui la loc, iar aia se face doar de om, din
+// butonul „Repara". Vezi lib/vercel.ts pentru de ce.
+//
+// Ce NU raporteaza: domeniile care asteapta clientul sa schimbe DNS-ul la
+// registrar (`misconfigured` fara `zoneMissing`). Aia nu e defectiunea noastra
+// si nu are rost sa sune alarma pentru ea in fiecare ora.
 
 function verifyCron(req: NextRequest): boolean {
   const secret = req.headers.get("authorization")?.replace("Bearer ", "");
@@ -66,32 +69,46 @@ export async function GET(req: NextRequest) {
       let status = await getDomainStatus(domain);
 
       /*
-       * Ce tine de noi: legarea de proiect, geamanul www si zona — dar zona
-       * DOAR cand registrarul chiar deleaga catre Vercel (`zoneMissing`).
+       * Cronul face DOAR reparatii care adauga: ataseaza domeniul la proiect,
+       * adauga geamanul www. Nimic distructiv, niciodata, nesupravegheat.
        *
-       * „Fara zona" pur si simplu NU e defect: `caian-textile.ro` sta pe
-       * nameservere ROMARG cu un A catre IP-ul Vercel si merge perfect fara
-       * nicio zona. Daca am trata lipsa zonei ca defect, cronul ar demola in
-       * fiecare ora magazine care functioneaza.
+       * Recrearea zonei (scoate din cont + readauga) ramane exclusiv in spatele
+       * butonului „Repara", apasat de un om pe propriul domeniu. Motivul e ce
+       * s-a vazut pe 07.08.2026: judecata automata „domeniul asta e stricat" s-a
+       * inselat de doua ori intr-o singura zi — o data crezand ca lipsa zonei e
+       * defect (ar fi demolat `caian-textile.ro`, care merge pe DNS extern), o
+       * data crezand ca zona exista pentru ca API-ul Vercel o raporta, desi
+       * nameserverele raspundeau REFUSED. O reparatie automata care se poate
+       * insela in favoarea distrugerii nu merita viteza pe care o cumpara.
        */
-      const oursToFix = status.zoneMissing || !status.inProject || !status.wwwInProject;
+      const oursToFix = !status.inProject || !status.wwwInProject;
 
       if (oursToFix) {
-        const fix = await repairDomainOnVercel(domain);
+        const fix = await addDomainToVercel(domain);
         status = await getDomainStatus(domain);
 
-        if (!status.zoneMissing && status.inProject) {
+        if (status.inProject) {
           repaired.push(domain);
         } else {
           broken.push({
             store: label,
             domain,
-            problem: status.zoneMissing
-              ? `Delegat catre nameserverele Vercel dar fara zona DNS — domeniul e cazut complet. ${fix.error ?? ""}`.trim()
-              : `Nu e atasat proiectului Vercel. ${fix.error ?? ""}`.trim(),
+            problem: `Nu e atasat proiectului Vercel. ${fix.error ?? ""}`.trim(),
           });
           continue;
         }
+      }
+
+      // Zona lipsa se RAPORTEAZA, nu se repara aici.
+      if (status.zoneMissing) {
+        broken.push({
+          store: label,
+          domain,
+          problem:
+            "Nameserverele arata catre Vercel, dar Vercel nu are zona DNS — domeniul " +
+            "e cazut complet, si site si email. Se rezolva din Setari > Domenii, butonul Repara.",
+        });
+        continue;
       }
 
       if (status.healthy) healthy++;

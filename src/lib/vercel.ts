@@ -407,7 +407,11 @@ export async function getDomainStatus(domain: string): Promise<DomainStatus> {
   const [account, project, config, twin] = await Promise.all([
     isApex ? vercelFetch(`/v5/domains/${apex}`) : Promise.resolve(null),
     vercelFetch(`/v10/projects/${VERCEL_PROJECT_ID}/domains/${apex}`),
-    vercelFetch(`/v9/projects/${VERCEL_PROJECT_ID}/domains/${apex}/config`),
+    // Ruta CORECTA pentru „e configurat si putem emite certificat": e la nivel de
+    // domeniu, nu sub proiect. Cea de sub proiect nu exista, raspundea eroare, iar
+    // eroarea o citeam drept `misconfigured: true` — deci TOATE domeniile ieseau
+    // nesanatoase (`healthy: 0` in cronul de la 17:23, inclusiv magazine care merg).
+    vercelFetch(`/v6/domains/${apex}/config?projectIdOrName=${VERCEL_PROJECT_ID}`),
     isApex
       ? vercelFetch(`/v10/projects/${VERCEL_PROJECT_ID}/domains/www.${apex}`)
       : Promise.resolve(null),

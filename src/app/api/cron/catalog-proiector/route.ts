@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
-import { proiecteazaCoada } from "@/lib/storefront/catalog/proiector";
+import { proiecteazaCoada, MAX_COADA_PE_RULARE } from "@/lib/storefront/catalog/proiector";
 
 /**
  * Goleste coada de reproiectat a catalogului.
@@ -21,10 +21,10 @@ import { proiecteazaCoada } from "@/lib/storefront/catalog/proiector";
  * facut costa o singura interogare pe o tabela care e aproape mereu goala.
  */
 
-/** Cate randuri se iau intr-o rulare. La un minut interval, e mult peste ce se
- *  poate acumula in mod normal; plafonul e pentru cazul unui import mare sau al
- *  unui UPDATE in masa rulat de mana. */
-const MAX_PE_RULARE = 2000;
+// Cate randuri se iau intr-o rulare: vezi `MAX_COADA_PE_RULARE`. Plafonul nu e
+// ales de aici, e impus de PostgREST — orice numar mai mare se taie tacut la 1000.
+// La un minut interval inseamna 60.000 de randuri pe ora, mult peste ce se poate
+// acumula normal; e dimensionat pentru un import mare sau un UPDATE in masa.
 
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) {
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   );
 
   const inceput = Date.now();
-  const scrise = await proiecteazaCoada(admin, MAX_PE_RULARE);
+  const scrise = await proiecteazaCoada(admin, MAX_COADA_PE_RULARE);
 
   return NextResponse.json({ ok: true, scrise, ms: Date.now() - inceput });
 }

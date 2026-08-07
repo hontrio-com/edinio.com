@@ -168,8 +168,22 @@ export async function proiecteaza(
   return scrise;
 }
 
-/** Ia din coada si proiecteaza. Folosit de cron. */
-export async function proiecteazaCoada(admin: SupabaseClient, maxim = 2000): Promise<number> {
+/**
+ * Ia din coada si proiecteaza. Folosit de cron.
+ *
+ * `maxim` NU are voie sa treaca de 1000: PostgREST plafoneaza ORICE raspuns la
+ * 1000 de randuri si nu da eroare, taie tacut (vezi `lib/supabase/fetch-all.ts`).
+ * Am scris intai 2000 si prima rulare pe productie a intors exact 1000 — capcana
+ * functioneaza si asupra celui care o cunoaste. Nu se ridica plafonul de aici:
+ * daca vreodata coada creste mai repede decat o goleste cronul, se merge pe
+ * ferestre cu `fetchAllRows`, nu pe un numar mai mare care oricum nu se onoreaza.
+ */
+export const MAX_COADA_PE_RULARE = 1000;
+
+export async function proiecteazaCoada(
+  admin: SupabaseClient,
+  maxim = MAX_COADA_PE_RULARE,
+): Promise<number> {
   const { data, error } = await admin
     .from("catalog_murdar")
     .select("product_id")

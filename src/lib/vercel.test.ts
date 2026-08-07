@@ -254,6 +254,88 @@ test("cand totul merge nu se emite niciun avertisment", async () => {
   assert.equal(res.warning, undefined);
 });
 
+test("un domeniu in cont FARA zona e scos si readaugat cu zona", async () => {
+  const { addDomainToVercel } = await import("./vercel");
+
+  let adaugariInCont = 0;
+  reply = (url, method) => {
+    if (method === "POST" && url.includes(ACCOUNT_DOMAINS)) {
+      adaugariInCont++;
+      // Prima incercare cade: Vercel il are deja, ca DNS extern.
+      if (adaugariInCont === 1) {
+        return {
+          status: 409,
+          body: { error: { code: "domain_already_in_use", message: "Cannot add magazin.ro since it's already in use by one of your projects." } },
+        };
+      }
+      return { status: 200 };
+    }
+    // Randul din cont: exista, dar zona NU e la Vercel.
+    if (method === "GET" && url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
+      return { status: 200, body: { domain: { name: "magazin.ro", serviceType: "external" } } };
+    }
+    return { status: 200 };
+  };
+
+  const res = await addDomainToVercel("magazin.ro");
+
+  assert.equal(res.success, true);
+  assert.ok(
+    calls.some((c) => c.method === "DELETE" && c.url.includes("/v6/domains/magazin.ro")),
+    "domeniul blocat in cont fara zona trebuie scos ca sa poata fi readaugat CU zona — altfel „Repara\" nu-l repara niciodata",
+  );
+  assert.equal(adaugariInCont, 2, "trebuie readaugat dupa stergere");
+});
+
+test("un domeniu cumparat PRIN Vercel nu se sterge niciodata din cont", async () => {
+  const { addDomainToVercel } = await import("./vercel");
+
+  reply = (url, method) => {
+    if (method === "POST" && url.includes(ACCOUNT_DOMAINS)) {
+      return { status: 409, body: { error: { message: "already in use by one of your projects" } } };
+    }
+    if (method === "GET" && url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
+      // Fara zona, DAR inregistrat prin Vercel.
+      return { status: 200, body: { domain: { name: "magazin.ro", serviceType: "external", boughtAt: 1700000000000 } } };
+    }
+    return { status: 200 };
+  };
+
+  const res = await addDomainToVercel("magazin.ro");
+
+  assert.equal(res.success, false);
+  assert.equal(
+    calls.some((c) => c.method === "DELETE" && c.url.includes("/v6/domains/")),
+    false,
+    "stergerea din cont a unui domeniu inregistrat prin Vercel ar pierde inregistrarea, nu doar zona",
+  );
+  assert.match(String(res.error), /inregistrat prin Vercel/);
+});
+
+test("'already in use by one of your projects' e SUCCES cand proiectul e al nostru", async () => {
+  const { addDomainToVercel } = await import("./vercel");
+
+  reply = (url, method) => {
+    if (url.includes(ACCOUNT_DOMAINS)) return { status: 200 };
+    if (method === "POST" && url.includes(PROJECT_DOMAINS)) {
+      return {
+        status: 409,
+        body: { error: { code: "domain_already_in_use", message: "Cannot add magazin.ro since it's already in use by one of your projects." } },
+      };
+    }
+    // Interogarea de control confirma: e chiar pe proiectul NOSTRU.
+    return { status: 200 };
+  };
+
+  const res = await addDomainToVercel("magazin.ro");
+
+  assert.equal(
+    res.success,
+    true,
+    "mesajul spune „one of YOUR projects\" — daca proiectul ala e al nostru, nu e nimic de reparat si „Repara\" nu are voie sa refuze",
+  );
+});
+
 test("starea raportata nu poate fi sanatoasa fara zona DNS", async () => {
   const { getDomainStatus } = await import("./vercel");
 

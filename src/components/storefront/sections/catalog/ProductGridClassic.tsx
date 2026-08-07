@@ -15,8 +15,16 @@ import { StoreProductCard } from "@/components/storefront/sections/products/Stor
  *
  * Ancora `#produse` e folosita de butonul din hero si de „Vezi toate" din
  * randurile pe categorie, deci trebuie sa ramana pe sectiune.
+ *
+ * `prioritate` spune daca grila e PRIMA sectiune a paginii, exact ca la
+ * randurile de produse. Grila era singura care nu primea steagul si isi incarca
+ * nerabdator primele patru imagini oricum — adica tocmai ce interzice
+ * comentariul din `SectionRenderer`. Pe un magazin cu hero si trei randuri
+ * deasupra, alea patru erau sub pliu si furau banda de la bannerul care chiar
+ * era elementul LCP: 864 KiB pe eSAFE, imagini de furnizor care ocolesc si
+ * redimensionarea din CDN.
  */
-export function ProductGridClassic() {
+export function ProductGridClassic({ prioritate = false }: { prioritate?: boolean }) {
   const {
     catalogRoot,
     color,
@@ -70,7 +78,7 @@ export function ProductGridClassic() {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {paginatedProducts.map((product, i) => (
-              <StoreProductCard key={product.id} product={product} priority={i < 4} />
+              <StoreProductCard key={product.id} product={product} priority={prioritate && i < 4} />
             ))}
           </div>
           {totalPages > 1 && (

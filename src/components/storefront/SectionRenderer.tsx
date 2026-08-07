@@ -159,7 +159,7 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
         <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} prioritate={estePrima} />
       );
     case "product_grid":
-      return <ProductGridClassic />;
+      return <ProductGridClassic prioritate={estePrima} />;
     case "benefits":
       return <BenefitsClassic />;
     case "reviews":

@@ -26,6 +26,22 @@ export interface ProductCardProps {
   newBadgeDays: number;
   outOfStock?: boolean;
   showCategoryBadge?: boolean;
+  /**
+   * Cardul e in primul ecran, deci imaginea lui se incarca nerabdator.
+   *
+   * NU inseamna „preincarca". Pana in Next 16 asta se scria `priority`, care
+   * insereaza un `<link rel=preload>` in `<head>`; documentatia lui il si
+   * depreciaza acum in favoarea lui `preload`, tocmai ca sa se vada ce face.
+   * Pentru carduri e gresit din doua motive scrise chiar acolo: preincarcarea e
+   * pentru UN element LCP, nu pentru patru candidati care depind de latimea
+   * ecranului (pe telefon se vad doua din patru), iar in `<head>` acele cereri
+   * pleaca inaintea bannerului si ii iau banda.
+   *
+   * Ce ramane e `loading="eager"` plus `fetchPriority="high"` — exact ce
+   * recomanda documentatia in locul preincarcarii: browserul le cere de indata
+   * ce parseaza eticheta, adica oricum devreme pentru primul rand, dar dupa ce
+   * a vazut bannerul.
+   */
   priority?: boolean;
   priceLowestOnly?: boolean;
 }
@@ -93,7 +109,8 @@ export function ProductCard({
               src={imageUrl}
               alt={product.name}
               fill
-              priority={priority}
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : undefined}
               sizes={SIZES_IMAGINE}
               className="object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
             />

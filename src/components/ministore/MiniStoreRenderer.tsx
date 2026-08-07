@@ -28,6 +28,7 @@ import {
   type Fateta, type SelectieFatete,
 } from "@/lib/storefront/catalog/facets";
 import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
+import { comparatorSortare, type CheieSortare } from "@/lib/storefront/catalog/sortare";
 import { scrieFiltre } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
@@ -708,20 +709,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       const matchesFatete = trecefiltrele(p.f, selectieIndici);
       return matchesSearch && matchesCategory && matchesPrice && matchesSale && matchesStock && matchesOptions && matchesFatete;
     });
-    // Sort. "relevance" only exists while a search is active (see effectiveSort).
-    if (searchMatches && effectiveSort === "relevance") {
-      list.sort((a, b) =>
-        ((searchMatches.get(b.id) ?? 0) - (searchMatches.get(a.id) ?? 0))
-        || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      return list;
-    }
-    switch (effectiveSort) {
-      case "price_asc": list.sort((a, b) => a.price_range.min - b.price_range.min); break;
-      case "price_desc": list.sort((a, b) => b.price_range.min - a.price_range.min); break;
-      case "popular": list.sort((a, b) => (b.is_featured ? 1 : 0) - (a.is_featured ? 1 : 0)); break;
-      case "name_asc": list.sort((a, b) => a.name.localeCompare(b.name)); break;
-      case "newest": default: list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
-    }
+    // Sortarile stau in lib/storefront/catalog/sortare.ts: toate dau o ordine
+    // TOTALA (departajare finala pe id), fiindca altfel felierea pe server ar
+    // putea aseza altfel randurile egale la fiecare pagina. Motivul intreg e
+    // scris acolo. "relevance" exista doar cat timp se cauta (vezi effectiveSort).
+    list.sort(comparatorSortare(effectiveSort as CheieSortare, searchMatches));
     return list;
   }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici]);
 

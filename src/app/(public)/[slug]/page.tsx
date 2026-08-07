@@ -25,6 +25,7 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { jsonLdSafe } from "@/lib/json-ld";
 
 interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string; sale?: string }>; }
@@ -285,17 +286,34 @@ export default async function SlugPage({ params, searchParams }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  // Fire-and-forget analytics (skip for owner). Sarita si pe preview/localhost:
-  // acele medii scriu in baza de PRODUCTIE, deci fiecare vizita de test ar
-  // aparea in statisticile comerciantului. Detalii in lib/storefront/host.ts.
+  // Analitica, DUPA ce raspunsul a plecat (skip pentru proprietar). Sarita si pe
+  // preview/localhost: acele medii scriu in baza de PRODUCTIE, deci fiecare
+  // vizita de test ar aparea in statisticile comerciantului. Detalii in
+  // lib/storefront/host.ts.
   if (!isOwner && !isNonProductionHost(host)) {
     const ua = headersList.get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
-    // Scriem cu SERVICE ROLE, nu cu clientul vizitatorului. Politica publica de
-    // INSERT (`with_check true`) a fost stearsa: permitea oricui cu cheia anon
-    // sa injecteze evenimente pentru ORICE magazin — statistici otravite si
-    // crestere necontrolata a bazei. Serverul stie deja ce magazin randeaza.
-    createAdminClient().from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
+    /*
+     * `after` in loc de promisiune lasata sa atarne.
+     *
+     * Un `.then(() => {})` nesupravegheat nu tine raspunsul, dar nici nu e
+     * garantat: functia se poate incheia cu INSERT-ul inca in zbor, si atunci
+     * vizita se pierde in tacere. `after` il muta explicit dupa raspuns si il
+     * tine in viata pana se termina — deci si mai rapid, si mai sigur.
+     *
+     * Nu face ruta dinamica (documentatia lui `after`: „not a Request-time API").
+     * `device` se citeste AICI, in randare, nu inauntru: antetele nu se pot citi
+     * din callback.
+     *
+     * Scriem cu SERVICE ROLE, nu cu clientul vizitatorului. Politica publica de
+     * INSERT (`with_check true`) a fost stearsa: permitea oricui cu cheia anon
+     * sa injecteze evenimente pentru ORICE magazin — statistici otravite si
+     * crestere necontrolata a bazei. Serverul stie deja ce magazin randeaza.
+     */
+    after(async () => {
+      await createAdminClient().from("site_analytics")
+        .insert({ business_id: business.id, event_type: "visit", device, country: "RO" });
+    });
   }
 
   // One Product Store: render the chosen product's landing page as the homepage,

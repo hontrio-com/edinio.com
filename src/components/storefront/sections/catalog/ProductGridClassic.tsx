@@ -2,7 +2,7 @@
 
 import { ShoppingCart } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
-import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
 
 /**
@@ -38,6 +38,7 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
     currentPage,
     totalPages,
     goToPage,
+    interogareFiltre,
   } = useStorefront();
 
   const areRecomandate = pageContent.show_featured_section === true;
@@ -82,7 +83,7 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
             ))}
           </div>
           {totalPages > 1 && (
-            <Paginare current={currentPage} total={totalPages} color={color} catalogRoot={catalogRoot} onGo={mergiLa} />
+            <Paginare current={currentPage} total={totalPages} color={color} catalogRoot={catalogRoot} interogareFiltre={interogareFiltre} onGo={mergiLa} />
           )}
         </>
       )}
@@ -105,6 +106,7 @@ function Paginare({
   total,
   color,
   catalogRoot,
+  interogareFiltre,
   onGo,
 }: {
   current: number;
@@ -116,6 +118,15 @@ function Paginare({
    * paginare ar fi trimis mereu la radacina magazinului.
    */
   catalogRoot: string;
+  /**
+   * Filtrele active, gata scrise ca interogare. Fara ele, fiecare numar de
+   * pagina arunca cautarea, categoria si pretul si trimitea la catalogul intreg.
+   *
+   * Nu contin `utm_*`/`gclid`/`preview`: alea se adauga doar la rescrierea
+   * adresei, din motivul scris in `MiniStoreRenderer` — puse in ancore, ar lipsi
+   * din HTML-ul initial si ar aparea abia la hidratare.
+   */
+  interogareFiltre: string;
   onGo: (n: number) => void;
 }) {
   const pagini = Array.from({ length: total }, (_, i) => i + 1)
@@ -127,10 +138,25 @@ function Paginare({
     }, []);
 
   const nav = "px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors";
-  // Fara slash inaintea interogarii: `/magazin/?page=2` ia un 308 la fiecare
-  // apasare, iar Search Console numara fiecare pagina ca redirectionare.
-  const radacina = radacinaMagazin(catalogRoot);
-  const href = (p: number) => (p <= 1 ? radacina : `${radacina}?page=${p}`);
+  /*
+   * Numerele duc la ACEEASI lista, doar la alta pagina din ea.
+   *
+   * Inainte se scria `?page=N` gol, deci fiecare numar arunca cautarea,
+   * categoria, intervalul de pret si fatetele: „pagina 2 din manusi sub 50 lei"
+   * ducea la pagina 2 din tot catalogul. Bug-ul statea ascuns fiindca
+   * `e.preventDefault()` de mai jos inghite apasarea obisnuita si paginarea se
+   * face pe loc — se vedea doar la ctrl-click, la copierea adresei, si la
+   * roboti, care nu apasa nimic si citesc chiar `href`-ul gresit.
+   *
+   * Aceeasi compunere ca sora ei din `ShopPieces`. `hrefCatalog` normalizeaza
+   * radacina, deci ramane si fara slash inaintea interogarii: `/magazin/?page=2`
+   * lua un 308 la fiecare apasare, iar Search Console numara fiecare pagina ca
+   * redirectionare.
+   */
+  const href = (p: number) => hrefCatalog(
+    catalogRoot,
+    p <= 1 ? interogareFiltre : `${interogareFiltre}${interogareFiltre ? "&" : ""}page=${p}`,
+  );
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 mt-8">

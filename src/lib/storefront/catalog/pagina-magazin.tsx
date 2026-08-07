@@ -2,6 +2,7 @@ import { COLOANE_BUSINESS_PUBLIC, pentruBrowser } from "@/lib/storefront/busines
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -319,11 +320,18 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   if (!isOwner && !isNonProductionHost(host)) {
     const ua = (await headers()).get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
+    // `after`, ca pe pagina principala: un `.then()` lasat sa atarne nu tine
+    // raspunsul, dar nici nu e garantat sa apuce sa se scrie. Antetele se citesc
+    // AICI, nu in callback. Nu face ruta dinamica.
+    //
     // Scriem cu SERVICE ROLE, nu cu clientul vizitatorului. Politica publica de
     // INSERT (`with_check true`) a fost stearsa: permitea oricui cu cheia anon
     // sa injecteze evenimente pentru ORICE magazin — statistici otravite si
     // crestere necontrolata a bazei. Serverul stie deja ce magazin randeaza.
-    createAdminClient().from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
+    after(async () => {
+      await createAdminClient().from("site_analytics")
+        .insert({ business_id: business.id, event_type: "visit", device, country: "RO" });
+    });
   }
 
   const filtre = citesteFiltreDinAdresa(sp, index.fatete);

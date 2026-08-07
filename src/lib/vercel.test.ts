@@ -389,6 +389,30 @@ test("delegat catre Vercel fara zona = zoneMissing, oricat de verde ar parea pro
   assert.equal(status.healthy, false);
 });
 
+test("fara zona si nefunctional = zoneMissing chiar daca Vercel nu vede niciun nameserver", async () => {
+  const { getDomainStatus } = await import("./vercel");
+
+  reply = (url) => {
+    // Lista de nameservere vine GOALA: Vercel o afla printr-o interogare DNS, iar
+    // cand zona lipseste chiar nameserverele alea raspund REFUSED. Daca ne-am
+    // baza doar pe `delegated`, exact cazul de reparat ar fi sarit.
+    if (url.includes(`${ACCOUNT_DOMAINS}/magazin.ro`)) {
+      return { status: 200, body: contFaraZona([]) };
+    }
+    if (url.includes("/config")) return { status: 200, body: { misconfigured: true } };
+    return { status: 200, body: { verified: true } };
+  };
+
+  const status = await getDomainStatus("magazin.ro");
+
+  assert.equal(status.delegated, false, "Vercel chiar nu raporteaza nameservere");
+  assert.equal(
+    status.zoneMissing,
+    true,
+    "fara zona SI nefunctional inseamna zona lipsa, indiferent ce lista de nameservere raporteaza Vercel",
+  );
+});
+
 test("pe DNS extern si configurat corect, domeniul e SANATOS desi n-are zona", async () => {
   const { getDomainStatus } = await import("./vercel");
 

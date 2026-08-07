@@ -440,7 +440,22 @@ export async function getDomainStatus(domain: string): Promise<DomainStatus> {
   const misconfigured = config.ok ? config.data.misconfigured === true : true;
   const wwwInProject = isApex ? Boolean(twin?.ok) : true;
   const delegated = delegatedToVercel(accountRow);
-  const zoneMissing = isApex && delegated && !zone;
+
+  /*
+   * Zona lipseste CU ADEVARAT cand domeniul nu o are si nici nu functioneaza
+   * altfel. Doua semne, oricare ajunge:
+   *   - `delegated`: registrarul arata deja catre ns1/ns2.vercel-dns.com
+   *   - `misconfigured`: Vercel spune ca domeniul nu ajunge la noi pe nicio cale
+   *
+   * Nu doar `delegated`, pentru ca lista de nameservere pe care o raporteaza
+   * Vercel vine din propria lui interogare DNS — iar cand zona lipseste, chiar
+   * nameserverele alea raspund REFUSED, deci lista poate veni goala. Exact
+   * cazul pe care il reparam ar fi sarit.
+   *
+   * `misconfigured === false` ramane paza pentru magazinele vii: un domeniu pe
+   * DNS extern care functioneaza nu e niciodata atins.
+   */
+  const zoneMissing = isApex && !zone && (delegated || misconfigured);
 
   /*
    * Sanatatea NU cere zona. Un domeniu poate ajunge la Vercel pe doua cai la fel
@@ -474,17 +489,17 @@ export async function repairDomainOnVercel(
 
   /*
    * Calea distructiva (scoate din cont + readauga cu zona) se deschide DOAR
-   * pentru starea care chiar o cere: registrarul deleaga catre nameserverele
-   * Vercel, dar Vercel nu are zona — atunci ns1/ns2 raspund REFUSED si domeniul
-   * e mort de tot. Un domeniu pe DNS extern (A/CNAME catre Vercel) nu are nevoie
-   * de zona si nu se atinge, oricat de „incomplet" ar parea.
+   * pentru starea care chiar o cere, si verdictul il da `getDomainStatus` —
+   * acelasi pe care il vede si clientul in panou, si cronul. Un singur loc
+   * decide ce inseamna „lipseste zona", ca sa nu se desincronizeze.
+   *
+   * Un domeniu pe DNS extern care functioneaza (`misconfigured === false`) nu e
+   * niciodata atins, oricat de „incomplet" ar parea ca n-are zona.
    */
-  if (shouldPairWww(apex)) {
-    const row = await accountDomain(apex);
-    if (row && !hasZone(row) && delegatedToVercel(row)) {
-      const recreat = await ensureDomainOnAccount(apex, { allowRecreate: true });
-      if (!recreat.success) return recreat;
-    }
+  const status = await getDomainStatus(apex);
+  if (status.zoneMissing) {
+    const recreat = await ensureDomainOnAccount(apex, { allowRecreate: true });
+    if (!recreat.success) return recreat;
   }
 
   return addDomainToVercel(domain);

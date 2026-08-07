@@ -79,12 +79,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Remove old domain from Vercel if switching
-  if (biz.custom_domain && biz.custom_domain !== clean) {
-    await stergeDacaNuIlMaiFoloseseNimeni(biz.custom_domain, businessId);
-  }
+  const domeniuVechi = biz.custom_domain;
 
-  // Add new domain to Vercel project
+  // Ordinea conteaza. Pana acum domeniul VECHI se scotea din Vercel PRIMUL, deci
+  // orice esec de dupa (adaugarea celui nou, scrierea in baza) lasa magazinul cu
+  // domeniul vechi smuls din rutare si baza aratand tot spre el — offline, si
+  // fara nimic in interfata care sa spuna asta. Acum cel nou e complet pus la
+  // punct si salvat inainte sa se demonteze ceva.
+
+  // 1. Adauga domeniul nou (cont + zona DNS, proiect, geaman www).
   const vercelResult = await addDomainToVercel(clean);
   if (!vercelResult.success) {
     return NextResponse.json(
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Save to database. `custom_domain` e coloana privilegiata (fara grant de
+  // 2. Salveaza. `custom_domain` e coloana privilegiata (fara grant de
   // UPDATE pentru `authenticated`), tocmai ca sa nu poata fi scrisa direct din
   // browser, ocolind validarea de mai sus si sincronizarea cu Vercel. Scrierea
   // ramane legata de `user_id` ca sa nu depinda doar de grant.
@@ -107,7 +110,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nu am putut salva domeniul" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, domain: clean });
+  // 3. Abia acum retragem domeniul vechi.
+  if (domeniuVechi && domeniuVechi !== clean) {
+    await stergeDacaNuIlMaiFoloseseNimeni(domeniuVechi, businessId);
+  }
+
+  return NextResponse.json({ success: true, domain: clean, warning: vercelResult.warning });
 }
 
 export async function DELETE(req: NextRequest) {

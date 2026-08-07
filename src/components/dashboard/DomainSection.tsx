@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   Globe, Loader2, Copy, Check, X,
   AlertCircle, ShoppingCart, ExternalLink, Clock,
-  CheckCircle2, XCircle, Search,
+  CheckCircle2, XCircle, Search, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -190,6 +190,14 @@ export function DomainSection({
   // DNS setup method: full nameserver delegation (recommended — simplest) vs. per-record A/CNAME.
   const [dnsMethod, setDnsMethod] = useState<"records" | "nameservers">("nameservers");
 
+  // Starea REALA a domeniului, ceruta de la Vercel. Bulina „conectat" se aprindea
+  // pana acum doar pentru ca `custom_domain` era nenul — asa a putut sta un
+  // magazin doua zile cazut, cu tot verde in interfata.
+  type Diagnosis = { ok: boolean; title: string; detail: string };
+  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
+  const [checkingDomain, setCheckingDomain] = useState(false);
+  const [repairingDomain, setRepairingDomain] = useState(false);
+
   // ── Data loading ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -225,6 +233,25 @@ export function DomainSection({
         if (data?.custom_domain) setCustomDomain(data.custom_domain);
       });
   }, [businessId]);
+
+  // Intrebam Vercel de fiecare data cand se deschide sectiunea cu un domeniu
+  // conectat. Fara asta, singura „dovada" ca domeniul merge ramane randul din
+  // baza noastra — care poate fi vechi de zile si complet fals.
+  useEffect(() => {
+    if (!businessId || !customDomain) { setDiagnosis(null); return; }
+    let cancelled = false;
+    setCheckingDomain(true);
+    fetch(`/api/domains/status?businessId=${encodeURIComponent(businessId)}`)
+      .then((r) => r.json())
+      .then((d: { diagnosis?: Diagnosis }) => {
+        if (!cancelled) setDiagnosis(d.diagnosis ?? null);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setCheckingDomain(false);
+      });
+    return () => { cancelled = true; };
+  }, [businessId, customDomain]);
 
   // ── Cleaned domain name ────────────────────────────────────────────────────
 
@@ -350,19 +377,54 @@ export function DomainSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain: externalInput.trim(), businessId }),
       });
-      const data = await res.json() as { success?: boolean; domain?: string; error?: string };
+      const data = await res.json() as { success?: boolean; domain?: string; error?: string; warning?: string };
 
       if (!res.ok || !data.success) {
         toast.error(data.error ?? "Nu am putut conecta domeniul.");
       } else {
         setCustomDomain(data.domain ?? externalInput.trim());
         setExternalInput("");
-        toast.success("Domeniu conectat cu succes. Configureaza DNS-ul conform instructiunilor.");
+        if (data.warning) toast.warning(data.warning, { duration: 10000 });
+        else toast.success("Domeniu conectat cu succes. Configureaza DNS-ul conform instructiunilor.");
       }
     } catch {
       toast.error("Eroare de retea. Incearca din nou.");
     }
     setSavingExternal(false);
+  }
+
+  // ── Verificare reala la Vercel ────────────────────────────────────────────────
+
+  async function checkDomain() {
+    if (!businessId) return;
+    setCheckingDomain(true);
+    try {
+      const res = await fetch(`/api/domains/status?businessId=${encodeURIComponent(businessId)}`);
+      const data = await res.json() as { diagnosis?: Diagnosis };
+      setDiagnosis(data.diagnosis ?? null);
+    } catch {
+      setDiagnosis(null);
+    }
+    setCheckingDomain(false);
+  }
+
+  async function repairDomain() {
+    if (!businessId) return;
+    setRepairingDomain(true);
+    try {
+      const res = await fetch("/api/domains/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId }),
+      });
+      const data = await res.json() as { diagnosis?: Diagnosis; repairError?: string };
+      setDiagnosis(data.diagnosis ?? null);
+      if (data.diagnosis?.ok) toast.success(data.diagnosis.title);
+      else toast.error(data.repairError ?? data.diagnosis?.title ?? "Nu am putut repara domeniul.");
+    } catch {
+      toast.error("Eroare de retea. Incearca din nou.");
+    }
+    setRepairingDomain(false);
   }
 
   async function handleDisconnectDomain() {
@@ -381,6 +443,7 @@ export function DomainSection({
         toast.error(data.error ?? "Nu am putut deconecta domeniul.");
       } else {
         setCustomDomain(null);
+        setDiagnosis(null);
         toast.success("Domeniu deconectat.");
       }
     } catch {
@@ -395,6 +458,19 @@ export function DomainSection({
 
   const activeOrders = orders.filter((o) => o.status === "pending" || o.status === "processing");
 
+  const domainState: "checking" | "ok" | "broken" | "unknown" = diagnosis
+    ? (diagnosis.ok ? "ok" : "broken")
+    : checkingDomain
+      ? "checking"
+      : "unknown";
+
+  const domainTone = {
+    ok:       "bg-success/5 border-success/20",
+    broken:   "bg-destructive/5 border-destructive/20",
+    checking: "bg-primary/5 border-primary/20",
+    unknown:  "bg-primary/5 border-primary/20",
+  }[domainState];
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -408,33 +484,81 @@ export function DomainSection({
         </div>
       )}
 
-      {/* Active domain banner */}
+      {/* Active domain banner — starea vine de la Vercel, nu din baza noastra */}
       {customDomain && (
-        <div className="flex items-center gap-3 p-4 bg-primary/5 border border-primary/20 rounded-xl">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <Globe className="h-4 w-4 text-primary" />
+        <div className={cn("p-4 border rounded-xl", domainTone)}>
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+                domainState === "ok" ? "bg-success/10" : domainState === "broken" ? "bg-destructive/10" : "bg-primary/10"
+              )}
+            >
+              {domainState === "checking" ? (
+                <Loader2 className="h-4 w-4 text-primary animate-spin" />
+              ) : domainState === "ok" ? (
+                <CheckCircle2 className="h-4 w-4 text-success" />
+              ) : domainState === "broken" ? (
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              ) : (
+                <Globe className="h-4 w-4 text-primary" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground font-medium">
+                {domainState === "checking" ? "Verific domeniul..." : diagnosis?.title ?? "Domeniu conectat"}
+              </p>
+              <p
+                className={cn(
+                  "text-sm font-semibold font-mono truncate",
+                  domainState === "ok" ? "text-success" : domainState === "broken" ? "text-destructive" : "text-primary"
+                )}
+              >
+                {customDomain}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={checkDomain}
+              disabled={checkingDomain || repairingDomain}
+              className="flex-shrink-0 hover:text-primary transition-colors disabled:opacity-40"
+              title="Verifica din nou"
+            >
+              <RefreshCw className={cn("h-4 w-4 text-muted-foreground", checkingDomain && "animate-spin")} />
+            </button>
+            <a
+              href={`https://${customDomain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 hover:text-primary transition-colors"
+            >
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+            </a>
+            <button
+              type="button"
+              onClick={handleDisconnectDomain}
+              disabled={savingExternal}
+              className="flex-shrink-0 hover:text-destructive transition-colors"
+              title="Deconecteaza domeniul"
+            >
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground font-medium">Domeniu conectat</p>
-            <p className="text-sm font-semibold text-primary font-mono">{customDomain}</p>
-          </div>
-          <a
-            href={`https://${customDomain}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-shrink-0 hover:text-primary transition-colors"
-          >
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-          </a>
-          <button
-            type="button"
-            onClick={handleDisconnectDomain}
-            disabled={savingExternal}
-            className="flex-shrink-0 hover:text-destructive transition-colors"
-            title="Deconecteaza domeniul"
-          >
-            <X className="h-4 w-4 text-muted-foreground" />
-          </button>
+
+          {diagnosis && !diagnosis.ok && (
+            <div className="mt-3 pl-11">
+              <p className="text-xs text-muted-foreground leading-relaxed">{diagnosis.detail}</p>
+              <button
+                type="button"
+                onClick={repairDomain}
+                disabled={repairingDomain || checkingDomain}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/15 transition-colors disabled:opacity-50"
+              >
+                {repairingDomain && <Loader2 className="h-3 w-3 animate-spin" />}
+                {repairingDomain ? "Repar..." : "Repara"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

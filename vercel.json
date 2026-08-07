@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/discount-release",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/domains-reconcile",
+      "schedule": "23 * * * *"
     }
   ]
 }

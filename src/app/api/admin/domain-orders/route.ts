@@ -109,8 +109,24 @@ export async function PATCH(req: NextRequest) {
   // trateaza „deja in proiectul nostru" drept succes.
   if (status === "completed") {
     const vercelResult = await addDomainToVercel(order.domain);
+
+    // Verdictul ajunge la ADMIN, nu doar in console.error. Calea asta e cea pe
+    // care merge fiecare domeniu cumparat prin platforma, iar pana acum spunea
+    // „conectat automat" indiferent de rezultat. Asa a stat `atelierullarisei.ro`
+    // doua zile complet cazut fara ca nimeni sa aiba de unde afla.
     if (!vercelResult.success) {
       console.error("[domain-orders] Vercel add failed:", vercelResult.error);
+      return NextResponse.json({
+        success: true,
+        warning:
+          `Comanda e marcata finalizata, dar domeniul NU a fost conectat la Vercel: ` +
+          `${vercelResult.error} Pana se rezolva, domeniul nu functioneaza deloc. ` +
+          `Salveaza comanda din nou ca sa reincerci, sau asteapta reconcilierea orara.`,
+      });
+    }
+
+    if (vercelResult.warning) {
+      return NextResponse.json({ success: true, warning: vercelResult.warning });
     }
   }
 

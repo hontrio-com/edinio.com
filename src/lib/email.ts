@@ -462,6 +462,51 @@ const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.c
  */
 
 /**
+ * Alerta pentru domenii custom care nu functioneaza si pe care reconcilierea
+ * automata NU a reusit sa le repare singura.
+ *
+ * Se cheama DOAR din cronul orar (`/api/cron/domains-reconcile`), deci nu are
+ * suprafata publica si nu-i trebuie plafon — spre deosebire de
+ * `sendMigrationLeadToAdmin` de mai sus. Continutul e compus integral aici din
+ * date interne; nimic din el nu vine dintr-un formular.
+ */
+export async function sendBrokenDomainsToAdmin(items: {
+  store: string;
+  domain: string;
+  problem: string;
+}[]) {
+  if (!process.env.RESEND_API_KEY || items.length === 0) return;
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const rows = items
+    .map(
+      (it) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
+        <p style="margin:0;font-size:15px;color:#18181b;font-weight:600;">${esc(it.domain)}</p>
+        <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${esc(it.store)}</p>
+        <p style="margin:6px 0 0 0;font-size:13px;color:#dc2626;">${esc(it.problem)}</p>
+      </td>
+    </tr>`
+    )
+    .join("");
+  const titlu = items.length === 1 ? "Un domeniu nu functioneaza" : `${items.length} domenii nu functioneaza`;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${titlu}</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Reconcilierea automata a incercat sa le repare si nu a reusit. Fara zona DNS un domeniu e cazut complet — si site, si email.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
+      ${rows}
+    </table>
+  `;
+  await getResend().emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: `[Domenii] ${items.length} ${items.length === 1 ? "domeniu cazut" : "domenii cazute"}`,
+    html: baseTemplate(content),
+  });
+}
+
+/**
  * Subiect curatat pentru antetul `Subject:`.
  *
  * `data.subject` e scris integral de utilizator si intra direct in antet.

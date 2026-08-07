@@ -96,17 +96,24 @@ export function AdminDomainOrdersClient({ orders }: { orders: DomainOrder[] }) {
           admin_notes: notes || null,
         }),
       });
-      const data = await res.json() as { success?: boolean; error?: string };
+      const data = await res.json() as { success?: boolean; error?: string; warning?: string };
       if (!data.success) {
         toast.error(data.error ?? "Eroare la actualizare");
         return;
       }
 
-      toast.success(
-        newStatus === "completed"
-          ? `Domeniul ${selected.domain} a fost marcat ca finalizat si conectat automat la magazin.`
-          : "Comanda actualizata."
-      );
+      // Un avertisment inseamna ca marcarea a reusit, dar conectarea NU. Nu-l
+      // ascunde intr-un toast de succes care dispare in patru secunde — exact asa
+      // ajunge un domeniu sa stea zile intregi cazut fara sa stie nimeni.
+      if (data.warning) {
+        toast.warning(data.warning, { duration: Infinity, closeButton: true });
+      } else {
+        toast.success(
+          newStatus === "completed"
+            ? `Domeniul ${selected.domain} a fost marcat ca finalizat si conectat automat la magazin.`
+            : "Comanda actualizata."
+        );
+      }
       setSelected(null);
       router.refresh();
     } catch {

@@ -11,28 +11,51 @@ import { getDomainStatus, repairDomainOnVercel, type DomainStatus } from "@/lib/
  * GET raspunde ce e; POST incearca sa repare, apoi raspunde tot ce e.
  */
 
+type Diagnostic = { ok: boolean; title: string; detail: string };
+
+/** Instructiunile DNS, cu valorile REALE primite de la Vercel pentru acest proiect. */
+function instructiuni(domain: string, s: DomainStatus): string {
+  const a = s.recommendedIPv4[0];
+  const cname = s.recommendedCNAME[0];
+  const ns = s.intendedNameservers.length ? s.intendedNameservers : null;
+
+  const peInregistrari = a
+    ? `La registrarul unde ai cumparat ${domain}, pune un A pe domeniu (@) catre ${a}` +
+      (cname ? `, si un CNAME pe www catre ${cname}.` : ".")
+    : null;
+
+  // Nameserverele se recomanda DOAR daca Vercel chiar gazduieste zona. Fara
+  // zona, mutarea nameserverelor nu e o imbunatatire — omoara domeniul complet,
+  // si site si email. Exact asta a patit atelierullarisei.ro pe 07.08.2026.
+  const peNameservere =
+    s.zone && ns
+      ? ` Alternativ, poti muta nameserverele domeniului la Vercel: ${ns.join(", ")} — ` +
+        `dar atunci trebuie sa readaugi aici si inregistrarile de email (MX), pentru ` +
+        `ca zona porneste goala.`
+      : "";
+
+  if (peInregistrari) return peInregistrari + peNameservere;
+  if (ns && s.zone) return `Muta nameserverele domeniului ${domain} la: ${ns.join(", ")}.`;
+  return `Deschide setarile DNS ale domeniului ${domain} la registrarul tau si urmeaza instructiunile din pagina.`;
+}
+
 /** Ce anume lipseste, spus pe romaneste, in ordinea in care conteaza. */
-function diagnose(domain: string, s: DomainStatus): { ok: boolean; title: string; detail: string } {
+function diagnose(domain: string, s: DomainStatus): Diagnostic {
   if (s.error) {
-    return {
-      ok: false,
-      title: "Nu am putut verifica domeniul",
-      detail: s.error,
-    };
+    return { ok: false, title: "Nu am putut verifica domeniul", detail: s.error };
   }
-  // Zona lipsa conteaza doar cand registrarul chiar deleaga catre Vercel. Un
-  // domeniu pe DNS extern (A/CNAME de la registrarul clientului) merge perfect
-  // fara zona la Vercel si nu are nimic de reparat.
+
+  // Cazul fatal: zona DOVEDIT lipsa, si domeniul chiar nu ajunge la noi.
   if (s.zoneMissing) {
     return {
       ok: false,
       title: "Domeniul nu are zona DNS pe Vercel",
       detail:
-        `Nameserverele sunt indreptate catre Vercel, dar Vercel nu gazduieste inca ` +
-        `zona pentru ${domain} — deci nu raspunde nimeni, nici pentru site nici ` +
-        `pentru email. Apasa „Repara".`,
+        `Nu raspunde nimeni pentru ${domain} — nici site-ul, nici emailul. ` +
+        `Apasa „Repara". Daca nici dupa aceea nu merge, ${instructiuni(domain, s)}`,
     };
   }
+
   if (!s.inProject) {
     return {
       ok: false,
@@ -40,21 +63,20 @@ function diagnose(domain: string, s: DomainStatus): { ok: boolean; title: string
       detail: `${domain} nu e atasat magazinului tau in rutare. Apasa „Repara".`,
     };
   }
+
   if (s.misconfigured) {
-    const ns = s.intendedNameservers.length ? s.intendedNameservers : ["ns1.vercel-dns.com", "ns2.vercel-dns.com"];
     return {
       ok: false,
       title: "Asteptam DNS-ul",
       detail:
-        `Totul e pregatit de partea noastra. La registrarul unde ai cumparat ` +
-        `${domain} pune nameserverele: ${ns.join(", ")}. ` +
+        `Totul e pregatit de partea noastra. ${instructiuni(domain, s)} ` +
         (s.currentNameservers.length
-          ? `Acum sunt setate: ${s.currentNameservers.join(", ")}. `
+          ? `Momentan nameserverele sunt: ${s.currentNameservers.join(", ")}. `
           : "") +
-        `Daca preferi sa pastrezi DNS-ul acolo unde e, merge si cu inregistrari ` +
-        `A/CNAME catre Vercel. Dupa schimbare dureaza pana la cateva ore.`,
+        `Dupa modificare dureaza pana la cateva ore.`,
     };
   }
+
   if (!s.verified) {
     return {
       ok: false,
@@ -62,6 +84,7 @@ function diagnose(domain: string, s: DomainStatus): { ok: boolean; title: string
       detail: `DNS-ul arata bine; Vercel inca valideaza proprietatea pentru ${domain}.`,
     };
   }
+
   if (!s.wwwInProject) {
     return {
       ok: true,
@@ -71,6 +94,7 @@ function diagnose(domain: string, s: DomainStatus): { ok: boolean; title: string
         `tasteaza primeste eroare de certificat. Apasa „Repara" ca s-o adaugam.`,
     };
   }
+
   return {
     ok: true,
     title: "Domeniul functioneaza",
@@ -126,6 +150,9 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     domain,
+    // `repaired` reflecta acum ce s-a intamplat CU ADEVARAT: repararea
+    // re-citeste starea si refuza sa raporteze succes daca problema pentru care
+    // a fost chemata e tot acolo.
     repaired: repair.success,
     repairError: repair.error,
     status,

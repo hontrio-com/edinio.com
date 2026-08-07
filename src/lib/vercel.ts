@@ -9,9 +9,11 @@ const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
 
 const BASE = "https://api.vercel.com";
 
+type Metoda = "GET" | "POST" | "PATCH" | "DELETE";
+
 async function rawFetch(
   path: string,
-  method: "GET" | "POST" | "DELETE",
+  method: Metoda,
   body?: Record<string, unknown>
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const options: RequestInit = {
@@ -36,15 +38,18 @@ async function rawFetch(
  * Ce cont detine proiectul nostru.
  *
  * Rutele de PROIECT nu au nevoie: id-ul de proiect e unic global, deci Vercel
- * afla singur proprietarul. Rutele de CONT au: `POST /v5/domains` fara `teamId`
- * inregistreaza domeniul pe contul PERSONAL, nu pe echipa care detine
+ * afla singur proprietarul. Rutele de CONT au: adaugarea unui domeniu fara
+ * `teamId` il inregistreaza pe contul PERSONAL, nu pe echipa care detine
  * proiectul. Domeniul ar parea adaugat, zona s-ar crea unde nu se uita nimeni,
- * iar magazinul ar ramane mort — exact clasa de stare gresita si tacuta pentru
- * care exista tot modulul asta.
+ * iar magazinul ar ramane mort.
  *
  * Se deduce din proiect, nu dintr-o variabila de mediu, tocmai pentru ca o
- * variabila se poate uita — si uitarea ar esua in tacere. Se afla o data pe
- * instanta.
+ * variabila se poate uita — si uitarea ar esua in tacere.
+ *
+ * Se memoreaza DOAR rezultatele reusite. Daca prima cerere dintr-o instanta
+ * cade pe un 429 sau 5xx, a memora `null` ar scoate `teamId` de pe toate
+ * apelurile de cont urmatoare, pentru toata viata instantei — adica exact
+ * catastrofa descrisa mai sus, cauzata de o eroare trecatoare.
  */
 let cachedTeamId: string | null | undefined;
 
@@ -53,7 +58,9 @@ async function resolveTeamId(): Promise<string | null> {
   if (cachedTeamId !== undefined) return cachedTeamId;
 
   const { ok, data } = await rawFetch(`/v10/projects/${VERCEL_PROJECT_ID}`, "GET");
-  const accountId = ok && typeof data.accountId === "string" ? data.accountId : null;
+  if (!ok) return null; // trecator: reincercam data viitoare, nu memoram
+
+  const accountId = typeof data.accountId === "string" ? data.accountId : null;
   // Conturile personale au aici un id de user, nu de echipa; doar „team_*" e
   // valoare valida pentru `teamId`.
   cachedTeamId = accountId?.startsWith("team_") ? accountId : null;
@@ -62,7 +69,7 @@ async function resolveTeamId(): Promise<string | null> {
 
 async function vercelFetch(
   path: string,
-  method: "GET" | "POST" | "DELETE" = "GET",
+  method: Metoda = "GET",
   body?: Record<string, unknown>
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   if (!VERCEL_TOKEN || !VERCEL_PROJECT_ID) {
@@ -91,52 +98,6 @@ function shouldPairWww(apex: string): boolean {
   return apex.split(".").length === 2;
 }
 
-/**
- * E gazda asta atasata PROIECTULUI nostru chiar acum?
- *
- * Serveste la transarea adaugarilor esuate prin observatie, nu prin citirea
- * mesajului de eroare: formularile Vercel cu „already" acopera si cazul benign
- * (e deja al nostru) si pe cel fatal (il tine altcineva).
- */
-async function projectHasDomain(name: string): Promise<boolean> {
-  const { ok } = await vercelFetch(`/v10/projects/${VERCEL_PROJECT_ID}/domains/${name}`);
-  return ok;
-}
-
-async function addOne(name: string, body?: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
-  const { ok, data } = await vercelFetch(
-    `/v10/projects/${VERCEL_PROJECT_ID}/domains`,
-    "POST",
-    { name, ...body },
-  );
-  if (ok) return { success: true };
-  const err = (data.error as Record<string, unknown>)?.message ?? data.message ?? "Eroare Vercel API";
-  const cod = String((data.error as Record<string, unknown>)?.code ?? data.code ?? "");
-
-  /*
-   * „Deja adaugat" sunt DOUA lucruri diferite, si mult timp amandoua treceau
-   * drept succes: `domain_already_in_use` poate insemna „e al ALTUI cont" (nu
-   * s-a adaugat nimic) sau „e deja pe proiectul NOSTRU" (totul e in regula).
-   *
-   * Decizia se ia INTREBAND, nu citind proza erorii. Vercel raspunde „already in
-   * use by one of your projects" si cand proiectul ala e chiar AL NOSTRU (caz in
-   * care totul e deja in regula), si cand e altul. Clasificarea pe sir citea
-   * ambele ca esec si bloca „Repara" pe un domeniu care era deja atasat corect —
-   * exact ce s-a intamplat pe atelierullarisei.ro pe 07.08.2026.
-   */
-  if (await projectHasDomain(name)) return { success: true };
-
-  const dejaAlNostru = cod === "domain_already_exists" || /already (exists|added)/i.test(String(err));
-  if (dejaAlNostru) return { success: true };
-  if (cod.includes("domain_already") || /already in use/i.test(String(err))) {
-    return {
-      success: false,
-      error: `Domeniul este deja folosit de alt proiect Vercel si nu poate fi conectat aici. Scoate-l din proiectul acela, apoi incearca din nou. (${err})`,
-    };
-  }
-  return { success: false, error: String(err) };
-}
-
 /** Mesaj citibil din raspunsul de eroare al Vercel (are forme inconsecvente). */
 function errMessage(data: Record<string, unknown>): string {
   const e = data.error;
@@ -149,138 +110,182 @@ function errMessage(data: Record<string, unknown>): string {
   return "Eroare Vercel API";
 }
 
-/** Randul din cont pentru un domeniu, sau null daca nu-l avem. */
-async function accountDomain(apex: string): Promise<Record<string, unknown> | null> {
-  const { ok, data } = await vercelFetch(`/v5/domains/${apex}`);
-  if (!ok) return null;
-  return ((data.domain ?? data) as Record<string, unknown>) ?? null;
+// ─── Sonde: ce e adevarat, intrebat de la Vercel ──────────────────────────────
+
+/**
+ * `null` inseamna „nu stiu", NU „e rau".
+ *
+ * Distinctia asta e tot ce sta intre un 429 trecator si o reparatie declansata
+ * pe un magazin sanatos. Nicio decizie de scriere nu se ia pe `null`.
+ */
+type Verdict = true | false | null;
+
+/** Randul din contul Vercel pentru un domeniu, cu statusul citirii. */
+async function accountDomain(
+  apex: string
+): Promise<{ row: Record<string, unknown> | null; status: number; ok: boolean }> {
+  const { ok, status, data } = await vercelFetch(`/v5/domains/${apex}`);
+  if (!ok) return { row: null, status, ok };
+  const row = ((data.domain ?? data) as Record<string, unknown>) ?? null;
+  return { row, status, ok };
 }
 
-/** `serviceType: "zeit.world"` = zona chiar e gazduita de Vercel. */
-function hasZone(row: Record<string, unknown> | null): boolean {
-  return Boolean(row) && row?.serviceType === "zeit.world";
+/*
+ * EXISTA cu adevarat zona DNS pentru domeniu?
+ *
+ * Asta e sonda care lipsea, si lipsa ei a costat o zi intreaga pe
+ * `atelierullarisei.ro`. Codul citea `serviceType === "zeit.world"` de pe
+ * `GET /v5/domains/{apex}` si trata rezultatul ca dovada ca zona exista.
+ * Nu poate fi: specificatia OpenAPI defineste `serviceType` drept „tipul de
+ * serviciu care se ocupa de domeniu" (`external` | `zeit.world` | `na`) —
+ * o clasificare, nu o stare de aprovizionare — iar raspunsul acelui endpoint
+ * NU are deloc un camp `zone`. Existenta zonei e structural necitibila de
+ * acolo, deci orice logica construita pe el era garantat sa minta.
+ *
+ * `GET /v5/domains/{apex}/records` e singura ruta care raspunde DESPRE ZONA:
+ * ori exista si o poate lista, ori nu si da 404.
+ */
+async function zonaChiarExista(apex: string): Promise<Verdict> {
+  const { ok, status, data } = await vercelFetch(`/v5/domains/${apex}/records`);
+  if (ok) {
+    // Ruta e legata de zona: daca raspunde, obiectul-zona exista. Chiar si o
+    // lista goala inseamna „zona e acolo, doar n-are inregistrari proprii".
+    void data;
+    return true;
+  }
+  if (status === 404) return false;
+  return null; // 401/403/429/5xx/retea — nu tragem nicio concluzie
 }
 
-/** Registrarul chiar deleaga domeniul catre Vercel? */
+/** Registrarul chiar deleaga domeniul catre nameserverele Vercel? */
 function delegatedToVercel(row: Record<string, unknown> | null): boolean {
   const ns = Array.isArray(row?.nameservers) ? (row.nameservers as string[]) : [];
   return ns.some((n) => n.toLowerCase().includes("vercel-dns.com"));
 }
 
+/** `recommendedIPv4` / `recommendedCNAME` vin ca liste de {rank, value} sau de siruri. */
+function recomandari(valoare: unknown): string[] {
+  if (!Array.isArray(valoare)) return [];
+  const iesire: string[] = [];
+  for (const item of valoare) {
+    if (typeof item === "string") iesire.push(item);
+    else if (item && typeof item === "object") {
+      const v = (item as Record<string, unknown>).value;
+      if (typeof v === "string") iesire.push(v);
+      else if (Array.isArray(v)) for (const x of v) if (typeof x === "string") iesire.push(x);
+    }
+  }
+  return iesire;
+}
+
+// ─── Scrieri ──────────────────────────────────────────────────────────────────
+
 /*
- * Inregistreaza apexul in CONTUL Vercel si cere gazduirea zonei lui DNS.
+ * Cere Vercel sa gazduiasca zona DNS a domeniului.
  *
- * Pasul asta lipsea, si lipsa lui a tinut `atelierullarisei.ro` cazut complet
- * doua zile (07.08.2026), dupa ce facuse la fel cu `vetdepo.ro`.
+ * Doua rute, in ordine, si NICIUNA distructiva:
+ *   1. `POST /v7/domains` cu `{ zone: true }` — cand domeniul nu e inca in cont.
+ *      `zone` e documentat exact ca „Whether to create a DNS zone on Vercel.
+ *      Set `true` if using Vercel nameservers."
+ *   2. `PATCH /v3/domains/{apex}` cu `{ op: "update", zone: true }` — cand e deja
+ *      in cont (pasul 1 da conflict). E echivalentul API al butonului „Enable
+ *      Vercel DNS" din panou, documentat ca „Specifies whether this is a DNS
+ *      zone that intends to use Vercel's nameservers."
  *
- * Adaugarea la PROIECT doar ruteaza traficul; NU creeaza zona DNS. Singurul
- * lucru care o creeaza e `zone: true` pe ruta de cont — din schema oficiala
- * pentru `POST /v5/domains`:
- *   "zone": "Whether to create a DNS zone on Vercel. Set `true` if using Vercel nameservers."
- * Fara ea, ns1/ns2.vercel-dns.com nu au ce servi si raspund REFUSED, ceea ce
- * omoara tot domeniul — si site, si email — in timp ce panoul afiseaza linistit
- * „Invalid Configuration", iar noi ii scriam clientului „Domeniu conectat".
+ * Versiunea anterioara facea `DELETE /v6/domains/{apex}` + re-adaugare, fiindca
+ * nu stiam de PATCH. Stergerea din cont scoate automat si aliasurile, si zona —
+ * adica MX-urile si TXT-urile clientului. Ireversibil, unde documentatia ofera
+ * idempotent. Calea aia e eliminata complet.
  *
- * Idempotenta: un domeniu pe care il avem deja e succes, nu eroare. Se verifica
- * intreband, nu cautand cuvantul „already" intr-o propozitie care poate la fel
- * de bine sa insemne „e deja al altcuiva".
- *
- * `allowRecreate` deschide calea distructiva (scoate din cont + readauga cu
- * zona). Implicit INCHISA, si asta conteaza: zona Vercel e una din DOUA metode
- * valide de configurare, nu o cerinta.
- *
- * `caian-textile.ro` sta pe nameservere ROMARG cu un A catre IP-ul Vercel si
- * functioneaza perfect fara nicio zona la Vercel. Prima versiune a reparatiei
- * citea „fara zona" ca „stricat" si l-ar fi scos din cont la fiecare rulare a
- * cronului — pe un magazin viu. Zona se cere DOAR cand registrarul chiar
- * deleaga catre ns1/ns2.vercel-dns.com, fiindca doar atunci lipsa ei omoara
- * domeniul.
+ * Si, esential: nu raporteaza succes fara sa RE-INTREBE. Codul de dinainte
+ * intorcea `{ success: true }` pe baza aceleiasi presupuneri gresite care il
+ * adusese acolo, deci butonul „Repara" zicea „gata" fara sa fi facut nimic.
  */
-async function ensureDomainOnAccount(
-  apex: string,
-  { allowRecreate = false }: { allowRecreate?: boolean } = {},
-): Promise<{ success: boolean; error?: string }> {
-  const { ok, data } = await vercelFetch("/v5/domains", "POST", {
+async function declaraZonaLaVercel(apex: string): Promise<{ success: boolean; error?: string }> {
+  const adaugat = await vercelFetch("/v7/domains", "POST", {
     name: apex,
     method: "add",
     zone: true,
   });
+
+  if (!adaugat.ok) {
+    const patch = await vercelFetch(`/v3/domains/${apex}`, "PATCH", {
+      op: "update",
+      zone: true,
+    });
+
+    if (!patch.ok) {
+      // Daca domeniul nu e deloc al nostru, eroarea relevanta e cea de la adaugare.
+      const { row, ok } = await accountDomain(apex);
+      if (ok && !row) return { success: false, error: errMessage(adaugat.data) };
+      return {
+        success: false,
+        error: `Nu am putut activa DNS-ul Vercel pentru ${apex}: ${errMessage(patch.data)}`,
+      };
+    }
+  }
+
+  const zona = await zonaChiarExista(apex);
+  if (zona === false) {
+    return {
+      success: false,
+      error:
+        `Vercel a acceptat cererea, dar zona DNS pentru ${apex} tot nu exista. ` +
+        `Activeaza „Enable Vercel DNS" din panoul Vercel (Domains > ${apex} > ` +
+        `Advanced Settings); daca nici asa nu apare, e o problema de partea Vercel.`,
+    };
+  }
+
+  // `true` sau `null` — nu blocam pe o citire care n-a raspuns. Apelantul
+  // re-verifica oricum starea la final.
+  return { success: true };
+}
+
+async function projectHasDomain(name: string): Promise<boolean> {
+  const { ok } = await vercelFetch(`/v10/projects/${VERCEL_PROJECT_ID}/domains/${name}`);
+  return ok;
+}
+
+async function addOne(name: string, body?: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+  const { ok, data } = await vercelFetch(
+    `/v10/projects/${VERCEL_PROJECT_ID}/domains`,
+    "POST",
+    { name, ...body },
+  );
   if (ok) return { success: true };
-
-  const existing = await accountDomain(apex);
-
-  // Nu e al nostru deloc: eroarea e reala (alt cont il detine).
-  if (!existing) return { success: false, error: errMessage(data) };
-
-  // E al nostru SI are zona: exact ce voiam, doar ca era deja facut.
-  if (hasZone(existing)) return { success: true };
-
-  // E al nostru, fara zona, si nu avem voie sa demolam: mergem mai departe.
-  // Domeniul poate sta foarte bine pe DNS extern — nu stricam ce merge.
-  if (!allowRecreate) return { success: true };
+  const err = errMessage(data);
+  const cod = String((data.error as Record<string, unknown>)?.code ?? data.code ?? "");
 
   /*
-   * Starea capcana, si cea in care a fost prins `atelierullarisei.ro` pe
-   * 07.08.2026 chiar dupa prima reparatie: domeniul E in cont, dar cu DNS extern
-   * si FARA zona. A ajuns acolo cand a fost atasat la proiect. Vercel refuza
-   * atunci re-adaugarea („already in use by one of your projects"), deci
-   * `zone: true` nu are cum sa se mai aplice — si domeniul ramane mort la
-   * nesfarsit, oricat ai apasa „Repara".
-   *
-   * Singura cale de iesire prin API e sa-l scoatem din cont si sa-l punem la loc
-   * CU zona. E o operatie distructiva, deci se face doar aici, unde tocmai am
-   * dovedit ca zona lipseste — adica pe un domeniu care oricum nu functioneaza,
-   * unde nu exista nimic de pierdut.
+   * „Deja adaugat" sunt DOUA lucruri diferite: `domain_already_in_use` poate
+   * insemna „e al ALTUI cont" (nu s-a adaugat nimic) sau „e deja pe proiectul
+   * NOSTRU" (totul e in regula). Decizia se ia INTREBAND — si intrebarea de mai
+   * jos e verdictul FINAL. Nu exista apel dupa ea care sa accepte succesul pe
+   * baza textului erorii: daca sonda a raspuns „nu e pe proiectul nostru",
+   * atunci nu e, oricum ar fi formulat mesajul.
    */
-  if (existing.boughtAt) {
-    // Domeniu inregistrat PRIN Vercel: stergerea din cont ar insemna pierderea
-    // inregistrarii, nu doar a zonei. Nu-l atingem.
+  if (await projectHasDomain(name)) return { success: true };
+
+  if (cod.includes("domain_already") || /already (in use|exists|added)/i.test(err)) {
     return {
       success: false,
-      error:
-        `${apex} e inregistrat prin Vercel dar nu are zona DNS. Activeaza ` +
-        `nameserverele Vercel pentru el din panou; nu-l pot repara automat fara ` +
-        `sa risc inregistrarea domeniului.`,
+      error: `Domeniul este deja folosit de alt proiect Vercel si nu poate fi conectat aici. Scoate-l din proiectul acela, apoi incearca din nou. (${err})`,
     };
   }
-
-  const removed = await vercelFetch(`/v6/domains/${apex}`, "DELETE");
-  if (!removed.ok) {
-    return {
-      success: false,
-      error:
-        `${apex} e in contul Vercel fara zona DNS si nu a putut fi scos ca sa fie ` +
-        `readaugat corect: ${errMessage(removed.data)}`,
-    };
-  }
-
-  const again = await vercelFetch("/v5/domains", "POST", {
-    name: apex,
-    method: "add",
-    zone: true,
-  });
-  if (again.ok) return { success: true };
-
-  return {
-    success: false,
-    error:
-      `${apex} a fost scos din cont, dar readaugarea cu zona DNS a esuat: ` +
-      `${errMessage(again.data)}`,
-  };
+  return { success: false, error: err };
 }
 
 /**
- * Add a custom domain to the Vercel project. Vercel provisions SSL once DNS is
- * configured.
+ * Conecteaza un domeniu custom la magazin.
  *
- * Trei lucruri trebuie sa fie adevarate ca domeniul sa functioneze, si acum se
- * fac toate trei, nu doar cel din mijloc:
- *   1. apexul e in CONT, cu zona DNS   -> nameserverele Vercel chiar raspund
- *   2. apexul e pe PROIECT             -> traficul e rutat
- *   3. geamanul „www." e pe proiect ca 308 catre apex -> certificat valid pe www
+ * Trei obiecte distincte trebuie sa existe, si documentatia Vercel le trateaza
+ * ca atare:
+ *   1. domeniul in CONT, cu zona DNS  -> nameserverele Vercel chiar raspund
+ *   2. domeniul pe PROIECT            -> traficul e rutat, se emite certificat
+ *   3. geamanul „www." pe proiect, ca 308 catre apex
  *
  * Pasul 1 se sare pentru subdomenii (shop.magazin.ro): alea raman pe DNS-ul
- * clientului printr-un CNAME, deci nu exista zona Vercel de creat.
+ * clientului printr-un CNAME.
  */
 export async function addDomainToVercel(
   domain: string
@@ -289,23 +294,15 @@ export async function addDomainToVercel(
   const isApex = shouldPairWww(apex);
 
   if (isApex) {
-    const zone = await ensureDomainOnAccount(apex);
-    if (!zone.success) {
-      return {
-        success: false,
-        error:
-          `Domeniul nu a putut fi inregistrat in contul Vercel (fara asta ` +
-          `nameserverele Vercel nu raspund deloc pentru el): ${zone.error}`,
-      };
-    }
+    const zona = await declaraZonaLaVercel(apex);
+    if (!zona.success) return { success: false, error: zona.error };
   }
 
   const primary = await addOne(apex);
   if (!primary.success) return primary;
 
-  // Geamanul www nu are voie sa blocheze un apex functional — dar esecul lui se
-  // raporteaza acum, in loc sa fie aruncat la gunoi: un www stricat inseamna
-  // eroare de certificat pentru fiecare vizitator care il tasteaza.
+  // Geamanul www nu blocheaza un apex functional, dar esecul lui se raporteaza:
+  // un www stricat inseamna eroare de certificat pentru cine il tasteaza.
   let warning: string | undefined;
   if (isApex) {
     const twin = await addOne(`www.${apex}`, { redirect: apex, redirectStatusCode: 308 });
@@ -318,7 +315,11 @@ export async function addDomainToVercel(
 }
 
 /**
- * Remove a custom domain from the Vercel project (apex + its www twin).
+ * Scoate un domeniu custom din PROIECTUL Vercel (apex + geamanul www).
+ *
+ * Deliberat NU elibereaza domeniul din cont si NU sterge zona: un magazin care
+ * reconecteaza acelasi domeniu nu-si pierde inregistrarile DNS (MX-urile lui,
+ * printre altele) si nu ramane mort intre timp.
  */
 export async function removeDomainFromVercel(
   domain: string
@@ -345,22 +346,23 @@ export async function removeDomainFromVercel(
     "DELETE"
   );
 
-  if (!ok) {
-    const err = (data.error as Record<string, unknown>)?.message ?? data.message ?? "Eroare Vercel API";
-    return { success: false, error: String(err) };
-  }
+  if (!ok) return { success: false, error: errMessage(data) };
 
   return { success: true };
 }
 
+// ─── Citirea starii ───────────────────────────────────────────────────────────
+
 export type DomainStatus = {
-  /** Apexul e in contul Vercel SI Vercel ii gazduieste zona DNS. */
+  /** Zona DNS exista cu adevarat la Vercel (intrebat pe /records, nu dedus). */
   zone: boolean;
+  /** Nu am putut afla daca exista zona — nu inseamna ca lipseste. */
+  zoneUnknown: boolean;
   /** Apexul e atasat proiectului nostru. */
   inProject: boolean;
   /** Vercel considera proprietatea dovedita. */
   verified: boolean;
-  /** „Invalid Configuration" al Vercel: DNS-ul nu arata (inca) incoace. */
+  /** „Invalid Configuration" al Vercel: DNS-ul nu ajunge la noi pe nicio cale. */
   misconfigured: boolean;
   /** Geamanul „www." e si el atasat. */
   wwwInProject: boolean;
@@ -370,13 +372,17 @@ export type DomainStatus = {
   currentNameservers: string[];
   /** Registrarul deleaga catre ns1/ns2.vercel-dns.com. */
   delegated: boolean;
+  /** IP-urile de A recomandate de Vercel PENTRU ACEST proiect. */
+  recommendedIPv4: string[];
+  /** Tinta de CNAME recomandata de Vercel PENTRU ACEST proiect. */
+  recommendedCNAME: string[];
   /**
-   * Starea fatala: delegat catre Vercel, dar fara zona. Atunci nameserverele
-   * raspund REFUSED si domeniul e mort complet, si site si email. Distinct de
-   * „fara zona" simplu, care pe DNS extern e perfect normal.
+   * Starea fatala: zona lipseste DOVEDIT si domeniul nu ajunge la noi altfel.
+   * Atunci nameserverele raspund REFUSED si domeniul e mort complet — si site,
+   * si email.
    */
   zoneMissing: boolean;
-  /** Adevarat doar cand totul e la locul lui si domeniul chiar serveste magazinul. */
+  /** Domeniul chiar serveste magazinul acum. */
   healthy: boolean;
   error?: string;
 };
@@ -386,13 +392,18 @@ export type DomainStatus = {
  * baza noastra. Nimic din produs nu facea asta: `businesses.custom_domain`
  * nenul era tratat drept dovada ca domeniul merge — de aceea un magazin a putut
  * sta doua zile mort afisand „Domeniu conectat".
+ *
+ * Regula peste tot aici: o citire care NU a raspuns nu produce niciodata un
+ * verdict negativ. `zoneUnknown` si `error` exista tocmai ca sa deosebeasca
+ * „am aflat ca e rau" de „n-am putut afla".
  */
 export async function getDomainStatus(domain: string): Promise<DomainStatus> {
   const apex = apexOf(domain);
   const isApex = shouldPairWww(apex);
 
-  const empty: DomainStatus = {
+  const gol: DomainStatus = {
     zone: false,
+    zoneUnknown: true,
     inProject: false,
     verified: false,
     misconfigured: true,
@@ -400,75 +411,72 @@ export async function getDomainStatus(domain: string): Promise<DomainStatus> {
     intendedNameservers: [],
     currentNameservers: [],
     delegated: false,
+    recommendedIPv4: [],
+    recommendedCNAME: [],
     zoneMissing: false,
     healthy: false,
   };
 
-  const [account, project, config, twin] = await Promise.all([
-    isApex ? vercelFetch(`/v5/domains/${apex}`) : Promise.resolve(null),
+  const [cont, zonaVerdict, proiect, config, geaman] = await Promise.all([
+    isApex ? accountDomain(apex) : Promise.resolve(null),
+    isApex ? zonaChiarExista(apex) : Promise.resolve<Verdict>(true),
     vercelFetch(`/v10/projects/${VERCEL_PROJECT_ID}/domains/${apex}`),
-    // Ruta CORECTA pentru „e configurat si putem emite certificat": e la nivel de
-    // domeniu, nu sub proiect. Cea de sub proiect nu exista, raspundea eroare, iar
-    // eroarea o citeam drept `misconfigured: true` — deci TOATE domeniile ieseau
-    // nesanatoase (`healthy: 0` in cronul de la 17:23, inclusiv magazine care merg).
-    vercelFetch(`/v6/domains/${apex}/config?projectIdOrName=${VERCEL_PROJECT_ID}`),
+    // Ruta e la nivel de DOMENIU, nu sub proiect — cea de sub proiect nu exista.
+    // `strict=true`: altfel raspunsul imprumuta nameserverele zonei parinte si
+    // ascunde faptul ca domeniul insusi n-are nimic.
+    vercelFetch(`/v6/domains/${apex}/config?projectIdOrName=${VERCEL_PROJECT_ID}&strict=true`),
     isApex
       ? vercelFetch(`/v10/projects/${VERCEL_PROJECT_ID}/domains/www.${apex}`)
       : Promise.resolve(null),
   ]);
 
   // status 0 = nu avem deloc credentiale Vercel; nu e „domeniu stricat".
-  if (project.status === 0) {
-    return { ...empty, error: errMessage(project.data) };
+  if (proiect.status === 0) {
+    return { ...gol, error: errMessage(proiect.data) };
   }
 
-  const accountRow = (account?.ok ? account.data.domain ?? account.data : null) as
-    | Record<string, unknown>
-    | null;
+  const rand = cont?.row ?? null;
+  // O citire de cont care a esuat altfel decat cu 404 nu spune nimic despre domeniu.
+  const contNecitit = Boolean(cont && !cont.ok && cont.status !== 404);
 
-  // `serviceType: "zeit.world"` e semnul Vercel pentru „zona e gazduita la noi".
-  // Pentru un subdomeniu nu exista rand in cont si nici zona de asteptat.
-  const zone = !isApex
-    ? true
-    : hasZone(accountRow);
+  const zone = zonaVerdict === true;
+  const zoneUnknown = zonaVerdict === null;
 
-  const intendedNameservers = Array.isArray(accountRow?.intendedNameservers)
-    ? (accountRow.intendedNameservers as string[])
+  const intendedNameservers = Array.isArray(rand?.intendedNameservers)
+    ? (rand.intendedNameservers as string[])
     : [];
-  const currentNameservers = Array.isArray(accountRow?.nameservers)
-    ? (accountRow.nameservers as string[])
+  const currentNameservers = Array.isArray(rand?.nameservers)
+    ? (rand.nameservers as string[])
     : [];
 
-  const inProject = project.ok;
-  const verified = project.ok && project.data.verified === true;
+  const inProject = proiect.ok;
+  const verified = proiect.ok && proiect.data.verified === true;
   const misconfigured = config.ok ? config.data.misconfigured === true : true;
-  const wwwInProject = isApex ? Boolean(twin?.ok) : true;
-  const delegated = delegatedToVercel(accountRow);
+  const configNecitit = !config.ok;
+  const wwwInProject = isApex ? Boolean(geaman?.ok) : true;
+  const delegated = delegatedToVercel(rand);
+
+  const recommendedIPv4 = config.ok ? recomandari(config.data.recommendedIPv4) : [];
+  const recommendedCNAME = config.ok ? recomandari(config.data.recommendedCNAME) : [];
 
   /*
-   * Zona lipseste CU ADEVARAT cand domeniul nu o are si nici nu functioneaza
-   * altfel. Doua semne, oricare ajunge:
-   *   - `delegated`: registrarul arata deja catre ns1/ns2.vercel-dns.com
-   *   - `misconfigured`: Vercel spune ca domeniul nu ajunge la noi pe nicio cale
-   *
-   * Nu doar `delegated`, pentru ca lista de nameservere pe care o raporteaza
-   * Vercel vine din propria lui interogare DNS — iar cand zona lipseste, chiar
-   * nameserverele alea raspund REFUSED, deci lista poate veni goala. Exact
-   * cazul pe care il reparam ar fi sarit.
-   *
-   * `misconfigured === false` ramane paza pentru magazinele vii: un domeniu pe
-   * DNS extern care functioneaza nu e niciodata atins.
+   * Zona lipseste doar cand am DOVEDIT ca lipseste (`zonaVerdict === false`) SI
+   * domeniul chiar nu ajunge la noi. Un `null` — adica o citire care n-a
+   * raspuns — nu declanseaza nimic, niciodata: altfel un 429 trecator ar porni
+   * o reparatie pe un magazin sanatos.
    */
-  const zoneMissing = isApex && !zone && (delegated || misconfigured);
+  const zoneMissing =
+    isApex && zonaVerdict === false && !configNecitit && (delegated || misconfigured);
 
-  /*
-   * Sanatatea NU cere zona. Un domeniu poate ajunge la Vercel pe doua cai la fel
-   * de valide: nameservere delegate (atunci zona e obligatorie) sau A/CNAME de
-   * la registrarul clientului (atunci zona nici nu are rost). `misconfigured`
-   * vine de la Vercel si acopera ambele — e singurul verdict care conteaza.
-   */
+  const error = contNecitit
+    ? `Nu am putut citi domeniul din contul Vercel (HTTP ${cont?.status}).`
+    : configNecitit && proiect.ok
+      ? "Nu am putut citi configuratia DNS de la Vercel."
+      : undefined;
+
   return {
     zone,
+    zoneUnknown,
     inProject,
     verified,
     misconfigured,
@@ -476,37 +484,49 @@ export async function getDomainStatus(domain: string): Promise<DomainStatus> {
     intendedNameservers,
     currentNameservers,
     delegated,
+    recommendedIPv4,
+    recommendedCNAME,
     zoneMissing,
     healthy: inProject && verified && !misconfigured,
+    error,
   };
 }
 
 /**
- * Readuce domeniul in starea in care ar fi trebuit sa fie. Se poate chema si pe
- * un domeniu sanatos (fiecare pas e idempotent) — de aceea merge folosita si de
- * butonul „Repara" din magazin, si de cronul orar de reconciliere.
+ * Readuce domeniul in starea in care ar fi trebuit sa fie.
+ *
+ * Toti pasii sunt idempotenti si niciunul nu e distructiv, deci se poate chema
+ * si pe un domeniu sanatos. Spre deosebire de versiunea anterioara, RE-CITESTE
+ * la final si refuza sa raporteze succes daca problema pentru care a fost
+ * chemata e tot acolo.
  */
 export async function repairDomainOnVercel(
   domain: string
 ): Promise<{ success: boolean; error?: string; warning?: string }> {
   const apex = apexOf(domain);
+  const inainte = await getDomainStatus(apex);
 
-  /*
-   * Calea distructiva (scoate din cont + readauga cu zona) se deschide DOAR
-   * pentru starea care chiar o cere, si verdictul il da `getDomainStatus` —
-   * acelasi pe care il vede si clientul in panou, si cronul. Un singur loc
-   * decide ce inseamna „lipseste zona", ca sa nu se desincronizeze.
-   *
-   * Un domeniu pe DNS extern care functioneaza (`misconfigured === false`) nu e
-   * niciodata atins, oricat de „incomplet" ar parea ca n-are zona.
-   */
-  const status = await getDomainStatus(apex);
-  if (status.zoneMissing) {
-    const recreat = await ensureDomainOnAccount(apex, { allowRecreate: true });
-    if (!recreat.success) return recreat;
+  const adaugat = await addDomainToVercel(domain);
+  if (!adaugat.success) return adaugat;
+
+  const dupa = await getDomainStatus(apex);
+
+  if (inainte.zoneMissing && dupa.zoneMissing) {
+    return {
+      success: false,
+      error:
+        `Zona DNS pentru ${apex} tot lipseste dupa reparare. Activeaza ` +
+        `„Enable Vercel DNS" din panoul Vercel (Domains > ${apex} > Advanced ` +
+        `Settings). Daca nici asa nu apare, e o problema de partea Vercel — pana ` +
+        `atunci, muta domeniul pe inregistrari A/CNAME ca sa iasa din offline.`,
+    };
   }
 
-  return addDomainToVercel(domain);
+  if (inainte.inProject === false && dupa.inProject === false) {
+    return { success: false, error: `${apex} tot nu e atasat proiectului dupa reparare.` };
+  }
+
+  return adaugat;
 }
 
 /**

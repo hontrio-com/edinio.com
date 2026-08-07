@@ -187,16 +187,32 @@ export function DomainSection({
   // Connect external domain
   const [externalInput, setExternalInput] = useState("");
   const [savingExternal, setSavingExternal] = useState(false);
-  // DNS setup method: full nameserver delegation (recommended — simplest) vs. per-record A/CNAME.
-  const [dnsMethod, setDnsMethod] = useState<"records" | "nameservers">("nameservers");
+  // Implicit pe INREGISTRARI, nu pe nameservere. Delegarea nameserverelor merge
+  // doar daca Vercel gazduieste chiar zona domeniului; cand n-o gazduieste, muta
+  // domeniul din functional in mort complet — si site, si email. Pe 07.08.2026 un
+  // magazin a stat asa doua zile. Inregistrarile A/CNAME lasa DNS-ul (si emailul)
+  // la registrarul clientului si nu depind de nimic din partea noastra.
+  const [dnsMethod, setDnsMethod] = useState<"records" | "nameservers">("records");
 
   // Starea REALA a domeniului, ceruta de la Vercel. Bulina „conectat" se aprindea
   // pana acum doar pentru ca `custom_domain` era nenul — asa a putut sta un
   // magazin doua zile cazut, cu tot verde in interfata.
   type Diagnosis = { ok: boolean; title: string; detail: string };
+  type DomainStatusLite = { recommendedIPv4?: string[]; recommendedCNAME?: string[] };
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [checkingDomain, setCheckingDomain] = useState(false);
   const [repairingDomain, setRepairingDomain] = useState(false);
+  // Valorile DNS pe care le recomanda VERCEL pentru acest proiect. Erau deja
+  // aduse de endpointul de stare si aruncate, iar interfata afisa in schimb doua
+  // valori scrise de mana — dintre care CNAME-ul era din generatia veche. Vercel
+  // da azi tinte per-proiect, deci o valoare generica poate fi pur si simplu
+  // gresita pentru magazinul asta.
+  const [recomandat, setRecomandat] = useState<{ a: string[]; cname: string[] }>({ a: [], cname: [] });
+
+  function preiaRecomandari(s: DomainStatusLite | undefined) {
+    if (!s) return;
+    setRecomandat({ a: s.recommendedIPv4 ?? [], cname: s.recommendedCNAME ?? [] });
+  }
 
   // ── Data loading ─────────────────────────────────────────────────────────────
 
@@ -243,8 +259,10 @@ export function DomainSection({
     setCheckingDomain(true);
     fetch(`/api/domains/status?businessId=${encodeURIComponent(businessId)}`)
       .then((r) => r.json())
-      .then((d: { diagnosis?: Diagnosis }) => {
-        if (!cancelled) setDiagnosis(d.diagnosis ?? null);
+      .then((d: { diagnosis?: Diagnosis; status?: DomainStatusLite }) => {
+        if (cancelled) return;
+        setDiagnosis(d.diagnosis ?? null);
+        preiaRecomandari(d.status);
       })
       .catch(() => {})
       .finally(() => {
@@ -400,8 +418,9 @@ export function DomainSection({
     setCheckingDomain(true);
     try {
       const res = await fetch(`/api/domains/status?businessId=${encodeURIComponent(businessId)}`);
-      const data = await res.json() as { diagnosis?: Diagnosis };
+      const data = await res.json() as { diagnosis?: Diagnosis; status?: DomainStatusLite };
       setDiagnosis(data.diagnosis ?? null);
+      preiaRecomandari(data.status);
     } catch {
       setDiagnosis(null);
     }
@@ -417,8 +436,9 @@ export function DomainSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ businessId }),
       });
-      const data = await res.json() as { diagnosis?: Diagnosis; repairError?: string };
+      const data = await res.json() as { diagnosis?: Diagnosis; repairError?: string; status?: DomainStatusLite };
       setDiagnosis(data.diagnosis ?? null);
+      preiaRecomandari(data.status);
       if (data.diagnosis?.ok) toast.success(data.diagnosis.title);
       else toast.error(data.repairError ?? data.diagnosis?.title ?? "Nu am putut repara domeniul.");
     } catch {
@@ -853,8 +873,8 @@ export function DomainSection({
               <div className="px-5 pt-4">
                 <div className="flex bg-muted rounded-xl p-1 gap-1">
                   {([
-                    { id: "nameservers", label: "Nameservere", badge: "Recomandat" },
-                    { id: "records",     label: "Inregistrari DNS", badge: null },
+                    { id: "records",     label: "Inregistrari DNS", badge: "Recomandat" },
+                    { id: "nameservers", label: "Nameservere", badge: null },
                   ] as const).map((m) => (
                     <button
                       key={m.id}
@@ -878,7 +898,7 @@ export function DomainSection({
                 </div>
               </div>
 
-              {/* ── Method: Nameservers (recommended) ── */}
+              {/* ── Metoda: nameservere (cere ca Vercel sa gazduiasca zona) ── */}
               {dnsMethod === "nameservers" && (
                 <>
                   <div className="px-5 pt-3 pb-1">
@@ -937,8 +957,11 @@ export function DomainSection({
                       <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Valoare</span>
                     </div>
                     {[
-                      { type: "A",     name: "@",   value: "216.150.1.1" },
-                      { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
+                      // Valorile vin de la Vercel pentru ACEST proiect. Rezervele
+                      // se folosesc doar inainte sa avem un domeniu conectat de
+                      // la care sa le putem cere.
+                      { type: "A",     name: "@",   value: recomandat.a[0] ?? "216.150.1.1" },
+                      { type: "CNAME", name: "www", value: recomandat.cname[0] ?? "cname.vercel-dns-0.com" },
                     ].map((rec) => (
                       <div
                         key={rec.type + rec.name}

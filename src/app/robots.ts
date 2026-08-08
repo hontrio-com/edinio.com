@@ -1,9 +1,6 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { isPlatformHost } from "@/lib/seo";
-// Numarul de felii vine de la sursa lui, nu copiat: anuntate mai putine decat se
-// randeaza, produsele din ultima felie n-ar fi gasite niciodata de crawler.
-import { FELII } from "@/app/produse/sitemap";
 
 // Host-aware: each domain (platform or a merchant custom domain) advertises its
 // own sitemap, so crawlers fetch the right one. headers() makes this dynamic.
@@ -28,17 +25,20 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       },
     ],
     /*
-     * Pe platforma se anunta SI feliile de produse.
+     * Pe platforma se anunta DOUA: sitemap-ul ei (pagini statice + vitrinele
+     * magazinelor) si INDEXUL, care trimite la sitemap-ul fiecarui magazin.
      *
-     * `generateSitemaps` le publica la `/produse/sitemap/N.xml`, dar nu le leaga
-     * de nicaieri — robots.txt e locul unde un crawler afla ca exista. Fara ele,
-     * paginile de produs ale platformei n-ar avea niciun sitemap.
+     * Produsele nu apar in niciunul dintre ele: fiecare magazin isi enumera
+     * singur produsele, in `/{slug}/sitemap.xml`. Un index nu enumera nimic, deci
+     * costul lui creste cu numarul de magazine, nu cu numarul de produse.
      *
-     * Pe domeniul unui comerciant nu se anunta: acolo `sitemap.xml` e deja al
-     * magazinului lui, cu produsele lui.
+     * Pe domeniul unui comerciant se anunta doar `sitemap.xml`: acolo el E deja
+     * sitemap-ul magazinului, cu produsele lui. Iar cand un magazin isi conecteaza
+     * domeniul, iese singur din indexul platformei si intra aici — fara nicio
+     * interventie.
      */
     sitemap: isPlatformHost(host)
-      ? [`https://${host}/sitemap.xml`, ...Array.from({ length: FELII }, (_, i) => `https://${host}/produse/sitemap/${i}.xml`)]
+      ? [`https://${host}/sitemap.xml`, `https://${host}/sitemap-magazine.xml`]
       : `https://${host}/sitemap.xml`,
   };
 }

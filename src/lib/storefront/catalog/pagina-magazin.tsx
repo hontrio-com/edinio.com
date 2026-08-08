@@ -351,8 +351,6 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    * Politica de fatete e aceeasi in ambele: `construiesteFateteDinJetoane` a scris
    * rezumatul, si tot ea ruleaza pe calea client.
    */
-  const numeleSubarborelui = numeCategorie ? numeSubarbore(categoriesData, numeCategorie) : null;
-
   // Valori de pornire, nu implicite cu inteles: a doua ramura ruleaza ori de cate
   // ori prima n-a reusit, deci amandoua le rescriu. Sunt aici doar fiindca `tsc`
   // nu poate dovedi ca `if (...) {} if (!reusit) {}` acopera totul.
@@ -372,12 +370,39 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     // EXACT marimea pe care o calculeaza si renderer-ul (`PRODUCTS_PER_PAGE`).
     // Diferite, felierea de pe server si numarul de pagini din browser s-ar
     // contrazice: ultima pagina ar fi goala, sau ar lipsi produse de pe ea.
-    const perPagina = citesteSetariMagazin(resolved.design).perPage;
+    const setari = citesteSetariMagazin(resolved.design);
+    const perPagina = setari.perPage;
+
+    /*
+     * Sortarea EFECTIVA, nu cea din adresa.
+     *
+     * Clientul o compune ca `sortare || sortareImplicita || default_sort`
+     * (MiniStoreRenderer). Trimis brut, un `?sort=` lipsa insemna pe server
+     * „ordinea de catalog" si in browser „newest" — aceleasi produse, alta
+     * ordine, deci alte pagini. Testul diferential a prins asta pe 20 din 20 de
+     * carduri pe prima pagina.
+     */
+    const sortareImplicita = (pc.sort_options as { default_sort?: string } | undefined)?.default_sort ?? "newest";
+    const sortareEfectiva = filtre.sortare || setari.sortareImplicita || sortareImplicita;
+
+    /*
+     * Categoria vine SI din `?cat=`, nu doar din cale.
+     *
+     * `?cat=` poate purta numele categoriei sau ID-ul ei (linkurile de meniu).
+     * Ignorate aici, serverul intorcea tot catalogul in timp ce browserul filtra
+     * — server 20, client 7. Aceeasi traducere ca `initialCategory` de mai jos;
+     * calea bate interogarea, fiindca pagina se numeste dupa ea.
+     */
+    const categoriaCeruta = numeCategorie
+      || (filtre.categorie && categoriesData.find((c) => c.id === filtre.categorie)?.name)
+      || filtre.categorie
+      || "";
+    const numeleFiltrate = categoriaCeruta ? numeSubarbore(categoriesData, categoriaCeruta) : null;
     const { data: raspuns, error: eroareRpc } = await proiectieDb().rpc("catalog_pagina", {
       p_business: business.id,
       p_filtre: {
-        sortare: filtre.sortare,
-        categorii: numeleSubarborelui,
+        sortare: sortareEfectiva,
+        categorii: numeleFiltrate,
         pretMin: filtre.pretMin,
         pretMax: filtre.pretMax,
         reduceri: filtre.reduceri,

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database.types";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { logError } from "@/lib/error-logger";
 import type { ParsedCsv } from "@/lib/import/csv";
 import { parseTabular } from "@/lib/import/tabular";
@@ -130,7 +130,7 @@ export async function analyzeCustomerFile(
  * `fetchAllRows`, pentru ca Supabase taie silentios la 1000 de randuri.
  */
 async function loadExisting(admin: ReturnType<typeof createAdminClient>, businessId: string) {
-  const customerRows = await fetchAllRows("customer-import.existing", (from, to) =>
+  const customerRows = await fetchAllRowsStrict("customer-import.existing", (from, to) =>
     admin
       .from("customers")
       .select("id, key, name, email, phone, address, city, county, postcode, external_id")
@@ -154,7 +154,7 @@ async function loadExisting(admin: ReturnType<typeof createAdminClient>, busines
     });
   }
 
-  const orderRows = await fetchAllRows("customer-import.order-keys", (from, to) =>
+  const orderRows = await fetchAllRowsStrict("customer-import.order-keys", (from, to) =>
     admin
       .from("orders")
       .select("customer_phone, customer_email")

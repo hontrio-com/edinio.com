@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import type { CatalogEntry, CatalogVariant, StockMatchKey } from "./types";
 
 /**
@@ -117,7 +117,7 @@ export async function loadCatalog(
 
   if (countError) throw new Error(`Nu am putut numara produsele: ${countError.message}`);
 
-  const rows = await fetchAllRows("stock-feed.catalog", (from, to) =>
+  const rows = await fetchAllRowsStrict("stock-feed.catalog", (from, to) =>
     client
       .from("products")
       .select(columns)

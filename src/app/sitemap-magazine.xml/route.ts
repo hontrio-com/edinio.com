@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { proiectieDb } from "@/lib/storefront/catalog/din-proiectie";
+import { logError } from "@/lib/error-logger";
 
 /**
  * INDEX de sitemap-uri: cate unul pentru fiecare magazin al platformei.
@@ -37,7 +38,38 @@ function xmlSafe(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * Ce se raspunde cand baza nu poate fi citita.
+ *
+ * NU 200 cu index gol. Un `sitemapindex` valid si fara niciun magazin ii spune
+ * lui Google „am hotarat sa nu mai am nicio adresa", si asa a si citit-o doua
+ * saptamani in august. 503 ii spune „mai incearca", ceea ce e adevarul.
+ *
+ * Si fara `cache-control`: golul de atunci s-ar fi pus in cache o ora pe CDN,
+ * deci o sclipire de o secunda din baza ar fi tinut indexul gol de saizeci de ori
+ * mai mult decat a durat defectiunea.
+ */
+function indisponibil(e: unknown): Response {
+  logError({
+    action: "sitemapIndex",
+    message: e instanceof Error ? e.message : "citirea a esuat",
+    severity: "critical",
+  });
+  return new Response("sitemap temporar indisponibil", {
+    status: 503,
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
 export async function GET() {
+  try {
+    return await construieste();
+  } catch (e) {
+    return indisponibil(e);
+  }
+}
+
+async function construieste(): Promise<Response> {
   const admin = createAdminClient();
 
   /*
@@ -45,7 +77,7 @@ export async function GET() {
    * `fetchAllRows` fiindca plafonul PostgREST de 1000 taie silentios, iar la
    * peste o mie de magazine indexul ar fi pierdut restul fara sa spuna nimic.
    */
-  const magazine = await fetchAllRows("sitemapIndex.magazine", (from, to) =>
+  const magazine = await fetchAllRowsStrict("sitemapIndex.magazine", (from, to) =>
     admin
       .from("businesses")
       .select("id, slug, updated_at")
@@ -73,16 +105,23 @@ export async function GET() {
    * Paginile personalizate ale unui magazin fara produse nu se pierd: sunt deja
    * enumerate in `sitemap.ts`, sectiunea de `custom_pages`.
    */
-  const cuProduse = new Set(
-    // `catalog_rezumat` nu e in tipurile generate, ca si celelalte tabele de
-    // proiectie: se citeste prin `proiectieDb()`, tiparul casei.
-    ((await proiectieDb()
-      .from("catalog_rezumat")
-      .select("business_id, total")
-      .eq("fara_imagini", false)
-      .eq("fara_stoc_ascuns", false)
-      .gt("total", 0)).data ?? []).map((r) => (r as { business_id: string }).business_id),
-  );
+  // `catalog_rezumat` nu e in tipurile generate, ca si celelalte tabele de
+  // proiectie: se citeste prin `proiectieDb()`, tiparul casei.
+  const { data: rezumate, error: eRezumat } = await proiectieDb()
+    .from("catalog_rezumat")
+    .select("business_id, total")
+    .eq("fara_imagini", false)
+    .eq("fara_stoc_ascuns", false)
+    .gt("total", 0);
+  /*
+   * `error` VERIFICAT, nu `data ?? []`.
+   *
+   * Asta e chiar forma care a golit sitemapul: la o eroare, `data` e `null`,
+   * `?? []` o preface intr-un raspuns valid, si iese un index gol cu cod 200.
+   * O interogare care esueaza nu inseamna „niciun magazin n-are produse".
+   */
+  if (eRezumat) throw new Error(`catalog_rezumat: ${eRezumat.message}`);
+  const cuProduse = new Set((rezumate ?? []).map((r) => (r as { business_id: string }).business_id));
 
   const corp = magazine
     .filter((b) => b.slug && cuProduse.has(b.id))

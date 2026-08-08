@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { buildAuthUrl, signState, googleMerchantConfigured, getAccessToken } from "@/lib/google-merchant/oauth";
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription, listAccountIssues } from "@/lib/google-merchant/client";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
@@ -319,7 +319,7 @@ export async function queueSyncAll(businessId: string): Promise<{ queued: number
   if (!config.connected || !config.account_id) return { error: "Conecteaza mai intai Google Merchant." };
 
   // Windowed: catalogul intreg intra in coada, nu doar primele 1000 de produse.
-  const products = await fetchAllRows("gmc.queueSyncAll.products", (from, to) =>
+  const products = await fetchAllRowsStrict("gmc.queueSyncAll.products", (from, to) =>
     supabase.from("products").select("id").eq("business_id", businessId).eq("is_active", true).order("id").range(from, to)
   );
   const rows = products.map((p) => ({ business_id: businessId, product_id: p.id, offer_id: p.id, op: "upsert" }));

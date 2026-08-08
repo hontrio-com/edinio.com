@@ -15,7 +15,7 @@ import type {
 import { EMPTY_TOTALS } from "./types";
 import { rehostProductImages, rehostImageUrl, needsRehost, isR2Url, type CacheRehostare } from "./image-rehost";
 import { parseShippingClasses } from "@/lib/shipping/rules";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -505,7 +505,7 @@ async function loadSlugs(admin: Admin, businessId: string): Promise<Set<string>>
   // returna slug-uri deja existente in DB si TOATE insert-urile picau pe
   // constrangerea de unicitate (incident 25.07: job cu 100/100 esuate la un
   // catalog de peste 1000 de produse).
-  const data = await fetchAllRows("import.commit.slugs", (from, to) =>
+  const data = await fetchAllRowsStrict("import.commit.slugs", (from, to) =>
     admin.from("products").select("id, slug").eq("business_id", businessId).not("slug", "is", null).order("id").range(from, to)
   );
   return new Set(data.map((r) => r.slug as string));
@@ -547,7 +547,7 @@ interface CatNode {
 async function loadCategories(admin: Admin, businessId: string): Promise<Map<string, CatNode>> {
   // Windowed past the 1000-row PostgREST cap — an incomplete dedup map would
   // make the committer re-insert categories that already exist.
-  const data = await fetchAllRows("import.commit.categories", (from, to) =>
+  const data = await fetchAllRowsStrict("import.commit.categories", (from, to) =>
     admin.from("categories").select("id, name, parent_id").eq("business_id", businessId).order("id").range(from, to)
   );
   const map = new Map<string, CatNode>();

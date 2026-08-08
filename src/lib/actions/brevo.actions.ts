@@ -9,7 +9,7 @@ import {
   brevoWebhookUrl, registerWebhook, deleteWebhook,
   type BrevoConfig, type BrevoList, type BrevoContactInput, type BrevoPublicConfig,
 } from "@/lib/brevo";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -180,7 +180,7 @@ export async function syncExistingCustomers(
   // fetchAllRows: sync-ul trebuie sa acopere TOATE comenzile, nu doar primele
   // 1000 (cap-ul silentios PostgREST) — altfel clientii vechi lipsesc din lista.
   const [orders, sup] = await Promise.all([
-    fetchAllRows("brevo.syncExistingCustomers.orders", (from, to) =>
+    fetchAllRowsStrict("brevo.syncExistingCustomers.orders", (from, to) =>
       owned.supabase
         .from("orders")
         .select("customer_email, customer_name, customer_phone, created_at")
@@ -190,7 +190,7 @@ export async function syncExistingCustomers(
         .order("id", { ascending: false })
         .range(from, to)
     ),
-    fetchAllRows("brevo.syncExistingCustomers.suppressions", (from, to) =>
+    fetchAllRowsStrict("brevo.syncExistingCustomers.suppressions", (from, to) =>
       owned.supabase.from("brevo_suppressions").select("email").eq("business_id", businessId).order("id").range(from, to)
     ),
   ]);

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
 import { hasVariants } from "@/lib/storefront/variants";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
@@ -110,7 +110,7 @@ export async function getBundleEligibleProducts(businessId: string, includeIds: 
   // PostgREST taie SILENTIOS la 1000 de randuri: pe un magazin cu mai multe
   // produse, cele de dupa nu apareau in selector si comerciantul nu putea pune
   // in oferta chiar produsele lui noi.
-  const data = await fetchAllRows("produse pentru oferte", (from, to) =>
+  const data = await fetchAllRowsStrict("produse pentru oferte", (from, to) =>
     supabase
       .from("products")
       .select("id, name, price, images, is_active, track_inventory, stock_quantity, page_sections")

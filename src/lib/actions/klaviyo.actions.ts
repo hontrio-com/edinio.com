@@ -7,7 +7,7 @@ import {
   pingKlaviyo, getLists, subscribeProfiles, toPublicKlaviyoConfig,
   type KlaviyoConfig, type KlaviyoList, type KlaviyoPublicConfig,
 } from "@/lib/klaviyo";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -154,7 +154,7 @@ export async function syncExistingCustomers(
 
   // fetchAllRows: sync-ul trebuie sa acopere TOATE comenzile, nu doar primele
   // 1000 (cap-ul silentios PostgREST) — altfel clientii vechi lipsesc din lista.
-  const orders = await fetchAllRows("klaviyo.syncExistingCustomers.orders", (from, to) =>
+  const orders = await fetchAllRowsStrict("klaviyo.syncExistingCustomers.orders", (from, to) =>
     owned.supabase
       .from("orders")
       .select("customer_email")

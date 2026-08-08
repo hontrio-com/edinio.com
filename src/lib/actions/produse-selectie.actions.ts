@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import {
   aplicaFiltreProduse, ordoneazaProduse, type FiltreProduse,
 } from "@/lib/dashboard/produse-filtre";
@@ -42,7 +42,7 @@ export async function idurileProduselorFiltrate(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
-  const categories = await fetchAllRows("dashboard.products.selectie.categorii", (from, to) =>
+  const categories = await fetchAllRowsStrict("dashboard.products.selectie.categorii", (from, to) =>
     supabase.from("categories").select("id, name, parent_id")
       .eq("business_id", businessId).order("id").range(from, to));
 
@@ -52,7 +52,7 @@ export async function idurileProduselorFiltrate(
    * mie — si apoi o stergere in masa care lasa restul in urma, fara sa spuna
    * nimic. Vezi [[postgrest-1000-row-cap]].
    */
-  const randuri = await fetchAllRows("dashboard.products.selectie", (from, to) =>
+  const randuri = await fetchAllRowsStrict("dashboard.products.selectie", (from, to) =>
     ordoneazaProduse(
       aplicaFiltreProduse(
         supabase.from("products").select("id").eq("business_id", businessId),

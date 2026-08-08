@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { logError } from "@/lib/error-logger";
 import {
   buildAuthUrl, ensureMerchantToken, olxConfigured, signState,
@@ -368,7 +368,7 @@ export async function publishAllOlx(businessId: string): Promise<{ queued: numbe
   if (mappedCategories.size === 0) return { error: "Mapeaza mai intai cel putin o categorie la OLX." };
 
   // Windowed over the 1000-row cap — whole catalog, not just the first page.
-  const products = await fetchAllRows("olx.publishAll.products", (from, to) =>
+  const products = await fetchAllRowsStrict("olx.publishAll.products", (from, to) =>
     supabase.from("products").select("id, category").eq("business_id", businessId).eq("is_active", true).order("id").range(from, to)
   );
   const rows = products

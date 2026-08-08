@@ -10,7 +10,7 @@ import {
   type MailchimpConfig, type MailchimpAudience, type MailchimpMemberInput, type MailchimpPublicConfig,
 } from "@/lib/mailchimp";
 import { ensureStore } from "@/lib/mailchimp-ecommerce";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -195,7 +195,7 @@ export async function syncExistingCustomers(
   // fetchAllRows: sync-ul trebuie sa acopere TOATE comenzile, nu doar primele
   // 1000 (cap-ul silentios PostgREST) — altfel clientii vechi lipsesc din lista.
   const [orders, sup] = await Promise.all([
-    fetchAllRows("mailchimp.syncExistingCustomers.orders", (from, to) =>
+    fetchAllRowsStrict("mailchimp.syncExistingCustomers.orders", (from, to) =>
       owned.supabase
         .from("orders")
         .select("customer_email, customer_name, customer_phone, created_at")
@@ -205,7 +205,7 @@ export async function syncExistingCustomers(
         .order("id", { ascending: false })
         .range(from, to)
     ),
-    fetchAllRows("mailchimp.syncExistingCustomers.suppressions", (from, to) =>
+    fetchAllRowsStrict("mailchimp.syncExistingCustomers.suppressions", (from, to) =>
       owned.supabase.from("mailchimp_suppressions").select("email").eq("business_id", businessId).order("id").range(from, to)
     ),
   ]);

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { deleteFromR2 } from "@/lib/r2";
 import { logError } from "@/lib/error-logger";
 import { collectMediaUrls, parseMediaUrl, inferMediaType, inferFolder } from "@/lib/media/scan";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import type { Database } from "@/types/database.types";
 
 export type MediaRow = Database["public"]["Tables"]["media_library"]["Row"];
@@ -246,15 +246,15 @@ async function fetchCatalog(supabase: SupabaseServerClient, businessId: string):
   // Windowed reads: plain selects truncate silently at the 1000-row PostgREST
   // cap, and a PARTIAL scan would mark in-use images as unused (delete bait).
   const [products, pages, biz, settings, categories] = await Promise.all([
-    fetchAllRows("media.catalog.products", (from, to) =>
+    fetchAllRowsStrict("media.catalog.products", (from, to) =>
       supabase.from("products").select("id, name, images, page_sections").eq("business_id", businessId).order("id").range(from, to)
     ),
-    fetchAllRows("media.catalog.pages", (from, to) =>
+    fetchAllRowsStrict("media.catalog.pages", (from, to) =>
       supabase.from("custom_pages").select("id, title, blocks, seo").eq("business_id", businessId).order("id").range(from, to)
     ),
     supabase.from("businesses").select("logo_url, cover_url, gallery").eq("id", businessId).maybeSingle(),
     supabase.from("store_settings").select("*").eq("business_id", businessId).maybeSingle(),
-    fetchAllRows("media.catalog.categories", (from, to) =>
+    fetchAllRowsStrict("media.catalog.categories", (from, to) =>
       supabase.from("categories").select("id, name, image_url").eq("business_id", businessId).order("id").range(from, to)
     ),
   ]);
@@ -347,7 +347,7 @@ export async function getMediaPageData(): Promise<{ rows: MediaRow[]; usage: Usa
     fetchCatalog(supabase, businessId),
     // Setul de chei trebuie sa fie COMPLET (peste cap-ul de 1000 PostgREST),
     // altfel reconcile-ul re-insereaza randuri deja existente.
-    fetchAllRows("media.pageData.keys", (from, to) =>
+    fetchAllRowsStrict("media.pageData.keys", (from, to) =>
       supabase.from("media_library").select("r2_key").eq("business_id", businessId).order("id").range(from, to)
     ),
   ]);
@@ -391,7 +391,7 @@ export async function backfillMediaLibrary(): Promise<{ success: true; added: nu
 
   const [catalog, existingKeys] = await Promise.all([
     fetchCatalog(supabase, businessId),
-    fetchAllRows("media.backfill.keys", (from, to) =>
+    fetchAllRowsStrict("media.backfill.keys", (from, to) =>
       supabase.from("media_library").select("r2_key").eq("business_id", businessId).order("id").range(from, to)
     ),
   ]);

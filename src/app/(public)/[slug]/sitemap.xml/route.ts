@@ -1,11 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { PLATFORM_ORIGIN, parseStoreSeo } from "@/lib/seo";
 import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { logError } from "@/lib/error-logger";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,35 @@ const SITEMAP_URL_LIMIT = 50000;
 // sitemap in Google Search Console. Custom-domain stores are covered by the
 // host-aware root app/sitemap.ts (proxy.ts serves /sitemap.xml directly on the
 // domain, and redirects edinio.com/{slug}/sitemap.xml -> their domain for them).
-export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+/**
+ * O citire care esueaza da 503, nu un raspuns valid si gol.
+ *
+ * Un sitemap gol cu cod 200 ii spune lui Google „am hotarat sa nu mai am nicio
+ * adresa" — exact ce a crezut doua saptamani in august, cand un embed rupt
+ * intorcea zero produse fara sa dea eroare. 503 inseamna „mai incearca".
+ * `no-store`, ca o sclipire de o secunda sa nu stea in cache o ora pe CDN.
+ */
+function indisponibil(cine: string, e: unknown): Response {
+  logError({
+    action: cine,
+    message: e instanceof Error ? e.message : "citirea a esuat",
+    severity: "critical",
+  });
+  return new Response("temporar indisponibil", {
+    status: 503,
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
+  try {
+    return await construieste(req, ctx);
+  } catch (e) {
+    return indisponibil("slugSitemap", e);
+  }
+}
+
+async function construieste(_req: Request, { params }: { params: Promise<{ slug: string }> }): Promise<Response> {
   const { slug } = await params;
   const admin = createAdminClient();
 
@@ -61,7 +90,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
      * citit catalogul intreg la fiecare cerere. O categorie goala e o pagina
      * corecta, doar goala.
      */
-    const categorii = await fetchAllRows("slugSitemap.categories", (from, to) =>
+    const categorii = await fetchAllRowsStrict("slugSitemap.categories", (from, to) =>
       admin.from("categories").select("name").eq("business_id", biz.id).order("id").range(from, to),
     );
     const vazute = new Set<string>();
@@ -78,7 +107,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   // One Product Store: the homepage already represents the single product, so
   // its /product/* URLs are excluded (they 301 to the homepage / are noindex).
   if (parseStoreModeFromSettings(biz.store_settings).mode !== "one_product") {
-    const products = await fetchAllRows("slugSitemap.products", (from, to) =>
+    const products = await fetchAllRowsStrict("slugSitemap.products", (from, to) =>
       admin.from("products").select("slug, updated_at").eq("business_id", biz.id).eq("is_active", true).not("slug", "is", null).order("id").range(from, to),
     );
     for (const p of products) {
@@ -99,7 +128,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     entries.push({ loc: `${base}/politici/${tip}`, lastmod: iso(biz.updated_at) });
   }
 
-  const pages = await fetchAllRows("slugSitemap.pages", (from, to) =>
+  const pages = await fetchAllRowsStrict("slugSitemap.pages", (from, to) =>
     admin.from("custom_pages").select("slug, updated_at, seo").eq("business_id", biz.id).eq("is_published", true).order("id").range(from, to),
   );
   for (const pg of pages) {

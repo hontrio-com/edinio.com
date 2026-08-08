@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { listAllAuthUsers } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import {
   sendAutomationEmail,
   emailOnboardingNotStarted, emailOnboardingStuck, emailOnboardingHelp, emailOnboardingLastChance,
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   // Get all sent automation keys to avoid duplicates. Windowed (.range) —
   // taiat la 1000 de cap-ul PostgREST, dedup-ul uita emailuri deja trimise
   // si automatiile ajung sa RETRIMITA aceleasi mailuri.
-  const allSent = await fetchAllRows("cron.emailAutomations.sent", (f, t) =>
+  const allSent = await fetchAllRowsStrict("cron.emailAutomations.sent", (f, t) =>
     admin.from("email_automations").select("user_id, email_key").order("user_id").order("email_key").range(f, t));
   const sentSet = new Set(allSent.map(s => `${s.user_id}:${s.email_key}`));
 
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Fetch all users with auth data (windowed — vezi nota de la allSent) ────
-  const profiles = await fetchAllRows("cron.emailAutomations.profiles", (f, t) =>
+  const profiles = await fetchAllRowsStrict("cron.emailAutomations.profiles", (f, t) =>
     admin
       .from("users_profile")
       .select("id, full_name, plan, plan_expires_at, onboarding_step, onboarding_completed, created_at")
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
   const authMap = new Map(authList.map(u => [u.id, u]));
 
   // ── Fetch businesses + product counts + order counts ───────────────────────
-  const businesses = await fetchAllRows("cron.emailAutomations.businesses", (f, t) =>
+  const businesses = await fetchAllRowsStrict("cron.emailAutomations.businesses", (f, t) =>
     admin.from("businesses").select("id, user_id, slug, business_name, created_at, suspended_until").order("id").range(f, t));
   const bizMap = new Map(businesses.map(b => [b.user_id, b]));
 
@@ -300,7 +300,7 @@ export async function GET(req: NextRequest) {
   // ── D14: Prima comanda (check recent orders) ──────────────────────────────
   // This checks orders placed in the last 2 hours
   const twoHoursAgo = new Date(now.getTime() - 2 * 3600000).toISOString();
-  const recentOrders = await fetchAllRows("cron.emailAutomations.recentOrders", (f, t) =>
+  const recentOrders = await fetchAllRowsStrict("cron.emailAutomations.recentOrders", (f, t) =>
     admin
       .from("orders")
       .select("id, business_id, order_number, customer_name, total, created_at")

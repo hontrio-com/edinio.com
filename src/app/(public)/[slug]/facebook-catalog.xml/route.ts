@@ -1,7 +1,8 @@
 import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { buildCatalogItems, serializeCatalogFeed, type CatalogBusiness, type CatalogProduct } from "@/lib/facebook/catalog-feed";
+import { logError } from "@/lib/error-logger";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,35 @@ export const dynamic = "force-dynamic";
 // rewrites customdomain.ro/facebook-catalog.xml -> /{slug}/facebook-catalog.xml
 // (it is NOT special-cased like /sitemap.xml); an edinio.com/{slug} store is served
 // directly. The feed links use the store's canonical base (storeBaseUrl).
-export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+/**
+ * O citire care esueaza da 503, nu un raspuns valid si gol.
+ *
+ * Un sitemap gol cu cod 200 ii spune lui Google „am hotarat sa nu mai am nicio
+ * adresa" — exact ce a crezut doua saptamani in august, cand un embed rupt
+ * intorcea zero produse fara sa dea eroare. 503 inseamna „mai incearca".
+ * `no-store`, ca o sclipire de o secunda sa nu stea in cache o ora pe CDN.
+ */
+function indisponibil(cine: string, e: unknown): Response {
+  logError({
+    action: cine,
+    message: e instanceof Error ? e.message : "citirea a esuat",
+    severity: "critical",
+  });
+  return new Response("temporar indisponibil", {
+    status: 503,
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+export async function GET(req: Request, ctx: { params: Promise<{ slug: string }> }) {
+  try {
+    return await construieste(req, ctx);
+  } catch (e) {
+    return indisponibil("fbCatalog", e);
+  }
+}
+
+async function construieste(_req: Request, { params }: { params: Promise<{ slug: string }> }): Promise<Response> {
   const { slug } = await params;
   const admin = createAdminClient();
 
@@ -28,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     business_name: biz.business_name,
   };
 
-  const products = await fetchAllRows("fbCatalog.products", (from, to) =>
+  const products = await fetchAllRowsStrict("fbCatalog.products", (from, to) =>
     admin
       .from("products")
       .select("id, name, slug, description, price, compare_at_price, images, category, is_bundle, track_inventory, stock_quantity, page_sections")

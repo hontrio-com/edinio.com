@@ -13,7 +13,9 @@ import {
   buildTrendyolItems, buildVariantPrices, deriveVariantSlots, resolveVariantQuantity, verificaBarcode,
   type MappableProduct, type TrendyolListingEnrichment, type TrendyolVariantData,
 } from "./mapping";
-import type { TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
+import type { TrendyolCategoryAttribute, TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
+import { getCategoryAttributesCached } from "./taxonomy";
+import { atributeObligatoriiLipsa, mesajAtributeLipsa } from "./atribute-obligatorii";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 
 type Db = SupabaseClient<Database>;
@@ -175,6 +177,27 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
   if ("error" in built) {
     await setListingStatus(admin, listing.id, "error", { error: built.error });
     return { ok: false, error: built.error };
+  }
+
+  /*
+   * Aceeasi verificare de atribute obligatorii ca pe calea in masa.
+   *
+   * Sta si aici, nu doar acolo, fiindca doua cai catre acelasi marketplace cu
+   * doua verificari diferite se despart la prima schimbare — iar simptomul ar fi
+   * „merge cand public unul, esueaza cand public tot", adica exact felul de
+   * diferenta pe care nimeni n-o cauta.
+   */
+  const catId = built.items[0]?.categoryId;
+  if (typeof catId === "number") {
+    const aleCategoriei = await getCategoryAttributesCached(ctx.auth, catId);
+    if (aleCategoriei) {
+      const lipsa = atributeObligatoriiLipsa(aleCategoriei, built.items[0]?.attributes ?? []);
+      if (lipsa.length > 0) {
+        const mesaj = mesajAtributeLipsa(lipsa);
+        await setListingStatus(admin, listing.id, "error", { error: mesaj });
+        return { ok: false, error: mesaj };
+      }
+    }
   }
 
   const res = await createProducts(ctx.auth, built.items);
@@ -354,6 +377,15 @@ export async function syncProductsBulk(
 
   // Constructia articolelor, pastrand legatura articol -> listare pentru statusuri.
   const deTrimis: { items: TrendyolProductItem[]; listingId: string; mainId: string }[] = [];
+  /*
+   * Atributele obligatorii ale fiecarei categorii, cerute O DATA per categorie.
+   *
+   * Sunt cateva categorii distincte intr-un lot de sute de produse, iar
+   * `getCategoryAttributesCached` mai are si un cache de sase ore — deci
+   * verificarea nu adauga un dus-intors pe produs.
+   */
+  const atributeCategorie = new Map<number, TrendyolCategoryAttribute[] | null>();
+
   for (const { product, listingId } of pregatite) {
     const listing = listariDupaId.get(listingId);
     if (!listing) { out.failed++; out.errors.push({ product: product.name, message: "Listare negăsită." }); continue; }
@@ -367,6 +399,37 @@ export async function syncProductsBulk(
       out.errors.push({ product: product.name, message: built.error });
       continue;
     }
+
+    /*
+     * ATRIBUTELE OBLIGATORII SE VERIFICA AICI, INAINTE DE TRIMITERE.
+     *
+     * Fara asta, produsul pleaca si e respins de Trendyol, cu raspunsul sosind
+     * ore mai tarziu pe LOT, nu pe produsul care avea gaura. Masurat: trei rulari,
+     * doua magazine, 0/25, 0/14 si 1/13 — si singurul motiv pastrat undeva a fost
+     * „Lipseste ID atribut: 47, Nume atribut: Culoare", pe doua produse din 52.
+     *
+     * Cand nu putem afla atributele categoriei (API cazut), NU se blocheaza
+     * produsul: se trimite ca pana acum. O verificare care nu poate rula n-are
+     * voie sa devina ea insasi motivul pentru care nu se listeaza nimic.
+     */
+    const catId = built.items[0]?.categoryId;
+    if (typeof catId === "number") {
+      if (!atributeCategorie.has(catId)) {
+        atributeCategorie.set(catId, await getCategoryAttributesCached(ctx.auth, catId));
+      }
+      const aleCategoriei = atributeCategorie.get(catId);
+      if (aleCategoriei) {
+        const lipsa = atributeObligatoriiLipsa(aleCategoriei, built.items[0]?.attributes ?? []);
+        if (lipsa.length > 0) {
+          const mesaj = mesajAtributeLipsa(lipsa);
+          await setListingStatus(admin, listingId, "error", { error: mesaj });
+          out.failed++;
+          out.errors.push({ product: product.name, message: mesaj });
+          continue;
+        }
+      }
+    }
+
     deTrimis.push({ items: built.items, listingId, mainId: listing.product_main_id });
   }
   if (deTrimis.length === 0) return out;

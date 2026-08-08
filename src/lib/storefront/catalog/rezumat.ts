@@ -116,6 +116,20 @@ export async function rezumaCatalog(admin: SupabaseClient, businessId: string): 
     console.error(`[rezumat] scrierea pentru ${businessId} a esuat: ${eScr.message}`);
     return 0;
   }
+  /*
+   * Vocabularul si indexul inversat de cautare, in aceeasi trecere.
+   *
+   * Se refac aici fiindca depind de exact aceleasi date (`cauta_norm`), si de
+   * acelasi eveniment: catalogul magazinului s-a schimbat. Lasate pe dinafara,
+   * ar fi trebuit chemate de mana — iar la primul import cautarea ar fi ratat
+   * produsele noi, fara sa dea nicio eroare: pur si simplu n-ar fi fost gasite.
+   *
+   * Nu blocheaza rezumatul daca eșueaza: agregatele sunt corecte oricum, iar
+   * cautarea se reface la urmatoarea trecere.
+   */
+  const { error: eCuv } = await admin.rpc("catalog_reface_cuvinte", { p_business: businessId });
+  if (eCuv) console.error(`[rezumat] vocabularul pentru ${businessId} a esuat: ${eCuv.message}`);
+
   // Coada se goleste DOAR la succes: altfel un magazin care esueaza o data n-ar
   // mai fi recalculat niciodata.
   await admin.from("catalog_rezumat_murdar").delete().eq("business_id", businessId);

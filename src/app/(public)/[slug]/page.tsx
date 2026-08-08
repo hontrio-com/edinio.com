@@ -30,6 +30,8 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
 import { after } from "next/server";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { jsonLdSafe } from "@/lib/json-ld";
 
 interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string; sale?: string }>; }
@@ -397,7 +399,26 @@ export default async function SlugPage({ params, searchParams }: Props) {
      * sa injecteze evenimente pentru ORICE magazin — statistici otravite si
      * crestere necontrolata a bazei. Serverul stie deja ce magazin randeaza.
      */
+    const ipVizitator = clientIpFromHeaders(headersList);
+    /*
+     * Limita pe IP inaintea scrierii.
+     *
+     * Scrierea de analitice era SINGURA scriere publica fara NICIUN limitator —
+     * nici in memorie, nici durabil. Un script care cere `/{slug}` in bucla
+     * insereaza un rand la fiecare cerere, cu service role, deci ocolind si RLS-ul
+     * si orice plafon. Tabela a ajuns a cincea ca marime a bazei doar din trafic
+     * NORMAL; e cel mai ieftin mod de a umfla baza platformei si de a otravi
+     * statisticile unui comerciant.
+     *
+     * Exact atacul pentru care s-a sters deja politica publica de INSERT — doar ca
+     * atunci s-a inchis usa clientului si a ramas deschisa cea a serverului.
+     *
+     * Sta INAUNTRUL lui `after`, deci nu intra pe drumul raspunsului. Iar `ip` se
+     * citeste AICI, in randare: antetele nu se pot citi din callback.
+     */
     after(async () => {
+      const { permis } = await consumaLimita(`analytics:${ipVizitator}`, 120, 3600);
+      if (!permis) return;
       await createAdminClient().from("site_analytics")
         .insert({ business_id: business.id, event_type: "visit", device, country: "RO" });
     });

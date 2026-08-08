@@ -18,6 +18,8 @@ import { PLATFORM_ORIGIN } from "@/lib/seo";
  *   * indexul de cautare nu se mai reconstruia din cron, din patru zile
  *     (`DELETE` fara `WHERE`, respins de paza rolului `service_role`)
  *   * stocul nu se elibera niciodata la anulare
+ *   * o marime cu o bucata se putea vinde de doua ori, iar plafonarea la zero
+ *     facea ca baza sa NU ramana negativa — deci nu ramanea nici urma
  *
  * TOATE au raspuns 200. Niciunul n-a fost prins de `tsc`, de teste, de build sau
  * de un audit extern care a citit chiar fisierele cu pricina. Trei din patru au
@@ -160,6 +162,42 @@ export async function GET(req: NextRequest) {
         if (cod !== 200) return `cod ${cod}`;
         const n = numara(text, /href="[^"]*\/product\//g);
         return n === 0 ? `cautarea dupa „${termen}" (cel mai frecvent cuvant al magazinului) n-a gasit nimic` : null;
+      },
+    },
+    {
+      nume: "ciclul stocului si cursa pe marime",
+      ruleaza: async () => {
+        /*
+         * Singura proba care VERIFICA O SCRIERE, nu o citire.
+         *
+         * Celelalte cinci cer pagini si numara ce iese. Asta cheama `proba_stoc()`,
+         * care isi face un produs cu doua marimi si o comanda, le trece prin tot
+         * ciclul — revendicare, refuz pe marimea epuizata, anulare, reactivare — si
+         * ANULEAZA TRANZACTIA la final. Nimic nu ramane in baza; verificat.
+         *
+         * De ce pe date sintetice: proba scade si pune inapoi stoc. Pe marfa reala,
+         * o rulare intrerupta la mijloc ar lasa stocul gresit — santinela ar deveni
+         * ea cauza defectului pe care il cauta.
+         *
+         * De ce DOUA marimi: cu una singura, stocul produsului (care e SUMA) ajunge
+         * la zero odata cu ea, refuza verificarea de PRODUS, si proba ar trece
+         * printr-un drum pe care defectul n-a existat niciodata. Prima forma a
+         * probei chiar a cazut asa.
+         *
+         * Dovedit ca poate ESUA: rulata peste purtarea de dinainte de 18.08
+         * (verificare doar pe produs, scadere plafonata la zero pe marime), a doua
+         * bucata primea `{"ok": true}` si proba o prindea.
+         */
+        const { data, error } = await admin.rpc("proba_stoc" as never, {} as never);
+        if (error) return `proba n-a putut rula: ${error.message}`;
+        const r = data as unknown as
+          { ok?: boolean; motiv?: string; pasi?: { pas: string; ok: boolean; detaliu?: string }[] } | null;
+        if (!r) return "proba n-a raspuns";
+        if (r.ok === true) return null;
+        const cazuti = (r.pasi ?? []).filter((p) => !p.ok);
+        return cazuti.length
+          ? cazuti.map((p) => `${p.pas}: ${p.detaliu ?? "a picat"}`).join(" | ")
+          : (r.motiv ?? "proba a picat fara detalii");
       },
     },
     {

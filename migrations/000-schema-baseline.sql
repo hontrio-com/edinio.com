@@ -1776,6 +1776,146 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.proba_stoc()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+ SET statement_timeout TO '30s'
+AS $function$
+declare
+  v_biz uuid; v_pid uuid; v_oid uuid;
+  v_r jsonb; v_v int; v_prod int;
+  v_pasi jsonb := '[]'::jsonb;
+  v_ok boolean := true;
+begin
+  /*
+   * PROBA CICLULUI DE STOC, pe date SINTETICE, intr-o tranzactie care se ANULEAZA.
+   *
+   * Tot ce se scrie mai jos — produs, comanda, scaderi — dispare la iesire:
+   * blocul `exception` din plpgsql e o subtranzactie, iar `raise` la final o
+   * intoarce. Verdictul supravietuieste fiindca il purtam in mesajul exceptiei.
+   *
+   * De ce sintetic si nu pe marfa adevarata: proba scade si pune inapoi stoc. Pe
+   * un produs real, o rulare intrerupta la mijloc ar lasa stocul gresit — adica
+   * santinela ar deveni ea cauza defectului pe care il cauta.
+   *
+   * ⚠ DOUA marimi, nu una, si asta e tot rostul.
+   *
+   * Prima forma a probei avea o singura marime, si a picat imediat: cu o singura
+   * combinatie, `products.stock_quantity` (care e SUMA) ajunge la zero odata cu
+   * ea, deci refuza verificarea de PRODUS si nu se mai ajunge la cea de varianta.
+   * Adica proba trecea printr-un drum pe care defectul N-A EXISTAT NICIODATA.
+   *
+   * Cu doua marimi — una de 1 bucata, alta de 5 — produsul are „stoc" 6 si trece
+   * senin, iar singurul lucru care mai poate refuza a doua bucata de PROBA e
+   * verificarea pe combinatie. Exact cursa din 18.08.
+   */
+  begin
+    select id into v_biz from businesses where is_published order by created_at limit 1;
+    if v_biz is null then
+      return jsonb_build_object('ok', false, 'motiv', 'niciun magazin publicat');
+    end if;
+
+    insert into products (business_id, name, slug, price, is_active, track_inventory,
+                          stock_quantity, page_sections)
+    values (v_biz, 'ZZ proba santinela', 'zz-proba-santinela-' || gen_random_uuid()::text,
+            10, false, true, 6,
+            jsonb_build_object('variants', jsonb_build_object(
+              'enabled', true, 'combinations', jsonb_build_array(
+                jsonb_build_object('title', 'PROBA',  'enabled', true, 'stock_quantity', 1),
+                jsonb_build_object('title', 'PROBA2', 'enabled', true, 'stock_quantity', 5)))))
+    returning id into v_pid;
+
+    select stock_quantity into v_prod from products where id = v_pid;
+    if v_prod <> 6 then
+      v_ok := false;
+      v_pasi := v_pasi || jsonb_build_object('pas', 'stocul produsului = suma marimilor', 'ok', false,
+                  'detaliu', format('produsul are %s in loc de 6 — declansatorul de insumare nu si-a facut treaba', v_prod));
+    else
+      v_pasi := v_pasi || jsonb_build_object('pas', 'stocul produsului = suma marimilor', 'ok', true);
+    end if;
+
+    -- ── 1. singura bucata din PROBA se poate lua ──────────────────────────────
+    v_r := public.revendica_stoc_complet(
+             jsonb_build_array(jsonb_build_object('product_id', v_pid, 'quantity', 1)),
+             jsonb_build_array(jsonb_build_object('product_id', v_pid, 'variant_title', 'PROBA', 'quantity', 1)));
+    select floor((c->>'stock_quantity')::numeric)::int into v_v
+      from products p, lateral jsonb_array_elements(p.page_sections->'variants'->'combinations') c
+     where p.id = v_pid and c->>'title' = 'PROBA' limit 1;
+    if (v_r->>'ok')::boolean is not true or v_v <> 0 then
+      v_ok := false;
+      v_pasi := v_pasi || jsonb_build_object('pas', 'revendicare', 'ok', false,
+                  'detaliu', format('raspuns %s, marimea a ramas %s in loc de 0', v_r::text, v_v));
+    else
+      v_pasi := v_pasi || jsonb_build_object('pas', 'revendicare', 'ok', true);
+    end if;
+
+    -- ── 2. A DOUA bucata TREBUIE refuzata, si PE MARIME ───────────────────────
+    -- Produsul mai are 5 (din PROBA2), deci verificarea de produs trece. Daca aici
+    -- vine `ok:true`, cursa de supravanzare e din nou deschisa.
+    v_r := public.revendica_stoc_complet(
+             jsonb_build_array(jsonb_build_object('product_id', v_pid, 'quantity', 1)),
+             jsonb_build_array(jsonb_build_object('product_id', v_pid, 'variant_title', 'PROBA', 'quantity', 1)));
+    if (v_r->>'ok')::boolean is not false then
+      v_ok := false;
+      v_pasi := v_pasi || jsonb_build_object('pas', 'a doua bucata din marimea epuizata e REFUZATA', 'ok', false,
+                  'detaliu', format('SUPRAVANZARE: a trecut, raspuns %s', v_r::text));
+    elsif v_r->>'varianta' is distinct from 'PROBA' then
+      v_ok := false;
+      v_pasi := v_pasi || jsonb_build_object('pas', 'a doua bucata din marimea epuizata e REFUZATA', 'ok', false,
+                  'detaliu', format('refuzat, dar fara numele marimii: %s', v_r::text));
+    else
+      v_pasi := v_pasi || jsonb_build_object('pas', 'a doua bucata din marimea epuizata e REFUZATA', 'ok', true);
+    end if;
+
+    -- ── 3. anularea comenzii pune marfa inapoi ────────────────────────────────
+    insert into orders (business_id, customer_name, customer_phone, order_number, items,
+                        shipping_address, subtotal, total, status, stoc_rezervat)
+    values (v_biz, 'Proba Santinela', '0700000000', 'ZZ-' || substr(gen_random_uuid()::text, 1, 8),
+            '[]'::jsonb, '{}'::jsonb, 10, 10, 'pending',
+            jsonb_build_object(
+              'produse',  jsonb_build_array(jsonb_build_object('product_id', v_pid, 'quantity', 1)),
+              'variante', jsonb_build_array(jsonb_build_object('product_id', v_pid, 'variant_title', 'PROBA', 'quantity', 1))))
+    returning id into v_oid;
+
+    v_r := public.aplica_tranzitia_comenzii(v_oid, 'cancelled', null, v_biz);
+    select floor((c->>'stock_quantity')::numeric)::int into v_v
+      from products p, lateral jsonb_array_elements(p.page_sections->'variants'->'combinations') c
+     where p.id = v_pid and c->>'title' = 'PROBA' limit 1;
+    if v_r->>'stoc' <> 'eliberat' or v_v <> 1 then
+      v_ok := false;
+      v_pasi := v_pasi || jsonb_build_object('pas', 'anularea pune MARIMEA inapoi', 'ok', false,
+                  'detaliu', format('stoc=%s, marimea a ramas %s in loc de 1', v_r->>'stoc', v_v));
+    else
+      v_pasi := v_pasi || jsonb_build_object('pas', 'anularea pune MARIMEA inapoi', 'ok', true);
+    end if;
+
+    -- ── 4. reactivarea o ia inapoi ────────────────────────────────────────────
+    v_r := public.aplica_tranzitia_comenzii(v_oid, 'confirmed', null, v_biz);
+    select floor((c->>'stock_quantity')::numeric)::int into v_v
+      from products p, lateral jsonb_array_elements(p.page_sections->'variants'->'combinations') c
+     where p.id = v_pid and c->>'title' = 'PROBA' limit 1;
+    if v_v <> 0 then
+      v_ok := false;
+      v_pasi := v_pasi || jsonb_build_object('pas', 'reactivarea scade la loc', 'ok', false,
+                  'detaliu', format('marimea a ramas %s in loc de 0', v_v));
+    else
+      v_pasi := v_pasi || jsonb_build_object('pas', 'reactivarea scade la loc', 'ok', true);
+    end if;
+
+    raise exception 'PROBA_GATA:%', jsonb_build_object('ok', v_ok, 'pasi', v_pasi)::text;
+
+  exception when others then
+    if sqlerrm like 'PROBA_GATA:%' then
+      return substr(sqlerrm, 12)::jsonb;
+    end if;
+    return jsonb_build_object('ok', false, 'motiv', format('[%s] %s', sqlstate, sqlerrm), 'pasi', v_pasi);
+  end;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.reclaim_order_discount(p_order_id uuid)
  RETURNS text
  LANGUAGE plpgsql
@@ -5671,6 +5811,7 @@ grant execute on function public.orders_status_counts(bid uuid) to service_role;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to anon;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to authenticated;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to service_role;
+grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.release_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.release_order_discount(p_order_id uuid) to service_role;

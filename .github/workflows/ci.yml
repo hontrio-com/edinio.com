@@ -1,0 +1,83 @@
+# Poarta care lipsea.
+#
+# Repo-ul are 1132 de teste si nimic nu obliga un deploy sa treaca prin ele. In
+# aceeasi saptamana au iesit patru defecte grave peste care `tsc`, testele si
+# build-ul trecusera toate — dar alea sunt defecte de CONTINUT, si pentru ele
+# exista santinela. Ce prinde poarta asta e mai banal si la fel de scump: o
+# eroare de tip sau un test rupt care ajunge in productie fiindca cineva (eu, de
+# obicei) a dat push inainte sa ruleze totul.
+#
+# Nu inlocuieste verificarea de dinainte de push. O face obligatorie.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Un push nou peste altul in curs il opreste pe cel vechi: pe `main` conteaza
+# doar ultimul commit, iar rulari paralele pe acelasi branch se calca reciproc.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifica:
+    name: tipuri · teste · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Aceeasi linie majora ca local (v24) si ca pe Vercel. O versiune mai
+          # veche ar trece aici si ar cadea la deploy — adica exact pe dos.
+          node-version: '24'
+          cache: npm
+
+      # `npm ci`, nu `npm install`: respecta lockfile-ul intocmai. `install` poate
+      # ridica o dependenta si atunci CI-ul verifica alt arbore decat productia.
+      - run: npm ci
+
+      # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca
+      # trece cu `.env.example`: Next.js are nevoie ca VARIABILELE SA EXISTE, nu
+      # ca ele sa fie adevarate. Asta face ca poarta sa mearga si pe fork-uri,
+      # unde secretele nu sunt disponibile.
+      - name: Mediu de proba
+        run: cp .env.example .env.local
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+  # ── Deriva de schema ────────────────────────────────────────────────────────
+  #
+  # Job SEPARAT, si care NU pica lipsa secretului: pe un fork sau intr-un repo
+  # proaspat clonat nu exista cheie, iar o poarta care cade acolo devine zgomot
+  # si pe urma se ignora. Cand cheia exista, compara schema din Git cu productia.
+  #
+  # Asta e verificarea care ar fi prins `catalog_cuvinte_murdar`: tabela exista in
+  # productie fiindca o crease cineva dintr-o consola SQL, si nicaieri in repo.
+  schema:
+    name: schema din Git = productie
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verifica deriva
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Fara SUPABASE_SERVICE_ROLE_KEY in secretele repo-ului — verificarea de schema se sare."
+            echo "Adauga secretele SUPABASE_URL si SUPABASE_SERVICE_ROLE_KEY ca sa fie pornita."
+            exit 0
+          fi
+          bash scripts/schema-baseline.sh --check

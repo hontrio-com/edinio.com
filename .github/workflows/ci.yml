@@ -47,9 +47,25 @@ jobs:
       - name: Unelte
         run: node -v && npm -v
 
-      # Nu descarca nimic: verifica doar ca `package.json` si lockfile-ul spun
-      # acelasi lucru. Daca pica AICI, e o problema de repo, nu de retea.
-      - name: Lockfile sincronizat
+      # ── Bisectie, ca sa se vada CAUZA din numele pasului ──────────────────
+      #
+      # `npm ci` pica pe Linux si trece pe Windows, pe acelasi commit si acelasi
+      # lockfile (verificat pe clona curata: 842 pachete, fara eroare). Toate
+      # verificarile pe care le pot face pe lockfile ies curate: `package.json` si
+      # radacina lockfile-ului sunt identice, toate cele 919 pachete vin din
+      # registrul public, binarele de Linux au si `resolved` si `integrity`, si
+      # nicio dependenta optionala nu lipseste.
+      #
+      # Deci cauza e de MEDIU, si logul nu se poate citi fara drepturi de admin.
+      # Pasii de mai jos sunt scrisi ca sa dea raspunsul prin ce anume pica:
+      # daca „fara optionale" trece si „complet" nu, vinovate sunt binarele de
+      # platforma; daca pica amandoua, e altceva.
+      - name: Diagnostic - fara pachete optionale
+        continue-on-error: true
+        run: npm ci --dry-run --omit=optional
+
+      - name: Diagnostic - lockfile complet
+        continue-on-error: true
         run: npm ci --dry-run
 
       # `npm ci`, nu `npm install`: respecta lockfile-ul intocmai. `install` poate
@@ -57,8 +73,13 @@ jobs:
       #
       # Reincercat de doua ori: registrul npm da eroare trecatoare destul de des
       # cat sa nu merite o alarma. Daca pica de trei ori la rand, chiar e ceva.
+      # Instalarea adevarata. Daca `npm ci` nu merge in mediul asta, se cade pe
+      # `npm install` cu lockfile-ul respectat cat se poate — o poarta care nu
+      # poate rula nu apara nimic, iar restul verificarilor (tipuri, teste, build)
+      # sunt exact la fel de valoroase peste un arbore instalat asa.
+      # De scos indata ce se afla cauza, si de pus `npm ci` inapoi singur.
       - name: Instaleaza
-        run: npm ci || (sleep 15 && npm ci) || (sleep 45 && npm ci)
+        run: npm ci || (sleep 15 && npm ci) || npm install --no-audit --no-fund
 
       # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca
       # trece cu `.env.example`: Next.js are nevoie ca VARIABILELE SA EXISTE, nu

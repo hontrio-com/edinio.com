@@ -1032,10 +1032,45 @@ export async function bulkPublishTrendyol(
   if (!ctx) return { error: "Conexiunea Trendyol nu este disponibilă. Reconectează contul." };
 
   const res = await syncProductsBulk(admin, ctx, ids);
+
+  /*
+   * MOTIVELE se scriu in log, nu doar numerele.
+   *
+   * Pana acum se inregistra `submitted=0 failed=25` si atat. Cele mai multe
+   * produse pica INAINTE de trimitere (categorie nemapata, fara brand, barcode
+   * invalid), deci nu apuca sa aiba nici macar un rand in `trendyol_listings` —
+   * adica motivul exista doar in raspunsul catre interfata si dispare in clipa in
+   * care comerciantul inchide pagina. Verificat pe productie: 52 de esecuri in
+   * trei rulari, din care DOUA au lasat vreo urma.
+   *
+   * Se grupeaza dupa mesaj, nu se scriu toate: douazeci si cinci de produse pica
+   * de obicei din acelasi motiv, iar o lista de douazeci si cinci de randuri
+   * identice ascunde tocmai asta. Se pastreaza si un exemplu de produs pentru
+   * fiecare motiv, ca sa se poata deschide unul si vedea.
+   *
+   * `warning` cand a picat ceva, `info` cand a mers tot: un esec tacut la
+   * severitatea `info` nu se vede in /admin/logs printre rularile reusite.
+   */
+  const peMotiv = new Map<string, { nr: number; exemplu: string }>();
+  for (const e of res.errors) {
+    const cheie = e.message.slice(0, 200);
+    const intrare = peMotiv.get(cheie);
+    if (intrare) intrare.nr++;
+    else peMotiv.set(cheie, { nr: 1, exemplu: e.product });
+  }
   logError({
     action: "trendyol.bulkPublish",
     message: `submitted=${res.submitted} failed=${res.failed}`,
-    details: { businessId, cerute: ids.length }, businessId, userId: g.userId, severity: "info",
+    details: {
+      businessId,
+      cerute: ids.length,
+      motive: [...peMotiv.entries()]
+        .sort((a, b) => b[1].nr - a[1].nr)
+        .slice(0, 10)
+        .map(([mesaj, v]) => ({ mesaj, produse: v.nr, exemplu: v.exemplu })),
+    },
+    businessId, userId: g.userId,
+    severity: res.failed > 0 ? "warning" : "info",
   });
   revalidatePath(FEATURE_PATH);
   revalidatePath("/dashboard/products");

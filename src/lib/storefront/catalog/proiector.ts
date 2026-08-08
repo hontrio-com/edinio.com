@@ -111,6 +111,20 @@ export function proiecteazaRand(p: RandSursa, acum: string): ProiectieCalculata 
 export async function proiecteaza(
   admin: SupabaseClient,
   ids: string[],
+  /**
+   * Pana la ce marcaj are voie sa se goleasca coada.
+   *
+   * CURSA pe care o inchide: intre citirea cozii si scrierea proiectiei,
+   * comerciantul poate salva din nou produsul. Declansatorul il remarcheaza
+   * (`marcat_la = now()`), dar lucratorul vechi stergea randul oricum — deci
+   * proiectia ramanea cea VECHE si nimic n-o mai punea la coada. Un pret sau un
+   * nume invechit pe pagina, fara nicio eroare; il gasea abia alarma orara de
+   * drift, daca il prindea in esantion.
+   *
+   * Gol inseamna „sterge tot ce ai cerut", pentru apelurile SINCRONE din
+   * mutatoare: acolo id-urile vin de la codul care tocmai a scris, nu din coada.
+   */
+  pragCoada = "",
   acum = new Date().toISOString(),
 ): Promise<number> {
   if (ids.length === 0) return 0;
@@ -128,7 +142,9 @@ export async function proiecteaza(
       // Produsele au disparut intre marcaj si proiectare. Declansatorul a sters
       // deja randurile din `catalog_produs`; aici doar golim coada, altfel ar
       // ramane marcaje care nu se pot rezolva niciodata.
-      await admin.from("catalog_murdar").delete().in("product_id", bucata);
+      await (pragCoada
+        ? admin.from("catalog_murdar").delete().in("product_id", bucata).lte("marcat_la", pragCoada)
+        : admin.from("catalog_murdar").delete().in("product_id", bucata));
       continue;
     }
 
@@ -160,7 +176,12 @@ export async function proiecteaza(
 
     // Se sterge TOATA bucata din coada, nu doar cele scrise: un rand care nu are
     // pereche in `catalog_produs` (produs inactiv) n-ar iesi niciodata altfel.
-    const { error: eDel } = await admin.from("catalog_murdar").delete().in("product_id", bucata);
+    // Se sterge doar ce nu s-a remarcat intre timp: un produs salvat din nou intre
+    // citirea cozii si scrierea de mai sus are `marcat_la` mai nou si RAMANE, ca
+    // sa fie reluat. Vezi `pragCoada`.
+    const { error: eDel } = await (pragCoada
+      ? admin.from("catalog_murdar").delete().in("product_id", bucata).lte("marcat_la", pragCoada)
+      : admin.from("catalog_murdar").delete().in("product_id", bucata));
     if (eDel) console.error("[proiector] golirea cozii a esuat:", eDel.message);
   }
 
@@ -232,7 +253,9 @@ export async function proiecteazaCoada(
 ): Promise<number> {
   const { data, error } = await admin
     .from("catalog_murdar")
-    .select("product_id")
+    // `marcat_la` se citeste, nu doar id-ul: la final se sterge din coada NUMAI
+    // ce n-a fost remarcat intre timp. Vezi `proiecteaza`.
+    .select("product_id, marcat_la")
     // Cele mai vechi intai: altfel un magazin care se editeaza intens ar putea
     // tine la infinit in coada randurile altuia.
     .order("marcat_la", { ascending: true })
@@ -241,6 +264,11 @@ export async function proiecteazaCoada(
     console.error("[proiector] citirea cozii a esuat:", error.message);
     return 0;
   }
-  const ids = (data ?? []).map((r) => (r as { product_id: string }).product_id);
-  return proiecteaza(admin, ids);
+  const randuri = (data ?? []) as { product_id: string; marcat_la: string }[];
+  /*
+   * Cel mai NOU marcaj din lotul citit e granita pana la care avem voie sa
+   * stergem. Orice remarcare de dupa el are `marcat_la` mai mare si supravietuieste.
+   */
+  const pragul = randuri.reduce((m, r) => (r.marcat_la > m ? r.marcat_la : m), "");
+  return proiecteaza(admin, randuri.map((r) => r.product_id), pragul);
 }

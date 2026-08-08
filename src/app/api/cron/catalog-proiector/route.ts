@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { proiecteazaCoada, MAX_COADA_PE_RULARE } from "@/lib/storefront/catalog/proiector";
-import { rezumaCoada } from "@/lib/storefront/catalog/rezumat";
+import { rezumaCoada, refaCuvinteleCozii } from "@/lib/storefront/catalog/rezumat";
 
 /**
  * Goleste coada de reproiectat a catalogului.
@@ -47,5 +47,15 @@ export async function GET(req: NextRequest) {
   // tocmai urmeaza sa se schimbe, si rezumatul ar ramane cu o rulare in urma.
   const rezumate = await rezumaCoada(admin);
 
-  return NextResponse.json({ ok: true, scrise, rezumate, ms: Date.now() - inceput });
+  /*
+   * Vocabularul de cautare, pe coada LUI.
+   *
+   * Se refacea odata cu rezumatul, ceea ce insemna ca fiecare sincronizare de
+   * stoc reconstruia tot indexul de cautare al magazinului — 1,46 s pe eSAFE, de
+   * patru ori pe minut, degeaba: stocul nu atinge `cauta_norm`. Acum se marcheaza
+   * doar cand textul chiar s-a schimbat.
+   */
+  const cuvinte = await refaCuvinteleCozii(admin);
+
+  return NextResponse.json({ ok: true, scrise, rezumate, cuvinte, ms: Date.now() - inceput });
 }

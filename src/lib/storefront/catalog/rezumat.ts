@@ -117,18 +117,23 @@ export async function rezumaCatalog(admin: SupabaseClient, businessId: string): 
     return 0;
   }
   /*
-   * Vocabularul si indexul inversat de cautare, in aceeasi trecere.
+   * Vocabularul NU se mai reface aici. Are coada lui.
    *
-   * Se refac aici fiindca depind de exact aceleasi date (`cauta_norm`), si de
-   * acelasi eveniment: catalogul magazinului s-a schimbat. Lasate pe dinafara,
-   * ar fi trebuit chemate de mana — iar la primul import cautarea ar fi ratat
-   * produsele noi, fara sa dea nicio eroare: pur si simplu n-ar fi fost gasite.
+   * Se refacea in aceeasi trecere cu rezumatul, si asta parea firesc: depind de
+   * aceleasi date. Dar nu depind de aceleasi EVENIMENTE. Rezumatul chiar depinde
+   * de stoc — cele patru randuri ale lui numara produsele cu si fara stoc ascuns
+   * — deci orice sincronizare de marketplace il invalideaza pe drept. Vocabularul
+   * depinde numai de `cauta_norm`, pe care o schimbare de stoc n-o atinge deloc.
    *
-   * Nu blocheaza rezumatul daca eșueaza: agregatele sunt corecte oricum, iar
-   * cautarea se reface la urmatoarea trecere.
+   * Legate, fiecare schimbare de stoc refacea tot indexul de cautare al
+   * magazinului: masurat pe eSAFE, 1,46 s pentru 7.827 de cuvinte si 98.661 de
+   * perechi, la fiecare trecere. Cu patru sincronizari de marketplace pe minut,
+   * asta e munca aruncata continuu — si creste cu marimea catalogului, adica
+   * exact acolo unde doare.
+   *
+   * Acum `catalog_cuvinte_murdar` se marcheaza doar cand `cauta_norm` chiar s-a
+   * schimbat, iar `refaCuvinteleCozii` o goleste in acelasi cron.
    */
-  const { error: eCuv } = await admin.rpc("catalog_reface_cuvinte", { p_business: businessId });
-  if (eCuv) console.error(`[rezumat] vocabularul pentru ${businessId} a esuat: ${eCuv.message}`);
 
   // Coada se goleste DOAR la succes: altfel un magazin care esueaza o data n-ar
   // mai fi recalculat niciodata.
@@ -159,6 +164,41 @@ export async function rezumaCoada(admin: SupabaseClient, maxim = MAX_REZUMATE_PE
   let facute = 0;
   for (const r of (data ?? []) as unknown as { business_id: string }[]) {
     if (await rezumaCatalog(admin, r.business_id)) facute++;
+  }
+  return facute;
+}
+
+/**
+ * Reface vocabularul magazinelor al caror TEXT s-a schimbat.
+ *
+ * Separat de rezumat fiindca se declanseaza altfel: rezumatul la orice schimbare
+ * din catalog (stocul inclus), vocabularul doar cand se schimba `cauta_norm`.
+ * Vezi nota din `rezumaCatalog`.
+ *
+ * Coada se goleste DOAR pana la marcajul citit: un produs redenumit intre citire
+ * si reconstructie ramane marcat si se reia. Aceeasi garda ca la coada de
+ * proiectie.
+ */
+export async function refaCuvinteleCozii(admin: SupabaseClient, maxim = MAX_REZUMATE_PE_RULARE): Promise<number> {
+  const { data, error } = await admin
+    .from("catalog_cuvinte_murdar")
+    .select("business_id, marcat_la")
+    .order("marcat_la", { ascending: true })
+    .limit(maxim);
+  if (error) {
+    console.error("[cuvinte] citirea cozii a esuat:", error.message);
+    return 0;
+  }
+  let facute = 0;
+  for (const r of (data ?? []) as { business_id: string; marcat_la: string }[]) {
+    const { error: eCuv } = await admin.rpc("catalog_reface_cuvinte", { p_business: r.business_id });
+    if (eCuv) {
+      console.error(`[cuvinte] ${r.business_id}: ${eCuv.message}`);
+      continue;
+    }
+    await admin.from("catalog_cuvinte_murdar").delete()
+      .eq("business_id", r.business_id).lte("marcat_la", r.marcat_la);
+    facute++;
   }
   return facute;
 }

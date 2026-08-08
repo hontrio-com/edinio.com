@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { getDomainStatus, addDomainToVercel } from "@/lib/vercel";
 import { sendBrokenDomainsToAdmin } from "@/lib/email";
@@ -24,13 +25,20 @@ import { sendBrokenDomainsToAdmin } from "@/lib/email";
 // registrar (`misconfigured` fara `zoneMissing`). Aia nu e defectiunea noastra
 // si nu are rost sa sune alarma pentru ea in fiecare ora.
 
-function verifyCron(req: NextRequest): boolean {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  return secret === process.env.CRON_SECRET;
-}
-
+/*
+ * Verificarea comuna, nu una proprie.
+ *
+ * Ce era aici: `req.headers.get("authorization")?.replace(...) === process.env.CRON_SECRET`.
+ * `headers.get()` intoarce `null` cand antetul lipseste, `null?.replace()` da
+ * `undefined`, iar `CRON_SECRET` nesetat e tot `undefined` — deci
+ * `undefined === undefined` si ruta se deschidea la o cerere FARA niciun antet.
+ * Fail-OPEN, adica pe dos decat trebuie o poarta.
+ *
+ * `verificaCron` a fost scris exact pentru bug-ul asta si a fost pus peste tot;
+ * ruta asta a ramas singura pe forma veche. Acum nu mai exista niciuna.
+ */
 export async function GET(req: NextRequest) {
-  if (!verifyCron(req)) {
+  if (!verificaCron(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

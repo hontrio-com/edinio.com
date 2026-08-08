@@ -213,31 +213,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .map((b) => b.slug),
   );
 
-  const products = await fetchAllRows("sitemap.platform.products", (from, to) =>
-    supabase
-      .from("products")
-      .select("slug, updated_at, businesses!inner(slug, is_published, custom_domain)")
-      .eq("is_active", true)
-      .eq("businesses.is_published", true)
-      .order("id")
-      .range(from, to)
-  );
-
-  const productPages: MetadataRoute.Sitemap = products
-    .filter((p) => {
-      const biz = p.businesses as unknown as { slug: string; custom_domain: string | null };
-      return p.slug && !biz.custom_domain && !opsSlugs.has(biz.slug);
-    })
-    .map((p) => {
-      const biz = p.businesses as unknown as { slug: string };
-      return {
-        url: `${PLATFORM_ORIGIN}/${biz.slug}/product/${p.slug}`,
-        lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      };
-    });
-
+  /*
+   * PRODUSELE NU MAI SUNT AICI. Vezi `app/produse/sitemap.ts`.
+   *
+   * Se citeau toate, ale tuturor magazinelor publicate, ca sa se pastreze primele
+   * 50.000 — la cinci milioane de produse, cinci milioane de randuri aduse in
+   * memoria functiei ca sa se arunce 99%. Si e o ruta PUBLICA, deci oricine o
+   * putea declansa.
+   *
+   * Acum sunt taiate in felii de 45.000 cu `generateSitemaps`, fiecare citindu-si
+   * exact fereastra ei. Feliile se anunta din `robots.txt`.
+   */
   const pages = await fetchAllRows("sitemap.platform.pages", (from, to) =>
     supabase
       .from("custom_pages")
@@ -261,5 +247,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       };
     });
 
-  return [...staticPages, ...businessPages, ...paginiDeCatalog, ...productPages, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
+  return [...staticPages, ...businessPages, ...paginiDeCatalog, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
 }

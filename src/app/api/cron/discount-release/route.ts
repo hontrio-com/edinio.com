@@ -76,10 +76,10 @@ export async function GET(req: NextRequest) {
    * rescrie fereastra, nu aduna, deci rularea de doua ori pe aceeasi zi nu
    * dubleaza nimic.
    *
-   * Inca NU citeste nimeni din ea, si asta e deliberat: mutarea panoului pe
-   * agregat i-ar schimba cifrele (cere „de acum minus 30 de zile", cu ora cu tot,
-   * iar o zi intreaga nu poate raspunde la asta). Motivul intreg e in
-   * migrations/2026-08-16-analitice-zilnice.sql.
+   * Panoul CITESTE agregatul: ferestrele lui au trecut pe zile calendaristice
+   * (ora Romaniei), iar zilele incheiate vin de aici. Ziua de AZI o citeste tot
+   * din brut, ca sa fie la secunda — de aia retentia de mai jos pastreaza opt
+   * zile, nu una.
    *
    * Inghitit, ca si alarma de mai sus: treaba adevarata a acestui cron e
    * eliberarea cupoanelor.
@@ -87,18 +87,38 @@ export async function GET(req: NextRequest) {
   await admin.rpc("agregeaza_analitice", { p_zile: 2 }).then(() => {}, () => {});
 
   /*
-   * Si stergerea randurilor brute vechi, DUPA agregare, in aceeasi rulare.
+   * Stergerea randurilor brute vechi, DUPA agregare, in aceeasi rulare.
    *
    * Ordinea nu e optionala: invers, s-ar sterge o zi inainte sa fie insumata, si
    * ar disparea din statistici pentru totdeauna. De aia stau una langa alta, in
    * ordinea asta, si nu in doua croane separate.
    *
    * Se pastreaza opt zile, desi panoul citeste brut doar ziua de AZI: agregarea
-   * reface ultimele doua, iar marginea acopera o rulare sarita. Se sterge in
-   * transe de 5.000 — un `delete` peste zeci de mii de randuri ar tine un lock
-   * lung chiar pe tabela in care scrie fiecare vizita.
+   * reface ultimele doua, iar marginea acopera o rulare sarita. Transele de 5.000
+   * exista fiindca un `delete` peste zeci de mii de randuri ar tine un lock lung
+   * chiar pe tabela in care scrie fiecare vizita.
+   *
+   * IN BUCLA, pana nu mai are ce sterge sau pana la un plafon de rulare.
+   *
+   * O singura transa de 5.000 pe ora inseamna 120.000 de randuri sterse pe zi. Cat
+   * timp platforma scrie mult mai putin de atat, e de ajuns — dar la un trafic de
+   * ordinul sutelor de mii de evenimente pe zi, coada ar creste permanent si
+   * curatarea n-ar ajunge-o niciodata. Adica exact felul de plafon care nu se vede
+   * pana cand tabela e deja de zece ori mai mare.
+   *
+   * Douazeci de transe pe rulare = 100.000 de randuri pe ora, adica 2,4 milioane
+   * pe zi. Bucla se opreste singura cand nu mai gaseste nimic, deci in ziua
+   * obisnuita face O trecere si iese.
+   *
+   * La ordinul milioanelor pe zi, raspunsul nu mai e o bucla mai lunga, ci
+   * PARTITIONARE pe data: atunci se arunca o partitie intreaga, instantaneu, in
+   * loc sa se stearga randuri unul cate unul.
    */
-  await admin.rpc("curata_analitice_brute", { p_pastreaza_zile: 8, p_max: 5000 }).then(() => {}, () => {});
+  for (let transa = 0; transa < 20; transa++) {
+    const { data: sterse, error } = await admin.rpc("curata_analitice_brute", { p_pastreaza_zile: 8, p_max: 5000 });
+    if (error || !sterse) break;
+    if (Number(sterse) < 5000) break;
+  }
 
   // `?ore=` largeste sau stramteaza pragul pentru o verificare manuala; rularea
   // programata foloseste implicitul.

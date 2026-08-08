@@ -146,10 +146,17 @@ export async function rezumaCatalog(admin: SupabaseClient, businessId: string): 
  * el: altfel ar rezuma randuri care tocmai urmeaza sa se schimbe.
  *
  * Putine magazine per rulare, nu o mie: recalculul citeste TOT magazinul, deci e
- * partea scumpa. La un minut interval, cate cinci acopera orice ritm real de
- * editare, iar un import mare se aseaza in cateva minute.
+ * partea scumpa.
+ *
+ * DE LA CINCI LA DOUAZECI SI CINCI. Cinci pe minut inseamna 300 pe ora — sub
+ * numarul de magazine ACTIVE la care tinteste platforma, deci coada ar fi ramas
+ * permanent in urma si rezumatele ar fi imbatranit tacut. Iar partea cu adevarat
+ * scumpa a trecerii — reconstructia vocabularului de cautare, 1,46 s pe eSAFE — a
+ * plecat intre timp pe coada ei, care se marcheaza doar cand se schimba TEXTUL.
+ * Ce ramane aici e o citire de proiectie si o agregare, adica de ordinul zecilor
+ * de milisecunde pe magazin.
  */
-export const MAX_REZUMATE_PE_RULARE = 5;
+export const MAX_REZUMATE_PE_RULARE = 25;
 
 export async function rezumaCoada(admin: SupabaseClient, maxim = MAX_REZUMATE_PE_RULARE): Promise<number> {
   const { data, error } = await admin

@@ -324,6 +324,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       faraImagini,
       faraStocAscuns,
       rezumat,
+      sortareImplicita: (pcCatalog.sort_options as { default_sort?: string } | undefined)?.default_sort || "newest",
       preia: (r) => {
         products = r.products; totalVizibile = r.totalVizibile; totalFiltrate = r.totalFiltrate;
         featuredServer = r.featured; sectiuniServer = r.sectiuni;

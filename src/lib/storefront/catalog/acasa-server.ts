@@ -53,6 +53,8 @@ export async function incarcaAcasaDeLaServer(args: {
   faraImagini: boolean;
   faraStocAscuns: boolean;
   rezumat: Rezumat;
+  /** `page_content.sort_options.default_sort`, sau „newest". Vezi mai jos de ce. */
+  sortareImplicita: string;
   preia: (r: RezultatAcasa) => void;
 }): Promise<boolean> {
   const { businessId, pagina, pageContent, categorii, faraImagini, faraStocAscuns } = args;
@@ -83,10 +85,16 @@ export async function incarcaAcasaDeLaServer(args: {
   const [pagRasp, randRasp] = await Promise.all([
     db.rpc("catalog_pagina", {
       p_business: businessId,
-      // Pagina principala n-are bara de filtre; filtrarea de acolo se face din
-      // adresa doar prin `?cat=` si `?sale=`, care ajung la client. Grila de aici
-      // arata catalogul in ordinea lui.
-      p_filtre: { faraImagini, faraStocAscuns },
+      /*
+       * Sortarea EFECTIVA, nu „niciuna".
+       *
+       * Pe pagina principala clientul foloseste `initialSort || default_sort`, iar
+       * `default_sort` e „newest" cand nu scrie altceva. Netrimisa, serverul ar fi
+       * ordonat dupa catalog si browserul dupa data — acelasi NUMAR de produse,
+       * alte produse. Exact bug-ul prins la /magazin, repetat aici; de aia testul
+       * diferential se ruleaza pe FIECARE suprafata, nu o data pe magazin.
+       */
+      p_filtre: { faraImagini, faraStocAscuns, sortare: args.sortareImplicita },
       p_limit: PE_PAGINA_ACASA,
       p_offset: (pagina - 1) * PE_PAGINA_ACASA,
     }),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { processImport } from "@/lib/import/committer";
+import { logError } from "@/lib/error-logger";
 import { deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 
 // Fallback worker: finishes imports whose client loop stopped (tab closed/crashed).
@@ -53,10 +54,31 @@ export async function GET(req: NextRequest) {
 
   let ticks = 0;
   for (const job of jobs ?? []) {
-    for (let i = 0; i < MAX_TICKS; i++) {
-      const r = await processImport(admin, job.id);
-      ticks++;
-      if (r.done || (r.status !== "importing" && r.status !== "rehosting_images")) break;
+    /*
+     * Un job care arunca nu mai omoara toata rularea.
+     *
+     * `commitChunk` poate arunca pe drept: `loadSlugs` e o citire care TREBUIE sa
+     * fie completa (cu set partial, `dedupeSlug` intoarce slug-uri deja existente
+     * si TOATE insert-urile pica pe unicitate — incident 25.07), la fel cautarea
+     * produselor existente. Dar pana acum exceptia iesea din bucla, iar celelalte
+     * joburi din lot nu mai erau atinse deloc — un import stricat oprea importurile
+     * altor comercianti, tacut, la fiecare minut.
+     *
+     * Jobul ramane `importing`: la ridicarea urmatoare se reia de unde a ramas.
+     */
+    try {
+      for (let i = 0; i < MAX_TICKS; i++) {
+        const r = await processImport(admin, job.id);
+        ticks++;
+        if (r.done || (r.status !== "importing" && r.status !== "rehosting_images")) break;
+      }
+    } catch (e) {
+      await logError({
+        action: "process-imports",
+        message: e instanceof Error ? e.message : "tick de import esuat",
+        details: { importId: job.id },
+        severity: "critical",
+      });
     }
     // Clean up the raw CSV once the job has reached a terminal state.
     const { data: fresh } = await admin.from("product_imports").select("status, file_url").eq("id", job.id).single();

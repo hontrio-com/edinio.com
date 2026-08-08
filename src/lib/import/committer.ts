@@ -19,7 +19,24 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-const COMMIT_CHUNK = 40; // products written per tick
+/*
+ * Cate produse pe tick.
+ *
+ * A stat la 40 fiindca ATAT incapea: trei cereri de fiecare produs faceau un tick
+ * de ~6,5 s, si opt tick-uri umpleau bugetul de 60 s al functiei. Ridicat singur,
+ * n-ar fi schimbat nimic — la 100 ar fi incaput trei tick-uri in loc de opt, deci
+ * 300 de produse in loc de 320.
+ *
+ * De cand scrierile merg in valuri (vezi `scrieProdusele`), un tick tine ~1 s, si
+ * abia acum marimea bucatii chiar cumpara ceva: 8 x 200 = 1.600 de produse pe
+ * ridicare, in loc de 320.
+ *
+ * Nu creste riscul la o functie taiata de limita de timp: produsele se scriu in
+ * valuri de opt, iar fiecare val isi marcheaza randurile inainte sa inceapa
+ * urmatorul — deci fereastra „scris dar nemarcat" ramane de cel mult opt produse,
+ * oricat de mare ar fi bucata.
+ */
+const COMMIT_CHUNK = 200;
 const REHOST_CHUNK = 15; // products whose images are rehosted per tick (slower)
 const STAGE_BATCH = 500; // import_rows inserted per batch
 
@@ -166,40 +183,96 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
   // Shipping classes are keyed by name in the CSV; map them to their stored ids.
   const shipClassMap = await loadShippingClasses(admin, businessId);
 
+  /*
+   * ═══ DOUA FAZE: pregatire SECVENTIALA, apoi scriere PARALELA ═══
+   *
+   * Masurat inainte: ~130 de cereri la baza pe un tick de 40 de produse — trei de
+   * fiecare produs (cautarea la suprascriere, scrierea, marcarea randului) plus
+   * cele fixe. La ~50 ms fiecare, un tick tinea ~6,5 s, iar opt tick-uri umpleau
+   * exact bugetul de 60 s al functiei.
+   *
+   * De asta ridicarea lui `COMMIT_CHUNK` NU ajuta cu nimic, desi pare reparatia
+   * evidenta: la 100 de produse pe bucata, un tick ar tine 17 s si ar incapea trei
+   * — adica 300 de produse pe rulare, in loc de 320. Constrangerea nu e marimea
+   * bucatii, e numarul de dus-intorsuri.
+   *
+   * Ce NU se poate paraleliza, si de asta exista faza intai:
+   *
+   *   - `dedupeSlug` MUTA `slugSet`. In paralel, doua produse cu acelasi nume ar
+   *     primi acelasi slug, si al doilea ar pica pe unicitate.
+   *   - `upsertCategoryPath` MUTA `catMap` si poate CREA categorii. In paralel,
+   *     doua produse din aceeasi categorie noua ar crea-o de doua ori.
+   *   - limita de plan se citeste si se creste; decisa in paralel, ar lasa sa
+   *     treaca mai multe produse decat permite planul.
+   *
+   * Ce ramane dupa aceea — scrierea produsului si marcarea randului — e
+   * independent de la un produs la altul, deci merge in valuri.
+   */
+
+  /*
+   * Cautarea la suprascriere, o SINGURA data pentru toata bucata.
+   *
+   * Era cate un `maybeSingle()` de fiecare produs: patruzeci de dus-intorsuri ca
+   * sa afli patruzeci de id-uri care incap intr-o interogare.
+   */
+  const idDupaExternal = new Map<string, string>();
+  if (options.overwrite_existing) {
+    const externals = [...new Set(
+      pending.map((r) => (r.parsed as unknown as StagedProduct | null)?.external_id)
+             .filter((x): x is string => Boolean(x)))];
+    if (externals.length > 0) {
+      const { data: existente, error } = await admin
+        .from("products")
+        .select("id, external_id")
+        .eq("business_id", businessId)
+        .eq("source", source)
+        .in("external_id", externals);
+      // O citire picata NU se ia drept „niciunul nu exista": asa s-ar crea
+      // duplicate pentru produse care exista deja. Se opreste bucata, se reia.
+      if (error) throw new Error(`cautarea produselor existente a esuat: ${error.message}`);
+      for (const e of existente ?? []) {
+        if (e.external_id) idDupaExternal.set(e.external_id as string, e.id as string);
+      }
+    }
+  }
+
+  const deScris: ProdusPregatit[] = [];
+  const deEsuat: { rowId: string; motiv: string }[] = [];
+
+  // ── Faza 1: pregatire, un produs dupa altul ────────────────────────────────
   for (const row of pending) {
     const p = row.parsed as unknown as StagedProduct | null;
     const rowId = row.id;
 
     if (!p || !(p.name ?? "").trim()) {
-      await failRow(admin, rowId, "Lipseste numele produsului");
-      deltas.failed++;
+      deEsuat.push({ rowId, motiv: "Lipseste numele produsului" });
       continue;
     }
     if (!(p.price > 0)) {
-      await failRow(admin, rowId, "Pret lipsa sau invalid");
-      deltas.failed++;
+      deEsuat.push({ rowId, motiv: "Pret lipsa sau invalid" });
       continue;
     }
+
+    const existingId = (options.overwrite_existing && p.external_id)
+      ? idDupaExternal.get(p.external_id) ?? null
+      : null;
+
     /*
      * Limita de plan atinsa: se marcheaza TOT restul dintr-o data si se iese.
      *
      * `currentCount` doar creste, deci din clipa in care conditia e adevarata
      * ramane adevarata pentru fiecare rand care urmeaza — nu doar din bucata
-     * asta, ci din tot importul. Pana acum se afla asta din nou la fiecare rand:
-     * un `UPDATE` propriu ca sa-l marcheze `skipped`, patruzeci pe bucata, plus
-     * inca un tur de orchestrare pentru urmatoarea bucata. Masurat, 22 de minute
-     * intr-un job care crease ZECE produse; in istoric sunt 3.674 de randuri
-     * marcate asa, adica 3.674 de dus-intorsuri.
+     * asta, ci din tot importul. Pana la reparatia din 17.08 se afla asta din nou
+     * la fiecare rand: un `UPDATE` propriu ca sa-l marcheze `skipped`, patruzeci
+     * pe bucata. Masurat, 22 de minute intr-un job care crease ZECE produse.
      *
-     * Acum: o singura instructiune peste toate randurile ramase, si
-     * `remaining: 0`, deci orchestrarea incheie importul in tick-ul asta in loc
-     * sa mai ceara nouazeci si doua de bucati care ar face exact acelasi lucru.
-     *
-     * `count: "exact"` fiindca `deltas.skipped` intra in totalurile aratate
-     * comerciantului: numarat gresit, raportul i-ar spune ca s-au sarit mai
-     * putine produse decat s-au sarit.
+     * Numai CREARILE consuma din limita: o suprascriere nu adauga niciun produs.
      */
-    if (limit !== Infinity && currentCount >= limit) {
+    if (!existingId && limit !== Infinity && currentCount >= limit) {
+      // Ce s-a pregatit pana aici se scrie mai jos; restul se marcheaza deodata.
+      await scrieMarcaje(admin, deEsuat);
+      deltas.failed += deEsuat.length;
+      await scrieProdusele(admin, businessId, deScris, deltas);
       const { count } = await admin
         .from("product_import_rows")
         .update({ status: "skipped", error: "Limita de plan atinsa" }, { count: "exact" })
@@ -215,61 +288,28 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       ? shipClassMap.get(p.shipping_class.trim().toLowerCase()) ?? null
       : null;
 
-    // Overwrite path: update an existing product matched by (source, external_id).
-    let existingId: string | null = null;
-    if (options.overwrite_existing && p.external_id) {
-      const { data: ex } = await admin
-        .from("products")
-        .select("id")
-        .eq("business_id", businessId)
-        .eq("source", source)
-        .eq("external_id", p.external_id)
-        .maybeSingle();
-      existingId = ex?.id ?? null;
-    }
-
     const payload = buildPayload(p, businessId, source, category, shippingClassId);
+    // Slugul se rezerva ACUM, cat suntem inca secventiali.
+    const slug = existingId ? null : dedupeSlug(payload.slug, slugSet);
 
-    if (existingId) {
-      // Keep the existing slug (avoid collisions); update everything else.
-      const { slug: _slug, ...rest } = payload;
-      void _slug;
-      const { error } = await admin
-        .from("products")
-        .update({ ...rest, updated_at: new Date().toISOString() })
-        .eq("id", existingId)
-        .eq("business_id", businessId);
-      if (error) {
-        // Pastreaza cauza reala (trunchiata) — un mesaj generic a ascuns o ora
-        // de depanare cand toate randurile picau pe unicitatea slug-ului.
-        await failRow(admin, rowId, `Eroare la actualizare: ${(error.message ?? "necunoscuta").slice(0, 120)}`);
-        deltas.failed++;
-        continue;
-      }
-      await admin.from("product_import_rows").update({ status: "updated", product_id: existingId, error: null }).eq("id", rowId);
-      deltas.updated++;
-      continue;
-    }
-
-    const slug = dedupeSlug(payload.slug, slugSet);
-    const { data: inserted, error } = await admin
-      .from("products")
-      .insert({ ...payload, slug })
-      .select("id")
-      .single();
-
-    if (error || !inserted) {
-      const cause = error?.code === "23505"
-        ? "Produs duplicat (slug deja existent)"
-        : `Eroare la salvare: ${(error?.message ?? "necunoscuta").slice(0, 120)}`;
-      await failRow(admin, rowId, cause);
-      deltas.failed++;
-      continue;
-    }
-    await admin.from("product_import_rows").update({ status: "created", product_id: inserted.id, error: null }).eq("id", rowId);
-    deltas.created++;
-    currentCount++;
+    deScris.push({ rowId, payload, slug, existingId });
+    /*
+     * Se numara la PREGATIRE, nu dupa ce insertul reuseste.
+     *
+     * Un insert picat lasa deci un produs fantoma in socoteala, si importul se
+     * poate opri cu un produs mai devreme decat ar fi trebuit. Am ales asta anume:
+     * cealalta greseala — sa numeri doar reusitele si sa afli prea tarziu — trece
+     * comerciantul PESTE limita platita. Mai bine un produs in minus decat un plan
+     * incalcat, mai ales ca insert-urile picate sunt rare.
+     */
+    if (!existingId) currentCount++;
   }
+
+  // ── Faza 2: scrierea, in valuri ────────────────────────────────────────────
+  await scrieMarcaje(admin, deEsuat);
+  deltas.failed += deEsuat.length;
+  await scrieProdusele(admin, businessId, deScris, deltas);
+
 
   const { count: remaining } = await admin
     .from("product_import_rows")
@@ -278,6 +318,109 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
     .eq("status", "pending");
 
   return { deltas, remaining: remaining ?? 0 };
+}
+
+/**
+ * Cate produse se scriu deodata.
+ *
+ * Scrierea unui produs si marcarea randului lui sunt independente de ale
+ * celorlalte — tot ce era comun (slugul rezervat, categoria creata, limita de
+ * plan) s-a hotarat deja, secvential, in faza intai.
+ *
+ * Opt, nu mai mult: fiecare produs inseamna doua scrieri, deci opt deodata sunt
+ * saisprezece cereri in zbor. Peste atat nu mai castigi nimic — dus-intorsul nu
+ * mai e cel care asteapta, ci baza — si incepi sa concurezi cu traficul real al
+ * magazinelor, care merge pe aceeasi baza.
+ */
+const SCRIERI_DEODATA = 8;
+
+/**
+ * Marcheaza randurile picate, GRUPAT dupa motiv.
+ *
+ * Erau patruzeci de `UPDATE`-uri separate, cate unul de rand. Motivele sunt insa
+ * cateva la numar („Lipseste numele produsului", „Pret lipsa sau invalid"), deci
+ * o instructiune pe motiv le acopera pe toate.
+ */
+async function scrieMarcaje(
+  admin: Admin,
+  esuate: { rowId: string; motiv: string }[],
+): Promise<void> {
+  if (esuate.length === 0) return;
+  const peMotiv = new Map<string, string[]>();
+  for (const e of esuate) {
+    const l = peMotiv.get(e.motiv);
+    if (l) l.push(e.rowId); else peMotiv.set(e.motiv, [e.rowId]);
+  }
+  for (const [motiv, ids] of peMotiv) {
+    await admin.from("product_import_rows").update({ status: "failed", error: motiv }).in("id", ids);
+  }
+}
+
+interface ProdusPregatit {
+  rowId: string;
+  payload: ReturnType<typeof buildPayload>;
+  slug: string | null;
+  existingId: string | null;
+}
+
+/**
+ * Scrie produsele pregatite, in valuri de `SCRIERI_DEODATA`.
+ *
+ * Fiecare produs isi pastreaza propriul verdict: o eroare pe unul il marcheaza pe
+ * el `failed`, cu cauza reala, si nu atinge restul. De asta NU se face un singur
+ * `insert` cu tot lotul, desi ar fi si mai putine cereri — la un lot, o singura
+ * incalcare de unicitate ar pica toate patruzeci si i-ar spune comerciantului ca
+ * n-a mers nimic, cand de fapt n-a mers unul.
+ */
+async function scrieProdusele(
+  admin: Admin,
+  businessId: string,
+  pregatite: ProdusPregatit[],
+  deltas: CommitDeltas,
+): Promise<void> {
+  for (let i = 0; i < pregatite.length; i += SCRIERI_DEODATA) {
+    await Promise.all(pregatite.slice(i, i + SCRIERI_DEODATA).map(async (it) => {
+      if (it.existingId) {
+        // Slugul existent se pastreaza (ca sa nu se ciocneasca); restul se scrie.
+        const { slug: _slug, ...rest } = it.payload;
+        void _slug;
+        const { error } = await admin
+          .from("products")
+          .update({ ...rest, updated_at: new Date().toISOString() })
+          .eq("id", it.existingId)
+          .eq("business_id", businessId);
+        if (error) {
+          // Pastreaza cauza reala (trunchiata) — un mesaj generic a ascuns o ora
+          // de depanare cand toate randurile picau pe unicitatea slug-ului.
+          await failRow(admin, it.rowId, `Eroare la actualizare: ${(error.message ?? "necunoscuta").slice(0, 120)}`);
+          deltas.failed++;
+          return;
+        }
+        await admin.from("product_import_rows")
+          .update({ status: "updated", product_id: it.existingId, error: null }).eq("id", it.rowId);
+        deltas.updated++;
+        return;
+      }
+
+      const { data: inserted, error } = await admin
+        .from("products")
+        .insert({ ...it.payload, slug: it.slug })
+        .select("id")
+        .single();
+
+      if (error || !inserted) {
+        const cause = error?.code === "23505"
+          ? "Produs duplicat (slug deja existent)"
+          : `Eroare la salvare: ${(error?.message ?? "necunoscuta").slice(0, 120)}`;
+        await failRow(admin, it.rowId, cause);
+        deltas.failed++;
+        return;
+      }
+      await admin.from("product_import_rows")
+        .update({ status: "created", product_id: inserted.id, error: null }).eq("id", it.rowId);
+      deltas.created++;
+    }));
+  }
 }
 
 // ── Image rehost phase ───────────────────────────────────────────────────────

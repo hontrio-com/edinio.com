@@ -126,6 +126,30 @@ interface Props {
    * header, fiindca evenimentul `storage` nu se declanseaza in fila care scrie.
    */
   surface?: "home" | "shop";
+  /**
+   * Cine a filtrat si a feliat catalogul.
+   *
+   * `"client"` e purtarea de dintotdeauna: `products` e catalogul INTREG si tot
+   * ce urmeaza — vizibilitate, filtre, sortare, paginare — se face aici.
+   *
+   * `"server"` inseamna ca `products` e DEJA pagina ceruta, gata filtrata si
+   * sortata de `catalog_pagina`. Atunci pasii de mai jos devin identitatea: nu se
+   * refiltreaza o pagina, si mai ales nu se REFELIAZA — o a doua feliere peste 24
+   * de randuri ar lasa pagina 2 goala.
+   */
+  palier?: "client" | "server";
+  /** Numerele venite din RPC. Obligatorii pe `palier="server"`, vezi StorefrontProvider. */
+  totalVizibileServer?: number;
+  totalFiltrateServer?: number;
+  /**
+   * Numele de categorie care au produse, din `catalog_rezumat`.
+   *
+   * Arborele de categorii se curata la cele care CHIAR contin produse, si asta se
+   * deducea din catalogul intreg. Cu o singura pagina in memorie n-ar mai fi
+   * posibil — ar disparea din meniu toate categoriile care n-au produse pe pagina
+   * curenta.
+   */
+  numeCategoriiCuProduse?: string[];
   /*
    * Adresa paginii de categorie pe care suntem, cand suntem pe una.
    *
@@ -155,7 +179,7 @@ interface Props {
   initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "" }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -464,7 +488,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // accesibil (deci si One Product Store e neafectat).
   const hideNoImage = pageContent.hide_products_without_images === true;
   const hideNoStock = pageContent.hide_out_of_stock_products === true;
+  const peServer = palier === "server";
   const visibleProducts = useMemo(() => {
+    // Pe palierul server comutatoarele de vizibilitate au fost deja aplicate in
+    // interogare; reaplicate aici n-ar strica nimic, dar ar sugera ca lista e
+    // intreaga, ceea ce nu mai e adevarat.
+    if (peServer) return products;
     if (!hideNoImage && !hideNoStock) return products;
     return products.filter((p) => {
       if (hideNoImage) {
@@ -474,15 +503,20 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       if (hideNoStock && isProductOutOfStock(p)) return false;
       return true;
     });
-  }, [products, hideNoImage, hideNoStock, isProductOutOfStock]);
+  }, [products, hideNoImage, hideNoStock, isProductOutOfStock, peServer]);
 
   // Category hierarchy — built from the categories table (parent_id) + product
   // assignments. Only categories whose subtree contains products are shown.
   const catTree = useMemo(() => {
     type Item = { key: string; id: string | null; name: string; image: string | null; hasChildren: boolean };
     const list = categories ?? [];
-    const productCatNames = new Set<string>();
-    visibleProducts.forEach(p => { if (p.category) productCatNames.add(p.category); });
+    // Din rezumat cand exista: pe palierul server, `visibleProducts` e o singura
+    // pagina, iar dedus din ea arborele ar pierde toate categoriile care n-au
+    // produse pe pagina curenta.
+    const productCatNames = new Set<string>(numeCategoriiCuProduse ?? []);
+    if (!numeCategoriiCuProduse) {
+      visibleProducts.forEach(p => { if (p.category) productCatNames.add(p.category); });
+    }
 
     const byId = new Map(list.map(c => [c.id, c]));
     const childrenOf = new Map<string, StoreCategoryNode[]>();
@@ -542,7 +576,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
     const hasAnyImage = topItems.some(i => i.image) || Object.values(childItemsById).some(arr => arr.some(i => i.image));
     return { topItems, toateRadacinile, childItemsById, subtreeByName, byId, hasAnyImage };
-  }, [categories, visibleProducts]);
+  }, [categories, visibleProducts, numeCategoriiCuProduse]);
 
   const [drillParentId, setDrillParentId] = useState<string | null>(initialDrillParentId);
   const drillParent = drillParentId ? catTree.byId.get(drillParentId) ?? null : null;
@@ -681,6 +715,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Filtered products
   const filteredProducts = useMemo(() => {
+    // Pe palierul server lista E deja rezultatul filtrelor, in ordinea ceruta.
+    // Refiltrata aici ar fi cel mult o no-op costisitoare, dar RESORTATA ar fi o
+    // greseala: sortarea s-a facut peste TOT catalogul, iar o resortare peste 24
+    // de randuri ar reordona pagina in interiorul ei.
+    if (peServer) return products;
     const pMin = priceMin.trim() ? parseFloat(priceMin) : null;
     const pMax = priceMax.trim() ? parseFloat(priceMax) : null;
     const activeOpts = Object.entries(selectedOptions).filter(([, v]) => v.length > 0);
@@ -720,7 +759,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // scris acolo. "relevance" exista doar cat timp se cauta (vezi effectiveSort).
     list.sort(comparatorSortare(effectiveSort as CheieSortare, searchMatches));
     return list;
-  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici, isProductOutOfStock]);
+  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici, isProductOutOfStock, peServer, products]);
 
   /*
    * Cate produse intra pe o pagina, si cum se ajunge la urmatoarele.
@@ -733,7 +772,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Pe palierul client lista E intreaga, deci lungimea ei E totalul. Cand
   // felierea trece pe server, aici intra numarul venit din RPC — de aceea
   // consumatorii citesc deja `totalFiltrate` din context, nu lungimi.
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  const totalFiltrateEfectiv = peServer ? (totalFiltrateServer ?? 0) : filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltrateEfectiv / PRODUCTS_PER_PAGE));
   /*
    * La „incarca mai multe" si la derulare, paginile se ADUNA in loc sa se
    * inlocuiasca: `currentPage` inseamna acolo „cate pagini s-au incarcat".
@@ -743,7 +783,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * raman crawlabile — doar ca la modurile care aduna sunt ascunse vizual.
    */
   const aduna = surface === "shop" && setariMagazin.modPaginare !== "pagini";
-  const paginatedProducts = filteredProducts.slice(
+  // A doua feliere ar goli pagina 2: serverul a trimis DEJA fereastra ceruta, iar
+  // `slice((2-1)*24, 2*24)` peste 24 de randuri da lista goala.
+  const paginatedProducts = peServer ? filteredProducts : filteredProducts.slice(
     aduna ? 0 : (currentPage - 1) * PRODUCTS_PER_PAGE,
     currentPage * PRODUCTS_PER_PAGE,
   );
@@ -952,8 +994,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // Pe palierul client sunt chiar lungimile listelor. Cand felierea trece pe
     // server, `filteredProducts` are doar pagina curenta si numerele vin din
     // raspunsul RPC-ului — de aia sunt campuri, nu `.length` la locul folosirii.
-    totalVizibile: visibleProducts.length,
-    totalFiltrate: filteredProducts.length,
+    totalVizibile: peServer ? (totalVizibileServer ?? 0) : visibleProducts.length,
+    totalFiltrate: totalFiltrateEfectiv,
     featuredProducts,
     productSections,
     isProductOutOfStock,

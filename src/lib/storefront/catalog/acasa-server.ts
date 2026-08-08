@@ -55,6 +55,16 @@ export async function incarcaAcasaDeLaServer(args: {
   rezumat: Rezumat;
   /** `page_content.sort_options.default_sort`, sau „newest". Vezi mai jos de ce. */
   sortareImplicita: string;
+  /**
+   * `?cat=` si `?sale=`, pe care pagina principala le citeste din adresa si le
+   * trimite grilei ca `initialCategory`/`initialOnSale`.
+   *
+   * Netrimise, serverul ar fi intors catalogul intreg in timp ce browserul
+   * filtra. `categorie` vine ca NUME deja rezolvat (poate sosi ca id in adresa),
+   * iar subarborele se calculeaza aici, cu acelasi `numeSubarbore`.
+   */
+  categorie: string;
+  reduceri: boolean;
   preia: (r: RezultatAcasa) => void;
 }): Promise<boolean> {
   const { businessId, pagina, pageContent, categorii, faraImagini, faraStocAscuns } = args;
@@ -94,7 +104,12 @@ export async function incarcaAcasaDeLaServer(args: {
        * alte produse. Exact bug-ul prins la /magazin, repetat aici; de aia testul
        * diferential se ruleaza pe FIECARE suprafata, nu o data pe magazin.
        */
-      p_filtre: { faraImagini, faraStocAscuns, sortare: args.sortareImplicita },
+      p_filtre: {
+        faraImagini, faraStocAscuns,
+        sortare: args.sortareImplicita,
+        reduceri: args.reduceri,
+        categorii: args.categorie ? numeSubarbore(categorii, args.categorie) : null,
+      },
       p_limit: PE_PAGINA_ACASA,
       p_offset: (pagina - 1) * PE_PAGINA_ACASA,
     }),

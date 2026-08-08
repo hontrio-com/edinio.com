@@ -302,6 +302,13 @@ export default async function SlugPage({ params, searchParams }: Props) {
     if (data) rezumat = data as unknown as typeof rezumat;
   }
 
+  // Categoria din adresa, rezolvata din ID in NUME ca la `initialCategory` de mai
+  // jos. Se calculeaza aici fiindca palierul server are nevoie de ea INAINTE de
+  // a cere pagina.
+  const catRawSus = (catParam ?? "").slice(0, 100);
+  const categorieAcasa =
+    (catRawSus && categoriesData.find((c) => c.id === catRawSus)?.name) || catRawSus || "";
+
   const seCautaAcasa = (qParam ?? "").trim().length > 0;
   const palier = rezumat
     ? alegePalier({ pageContent: pcCatalog, totalProduse: rezumat.total, cauta: seCautaAcasa })
@@ -325,6 +332,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
       faraStocAscuns,
       rezumat,
       sortareImplicita: (pcCatalog.sort_options as { default_sort?: string } | undefined)?.default_sort || "newest",
+      categorie: categorieAcasa,
+      reduceri: saleParam === "1",
       preia: (r) => {
         products = r.products; totalVizibile = r.totalVizibile; totalFiltrate = r.totalFiltrate;
         featuredServer = r.featured; sectiuniServer = r.sectiuni;
@@ -525,9 +534,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // (linkurile de meniu de tip categorie trimit `target`, care e un id). Filtrul
   // catalogului lucreaza pe nume, deci id-urile se traduc aici; altfel linkul ar
   // duce la un catalog gol.
-  const catRaw = (catParam ?? "").slice(0, 100);
-  const initialCategory =
-    (catRaw && categoriesData.find((c) => c.id === catRaw)?.name) || catRaw || "toate";
+  const initialCategory = categorieAcasa || "toate";
 
   const displayName = business.store_name ?? business.business_name;
   const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;

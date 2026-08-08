@@ -84,8 +84,16 @@ export async function generateSitemaps(): Promise<{ id: number }[]> {
   return Array.from({ length: FELII }, (_, id) => ({ id }));
 }
 
-export default async function sitemap({ id }: { id: number }): Promise<MetadataRoute.Sitemap> {
-  const felie = Number(id) || 0;
+export default async function sitemap(props: { id: Promise<string> }): Promise<MetadataRoute.Sitemap> {
+  /*
+   * `id` e o PROMISIUNE in Next 16, nu un numar.
+   *
+   * Scris `Number(id) || 0` pe promisiune, iese `NaN || 0` = 0 — deci FIECARE
+   * felie randa felia zero. Verificat live: felia 1 intorcea aceleasi 3.980 de
+   * adrese ca felia 0. Nu da nicio eroare, arata plauzibil, si la peste 45.000 de
+   * produse ar fi insemnat ca restul nu ajung niciodata in index.
+   */
+  const felie = Number(await props.id) || 0;
   const de_la = felie * PE_FELIE;
 
   /*

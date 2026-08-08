@@ -46,10 +46,6 @@
       "schedule": "* * * * *"
     },
     {
-      "path": "/api/cron/rehost-imagini",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/cron/stock-feeds",
       "schedule": "0 * * * *"
     },

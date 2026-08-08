@@ -36,7 +36,13 @@ jobs:
           # Aceeasi linie majora ca local (v24) si ca pe Vercel. O versiune mai
           # veche ar trece aici si ar cadea la deploy — adica exact pe dos.
           node-version: '24'
-          cache: npm
+          # FARA `cache: npm`, deliberat.
+          #
+          # `npm ci` cade in ~2s, adica in faza de SCRIERE, nu la validare
+          # (`--dry-run` trece, si e verificat ca el chiar prinde o desincronizare:
+          # pus `zod@^99`, da `ETARGET`). O cadere imediata la scriere arata a cache
+          # stricat restaurat intre rulari — `EINTEGRITY` se poarta exact asa.
+          # Costa ~20s pe rulare; certitudinea face mai mult.
 
       # Pasii de instalare sunt SEPARATI si numiti anume.
       #

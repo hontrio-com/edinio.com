@@ -370,7 +370,7 @@ async function createAwbForOrder(
 // bulk status change should not silently mass-message customers.
 export async function bulkUpdateOrderStatus(
   businessId: string, orderIds: string[], status: string,
-): Promise<{ updated: number } | { error: string }> {
+): Promise<{ updated: number; esuate?: number } | { error: string }> {
   const g = await guardBusiness(businessId);
   if ("error" in g) return g;
   if (!(status in ORDER_STATUS)) return { error: "Status invalid." };
@@ -378,56 +378,59 @@ export async function bulkUpdateOrderStatus(
   if (ids.length === 0) return { error: "Nicio comanda selectata." };
 
   const admin = createAdminClient();
-  const { data: updated, error } = await admin
-    .from("orders")
-    .update({ status: status as never, updated_at: new Date().toISOString() })
-    .eq("business_id", businessId).in("id", ids)
-    .select("id, payment_status");
-  if (error) {
-    logError({ action: "bulkUpdateOrderStatus", message: error.message, details: { businessId, status }, businessId, userId: g.userId });
-    return { error: "Eroare la actualizarea statusului." };
+  /*
+   * FIECARE COMANDA TRECE PRIN ACEEASI TRANZACTIE CA IN PANOU.
+   *
+   * Pana acum lotul facea un UPDATE peste tot, apoi umbla pe rand la cupon si la
+   * stoc, si NU se uita la eroarea niciunui RPC. Pe 50 de comenzi puteai ajunge
+   * la 50 de statusuri corecte si 3 inventare gresite, raportate ca „50
+   * actualizate" — iar anularea in lot e chiar calea pe care pleaca majoritatea
+   * anularilor (sase din opt, masurat).
+   *
+   * Un apel pe comanda in loc de un UPDATE peste tot: lotul e o actiune din
+   * panou, pe zeci de comenzi, nu o cale fierbinte. Corectitudinea per comanda
+   * face mai mult decat un dus-intors economisit.
+   */
+  const reusite: { id: string; payment_status: string }[] = [];
+  const cazute: string[] = [];
+  for (const id of ids) {
+    const { data: t, error: eT } = await admin.rpc("aplica_tranzitia_comenzii" as never, {
+      p_order_id: id, p_status: status, p_payment_status: null,
+      // Limita de magazin: fara ea, un POST direct pe actiune cu id-uri din ALT
+      // magazin le-ar fi mutat statusul si le-ar fi eliberat stocul. Interogarea
+      // veche o avea (`.eq("business_id", ...)`), apelul per comanda a pierdut-o.
+      p_business_id: businessId,
+    } as never);
+    const r = t as unknown as {
+      gasit?: boolean; plata_veche?: string; cupon?: string; stoc?: string; negative?: unknown[];
+    } | null;
+    if (eT || r?.gasit !== true) {
+      // Comanda asta n-a fost mutata deloc — nici statusul, nici stocul. Se
+      // numara separat si NU intra in „actualizate": un lot care raporteaza mai
+      // mult decat a facut e mai rau decat unul care raporteaza un esec.
+      cazute.push(id);
+      logError({ action: "bulkUpdateOrderStatus", message: eT?.message ?? "tranzitie fara raspuns valid", details: { orderId: id, status, raspuns: r }, businessId, userId: g.userId, severity: "critical" });
+      continue;
+    }
+    reusite.push({ id, payment_status: r.plata_veche ?? "" });
+    if (r.stoc === "necunoscut") {
+      logError({ action: "bulkUpdateOrderStatus.stoc", message: "Comanda e dinainte de inregistrarea stocului rezervat; stocul NU s-a dat inapoi automat.", details: { orderId: id }, businessId, userId: g.userId, severity: "warning" });
+    }
+    if (Array.isArray(r.negative) && r.negative.length > 0) {
+      logError({ action: "bulkUpdateOrderStatus.stoc", message: "Reactivarea comenzii a dus stocul sub zero: marfa s-a vandut altcuiva intre timp.", details: { orderId: id, negative: r.negative }, businessId, userId: g.userId, severity: "warning" });
+    }
+    if (r.cupon === "plin") {
+      logError({ action: "bulkUpdateOrderStatus.cupon", message: "Cuponul si-a atins limita intre anulare si reactivare; comanda ramane cu reducerea, necontorizata.", details: { orderId: id }, businessId, userId: g.userId, severity: "warning" });
+    }
   }
 
-  for (const row of updated ?? []) {
-    void maybeAutoInvoice(businessId, row.id, status, (row.payment_status as string) ?? "");
-    /*
-     * Utilizarea cuponului se elibereaza si de AICI, nu doar din `updateOrder`.
-     *
-     * Masurat: din cele 8 comenzi online anulate din productie, SASE au fost
-     * anulate in lot — se vad dupa `updated_at` identic la microsecunda. Adica
-     * exact populatia constatarii 27 pleaca pe calea asta, iar cronul nu le
-     * prinde nici el (el cere `status = pending`, astea sunt `cancelled`).
-     * RPC-ul e idempotent: marcajul si contorul se ating in aceeasi instructiune.
-     */
-    if (status === "cancelled" || status === "refunded") {
-      // `await`, nu `void`: constructorul de cereri al lui postgrest-js e LENES —
-      // cererea se compune si pleaca abia in `then()`. Cu `void`, apelul nu iese
-      // niciodata din proces, deci eliberarea n-ar fi rulat deloc, tacut. Singurul
-      // loc din tot `src/` cu tiparul asta.
-      await admin.rpc("release_order_discount" as never, { p_order_id: row.id } as never);
-    }
-    /*
-     * STOCUL, si intr-un sens SI IN CELALALT — spre deosebire de cupon.
-     *
-     * Anularea in lot e chiar calea pe care pleaca majoritatea anularilor (sase
-     * din opt), deci fara linia asta reparatia n-ar fi atins tocmai populatia
-     * pentru care a fost facuta.
-     *
-     * Iar revendicarea la scoaterea din anulare NU e simetrie de dragul simetriei:
-     * la cupon, o utilizare in plus inseamna o campanie usor depasita; la stoc, o
-     * cantitate in plus inseamna marfa care se vinde fara sa existe. Un lot dus
-     * `cancelled -> confirmed` trebuie sa scoata marfa din stoc la loc.
-     *
-     * Amandoua sunt idempotente in baza: marcajul `stoc_eliberat_la` se pune si se
-     * sterge in aceeasi instructiune cu citirea lui, deci nici doua anulari nu
-     * elibereaza de doua ori, nici doua reactivari nu scad de doua ori.
-     */
-    if (status === "cancelled" || status === "refunded") {
-      await admin.rpc("elibereaza_stoc_comanda" as never, { p_order_id: row.id } as never);
-    } else {
-      await admin.rpc("revendica_stoc_comanda" as never, { p_order_id: row.id } as never);
-    }
+  // Facturarea automata ramane in afara tranzactiei, deliberat: e o chemare la un
+  // furnizor din afara, care poate dura sau pica, si n-are voie sa tina lacatul pe
+  // comanda — nici s-o dea inapoi daca esueaza.
+  for (const row of reusite) {
+    void maybeAutoInvoice(businessId, row.id, status, row.payment_status);
   }
+
   revalidatePath("/dashboard/orders");
-  return { updated: (updated ?? []).length };
+  return { updated: reusite.length, ...(cazute.length ? { esuate: cazute.length } : {}) };
 }

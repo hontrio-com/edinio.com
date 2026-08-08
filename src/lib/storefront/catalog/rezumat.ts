@@ -89,8 +89,18 @@ export function rezumaRanduri(businessId: string, randuri: RandRezumat[]): Rezum
   return out;
 }
 
-/** Citeste proiectia unui magazin, in ferestre, si calculeaza cele patru randuri. */
-export async function rezumaCatalog(admin: SupabaseClient, businessId: string): Promise<number> {
+/**
+ * Citeste proiectia unui magazin, in ferestre, si calculeaza cele patru randuri.
+ *
+ * `marcatLa` e marcajul citit din coada. Se da mai departe pana la stergerea de la
+ * final, ca sa nu se stearga marcaje puse INTRE citire si reconstructie — vezi
+ * acolo. `null` inseamna „chemat direct, in afara cozii".
+ */
+export async function rezumaCatalog(
+  admin: SupabaseClient,
+  businessId: string,
+  marcatLa: string | null = null,
+): Promise<number> {
   const randuri: RandRezumat[] = [];
   for (let from = 0; ; from += FEREASTRA) {
     const { data, error } = await admin
@@ -135,9 +145,18 @@ export async function rezumaCatalog(admin: SupabaseClient, businessId: string): 
    * schimbat, iar `refaCuvinteleCozii` o goleste in acelasi cron.
    */
 
-  // Coada se goleste DOAR la succes: altfel un magazin care esueaza o data n-ar
-  // mai fi recalculat niciodata.
-  await admin.from("catalog_rezumat_murdar").delete().eq("business_id", businessId);
+  /*
+   * Coada se goleste DOAR la succes: altfel un magazin care esueaza o data n-ar
+   * mai fi recalculat niciodata.
+   *
+   * SI DOAR PANA LA MARCAJUL CITIT. Fara `lte`, un produs modificat intre citirea
+   * cozii si scrierea rezumatului isi pierdea marcajul proaspat, iar rezumatul
+   * ramanea vechi la nesfarsit — nimic nu-l mai chema inapoi. Aceeasi cursa a fost
+   * reparata deja pe coada de proiectie si pe cea de vocabular; asta a ramas pe
+   * dinafara, la trei randuri de cea corecta (`refaCuvinteleCozii`, mai jos).
+   */
+  const stergere = admin.from("catalog_rezumat_murdar").delete().eq("business_id", businessId);
+  await (marcatLa ? stergere.lte("marcat_la", marcatLa) : stergere);
   return rezumate.length;
 }
 
@@ -161,7 +180,9 @@ export const MAX_REZUMATE_PE_RULARE = 25;
 export async function rezumaCoada(admin: SupabaseClient, maxim = MAX_REZUMATE_PE_RULARE): Promise<number> {
   const { data, error } = await admin
     .from("catalog_rezumat_murdar")
-    .select("business_id")
+    // `marcat_la`, nu doar id-ul: e marcajul pana la care are voie sa stearga
+    // `rezumaCatalog`. Fara el, coada pierde marcajele puse intre timp.
+    .select("business_id, marcat_la")
     .order("marcat_la", { ascending: true })
     .limit(maxim);
   if (error) {
@@ -169,8 +190,8 @@ export async function rezumaCoada(admin: SupabaseClient, maxim = MAX_REZUMATE_PE
     return 0;
   }
   let facute = 0;
-  for (const r of (data ?? []) as unknown as { business_id: string }[]) {
-    if (await rezumaCatalog(admin, r.business_id)) facute++;
+  for (const r of (data ?? []) as unknown as { business_id: string; marcat_la: string }[]) {
+    if (await rezumaCatalog(admin, r.business_id, r.marcat_la)) facute++;
   }
   return facute;
 }

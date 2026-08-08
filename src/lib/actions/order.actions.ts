@@ -1698,125 +1698,86 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   if (!biz) return { error: "Acces interzis" };
   const storeName = biz.store_name || biz.business_name;
 
-  const { error } = await supabase.from("orders")
-    .update({ status: data.status as never, payment_status: data.payment_status as never })
-    .eq("id", orderId);
+  /*
+   * STATUSUL, CUPONUL SI STOCUL — INTR-O SINGURA TRANZACTIE.
+   *
+   * Erau trei drumuri separate la baza: un UPDATE, apoi `release_order_discount`,
+   * apoi `elibereaza_stoc_comanda`. Fiecare putea sa pice singur, iar apelul de
+   * aici nici nu se uita la eroare (`const { data: fel } = await ...`, fara
+   * `error`). Rezultatul unei picari: comanda anulata, marfa inca rezervata,
+   * raspuns de SUCCES si NICIO urma nicaieri.
+   *
+   * Regulile („vanzarea se intoarce", „vanzarea se reia") au plecat si ele in
+   * baza. Se calculau aici din statusul citit cu cateva dus-intorsuri inainte, iar
+   * intre citire si scriere statusul se putea schimba din panou, dintr-un lot sau
+   * dintr-un webhook de plata — si atunci se elibera stoc pentru o intoarcere care
+   * nu mai avea loc. Acum se citesc sub `for update`, langa scriere.
+   *
+   * Autorizarea RAMANE aici: functia e `security definer` si se cheama abia dupa
+   * ce `businesses ... eq(user_id)` de mai sus a confirmat ca magazinul e al lui.
+   */
+  const adminTranzitie = createAdminClient();
+  const { data: tranzitie, error } = await adminTranzitie.rpc("aplica_tranzitia_comenzii" as never, {
+    p_order_id: orderId,
+    p_status: data.status,
+    p_payment_status: data.payment_status,
+    // Apartenenta e deja verificata mai sus, cu clientul utilizatorului sub RLS.
+    // Se trimite si aici fiindca nu costa nimic si inchide drumul daca vreodata
+    // verificarea de deasupra se muta sau se pierde la o refactorizare.
+    p_business_id: order.business_id,
+  } as never);
 
   if (error) {
-    logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
+    logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id, severity: "critical" });
     return { error: "Eroare la actualizare." };
   }
 
-  const statusChanged = data.status !== (order.status as string);
-  const paymentChanged = data.payment_status !== (order.payment_status as string);
+  const t = tranzitie as unknown as {
+    gasit?: boolean; status_vechi?: string; plata_veche?: string;
+    status_schimbat?: boolean; plata_schimbata?: boolean;
+    cupon?: string; stoc?: string; negative?: unknown[];
+  } | null;
 
-  // Server-side GA4 refund (Measurement Protocol) when the sale is reversed —
-  // refunds can't be tracked from the customer's browser. Offset by transaction_id.
+  /*
+   * Raspuns de alta forma inseamna ca NU stim ce s-a intamplat — nici macar daca
+   * s-a scris ceva. Se opreste aici, cu jurnal: mai departe ar pleca emailuri si
+   * SMS-uri catre client despre o schimbare care poate n-a avut loc.
+   */
+  if (!t || t.gasit !== true) {
+    logError({ action: "updateOrder", message: t?.gasit === false ? "comanda a disparut intre verificare si scriere" : "raspuns de forma neasteptata la tranzitie", details: { orderId, raspuns: t }, businessId: order.business_id, userId: user.id, severity: "critical" });
+    return { error: "Eroare la actualizare." };
+  }
+
+  const statusVechi = t.status_vechi ?? (order.status as string);
+  const statusChanged = t.status_schimbat === true;
+  const paymentChanged = t.plata_schimbata === true;
+
+  // „necunoscut" = comanda plasata inainte sa existe `stoc_rezervat`. Nu se
+  // ghiceste din `items` (pachetele nu-si scriu componentele acolo), deci ramane
+  // o urma in loguri si comerciantul poate corecta de mana.
+  if (t.stoc === "necunoscut") {
+    logError({ action: "updateOrder.elibereazaStoc", message: "Comanda e dinainte de inregistrarea stocului rezervat; stocul NU s-a dat inapoi automat.", details: { orderId }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+  if (Array.isArray(t.negative) && t.negative.length > 0) {
+    logError({ action: "updateOrder.revendicaStoc", message: "Reactivarea comenzii a dus stocul sub zero: marfa s-a vandut altcuiva intre timp.", details: { orderId, negative: t.negative }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+  // „plin" = intre timp cuponul si-a atins limita: comanda ramane valida, dar
+  // peste limita, si asta trebuie sa se vada undeva.
+  if (t.cupon === "plin") {
+    logError({ action: "updateOrder.reclaimDiscount", message: "Cuponul si-a atins limita intre anulare si reactivare; comanda ramane cu reducerea, necontorizata.", details: { orderId, code: order.discount_code }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+
+  /*
+   * GA4: rambursarea se raporteaza pe statusul VECHI intors de baza, nu pe cel
+   * citit mai sus. Sunt aceleasi in cazul obisnuit, dar cand nu sunt, cel din
+   * baza e cel adevarat — si atunci evenimentul ar fi plecat pentru o intoarcere
+   * care nu s-a produs, sau ar fi lipsit pentru una care s-a produs.
+   */
   const GA4_REVERSAL = new Set(["refunded", "cancelled"]);
-  if (statusChanged && GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string)) {
+  if (statusChanged && GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(statusVechi)) {
     const refundItems = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
     const gaClientId = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
     void ga4OrderEvent(order.business_id, "refund", { transactionId: orderId, value: order.total ?? 0, clientId: gaClientId, items: refundItems });
-  }
-
-  /*
-   * Utilizarea cuponului se da inapoi cand vanzarea se intoarce, si se ia inapoi
-   * daca vanzarea se reia.
-   *
-   * Pana acum se revendica atomic la plasare si nu se elibera niciodata: un cupon
-   * cu 100 de utilizari se epuiza cu 100 de comenzi anulate. Masurat pe productie
-   * (2026-08-04): 26 de comenzi in `cancelled`/`refunded`, niciuna cu cupon, deci
-   * azi nu se repara nimic retroactiv — dar CADOU30 are max_uses 4, si patru
-   * anulari i-ar fi stins campania.
-   *
-   * Se uita si la PLATA, nu doar la status: comerciantul care da banii inapoi
-   * mutand `payment_status` pe „refunded" fara sa atinga statusul face exact
-   * acelasi lucru — vanzarea nu se mai face. Doua comenzi din productie arata asa.
-   *
-   * `GA4_REVERSAL`, aceeasi multime ca la evenimentul de refund: e exact
-   * intrebarea „vanzarea asta se mai face?".
-   *
-   * Cine hotaraste ca utilizarea a fost DEJA data inapoi e baza, nu codul de
-   * aici: `release_order_discount` pune marcajul si scade contorul in aceeasi
-   * instructiune, deci o comanda anulata de doua ori (sau anulata din panou si
-   * stearsa pe urma) scade o singura data. Din acelasi motiv nu conteaza ca
-   * `bulkUpdateOrderStatus` nu stie statusul vechi.
-   *
-   * `discount_code` e doar poarta ieftina: fara cod nu poate exista revendicare,
-   * deci nu mai facem drumul pana la baza pentru cele 95 de comenzi din 96 care
-   * n-au avut niciodata cupon.
-   */
-  const banaRestituita = data.payment_status === "refunded" && (order.payment_status as string) !== "refunded";
-  if (order.discount_code && (statusChanged || banaRestituita)) {
-    const seIntoarce = banaRestituita
-      || (GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string));
-    /*
-     * Re-revendicarea NU cere ca statusul vechi sa fi fost anulat.
-     *
-     * Cronul elibereaza comenzi ramase in `pending`, nu anulate. Cu conditia pe
-     * statusul vechi, comerciantul care duce apoi comanda `pending -> confirmed`
-     * nu declansa nimic: comanda pastra reducerea, campania n-o mai numara, si o
-     * campanie de 4 servea 5. Nu e ipotetic — in productie exista o comanda
-     * `shipped` + `unpaid`, adica expediata inainte de plata.
-     *
-     * Garda ramane in baza: `reclaim_order_discount` intoarce „nimic" cand
-     * marcajul de eliberare lipseste, deci nu se poate revendica ce n-a fost dat
-     * inapoi.
-     */
-    const seReia = !GA4_REVERSAL.has(data.status);
-    const admin = createAdminClient();
-    if (seIntoarce) {
-      await admin.rpc("release_order_discount" as never, { p_order_id: orderId } as never);
-    } else if (seReia) {
-      // Comanda scoasa din anulare isi ia utilizarea la loc, altfel reducerea ar
-      // ramane acordata dar necontorizata si o campanie de 4 ar servi 5 clienti.
-      // „plin" = intre timp cuponul si-a atins limita: comanda ramane valida, dar
-      // peste limita, si asta trebuie sa se vada undeva.
-      const { data: reluat } = await admin.rpc("reclaim_order_discount" as never, { p_order_id: orderId } as never);
-      if (reluat === "plin") {
-        logError({ action: "updateOrder.reclaimDiscount", message: "Cuponul si-a atins limita intre anulare si reactivare; comanda ramane cu reducerea, necontorizata.", details: { orderId, code: order.discount_code }, businessId: order.business_id, userId: user.id, severity: "warning" });
-      }
-    }
-  }
-
-  /*
-   * STOCUL, dupa exact aceleasi reguli ca utilizarea cuponului de mai sus.
-   *
-   * Pana acum stocul nu se elibera NICIODATA: `elibereaza_stoc_batch` era chemata
-   * doar pe cele trei cai „insertul a esuat". O comanda anulata tinea marfa
-   * scazuta pentru o vanzare care nu s-a facut — masurat, 27 din 114 comenzi.
-   *
-   * Diferenta fata de cupon: nu exista o poarta ieftina de felul lui
-   * `discount_code`, fiindca aproape orice comanda consuma stoc. In schimb
-   * `elibereaza_stoc_comanda` iese imediat cand n-are ce face, si tot ea decide
-   * daca s-a dat deja inapoi — marcajul se pune in ACEEASI instructiune cu
-   * eliberarea, deci o comanda anulata de doua ori (sau anulata si stearsa pe
-   * urma) elibereaza o singura data. Un stoc umflat vinde marfa care nu exista,
-   * deci e mai rau decat unul blocat.
-   */
-  if (statusChanged || banaRestituita) {
-    const seIntoarceStoc = banaRestituita
-      || (GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string));
-    const admin = createAdminClient();
-    if (seIntoarceStoc) {
-      const { data: fel } = await admin.rpc("elibereaza_stoc_comanda" as never, { p_order_id: orderId } as never);
-      /*
-       * „necunoscut" = comanda plasata inainte sa existe `stoc_rezervat`. Nu se
-       * ghiceste din `items` (pachetele nu-si scriu componentele acolo), deci
-       * ramane o urma in loguri si comerciantul poate corecta de mana.
-       */
-      if (fel === "necunoscut") {
-        logError({ action: "updateOrder.elibereazaStoc", message: "Comanda e dinainte de inregistrarea stocului rezervat; stocul NU s-a dat inapoi automat.", details: { orderId }, businessId: order.business_id, userId: user.id, severity: "warning" });
-      }
-    } else if (!GA4_REVERSAL.has(data.status)) {
-      // Scoasa din anulare: marfa iese din nou din stoc. Garda e in baza — fara
-      // marcaj de eliberare nu se poate revendica ce n-a fost dat inapoi.
-      const { data: rez } = await admin.rpc("revendica_stoc_comanda" as never, { p_order_id: orderId } as never);
-      const negative = (rez as { negative?: unknown[] } | null)?.negative ?? [];
-      if (Array.isArray(negative) && negative.length > 0) {
-        logError({ action: "updateOrder.revendicaStoc", message: "Reactivarea comenzii a dus stocul sub zero: marfa s-a vandut altcuiva intre timp.", details: { orderId, negative }, businessId: order.business_id, userId: user.id, severity: "warning" });
-      }
-    }
   }
 
   /*
@@ -2451,37 +2412,36 @@ export async function deleteOrder(orderId: string) {
   if (!biz) return { error: "Acces interzis" };
 
   /*
-   * Utilizarea cuponului se da inapoi INAINTE de stergere.
+   * CUPONUL, STOCUL SI STERGEREA — ORI TOT, ORI NIMIC.
    *
-   * Dupa DELETE randul nu mai exista, deci nu se mai poate afla ce cupon
-   * revendicase comanda: `discount_id` pleaca odata cu ea, si contorul ar ramane
-   * crescut pentru o comanda care nu mai e nicaieri.
+   * Ordinea de pana acum era corecta ca intentie si periculoasa ca rezultat:
    *
-   * Daca stergerea de mai jos esueaza, utilizarea a plecat inapoi la o comanda
-   * care inca traieste — dar marcajul pus de `release_order_discount` face ca o a
-   * doua incercare (sau o anulare din panou) sa nu mai scada inca o data. Un
-   * cupon in plus la o stergere esuata e mai bun decat o campanie stinsa de
-   * comenzi care nu mai exista.
+   *     elibereaza cupon  -> reuseste
+   *     elibereaza stoc   -> reuseste
+   *     DELETE order      -> ESUEAZA
+   *
+   * si ramaneai cu o comanda care exista si al carei stoc fusese deja pus inapoi
+   * pe raft — adica supravanzare, din chiar incercarea de a nu pierde marfa. Nu
+   * se repara inversand ordinea: dupa DELETE nu mai stii CE sa dai inapoi
+   * (`discount_id` si `stoc_rezervat` pleaca odata cu randul). Se repara punand
+   * tot intr-o tranzactie.
+   *
+   * Si stergerea insasi era oarba in celalalt sens: un DELETE care nu prinde
+   * niciun rand sub RLS NU intoarce eroare, deci `if (error)` nu se aprindea si
+   * comanda ramanea, raportata ca stearsa. Functia spune daca a gasit-o.
+   *
+   * Autorizarea ramane mai sus (`businesses ... eq(user_id)`), inainte de orice
+   * apel cu drepturi de serviciu.
    */
-  if (order.discount_code) {
-    await createAdminClient().rpc("release_order_discount" as never, { p_order_id: orderId } as never);
-  }
-
-  /*
-   * Si stocul, tot INAINTE de stergere, si din exact acelasi motiv: dupa DELETE
-   * nu mai exista `stoc_rezervat`, deci nu s-ar mai putea afla ce marfa consumase
-   * comanda — si ar ramane scazuta pentru totdeauna, pentru o comanda care nu mai
-   * e nicaieri.
-   *
-   * Marcajul din baza face ca o comanda deja anulata (deci deja eliberata) sa nu
-   * primeasca stocul a doua oara la stergere.
-   */
-  await createAdminClient().rpc("elibereaza_stoc_comanda" as never, { p_order_id: orderId } as never);
-
-  const { error } = await supabase.from("orders").delete().eq("id", orderId);
+  const { data: sters, error } = await createAdminClient()
+    .rpc("sterge_comanda" as never, { p_order_id: orderId, p_business_id: order.business_id } as never);
   if (error) {
-    logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, userId: user.id });
+    logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la stergerea comenzii." };
+  }
+  if ((sters as { gasit?: boolean } | null)?.gasit !== true) {
+    logError({ action: "deleteOrder", message: "comanda n-a fost gasita la stergere", details: { orderId, raspuns: sters }, businessId: order.business_id, userId: user.id, severity: "warning" });
+    return { error: "Comanda negasita" };
   }
 
   revalidatePath("/dashboard/orders");

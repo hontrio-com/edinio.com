@@ -198,7 +198,20 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
       const res = await bulkUpdateOrderStatus(businessId!, ids, bulkStatus);
       setBulkBusy(false);
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success(`${res.updated} comenzi → ${label}`);
+      /*
+       * Cate au picat se SPUNE, nu se tace.
+       *
+       * Actualizarea optimista de mai sus a colorat deja TOATE randurile, iar
+       * mesajul vechi numara doar reusitele — deci un lot in care doua comenzi
+       * n-au fost mutate deloc arata pe ecran ca mutat complet. `router.refresh()`
+       * readuce adevarul din server, dar nimeni nu se uita la un rand care
+       * „tocmai a mers".
+       */
+      if (res.esuate) {
+        toast.error(`${res.updated} comenzi → ${label}. ${res.esuate} NU s-au putut muta — vezi Jurnalul.`);
+      } else {
+        toast.success(`${res.updated} comenzi → ${label}`);
+      }
       clearSelection();
       router.refresh();
     });

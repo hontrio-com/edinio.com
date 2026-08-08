@@ -353,13 +353,17 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    */
   const numeleSubarborelui = numeCategorie ? numeSubarbore(categoriesData, numeCategorie) : null;
 
-  let fateteDePagina: Fateta[];
-  let jetoaneDePagina: string[];
-  let products: StorefrontProduct[];
-  let totalVizibile: number;
-  let totalFiltrate: number;
-  let filtre: ReturnType<typeof citesteFiltreDinAdresa>;
+  // Valori de pornire, nu implicite cu inteles: a doua ramura ruleaza ori de cate
+  // ori prima n-a reusit, deci amandoua le rescriu. Sunt aici doar fiindca `tsc`
+  // nu poate dovedi ca `if (...) {} if (!reusit) {}` acopera totul.
+  let fateteDePagina: Fateta[] = [];
+  let jetoaneDePagina: string[] = [];
+  let products: StorefrontProduct[] = [];
+  let totalVizibile = 0;
+  let totalFiltrate = 0;
+  let filtre = citesteFiltreDinAdresa(sp, []);
 
+  let reusitPeServer = false;
   if (peServer && rezumat) {
     fateteDePagina = rezumat.fatete?.fatete ?? [];
     jetoaneDePagina = rezumat.fatete?.jetoane ?? [];
@@ -369,7 +373,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     // Diferite, felierea de pe server si numarul de pagini din browser s-ar
     // contrazice: ultima pagina ar fi goala, sau ar lipsi produse de pe ea.
     const perPagina = citesteSetariMagazin(resolved.design).perPage;
-    const { data: raspuns } = await proiectieDb().rpc("catalog_pagina", {
+    const { data: raspuns, error: eroareRpc } = await proiectieDb().rpc("catalog_pagina", {
       p_business: business.id,
       p_filtre: {
         sortare: filtre.sortare,
@@ -386,8 +390,24 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       p_limit: perPagina,
       p_offset: (filtre.pagina - 1) * perPagina,
     });
-    const pag = (raspuns ?? { randuri: [], total: 0 }) as { randuri: RandProiectie[]; total: number };
-    products = pag.randuri.map((r) => {
+    /*
+     * Un RPC stricat NU are voie sa randeze un catalog gol.
+     *
+     * Exact asta s-a intamplat la prima aprindere: `categorii: null` facea
+     * functia sa arunce (`jsonb_array_elements` pe un null JSON), clientul
+     * Supabase inghitea eroarea in `data: null`, si magazinul afisa
+     * „0 din 1049 produse" — fara nicio urma nicaieri. Un catalog gol arata a
+     * magazin fara marfa, nu a defect, deci nu-l raporteaza nimeni.
+     *
+     * De acum orice esec se scrie in loguri SI cade pe calea veche. Aia e mai
+     * lenta, dar e intreaga; palierul server e o optimizare, si o optimizare
+     * n-are voie sa fie singurul drum catre produse.
+     */
+    if (eroareRpc || !raspuns) {
+      console.error(`[catalog] catalog_pagina a esuat pentru ${business.slug}:`, eroareRpc?.message ?? "raspuns gol");
+    }
+    const pag = (raspuns ?? null) as { randuri: RandProiectie[]; total: number } | null;
+    products = (pag?.randuri ?? []).map((r) => {
       const p = dinProiectie(r);
       // Indicii trebuie sa arate catre dictionarul REZUMATULUI, nu catre unul
       // construit din pagina: altfel bifele din bara ar arata alte valori decat
@@ -395,9 +415,14 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       const f = (r.fatete ?? []).map((j) => jetoaneDePagina.indexOf(j)).filter((i) => i >= 0);
       return f.length ? { ...p, f } : p;
     });
-    totalVizibile = rezumat.total;
-    totalFiltrate = pag.total;
-  } else {
+    if (pag) {
+      totalVizibile = rezumat.total;
+      totalFiltrate = pag.total;
+      reusitPeServer = true;
+    }
+  }
+
+  if (!reusitPeServer) {
     const productsRaw = await fetchAllRows("storefront.magazin.products", (from, to) =>
       proiectieDb()
         .from("catalog_produs")

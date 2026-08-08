@@ -53,14 +53,25 @@ export function setarileDin<T>(rand: { store_settings?: T | T[] | null } | null)
  * altfel magazinele nepublicate ar fi devenit pagini vizibile, cu raspuns 200 si
  * indexabile.
  *
- * `null` inseamna „nu are voie sa vada": apelantul face `notFound()`, exact ca
- * pana acum.
+ * `null` inseamna „nu exista niciun magazin cu slug-ul asta" — apelantul face
+ * `notFound()`. Magazinul care EXISTA dar nu e publicat NU e `null`: vine cu
+ * `nepublicat: true`, si apelantul arata ecranul „in curand disponibil".
+ *
+ * DE CE NU MAI E 404. Ecranul acela era scris de mult in ambele pagini si era COD
+ * MORT: citirea trecea prin RLS, iar politica publica e `is_published = true`,
+ * deci pentru un strain randul nici nu sosea si pagina raspundea 404 inainte sa
+ * ajunga la el. Un comerciant care isi trimite linkul inainte de publicare —
+ * lucrul cel mai firesc din lume — isi trimitea prietenii intr-o pagina de eroare.
+ *
+ * Raspunsul e 200, dar paginile TREBUIE sa-l dea `noindex` (vezi
+ * `metadataMagazinNepublicat`): altfel magazinele nepublicate ar intra in indexul
+ * Google exact ca pagini „in curand", si ar ramane acolo si dupa publicare.
  */
 export async function incarcaMagazinul(slug: string, userId: string | undefined) {
   const rand = await incarcaAntetMagazin(slug);
   if (!rand) return null;
   const esteProprietar = !!userId && userId === rand.user_id;
-  if (!rand.is_published && !esteProprietar) return null;
+  const nepublicat = !rand.is_published && !esteProprietar;
   /*
    * `store_settings` NU pleaca mai departe.
    *
@@ -75,5 +86,14 @@ export async function incarcaMagazinul(slug: string, userId: string | undefined)
    * Paginile isi citesc oricum `store_settings` separat, cu coloanele lor.
    */
   const { store_settings: _setari, ...business } = rand;
-  return { business, esteProprietar };
+  return { business, esteProprietar, nepublicat };
+}
+
+/** Metadata unei vitrine nepublicate: numele magazinului, si NICIODATA indexabila. */
+export function metadataMagazinNepublicat(nume: string) {
+  return {
+    title: { absolute: nume },
+    description: "Magazinul este in curand disponibil.",
+    robots: { index: false, follow: false },
+  } as const;
 }

@@ -1,5 +1,5 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
-import { incarcaMagazinul } from "@/lib/storefront/antet-magazin";
+import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -57,10 +57,20 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   // is no longer anon-readable, so a nested anon select would return null there.
   const { data: business } = await createAdminClient()
     .from("businesses")
-    .select("id, business_name, store_name, tagline, description, store_city, cover_url, custom_domain, store_settings(page_content, storefront_design)")
+    .select("id, business_name, store_name, tagline, description, store_city, cover_url, custom_domain, is_published, store_settings(page_content, storefront_design)")
     .eq("slug", slug)
     .single();
   if (!business) return {};
+
+  /*
+   * Vitrina NEPUBLICATA raspunde 200 (ecranul „in curand disponibil"), deci
+   * metadata ei trebuie sa spuna explicit `noindex` — altfel magazinele in lucru
+   * intra in indexul Google ca pagini goale si raman acolo si dupa publicare,
+   * concurand chiar pagina adevarata. Vezi `incarcaMagazinul`.
+   */
+  if (!business.is_published) {
+    return metadataMagazinNepublicat(business.store_name ?? business.business_name);
+  }
 
   // Merchant overrides (Settings > SEO) win; otherwise fall back to the
   // auto-derived defaults (single source of truth in @/lib/seo).

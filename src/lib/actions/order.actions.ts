@@ -31,6 +31,7 @@ import { verifyShippingQuote } from "@/lib/shipping/quote-token";
 import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleStock } from "@/lib/bundles";
+import { stocRezervat } from "@/lib/orders/stoc-rezervat";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
@@ -624,34 +625,6 @@ async function revendicaStocul(
 
 /** Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
  *  `revendicaStocul`, ca `release_discount_use` pentru cupon. */
-/**
- * Ce stoc a consumat comanda, in forma in care se poate da INAPOI intocmai.
- *
- * Se scrie pe comanda la plasare, si nu se deduce mai tarziu din `items`, fiindca
- * din `items` NU se poate deduce: pachetele nu-si scriu componentele acolo (se
- * scade componenta, se retine pachetul), variantele se scad pe combinatie, iar
- * `items[].product_id` amesteca id-uri de produs cu `extra_<id>`. Peste toate,
- * compozitia unui pachet se poate schimba intre vanzare si anulare — dedus atunci,
- * s-ar da inapoi altceva decat s-a luat.
- *
- * Vezi migrations/2026-08-17-eliberare-stoc-comanda.sql.
- */
-function stocRezervat(
-  decrements: { product_id: string; quantity: number }[],
-  liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
-): { produse: { product_id: string; quantity: number }[]; variante: { product_id: string; variant_title: string; quantity: number }[] } {
-  return {
-    produse: decrements,
-    variante: liniiVarianta
-      .filter((l) => l.variant_title)
-      .map((l) => ({
-        product_id: l.product_id,
-        variant_title: l.variant_title as string,
-        quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
-      })),
-  };
-}
-
 async function elibereazaStocul(
   admin: SupabaseClient<Database>,
   decrements: { product_id: string; quantity: number }[],

@@ -1,5 +1,5 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
-import { incarcaMagazinul } from "@/lib/storefront/antet-magazin";
+import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -74,10 +74,16 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   const admin = createAdminClient();
   const { data: business } = await admin
     .from("businesses")
-    .select("id, business_name, store_name, store_city, cover_url, custom_domain, store_settings(page_content, storefront_design)")
+    .select("id, business_name, store_name, store_city, cover_url, custom_domain, is_published, store_settings(page_content, storefront_design)")
     .eq("slug", slug)
     .single();
   if (!business) return {};
+
+  // Nepublicat: pagina redirectioneaza catre vitrina, care arata „in curand
+  // disponibil". Metadata ei n-are ce cauta in index. Vezi `incarcaMagazinul`.
+  if (!business.is_published) {
+    return metadataMagazinNepublicat(business.store_name ?? business.business_name);
+  }
 
   const brut = (business as unknown as {
     store_settings: { page_content: unknown; storefront_design: unknown } | { page_content: unknown; storefront_design: unknown }[] | null;

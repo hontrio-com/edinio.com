@@ -150,6 +150,18 @@ interface Props {
    * curenta.
    */
   numeCategoriiCuProduse?: string[];
+  /**
+   * Randurile paginii principale, rezolvate de `catalog_randuri`.
+   *
+   * Se derivau din `visibleProducts`, deci din catalogul INTREG — inca un motiv
+   * pentru care trebuia trimis tot. Cu o singura pagina in memorie, randul
+   * „Veste" ar fi aratat doar vestele care se nimeresc pe pagina curenta.
+   *
+   * `sectiuniServer` e pe id de sectiune; sectiunile lipsa raman goale si se
+   * arunca la fel ca azi.
+   */
+  featuredServer?: StorefrontProduct[];
+  sectiuniServer?: Record<string, StorefrontProduct[]>;
   /*
    * Adresa paginii de categorie pe care suntem, cand suntem pe una.
    *
@@ -179,7 +191,7 @@ interface Props {
   initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, featuredServer, sectiuniServer }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -640,16 +652,29 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   }
 
   // Featured products
-  const featuredProducts = useMemo(() => visibleProducts.filter(p => p.is_featured), [visibleProducts]);
+  // Pe palierul server vin gata alese din `catalog_randuri`: derivate din
+  // `visibleProducts`, ar fi cuprins doar produsele de pe pagina curenta.
+  const featuredProducts = useMemo(
+    () => (peServer ? (featuredServer ?? []) : visibleProducts.filter(p => p.is_featured)),
+    [visibleProducts, peServer, featuredServer],
+  );
 
   // Custom product sections — curated rows shown above the main catalog. Resolved
   // from the already-loaded product list (no extra queries); empty ones are dropped.
   const productSections = useMemo(() => {
     return parseProductSections(pageContent.product_sections)
       .filter(s => s.enabled)
-      .map(section => ({ section, items: resolveSectionProducts(section, visibleProducts, catTree.subtreeByName) }))
+      // Pe palierul server randurile sunt deja rezolvate, dupa ACELEASI reguli,
+      // in `catalog_randuri`. Aruncarea celor goale ramane aici, ca sa fie un
+      // singur loc care decide ce se afiseaza.
+      .map(section => ({
+        section,
+        items: peServer
+          ? (sectiuniServer?.[section.id] ?? [])
+          : resolveSectionProducts(section, visibleProducts, catTree.subtreeByName),
+      }))
       .filter(x => x.items.length > 0);
-  }, [pageContent.product_sections, visibleProducts, catTree.subtreeByName]);
+  }, [pageContent.product_sections, visibleProducts, catTree.subtreeByName, peServer, sectiuniServer]);
 
   function viewAllCategory(category: string) {
     // Ancora `#produse` traieste pe grila. Mutata, „Vezi toate" ar fi derulat

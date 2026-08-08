@@ -13,6 +13,10 @@ import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-da
 import { resolveProductOffers } from "@/lib/offers/offers";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
+import { alegePalier } from "@/lib/storefront/catalog/tier";
+import { incarcaAcasaDeLaServer } from "@/lib/storefront/catalog/acasa-server";
+import type { Fateta as FatetaCatalog } from "@/lib/storefront/catalog/facets";
+import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { scrieFiltre } from "@/lib/storefront/catalog/url";
@@ -221,35 +225,14 @@ export default async function SlugPage({ params, searchParams }: Props) {
     }
   }
 
-  // Catalogul complet, in ferestre .range(): un query simplu se trunchiaza
-  // silentios la 1000 de randuri (cap PostgREST) si ar ascunde produse.
-  const [productsRaw, { data: storeSettings }, categoriesData] = await Promise.all([
-    fetchAllRows("storefront.home.products", (from, to) =>
-    /*
-     * Service role, si de ce e in regula.
-     *
-     * `catalog_produs` are RLS pornit si NICIO politica, deci se citeste doar cu
-     * cheia de serviciu. Cu asta pierdem politica de pe `products`, care cerea
-     * „produs activ AL UNEI AFACERI PUBLICATE" — iar acum ambele conditii sunt
-     * tinute in alta parte:
-     *   - activ: in tabela intra DOAR produse active, si declansatorul scoate
-     *     randul in clipa in care produsul se dezactiveaza;
-     *   - publicat: poarta din codul de mai sus, care iese din functie inainte
-     *     sa se ajunga aici.
-     *
-     * Deci poarta aia nu mai are voie sa se mute sub aceasta citire, si nici sa
-     * devina conditionala. Daca vreodata se muta, catalogul unui magazin
-     * nepublicat devine public — fara nicio eroare care sa o arate.
-     */
-      proiectieDb()
-        .from("catalog_produs")
-        .select(COLOANE_PROIECTIE)
-        .eq("business_id", business.id)
-        .order("is_featured", { ascending: false })
-        .order("sort_order")
-        .order("product_id")
-        .range(from, to)
-    ),
+  /*
+   * Ordinea: setarile si agregatele INTAI, decizia, apoi produsele.
+   *
+   * Decizia „cine feliaza" are nevoie si de comutatoarele din `page_content`, si
+   * de numarul total din rezumat. Citite in acelasi val cu produsele, palierul
+   * server ar fi adus si tot catalogul, SI pagina.
+   */
+  const [{ data: storeSettings }, categoriesData, rezumatRaspuns] = await Promise.all([
     createAdminClient()
       .from("store_settings")
       // Coloanele de TVA sunt necesare pentru eticheta de langa pret: prima pagina
@@ -267,6 +250,13 @@ export default async function SlugPage({ params, searchParams }: Props) {
         .order("id")
         .range(from, to)
     ),
+    proiectieDb()
+      .from("catalog_rezumat")
+      .select("total, price_min, price_max, categorii, fatete")
+      .eq("business_id", business.id)
+      .eq("fara_imagini", false)
+      .eq("fara_stoc_ascuns", false)
+      .maybeSingle(),
   ]);
 
   /*
@@ -279,9 +269,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * nu curata nimic la executie.
    */
   // Ciorna se randeaza DOAR pentru proprietar si doar in preview: pana la
-  // Publica, vizitatorii vad neaparat versiunea publicata. Se calculeaza aici,
-  // inaintea ramurii cu un singur produs — altfel acele magazine n-aveau deloc
-  // previzualizare live, editorul le arata mereu designul publicat.
+  // Publica, vizitatorii vad neaparat versiunea publicata.
   const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
   const designDeRandat = useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design;
 
@@ -289,16 +277,85 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
     : storeSettings;
 
+  const pcCatalog = (storeSettings?.page_content as Record<string, unknown>) ?? {};
+  const faraImagini = pcCatalog.hide_products_without_images === true;
+  const faraStocAscuns = pcCatalog.hide_out_of_stock_products === true;
+
   /*
-   * Catalogul vine gata subtiat din `catalog_produs`, nu se mai subtiaza aici.
-   *
-   * Slimuirea din JS ramasese ultimul loc care cerea randul BRUT: ca sa arunce
-   * combinatiile de variante trebuia intai sa le citeasca, deci pagina scotea din
-   * Postgres 18 MB ca sa pastreze 1,1. Acum randul iese deja mic din baza, iar
-   * pretul si disponibilitatea pachetelor vin calculate — vezi
-   * lib/storefront/catalog/proiector.ts.
+   * Rezumatul cerut mai sus e cel cu AMBELE comutatoare stinse, fiindca abia
+   * dupa ce citim setarile stim care rand ne trebuie. Cand comutatoarele sunt
+   * pornite, se cere randul potrivit — un al doilea dus-intors, dar numai la
+   * magazinele care chiar folosesc comutatoarele.
    */
-  const products = (productsRaw as unknown as RandProiectie[]).map(dinProiectie);
+  let rezumat = (rezumatRaspuns.data ?? null) as unknown as {
+    total: number; price_min: number; price_max: number; categorii: string[];
+    fatete: { jetoane?: string[]; fatete?: FatetaCatalog[] };
+  } | null;
+  if (rezumat && (faraImagini || faraStocAscuns)) {
+    const { data } = await proiectieDb()
+      .from("catalog_rezumat")
+      .select("total, price_min, price_max, categorii, fatete")
+      .eq("business_id", business.id)
+      .eq("fara_imagini", faraImagini)
+      .eq("fara_stoc_ascuns", faraStocAscuns)
+      .maybeSingle();
+    if (data) rezumat = data as unknown as typeof rezumat;
+  }
+
+  const seCautaAcasa = (qParam ?? "").trim().length > 0;
+  const palier = rezumat
+    ? alegePalier({ pageContent: pcCatalog, totalProduse: rezumat.total, cauta: seCautaAcasa })
+    : "client";
+  const peServer = palier === "server";
+
+  let products: StorefrontProduct[] = [];
+  let totalVizibile = 0;
+  let totalFiltrate = 0;
+  let featuredServer: StorefrontProduct[] | undefined;
+  let sectiuniServer: Record<string, StorefrontProduct[]> | undefined;
+  let reusitPeServer = false;
+
+  if (peServer && rezumat) {
+    reusitPeServer = await incarcaAcasaDeLaServer({
+      businessId: business.id,
+      pagina: initialPage,
+      pageContent: pcCatalog,
+      categorii: categoriesData,
+      faraImagini,
+      faraStocAscuns,
+      rezumat,
+      preia: (r) => {
+        products = r.products; totalVizibile = r.totalVizibile; totalFiltrate = r.totalFiltrate;
+        featuredServer = r.featured; sectiuniServer = r.sectiuni;
+      },
+    });
+  }
+
+  if (!reusitPeServer) {
+    const productsRaw = await fetchAllRows("storefront.home.products", (from, to) =>
+      /*
+       * Service role, si de ce e in regula.
+       *
+       * `catalog_produs` are RLS pornit si NICIO politica, deci se citeste doar cu
+       * cheia de serviciu. Cu asta pierdem politica de pe `products`, care cerea
+       * „produs activ AL UNEI AFACERI PUBLICATE" — iar acum ambele conditii sunt
+       * tinute in alta parte: ACTIV prin declansator, iar PUBLICAT prin poarta din
+       * codul de mai sus, care iese din functie inainte sa se ajunga aici.
+       *
+       * Poarta aia nu mai are voie sa se mute sub aceasta citire.
+       */
+      proiectieDb()
+        .from("catalog_produs")
+        .select(COLOANE_PROIECTIE)
+        .eq("business_id", business.id)
+        .order("is_featured", { ascending: false })
+        .order("sort_order")
+        .order("product_id")
+        .range(from, to));
+    products = (productsRaw as unknown as RandProiectie[]).map(dinProiectie);
+    totalVizibile = products.length;
+    totalFiltrate = products.length;
+  }
 
   // Detect custom domain access
   const headersList = await headers();
@@ -500,6 +557,12 @@ export default async function SlugPage({ params, searchParams }: Props) {
       <MiniStoreRenderer
         business={pentruBrowser(business)}
         products={products}
+        palier={palier}
+        totalVizibileServer={totalVizibile}
+        totalFiltrateServer={totalFiltrate}
+        numeCategoriiCuProduse={peServer ? rezumat?.categorii : undefined}
+        featuredServer={featuredServer}
+        sectiuniServer={sectiuniServer}
         storeSettings={setariDeTrimis}
         basePath={basePath}
         categories={categoriesData}

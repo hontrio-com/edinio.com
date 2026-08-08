@@ -1,4 +1,5 @@
-import { COLOANE_BUSINESS_PUBLIC, pentruBrowser } from "@/lib/storefront/business-public";
+import { pentruBrowser } from "@/lib/storefront/business-public";
+import { incarcaMagazinul } from "@/lib/storefront/antet-magazin";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
@@ -172,13 +173,18 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
 
 export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   const supabase = await createClient();
-  const [{ data: business }, { data: { user } }] = await Promise.all([
-    supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single(),
-    supabase.auth.getUser(),
-  ]);
-  if (!business) notFound();
-
-  const isOwner = user?.id === business.user_id;
+  /*
+   * Randul de magazin vine din citirea DEDUPLICATA a antetului, nu dintr-o a doua
+   * interogare. Layout-ul l-a adus deja in aceeasi randare, cu `cache()` din React.
+   *
+   * `incarcaMagazinul` poarta si refuzul: citirea de dinainte trecea prin RLS
+   * (`is_published = true`), deci pentru un strain un magazin nepublicat intorcea
+   * nimic si pagina raspundea 404. Aceeasi purtare, acum scrisa explicit.
+   */
+  const { data: { user } } = await supabase.auth.getUser();
+  const acces = await incarcaMagazinul(slug, user?.id);
+  if (!acces) notFound();
+  const { business, esteProprietar: isOwner } = acces;
 
   const admin = createAdminClient();
   const { data: storeSettings } = await admin

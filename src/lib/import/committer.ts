@@ -13,7 +13,7 @@ import type {
   ValidationSummary,
 } from "./types";
 import { EMPTY_TOTALS } from "./types";
-import { rehostProductImages, rehostImageUrl, needsRehost, isR2Url } from "./image-rehost";
+import { rehostProductImages, rehostImageUrl, needsRehost, isR2Url, type CacheRehostare } from "./image-rehost";
 import { parseShippingClasses } from "@/lib/shipping/rules";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
@@ -180,13 +180,33 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       deltas.failed++;
       continue;
     }
+    /*
+     * Limita de plan atinsa: se marcheaza TOT restul dintr-o data si se iese.
+     *
+     * `currentCount` doar creste, deci din clipa in care conditia e adevarata
+     * ramane adevarata pentru fiecare rand care urmeaza — nu doar din bucata
+     * asta, ci din tot importul. Pana acum se afla asta din nou la fiecare rand:
+     * un `UPDATE` propriu ca sa-l marcheze `skipped`, patruzeci pe bucata, plus
+     * inca un tur de orchestrare pentru urmatoarea bucata. Masurat, 22 de minute
+     * intr-un job care crease ZECE produse; in istoric sunt 3.674 de randuri
+     * marcate asa, adica 3.674 de dus-intorsuri.
+     *
+     * Acum: o singura instructiune peste toate randurile ramase, si
+     * `remaining: 0`, deci orchestrarea incheie importul in tick-ul asta in loc
+     * sa mai ceara nouazeci si doua de bucati care ar face exact acelasi lucru.
+     *
+     * `count: "exact"` fiindca `deltas.skipped` intra in totalurile aratate
+     * comerciantului: numarat gresit, raportul i-ar spune ca s-au sarit mai
+     * putine produse decat s-au sarit.
+     */
     if (limit !== Infinity && currentCount >= limit) {
-      await admin
+      const { count } = await admin
         .from("product_import_rows")
-        .update({ status: "skipped", error: "Limita de plan atinsa" })
-        .eq("id", rowId);
-      deltas.skipped++;
-      continue;
+        .update({ status: "skipped", error: "Limita de plan atinsa" }, { count: "exact" })
+        .eq("import_id", job.id)
+        .eq("status", "pending");
+      deltas.skipped += count ?? 0;
+      return { deltas, remaining: 0 };
     }
 
     const category = await upsertCategoryPath(admin, businessId, p.category_path, catMap);
@@ -264,7 +284,7 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
 
 async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; failed: number; remaining: number }> {
   const businessId = job.business_id;
-  const cache = new Map<string, string>();
+  const cache: CacheRehostare = new Map();
   let imagesDone = 0;
   let imagesFailed = 0;
 
@@ -279,10 +299,30 @@ async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; f
 
   if (!rows || rows.length === 0) return { done: 0, failed: 0, remaining: 0 };
 
-  for (const row of rows) {
+  /*
+   * Produsele se rehosteaza in BAZIN, nu unul dupa altul.
+   *
+   * Rehostarea e partea grea a importului — 88% din durata lui, masurat: 2.828 de
+   * imagini, cate ~1,17 s fiecare, toate la coada. Fiecare imagine inseamna o
+   * descarcare de pe serverul altcuiva si o urcare in R2, deci timpul e aproape
+   * numai ASTEPTARE; puse in paralel, se suprapune.
+   *
+   * PATRU, nu cincisprezece: sursa e de obicei un singur CDN al furnizorului, iar
+   * o rafala prea larga se intoarce ca `429` — adica imagini pierdute, nu doar
+   * mai lente. Patru produse deodata, fiecare cu imaginile lui cerute in paralel,
+   * inseamna un varf de ordinul zecilor de cereri, nu al sutelor. Numarul asta se
+   * poate ridica, dar numai dupa ce se masoara pe un import real.
+   *
+   * Duplicarea e imposibila: cache-ul tine PROMISIUNI, deci doi lucratori care
+   * cer aceeasi adresa in aceeasi clipa asteapta amandoi acelasi rezultat, si in
+   * R2 ajunge un singur obiect. Vezi `CacheRehostare`.
+   */
+  const PARALEL = 4;
+  for (let i = 0; i < rows.length; i += PARALEL) {
+    await Promise.all(rows.slice(i, i + PARALEL).map(async (row) => {
     if (!row.product_id) {
       await admin.from("product_import_rows").update({ images_done: true }).eq("id", row.id);
-      continue;
+      return;
     }
     const { data: product } = await admin.from("products").select("images, page_sections").eq("id", row.product_id).single();
     const images = Array.isArray(product?.images) ? (product!.images as string[]) : [];
@@ -315,6 +355,7 @@ async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; f
       await admin.from("products").update(update as never).eq("id", row.product_id);
     }
     await admin.from("product_import_rows").update({ images_done: true }).eq("id", row.id);
+    }));
   }
 
   const { count: remaining } = await admin

@@ -51,16 +51,43 @@ export function needsRehost(images: string[]): boolean {
  * original URL on failure (best-effort: a broken rehost never drops the image).
  * `cache` dedupes identical URLs within one processing chunk.
  */
+/**
+ * Cache-ul de rehostare tine PROMISIUNI, nu adrese gata rezolvate.
+ *
+ * Cat timp rehostarea era strict seriala, o harta de siruri ajungea: cine venea
+ * al doilea gasea adresa deja scrisa. Cu rehostarea in paralel, doi lucratori pot
+ * rata amandoi cache-ul pentru ACEEASI adresa in aceeasi clipa, si atunci ar
+ * descarca-o de doua ori si ar urca doua obiecte in R2 — spatiu platit de doua
+ * ori, si doua adrese diferite pentru aceeasi poza, din care produsele ar apuca
+ * care pe care. Cu promisiuni, al doilea o asteapta pe a primului.
+ *
+ * Se retine si ESECUL, nu doar reusita: o adresa moarta impartita de cincizeci de
+ * produse era ceruta de cincizeci de ori, si de fiecare data astepta acelasi
+ * timeout. Cache-ul traieste cat un import, deci nu poate „ingheta" o eroare
+ * trecatoare mai mult decat atat.
+ */
+export type CacheRehostare = Map<string, Promise<{ url: string; ok: boolean }>>;
+
 export async function rehostImageUrl(
   url: string,
   businessId: string,
   importId: string,
-  cache: Map<string, string>,
+  cache: CacheRehostare,
 ): Promise<{ url: string; ok: boolean }> {
   if (isR2Url(url)) return { url, ok: true };
-  const cached = cache.get(url);
-  if (cached) return { url: cached, ok: true };
+  const inZbor = cache.get(url);
+  if (inZbor) return inZbor;
 
+  const promisiune = rehosteazaAcum(url, businessId, importId);
+  cache.set(url, promisiune);
+  return promisiune;
+}
+
+async function rehosteazaAcum(
+  url: string,
+  businessId: string,
+  importId: string,
+): Promise<{ url: string; ok: boolean }> {
   const result = await safeFetchImage(url);
   if ("error" in result) return { url, ok: false };
 
@@ -83,7 +110,6 @@ export async function rehostImageUrl(
 
   try {
     const r2Url = await uploadToR2(result.buffer, key, tipReal);
-    cache.set(url, r2Url);
     return { url: r2Url, ok: true };
   } catch {
     return { url, ok: false };
@@ -98,22 +124,29 @@ export async function rehostProductImages(
   images: string[],
   businessId: string,
   importId: string,
-  cache: Map<string, string>,
+  cache: CacheRehostare,
 ): Promise<{ images: string[]; done: number; failed: number }> {
-  const out: string[] = [];
-  let done = 0;
-  let failed = 0;
-
-  for (const url of images) {
-    if (isR2Url(url)) {
-      out.push(url);
-      continue;
-    }
+  /*
+   * Imaginile unui produs se cer DEODATA, nu una dupa alta.
+   *
+   * Sunt de obicei doua-cinci, fiecare inseamna o descarcare de pe serverul
+   * altcuiva plus o urcare in R2 — masurat, 1,17 s bucata. Puse la coada, un
+   * produs cu cinci poze tinea sase secunde de unul singur. Numarul de cereri
+   * catre gazda-sursa e marginit mai sus, de bazinul din `committer.ts`.
+   *
+   * Ordinea din `images` se pastreaza: `Promise.all` intoarce rezultatele in
+   * ordinea intrarilor, nu in ordinea in care s-au terminat. Prima imagine e
+   * coperta produsului, deci o reordonare ar fi schimbat cardul.
+   */
+  const rezultate = await Promise.all(images.map(async (url) => {
+    if (isR2Url(url)) return { url, ok: true, sarita: true };
     const res = await rehostImageUrl(url, businessId, importId, cache);
-    out.push(res.url);
-    if (res.ok) done++;
-    else failed++;
-  }
+    return { ...res, sarita: false };
+  }));
 
-  return { images: out, done, failed };
+  return {
+    images: rezultate.map((r) => r.url),
+    done: rezultate.filter((r) => !r.sarita && r.ok).length,
+    failed: rezultate.filter((r) => !r.sarita && !r.ok).length,
+  };
 }

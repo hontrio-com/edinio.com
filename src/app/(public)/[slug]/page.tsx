@@ -1,4 +1,5 @@
-import { COLOANE_BUSINESS_PUBLIC, pentruBrowser } from "@/lib/storefront/business-public";
+import { pentruBrowser } from "@/lib/storefront/business-public";
+import { incarcaMagazinul } from "@/lib/storefront/antet-magazin";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -186,14 +187,15 @@ export default async function SlugPage({ params, searchParams }: Props) {
   const isPreview = previewParam === "1";
   const supabase = await createClient();
 
-  const [{ data: business }, { data: { user } }] = await Promise.all([
-    supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single(),
-    supabase.auth.getUser(),
-  ]);
-
-  if (!business) notFound();
-
-  const isOwner = user?.id === business.user_id;
+  /*
+   * Acelasi rand pe care l-a adus deja layout-ul, nu inca o interogare. Poarta
+   * (`is_published`, sau proprietarul) e acum in `incarcaMagazinul`, fiindca
+   * citirea nu mai trece prin RLS. Vezi antet-magazin.ts.
+   */
+  const { data: { user } } = await supabase.auth.getUser();
+  const acces = await incarcaMagazinul(slug, user?.id);
+  if (!acces) notFound();
+  const { business, esteProprietar: isOwner } = acces;
 
   if (!business.is_published && !isOwner) {
     return (

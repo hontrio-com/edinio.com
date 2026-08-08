@@ -227,7 +227,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const pages = await fetchAllRows("sitemap.platform.pages", (from, to) =>
     supabase
       .from("custom_pages")
-      .select("slug, updated_at, seo, businesses!inner(slug, is_published, custom_domain)")
+      // Relatia numita explicit, ca la sitemap-ul de produse: aici nu e (inca)
+      // ambigua, dar o tabela noua cu chei straine catre `custom_pages` si
+      // `businesses` ar face-o, iar simptomul ar fi tot un sitemap gol cu 200.
+      .select("slug, updated_at, seo, businesses!custom_pages_business_id_fkey!inner(slug, is_published, custom_domain)")
       .eq("is_published", true)
       .eq("businesses.is_published", true)
       .order("id")

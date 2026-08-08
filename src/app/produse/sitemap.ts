@@ -43,7 +43,21 @@ function interogare(coloane: string) {
     .eq("businesses.is_published", true);
 }
 
-const COLOANE = "slug, updated_at, businesses!inner(slug, is_published, custom_domain)";
+/*
+ * Relatia se numeste EXPLICIT prin cheia straina, nu se lasa dedusa.
+ *
+ * `businesses!inner(...)` intorcea eroarea „more than one relationship was found
+ * for 'products' and 'businesses'", si sitemap-ul iesea gol cu raspuns 200.
+ * Cauza: `catalog_produs` si `catalog_index_cuvant` au fiecare chei straine catre
+ * AMANDOUA tabelele, deci PostgREST vede si drumuri indirecte
+ * (products → catalog_produs → businesses) pe langa cel direct, si refuza sa
+ * aleaga.
+ *
+ * Adica embed-ul asta e rupt de cand exista modelul de citire al catalogului
+ * (migratia din 09.08) — nu de azi. N-a semnalat nimeni fiindca eroarea era
+ * inghitita intr-un `const { data } = await ...`.
+ */
+const COLOANE = "slug, updated_at, businesses!products_business_id_fkey!inner(slug, is_published, custom_domain)";
 
 /*
  * Ruta e DINAMICA: se randeaza la cerere, nu la build.

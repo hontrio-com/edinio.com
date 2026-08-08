@@ -32,6 +32,7 @@ import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } fr
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleStock } from "@/lib/bundles";
 import { stocRezervat } from "@/lib/orders/stoc-rezervat";
+import { mesajRefuzStoc } from "@/lib/orders/refuz-stoc";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
@@ -446,8 +447,17 @@ function eroareStocPeVarianta(
  * Citita aici, modificata si scrisa inapoi, doua comenzi in aceeasi clipa ar
  * citi amandoua cinci si ar scrie amandoua patru, iar o bucata s-ar pierde.
  *
- * Se cheama DUPA ce comanda a intrat, la fel ca scaderea stocului de produs: o
- * comanda respinsa n-are voie sa consume stoc.
+ * ═══ NU MAI E CALEA OBISNUITA ═══
+ *
+ * De la 18.08 marimile se scad odata cu verdictul, in `revendica_stoc_complet`,
+ * INAINTE de insert. Functia asta ramane doar pentru cazul `nerevendicat` — cand
+ * functia din baza nu raspunde — si trebuie chemata NUMAI acolo: langa o
+ * revendicare reusita ar scadea a doua oara.
+ *
+ * Diferenta care conteaza: `decrement_variant_stock_batch` plafoneaza
+ * (`greatest(0, ...)`) in loc sa refuze, deci pe drumul asta cursa ramane
+ * deschisa. E purtarea de dinainte, pastrata ca sa nu se opreasca toate comenzile
+ * cand functia noua lipseste — nu o a doua garantie.
  */
 async function scadeStoculVariantelor(
   admin: SupabaseClient<Database>,
@@ -573,13 +583,45 @@ type Revendicare =
  * `expandBundleStock` ramane inaintea ei si nu se scoate: ea desface pachetele in
  * componente si formuleaza mesajele omenesti („scoate pachetul din cos"), pe care
  * un verdict venit din baza nu le poate da.
+ *
+ * ═══ SI VARIANTELE, DE LA 18.08 ═══
+ *
+ * Variantele nu treceau pe aici deloc: se verificau in aplicatie
+ * (`eroareStocPeVarianta`, o citire) si se scadeau DUPA insert, cu o functie care
+ * plafoneaza la zero in loc sa refuze. Verificarea de produs nu acoperea gaura,
+ * fiindca `products.stock_quantity` e SUMA combinatiilor: pe un produs cu 94 de
+ * marimi si 993.313 bucati, o cursa pe marimea cu 2 bucati trecea de fiecare data.
+ *
+ * Dovedit pe productie inainte de reparatie, pe „Pique Polo" / „verde sticla 4XL"
+ * (stoc 2): pe calea veche a doua cerere primea `{ok:true}` si vindea a treia
+ * bucata; pe cea noua primeste `{ok:false, varianta, disponibil:0}`. Iar plafonarea
+ * facea ca baza sa nu ramana negativa, deci supravanzarea nu lasa nicio urma.
+ *
+ * Consecinta pentru apelanti: scaderea variantelor S-A MUTAT INAINTE de insert,
+ * impreuna cu cea de produs. `scadeStoculVariantelor` ramane DOAR pentru cazul
+ * `nerevendicat` (functia din baza inca nu exista) — chemata si dupa o revendicare
+ * reusita, ar scadea a doua oara.
  */
 async function revendicaStocul(
   admin: SupabaseClient<Database>,
   decrements: { product_id: string; quantity: number }[],
+  liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
 ): Promise<Revendicare> {
-  if (decrements.length === 0) return { fel: "revendicat" };
-  const { data, error } = await admin.rpc("revendica_stoc_batch" as never, { p_items: decrements } as never);
+  const variante = liniiVarianta
+    .filter((l) => l.variant_title)
+    .map((l) => ({
+      product_id: l.product_id,
+      variant_title: l.variant_title as string,
+      // Aceeasi normalizare ca `stocRezervat` si ca fosta `scadeStoculVariantelor`:
+      // ce se rezerva trebuie sa fie exact ce se scrie pe comanda, altfel anularea
+      // da inapoi alt numar decat s-a luat.
+      quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+    }));
+  if (decrements.length === 0 && variante.length === 0) return { fel: "revendicat" };
+  const { data, error } = await admin.rpc(
+    "revendica_stoc_complet" as never,
+    { p_produse: decrements, p_variante: variante } as never,
+  );
   /*
    * Cand functia nu raspunde, comanda MERGE MAI DEPARTE pe drumul vechi.
    *
@@ -593,24 +635,20 @@ async function revendicaStocul(
   if (error) {
     logError({
       action: "revendicaStocul", message: error.message,
-      details: { code: error.code, hint: error.hint, produse: decrements.length },
+      details: { code: error.code, hint: error.hint, produse: decrements.length, variante: variante.length },
       severity: "critical",
     });
     return { fel: "nerevendicat" };
   }
-  const rez = data as unknown as { ok?: boolean; nume?: string | null; disponibil?: number | null } | null;
+  const rez = data as unknown as
+    { ok?: boolean; nume?: string | null; varianta?: string | null; disponibil?: number | null } | null;
   if (rez?.ok === true) return { fel: "revendicat" };
   if (rez?.ok === false) {
-    // Mesajul se scrie aici, nu in baza: numele produsului e singurul lucru pe
-    // care functia nu-l poate formula in tonul celorlalte refuzuri din checkout.
-    const nume = String(rez.nume ?? "produsul cerut").slice(0, 60);
-    const disponibil = Number(rez.disponibil) || 0;
-    return {
-      fel: "refuzat",
-      error: disponibil <= 0
-        ? `„${nume}" tocmai s-a epuizat. Scoate-l din cos si incearca din nou.`
-        : `Din „${nume}" au mai ramas ${disponibil} bucati. Scade cantitatea si incearca din nou.`,
-    };
+    // Mesajul se scrie in aplicatie, nu in baza: numele produsului si al marimii
+    // sunt singurele lucruri pe care functia nu le poate formula in tonul
+    // celorlalte refuzuri din checkout. Formularea sta in `refuz-stoc.ts`, unde
+    // poate fi testata — aici, sub `"use server"`, nu poate.
+    return { fel: "refuzat", error: mesajRefuzStoc(rez) };
   }
   /*
    * Raspuns de alta forma: se cade tot pe drumul vechi, nu se presupune „gata".
@@ -623,18 +661,36 @@ async function revendicaStocul(
   return { fel: "nerevendicat" };
 }
 
-/** Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
- *  `revendicaStocul`, ca `release_discount_use` pentru cupon. */
+/**
+ * Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
+ * `revendicaStocul`, ca `release_discount_use` pentru cupon.
+ *
+ * DA INAPOI SI VARIANTELE. De cand revendicarea le ia inainte de insert, o
+ * eliberare doar pe produse ar lasa marimea consumata pentru o comanda care nu
+ * exista — adica exact gaura pe care mutarea o repara, doar pe calea de eroare.
+ * Amandoua intr-un singur apel: doua apeluri separate pot reusi pe jumatate.
+ */
 async function elibereazaStocul(
   admin: SupabaseClient<Database>,
   decrements: { product_id: string; quantity: number }[],
+  liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
 ): Promise<void> {
-  if (decrements.length === 0) return;
-  const { error } = await admin.rpc("elibereaza_stoc_batch" as never, { p_items: decrements } as never);
+  const variante = liniiVarianta
+    .filter((l) => l.variant_title)
+    .map((l) => ({
+      product_id: l.product_id,
+      variant_title: l.variant_title as string,
+      quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+    }));
+  if (decrements.length === 0 && variante.length === 0) return;
+  const { error } = await admin.rpc(
+    "elibereaza_stoc_complet" as never,
+    { p_produse: decrements, p_variante: variante } as never,
+  );
   if (error) {
     // Marfa ramane rezervata pentru o comanda care nu exista. Se repara de mana,
     // deci trebuie sa se vada: fara jurnal, stocul scade in gol si nimeni nu stie.
-    logError({ action: "elibereazaStocul", message: error.message, details: { code: error.code, produse: decrements.length }, severity: "critical" });
+    logError({ action: "elibereazaStocul", message: error.message, details: { code: error.code, produse: decrements.length, variante: variante.length }, severity: "critical" });
   }
 }
 
@@ -1186,7 +1242,7 @@ export async function placeOrder(data: {
   // de mai sus a citit doar, iar intre citire si scaderea de dupa insert incapeau
   // patru cereri paralele care vindeau toate acelasi ultim produs. Vezi
   // `revendicaStocul`.
-  const stoc = await revendicaStocul(admin, stockExp.decrements);
+  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCuVarianta);
   if (stoc.fel === "refuzat") {
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
     return { error: stoc.error };
@@ -1274,7 +1330,7 @@ export async function placeOrder(data: {
     // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
     // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
-    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
     logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
@@ -1297,16 +1353,18 @@ export async function placeOrder(data: {
   }
 
 
-  // Stocul de produs e DEJA scazut, odata cu verdictul, inainte de insert.
-  // Ramura de mai jos e doar pentru cazul in care revendicarea n-a putut rula
-  // (migratia neaplicata): atunci se scade ca inainte, dupa insert.
+  /*
+   * Stocul — si de produs, si de marime — e DEJA scazut, odata cu verdictul,
+   * inainte de insert. Ramura de mai jos e doar pentru cazul in care revendicarea
+   * n-a putut rula (migratia neaplicata): atunci se scade ca inainte, dupa insert.
+   *
+   * `scadeStoculVariantelor` sta INAUNTRUL ramurii, nu langa ea: chemata si dupa
+   * o revendicare reusita, ar scadea marimea a doua oara.
+   */
   if (stoc.fel === "nerevendicat") {
     await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+    await scadeStoculVariantelor(admin, liniiCuVarianta);
   }
-  // Si stocul marimii vandute, nu doar al produsului intreg. `liniiCuVarianta`
-  // e aceeasi lista pe care a verificat-o `eroareStocPeVarianta` mai sus, deci
-  // ce s-a masurat se si scade.
-  await scadeStoculVariantelor(admin, liniiCuVarianta);
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
   void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
@@ -2300,7 +2358,7 @@ export async function updateOrderDetails(orderId: string, data: {
   // cai de comanda: `expandBundleStock` de mai sus doar citeste, iar scaderea de
   // dupa update lasa aceeasi fereastra — doi comercianti care adauga in acelasi
   // timp acelasi ultim produs treceau amandoi. Vezi `revendicaStocul`.
-  const stoc = await revendicaStocul(admin, decrements);
+  const stoc = await revendicaStocul(admin, decrements, plan.adaugate);
   if (stoc.fel === "refuzat") return { error: stoc.error };
 
   const { error } = await supabase.from("orders").update({
@@ -2324,24 +2382,51 @@ export async function updateOrderDetails(orderId: string, data: {
   if (error) {
     // Comanda n-a fost salvata, deci stocul rezervat pentru liniile adaugate se
     // da inapoi — altfel marfa ramane scazuta pentru linii care nu exista.
-    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
     logError({ action: "updateOrderDetails", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
     return { error: "Eroare la salvarea modificarilor." };
   }
 
-  // Google Merchant availability sync for the added items (mirrors placeOrder).
-  // Stocul de produs e deja scazut de revendicare; ramura veche ramane doar cat
-  // timp migratia nu e aplicata.
-  if (decrements.length > 0 && stoc.fel === "nerevendicat") {
-    await admin.rpc("decrement_stock_batch" as never, { p_items: decrements } as never);
+  /*
+   * CE S-A MAI CONSUMAT SE ADAUGA LA `stoc_rezervat`.
+   *
+   * Calea asta scadea stocul pentru liniile adaugate si nu atingea deloc coloana.
+   * Deci o comanda editata si apoi anulata dadea inapoi doar cantitatile de la
+   * plasare, iar liniile adaugate ramaneau consumate pentru totdeauna — aceeasi
+   * gaura ca pe calea cosului, doar pe a treia cale, si negasita de niciun audit.
+   *
+   * Adaugarea se face in baza (`adauga_stoc_rezervat`), nu aici: citita si scrisa
+   * din aplicatie, doua editari in aceeasi clipa si una dintre ele dispare.
+   *
+   * Numai cand revendicarea a REUSIT: pe ramura veche stocul se scade mai jos, iar
+   * daca nici aia n-a rulat n-are ce sa fie dat inapoi.
+   */
+  if (stoc.fel === "revendicat" && (decrements.length > 0 || plan.adaugate.length > 0)) {
+    const { error: eRez } = await admin.rpc("adauga_stoc_rezervat" as never, {
+      p_order_id: orderId,
+      p_produse: decrements,
+      p_variante: stocRezervat([], plan.adaugate).variante,
+    } as never);
+    if (eRez) {
+      // Marfa e scazuta, dar comanda nu stie de ea: la anulare nu se va da inapoi.
+      // Se repara de mana, deci trebuie sa se vada.
+      logError({ action: "updateOrderDetails.stocRezervat", message: eRez.message, details: { code: eRez.code, orderId }, businessId: order.business_id, userId: user.id, severity: "critical" });
+    }
   }
-  // Stocul declarat pe fiecare marime vanduta scade si el, ca la ambele cai de
-  // comanda; fara asta o marime cu cinci bucati ramanea cinci oricat s-ar fi
-  // vandut din ea. Legat de liniile ADAUGATE, nu de scaderile de pachet: un
-  // produs fara `track_inventory` poate sa nu produca nicio scadere de produs si
-  // sa aiba totusi stoc declarat pe combinatie.
-  if (plan.adaugate.length > 0) {
+
+  // Google Merchant availability sync for the added items (mirrors placeOrder).
+  // Stocul de produs SI cel de marime sunt deja scazute de revendicare; ramura
+  // veche ramane doar cat timp migratia nu e aplicata.
+  if (stoc.fel === "nerevendicat") {
+    if (decrements.length > 0) {
+      await admin.rpc("decrement_stock_batch" as never, { p_items: decrements } as never);
+    }
+    // Legat de liniile ADAUGATE, nu de scaderile de pachet: un produs fara
+    // `track_inventory` poate sa nu produca nicio scadere de produs si sa aiba
+    // totusi stoc declarat pe combinatie.
     await scadeStoculVariantelor(admin, plan.adaugate);
+  }
+  if (plan.adaugate.length > 0) {
     const atinse = [...new Set([...decrements.map((d) => d.product_id), ...plan.adaugate.map((a) => a.product_id)])];
     void enqueueGmcSyncMany(order.business_id, atinse);
     void enqueueOlxSyncMany(order.business_id, atinse);
@@ -2922,7 +3007,7 @@ export async function placeCartOrder(data: {
 
   // Ca la comanda din formular: stocul se revendica atomic inainte de inserare,
   // fiindca `expandBundleStock` doar citeste. Vezi `revendicaStocul`.
-  const stoc = await revendicaStocul(admin, stockExp.decrements);
+  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCerute);
   if (stoc.fel === "refuzat") {
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
     return { error: stoc.error };
@@ -2989,18 +3074,28 @@ export async function placeCartOrder(data: {
     /* Vezi `placeOrder`: id-ul cuponului revendicat, ca utilizarea sa se poata da
      * inapoi cand comanda nu se mai face. `as never` din acelasi motiv. */
     discount_id: (validDiscountId ?? null) as never,
-    /* Fara `variante`: calea asta scade doar stocul de PRODUS (nu cheama
-     * `scadeStoculVariantelor`), iar inregistrarea trebuie sa spuna ce s-a
-     * intamplat cu adevarat — altfel eliberarea ar pune inapoi o cantitate
-     * pe o combinatie din care nu s-a scazut nimic. */
-    stoc_rezervat: stocRezervat(stockExp.decrements) as never,
+    /*
+     * CU `variante` — si aici a stat o gaura, din chiar ziua reparatiei.
+     *
+     * Comentariul de dinainte spunea „fara variante: calea asta scade doar stocul
+     * de PRODUS (nu cheama `scadeStoculVariantelor`)". Nu era adevarat: linia
+     * exista cateva randuri mai jos si scadea marimile. Deci coada consuma XL, iar
+     * `stoc_rezervat` nu-l pomenea — si la anulare `elibereaza_stoc_comanda` punea
+     * inapoi produsul si NICIODATA marimea.
+     *
+     * Calea directa avea argumentul de la inceput; pe cea a cosului l-am uitat si
+     * mi-am justificat omisiunea intr-un comentariu care era deja fals cand l-am
+     * scris. Un comentariu gresit e mai rau decat lipsa lui: opreste pe urmatorul
+     * din a se mai uita.
+     */
+    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCerute) as never,
   }).select("id, order_number, total").single();
 
   if (error) {
     // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
     // rezervat. Vezi `placeOrder`.
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
-    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
     logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
@@ -3015,14 +3110,13 @@ export async function placeCartOrder(data: {
     } catch { /* fara context de cerere (scripturi, teste) */ }
   }
 
-  // Stocul de produs e deja scazut inainte de insert; ramura asta ramane doar
-  // pentru cazul in care revendicarea n-a putut rula. Vezi `placeOrder`.
+  // Stocul — de produs si de marime — e deja scazut inainte de insert; ramura
+  // asta ramane doar pentru cazul in care revendicarea n-a putut rula, si atunci
+  // scade amandoua ca inainte. Vezi `placeOrder`.
   if (stoc.fel === "nerevendicat") {
     await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+    await scadeStoculVariantelor(admin, liniiCerute);
   }
-  // Si stocul marimii vandute, pe aceleasi linii pe care le-a verificat
-  // `eroareStocPeVarianta` la intrare — cu cantitatea plafonata, cea incasata.
-  await scadeStoculVariantelor(admin, liniiCerute);
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
   void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);

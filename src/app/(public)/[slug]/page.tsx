@@ -12,7 +12,7 @@ import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
 import { resolveProductOffers } from "@/lib/offers/offers";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
+import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { scrieFiltre } from "@/lib/storefront/catalog/url";
@@ -225,14 +225,29 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // silentios la 1000 de randuri (cap PostgREST) si ar ascunde produse.
   const [productsRaw, { data: storeSettings }, categoriesData] = await Promise.all([
     fetchAllRows("storefront.home.products", (from, to) =>
-      supabase
-        .from("products")
-        .select("id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id, page_sections, weight_grams")
+    /*
+     * Service role, si de ce e in regula.
+     *
+     * `catalog_produs` are RLS pornit si NICIO politica, deci se citeste doar cu
+     * cheia de serviciu. Cu asta pierdem politica de pe `products`, care cerea
+     * „produs activ AL UNEI AFACERI PUBLICATE" — iar acum ambele conditii sunt
+     * tinute in alta parte:
+     *   - activ: in tabela intra DOAR produse active, si declansatorul scoate
+     *     randul in clipa in care produsul se dezactiveaza;
+     *   - publicat: poarta din codul de mai sus, care iese din functie inainte
+     *     sa se ajunga aici.
+     *
+     * Deci poarta aia nu mai are voie sa se mute sub aceasta citire, si nici sa
+     * devina conditionala. Daca vreodata se muta, catalogul unui magazin
+     * nepublicat devine public — fara nicio eroare care sa o arate.
+     */
+      proiectieDb()
+        .from("catalog_produs")
+        .select(COLOANE_PROIECTIE)
         .eq("business_id", business.id)
-        .eq("is_active", true)
         .order("is_featured", { ascending: false })
         .order("sort_order")
-        .order("id")
+        .order("product_id")
         .range(from, to)
     ),
     createAdminClient()
@@ -274,11 +289,16 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
     : storeSettings;
 
-  // Slimuire payload: cardurile/cautarea/cosul folosesc doar o fractiune din
-  // fiecare rand — restul (combinatii de variante, imagini 2+, descrieri
-  // intregi, alte sectiuni din page_sections) umfla pagina de ~9x la
-  // cataloagele mari. Detalii in lib/storefront/catalog-slim.ts.
-  const products = productsRaw.map(slimCatalogProduct);
+  /*
+   * Catalogul vine gata subtiat din `catalog_produs`, nu se mai subtiaza aici.
+   *
+   * Slimuirea din JS ramasese ultimul loc care cerea randul BRUT: ca sa arunce
+   * combinatiile de variante trebuia intai sa le citeasca, deci pagina scotea din
+   * Postgres 18 MB ca sa pastreze 1,1. Acum randul iese deja mic din baza, iar
+   * pretul si disponibilitatea pachetelor vin calculate — vezi
+   * lib/storefront/catalog/proiector.ts.
+   */
+  const products = (productsRaw as unknown as RandProiectie[]).map(dinProiectie);
 
   // Detect custom domain access
   const headersList = await headers();

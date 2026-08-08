@@ -6,7 +6,6 @@ import { ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
-import { esteFaraStocInCatalog } from "@/lib/storefront/stoc-catalog";
 import { parseProductSections, resolveSectionProducts } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
@@ -271,13 +270,21 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * componente sterse.
    */
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
-  // Regula sta in lib/storefront/stoc-catalog.ts, ca sa aiba UN singur loc:
-  // filtrul „In stoc" si panoul de cautare aveau fiecare formularea lui, si
-  // niciuna nu stia de pachete.
-  const isProductOutOfStock = useCallback(
-    (p: Product): boolean => esteFaraStocInCatalog(p, productById),
-    [productById],
-  );
+  /*
+   * Verdictul vine de la SERVER, gata luat.
+   *
+   * Se deriva aici, din harta intregului catalog, si asta mergea doar fiindca
+   * payload-ul continea TOT catalogul activ: un id de componenta care nu se
+   * regasea insemna „sters". Regula ramane scrisa in
+   * lib/storefront/stoc-catalog.ts si oglindita in SQL (`catalog_fara_stoc`), cu
+   * test de paritate intre ele — dar raspunsul se calculeaza o data, la scriere,
+   * nu la fiecare afisare de pagina in browserul fiecarui vizitator.
+   *
+   * Asta e si conditia ca lista sa poata deveni PARTIALA: cu o singura pagina de
+   * produse in memorie, derivarea de dinainte ar fi marcat fiecare pachet ca
+   * indisponibil, fiindca nu si-ar mai fi gasit componentele.
+   */
+  const isProductOutOfStock = useCallback((p: Product): boolean => p.fara_stoc, []);
 
   // Product filters (price range, variant options, on-sale, in-stock)
   const [filtersOpen, setFiltersOpen] = useState(false);

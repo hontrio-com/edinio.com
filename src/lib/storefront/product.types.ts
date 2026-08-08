@@ -44,6 +44,24 @@ export type StorefrontProduct = Pick<
    */
   price_range: PriceRange;
   /**
+   * Produsul e epuizat — raspuns venit de la SERVER, pentru pachete cu tot.
+   *
+   * Intrebarea „e in stoc?" a avut opt formulari in aplicatie, si niciuna dintre
+   * cele din browser nu stia de pachete: un pachet se scrie cu
+   * `track_inventory: false`, deci `!track_inventory || stock > 0` era adevarat
+   * pentru fiecare, oricum ar fi stat componentele lui. Asa a stat „Pachet Femei"
+   * o saptamana pe raft, la 358,40 lei, cu toate cele trei componente sterse.
+   *
+   * Pana acum raspunsul corect se putea deriva in browser doar fiindca payload-ul
+   * continea TOT catalogul activ, deci o componenta lipsa insemna „stearsa". In
+   * clipa in care lista devine partiala, derivarea aia nu mai e posibila — si ar
+   * marca fiecare pachet ca indisponibil. De aia verdictul vine gata luat din
+   * `catalog_produs.fara_stoc`, calculat de `catalog_fara_stoc` in baza.
+   *
+   * Camp CERUT, nu optional: un steag optional se uita exact acolo unde conteaza.
+   */
+  fara_stoc: boolean;
+  /**
    * Indicii jetoanelor de fateta ale produsului, in dictionarul trimis alaturi.
    *
    * Prezenti doar pe pagina de catalog, care le cere explicit: brandul si

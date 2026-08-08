@@ -8,8 +8,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
-import { construiesteFatete } from "@/lib/storefront/catalog/facets";
-import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
+import { construiesteFateteDinJetoane } from "@/lib/storefront/catalog/facets";
+import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
 import { radacinaMagazin, slugCategorie } from "@/lib/storefront/category-href";
 import { SEGMENT_MAGAZIN, shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
@@ -31,10 +31,6 @@ import type { Json } from "@/types/database.types";
  * props. Prima nepotrivire ar fi fost una tacuta: o pagina de categorie care
  * vinde mai departe dintr-un magazin suspendat.
  */
-
-/** Coloanele cerute in plus fata de pagina principala: `tags` alimenteaza fatetele. */
-export const COLOANE_CATALOG =
-  "id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id, page_sections, weight_grams, tags";
 
 interface Argumente {
   slug: string;
@@ -248,14 +244,29 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   // 1000 de randuri (cap PostgREST) si ar ascunde produse.
   const [productsRaw, categoriesData] = await Promise.all([
     fetchAllRows("storefront.magazin.products", (from, to) =>
-      supabase
-        .from("products")
-        .select(COLOANE_CATALOG)
+    /*
+     * Service role, si de ce e in regula.
+     *
+     * `catalog_produs` are RLS pornit si NICIO politica, deci se citeste doar cu
+     * cheia de serviciu. Cu asta pierdem politica de pe `products`, care cerea
+     * „produs activ AL UNEI AFACERI PUBLICATE" — iar acum ambele conditii sunt
+     * tinute in alta parte:
+     *   - activ: in tabela intra DOAR produse active, si declansatorul scoate
+     *     randul in clipa in care produsul se dezactiveaza;
+     *   - publicat: poarta din codul de mai sus, care iese din functie inainte
+     *     sa se ajunga aici.
+     *
+     * Deci poarta aia nu mai are voie sa se mute sub aceasta citire, si nici sa
+     * devina conditionala. Daca vreodata se muta, catalogul unui magazin
+     * nepublicat devine public — fara nicio eroare care sa o arate.
+     */
+      proiectieDb()
+        .from("catalog_produs")
+        .select(COLOANE_PROIECTIE)
         .eq("business_id", business.id)
-        .eq("is_active", true)
         .order("is_featured", { ascending: false })
         .order("sort_order")
-        .order("id")
+        .order("product_id")
         .range(from, to)),
     fetchAllRows("storefront.magazin.categories", (from, to) =>
       supabase
@@ -266,6 +277,11 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
         .order("id")
         .range(from, to)),
   ]);
+
+  // Un singur loc unde randurile capata tip: `catalog_produs` nu e in tipurile
+  // generate, deci clientul e cel fara tipuri (vezi `proiectieDb`). Conversia sta
+  // sus, langa citire, ca toti consumatorii de mai jos sa o imparta.
+  const randuri = productsRaw as unknown as RandProiectie[];
 
   /*
    * Categoria din cale, daca pagina e a unei categorii.
@@ -289,7 +305,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
         numeParinte: categoriesData.find((c) => c.id === gasita.parent_id)?.name ?? null,
       };
     } else {
-      const orfane = Array.from(new Set(productsRaw.map((p) => p.category).filter(Boolean) as string[]));
+      const orfane = Array.from(new Set(randuri.map((p) => p.category).filter(Boolean) as string[]));
       const numeOrfan = potrivesteCategorie(orfane.map((n) => ({ name: n })), categorieSlug)?.name;
       if (!numeOrfan) notFound();
       numeCategorie = numeOrfan;
@@ -297,21 +313,26 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   }
 
   /*
-   * Fatetele se calculeaza AICI, pe randurile brute.
+   * Fatetele vin din jetoanele deja calculate de proiector.
    *
-   * `slimCatalogProduct` reconstruieste `page_sections` si pastreaza doar
-   * variantele si pachetul, deci brandul si specificatiile nu mai exista in
-   * browser. Calculate dupa slimuire, jumatate din filtre ar fi fost mereu
-   * goale.
+   * Se calculau aici, pe randul BRUT, fiindca brandul si specificatiile stau in
+   * `page_sections` si nu supravietuiau slimuirii — deci pagina trebuia sa
+   * citeasca tot randul doar ca sa afle dupa ce se poate filtra. Acum perechile
+   * sunt scrise o data, la salvarea produsului, si se citesc ca `text[]`.
+   *
+   * Politica ramane NESCHIMBATA: aceleasi praguri, aceeasi deduplicare, aceeasi
+   * ordonare. `construiesteFateteDinJetoane` trece prin exact aceeasi agregare ca
+   * `construiesteFatete`; difera doar de unde vin perechile.
    */
-  const index = construiesteFatete(productsRaw);
-  // Fara niciun cast: si `as StorefrontProduct` trecea, fiindca tipul tinta e
-  // asignabil catre forma fara `price_range`. Adnotarea tabloului face verificarea
-  // reala, adica exact pe producatorul cel mai mare — 1221 de produse.
-  const products: StorefrontProduct[] = productsRaw.map((p) => {
-    const { tags: _tags, ...slim } = slimCatalogProduct(p);
-    const f = index.perProdus.get(p.id);
-    return f ? { ...slim, f } : slim;
+  const index = construiesteFateteDinJetoane(
+    randuri.map((r) => ({ id: r.product_id, fatete: r.fatete })),
+  );
+  // Adnotarea tabloului, nu un cast: `as StorefrontProduct` ar fi trecut chiar
+  // daca lipsea un camp, fiindca tipul tinta e asignabil catre forme mai sarace.
+  const products: StorefrontProduct[] = randuri.map((r) => {
+    const p = dinProiectie(r);
+    const f = index.perProdus.get(r.product_id);
+    return f ? { ...p, f } : p;
   });
 
   // Analitica: aterizarile directe pe pagina de catalog sunt vizite reale, la

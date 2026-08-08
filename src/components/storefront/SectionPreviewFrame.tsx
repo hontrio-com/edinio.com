@@ -121,7 +121,9 @@ export function SectionPreviewFrame({
           items: items.slice(0, 6),
         },
       ],
-      isProductOutOfStock: (p) => !!(p.track_inventory && p.stock_quantity === 0),
+      // A OPTA formulare, acum si ea pe steagul de la server. In previzualizare
+      // produsele sunt cele demo, unde steagul e mereu false.
+      isProductOutOfStock: (p) => p.fara_stoc,
 
       search: "",
       setSearch: nimic,

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { descriereDeCautare, slimPageSections } from "@/lib/storefront/catalog-slim";
 import { normalizeSearchText } from "@/lib/storefront/product-search";
-import { perechileProdusului } from "@/lib/storefront/catalog/facets";
+import { jeton, perechileProdusului } from "@/lib/storefront/catalog/facets";
 
 /**
  * Umple campurile CALCULATE din `catalog_produs`, apeland regulile existente.
@@ -24,10 +24,6 @@ import { perechileProdusului } from "@/lib/storefront/catalog/facets";
  * (`catalog_fara_stoc`), fiindca de ea depinde un declansator — si are un test de
  * paritate care ruleaza ambele implementari peste aceleasi cazuri.
  */
-
-/** Separator intre cheia fatetei si valoare. Caracter de control tocmai fiindca
- *  nu poate aparea intr-un nume de fateta sau intr-o valoare din `page_sections`. */
-export const SEPARATOR_FATETA = "";
 
 /** Cate produse se citesc si se scriu intr-un lot. */
 const LOT = 500;
@@ -93,7 +89,10 @@ export function proiecteazaRand(p: RandSursa, acum: string): ProiectieCalculata 
     // `Set` fiindca acelasi (cheie, valoare) poate veni si din `google.brand`, si
     // dintr-o specificatie scrisa „Brand" — `construiesteFatete` le uneste oricum,
     // dar un array cu dubluri ar umfla degeaba indexul GIN.
-    fatete: Array.from(new Set(perechi.map((x) => `${x.cheie}${SEPARATOR_FATETA}${x.valoare}`))),
+    // `jeton()` din facets.ts, nu un separator propriu: doua definitii ale
+    // aceluiasi caracter ar putea diverge, si atunci fatetele s-ar reconstrui
+    // gresit fara nicio eroare.
+    fatete: Array.from(new Set(perechi.map((x) => jeton(x.cheie, x.valoare)))),
     proiectat_la: acum,
   };
 }

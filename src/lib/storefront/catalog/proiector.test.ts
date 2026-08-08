@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { proiecteazaRand, SEPARATOR_FATETA } from "./proiector";
+import { proiecteazaRand } from "./proiector";
+// Separatorul are o SINGURA definitie, in facets.ts, si testul o foloseste pe
+// aceea. Cu o copie locala, testul ar putea trece in timp ce productia scrie
+// altceva — exact bug-ul pe care ar trebui sa-l prinda.
+import { jeton } from "@/lib/storefront/catalog/facets";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 
 /**
@@ -98,10 +102,10 @@ test("fatetele poarta cheia si valoarea, despartite de caracterul de control", (
       specifications: [{ label: "Certificari", value: "EN388" }],
     },
   }), ACUM);
-  assert.ok(pr.fatete.includes(`a.Marime${SEPARATOR_FATETA}XL`));
-  assert.ok(pr.fatete.includes(`brand${SEPARATOR_FATETA}Portwest`));
-  assert.ok(pr.fatete.includes(`tag${SEPARATOR_FATETA}Reducere`));
-  assert.ok(pr.fatete.includes(`s.Certificari${SEPARATOR_FATETA}EN388`));
+  assert.ok(pr.fatete.includes(jeton("a.Marime", "XL")));
+  assert.ok(pr.fatete.includes(jeton("brand", "Portwest")));
+  assert.ok(pr.fatete.includes(jeton("tag", "Reducere")));
+  assert.ok(pr.fatete.includes(jeton("s.Certificari", "EN388")));
 });
 
 test("aceeasi pereche din doua surse se scrie o singura data", () => {
@@ -109,7 +113,7 @@ test("aceeasi pereche din doua surse se scrie o singura data", () => {
   const pr = proiecteazaRand(rand({
     page_sections: { google: { brand: "Portwest" }, specifications: [{ label: "Brand", value: "Portwest" }] },
   }), ACUM);
-  const portwest = pr.fatete.filter((f) => f.endsWith(`${SEPARATOR_FATETA}Portwest`));
+  const portwest = pr.fatete.filter((f) => f.endsWith(jeton("", "Portwest")));
   assert.equal(new Set(portwest).size, portwest.length, "dubluri in indexul GIN");
 });
 

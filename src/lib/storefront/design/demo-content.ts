@@ -188,6 +188,9 @@ export function demoProductPage(businessId: string) {
     tags: ["exterior", "solar"],
     shipping_class: null,
     weight_grams: 1200,
+    // Produsele demo sunt mereu disponibile: galeria de design arata cum arata
+    // un magazin care merge, nu unul cu rafturile goale.
+    fara_stoc: false,
     page_sections: {
       short_description:
         "<p>Se incarca de la soare, porneste singura la apus si lumineaza toata noaptea. Fara cabluri, fara curent, fara intretinere.</p>",
@@ -277,5 +280,6 @@ export function demoProducts(businessId: string) {
       ],
     },
     weight_grams: null,
+    fara_stoc: false,
   }));
 }

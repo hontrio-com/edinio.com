@@ -90,7 +90,9 @@ export function ProductCard({
   // produse demonstrative din catalogul de design-uri (au `variants.enabled` fara
   // nicio combinatie). Steagul e citit acolo unde chiar conteaza: datele
   // structurate.
-  const isOutOfStock = outOfStock ?? (product.track_inventory && product.stock_quantity === 0);
+  // Rezerva era a SAPTEA formulare a intrebarii, si nu stia de pachete. Acum
+  // cade pe steagul venit de la server, care le stie.
+  const isOutOfStock = outOfStock ?? product.fara_stoc;
   // Produs variabil: cardul deschide selectorul de optiuni in loc sa adauge direct.
   const isVariable = parseVariants(product.page_sections) !== null;
 

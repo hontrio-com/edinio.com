@@ -1,6 +1,19 @@
 import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 
 /**
+ * NU E COD MORT. Nu-l sterge fiindca nu-l importa nimeni.
+ *
+ * De cand catalogul citeste `catalog_produs.fara_stoc`, regula nu mai RULEAZA in
+ * browser — dar ramane SPECIFICATIA EXECUTABILA pe care o oglindeste functia SQL
+ * `catalog_fara_stoc` (migrations/2026-08-09-catalog-produs.sql). Testele de
+ * alaturi sunt singurul loc unde regula e scrisa in TypeScript si verificata pe
+ * cazurile reale; sters fisierul, portul SQL ramane fara pereche si urmatoarea
+ * modificare a lui nu mai are cu ce sa fie comparata.
+ *
+ * Daca vreodata regula se schimba, se schimba AICI si in SQL, in acelasi commit.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
  * „Produsul asta e fara stoc?", pentru catalogul din browser.
  *
  * Intrebarea a avut, pe rand, sase formulari diferite in aceeasi aplicatie.

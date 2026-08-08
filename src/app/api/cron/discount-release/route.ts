@@ -86,6 +86,20 @@ export async function GET(req: NextRequest) {
    */
   await admin.rpc("agregeaza_analitice", { p_zile: 2 }).then(() => {}, () => {});
 
+  /*
+   * Si stergerea randurilor brute vechi, DUPA agregare, in aceeasi rulare.
+   *
+   * Ordinea nu e optionala: invers, s-ar sterge o zi inainte sa fie insumata, si
+   * ar disparea din statistici pentru totdeauna. De aia stau una langa alta, in
+   * ordinea asta, si nu in doua croane separate.
+   *
+   * Se pastreaza opt zile, desi panoul citeste brut doar ziua de AZI: agregarea
+   * reface ultimele doua, iar marginea acopera o rulare sarita. Se sterge in
+   * transe de 5.000 — un `delete` peste zeci de mii de randuri ar tine un lock
+   * lung chiar pe tabela in care scrie fiecare vizita.
+   */
+  await admin.rpc("curata_analitice_brute", { p_pastreaza_zile: 8, p_max: 5000 }).then(() => {}, () => {});
+
   // `?ore=` largeste sau stramteaza pragul pentru o verificare manuala; rularea
   // programata foloseste implicitul.
   const ore = Math.min(Math.max(Number(req.nextUrl.searchParams.get("ore")) || ORE_PANA_LA_ELIBERARE, 1), 24 * 30);

@@ -624,6 +624,34 @@ async function revendicaStocul(
 
 /** Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
  *  `revendicaStocul`, ca `release_discount_use` pentru cupon. */
+/**
+ * Ce stoc a consumat comanda, in forma in care se poate da INAPOI intocmai.
+ *
+ * Se scrie pe comanda la plasare, si nu se deduce mai tarziu din `items`, fiindca
+ * din `items` NU se poate deduce: pachetele nu-si scriu componentele acolo (se
+ * scade componenta, se retine pachetul), variantele se scad pe combinatie, iar
+ * `items[].product_id` amesteca id-uri de produs cu `extra_<id>`. Peste toate,
+ * compozitia unui pachet se poate schimba intre vanzare si anulare — dedus atunci,
+ * s-ar da inapoi altceva decat s-a luat.
+ *
+ * Vezi migrations/2026-08-17-eliberare-stoc-comanda.sql.
+ */
+function stocRezervat(
+  decrements: { product_id: string; quantity: number }[],
+  liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
+): { produse: { product_id: string; quantity: number }[]; variante: { product_id: string; variant_title: string; quantity: number }[] } {
+  return {
+    produse: decrements,
+    variante: liniiVarianta
+      .filter((l) => l.variant_title)
+      .map((l) => ({
+        product_id: l.product_id,
+        variant_title: l.variant_title as string,
+        quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+      })),
+  };
+}
+
 async function elibereazaStocul(
   admin: SupabaseClient<Database>,
   decrements: { product_id: string; quantity: number }[],
@@ -1263,6 +1291,9 @@ export async function placeOrder(data: {
      * dar inca nu si in tipurile generate.
      */
     discount_id: (validDiscountId ?? null) as never,
+    /* Ce s-a rezervat, ca sa se poata da inapoi intocmai la anulare. `as never`
+     * ca la `discount_id`: coloana e noua si tipurile generate n-o stiu inca. */
+    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCuVarianta) as never,
   }).select("id, order_number").single();
 
   if (error) {
@@ -1713,6 +1744,46 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       const { data: reluat } = await admin.rpc("reclaim_order_discount" as never, { p_order_id: orderId } as never);
       if (reluat === "plin") {
         logError({ action: "updateOrder.reclaimDiscount", message: "Cuponul si-a atins limita intre anulare si reactivare; comanda ramane cu reducerea, necontorizata.", details: { orderId, code: order.discount_code }, businessId: order.business_id, userId: user.id, severity: "warning" });
+      }
+    }
+  }
+
+  /*
+   * STOCUL, dupa exact aceleasi reguli ca utilizarea cuponului de mai sus.
+   *
+   * Pana acum stocul nu se elibera NICIODATA: `elibereaza_stoc_batch` era chemata
+   * doar pe cele trei cai „insertul a esuat". O comanda anulata tinea marfa
+   * scazuta pentru o vanzare care nu s-a facut — masurat, 27 din 114 comenzi.
+   *
+   * Diferenta fata de cupon: nu exista o poarta ieftina de felul lui
+   * `discount_code`, fiindca aproape orice comanda consuma stoc. In schimb
+   * `elibereaza_stoc_comanda` iese imediat cand n-are ce face, si tot ea decide
+   * daca s-a dat deja inapoi — marcajul se pune in ACEEASI instructiune cu
+   * eliberarea, deci o comanda anulata de doua ori (sau anulata si stearsa pe
+   * urma) elibereaza o singura data. Un stoc umflat vinde marfa care nu exista,
+   * deci e mai rau decat unul blocat.
+   */
+  if (statusChanged || banaRestituita) {
+    const seIntoarceStoc = banaRestituita
+      || (GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string));
+    const admin = createAdminClient();
+    if (seIntoarceStoc) {
+      const { data: fel } = await admin.rpc("elibereaza_stoc_comanda" as never, { p_order_id: orderId } as never);
+      /*
+       * „necunoscut" = comanda plasata inainte sa existe `stoc_rezervat`. Nu se
+       * ghiceste din `items` (pachetele nu-si scriu componentele acolo), deci
+       * ramane o urma in loguri si comerciantul poate corecta de mana.
+       */
+      if (fel === "necunoscut") {
+        logError({ action: "updateOrder.elibereazaStoc", message: "Comanda e dinainte de inregistrarea stocului rezervat; stocul NU s-a dat inapoi automat.", details: { orderId }, businessId: order.business_id, userId: user.id, severity: "warning" });
+      }
+    } else if (!GA4_REVERSAL.has(data.status)) {
+      // Scoasa din anulare: marfa iese din nou din stoc. Garda e in baza — fara
+      // marcaj de eliberare nu se poate revendica ce n-a fost dat inapoi.
+      const { data: rez } = await admin.rpc("revendica_stoc_comanda" as never, { p_order_id: orderId } as never);
+      const negative = (rez as { negative?: unknown[] } | null)?.negative ?? [];
+      if (Array.isArray(negative) && negative.length > 0) {
+        logError({ action: "updateOrder.revendicaStoc", message: "Reactivarea comenzii a dus stocul sub zero: marfa s-a vandut altcuiva intre timp.", details: { orderId, negative }, businessId: order.business_id, userId: user.id, severity: "warning" });
       }
     }
   }
@@ -2338,6 +2409,17 @@ export async function deleteOrder(orderId: string) {
     await createAdminClient().rpc("release_order_discount" as never, { p_order_id: orderId } as never);
   }
 
+  /*
+   * Si stocul, tot INAINTE de stergere, si din exact acelasi motiv: dupa DELETE
+   * nu mai exista `stoc_rezervat`, deci nu s-ar mai putea afla ce marfa consumase
+   * comanda — si ar ramane scazuta pentru totdeauna, pentru o comanda care nu mai
+   * e nicaieri.
+   *
+   * Marcajul din baza face ca o comanda deja anulata (deci deja eliberata) sa nu
+   * primeasca stocul a doua oara la stergere.
+   */
+  await createAdminClient().rpc("elibereaza_stoc_comanda" as never, { p_order_id: orderId } as never);
+
   const { error } = await supabase.from("orders").delete().eq("id", orderId);
   if (error) {
     logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, userId: user.id });
@@ -2934,6 +3016,11 @@ export async function placeCartOrder(data: {
     /* Vezi `placeOrder`: id-ul cuponului revendicat, ca utilizarea sa se poata da
      * inapoi cand comanda nu se mai face. `as never` din acelasi motiv. */
     discount_id: (validDiscountId ?? null) as never,
+    /* Fara `variante`: calea asta scade doar stocul de PRODUS (nu cheama
+     * `scadeStoculVariantelor`), iar inregistrarea trebuie sa spuna ce s-a
+     * intamplat cu adevarat — altfel eliberarea ar pune inapoi o cantitate
+     * pe o combinatie din care nu s-a scazut nimic. */
+    stoc_rezervat: stocRezervat(stockExp.decrements) as never,
   }).select("id, order_number, total").single();
 
   if (error) {

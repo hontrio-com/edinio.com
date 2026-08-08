@@ -406,6 +406,27 @@ export async function bulkUpdateOrderStatus(
       // loc din tot `src/` cu tiparul asta.
       await admin.rpc("release_order_discount" as never, { p_order_id: row.id } as never);
     }
+    /*
+     * STOCUL, si intr-un sens SI IN CELALALT — spre deosebire de cupon.
+     *
+     * Anularea in lot e chiar calea pe care pleaca majoritatea anularilor (sase
+     * din opt), deci fara linia asta reparatia n-ar fi atins tocmai populatia
+     * pentru care a fost facuta.
+     *
+     * Iar revendicarea la scoaterea din anulare NU e simetrie de dragul simetriei:
+     * la cupon, o utilizare in plus inseamna o campanie usor depasita; la stoc, o
+     * cantitate in plus inseamna marfa care se vinde fara sa existe. Un lot dus
+     * `cancelled -> confirmed` trebuie sa scoata marfa din stoc la loc.
+     *
+     * Amandoua sunt idempotente in baza: marcajul `stoc_eliberat_la` se pune si se
+     * sterge in aceeasi instructiune cu citirea lui, deci nici doua anulari nu
+     * elibereaza de doua ori, nici doua reactivari nu scad de doua ori.
+     */
+    if (status === "cancelled" || status === "refunded") {
+      await admin.rpc("elibereaza_stoc_comanda" as never, { p_order_id: row.id } as never);
+    } else {
+      await admin.rpc("revendica_stoc_comanda" as never, { p_order_id: row.id } as never);
+    }
   }
   revalidatePath("/dashboard/orders");
   return { updated: (updated ?? []).length };

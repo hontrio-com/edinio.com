@@ -173,20 +173,6 @@ export async function applyStockPlan(
   });
 
   await runBatches([...byProduct.entries()], async ([productId, productChanges]) => {
-    /* Citire proaspata: intre previzualizare si scriere produsul poate fi editat. */
-    const { data: row, error: readErr } = await admin
-      .from("products")
-      .select("page_sections")
-      .eq("id", productId)
-      .eq("business_id", businessId)
-      .single();
-
-    if (readErr || !row) {
-      const message = readErr?.message ?? "Produsul nu mai exista";
-      for (const c of productChanges) failed.push({ change: c, message });
-      return;
-    }
-
     const edits: VariantEdit[] = productChanges.map((c) => ({
       key: c.rowIndex,
       variantId: c.variantId as string,
@@ -195,7 +181,69 @@ export async function applyStockPlan(
       price: c.priceTo,
     }));
 
-    const { next, missing } = patchVariants(row.page_sections, edits);
+    /*
+     * CITESTE → PATCH → SCRIE DOAR DACA NU S-A SCHIMBAT, cu reluare.
+     *
+     * Pana acum erau trei pasi fara nicio legatura intre ei: SELECT, patch in
+     * JavaScript, UPDATE. O vanzare aterizata intre citire si scriere
+     * (`decrement_variant_stock_batch` scrie tot in `page_sections`) era
+     * SUPRASCRISA cu valoarea de dinainte de vanzare — fara eroare si fara urma.
+     * Feedul ruleaza orar si trateaza opt produse deodata, deci fereastra e reala.
+     *
+     * Patch-ul RAMANE in TypeScript: `patchVariants` potriveste dupa id sau SKU,
+     * raporteaza variantele lipsa si pastreaza tipul sir-vs-numar al stocului.
+     * Rescris in SQL, ar fi devenit a doua formulare a acelorasi reguli.
+     *
+     * Reluarea, nu esecul: daca randul s-a schimbat intre timp, se reciteste si se
+     * reface patch-ul PESTE valoarea noua — deci se pastreaza si vanzarea, si
+     * actualizarea din feed. Trei incercari; peste ele, produsul se raporteaza ca
+     * esuat in loc sa se insiste pe un rand pe care evident scrie altcineva.
+     */
+    let row: { page_sections: unknown } | null = null;
+    let next: unknown = null;
+    let missing: number[] = [];
+    let scris = false;
+    let mesajEroare = "";
+
+    for (let incercare = 0; incercare < 3 && !scris; incercare++) {
+      const { data, error: readErr } = await admin
+        .from("products")
+        .select("page_sections")
+        .eq("id", productId)
+        .eq("business_id", businessId)
+        .single();
+
+      if (readErr || !data) {
+        mesajEroare = readErr?.message ?? "Produsul nu mai exista";
+        break;
+      }
+      row = data;
+      const patch = patchVariants(data.page_sections, edits);
+      next = patch.next;
+      missing = patch.missing;
+
+      // Toate variantele au disparut: nu mai e nimic de scris, iar erorile lor se
+      // raporteaza mai jos.
+      if (missing.length === productChanges.length) { scris = true; break; }
+
+      const { data: fel, error: rpcErr } = await admin.rpc("scrie_variante_daca_neschimbat" as never, {
+        p_business: businessId,
+        p_product: productId,
+        p_asteptat: data.page_sections as never,
+        p_nou: next as never,
+      } as never);
+
+      if (rpcErr) { mesajEroare = rpcErr.message; break; }
+      if (fel === "scris") { scris = true; break; }
+      if (fel === "lipsa") { mesajEroare = "Produsul nu mai exista"; break; }
+      // `schimbat`: se reia bucla, cu o citire proaspata.
+      mesajEroare = "Produsul a fost modificat in acelasi timp de altcineva";
+    }
+
+    if (!row) {
+      for (const c of productChanges) failed.push({ change: c, message: mesajEroare });
+      return;
+    }
 
     /* Varianta disparuta intre previzualizare si scriere: randul ei e eroare, dar
        restul variantelor aceluiasi produs se scriu normal. */
@@ -209,14 +257,8 @@ export async function applyStockPlan(
     const appliedChanges = productChanges.filter((c) => !missingSet.has(c.rowIndex));
     if (appliedChanges.length === 0) return;
 
-    const { error: writeErr } = await admin
-      .from("products")
-      .update({ page_sections: next as never })
-      .eq("id", productId)
-      .eq("business_id", businessId);
-
-    if (writeErr) {
-      for (const c of appliedChanges) failed.push({ change: c, message: writeErr.message });
+    if (!scris) {
+      for (const c of appliedChanges) failed.push({ change: c, message: mesajEroare });
     } else {
       written.push(...appliedChanges);
     }

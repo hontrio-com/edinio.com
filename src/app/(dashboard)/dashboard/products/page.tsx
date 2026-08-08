@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { aplicaFiltreProduse, citesteFiltreProduse, ordoneazaProduse, PRODUSE_PE_PAGINA, type FiltreProduse } from "@/lib/dashboard/produse-filtre";
 import { ProductsClient } from "@/components/dashboard/ProductsClient";
 import { getProductLimit } from "@/lib/plan-limits";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,13 +20,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; page?: string }>;
+  searchParams: Promise<{ search?: string; page?: string; cat?: string; stare?: string; stoc?: string }>;
 }) {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: bizRow }, { search: searchQuery, page: pageParam }, { data: profile }] = await Promise.all([
+  const [{ data: bizRow }, sp, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
       .select("id, store_settings(olx_config)")
@@ -45,13 +46,17 @@ export default async function ProductsPage({
   const olxSettings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] : bizRow.store_settings;
   const olxConnected = !!(olxSettings?.olx_config as { connected?: boolean } | null)?.connected;
 
+  const filtre = citesteFiltreProduse(sp);
+
   return (
     <div className="p-4 sm:p-6">
-      <Suspense fallback={<ScheletProduse />}>
+      {/* `key` pe filtre: la o filtrare noua lista se remonteaza, deci starea de
+          selectie si pagina pornesc curate — altfel ar fi ramas bifate produse
+          care nu mai sunt in lista. */}
+      <Suspense key={JSON.stringify(filtre)} fallback={<ScheletProduse />}>
         <ListaProduse
           businessId={bizRow.id}
-          initialSearch={searchQuery ?? ""}
-          initialPage={Math.max(1, parseInt(pageParam ?? "1", 10) || 1)}
+          filtre={filtre}
           productLimit={productLimit}
           plan={plan}
           olxConnected={olxConnected}
@@ -89,50 +94,65 @@ function ScheletProduse() {
 
 async function ListaProduse({
   businessId,
-  initialSearch,
-  initialPage,
+  filtre,
   productLimit,
   plan,
   olxConnected,
 }: {
   businessId: string;
-  initialSearch: string;
-  initialPage: number;
+  filtre: FiltreProduse;
   productLimit: number;
   plan: string;
   olxConnected: boolean;
 }) {
   const supabase = await createClient();
 
-  // Windowed reads: embedded selects (businesses -> products(...)) cap silently
-  // at 1000 rows (PostgREST), so a bigger catalog looked truncated to exactly
-  // 1000 in the list and the merchant read it as a plan limit.
-  const [productsRaw, categoriesRaw] = await Promise.all([
-    fetchAllRows("dashboard.products.list", (from, to) =>
-      supabase
-        .from("products")
-        .select("id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id")
-        .eq("business_id", businessId)
-        .order("id")
-        .range(from, to)
-    ),
-    fetchAllRows("dashboard.products.categories", (from, to) =>
-      supabase
-        .from("categories")
-        .select("id, name, parent_id, sort_order")
-        .eq("business_id", businessId)
-        .order("sort_order")
-        .order("id")
-        .range(from, to)
-    ),
+  /*
+   * O PAGINA de produse, filtrata in SQL — nu tot catalogul, filtrat in browser.
+   *
+   * Se citea TOT: la eSAFE, 4,9 MB de randuri (3.351 de produse) ca sa se arate
+   * douazeci si cinci. `?search=` si `?page=` existau in adresa si erau
+   * decorative — filtrarea si felierea se faceau amandoua in `ProductsClient`.
+   *
+   * Categoriile raman citite intregi: sunt cateva zeci, alimenteaza selectorul de
+   * filtru si trebuie sa fie toate acolo, nu doar cele de pe pagina curenta.
+   * `numaraProdusele` e separat de `count`-ul listei: limita de plan se masoara pe
+   * catalogul INTREG, nu pe cate randuri a lasat filtrul.
+   */
+  const de_la = (filtre.pagina - 1) * PRODUSE_PE_PAGINA;
+
+  const categoriesRaw = await fetchAllRows("dashboard.products.categories", (from, to) =>
+    supabase
+      .from("categories")
+      .select("id, name, parent_id, sort_order")
+      .eq("business_id", businessId)
+      .order("sort_order")
+      .order("id")
+      .range(from, to)
+  );
+
+  const [{ data: productsRaw, count: totalFiltrate }, { count: totalCatalog }] = await Promise.all([
+    ordoneazaProduse(
+      aplicaFiltreProduse(
+        supabase
+          .from("products")
+          .select(
+            "id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id",
+            { count: "exact" },
+          )
+          .eq("business_id", businessId),
+        filtre,
+        categoriesRaw,
+      ),
+    ).range(de_la, de_la + PRODUSE_PE_PAGINA - 1),
+    supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .eq("is_bundle", false),
   ]);
 
-  const products = productsRaw
-    .filter((p) => !p.is_bundle)
-    .sort((a, b) => {
-      if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+  const products = productsRaw ?? [];
 
   const categories = [...categoriesRaw]
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name));
@@ -141,11 +161,11 @@ async function ListaProduse({
     <ProductsClient
       products={products}
       businessId={businessId}
-      initialSearch={initialSearch}
-      initialPage={initialPage}
+      filtre={filtre}
+      totalFiltrate={totalFiltrate ?? 0}
       categories={categories}
       productLimit={productLimit}
-      productCount={products.length}
+      productCount={totalCatalog ?? 0}
       plan={plan}
       olxConnected={olxConnected}
     />

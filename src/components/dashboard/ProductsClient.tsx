@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent } from "lucide-react";
 import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
 import { publishProductsToOlx } from "@/lib/actions/olx.actions";
+import { idurileProduselorFiltrate } from "@/lib/actions/produse-selectie.actions";
+import type { FiltreProduse } from "@/lib/dashboard/produse-filtre";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
 import { pretVechiDeTaiat } from "@/lib/products/compare-at";
@@ -20,11 +22,17 @@ type Product = Pick<
   "id" | "name" | "slug" | "sku" | "price" | "compare_at_price" | "images" | "category" | "is_active" | "is_featured" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
 >;
 
-export function ProductsClient({ products, businessId, initialSearch = "", initialPage = 1, categories = [], productLimit, productCount, plan, olxConnected = false }: {
+export function ProductsClient({ products, businessId, filtre, totalFiltrate, categories = [], productLimit, productCount, plan, olxConnected = false }: {
   products: Product[];
   businessId: string;
-  initialSearch?: string;
-  initialPage?: number;
+  /**
+   * Filtrele CERUTE, citite din adresa pe server. Sunt sursa de adevar: lista
+   * primita e deja rezultatul lor, deci controalele nu fac decat sa le arate si
+   * sa ceara altele.
+   */
+  filtre: FiltreProduse;
+  /** Cate produse trec de filtre IN TOTAL, nu cate sunt pe pagina. */
+  totalFiltrate: number;
   categories: CategoryOption[];
   productLimit: number;
   productCount: number;
@@ -32,24 +40,47 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   olxConnected?: boolean;
 }) {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const didMountRef = useRef(false);
+  const [searchQuery, setSearchQuery] = useState(filtre.cautare);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDupTransition] = useTransition();
-  const [page, setPage] = useState(initialPage);
-  const didMountRef = useRef(false);
-  // Keep the current page in the URL (?page=N) WITHOUT a server round-trip, so
-  // opening a product and returning (save / cancel / browser back) lands on the
-  // same page. The list is paginated client-side, hence history.replaceState.
-  const goToPage = useCallback((p: number) => {
-    setPage(p);
-    const params = new URLSearchParams(window.location.search);
-    if (p > 1) params.set("page", String(p)); else params.delete("page");
-    const qs = params.toString();
-    window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
-  }, []);
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all");
+  const [naviga, startNavigare] = useTransition();
+
+  /*
+   * FILTRELE CER O PAGINA NOUA, nu mai taie o lista din memorie.
+   *
+   * Lista are acum douazeci si cinci de randuri, nu tot catalogul, deci filtrarea
+   * si paginarea NU se mai pot face aici — se cer de la server, prin adresa.
+   * Adresa devine astfel si singurul loc unde traiesc filtrele: un link catre
+   * „produse fara stoc din categoria X" se poate trimite mai departe, iar Inapoi
+   * face ce scrie pe el.
+   *
+   * `router.push`, nu `location.href`: o reincarcare intreaga ar pierde focusul
+   * din caseta de cautare la fiecare litera asezata.
+   */
+  const cereFiltre = useCallback((schimbari: Partial<FiltreProduse>) => {
+    const noi = { ...filtre, ...schimbari };
+    // Orice schimbare de filtru duce la pagina 1: pagina 7 dintr-o lista de trei
+    // pagini ar fi goala. Numai o cerere explicita de pagina o pastreaza.
+    if (schimbari.pagina === undefined) noi.pagina = 1;
+    const p = new URLSearchParams();
+    if (noi.cautare.trim()) p.set("search", noi.cautare.trim());
+    if (noi.categorie) p.set("cat", noi.categorie);
+    if (noi.stare !== "all") p.set("stare", noi.stare);
+    if (noi.stoc !== "all") p.set("stoc", noi.stoc);
+    if (noi.pagina > 1) p.set("page", String(noi.pagina));
+    const qs = p.toString();
+    startNavigare(() => router.push(qs ? `/dashboard/products?${qs}` : "/dashboard/products", { scroll: false }));
+  }, [filtre, router]);
+
+  const goToPage = useCallback((p: number) => cereFiltre({ pagina: p }), [cereFiltre]);
+
+  const categoryFilter = filtre.categorie;
+  const statusFilter = filtre.stare;
+  const stockFilter = filtre.stoc;
+  const setCategoryFilter = (v: string) => cereFiltre({ categorie: v });
+  const setStatusFilter = (v: "all" | "active" | "inactive") => cereFiltre({ stare: v });
+  const setStockFilter = (v: "all" | "in" | "out") => cereFiltre({ stoc: v });
   const [exporting, setExporting] = useState(false);
 
   // ── Bulk selection + actions ──
@@ -115,20 +146,10 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
 
   const parentCategories = useMemo(() => categories.filter(c => !c.parent_id), [categories]);
 
-  // category name -> [name, ...child names], so picking a parent includes its subcategories
-  const subtreeByName = useMemo(() => {
-    const childrenByParent = new Map<string, string[]>();
-    for (const c of categories) {
-      if (c.parent_id) {
-        const arr = childrenByParent.get(c.parent_id) ?? [];
-        arr.push(c.name);
-        childrenByParent.set(c.parent_id, arr);
-      }
-    }
-    const map: Record<string, string[]> = {};
-    for (const c of categories) map[c.name] = [c.name, ...(childrenByParent.get(c.id) ?? [])];
-    return map;
-  }, [categories]);
+  // Subarborele de categorii (parinte + copii directi) a plecat pe server, in
+  // `subarboreUnNivel`: filtrul se aplica acum in SQL, iar regula trebuie sa fie
+  // una singura. Scrisa si aici, prima nepotrivire ar fi fost o categorie care
+  // arata alte produse decat numara.
 
   const hasActiveFilters = searchQuery.trim() !== "" || categoryFilter !== "" || statusFilter !== "all" || stockFilter !== "all";
 
@@ -139,45 +160,43 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
     setStockFilter("all");
   }
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const catNames = categoryFilter ? (subtreeByName[categoryFilter] ?? [categoryFilter]) : null;
-    return produse.filter(p => {
-      if (q && !(
-        p.name.toLowerCase().includes(q) ||
-        (p.category ?? "").toLowerCase().includes(q) ||
-        (p.sku ?? "").toLowerCase().includes(q)
-      )) return false;
-      if (catNames && !catNames.includes(p.category ?? "")) return false;
-      if (statusFilter === "active" && !p.is_active) return false;
-      if (statusFilter === "inactive" && p.is_active) return false;
-      if (stockFilter !== "all") {
-        const out = !!p.track_inventory && (p.stock_quantity ?? 0) <= 0;
-        if (stockFilter === "out" && !out) return false;
-        if (stockFilter === "in" && out) return false;
-      }
-      return true;
-    });
-  }, [produse, searchQuery, categoryFilter, statusFilter, stockFilter, subtreeByName]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  /*
+   * Lista primita E rezultatul filtrelor, si E pagina ceruta.
+   *
+   * Filtrarea si felierea se faceau aici, peste tot catalogul. Refacute acum peste
+   * douazeci si cinci de randuri ar fi cel mult o no-op costisitoare — dar
+   * FELIEREA a doua oara ar goli pagina 2 (`slice(25, 50)` peste 25 de randuri da
+   * lista goala). Aceeasi lectie ca la catalogul public.
+   */
+  const totalPages = Math.max(1, Math.ceil(totalFiltrate / PAGE_SIZE));
+  const currentPage = Math.min(filtre.pagina, totalPages);
+  const paginated = produse;
   // Carry the current page into the edit URL so save/cancel returns to it.
   const editHref = (id: string) => `/dashboard/products/${id}/edit${currentPage > 1 ? `?page=${currentPage}` : ""}`;
 
-  // Reset paging + selection whenever the filtered set changes — but NOT on the
-  // initial mount, so a page restored from the URL (?page=N) is preserved.
+  /*
+   * Cautarea se trimite cu INTARZIERE, nu la fiecare tasta.
+   *
+   * Fiecare litera inseamna acum o cerere la server, nu o filtrare in memorie.
+   * Nu se trimite nici la montare: acolo caseta arata deja ce a cerut adresa.
+   */
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }
-    goToPage(1);
-    setSelected(new Set());
-    setBulkPanel(null);
-    setConfirmBulkDelete(false);
-  }, [searchQuery, categoryFilter, statusFilter, stockFilter, goToPage]);
+    if (searchQuery === filtre.cautare) return;
+    const t = window.setTimeout(() => cereFiltre({ cautare: searchQuery }), 400);
+    return () => window.clearTimeout(t);
+  }, [searchQuery, filtre.cautare, cereFiltre]);
 
-  const allSelected = filtered.length > 0 && filtered.every(p => selected.has(p.id));
-  const someSelected = !allSelected && filtered.some(p => selected.has(p.id));
+  /*
+   * „Selecteaza tot" inseamna TOT ce trece de filtre, nu pagina curenta.
+   *
+   * Asa a insemnat dintotdeauna, si de el atarna actiunile in masa — inclusiv
+   * stergerea. Cu lista redusa la o pagina, id-urile se cer de la server, dar
+   * numai CAND SE APASA: pe o incarcare obisnuita nu costa nimic.
+   */
+  const [selectieTotala, setSelectieTotala] = useState(false);
+  const allSelected = selectieTotala || (paginated.length > 0 && paginated.every(p => selected.has(p.id)));
+  const someSelected = !allSelected && paginated.some(p => selected.has(p.id));
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected;
@@ -186,10 +205,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   function toggleOne(id: string) {
     setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
-  function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(filtered.map(p => p.id)));
+  async function toggleAll() {
+    if (allSelected) { setSelected(new Set()); setSelectieTotala(false); return; }
+    const r = await idurileProduselorFiltrate(businessId, filtre);
+    if ("error" in r) { toast.error(r.error); return; }
+    setSelected(new Set(r.ids));
+    setSelectieTotala(true);
   }
-  function clearSelection() { setSelected(new Set()); setBulkPanel(null); setConfirmBulkDelete(false); }
+  function clearSelection() { setSelected(new Set()); setSelectieTotala(false); setBulkPanel(null); setConfirmBulkDelete(false); }
 
   function runBulk(action: BulkAction, successMsg: string) {
     const ids = [...selected];
@@ -374,9 +397,9 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
 
       {hasActiveFilters && (
         <p className="text-sm text-muted-foreground mb-3">
-          {filtered.length === 0
+          {totalFiltrate === 0
             ? "Niciun produs gasit cu filtrele selectate"
-            : `${filtered.length} ${filtered.length === 1 ? "produs gasit" : "produse gasite"}`}
+            : `${totalFiltrate} ${totalFiltrate === 1 ? "produs gasit" : "produse gasite"}`}
         </p>
       )}
 
@@ -448,7 +471,10 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
         </div>
       )}
 
-      {filtered.length > 0 ? (
+      {/* Filtrele fac acum un dus-intors: fara semnul asta, apesi si nu se
+          schimba nimic vizibil pentru o jumatate de secunda. */}
+      <div className={naviga ? "opacity-50 pointer-events-none transition-opacity" : "transition-opacity"} aria-busy={naviga || undefined}>
+      {totalFiltrate > 0 ? (
         <>
           {/* Mobile: card list (the table is too cramped on small screens) */}
           <div className="sm:hidden space-y-2">
@@ -655,7 +681,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
           {totalPages > 1 && (
             <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2 px-3 sm:px-5 py-3 mt-3 bg-surface border border-border rounded-xl">
               <p className="text-xs text-muted-foreground">
-                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} produse
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalFiltrate)} din {totalFiltrate} produse
               </p>
               <div className="flex items-center gap-1 self-end sm:self-auto">
                 <button onClick={() => goToPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
@@ -720,6 +746,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
           </div>
         </div>
       )}
+      </div>
     </>
   );
 }

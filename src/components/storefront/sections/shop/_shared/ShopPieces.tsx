@@ -338,7 +338,7 @@ export function FiltreActive() {
 export function Sortare() {
   // `effectiveSort`, nu `sort`: cat timp exista o cautare si nimeni n-a ales
   // altceva, sortarea e „relevanta", si asta trebuie sa arate si selectorul.
-  const { setSort, setSortTouched, effectiveSort, hasSearchMatches, setariMagazin } = useStorefront();
+  const { setSort, setSortTouched, effectiveSort, hasSearchMatches, setariMagazin, totalVizibile, totalFiltrate } = useStorefront();
   // O singura optiune inseamna un selector fara alegere: mai bine lipseste.
   if (setariMagazin.sortariOferite.length < 2 && !hasSearchMatches) return null;
   return (
@@ -361,10 +361,11 @@ export function Sortare() {
 }
 
 export function NumarRezultate() {
-  const { filteredProducts, visibleProducts, setariMagazin } = useStorefront();
+  const { filteredProducts, visibleProducts, setariMagazin , totalFiltrate , totalVizibile } = useStorefront();
   if (!setariMagazin.arataNumarul) return null;
-  const n = filteredProducts.length;
-  const total = visibleProducts.length;
+  // Vezi nota de la `totalVizibile` in StorefrontProvider.
+  const n = totalFiltrate;
+  const total = totalVizibile;
   return (
     <p className="text-[13px] text-[var(--st-muted)]">
       {n === total ? `${n} ${n === 1 ? "produs" : "produse"}` : `${n} din ${total} produse`}
@@ -396,7 +397,7 @@ export function CautareCatalog() {
  * clientul sa vada.
  */
 export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPornite: string[]; panaLa?: "lg" | "xl" }) {
-  const { filtersOpen, setFiltersOpen, activeFilterCount, resetFilters, filteredProducts } = useStorefront();
+  const { filtersOpen, setFiltersOpen, activeFilterCount, resetFilters, totalFiltrate } = useStorefront();
   const panou = useRef<HTMLDivElement>(null);
   const declansator = useRef<HTMLButtonElement>(null);
   // Pragul vine de la model, nu e fix: la „Compact" bara laterala apare abia de
@@ -471,7 +472,7 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
               <button type="button" onClick={() => setFiltersOpen(false)}
                 className="flex-1 py-3 text-sm font-bold text-white rounded-[var(--st-radius-sm)]"
                 style={{ backgroundColor: "var(--st-primary)" }}>
-                Arata {filteredProducts.length} {filteredProducts.length === 1 ? "produs" : "produse"}
+                Arata {totalFiltrate} {totalFiltrate === 1 ? "produs" : "produse"}
               </button>
             </div>
           </div>
@@ -484,9 +485,9 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
 /* ─── Grila si paginarea ─────────────────────────────────────────────────── */
 
 export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; coloaneMobil?: number }) {
-  const { paginatedProducts, filteredProducts, activeFilterCount, resetFilters, search } = useStorefront();
+  const { paginatedProducts, filteredProducts, activeFilterCount, resetFilters, search , totalFiltrate } = useStorefront();
 
-  if (filteredProducts.length === 0) {
+  if (totalFiltrate === 0) {
     const cauta = !!search || activeFilterCount > 0;
     return (
       <div className="text-center py-20 border border-dashed border-[var(--st-border)] rounded-[var(--st-radius)]">
@@ -543,7 +544,7 @@ export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; c
 export function Paginare() {
   const {
     currentPage, totalPages, goToPage, color, catalogRoot, radacinaPaginare, interogareFiltre,
-    setariMagazin, filteredProducts, paginatedProducts,
+    setariMagazin, filteredProducts, paginatedProducts, totalFiltrate,
   } = useStorefront();
   const mod = setariMagazin.modPaginare;
   const santinela = useRef<HTMLDivElement>(null);
@@ -624,7 +625,7 @@ export function Paginare() {
           )}
           {mod === "infinit" && maiSunt && <div ref={santinela} className="h-px w-full" aria-hidden="true" />}
           <p className="text-[13px] text-[var(--st-muted)]" aria-live="polite">
-            {paginatedProducts.length} din {filteredProducts.length} produse
+            {paginatedProducts.length} din {totalFiltrate} produse
           </p>
         </div>
         <nav aria-label="Paginare" className="sr-only">

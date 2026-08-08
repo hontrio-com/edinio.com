@@ -30,7 +30,6 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
     color,
     search,
     categoryFilter,
-    filteredProducts,
     paginatedProducts,
     featuredProducts,
     pageContent,
@@ -39,6 +38,7 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
     totalPages,
     goToPage,
     interogareFiltre,
+    totalFiltrate,
   } = useStorefront();
 
   const areRecomandate = pageContent.show_featured_section === true;
@@ -56,14 +56,14 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
           <h2 className="text-xl font-semibold text-foreground">Produse</h2>
         </div>
       )}
-      {areRecomandate && featuredProducts.length > 0 && filteredProducts.length > 0 && (
+      {areRecomandate && featuredProducts.length > 0 && totalFiltrate > 0 && (
         <div className="flex items-center gap-2 mb-4">
           <h2 className="text-base font-bold text-foreground">Toate produsele</h2>
           <div className="h-px flex-1 bg-border" />
         </div>
       )}
 
-      {filteredProducts.length === 0 ? (
+      {totalFiltrate === 0 ? (
         <div className="text-center py-20 border border-dashed border-border rounded-2xl">
           <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
             <ShoppingCart className="h-7 w-7 text-muted-foreground" />

@@ -207,6 +207,26 @@ export interface StorefrontContextValue extends StoreChromeValue {
   visibleProducts: StorefrontProduct[];
   filteredProducts: StorefrontProduct[];
   paginatedProducts: StorefrontProduct[];
+  /**
+   * Cate produse are magazinul, si cate trec de filtre — NUMERE, nu lungimi.
+   *
+   * Pana acum orice contor se citea din `.length` al listelor de mai sus, si asta
+   * mergea fiindca listele erau INTREGI: browserul avea tot catalogul si felia
+   * singur. Din clipa in care felierea se face pe server, `filteredProducts` are
+   * douazeci si patru de elemente si nimic altceva, deci
+   * „{paginatedProducts.length} din {filteredProducts.length} produse" ar scrie
+   * „24 din 24 produse" pe un catalog de trei mii.
+   *
+   * CERUTE, nu optionale, si asta e deliberat: e acelasi truc pe care codul il
+   * foloseste deja de doua ori (`price_range` in `product.types.ts`, `vandabila`
+   * in `bundles.ts`). Un camp optional s-ar fi uitat exact acolo unde conteaza;
+   * unul cerut il plimba pe `tsc` prin toate cele noua locuri care numarau, in
+   * loc sa afle cineva din raportul unui comerciant.
+   *
+   * Pe palierul client sunt chiar lungimile listelor, deci nimic nu se schimba.
+   */
+  totalVizibile: number;
+  totalFiltrate: number;
   featuredProducts: StorefrontProduct[];
   productSections: { section: ProductSection; items: StorefrontProduct[] }[];
   isProductOutOfStock: (p: StorefrontProduct) => boolean;

@@ -111,6 +111,10 @@ export function SectionPreviewFrame({
       visibleProducts: products,
       filteredProducts: items,
       paginatedProducts: items,
+      // Previzualizarea are mereu catalogul demo intreg in memorie, deci
+      // numerele sunt chiar lungimile listelor de deasupra.
+      totalVizibile: products.length,
+      totalFiltrate: items.length,
       featuredProducts: products.filter((p) => p.is_featured).slice(0, 8),
       // Un rand curat n-are configuratie aici, deci ii dam una sintetica cu
       // id-ul cerut: altfel un rand deschis direct pe ruta de previzualizare ar

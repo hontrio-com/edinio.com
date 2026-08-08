@@ -26,10 +26,10 @@ export function CatalogToolbar() {
     activeFilterCount,
     resetFilters,
     headerHasSearch,
-    visibleProducts,
-    filteredProducts,
     isHome,
     pageContent,
+    totalVizibile,
+    totalFiltrate,
   } = useStorefront();
 
   /*
@@ -52,8 +52,9 @@ export function CatalogToolbar() {
    * merita citit acolo: cate produse a mai lasat filtrarea. Pe telefon nu se
    * arata — acolo latimea e oricum ocupata de sortare si de butonul de filtre.
    */
-  const total = visibleProducts.length;
-  const aratate = filteredProducts.length;
+  // Numerele, nu lungimile: pe palierul server listele au doar pagina curenta.
+  const total = totalVizibile;
+  const aratate = totalFiltrate;
   const contor = aratate === total
     ? `${total} ${total === 1 ? "produs" : "produse"}`
     : `${aratate} din ${total} ${total === 1 ? "produs" : "produse"}`;
@@ -173,7 +174,7 @@ export function CatalogToolbar() {
  * blocheaza numai cand foaia chiar se vede.
  */
 function FoaieFiltre({ onClose }: { onClose: () => void }) {
-  const { color, activeFilterCount, resetFilters, filteredProducts } = useStorefront();
+  const { color, activeFilterCount, resetFilters, totalFiltrate } = useStorefront();
   const panou = useRef<HTMLDivElement>(null);
   // Parintele da un `onClose` nou la fiecare randare; tinut intr-un ref, efectul
   // de mai jos ramane pe montare.
@@ -236,7 +237,7 @@ function FoaieFiltre({ onClose }: { onClose: () => void }) {
           <button type="button" onClick={onClose}
             className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-opacity hover:opacity-90"
             style={{ backgroundColor: color }}>
-            Vezi {filteredProducts.length} {filteredProducts.length === 1 ? "produs" : "produse"}
+            Vezi {totalFiltrate} {totalFiltrate === 1 ? "produs" : "produse"}
           </button>
         </div>
       </div>

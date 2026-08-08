@@ -730,6 +730,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * pe alta pagina. Pagina de catalog citeste ce a ales comerciantul.
    */
   const PRODUCTS_PER_PAGE = surface === "shop" ? setariMagazin.perPage : 20;
+  // Pe palierul client lista E intreaga, deci lungimea ei E totalul. Cand
+  // felierea trece pe server, aici intra numarul venit din RPC — de aceea
+  // consumatorii citesc deja `totalFiltrate` din context, nu lungimi.
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
   /*
    * La „incarca mai multe" si la derulare, paginile se ADUNA in loc sa se
@@ -946,6 +949,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     visibleProducts,
     filteredProducts,
     paginatedProducts,
+    // Pe palierul client sunt chiar lungimile listelor. Cand felierea trece pe
+    // server, `filteredProducts` are doar pagina curenta si numerele vin din
+    // raspunsul RPC-ului — de aia sunt campuri, nu `.length` la locul folosirii.
+    totalVizibile: visibleProducts.length,
+    totalFiltrate: filteredProducts.length,
     featuredProducts,
     productSections,
     isProductOutOfStock,

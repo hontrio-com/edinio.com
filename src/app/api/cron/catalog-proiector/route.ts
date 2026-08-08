@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { proiecteazaCoada, MAX_COADA_PE_RULARE } from "@/lib/storefront/catalog/proiector";
+import { rezumaCoada } from "@/lib/storefront/catalog/rezumat";
 
 /**
  * Goleste coada de reproiectat a catalogului.
@@ -42,5 +43,9 @@ export async function GET(req: NextRequest) {
   const inceput = Date.now();
   const scrise = await proiecteazaCoada(admin, MAX_COADA_PE_RULARE);
 
-  return NextResponse.json({ ok: true, scrise, ms: Date.now() - inceput });
+  // Agregatele DUPA proiectie, in aceeasi rulare: invers, ar rezuma randuri care
+  // tocmai urmeaza sa se schimbe, si rezumatul ar ramane cu o rulare in urma.
+  const rezumate = await rezumaCoada(admin);
+
+  return NextResponse.json({ ok: true, scrise, rezumate, ms: Date.now() - inceput });
 }

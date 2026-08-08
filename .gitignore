@@ -53,3 +53,6 @@ next-env.d.ts
 /scripts/*
 !/scripts/migrations/
 !/scripts/tests/
+# Generatorul de baseline: NU e scratch, e unealta. CI-ul il ruleaza
+# (`schema-baseline.sh --check`), iar fara el jobul de deriva n-are ce executa.
+!/scripts/schema-baseline.sh

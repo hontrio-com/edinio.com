@@ -45,20 +45,20 @@ export async function GET(req: NextRequest) {
   );
 
   /*
-   * Se cer mai multe randuri decat se prelucreaza, si se filtreaza in JS.
+   * Se cer DOAR produsele care chiar au o imagine strainã, printr-un RPC.
    *
-   * `needsRehost` lucreaza pe lista de URL-uri, iar in SQL nu exista o conditie
-   * care sa insemne exact „are cel putin o imagine care nu e a noastra" fara sa
-   * duplice regula din `isOurR2Url`. O a doua definitie a ei ar diverge exact ca
-   * celelalte pe care le-am unificat.
+   * Prima versiune lua cele mai vechi 200 de produse dupa `updated_at` si filtra
+   * in JS. Nu avanseaza: un produs rehostat isi schimba `updated_at` si pleaca la
+   * coada, dar unul SARIT (fara imagini externe) rămâne veșnic in fata. Deci
+   * fiecare rulare recitea aceleasi 200, din care aproape niciunul avea nevoie de
+   * ceva — masurat, un produs la trei rulari in loc de douazeci si patru.
+   *
+   * `needsRehost` ramane AUTORITATEA: RPC-ul e doar o ingustare, iar regula
+   * „e a noastra sau nu" are un singur loc, in `isOurR2Url`.
    */
-  const { data, error } = await admin
-    .from("products")
-    .select("id, business_id, images, page_sections")
-    .eq("is_active", true)
-    .not("images", "is", null)
-    .order("updated_at", { ascending: true })
-    .limit(200);
+  const { data, error } = await admin.rpc("produse_cu_imagini_externe", {
+    p_limit: 60,
+  });
 
   if (error) {
     console.error("[rehost] citirea produselor a esuat:", error.message);

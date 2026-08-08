@@ -74,19 +74,35 @@ export async function GET(req: NextRequest) {
     admin.from("businesses").select("id, user_id, slug, business_name, created_at, suspended_until").order("id").range(f, t));
   const bizMap = new Map(businesses.map(b => [b.user_id, b]));
 
-  const productCounts = await fetchAllRows("cron.emailAutomations.products", (f, t) =>
-    admin.from("products").select("business_id").order("id").range(f, t));
-  const prodCountMap: Record<string, number> = {};
-  for (const p of productCounts) {
-    prodCountMap[p.business_id] = (prodCountMap[p.business_id] ?? 0) + 1;
+  /*
+   * Cate produse si cate comenzi are fiecare magazin — NUMARATE IN BAZA.
+   *
+   * Se citeau TOATE randurile de produse si TOATE cele de comenzi, cate o
+   * coloana, doar ca sa fie numarate aici. Masurat: 5.862 de randuri de produse
+   * in SASE dus-intorsuri secventiale (fereastra PostgREST e de 1000) plus inca
+   * unul pentru comenzi, la fiecare ora, pentru doua numere pe magazin. Acum e un
+   * singur apel care intoarce ~3,5 kB.
+   *
+   * Semantica e IDENTICA (toate randurile, fara filtru pe `is_active` sau pe
+   * starea comenzii), verificata pe productie grup cu grup: 49 din 49 si 18 din
+   * 18, zero nepotriviri. Conteaza fiindca de numerele astea atarna cine primeste
+   * „nu ai niciun produs" si „nu ai nicio comanda".
+   *
+   * RPC-ul intoarce `jsonb`, un singur rand, si nu `setof`: `db-max-rows` taie si
+   * rezultatele procedurilor, deci un `setof` ar fi facut magazinul numarul 1001
+   * sa para cu zero produse — adica exact emailul gresit, trimis automat.
+   */
+  const { data: numarRaw, error: eNumar } = await admin.rpc("numar_produse_si_comenzi");
+  if (eNumar) {
+    // Fara numere, automatiile „nu ai produse"/„nu ai comenzi" ar suna la toata
+    // lumea. Se opreste rularea; urmatoarea ora reia de unde a ramas, fiindca
+    // dedup-ul e in `email_automations`, nu in memoria rularii.
+    console.error("[cron.emailAutomations] numaratorile au esuat:", eNumar.message);
+    return NextResponse.json({ error: "counts unavailable" }, { status: 500 });
   }
-
-  const orderCounts = await fetchAllRows("cron.emailAutomations.orders", (f, t) =>
-    admin.from("orders").select("business_id").order("id").range(f, t));
-  const orderCountMap: Record<string, number> = {};
-  for (const o of orderCounts) {
-    orderCountMap[o.business_id] = (orderCountMap[o.business_id] ?? 0) + 1;
-  }
+  const numar = (numarRaw ?? {}) as { produse?: Record<string, number>; comenzi?: Record<string, number> };
+  const prodCountMap: Record<string, number> = numar.produse ?? {};
+  const orderCountMap: Record<string, number> = numar.comenzi ?? {};
 
   // ── Process each user ──────────────────────────────────────────────────────
   for (const profile of profiles) {

@@ -63,6 +63,29 @@ export async function GET(req: NextRequest) {
    */
   await admin.rpc("catalog_verifica", { p_esantion: 300 }).then(() => {}, () => {});
 
+  /*
+   * Agregarea zilnica a analiticelor.
+   *
+   * `site_analytics` are un rand pe eveniment si nu se sterge niciodata: 54.980
+   * de randuri si 12 MB numai din trafic normal. Panoul nu citeste niciodata
+   * evenimente individuale pe intervale mari — cere chiar gruparea asta — iar
+   * agregatul e de 33,8 ori mai mic.
+   *
+   * DOUA zile, nu una: rularea reface si ziua de ieri, deci un cron sarit sau un
+   * eveniment intarziat se repara singur la urmatoarea trecere. Functia STERGE si
+   * rescrie fereastra, nu aduna, deci rularea de doua ori pe aceeasi zi nu
+   * dubleaza nimic.
+   *
+   * Inca NU citeste nimeni din ea, si asta e deliberat: mutarea panoului pe
+   * agregat i-ar schimba cifrele (cere „de acum minus 30 de zile", cu ora cu tot,
+   * iar o zi intreaga nu poate raspunde la asta). Motivul intreg e in
+   * migrations/2026-08-16-analitice-zilnice.sql.
+   *
+   * Inghitit, ca si alarma de mai sus: treaba adevarata a acestui cron e
+   * eliberarea cupoanelor.
+   */
+  await admin.rpc("agregeaza_analitice", { p_zile: 2 }).then(() => {}, () => {});
+
   // `?ore=` largeste sau stramteaza pragul pentru o verificare manuala; rularea
   // programata foloseste implicitul.
   const ore = Math.min(Math.max(Number(req.nextUrl.searchParams.get("ore")) || ORE_PANA_LA_ELIBERARE, 1), 24 * 30);

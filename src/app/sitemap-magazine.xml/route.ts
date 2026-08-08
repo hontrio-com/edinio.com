@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { proiectieDb } from "@/lib/storefront/catalog/din-proiectie";
 
 /**
  * INDEX de sitemap-uri: cate unul pentru fiecare magazin al platformei.
@@ -47,14 +48,44 @@ export async function GET() {
   const magazine = await fetchAllRows("sitemapIndex.magazine", (from, to) =>
     admin
       .from("businesses")
-      .select("slug, updated_at")
+      .select("id, slug, updated_at")
       .eq("is_published", true)
       .is("custom_domain", null)
       .order("id")
       .range(from, to));
 
+  /*
+   * NUMAI magazinele care au ce arata.
+   *
+   * Masurat: din 57 de magazine publicate fara domeniu propriu, 27 n-au NICIUN
+   * produs activ si inca 16 au unul sau doua. Anuntate toate, indexul ar fi trimis
+   * Google la zeci de vitrine goale — „thin content" la scara, chiar pe domeniul
+   * platformei, si tocmai semnalul care strica increderea in magazinele care chiar
+   * au marfa.
+   *
+   * Numarul vine din `catalog_rezumat` (patru randuri pe magazin), nu dintr-un
+   * `count` peste produse: aici trebuie sa ramana o citire care creste cu numarul
+   * de MAGAZINE, altfel indexul reintroduce exact problema pe care o repara.
+   *
+   * Un magazin nou cu produse intra dupa prima trecere a cronului de rezumat,
+   * adica in cel mult un minut. Pentru un sitemap, asta nu inseamna nimic.
+   *
+   * Paginile personalizate ale unui magazin fara produse nu se pierd: sunt deja
+   * enumerate in `sitemap.ts`, sectiunea de `custom_pages`.
+   */
+  const cuProduse = new Set(
+    // `catalog_rezumat` nu e in tipurile generate, ca si celelalte tabele de
+    // proiectie: se citeste prin `proiectieDb()`, tiparul casei.
+    ((await proiectieDb()
+      .from("catalog_rezumat")
+      .select("business_id, total")
+      .eq("fara_imagini", false)
+      .eq("fara_stoc_ascuns", false)
+      .gt("total", 0)).data ?? []).map((r) => (r as { business_id: string }).business_id),
+  );
+
   const corp = magazine
-    .filter((b) => b.slug)
+    .filter((b) => b.slug && cuProduse.has(b.id))
     .map((b) => {
       const lastmod = b.updated_at ? `\n    <lastmod>${new Date(b.updated_at).toISOString()}</lastmod>` : "";
       return `  <sitemap>\n    <loc>${xmlSafe(`${PLATFORM_ORIGIN}/${b.slug}/sitemap.xml`)}</loc>${lastmod}\n  </sitemap>`;

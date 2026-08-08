@@ -26,6 +26,12 @@ returns text
 language plpgsql
 security definer
 set search_path to 'public', 'pg_catalog', 'pg_temp'
+-- PostgREST taie la 8s CHIAR SI pentru `service_role` (57014, masurat: 8,15s).
+-- Setarea e locala functiei si dispare odata cu ea, deci nu slabeste nimic
+-- altundeva. Partea inceata e `information_schema.column_privileges`, si nu se
+-- poate ocoli: granturile pe coloana sunt chiar apararea pe care baseline-ul
+-- trebuie s-o poarte mai departe.
+set statement_timeout to '120s'
 as $fn$
 declare
   c_scheme constant text[] := array['public', 'privat'];

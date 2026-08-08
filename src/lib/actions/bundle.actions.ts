@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
 import { hasVariants } from "@/lib/storefront/variants";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -233,6 +234,9 @@ export async function createBundle(
   }
   if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
   if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
+  // Sincron, inaintea revalidarii: un pachet salvat trebuie sa-si arate pretul
+  // si disponibilitatea noua imediat, nu peste un minut.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products/bundles");
   return { success: true };
 }
@@ -289,6 +293,9 @@ export async function updateBundle(
 
   void enqueueGmcSync(businessId, bundleId, bundleId, "upsert");
   void enqueueOlxSync(businessId, bundleId, bundleId, "upsert");
+  // Sincron, inaintea revalidarii: un pachet salvat trebuie sa-si arate pretul
+  // si disponibilitatea noua imediat, nu peste un minut.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products/bundles");
   revalidatePath(`/dashboard/products/bundles/${bundleId}/edit`);
   return { success: true };

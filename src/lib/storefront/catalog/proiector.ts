@@ -180,6 +180,53 @@ export async function proiecteaza(
  */
 export const MAX_COADA_PE_RULARE = 1000;
 
+/**
+ * Proiecteaza ACUM, din calea unei actiuni de dashboard.
+ *
+ * Se cheama `await`, inaintea lui `revalidatePath`, in mutatoarele de produse:
+ * altfel comerciantul salveaza un pret si isi vede magazinul cu cel vechi pana
+ * trece cronul — pana la un minut de „nu s-a salvat", pe care il va raporta ca bug.
+ *
+ * NU ARUNCA NICIODATA. Randul e deja marcat in `catalog_murdar` de declansator,
+ * deci cel mai rau lucru care se poate intampla e ca proiectia sa intarzie un
+ * minut. Asta nu justifica sa cada salvarea produsului, care e treaba adevarata a
+ * apelantului. Erorile se scriu in consola si atat.
+ *
+ * Isi face singura clientul de service role: `catalog_produs` are RLS pornit si
+ * nicio politica, iar clientul comerciantului ar raporta senin zero randuri
+ * afectate, fara eroare.
+ */
+export async function proiecteazaImediat(businessId: string): Promise<void> {
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient() as unknown as SupabaseClient;
+    /*
+     * Se goleste coada MAGAZINULUI, nu o lista de id-uri data de apelant.
+     *
+     * O lista ar fi parut mai precisa, dar ar fi fost mai putin corecta: o
+     * scriere atinge si randuri pe care apelantul nu le stie. Sterge o
+     * componenta si declansatorul marcheaza pachetele care o contineau; schimba
+     * un pret si declansatorul repretuieste pachetele, care se marcheaza si ele.
+     * Coada e singurul loc care le stie pe toate, fiindca chiar declansatorul
+     * le-a scris acolo.
+     */
+    const { data, error } = await admin
+      .from("catalog_murdar")
+      .select("product_id")
+      .eq("business_id", businessId)
+      .limit(MAX_COADA_PE_RULARE);
+    if (error) {
+      console.error("[proiector] citirea cozii magazinului a esuat:", error.message);
+      return;
+    }
+    await proiecteaza(admin, (data ?? []).map((r) => (r as { product_id: string }).product_id));
+  } catch (e) {
+    console.error("[proiector] proiectia sincrona a esuat:", e instanceof Error ? e.message : e);
+  }
+}
+
+
+
 export async function proiecteazaCoada(
   admin: SupabaseClient,
   maxim = MAX_COADA_PE_RULARE,

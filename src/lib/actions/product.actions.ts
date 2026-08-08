@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
 import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoProduct, maybeSyncBrevoProductsBulk } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoProduct, maybeSyncKlaviyoProductsBulk } from "@/lib/klaviyo-sync";
@@ -187,6 +188,10 @@ export async function createProduct(businessId: string, data: ProductData) {
   if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -275,6 +280,10 @@ export async function updateProduct(productId: string, businessId: string, data:
   void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -348,6 +357,10 @@ export async function duplicateProduct(productId: string, businessId: string) {
     logError({ action: "duplicateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la duplicare." };
   }
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   // Intoarcem id-ul ca UI-ul sa deschidă direct editarea copiei.
   return { success: true, id: created.id };
@@ -434,6 +447,10 @@ export async function deleteProduct(productId: string, businessId: string) {
   void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncBrevoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncKlaviyoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -485,6 +502,7 @@ export async function bulkProductAction(
       else void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       if (action.kind === "active" && action.value === false) void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count: count ?? ids.length };
     }
@@ -499,6 +517,7 @@ export async function bulkProductAction(
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
       void enqueueTrendyolSyncMany(businessId, ids);
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count: count ?? ids.length };
     }
@@ -521,6 +540,7 @@ export async function bulkProductAction(
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count: (rows ?? []).length || ids.length };
     }
@@ -564,6 +584,7 @@ export async function bulkProductAction(
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count };
     }

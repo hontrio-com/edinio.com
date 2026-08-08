@@ -35,13 +35,12 @@ const PE_FELIE = 45_000;
  * magazinele cu domeniu propriu isi au sitemap-ul lor, pe domeniul lor, deci
  * randurile lor n-au ce cauta nici macar citite aici.
  */
-function interogare(coloane: string, optiuni?: { count: "exact"; head: true }) {
+function interogare(coloane: string) {
   return createAdminClient()
     .from("products")
-    .select(coloane, optiuni)
+    .select(coloane)
     .eq("is_active", true)
-    .eq("businesses.is_published", true)
-    .is("businesses.custom_domain", null);
+    .eq("businesses.is_published", true);
 }
 
 const COLOANE = "slug, updated_at, businesses!inner(slug, is_published, custom_domain)";
@@ -60,12 +59,10 @@ export const dynamic = "force-dynamic";
  *
  * `generateSitemaps` se evalueaza si la build, unde nu exista nici chei, nici
  * retea catre baza — o interogare aici rupe build-ul. Si n-ar castiga nimic: o
- * felie fara produse intoarce un sitemap valid si gol, pe care crawlerul il
- * citeste si il uita.
+ * felie fara produse intoarce un sitemap valid si gol.
  *
- * `FELII` acopera 180.000 de produse, de douazeci si sapte de ori catalogul de
- * azi al platformei. Numarul e ACELASI cu cel anuntat in `robots.ts`; crescute
- * separat, robots-ul ar fi anuntat felii care nu se randeaza, sau invers.
+ * Numarul e ACELASI cu cel anuntat in `robots.ts`, importat de acolo: anuntate
+ * mai putine decat se randeaza, produsele din ultima felie n-ar fi gasite.
  */
 export const FELII = 4;
 
@@ -77,40 +74,67 @@ export default async function sitemap({ id }: { id: number }): Promise<MetadataR
   const felie = Number(id) || 0;
   const de_la = felie * PE_FELIE;
 
-  const { data } = await interogare(COLOANE)
-    // Ordine STABILA, altfel doua felii pot arata acelasi produs si sari altul:
-    // `range` fara `order` nu garanteaza nimic intre doua cereri.
-    .order("id")
-    .range(de_la, de_la + PE_FELIE - 1);
-
-  const randuri = (data ?? []) as unknown as {
+  /*
+   * FEREASTRA SE CITESTE IN PASI DE 1000, nu dintr-o data.
+   *
+   * `range(0, 44999)` pare ca cere 45.000 de randuri, dar PostgREST taie SILENTIOS
+   * la `db-max-rows` = 1000 — chiar capcana pentru care exista `fetchAllRows`, si
+   * in care am calcat scriind fisierul asta. Aici nu se poate folosi `fetchAllRows`
+   * ca atare: acela citeste pana la capat, iar noi vrem exact fereastra feliei.
+   */
+  const PAS = 1000;
+  const randuri: {
     slug: string | null;
     updated_at: string | null;
-    businesses: { slug: string; store_settings?: unknown } | null;
-  }[];
+    businesses: { slug: string; custom_domain: string | null } | null;
+  }[] = [];
+
+  for (let pornire = de_la; pornire < de_la + PE_FELIE; pornire += PAS) {
+    const { data, error } = await interogare(COLOANE)
+      // Ordine STABILA: `range` fara `order` nu garanteaza nimic intre doua cereri,
+      // deci doua felii ar putea arata acelasi produs si sari altul.
+      .order("id")
+      .range(pornire, pornire + PAS - 1);
+
+    /*
+     * Eroarea se CITESTE. Fara asta, o interogare picata devine `data: null`
+     * devine sitemap GOL cu raspuns 200 — adica toate produsele dispar din index
+     * si nimic nu semnaleaza. Exact asa a iesit prima versiune a acestui fisier.
+     */
+    if (error) {
+      console.error(`[sitemap] felia ${felie}, pornire ${pornire}: ${error.message}`);
+      break;
+    }
+    const bucata = (data ?? []) as unknown as typeof randuri;
+    randuri.push(...bucata);
+    if (bucata.length < PAS) break;
+  }
 
   /*
-   * Magazinele „un singur produs" isi reprezinta produsul chiar prin pagina
-   * principala: `/product/*` face 301 catre ea, deci adresele alea n-au ce cauta
-   * in sitemap. Se citesc separat, o data pe felie — sunt cateva zeci de
-   * magazine, nu milioane de randuri.
+   * Magazinele cu DOMENIU PROPRIU isi au sitemap-ul pe domeniul lor, iar cele „un
+   * singur produs" isi reprezinta produsul prin pagina principala (`/product/*`
+   * face 301 catre ea).
+   *
+   * Amandoua se filtreaza AICI, in JavaScript, nu in interogare: un filtru
+   * `is.null` pe o resursa imbricata (`businesses.custom_domain`) intorcea ZERO
+   * randuri, tacut. Filtrul pe `is_published` merge — acela era si inainte — dar
+   * pe `is null` nu, si diferenta nu se vede decat numarand ce a iesit.
    */
   const { data: mode } = await createAdminClient()
     .from("businesses")
     .select("slug, store_settings(page_content)")
-    .eq("is_published", true)
-    .is("custom_domain", null);
+    .eq("is_published", true);
   const unSingurProdus = new Set(
     ((mode ?? []) as unknown as { slug: string; store_settings: { page_content: Json } | { page_content: Json }[] | null }[])
       .filter((b) => {
-        const s = Array.isArray(b.store_settings) ? b.store_settings[0] : b.store_settings;
-        return parseStoreMode(s?.page_content ?? null).mode === "one_product";
+        const st = Array.isArray(b.store_settings) ? b.store_settings[0] : b.store_settings;
+        return parseStoreMode(st?.page_content ?? null).mode === "one_product";
       })
       .map((b) => b.slug),
   );
 
   return randuri
-    .filter((p) => p.slug && p.businesses && !unSingurProdus.has(p.businesses.slug))
+    .filter((p) => p.slug && p.businesses && !p.businesses.custom_domain && !unSingurProdus.has(p.businesses.slug))
     .map((p) => ({
       url: `${PLATFORM_ORIGIN}/${p.businesses!.slug}/product/${p.slug}`,
       lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),

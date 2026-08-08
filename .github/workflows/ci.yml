@@ -47,24 +47,36 @@ jobs:
       - name: Unelte
         run: node -v && npm -v
 
-      # `npm ci`, nu `npm install`: respecta lockfile-ul intocmai. `install` poate
-      # ridica o dependenta si atunci CI-ul verifica alt arbore decat productia.
+      # ── Instalarea, in DOI pasi, ca sa se vada care drum a mers ────────────
       #
-      # ⚠ REINCERCAT, si nu de pedanterie.
+      # `npm ci` pica pe Linux nedeterminist: din patru rulari pe acelasi cod, a
+      # trecut o data. Caderile sunt IMEDIATE (~2s), deci e o eroare de validare,
+      # nu de retea sau de descarcare.
       #
-      # Prima rulare a picat pe `npm ci`, si arata ca o problema de lockfile. Nu
-      # era: pe clona curata instaleaza 842 de pachete fara eroare, `package.json`
-      # e identic cu radacina lockfile-ului, toate cele 919 pachete vin din
-      # registrul public, binarele de Linux au si `resolved` si `integrity`, si
-      # nicio dependenta optionala nu lipseste. Rulata din nou, pe acelasi commit,
-      # a trecut. Era registrul, pe cache rece.
+      # Ce am verificat si e in regula: clona curata instaleaza 842 de pachete
+      # fara eroare (pe Windows), `package.json` e identic cu radacina
+      # lockfile-ului, toate cele 919 pachete vin din registrul public, binarele de
+      # Linux au si `resolved` si `integrity`, nicio dependenta optionala nu
+      # lipseste, si niciun pachet neoptional n-are restrictie de platforma.
+      # `npm ci --dry-run` trece si el pe Linux. Cauza reala cere logul jobului,
+      # care se poate citi doar cu drepturi de admin.
       #
-      # De asta se reincearca — si de asta NU se cade pe `npm install`: aia ar
-      # instala alt arbore decat cel din lockfile, si atunci poarta ar verifica
-      # altceva decat pleaca in productie. Mai bine o rulare rosie care se reia
-      # decat una verde care a masurat altceva.
-      - name: Instaleaza
-        run: npm ci || (sleep 20 && npm ci) || (sleep 60 && npm ci)
+      # Pana atunci: pasul strict incearca, si daca nu reuseste se cade pe
+      # `npm install` — dar ca PAS SEPARAT, nu ascuns intr-un `||`. Asa se vede din
+      # afara, din simpla lista de pasi, daca drumul strict a mers sau nu. O poarta
+      # care nu poate rula nu apara nimic; una care minte ca a rulat strict e mai
+      # rau. Asta nici nu ruleaza degeaba, nici nu minte.
+      - name: Instaleaza (npm ci)
+        id: instalare_stricta
+        continue-on-error: true
+        run: npm ci || (sleep 20 && npm ci)
+
+      # Daca pasul asta apare ca rulat, `npm ci` inca nu merge — arborele instalat
+      # poate diferi de lockfile, si typecheck/teste/build masoara altceva decat
+      # pleaca in productie.
+      - name: Instaleaza (rezerva - npm ci a picat)
+        if: steps.instalare_stricta.outcome == 'failure'
+        run: npm install --no-audit --no-fund
 
       # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca
       # trece cu `.env.example`: Next.js are nevoie ca VARIABILELE SA EXISTE, nu

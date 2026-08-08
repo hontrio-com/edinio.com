@@ -53,7 +53,23 @@ export function citesteSteag(pageContent: unknown): SteagCatalog {
 export function alegePalier(args: {
   pageContent: unknown;
   totalProduse: number;
+  /**
+   * Magazinul e publicat. Cand nu e, palierul server NU poate raspunde.
+   *
+   * RPC-urile de catalog se cheama cu cheia de SERVICIU, deci `auth.uid()` e NULL
+   * inauntrul lor si poarta „publicat SAU al meu" se reduce la „publicat". Pentru
+   * un magazin nepublicat intorc corect zero randuri — dar proprietarul are voie
+   * sa-si vada catalogul in previzualizare, si ar fi vazut un magazin gol.
+   *
+   * Nu se repara mutand poarta in argument: un argument trimis din cod ar fi
+   * forjabil de oricine are cheia anon, adica „arata-mi catalogul oricarui magazin
+   * nepublicat". Se repara aici, unde decizia oricum se ia: fara publicare, calea
+   * veche. Latent azi (magazinele nepublicate sunt mici, deci pe `auto`), dar un
+   * `on` pus de mana pe unul l-ar fi golit.
+   */
+  publicat: boolean;
 }): PalierCatalog {
+  if (!args.publicat) return "client";
   const steag = citesteSteag(args.pageContent);
   if (steag === "off") return "client";
   if (steag === "on") return "server";

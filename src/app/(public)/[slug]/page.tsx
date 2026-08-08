@@ -335,7 +335,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
     (catRawSus && categoriesData.find((c) => c.id === catRawSus)?.name) || catRawSus || "";
 
   const palier = rezumat
-    ? alegePalier({ pageContent: pcCatalog, totalProduse: rezumat.total })
+    ? alegePalier({ pageContent: pcCatalog, totalProduse: rezumat.total, publicat: business.is_published === true })
     : "client";
   const peServer = palier === "server";
 
@@ -377,6 +377,19 @@ export default async function SlugPage({ params, searchParams }: Props) {
         featuredServer = r.featured; sectiuniServer = r.sectiuni;
       },
     });
+
+    /*
+     * O pagina dincolo de ultima e 404, nu o pagina goala cu raspuns 200.
+     *
+     * Search Console citeste o pagina indexabila fara continut ca SOFT 404, si
+     * asta scade increderea in paginile 2..N pentru care s-a facut paginarea
+     * crawlabila. Aceeasi regula ca pe `/magazin`.
+     *
+     * `notFound()` sta AICI, in componenta paginii, nu sub `<Suspense>`: aruncat
+     * de acolo, invelisul ar fi plecat deja cu 200. Vezi [[suspense-coaja-pagini]].
+     * Pagina 1 goala ramane 200 — un magazin fara produse e un raspuns valid.
+     */
+    if (reusitPeServer && initialPage > 1 && products.length === 0) notFound();
   }
 
   if (!reusitPeServer) {

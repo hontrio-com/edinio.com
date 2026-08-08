@@ -111,6 +111,33 @@ interface CommitDeltas {
   failed: number;
 }
 
+/**
+ * Randurile de stagiere ale unui import incheiat, sterse cand nu mai spun nimic.
+ *
+ * `product_import_rows` stageaza FIECARE rand al fisierului si nu se curata
+ * niciodata: 8.331 de randuri si 25 MB acumulate din importuri de mult terminate.
+ * Bomba nu e insa istoricul, ci feedul de stocuri — `stock-feed/runner.ts`
+ * stageaza un set COMPLET la fiecare rulare ORARA a fiecarei surse. Zero surse
+ * configurate azi, dar cronul e deja programat: la prima sursa reala, tabela
+ * creste cu tot fisierul in fiecare ora, pentru totdeauna.
+ *
+ * Se pastreaza `failed` si `skipped`: din ele se compune raportul de erori pe care
+ * comerciantul il descarca din `/api/imports/[id]/error-report`. Randurile
+ * reusite (`created`/`updated`) nu mai au niciun cititor odata ce produsul exista
+ * — id-ul lui e deja pe produs.
+ *
+ * Esecul e inghitit deliberat: o curatare care nu reuseste n-are voie sa faca un
+ * import incheiat sa para picat. Randurile raman, si le ia urmatoarea trecere.
+ */
+async function curataRandurileReusite(admin: Admin, importId: string): Promise<void> {
+  const { error } = await admin
+    .from("product_import_rows")
+    .delete()
+    .eq("import_id", importId)
+    .in("status", ["created", "updated"]);
+  if (error) console.error(`[import] curatarea randurilor pentru ${importId} a esuat:`, error.message);
+}
+
 async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitDeltas; remaining: number }> {
   const businessId = job.business_id;
   const options = job.options as unknown as ImportOptions;
@@ -351,6 +378,9 @@ export async function processImport(
       if (status !== "rehosting_images") patch.finished_at = new Date().toISOString();
     }
     await admin.from("product_imports").update(patch as never).eq("id", importId);
+    // Importul s-a incheiat aici (fara pas de imagini): randurile reusite nu mai
+    // au cititor. Vezi `curataRandurileReusite`.
+    if (status === "completed" || status === "completed_with_errors") await curataRandurileReusite(admin, importId);
     return { status, totals, done: status === "completed" || status === "completed_with_errors" };
   }
 
@@ -366,6 +396,10 @@ export async function processImport(
       patch.finished_at = new Date().toISOString();
     }
     await admin.from("product_imports").update(patch as never).eq("id", importId);
+    // Al doilea punct terminal: dupa rehostarea imaginilor. Curatarea sta la
+    // AMANDOUA, nu doar la primul — altfel importurile cu imagini nu s-ar curata
+    // niciodata, si tocmai alea au cele mai multe randuri.
+    if (status === "completed" || status === "completed_with_errors") await curataRandurileReusite(admin, importId);
     return { status, totals, done: status === "completed" || status === "completed_with_errors" };
   }
 

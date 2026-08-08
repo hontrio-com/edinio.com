@@ -286,7 +286,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    * lipsa rezumatului intarzie castigul, nu strica pagina.
    */
   const palier = rezumat
-    ? alegePalier({ pageContent: pc, totalProduse: rezumat.total })
+    ? alegePalier({ pageContent: pc, totalProduse: rezumat.total, publicat: business.is_published === true })
     : "client";
   const peServer = palier === "server";
 
@@ -469,6 +469,24 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       totalVizibile = rezumat.total;
       totalFiltrate = pag.total;
       reusitPeServer = true;
+
+      /*
+       * O pagina dincolo de ultima e 404, nu o pagina goala.
+       *
+       * `?page=500` pe un catalog de 53 de pagini randa un catalog fara niciun
+       * produs, cu raspuns 200. Search Console citeste asta ca SOFT 404 si ii
+       * scade increderea in restul paginilor de acelasi fel — adica exact in
+       * paginile 2..N pentru care s-a facut toata paginarea crawlabila.
+       *
+       * `notFound()` se cheama AICI, in componenta care randeaza pagina, nu
+       * intr-o bucata de sub `<Suspense>`: aruncat de acolo, invelisul ar fi fost
+       * deja trimis cu 200 si raspunsul ar fi ramas 200 cu un 404 desenat
+       * inauntru. Vezi [[suspense-coaja-pagini]].
+       *
+       * Pagina 1 goala NU e 404: un magazin fara produse, sau un filtru fara
+       * rezultate, sunt raspunsuri valide si trebuie sa arate mesajul lor.
+       */
+      if (filtre.pagina > 1 && products.length === 0) notFound();
     }
   }
 

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { alegePalier, citesteSteag, PRAG_CATALOG_SERVER } from "./tier";
 
-const p = (pageContent: unknown, totalProduse: number) =>
-  alegePalier({ pageContent, totalProduse });
+const p = (pageContent: unknown, totalProduse: number, publicat = true) =>
+  alegePalier({ pageContent, totalProduse, publicat });
 
 test("implicit: sub prag ramane in browser, peste prag trece pe server", () => {
   assert.equal(p(null, PRAG_CATALOG_SERVER - 1), "client");
@@ -38,4 +38,12 @@ test("cautarea NU mai inchide palierul server", () => {
 
 test("un catalog gol nu trece pe server", () => {
   assert.equal(p(null, 0), "client");
+});
+
+test("un magazin nepublicat ramane pe palierul client, chiar cu steagul pe on", () => {
+  // RPC-urile se cheama cu cheia de serviciu, deci `auth.uid()` e NULL si poarta
+  // lor se reduce la „publicat". Proprietarul care isi previzualizeaza magazinul
+  // ar fi vazut zero produse.
+  assert.equal(p({ catalog_server: "on" }, 100000, false), "client");
+  assert.equal(p(null, 100000, false), "client");
 });

@@ -37,6 +37,11 @@ interface RaspunsRpc {
   vocabular: number;
   /** Candidatii au depasit plafonul, deci nu s-au citit deloc. */
   prea_larg: boolean;
+  /**
+   * Interogarea are un cuvant sub trei litere, iar vocabularul incepe de la trei.
+   * Deci raspunsul din baza ar fi fost mai SARAC decat cel din browser.
+   */
+  cuvant_scurt: boolean;
 }
 
 /**
@@ -113,6 +118,15 @@ export async function cautaPeServer(args: {
     // devine frecvent — atunci reparatia e un index de cuvinte cu campul in care
     // a aparut cuvantul, nu un plafon mai mare.
     console.warn(`[cautare] „${args.q}" da prea multi candidati pe ${args.slug ?? args.businessId}; cad pe calea veche`);
+    return null;
+  }
+  if (r.cuvant_scurt) {
+    /*
+     * Un cuvant sub trei litere. Vocabularul nu-l poate avea, deci raspunsul din
+     * baza ar fi fost mai sarac decat cel din browser — nu gol, ci cu un produs
+     * sau doua mai putin, adica exact felul de diferenta pe care n-o vede nimeni.
+     * Prins de testul diferential pe `?q=a`.
+     */
     return null;
   }
 

@@ -60,34 +60,94 @@ set search_path to 'public', 'pg_temp', 'extensions'
 as $$
   with cerute as (
     /*
-     * `length(w) >= 1`, nu `>= 2`.
-     *
-     * Motorul din browser potriveste si un singur caracter: „a" prinde orice
-     * cuvant care incepe cu „a", prin ramura de prefix din `tokenScore`. Cu
-     * pragul la 2, o cautare de o litera ar fi intors ZERO pe server si ~tot
-     * catalogul in browser — adica exact felul de divergenta pe care faza asta
-     * are ca scop sa nu-l produca. In practica un cuvant de o litera depaseste
-     * plafonul si cererea cade pe calea veche, care e chiar comportamentul de azi.
+     * Cuvintele CERUTE. Cele sub `MIN_CUVANT` nu ajung niciodata aici — vezi
+     * `catalog_cauta`, care refuza intreaga cautare in cazul ala.
      */
-    select w, public.semnatura_cuvant(w) as semn
+    select w, public.semnatura_cuvant(w) as semn,
+           /*
+            * Bugetul de greseli, copiat din `typoBudget` (product-search.ts):
+            * doua editari de la 7 litere, una de la 4, niciuna sub. Scris altfel
+            * aici, candidatii ar fi fost fie mai putini decat potrivirile (deci
+            * rezultate lipsa), fie mult mai multi (deci munca degeaba).
+            */
+           case when length(w) >= 7 then 2 when length(w) >= 4 then 1 else 0 end as buget
       from unnest(coalesce(p_cuvinte, '{}'::text[])) w
      where length(w) >= 1
   ),
   /*
-   * Cuvintele din vocabular care se potrivesc, pe TREI cai, toate prin index:
-   * prefix (`like 'cuv%'`) si trigrame (`%`) pe GIN-ul de trigrame, semnatura pe
-   * btree. Semnatura prinde TRANSPOZITIILE, unde trigramele cad complet: masurat,
-   * „csaca" nu gasea „casca" la niciun prag, iar motorul TS le trateaza explicit.
+   * Cuvintele din vocabular care se potrivesc.
    *
-   * `%` si nu `similarity(...) >= 0.45`: al doilea e un apel de functie, deci
-   * evaluat pe fiecare rand din vocabular — 316 ms contra 36 ms, cu acelasi recall.
+   * ARMELE DE AICI OGLINDESC `tokenScore` DIN product-search.ts, una cate una.
+   * Nu sunt o aproximare a lui — sunt aceleasi intrebari, puse in SQL. Asta e
+   * singurul mod in care „SQL da recall, Node da ranking" poate fi corect:
+   * candidatii trebuie sa fie un SUPERSET al a ce potriveste motorul, iar un
+   * superset se dovedeste doar daca stii exact ce potriveste motorul.
+   *
+   * Versiunea de dinainte folosea trigrame (`%`) ca sa APROXIMEZE potrivirea
+   * aproximativa, si pierdea tacut doua arme intregi. Testul diferential le-a
+   * gasit pe amandoua:
+   *   * SUBSTRING — `set` nu gasea „mansete", „musetel", „frumusetea". Motorul le
+   *     gaseste: `d.includes(q)` pentru cuvinte de cel putin 3 litere.
+   *   * PREFIX TOLERANT LA GRESELI (ramura „in curs de tastare") — `casca` nu
+   *     gasea „calcar" si „calcat", desi motorul le gaseste: prefixul lor de 5
+   *     litere, „calca", e la o singura editare de „casca". Pe bricosmart asta
+   *     insemna 19 rezultate in loc de 56, adica DOUA pagini disparute.
+   * Si niciuna nu se vedea din numarul de produse — pagina 1 arata plauzibil.
+   *
+   * Costul: masurat pe vocabularul eSAFE (7.827 de cuvinte), 5-9 ms per cuvant
+   * cerut — adica mai IEFTIN decat cei 36 ms ai armei cu trigrame pe care o
+   * inlocuieste. Lectia veche („`similarity()` e apel de functie, deci 316 ms")
+   * ramane adevarata despre `similarity`, nu despre orice apel: `levenshtein` cu
+   * plafon se opreste dupa cateva litere, iar vocabularul e mic prin constructie.
+   *
+   * Trigramele NU mai apar deloc. Motorul n-are arma de trigrame, deci tot ce
+   * aducea in plus era munca pentru randuri pe care TS le arunca oricum.
    */
   potrivite as (
     select distinct c.w as cerut, v.cuvant
       from cerute c
       join public.catalog_cuvant v
         on v.business_id = p_business
-       and (v.cuvant % c.w or v.cuvant like c.w || '%' or v.semnatura = c.semn)
+       and (
+         -- 1. exact si prefix: `d === q`, `d.startsWith(q)`
+         v.cuvant like c.w || '%'
+         -- 2. subsir, doar de la 3 litere: `ql >= 3 && d.includes(q)`
+         or (length(c.w) >= 3 and v.cuvant like '%' || c.w || '%')
+         -- 3. greseli de tastare pe cuvantul intreg: `editDistanceWithin(q, d, budget)`
+         or (c.buget > 0
+             and extensions.levenshtein_less_equal(v.cuvant, c.w, c.buget) <= c.buget)
+         /*
+          * 4. prefix tolerant la greseli — ramura „ultimul cuvant se tasteaza inca".
+          *
+          * Motorul incearca fiecare prefix de lungime `ql-1 .. ql+buget` si
+          * pastreaza cel mai bun. Se incearca toate aici, nu doar cel mai lung:
+          * pentru „casca" contra unui cuvant ca „cascXY", numai prefixul de 4
+          * („casc") e la o editare, iar cel de 6 e la trei.
+          *
+          * Se aplica la TOATE cuvintele cerute, nu doar la ultimul: candidatii au
+          * voie sa fie mai multi decat potrivirile, iar cine e „ultimul" depinde
+          * de spatiul de la sfarsitul interogarii, pe care baza nu-l vede.
+          */
+         or (c.buget > 0 and length(v.cuvant) > length(c.w) and exists (
+              select 1 from generate_series(greatest(1, length(c.w) - 1), length(c.w) + c.buget) k
+               where extensions.levenshtein_less_equal(left(v.cuvant, k), c.w, c.buget) <= c.buget
+                  -- Si semnatura pe PREFIX, nu doar pe cuvantul intreg (vezi arma 5).
+                  -- „csaca" nu gasea „cascai": prefixul lui de 5, „casca", e o
+                  -- transpozitie a interogarii — o editare pentru motor, doua
+                  -- pentru `levenshtein`. Iar semnatura cuvantului INTREG nu ajuta,
+                  -- fiindca „cascai" are un „i" in plus.
+                  or public.semnatura_cuvant(left(v.cuvant, k)) = c.semn))
+         /*
+          * 5. semnatura — literele SORTATE.
+          *
+          * Motorul foloseste distanta Damerau-Levenshtein, care numara o
+          * TRANSPOZITIE adiacenta ca o singura editare; `levenshtein` din
+          * Postgres o numara ca doua. Deci „csaca" contra „casca" e 1 pentru
+          * motor si 2 pentru arma 3, si fara asta ar fi cazut. Orice transpozitie
+          * pastreaza multimea de litere, deci semnatura le prinde pe toate.
+          */
+         or v.semnatura = c.semn
+       )
   ),
   -- Intersectia listelor de aparitii, cu SI intre cuvintele cerute. Cu SAU,
   -- „manusa protectie" dadea toti candidatii pe care „protectie" ii are in
@@ -212,20 +272,44 @@ begin
     select 1 from public.businesses b
      where b.id = p_business and (b.is_published or b.user_id = auth.uid())
   ) then
-    return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', 0, 'prea_larg', false);
+    return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', 0, 'prea_larg', false, 'cuvant_scurt', false);
   end if;
 
   -- Vocabular gol = magazinul n-a fost inca indexat. Nu e „zero rezultate", e
   -- „nu pot raspunde"; se semnaleaza cu `vocabular = 0` si se cade pe calea veche.
   select count(*) into v_vocabular from public.catalog_cuvant where business_id = p_business;
   if v_vocabular = 0 then
-    return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', 0, 'prea_larg', false);
+    return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', 0, 'prea_larg', false, 'cuvant_scurt', false);
+  end if;
+
+  /*
+   * UN CUVANT SUB TREI LITERE NU SE POATE CAUTA DE AICI.
+   *
+   * Vocabularul se construieste cu `length(w) >= 3` (`catalog_reface_cuvinte`),
+   * deci cuvintele de una-doua litere din produse pur si simplu NU EXISTA in
+   * index. Motorul din browser le vede: cu `?q=a`, `tokenScore` potriveste orice
+   * cuvant care incepe cu „a", inclusiv un „a" singur dintr-o descriere.
+   *
+   * Testul diferential a prins exact asta: pe eSAFE, `?q=a&sort=name_asc` scotea
+   * un produs al carui singur cuvant cu „a" era litera „a". Un produs, pe o
+   * pagina — adica genul de nepotrivire pe care n-o vede nimeni si care spune ca
+   * cele doua paliere nu mai raspund la aceeasi intrebare.
+   *
+   * Se refuza toata cautarea, nu doar cuvantul: semantica e SI intre cuvinte,
+   * deci un cuvant nerezolvabil face tot rezultatul nesigur. Apelantul cade pe
+   * calea veche, unde raspunsul e intreg. Alternativa — indexarea cuvintelor de
+   * una-doua litere — ar umfla indexul inversat cu „de", „si", „cu", cate un rand
+   * pentru fiecare produs, pentru interogari care oricum potrivesc tot.
+   */
+  if exists (select 1 from unnest(coalesce(p_cuvinte, '{}'::text[])) w where length(w) < 3) then
+    return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', v_vocabular,
+                              'prea_larg', false, 'cuvant_scurt', true);
   end if;
 
   -- Numaratul INAINTE de citit: un set uriaș nu se materializeaza niciodata.
   select count(*) into v_nr from public.catalog_candidati(p_business, p_cuvinte, p_filtre);
   if v_nr > v_plafon then
-    return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', v_vocabular, 'prea_larg', true);
+    return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', v_vocabular, 'prea_larg', true, 'cuvant_scurt', false);
   end if;
 
   -- Aceleasi coloane, in aceeasi forma, ca `catalog_pagina`: apelantul trece
@@ -243,7 +327,8 @@ begin
   return jsonb_build_object(
     'randuri', coalesce(v_out, '[]'::jsonb),
     'vocabular', v_vocabular,
-    'prea_larg', false);
+    'prea_larg', false,
+    'cuvant_scurt', false);
 end;
 $$;
 

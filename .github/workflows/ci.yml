@@ -38,9 +38,27 @@ jobs:
           node-version: '24'
           cache: npm
 
+      # Pasii de instalare sunt SEPARATI si numiti anume.
+      #
+      # Nu din pedanterie: logurile unui job se pot citi doar cu drepturi de admin,
+      # dar NUMELE si rezultatul fiecarui pas se vad din API oricui. Cu un singur
+      # `npm ci`, „a picat instalarea" e tot ce afli. Impartit asa, se vede
+      # DE CE: lockfile nesincronizat, sau retea/integritate.
+      - name: Unelte
+        run: node -v && npm -v
+
+      # Nu descarca nimic: verifica doar ca `package.json` si lockfile-ul spun
+      # acelasi lucru. Daca pica AICI, e o problema de repo, nu de retea.
+      - name: Lockfile sincronizat
+        run: npm ci --dry-run
+
       # `npm ci`, nu `npm install`: respecta lockfile-ul intocmai. `install` poate
       # ridica o dependenta si atunci CI-ul verifica alt arbore decat productia.
-      - run: npm ci
+      #
+      # Reincercat de doua ori: registrul npm da eroare trecatoare destul de des
+      # cat sa nu merite o alarma. Daca pica de trei ori la rand, chiar e ceva.
+      - name: Instaleaza
+        run: npm ci || (sleep 15 && npm ci) || (sleep 45 && npm ci)
 
       # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca
       # trece cu `.env.example`: Next.js are nevoie ca VARIABILELE SA EXISTE, nu

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, useTransition } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { ShoppingCart, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
 import { parseProductSections, resolveSectionProducts } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
+import { documentDeCautare } from "@/lib/storefront/catalog/doc-cautare";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
@@ -151,6 +153,15 @@ interface Props {
    */
   numeCategoriiCuProduse?: string[];
   /**
+   * Capetele intervalului de pret pe TOT catalogul, din `catalog_rezumat`.
+   *
+   * Sugestiile din casetele de pret se derivau din lista trimisa in browser. Pe
+   * palierul server aceea e o singura pagina, deci pe bricosmart filtrul propunea
+   * „14 - 255" pentru un catalog de la 1,11 la 1.506,30 — un interval care ascunde
+   * aproape tot magazinul, fara sa dea nicio eroare.
+   */
+  intervalServer?: { min: number; max: number };
+  /**
    * Randurile paginii principale, rezolvate de `catalog_randuri`.
    *
    * Se derivau din `visibleProducts`, deci din catalogul INTREG — inca un motiv
@@ -191,7 +202,7 @@ interface Props {
   initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, featuredServer, sectiuniServer }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, intervalServer, featuredServer, sectiuniServer }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -271,7 +282,33 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   }, []);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [recoverDiscountCode, setRecoverDiscountCode] = useState<string | null>(null);
+  /*
+   * Cine filtreaza: browserul sau baza. Citit sus, fiindca de el atarna si starea
+   * cautarii si paginarea, nu doar randarea listei.
+   */
+  const peServer = palier === "server";
   const [search, setSearch] = useState(initialSearch);
+  /*
+   * Ce cautare a CERUT adresa, fata de ce se tasteaza acum.
+   *
+   * Pe palierul client cele doua sunt acelasi lucru: fiecare tasta filtreaza
+   * lista pe loc, deci adresa poate sa urmeze imediat. Pe palierul server nu pot
+   * fi acelasi lucru — o cautare aplicata inseamna un dus-intors la server, si
+   * n-o face nimeni la fiecare litera. Deci `search` e ce se vede in caseta, iar
+   * asta e ce s-a cerut; se apropie una de alta la Enter (`trimiteCautarea`).
+   *
+   * Conteaza si pentru linkurile de paginare: ele poarta `interogareFiltre`, iar
+   * cu textul tastat un link catre pagina 2 ar fi purtat o cautare pe care nimeni
+   * n-a trimis-o.
+   */
+  const [cautareAplicata, setCautareAplicata] = useState(initialSearch);
+  /**
+   * Cautarea care e in vigoare ACUM: pe client, ce se tasteaza (filtrarea e
+   * instantanee); pe server, ce s-a cerut. Tot ce depinde de „ce cauta omul" —
+   * adresa, linkurile de paginare, resetarea la pagina 1 — citeste asta, ca sa
+   * existe o singura definitie si nu doua care se despart la prima schimbare.
+   */
+  const cautareInAdresa = peServer ? cautareAplicata : search;
   const [categoryFilter, setCategoryFilter] = useState(initialCategory);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
@@ -284,11 +321,20 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const goToPage = useCallback((n: number) => {
     setCurrentPage(n);
     if (typeof window === "undefined") return;
+    /*
+     * Pe palierul server adresa o scrie efectul de navigare, nu functia asta.
+     *
+     * Acolo o schimbare de pagina e o CERERE, nu o feliere in memorie, iar un
+     * `replaceState` de aici ar fi lasat bara de adrese inaintea continutului
+     * pentru cateva sute de milisecunde — exact starea in care paginarea „arata
+     * ca merge" si nu merge, adica defectul pe care faza asta il repara.
+     */
+    if (peServer) return;
     const sp = new URLSearchParams(window.location.search);
     if (n <= 1) sp.delete("page"); else sp.set("page", String(n));
     const qs = sp.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
-  }, []);
+  }, [peServer]);
   // Remember the active page for this tab so the "Magazin" link on a product page
   // can return here (browser back already works via the URL).
   useEffect(() => {
@@ -500,7 +546,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // accesibil (deci si One Product Store e neafectat).
   const hideNoImage = pageContent.hide_products_without_images === true;
   const hideNoStock = pageContent.hide_out_of_stock_products === true;
-  const peServer = palier === "server";
   const visibleProducts = useMemo(() => {
     // Pe palierul server comutatoarele de vizibilitate au fost deja aplicate in
     // interogare; reaplicate aici n-ar strica nimic, dar ar sugera ca lista e
@@ -690,7 +735,22 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     }
   }
 
-  // Filter facets: variant options + price bounds across the products.
+  /*
+   * Filter facets: variant options + price bounds across the products.
+   *
+   * PE PALIERUL SERVER capetele de pret vin din REZUMAT, nu din lista.
+   *
+   * Derivate din `visibleProducts`, ele descriau doar pagina curenta: pe
+   * bricosmart casetele de pret propuneau „14" si „255" pentru un catalog care
+   * merge de la 1,11 la 1.506,30. Nu da nicio eroare — doar sugereaza un interval
+   * care ascunde nouazeci la suta din marfa, si tocmai in filtrul de pret.
+   *
+   * Lista de OPTIUNI de varianta nu se poate salva la fel: n-are echivalent in
+   * rezumat si n-are nici filtru in RPC, deci pastilele ei ar fi comutatoare care
+   * nu fac nimic. Pe palierul server ies din panou (mai jos, in
+   * `CatalogFilterFields`); pe pagina de catalog rolul lor il joaca deja fatetele,
+   * care vin din rezumat si CHIAR filtreaza.
+   */
   const facets = useMemo(() => {
     const opts = new Map<string, Set<string>>();
     let min = Infinity;
@@ -717,26 +777,51 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     const options = [...opts.entries()]
       .map(([name, set]) => ({ name, values: [...set].sort((a, b) => a.localeCompare(b, "ro", { numeric: true })) }))
       .filter((o) => o.values.length > 0);
+    // Capetele din rezumat descriu TOT catalogul; cele din lista, doar pagina.
+    // `Math.floor`/`Math.ceil` rămân, ca sugestia sa fie un numar rotund la fel ca
+    // pe palierul client.
+    if (peServer && intervalServer) {
+      return { options, priceMin: Math.floor(intervalServer.min), priceMax: Math.ceil(intervalServer.max) };
+    }
     return { options, priceMin: min === Infinity ? 0 : Math.floor(min), priceMax: Math.ceil(max) };
-  }, [visibleProducts]);
+  }, [visibleProducts, peServer, intervalServer]);
 
   // Search engine — diacritics-insensitive + typo-tolerant, ranked by
   // relevance (see @/lib/storefront/product-search). Deferred so results
   // recompute off the urgent keystroke render.
   const deferredSearch = useDeferredValue(search);
-  const searchIdx = useMemo(() => buildProductSearchIndex(visibleProducts.map((p) => {
-    const ps = p.page_sections as { variants?: { enabled?: boolean; options?: { name: string; values: string[] }[] } } | null;
-    const optionValues = ps?.variants?.enabled
-      ? (ps.variants.options ?? []).flatMap((o) => (Array.isArray(o?.values) ? o.values.map(String) : []))
-      : undefined;
-    return { id: p.id, name: p.name, category: p.category, description: p.description, optionValues };
-  })), [visibleProducts]);
+  /*
+   * Pe palierul server nu se construieste NICIUN index local.
+   *
+   * `visibleProducts` e o singura pagina acolo, deci un index peste ea ar fi
+   * cautat in 20 de produse si ar fi raspuns cu incredere „2 rezultate" pentru un
+   * termen care are 300 in catalog. Cautarea s-a facut deja in SQL, peste tot
+   * catalogul (`catalog_cauta` + acelasi motor, rulat in Node).
+   *
+   * Campurile indexate vin din `documentDeCautare`, ca sa fie ACELEASI si aici, si
+   * in panoul din header, si pe server. Erau scrise de doua ori si cele doua nu
+   * spuneau acelasi lucru — vezi fisierul.
+   */
+  const searchIdx = useMemo(
+    () => (peServer ? null : buildProductSearchIndex(visibleProducts.map(documentDeCautare))),
+    [visibleProducts, peServer],
+  );
   // null = empty query (no search filtering); otherwise product id → relevance.
   const searchMatches = useMemo(
-    () => queryProductSearchIndex(searchIdx, deferredSearch),
+    () => (searchIdx ? queryProductSearchIndex(searchIdx, deferredSearch) : null),
     [searchIdx, deferredSearch],
   );
-  const effectiveSort = searchMatches && !sortTouched ? "relevance" : sort;
+  /*
+   * „Se cauta acum?" — din adresa pe palierul server, din motorul local pe client.
+   *
+   * De asta atarna doua lucruri vizibile: optiunea „Relevanta" din selectorul de
+   * sortare, si sortarea implicita cat timp exista o cautare. Citita din
+   * `searchMatches`, pe palierul server ar fi fost mereu „nu se cauta", deci
+   * „Relevanta" ar fi lipsit exact de pe pagina care CHIAR e sortata dupa
+   * relevanta.
+   */
+  const seCautaAcum = peServer ? cautareInAdresa.trim().length > 0 : searchMatches !== null;
+  const effectiveSort = seCautaAcum && !sortTouched ? "relevance" : sort;
 
   // Filtered products
   const filteredProducts = useMemo(() => {
@@ -807,7 +892,21 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * partajat reface exact cat vazuse expeditorul, iar linkurile de paginare
    * raman crawlabile — doar ca la modurile care aduna sunt ascunse vizual.
    */
-  const aduna = surface === "shop" && setariMagazin.modPaginare !== "pagini";
+  /*
+   * „Incarca mai multe" si derularea infinita NU exista pe palierul server.
+   *
+   * Modurile alea ADUNA paginile: `currentPage` inseamna acolo „cate pagini s-au
+   * incarcat", si lista din memorie creste. Pe palierul server serverul trimite
+   * exact O pagina, deci a doua apasare ar fi INLOCUIT primele douazeci de produse
+   * cu urmatoarele douazeci sub un buton care scrie „Incarca mai multe" — adica
+   * produse care dispar la o apasare care promite ca adauga.
+   *
+   * Deci acolo paginarea e numerotata, indiferent de ce a ales comerciantul. Azi
+   * niciun magazin de pe palierul server nu foloseste alt mod (verificat: ambele
+   * au `modPaginare: "pagini"`), deci nu se schimba nimic vizibil; conditia e
+   * pentru cel care apasa maine butonul din editor.
+   */
+  const aduna = surface === "shop" && !peServer && setariMagazin.modPaginare !== "pagini";
   // A doua feliere ar goli pagina 2: serverul a trimis DEJA fereastra ceruta, iar
   // `slice((2-1)*24, 2*24)` peste 24 de randuri da lista goala.
   const paginatedProducts = peServer ? filteredProducts : filteredProducts.slice(
@@ -845,11 +944,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Reset to page 1 when filters change — but not on the initial mount, which
   // would clobber a page restored from the URL.
+  //
+  // `cautareAplicata`, nu `search`: pe palierul server tastarea nu e inca o
+  // filtrare, deci nu are ce reseta. Legat de `search`, fiecare litera ar fi mutat
+  // pagina la 1 — adica o navigare la server pe care n-a cerut-o nimeni. Pe
+  // palierul client cele doua sunt aceeasi valoare, deci nu se schimba nimic.
   const filtersInitRef = useRef(true);
   useEffect(() => {
     if (filtersInitRef.current) { filtersInitRef.current = false; return; }
     goToPage(1);
-  }, [search, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieFatete, goToPage]);
+  }, [cautareInAdresa, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieFatete, goToPage]);
 
   /*
    * Filtrele traiesc si in adresa, nu doar in stare.
@@ -883,13 +987,20 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * efectul care rescrie bara de adrese si linkurile de paginare, care se
    * randeaza si pe server. Scrisa in doua locuri, prima nepotrivire ar fi fost o
    * pagina 2 care pierde filtrele.
+   *
+   * Interogarea, ca FUNCTIE de textul cautat — nu ca valoare.
+   *
+   * Doi apelanti au nevoie de ea cu doua texte diferite: adresa si linkurile de
+   * paginare o vor cu cautarea CERUTA (`?q=`), iar trimiterea unei cautari noi o
+   * vrea cu cea TASTATA. Compusa in doua locuri, prima nepotrivire ar fi fost o
+   * pagina 2 care pierde filtrele — de aia e o singura compunere, parametrizata.
    */
-  const interogareFiltre = useMemo(
-    () => scrieFiltre({
+  const compuneInterogare = useCallback(
+    (cautare: string) => scrieFiltre({
       // Pe pagina unei categorii, categoria e chiar calea: scrisa si in
       // interogare, ar fi dat `/magazin/bocanci?cat=Bocanci` la fiecare filtrare.
       categorie: caleCategorie ? "" : categoryFilter,
-      cautare: search,
+      cautare,
       sortare: sortTouched ? sort : "",
       reduceri: onSaleOnly,
       stoc: inStockOnly,
@@ -897,41 +1008,176 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       pretMax: priceMax,
       fatete: selectieFatete,
     }),
-    [caleCategorie, categoryFilter, search, sort, sortTouched, onSaleOnly, inStockOnly, priceMin, priceMax, selectieFatete],
+    [caleCategorie, categoryFilter, sort, sortTouched, onSaleOnly, inStockOnly, priceMin, priceMax, selectieFatete],
+  );
+  const interogareFiltre = useMemo(
+    () => compuneInterogare(cautareInAdresa),
+    [compuneInterogare, cautareInAdresa],
   );
 
-  /*
-   * Adresa se rescrie cu INTARZIERE, nu la fiecare tasta.
+  /**
+   * Trimite cautarea tastata. Pe palierul client nu are ce trimite — filtrarea
+   * s-a intamplat deja la fiecare tasta.
    *
-   * Cautarea scrie la fiecare caracter, iar `goToPage(1)` mai scrie o data la
-   * fiecare schimbare de filtru: doua `replaceState` per tasta. Safari le
-   * limiteaza la o suta in treizeci de secunde si arunca `SecurityError` dupa,
-   * adica o eroare in consola exact la magazinele unde se cauta mult.
+   * NU navigheaza singura: doar face cautarea „aplicata", si de acolo o preia
+   * efectul de navigare de mai jos. Asa exista UN SINGUR loc care schimba adresa,
+   * in loc de doua care trebuie tinute in sincron — iar o a doua navigare
+   * declansata de aici ar fi intrat in cursa cu prima si ar fi putut ateriza pe
+   * cautarea veche.
    */
+  const trimiteCautarea = useCallback(() => {
+    if (!peServer) return;
+    setCautareAplicata(search);
+  }, [peServer, search]);
+
+  /*
+   * Adresa completa a unei stari de filtre. Parametrii straini se adauga AICI,
+   * nu in `interogareFiltre`.
+   *
+   * Interogarea aceea alimenteaza si linkurile de paginare, care se randeaza pe
+   * server: `utm_*`/`gclid`/`preview` adaugati acolo ar fi lipsit din HTML-ul
+   * initial si ar fi aparut la hidratare, adica exact nepotrivirea pe care am
+   * scos-o din paginare. In plus, o eticheta de campanie n-are ce cauta copiata
+   * in linkul catre pagina 2.
+   */
+  const adresaPentru = useCallback((interogare: string, pagina: number) => {
+    const straine = parametriStraini.current
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("&");
+    const qs = [interogare, pagina > 1 ? `page=${pagina}` : "", straine].filter(Boolean).join("&");
+    return `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+  }, []);
+
+  /*
+   * PE PALIERUL SERVER, UN FILTRU SCHIMBAT TREBUIE SA CEARA PAGINA DIN NOU.
+   *
+   * Asta era jumatatea care lipsea din A3/A6, si lipsea tacut. Serverul randa
+   * corect orice adresa, dar in browser NIMIC nu naviga: `goToPage` si efectul de
+   * mai jos scriau doar `history.replaceState`, iar `filteredProducts` intoarce pe
+   * palierul server chiar lista primita. Deci bara de adrese spunea `?page=2` sau
+   * `?q=aspirator` si grila arata neschimbat primele 20 de produse. Verificat in
+   * productie pe bricosmart: paginare, cautare, sortare, pret si fatete — toate
+   * inerte. Nimic nu da eroare, deci nimeni nu raporteaza; se vede doar dupa ce
+   * apesi si te uiti.
+   *
+   * `router.push`, nu `window.location.href`, si nu din eleganta: o reincarcare
+   * intreaga PIERDE FOCUSUL din casetele de pret, deci scrisul unui numar din doua
+   * cifre s-ar fi rupt la mijloc. In plus trimite ~207 kB in loc de ~45 kB de
+   * payload RSC si sare derularea in capul paginii. `staleTimes.dynamic` e 30 s in
+   * `next.config.ts`, deci o adresa nouă se cere mereu de la server, iar una
+   * revizitata in 30 s vine instant din cache-ul de router — ceea ce e chiar ce
+   * vrem la „bifez, ma razgandesc, debifez".
+   */
+  const router = useRouter();
+  const [navigheaza, startNavigare] = useTransition();
+  const ceruteDeServer = useRef<string | null>(null);
   useEffect(() => {
-    if (surface !== "shop" || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
+    /*
+     * Pe pagina principala filtrele stau in memorie, si acolo e in regula: grila
+     * e o parte a unei pagini de prezentare. Pe palierul server insa NU POT sta in
+     * memorie — lista vine gata filtrata de la server, deci singurul mod de a o
+     * schimba e o cerere noua. De aia conditia e „shop SAU server", nu doar „shop".
+     */
+    if (surface !== "shop" && !peServer) return;
+
+    const tinta = adresaPentru(interogareFiltre, currentPage);
+
+    /*
+     * Prima trecere doar RETINE adresa cu care s-a randat pagina.
+     *
+     * Se face aici, sincron la montare, si NU in temporizator: o apasare in
+     * prima jumatate de secunda ar fi anulat temporizatorul, iar rularea urmatoare
+     * ar fi crezut ca tot e montarea — si prima schimbare de filtru s-ar fi
+     * pierdut in liniste. Se retine adresa COMPUSA, nu `window.location.search`:
+     * o adresa care vine cu parametrii in alta ordine ar fi aratat ca o schimbare
+     * si ar fi declansat o navigare degeaba.
+     */
+    if (peServer && ceruteDeServer.current === null) {
+      ceruteDeServer.current = tinta;
+      return;
+    }
+
+    /*
+     * Cu INTARZIERE, nu la fiecare tasta.
+     *
+     * Pe palierul client motivul era Safari: `replaceState` de doua ori per tasta,
+     * iar Safari le limiteaza la o suta in treizeci de secunde si arunca
+     * `SecurityError` dupa. Pe palierul server intarzierea are un al doilea rost,
+     * mai scump: fiecare navigare e un dus-intors la server, deci cele trei tastari
+     * ale unui „150" in caseta de pret trebuie sa dea O navigare, nu trei.
+     */
     const id = window.setTimeout(() => {
-      /*
-       * Parametrii straini se adauga AICI, nu in `interogareFiltre`.
-       *
-       * Interogarea aceea alimenteaza si linkurile de paginare, care se
-       * randeaza pe server: adaugati acolo, ar fi lipsit din HTML-ul initial si
-       * ar fi aparut la hidratare, adica exact nepotrivirea pe care tocmai am
-       * scos-o din paginare. In plus, o eticheta de campanie n-are ce cauta
-       * copiata in linkul catre pagina 2.
-       */
-      const straine = parametriStraini.current
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-        .join("&");
-      const qs = [
-        interogareFiltre,
-        currentPage > 1 ? `page=${currentPage}` : "",
-        straine,
-      ].filter(Boolean).join("&");
-      window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
-    }, 250);
+      if (!peServer) {
+        window.history.replaceState(null, "", tinta);
+        return;
+      }
+      if (tinta === ceruteDeServer.current) return;
+      ceruteDeServer.current = tinta;
+      startNavigare(() => router.push(tinta, { scroll: false }));
+    }, peServer ? 400 : 250);
     return () => window.clearTimeout(id);
-  }, [surface, interogareFiltre, currentPage]);
+  }, [surface, peServer, interogareFiltre, currentPage, adresaPentru, router]);
+
+  /*
+   * Inapoi/Inainte aduc alte props; starea controalelor trebuie sa le urmeze.
+   *
+   * Navigarile PROPRII n-au nevoie de asta — acolo starea s-a schimbat prima si
+   * serverul a raspuns exact ce cerea ea. Dar butonul Inapoi al browserului
+   * reface arborele din cache-ul de router (documentat: back/forward nu respecta
+   * `staleTimes`, ca sa nu sara derularea), deci vin props-urile paginii de
+   * dinainte peste o stare care a rămas a paginii curente: caseta de pret ar fi
+   * aratat 50 peste o grila nefiltrata.
+   *
+   * Se resincronizeaza DOAR cand semnatura props-urilor se schimba, si de aia
+   * comparatia sta intr-un `ref` si nu intre props si stare: comparate intre ele,
+   * o singura valoare care nu se normalizeaza identic pe cele doua parti ar fi
+   * dat o bucla infinita de randari pe pagina de catalog.
+   */
+  const semnaturaProps = JSON.stringify([
+    initialPage, initialSearch, initialCategory, initialOnSale, initialInStock,
+    initialPriceMin, initialPriceMax, initialSort, initialSelectieFatete ?? {},
+  ]);
+  const propsAplicate = useRef<string | null>(null);
+  useEffect(() => {
+    if (!peServer) return;
+    if (propsAplicate.current === null || propsAplicate.current === semnaturaProps) {
+      propsAplicate.current = semnaturaProps;
+      return;
+    }
+    propsAplicate.current = semnaturaProps;
+    /*
+     * Si marcajul „ce ne-a dat serverul" se sterge, altfel Inapoi se anuleaza
+     * singur.
+     *
+     * Fara linia asta: Inapoi aduce props-urile paginii vechi, resincronizarea
+     * pune starea pe ele, efectul de navigare recompune adresa veche, o compara cu
+     * `ceruteDeServer` — care tine inca adresa spre care am navigat INAINTE — le
+     * vede diferite, si navigheaza iar INAINTE. Adica butonul Inapoi nu mai
+     * functioneaza deloc pe pagina de catalog.
+     *
+     * `null` in loc de adresa nouă: asa urmatoarea rulare a efectului intra pe
+     * ramura de „montare", isi retine adresa curenta si NU navigheaza — deci nu
+     * trebuie recompusa aici a doua oara aceeasi adresa.
+     */
+    ceruteDeServer.current = null;
+    setCurrentPage(initialPage);
+    setSearch(initialSearch);
+    // Si cautarea APLICATA, nu doar textul din caseta: altfel `interogareFiltre` ar
+    // fi rămas pe termenul de dinainte de Inapoi si ar fi cerut iar pagina aceea.
+    setCautareAplicata(initialSearch);
+    setCategoryFilter(initialCategory);
+    setOnSaleOnly(initialOnSale);
+    setInStockOnly(initialInStock);
+    setPriceMin(initialPriceMin);
+    setPriceMax(initialPriceMax);
+    setSort(initialSort || (surface === "shop" ? setariMagazin.sortareImplicita : "") || defaultSort);
+    setSortTouched(!!initialSort);
+    setSelectieFatete(initialSelectieFatete ?? {});
+    // `semnaturaProps` acopera toate valorile de mai sus; enumerate una cu una,
+    // lista de dependinte ar fi fost o a doua definitie a aceleiasi semnaturi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peServer, semnaturaProps]);
 
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).
@@ -1031,7 +1277,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     setSort,
     setSortTouched,
     effectiveSort,
-    hasSearchMatches: searchMatches !== null,
+    hasSearchMatches: seCautaAcum,
+    catalogPeServer: peServer,
+    trimiteCautarea,
+    catalogSeIncarca: navigheaza,
     // Orice forma de cautare din header — bara permanenta SAU lupa — ascunde
     // campul din catalog: doua cautari una sub alta nu ajuta pe nimeni.
     headerHasSearch: headerAreCautare(design),

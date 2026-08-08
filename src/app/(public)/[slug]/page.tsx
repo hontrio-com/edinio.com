@@ -19,7 +19,7 @@ import type { Fateta as FatetaCatalog } from "@/lib/storefront/catalog/facets";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { hrefCatalog } from "@/lib/storefront/category-href";
-import { scrieFiltre } from "@/lib/storefront/catalog/url";
+import { citesteFiltreDinAdresa, scrieFiltre } from "@/lib/storefront/catalog/url";
 import { SEGMENT_MAGAZIN, grilaRamaneAcasa, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { parseStoreDesign, resolveDesign } from "@/lib/storefront/design/parse";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -34,7 +34,20 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { jsonLdSafe } from "@/lib/json-ld";
 
-interface Props { params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string; preview?: string; q?: string; cat?: string; sale?: string }>; }
+/*
+ * `sort`, `pmin`, `pmax` si `stoc` sunt aici fiindca grila paginii principale are
+ * chiar controalele lor (bara `catalog_toolbar`), iar pe palierul server un
+ * control care nu ajunge in adresa nu poate face NIMIC: lista vine gata filtrata
+ * din baza. Pana acum se opreau in memoria browserului — ceea ce mergea cat timp
+ * browserul avea tot catalogul si filtra pe loc.
+ */
+interface Props {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{
+    page?: string; preview?: string; q?: string; cat?: string; sale?: string;
+    sort?: string; pmin?: string; pmax?: string; stoc?: string;
+  }>;
+}
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -158,8 +171,18 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
 export default async function SlugPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { page: pageParam, preview: previewParam, q: qParam, cat: catParam, sale: saleParam } = await searchParams;
+  const sp = await searchParams;
+  const { page: pageParam, preview: previewParam, q: qParam, cat: catParam, sale: saleParam } = sp;
   const initialPage = Math.max(1, parseInt(pageParam ?? "1", 10) || 1);
+  /*
+   * Filtrele se citesc cu ACELASI parser ca pagina de catalog.
+   *
+   * Fara fatete (pagina principala nu le are), dar cu aceleasi validari — mai ales
+   * `numarPozitiv`, care verifica sirul GOL primul: `Number("")` e zero, finit si
+   * pozitiv, deci o adresa fara `pmin` ar fi produs un filtru „de la 0 pana la 0",
+   * adica un catalog gol la fiecare incarcare. Vezi url.ts.
+   */
+  const filtreAcasa = citesteFiltreDinAdresa(sp, []);
   const isPreview = previewParam === "1";
   const supabase = await createClient();
 
@@ -311,9 +334,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
   const categorieAcasa =
     (catRawSus && categoriesData.find((c) => c.id === catRawSus)?.name) || catRawSus || "";
 
-  const seCautaAcasa = (qParam ?? "").trim().length > 0;
   const palier = rezumat
-    ? alegePalier({ pageContent: pcCatalog, totalProduse: rezumat.total, cauta: seCautaAcasa })
+    ? alegePalier({ pageContent: pcCatalog, totalProduse: rezumat.total })
     : "client";
   const peServer = palier === "server";
 
@@ -336,6 +358,20 @@ export default async function SlugPage({ params, searchParams }: Props) {
       sortareImplicita: (pcCatalog.sort_options as { default_sort?: string } | undefined)?.default_sort || "newest",
       categorie: categorieAcasa,
       reduceri: saleParam === "1",
+      cautare: filtreAcasa.cautare,
+      /*
+       * Sortarea CERUTA in adresa, si e alta treaba decat implicitul magazinului.
+       *
+       * Browserul compune `sortTouched = !!initialSort`, deci: cu `?sort=` ordinea
+       * e cea cerută, iar fara el si cu o cautare activa ordinea e RELEVANTA — nu
+       * `default_sort`. Trimise amestecat, ar fi ieșit acelasi NUMAR de produse in
+       * alta ordine, adica exact clasa de defect care a lovit deja de trei ori pe
+       * suprafetele astea si nu se vede din contoare.
+       */
+      sortareDinAdresa: filtreAcasa.sortare,
+      pretMin: filtreAcasa.pretMin,
+      pretMax: filtreAcasa.pretMax,
+      stoc: filtreAcasa.stoc,
       preia: (r) => {
         products = r.products; totalVizibile = r.totalVizibile; totalFiltrate = r.totalFiltrate;
         featuredServer = r.featured; sectiuniServer = r.sectiuni;
@@ -586,19 +622,46 @@ export default async function SlugPage({ params, searchParams }: Props) {
       <MiniStoreRenderer
         business={pentruBrowser(business)}
         products={products}
-        palier={palier}
+        /*
+         * Ce s-a INTAMPLAT, nu ce s-a decis.
+         *
+         * Cand palierul server n-a reusit (RPC picat, magazin neindexat, cuvant
+         * prea comun la cautare), mai jos s-a citit catalogul INTREG. Trimis cu
+         * `palier="server"`, renderer-ul n-ar mai filtra, n-ar mai sorta si mai
+         * ales n-ar mai felia — deci ar randa tot catalogul deodata la o adresa
+         * care cerea douazeci de produse.
+         */
+        palier={reusitPeServer ? palier : "client"}
         totalVizibileServer={totalVizibile}
         totalFiltrateServer={totalFiltrate}
-        numeCategoriiCuProduse={peServer ? rezumat?.categorii : undefined}
+        numeCategoriiCuProduse={reusitPeServer ? rezumat?.categorii : undefined}
+        intervalServer={reusitPeServer && rezumat
+          ? { min: Number(rezumat.price_min), max: Number(rezumat.price_max) }
+          : undefined}
         featuredServer={featuredServer}
         sectiuniServer={sectiuniServer}
         storeSettings={setariDeTrimis}
         basePath={basePath}
         categories={categoriesData}
         initialPage={initialPage}
-        initialSearch={(qParam ?? "").slice(0, 100)}
+        initialSearch={filtreAcasa.cautare}
         initialCategory={initialCategory}
         initialOnSale={saleParam === "1"}
+        /*
+         * Controalele barei de deasupra grilei trebuie sa arate ce spune adresa.
+         *
+         * Pe palierul server ele NAVIGHEAZA, deci starea lor vine de aici: fara
+         * props-urile astea, o cerere `?pmax=50` ar fi randat lista filtrata cu
+         * casetele goale, si prima atingere a oricarui alt filtru ar fi trimis o
+         * adresa fara `pmax` — adica filtrul dispare singur.
+         *
+         * Pe palierul client nu se schimba nimic vizibil: pana acum nu se citeau,
+         * dar nici nu le scria nimeni in adresa de pe pagina principala.
+         */
+        initialSort={filtreAcasa.sortare}
+        initialPriceMin={filtreAcasa.pretMin}
+        initialPriceMax={filtreAcasa.pretMax}
+        initialInStock={filtreAcasa.stoc}
         preview={isPreview}
         design={resolved.design}
         designStyle={resolved.style}

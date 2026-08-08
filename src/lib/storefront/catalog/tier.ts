@@ -37,24 +37,23 @@ export function citesteSteag(pageContent: unknown): SteagCatalog {
 }
 
 /**
- * `cauta` inchide palierul server, si asta e o decizie temporara, nu o scapare.
+ * CAUTAREA NU MAI INCHIDE PALIERUL SERVER.
  *
- * Cautarea e inca in browser: e tolerantă la greseli, cu scoruri, si ruleaza
- * peste tot catalogul. Cu o singura pagina in memorie n-ar mai avea ce cauta.
- * Pana cand cautarea se muta in SQL (cu poarta ei de paritate), o cerere cu `?q=`
- * cade pe calea de azi si primeste catalogul intreg.
+ * Pana la A4, o cerere cu `?q=` cadea aici pe palierul client si primea tot
+ * catalogul, fiindca motorul de cautare rula in browser peste lista intreaga. De
+ * acum ruleaza pe server, peste candidatii alesi de `catalog_cauta`, cu ACELASI
+ * cod — deci nu mai exista niciun motiv sa se trimita catalogul intreg.
  *
- * Nu e un compromis mare: navigarea obisnuita, care e majoritatea covarsitoare a
- * traficului, capata tot castigul. Iar cand cautarea se muta, se STERGE conditia
- * de aici — adica o migrare care nu schimba comportamentul nimanui, in loc sa
- * inlocuiasca un motor de cautare cu altul peste noapte.
+ * Conditia s-a STERS, nu s-a inlocuit: asta a fost proiectat de la inceput ca o
+ * migrare care nu schimba comportamentul nimanui, in loc de un schimb de motoare
+ * peste noapte. Rezerva ramane, dar mai jos si mai ingusta: `cautaPeServer`
+ * intoarce `null` cand nu poate raspunde (magazin neindexat, sau un cuvant prea
+ * comun), iar apelantul cade atunci pe calea veche pentru CEREREA aceea.
  */
 export function alegePalier(args: {
   pageContent: unknown;
   totalProduse: number;
-  cauta: boolean;
 }): PalierCatalog {
-  if (args.cauta) return "client";
   const steag = citesteSteag(args.pageContent);
   if (steag === "off") return "client";
   if (steag === "on") return "server";

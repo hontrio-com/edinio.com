@@ -12,6 +12,7 @@ import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefront/catalog/facets";
 import { alegePalier } from "@/lib/storefront/catalog/tier";
+import { cautaPeServer, sortareLaCautare } from "@/lib/storefront/catalog/cauta-server";
 import { numeSubarbore } from "@/lib/storefront/catalog/subarbore";
 import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
@@ -256,9 +257,6 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   const pc = (storeSettings?.page_content as Record<string, unknown>) ?? {};
   const faraImagini = pc.hide_products_without_images === true;
   const faraStocAscuns = pc.hide_out_of_stock_products === true;
-  // Cautarea se citeste direct din adresa: parsarea completa a filtrelor are
-  // nevoie de fatete, iar decizia are nevoie doar de „se cauta sau nu".
-  const seCauta = ((Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? "").trim().length > 0;
 
   const [rezumatRaspuns, categoriesData] = await Promise.all([
     proiectieDb()
@@ -288,7 +286,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    * lipsa rezumatului intarzie castigul, nu strica pagina.
    */
   const palier = rezumat
-    ? alegePalier({ pageContent: pc, totalProduse: rezumat.total, cauta: seCauta })
+    ? alegePalier({ pageContent: pc, totalProduse: rezumat.total })
     : "client";
   const peServer = palier === "server";
 
@@ -400,40 +398,65 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       || filtre.categorie
       || "";
     const numeleFiltrate = categoriaCeruta ? numeSubarbore(categoriesData, categoriaCeruta) : null;
-    const { data: raspuns, error: eroareRpc } = await proiectieDb().rpc("catalog_pagina", {
-      p_business: business.id,
-      p_filtre: {
-        sortare: sortareEfectiva,
-        categorii: numeleFiltrate,
-        pretMin: filtre.pretMin,
-        pretMax: filtre.pretMax,
-        reduceri: filtre.reduceri,
-        stoc: filtre.stoc,
-        faraImagini,
-        faraStocAscuns,
-        // Grupate pe cheie: SAU inauntru, SI intre chei — ca `trecefiltrele`.
-        fatete: Object.entries(filtre.fatete).map(([cheie, valori]) => valori.map((v) => jeton(cheie, v))),
-      },
-      p_limit: perPagina,
-      p_offset: (filtre.pagina - 1) * perPagina,
-    });
-    /*
-     * Un RPC stricat NU are voie sa randeze un catalog gol.
-     *
-     * Exact asta s-a intamplat la prima aprindere: `categorii: null` facea
-     * functia sa arunce (`jsonb_array_elements` pe un null JSON), clientul
-     * Supabase inghitea eroarea in `data: null`, si magazinul afisa
-     * „0 din 1049 produse" — fara nicio urma nicaieri. Un catalog gol arata a
-     * magazin fara marfa, nu a defect, deci nu-l raporteaza nimeni.
-     *
-     * De acum orice esec se scrie in loguri SI cade pe calea veche. Aia e mai
-     * lenta, dar e intreaga; palierul server e o optimizare, si o optimizare
-     * n-are voie sa fie singurul drum catre produse.
-     */
-    if (eroareRpc || !raspuns) {
-      console.error(`[catalog] catalog_pagina a esuat pentru ${business.slug}:`, eroareRpc?.message ?? "raspuns gol");
+    // Grupate pe cheie: SAU inauntru, SI intre chei — ca `trecefiltrele`.
+    const filtreRpc = {
+      categorii: numeleFiltrate,
+      pretMin: filtre.pretMin,
+      pretMax: filtre.pretMax,
+      reduceri: filtre.reduceri,
+      stoc: filtre.stoc,
+      faraImagini,
+      faraStocAscuns,
+      fatete: Object.entries(filtre.fatete).map(([cheie, valori]) => valori.map((v) => jeton(cheie, v))),
+    };
+
+    let pag: { randuri: RandProiectie[]; total: number } | null = null;
+    if (filtre.cautare.trim()) {
+      /*
+       * Cu `?q=`, pagina vine din cautare, nu din `catalog_pagina`.
+       *
+       * Sortarea e ALTA aici: cat timp se cauta si adresa nu cere explicit o
+       * sortare, ordinea e RELEVANTA — nu implicitul magazinului. Vezi
+       * `sortareLaCautare`, unde sta motivul si de ce e o functie cu nume.
+       *
+       * `null` inseamna „nu pot raspunde" (magazin neindexat, cuvant prea comun,
+       * RPC picat), NU „zero rezultate": atunci `reusitPeServer` ramane fals si
+       * pagina cade pe calea veche, cu catalogul intreg si cautarea in browser.
+       */
+      pag = await cautaPeServer({
+        businessId: business.id,
+        q: filtre.cautare,
+        filtre: filtreRpc,
+        sortare: sortareLaCautare(filtre.sortare),
+        limit: perPagina,
+        offset: (filtre.pagina - 1) * perPagina,
+        slug: business.slug,
+      });
+    } else {
+      const { data: raspuns, error: eroareRpc } = await proiectieDb().rpc("catalog_pagina", {
+        p_business: business.id,
+        p_filtre: { ...filtreRpc, sortare: sortareEfectiva },
+        p_limit: perPagina,
+        p_offset: (filtre.pagina - 1) * perPagina,
+      });
+      /*
+       * Un RPC stricat NU are voie sa randeze un catalog gol.
+       *
+       * Exact asta s-a intamplat la prima aprindere: `categorii: null` facea
+       * functia sa arunce (`jsonb_array_elements` pe un null JSON), clientul
+       * Supabase inghitea eroarea in `data: null`, si magazinul afisa
+       * „0 din 1049 produse" — fara nicio urma nicaieri. Un catalog gol arata a
+       * magazin fara marfa, nu a defect, deci nu-l raporteaza nimeni.
+       *
+       * De acum orice esec se scrie in loguri SI cade pe calea veche. Aia e mai
+       * lenta, dar e intreaga; palierul server e o optimizare, si o optimizare
+       * n-are voie sa fie singurul drum catre produse.
+       */
+      if (eroareRpc || !raspuns) {
+        console.error(`[catalog] catalog_pagina a esuat pentru ${business.slug}:`, eroareRpc?.message ?? "raspuns gol");
+      }
+      pag = (raspuns ?? null) as { randuri: RandProiectie[]; total: number } | null;
     }
-    const pag = (raspuns ?? null) as { randuri: RandProiectie[]; total: number } | null;
     products = (pag?.randuri ?? []).map((r) => {
       const p = dinProiectie(r);
       // Indicii trebuie sa arate catre dictionarul REZUMATULUI, nu catre unul
@@ -478,6 +501,20 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     totalVizibile = products.length;
     totalFiltrate = products.length;
   }
+
+  /*
+   * DACA S-A CAZUT PE CALEA VECHE, BROWSERUL TREBUIE SA AFLE.
+   *
+   * `palier` spune ce s-a DECIS; asta spune ce s-a INTAMPLAT, si numai al doilea
+   * are voie sa ajunga la renderer. Trimis „server" peste un `products` care e
+   * catalogul INTREG, renderer-ul nu mai filtreaza, nu mai sorteaza si mai ales nu
+   * mai feliaza — deci pagina ar fi randat toate cele 1.049 de carduri deodata,
+   * nefiltrate si necautate, la o adresa care cerea douazeci.
+   *
+   * Defectul exista deja pe calea de eroare a RPC-ului, unde era rar. Cautarea il
+   * face obisnuit: un cuvant prea comun cade pe calea veche prin proiectare.
+   */
+  const palierRandat = reusitPeServer ? palier : "client";
 
   // Analitica: aterizarile directe pe pagina de catalog sunt vizite reale, la
   // fel ca cele pe pagina principala. Aceleasi excluderi — proprietarul si
@@ -550,12 +587,16 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       preview={isPreview && isOwner}
       fatete={fateteDePagina}
       jetoane={jetoaneDePagina}
-      palier={palier}
+      palier={palierRandat}
       totalVizibileServer={totalVizibile}
       totalFiltrateServer={totalFiltrate}
       // Numele de categorie cu produse vin din rezumat: derivate din pagina
       // curenta, ar disparea din meniu toate categoriile fara produse pe ea.
-      numeCategoriiCuProduse={peServer ? rezumat?.categorii : undefined}
+      numeCategoriiCuProduse={reusitPeServer ? rezumat?.categorii : undefined}
+      // Capetele filtrului de pret descriu TOT catalogul, nu pagina trimisa.
+      intervalServer={reusitPeServer && rezumat
+        ? { min: Number(rezumat.price_min), max: Number(rezumat.price_max) }
+        : undefined}
       initialPage={filtre.pagina}
       initialSearch={filtre.cautare}
       initialCategory={initialCategory}

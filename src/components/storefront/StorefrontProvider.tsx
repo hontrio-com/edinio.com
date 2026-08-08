@@ -242,6 +242,40 @@ export interface StorefrontContextValue extends StoreChromeValue {
   hasSearchMatches: boolean;
   /** Varianta de header aleasa are deja o caseta de cautare. */
   headerHasSearch: boolean;
+  /**
+   * Lista vine gata filtrata din baza, o pagina la un moment dat.
+   *
+   * `false` inseamna purtarea de dintotdeauna: catalogul intreg e in browser si
+   * orice filtru se aplica pe loc. `true` schimba TREI lucruri, si toate trei
+   * fiindca lista din memorie nu mai e catalogul:
+   *
+   *   1. Cautarea se aplica la o CERERE, nu la fiecare tasta — casetele trebuie
+   *      sa fie intr-un `<form>` si sa cheme `trimiteCautarea`, altfel Enter nu
+   *      inseamna nimic si vizitatorul scrie un termen la care pagina nu raspunde.
+   *   2. Paginarea e NUMEROTATA, chiar daca reglajul cere „Incarca mai multe":
+   *      modurile care aduna cresc lista din memorie, iar aici serverul trimite
+   *      exact o pagina, deci a doua apasare ar fi inlocuit produsele in loc sa
+   *      le adauge.
+   *   3. Pastilele de varianta din filtre NU se arata: valorile lor se deriva din
+   *      produsele trimise, iar selectia lor nu ajunge in adresa — ar fi
+   *      comutatoare care se coloreaza si nu fac nimic. Rolul lor il joaca
+   *      fatetele, care vin din rezumat.
+   *
+   * Un singur steag, nu trei: sunt aceeasi consecinta a aceluiasi fapt, si trei
+   * booleeni care trebuie sa fie mereu egali se despart la prima schimbare.
+   */
+  catalogPeServer: boolean;
+  /** Aplica textul din caseta. Fara efect pe palierul client. */
+  trimiteCautarea: () => void;
+  /**
+   * O cerere de catalog e in curs (filtru, sortare sau pagina noua).
+   *
+   * Exista doar pe palierul server, si e singurul semn ca s-a intamplat ceva:
+   * pe client filtrele raspund instantaneu, aici e un dus-intors. Fara el,
+   * vizitatorul apasa o fateta, nu se schimba nimic vizibil timp de o jumatate de
+   * secunda, si apasa a doua.
+   */
+  catalogSeIncarca: boolean;
 
   /**
    * Pagina asta filtreaza pe loc, adica are o lista care raspunde la cautare.

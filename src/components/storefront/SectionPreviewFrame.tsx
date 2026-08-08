@@ -137,6 +137,11 @@ export function SectionPreviewFrame({
       effectiveSort: "newest",
       hasSearchMatches: false,
       headerHasSearch: false,
+      // Miniatura nu cere nimic de la server: e o randare statica peste produse
+      // demonstrative, deci si cautarea si indicatorul de incarcare sunt inerte.
+      catalogPeServer: false,
+      trimiteCautarea: nimic,
+      catalogSeIncarca: false,
 
       filtersOpen: false,
       setFiltersOpen: nimic,

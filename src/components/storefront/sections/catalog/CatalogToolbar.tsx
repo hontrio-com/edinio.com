@@ -26,6 +26,8 @@ export function CatalogToolbar() {
     activeFilterCount,
     resetFilters,
     headerHasSearch,
+    catalogPeServer,
+    trimiteCautarea,
     isHome,
     pageContent,
     totalVizibile,
@@ -79,11 +81,18 @@ export function CatalogToolbar() {
           </span>
         )}
         {!headerHasSearch && (
-          <div className="relative flex-1 min-w-[180px]">
+          /*
+           * Formular, nu doar o caseta: pe palierul server cautarea se aplica la o
+           * CERERE, nu la fiecare tasta, deci Enter trebuie sa insemne ceva. Pe
+           * palierul client `trimiteCautarea` nu face nimic, dar `preventDefault`
+           * e oricum necesar ca trimiterea implicita sa nu reincarce pagina.
+           */
+          <form role="search" className="relative flex-1 min-w-[180px]"
+            onSubmit={(e) => { e.preventDefault(); trimiteCautarea(); }}>
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="search"
-              placeholder="Cauta produse..."
+              placeholder={catalogPeServer ? "Cauta produse, apoi Enter..." : "Cauta produse..."}
               value={search}
               onChange={(e) => {
                 const v = e.target.value;
@@ -93,7 +102,7 @@ export function CatalogToolbar() {
               }}
               className="w-full pl-10 pr-4 py-3 text-sm border border-border rounded-2xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
             />
-          </div>
+          </form>
         )}
 
         {/* Sirul de clase e scris intreg pe fiecare ramura, nu compus dintr-o

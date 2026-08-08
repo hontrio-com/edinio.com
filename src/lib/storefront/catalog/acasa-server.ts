@@ -1,6 +1,7 @@
 import { parseProductSections } from "@/lib/store-sections";
 import { numeSubarbore, type CategorieArbore } from "@/lib/storefront/catalog/subarbore";
 import { dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
+import { cautaPeServer, sortareLaCautare, type PaginaCautata } from "@/lib/storefront/catalog/cauta-server";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
 
@@ -65,6 +66,26 @@ export async function incarcaAcasaDeLaServer(args: {
    */
   categorie: string;
   reduceri: boolean;
+  /**
+   * `?q=`, brut. Pe pagina principala grila se cauta la fel ca pe pagina de
+   * catalog — netransmis, serverul ar fi intors catalogul nefiltrat in timp ce
+   * browserul cauta, adica exact defectul prins de trei ori la `?cat=` si la
+   * sortare.
+   */
+  cautare: string;
+  /** Sortarea ceruta EXPLICIT in adresa (`?sort=`), goala daca nu e. */
+  sortareDinAdresa: string;
+  /**
+   * Pretul si „doar in stoc", din adresa.
+   *
+   * Bara de deasupra grilei paginii principale are chiar controalele astea. Pana
+   * la palierul server se opreau in memoria browserului, si acolo mergeau: lista
+   * era intreaga si se filtra pe loc. Acum lista vine gata filtrata din baza, deci
+   * un control care nu ajunge pana aici nu poate face nimic.
+   */
+  pretMin: string;
+  pretMax: string;
+  stoc: boolean;
   preia: (r: RezultatAcasa) => void;
 }): Promise<boolean> {
   const { businessId, pagina, pageContent, categorii, faraImagini, faraStocAscuns } = args;
@@ -92,37 +113,67 @@ export async function incarcaAcasaDeLaServer(args: {
     })),
   };
 
+  const filtreGrila = {
+    faraImagini, faraStocAscuns,
+    reduceri: args.reduceri,
+    stoc: args.stoc,
+    pretMin: args.pretMin,
+    pretMax: args.pretMax,
+    categorii: args.categorie ? numeSubarbore(categorii, args.categorie) : null,
+  };
+  const seCauta = args.cautare.trim().length > 0;
+
   const [pagRasp, randRasp] = await Promise.all([
-    db.rpc("catalog_pagina", {
-      p_business: businessId,
-      /*
-       * Sortarea EFECTIVA, nu „niciuna".
-       *
-       * Pe pagina principala clientul foloseste `initialSort || default_sort`, iar
-       * `default_sort` e „newest" cand nu scrie altceva. Netrimisa, serverul ar fi
-       * ordonat dupa catalog si browserul dupa data — acelasi NUMAR de produse,
-       * alte produse. Exact bug-ul prins la /magazin, repetat aici; de aia testul
-       * diferential se ruleaza pe FIECARE suprafata, nu o data pe magazin.
-       */
-      p_filtre: {
-        faraImagini, faraStocAscuns,
-        sortare: args.sortareImplicita,
-        reduceri: args.reduceri,
-        categorii: args.categorie ? numeSubarbore(categorii, args.categorie) : null,
-      },
-      p_limit: PE_PAGINA_ACASA,
-      p_offset: (pagina - 1) * PE_PAGINA_ACASA,
-    }),
+    /*
+     * Grila: cautare cand exista `?q=`, altfel pagina obisnuita.
+     *
+     * Sortarea EFECTIVA, nu „niciuna", si se compune ALTFEL in cele doua cazuri.
+     * Fara cautare, clientul foloseste `initialSort || default_sort`. CU cautare
+     * si fara `?sort=` explicit, foloseste „relevance" — fiindca `sortTouched`
+     * porneste ca `!!initialSort`. Netrimisa corect, serverul ar fi ordonat dupa
+     * data si browserul dupa relevanta: acelasi NUMAR de produse, alte produse.
+     * Exact bug-ul prins la /magazin, apoi la sortarea de acasa, apoi la `?cat=`.
+     */
+    seCauta
+      ? cautaPeServer({
+        businessId,
+        q: args.cautare,
+        filtre: filtreGrila,
+        sortare: sortareLaCautare(args.sortareDinAdresa),
+        limit: PE_PAGINA_ACASA,
+        offset: (pagina - 1) * PE_PAGINA_ACASA,
+      })
+      : db.rpc("catalog_pagina", {
+        p_business: businessId,
+        // `initialSort || default_sort`, exact ce compune browserul pe pagina
+        // principala (acolo nu intra si `setari.sortareImplicita`, fiindca pagina
+        // principala n-are bara de filtre a magazinului).
+        p_filtre: { ...filtreGrila, sortare: args.sortareDinAdresa || args.sortareImplicita },
+        p_limit: PE_PAGINA_ACASA,
+        p_offset: (pagina - 1) * PE_PAGINA_ACASA,
+      }),
     db.rpc("catalog_randuri", { p_business: businessId, p_spec: spec }),
   ]);
 
-  if (pagRasp.error || !pagRasp.data || randRasp.error || !randRasp.data) {
+  /*
+   * `cautaPeServer` intoarce direct pagina sau `null`; `rpc` intoarce
+   * `{data, error}`. Se normalizeaza aici, ca restul functiei sa nu stie care
+   * cale a mers — si ca `null` din cautare sa insemne acelasi lucru ca o eroare
+   * de RPC: cade pe calea veche.
+   */
+  const pag = seCauta
+    ? (pagRasp as PaginaCautata | null)
+    : ((pagRasp as { data: unknown; error: { message: string } | null }).data as { randuri: RandProiectie[]; total: number } | null);
+  const eroarePagina = seCauta
+    ? null
+    : (pagRasp as { error: { message: string } | null }).error;
+
+  if (!pag || eroarePagina || randRasp.error || !randRasp.data) {
     console.error("[acasa] palierul server a esuat:",
-      pagRasp.error?.message ?? randRasp.error?.message ?? "raspuns gol");
+      eroarePagina?.message ?? randRasp.error?.message ?? "raspuns gol");
     return false;
   }
 
-  const pag = pagRasp.data as { randuri: RandProiectie[]; total: number };
   const rand = randRasp.data as { featured: RandProiectie[]; sectiuni: Record<string, RandProiectie[]> };
 
   args.preia({

@@ -375,17 +375,32 @@ export function NumarRezultate() {
 
 /** Caseta de cautare a paginii, ascunsa cand header-ul are deja una. */
 export function CautareCatalog() {
-  const { search, setSearch, setSortTouched, headerHasSearch } = useStorefront();
+  const { search, setSearch, setSortTouched, headerHasSearch, catalogPeServer, trimiteCautarea } = useStorefront();
   if (headerHasSearch) return null;
+  /*
+   * Formular, nu doar o caseta.
+   *
+   * Pe palierul server lista vine gata filtrata din baza, deci cautarea se aplica
+   * la o CERERE, nu la fiecare tasta: fara `<form>`, Enter n-ar face nimic si
+   * vizitatorul ar scrie un termen la care pagina nu raspunde niciodata. Pe
+   * palierul client filtrarea s-a intamplat deja la tastare, iar `trimiteCautarea`
+   * nu face nimic — dar formularul trebuie sa opreasca oricum trimiterea
+   * implicita, care ar fi reincarcat pagina.
+   */
   return (
-    <input
-      type="search"
-      value={search}
-      onChange={(e) => { if (!search && e.target.value) setSortTouched(false); setSearch(e.target.value); }}
-      placeholder="Cauta in magazin"
-      aria-label="Cauta produse"
-      className="w-full px-3.5 py-2.5 text-sm rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]"
-    />
+    <form
+      role="search"
+      onSubmit={(e) => { e.preventDefault(); trimiteCautarea(); }}
+    >
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => { if (!search && e.target.value) setSortTouched(false); setSearch(e.target.value); }}
+        placeholder={catalogPeServer ? "Cauta in magazin, apoi Enter" : "Cauta in magazin"}
+        aria-label="Cauta produse"
+        className="w-full px-3.5 py-2.5 text-sm rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]"
+      />
+    </form>
   );
 }
 
@@ -485,7 +500,7 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
 /* ─── Grila si paginarea ─────────────────────────────────────────────────── */
 
 export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; coloaneMobil?: number }) {
-  const { paginatedProducts, filteredProducts, activeFilterCount, resetFilters, search , totalFiltrate } = useStorefront();
+  const { paginatedProducts, filteredProducts, activeFilterCount, resetFilters, search , totalFiltrate, catalogSeIncarca } = useStorefront();
 
   if (totalFiltrate === 0) {
     const cauta = !!search || activeFilterCount > 0;
@@ -524,8 +539,17 @@ export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; c
   };
   const clase = `${PE_MOBIL[coloaneMobil] ?? "grid-cols-2"} ${PE_ECRAN_MARE[coloane] ?? PE_ECRAN_MARE[4]}`;
 
+  /*
+   * Cat timp se cere pagina noua, grila se stinge putin si nu mai primeste apasari.
+   *
+   * Pe palierul server un filtru bifat e un dus-intors, deci pana la ~o jumatate de
+   * secunda nu se schimda nimic vizibil. Fara semnul asta, vizitatorul apasa a doua
+   * fateta crezand ca prima n-a mers — si atunci chiar ajunge unde nu voia.
+   * `aria-busy` spune acelasi lucru cititoarelor de ecran.
+   */
   return (
-    <div className={`grid ${clase} gap-3 sm:gap-4`}>
+    <div className={`grid ${clase} gap-3 sm:gap-4 transition-opacity${catalogSeIncarca ? " opacity-50 pointer-events-none" : ""}`}
+      aria-busy={catalogSeIncarca || undefined}>
       {paginatedProducts.map((p, i) => (
         <StoreProductCard key={p.id} product={p} priority={i < 4} />
       ))}
@@ -544,9 +568,18 @@ export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; c
 export function Paginare() {
   const {
     currentPage, totalPages, goToPage, color, catalogRoot, radacinaPaginare, interogareFiltre,
-    setariMagazin, filteredProducts, paginatedProducts, totalFiltrate,
+    setariMagazin, filteredProducts, paginatedProducts, totalFiltrate, catalogPeServer,
   } = useStorefront();
-  const mod = setariMagazin.modPaginare;
+  /*
+   * Pe palierul server paginarea e numerotata, indiferent de reglaj.
+   *
+   * „Incarca mai multe" si derularea infinita ADUNA paginile in lista din memorie,
+   * iar acolo serverul trimite exact una: a doua apasare ar fi INLOCUIT produsele
+   * sub un buton care promite ca le adauga. Aceeasi decizie ca `aduna` din
+   * `MiniStoreRenderer`, si trebuie sa fie luata la fel in ambele — altfel butonul
+   * ar aparea aici peste o feliere care nu mai aduna.
+   */
+  const mod = catalogPeServer ? "pagini" : setariMagazin.modPaginare;
   const santinela = useRef<HTMLDivElement>(null);
   const maiSunt = currentPage < totalPages;
 

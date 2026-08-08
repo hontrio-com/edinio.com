@@ -52,6 +52,15 @@ export function useCautareHeader(optiuni?: {
     e.preventDefault();
     setDeschise(false);
     if (catalog) {
+      /*
+       * Pe palierul server, Enter e singurul lucru care aplica cautarea.
+       *
+       * Acolo lista vine gata filtrata din baza, deci tastarea doar scrie in
+       * caseta; fara apelul asta, cine scria „bocanci" si apasa Enter vedea
+       * panoul inchizandu-se peste o grila neschimbata. Pe palierul client nu
+       * face nimic — filtrarea s-a intamplat deja la fiecare tasta.
+       */
+      catalog.trimiteCautarea();
       optiuni?.laAplicare?.();
       return;
     }

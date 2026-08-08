@@ -34,7 +34,24 @@ declare
   v_lim        int := least(greatest(coalesce(p_limit, 20), 1), 96);
   v_off        int := greatest(coalesce(p_offset, 0), 0);
   v_sort       text := coalesce(p_filtre->>'sortare', '');
-  v_categorii  text[] := coalesce((select array_agg(x #>> '{}') from jsonb_array_elements(p_filtre->'categorii') x), null);
+  /*
+   * Testul pe tip e POZITIV, si asta e reparatia unui incident.
+   *
+   * Cand nu se cere nicio categorie, apelantul trimite `categorii: null` — care
+   * ajunge aici ca jsonb `null`, NU ca SQL NULL. Deci `coalesce` il lasa sa
+   * treaca nevatamat, iar `jsonb_array_elements` peste un scalar arunca
+   * `22023 cannot extract elements from a scalar`. Prima aprindere a palierului
+   * server a randat asa „0 din 1049 produse".
+   *
+   * `jsonb_typeof(...) = 'array'` e singura verificare care tine: acopera si
+   * cheia absenta (unde `jsonb_typeof` da SQL NULL, iar orice comparatie
+   * NEGATIVA ar da NULL si ar arunca fiecare rand), si jsonb `null`, si un scalar
+   * trimis din greseala.
+   */
+  v_categorii  text[] := case
+    when jsonb_typeof(p_filtre->'categorii') = 'array'
+      then (select array_agg(x #>> '{}') from jsonb_array_elements(p_filtre->'categorii') x)
+    else null end;
   v_pmin       numeric := nullif(p_filtre->>'pretMin', '')::numeric;
   v_pmax       numeric := nullif(p_filtre->>'pretMax', '')::numeric;
   v_reduceri   boolean := coalesce((p_filtre->>'reduceri')::boolean, false);
@@ -43,7 +60,9 @@ declare
   v_fara_stoc  boolean := coalesce((p_filtre->>'faraStocAscuns')::boolean, false);
   -- Fatetele: un array de array-uri de jetoane. Fiecare element interior e o
   -- CHEIE cu valorile ei alese.
-  v_grupuri    jsonb := coalesce(p_filtre->'fatete', '[]'::jsonb);
+  -- Acelasi test pozitiv, din acelasi motiv. Vezi `v_categorii` mai sus.
+  v_grupuri    jsonb := case when jsonb_typeof(p_filtre->'fatete') = 'array'
+                             then p_filtre->'fatete' else '[]'::jsonb end;
   v_out        jsonb;
 begin
   /*
@@ -97,7 +116,10 @@ begin
          or not exists (
            select 1
              from jsonb_array_elements(v_grupuri) g
-            where not (v.fatete && (select array_agg(x #>> '{}') from jsonb_array_elements(g) x))
+            -- Un grup care nu e tablou se IGNORA, nu arunca: `jsonb_array_elements`
+            -- peste un scalar da `22023`, iar forma vine din adresa.
+            where jsonb_typeof(g) = 'array'
+              and not (v.fatete && (select array_agg(x #>> '{}') from jsonb_array_elements(g) x))
          )
        )
   ),

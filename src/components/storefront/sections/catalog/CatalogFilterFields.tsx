@@ -23,6 +23,7 @@ export function CatalogFilterFields() {
     setOnSaleOnly,
     inStockOnly,
     setInStockOnly,
+    catalogPeServer,
   } = useStorefront();
 
   const inputCls =
@@ -48,7 +49,17 @@ export function CatalogFilterFields() {
         </div>
       </div>
 
-      {facets.options.map((opt) => (
+      {/*
+        Pastilele de varianta NU se arata pe palierul server.
+        Doua motive, si amandoua le-ar fi facut mincinoase acolo: lista de valori
+        se deriva din produsele trimise in browser, iar acelea sunt o singura
+        pagina; si selectia lor nu ajunge in adresa, deci n-ar avea cum sa ceara
+        serverului nimic — ar fi comutatoare care se coloreaza si nu fac nimic.
+        Ce filtreaza cu adevarat pe atribute sunt FATETELE (`fatete` din rezumat),
+        care exista pe pagina de catalog. Aici, pe pagina principala, filtrul
+        rămâne pretul plus reducerile si stocul, care chiar ajung in interogare.
+      */}
+      {!catalogPeServer && facets.options.map((opt) => (
         <div key={opt.name}>
           <p className="text-xs font-semibold text-foreground mb-2">{opt.name}</p>
           <div className="flex flex-wrap gap-2">

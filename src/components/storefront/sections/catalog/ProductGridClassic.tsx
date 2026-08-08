@@ -39,6 +39,7 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
     goToPage,
     interogareFiltre,
     totalFiltrate,
+    catalogSeIncarca,
   } = useStorefront();
 
   const areRecomandate = pageContent.show_featured_section === true;
@@ -77,7 +78,12 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* Cat timp se cere pagina noua, grila se stinge putin si nu mai
+              primeste apasari: pe palierul server un filtru bifat e un
+              dus-intors, iar fara semnul asta vizitatorul apasa a doua data
+              crezand ca prima n-a mers. */}
+          <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 transition-opacity${catalogSeIncarca ? " opacity-50 pointer-events-none" : ""}`}
+            aria-busy={catalogSeIncarca || undefined}>
             {paginatedProducts.map((product, i) => (
               <StoreProductCard key={product.id} product={product} priority={prioritate && i < 4} />
             ))}

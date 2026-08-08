@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
+import { documentDeCautare } from "@/lib/storefront/catalog/doc-cautare";
+import { cautaSugestii } from "@/lib/actions/cautare-storefront.actions";
+import type { StorefrontProduct } from "@/lib/storefront/product.types";
 
 /**
  * Produsele gasite, chiar sub caseta de cautare din header.
@@ -44,12 +47,16 @@ export function RezultateCautare({
   inFlux?: boolean;
 }) {
   const catalog = useStorefrontOptional();
-  const produse = catalog?.visibleProducts;
+  /*
+   * Pe palierul server catalogul din browser e o SINGURA pagina, deci nu se
+   * cauta local: panoul ar fi raspuns „2 produse gasite" pentru un termen care
+   * are 300 in magazin. Nu gol — GRESIT, care e mai rau, fiindca arata a raspuns.
+   */
+  const peServer = catalog?.catalogPeServer === true;
+  const produse = peServer ? undefined : catalog?.visibleProducts;
 
   const index = useMemo(
-    () => buildProductSearchIndex((produse ?? []).map((p) => ({
-      id: p.id, name: p.name, category: p.category, description: p.description,
-    }))),
+    () => buildProductSearchIndex((produse ?? []).map(documentDeCautare)),
     [produse],
   );
 
@@ -64,7 +71,7 @@ export function RezultateCautare({
    * Lista taiata si numarul intreg ies acum din acelasi memo: numarul e cat a
    * gasit cautarea, lista e ce incape in panou.
    */
-  const gasite = useMemo(() => {
+  const gasiteLocal = useMemo(() => {
     if (!produse || text.trim().length < MIN_LITERE) return null;
     const potriviri = queryProductSearchIndex(index, text);
     if (!potriviri) return null;
@@ -79,6 +86,39 @@ export function RezultateCautare({
       .slice(0, MAX_REZULTATE);
     return { lista, total: potriviri.size };
   }, [produse, index, text]);
+
+  /*
+   * Pe palierul server, aceleasi rezultate vin de la server, prin ACELASI motor.
+   *
+   * Se cere cu intarziere si o singura cerere in zbor: la fiecare tasta ar fi fost
+   * o cautare completa pe catalog, adica cea mai scumpa interogare a paginii,
+   * inmultita cu numarul de litere. Cererea are si limitator pe IP, in actiune.
+   */
+  const [gasiteServer, setGasiteServer] = useState<{ lista: StorefrontProduct[]; total: number } | null>(null);
+  const businessId = catalog?.business?.id;
+  const faraImagini = catalog?.pageContent?.hide_products_without_images === true;
+  const faraStocAscuns = catalog?.pageContent?.hide_out_of_stock_products === true;
+  useEffect(() => {
+    if (!peServer || !businessId || text.trim().length < MIN_LITERE) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGasiteServer(null);
+      return;
+    }
+    let renuntat = false;
+    const id = window.setTimeout(() => {
+      cautaSugestii({ businessId, q: text, faraImagini, faraStocAscuns })
+        .then((r) => {
+          if (renuntat) return;
+          setGasiteServer(r ? { lista: r.produse, total: r.total } : null);
+        })
+        // Panoul e un ajutor, nu o functie: la orice esec pur si simplu nu apare,
+        // iar Enter duce in catalog unde raspunsul e intreg.
+        .catch(() => { if (!renuntat) setGasiteServer(null); });
+    }, 250);
+    return () => { renuntat = true; window.clearTimeout(id); };
+  }, [peServer, businessId, text, faraImagini, faraStocAscuns]);
+
+  const gasite = peServer ? gasiteServer : gasiteLocal;
 
   // Fara catalog incarcat nu avem ce cauta pe loc: acolo panoul nu se arata
   // deloc, iar Enter duce la catalog cu termenul in adresa.

@@ -954,6 +954,47 @@ begin
 end; $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  r record; v_vechi int; v_luat int;
+  v_lipsa jsonb := '[]'::jsonb; v_prod_consumat jsonb := '[]'::jsonb; v_v jsonb;
+begin
+  for r in
+    select (e->>'product_id')::uuid as pid,
+           sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as qty
+      from jsonb_array_elements(coalesce(p_produse,'[]'::jsonb)) e
+     where e->>'product_id' is not null group by 1
+    having sum(greatest(0, coalesce((e->>'quantity')::int,0))) > 0 order by 1
+  loop
+    select stock_quantity into v_vechi from products
+     where id = r.pid and track_inventory = true and stock_quantity is not null for update;
+    if v_vechi is null then continue; end if;
+    v_luat := least(r.qty, greatest(0, v_vechi));
+    if v_vechi < r.qty then
+      v_lipsa := v_lipsa || jsonb_build_object('product_id', r.pid, 'cerut', r.qty, 'disponibil', v_vechi);
+    end if;
+    if v_luat > 0 then
+      v_prod_consumat := v_prod_consumat || jsonb_build_object('product_id', r.pid, 'quantity', v_luat);
+    end if;
+    update products set stock_quantity = greatest(0, stock_quantity - r.qty) where id = r.pid;
+  end loop;
+
+  v_v := public.scade_variante_raportat(coalesce(p_variante,'[]'::jsonb));
+  return jsonb_build_object(
+    'ok', true,
+    'lipsa', v_lipsa || coalesce(v_v->'lipsa','[]'::jsonb),
+    -- CE S-A LUAT CU ADEVARAT. Se scrie in `stoc_rezervat`, ca anularea sa nu dea
+    -- inapoi mai mult decat s-a consumat: pe marketplace se plafoneaza, deci
+    -- „cerut" si „luat" chiar difera.
+    'consumat', jsonb_build_object('produse', v_prod_consumat, 'variante', coalesce(v_v->'consumat','[]'::jsonb)));
+end; $function$
+;
+
 CREATE OR REPLACE FUNCTION public.curata_analitice_brute(p_pastreaza_zile integer DEFAULT 8, p_max integer DEFAULT 5000)
  RETURNS integer
  LANGUAGE plpgsql
@@ -2206,27 +2247,21 @@ CREATE OR REPLACE FUNCTION public.revendica_stoc_comanda(p_order_id uuid)
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
-declare
-  v_rez jsonb; r record; v_negative jsonb := '[]'::jsonb; v_nou int; v_lipsa jsonb;
+declare v_rez jsonb; r record; v_negative jsonb := '[]'::jsonb; v_nou int; v_v jsonb;
 begin
-  update public.orders
-     set stoc_eliberat_la = null
+  update public.orders set stoc_eliberat_la = null
    where id = p_order_id and stoc_eliberat_la is not null and stoc_rezervat is not null
   returning stoc_rezervat into v_rez;
-
-  if v_rez is null then return jsonb_build_object('fel', 'nimic'); end if;
+  if v_rez is null then return jsonb_build_object('fel','nimic'); end if;
 
   for r in
     select (e->>'product_id')::uuid as pid,
-           sum(greatest(0, coalesce((e->>'quantity')::int, 0)))::int as qty
-      from jsonb_array_elements(coalesce(v_rez->'produse', '[]'::jsonb)) e
-     where e->>'product_id' is not null
-     group by 1
-    having sum(greatest(0, coalesce((e->>'quantity')::int, 0))) > 0
-     order by 1
+           sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as qty
+      from jsonb_array_elements(coalesce(v_rez->'produse','[]'::jsonb)) e
+     where e->>'product_id' is not null group by 1
+    having sum(greatest(0, coalesce((e->>'quantity')::int,0))) > 0 order by 1
   loop
-    update products
-       set stock_quantity = stock_quantity - r.qty
+    update products set stock_quantity = stock_quantity - r.qty
      where id = r.pid and track_inventory = true and stock_quantity is not null
     returning stock_quantity into v_nou;
     if v_nou is not null and v_nou < 0 then
@@ -2234,15 +2269,12 @@ begin
     end if;
   end loop;
 
-  -- Marimile, cu raport: `decrement_variant_stock_batch` plafona si tacea.
-  v_lipsa := public.scade_variante_raportat(coalesce(v_rez->'variante', '[]'::jsonb));
-  if jsonb_array_length(v_lipsa) > 0 then
-    v_negative := v_negative || v_lipsa;
+  v_v := public.scade_variante_raportat(coalesce(v_rez->'variante','[]'::jsonb));
+  if jsonb_array_length(coalesce(v_v->'lipsa','[]'::jsonb)) > 0 then
+    v_negative := v_negative || (v_v->'lipsa');
   end if;
-
-  return jsonb_build_object('fel', 'revendicat', 'negative', v_negative);
-end;
-$function$
+  return jsonb_build_object('fel','revendicat','negative', v_negative);
+end; $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb)
@@ -2384,8 +2416,8 @@ CREATE OR REPLACE FUNCTION public.scade_variante_raportat(p_items jsonb)
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 declare
-  r record; v_idx int; v_stoc int; v_tip text;
-  v_lipsa jsonb := '[]'::jsonb;
+  r record; v_idx int; v_stoc int; v_tip text; v_luat int;
+  v_lipsa jsonb := '[]'::jsonb; v_consumat jsonb := '[]'::jsonb;
 begin
   for r in
     select (i->>'product_id')::uuid as pid, i->>'variant_title' as titlu,
@@ -2396,37 +2428,37 @@ begin
   loop
     if r.cerut <= 0 then continue; end if;
     perform 1 from products where id = r.pid for update;
-
     v_idx := null;
     select t.idx, floor((t.c->>'stock_quantity')::numeric)::int, jsonb_typeof(t.c->'stock_quantity')
       into v_idx, v_stoc, v_tip
-      from products p,
-           lateral jsonb_array_elements(p.page_sections->'variants'->'combinations')
-                   with ordinality as t(c, idx)
+      from products p, lateral jsonb_array_elements(p.page_sections->'variants'->'combinations')
+                              with ordinality as t(c, idx)
      where p.id = r.pid and t.c->>'title' = r.titlu
        and (t.c->>'enabled')::boolean is true
        and (t.c->>'stock_quantity') ~ '^\s*\d+(\.\d+)?\s*$'
      order by t.idx limit 1;
     if v_idx is null then continue; end if;
 
-    -- Se scade tot ce se poate, si se RAPORTEAZA cat n-a incaput.
+    -- Cat s-a luat CU ADEVARAT: la plafonare, mai putin decat s-a cerut.
+    v_luat := least(r.cerut, greatest(0, v_stoc));
     if v_stoc < r.cerut then
       v_lipsa := v_lipsa || jsonb_build_object(
-        'product_id', r.pid, 'variant_title', r.titlu,
-        'cerut', r.cerut, 'disponibil', v_stoc);
+        'product_id', r.pid, 'variant_title', r.titlu, 'cerut', r.cerut, 'disponibil', v_stoc);
+    end if;
+    if v_luat > 0 then
+      v_consumat := v_consumat || jsonb_build_object(
+        'product_id', r.pid, 'variant_title', r.titlu, 'quantity', v_luat);
     end if;
 
     update products p
-       set page_sections = jsonb_set(
-             p.page_sections,
-             array['variants', 'combinations', (v_idx - 1)::text, 'stock_quantity'],
+       set page_sections = jsonb_set(p.page_sections,
+             array['variants','combinations',(v_idx - 1)::text,'stock_quantity'],
              case when v_tip = 'string' then to_jsonb(greatest(0, v_stoc - r.cerut)::text)
                   else to_jsonb(greatest(0, v_stoc - r.cerut)) end)
      where p.id = r.pid;
   end loop;
-  return v_lipsa;
-end;
-$function$
+  return jsonb_build_object('lipsa', v_lipsa, 'consumat', v_consumat);
+end; $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb)
@@ -2961,7 +2993,8 @@ create table if not exists public.aboutyou_variants (
   ay_status text,
   enabled boolean default true not null,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  variant_title text);
 
 create table if not exists public.admin_audit_log (
   id uuid default gen_random_uuid() not null,
@@ -3681,7 +3714,8 @@ create table if not exists public.trendyol_variants (
   ty_status text,
   enabled boolean default true not null,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  variant_title text);
 
 create table if not exists public.users_profile (
   id uuid not null,
@@ -5804,6 +5838,7 @@ grant execute on function public.catalog_scrie_rezumat(p_randuri jsonb) to servi
 grant execute on function public.catalog_verifica(p_esantion integer) to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) to service_role;
+grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) to service_role;
 grant execute on function public.curata_limite() to service_role;
 grant execute on function public.customer_orders(bid uuid, cust_key text, page_limit integer, page_offset integer) to anon;

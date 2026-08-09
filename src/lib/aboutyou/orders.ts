@@ -14,6 +14,7 @@
 // tolerant so ingestion keeps working as the shape is pinned down.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logError } from "@/lib/error-logger";
 import type { Database } from "@/types/database.types";
 import type { AboutYouSyncContext } from "./sync";
 import { getOrders, isAboutYouError } from "./client";
@@ -142,18 +143,25 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   // Resolve product names from SKU (variant -> product) for a readable order.
   const items = Array.isArray(order.order_items) ? order.order_items : [];
   const skus = [...new Set(items.map((it) => it.sku).filter(Boolean))];
-  const info = new Map<string, { productId: string | null; name: string }>();
+  const info = new Map<string, { productId: string | null; name: string; variantTitle: string | null }>();
   if (skus.length > 0) {
     const { data: vs } = await admin
-      .from("aboutyou_variants").select("sku, product_id").eq("business_id", ctx.businessId).in("sku", skus);
-    const prodIds = [...new Set((vs ?? []).map((v) => v.product_id).filter(Boolean) as string[])];
+      .from("aboutyou_variants").select("sku, product_id, variant_title" as never).eq("business_id", ctx.businessId).in("sku", skus);
+    // `as never` pe select: coloana vine din migratia `2026-08-19-stoc-marketplace`
+    // si nu apare inca in tipurile generate.
+    const randuri = (vs ?? []) as unknown as { sku: string; product_id: string | null; variant_title: string | null }[];
+    const prodIds = [...new Set(randuri.map((v) => v.product_id).filter(Boolean) as string[])];
     const prodName = new Map<string, string>();
     if (prodIds.length > 0) {
       const { data: ps } = await admin.from("products").select("id, name").in("id", prodIds);
       for (const p of ps ?? []) prodName.set(p.id, p.name);
     }
-    for (const v of vs ?? []) {
-      info.set(v.sku, { productId: v.product_id, name: v.product_id ? (prodName.get(v.product_id) ?? "Produs About You") : "Produs About You" });
+    for (const v of randuri) {
+      info.set(v.sku, {
+        productId: v.product_id,
+        name: v.product_id ? (prodName.get(v.product_id) ?? "Produs About You") : "Produs About You",
+        variantTitle: v.variant_title ?? null,
+      });
     }
   }
 
@@ -168,12 +176,21 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   const activeItems = items.filter((it) => it.status !== "cancelled" && it.status !== "returned");
 
   const qtyByProduct = new Map<string, number>();
+  const qtyByVariant = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
   const edinioItems = items.map((it) => {
     const meta = info.get(it.sku);
     const q = (it as { quantity?: number }).quantity;
     const qty = typeof q === "number" ? q : 1;
     const activ = it.status !== "cancelled" && it.status !== "returned";
-    if (activ && meta?.productId) qtyByProduct.set(meta.productId, (qtyByProduct.get(meta.productId) ?? 0) + qty);
+    if (activ && meta?.productId) {
+      qtyByProduct.set(meta.productId, (qtyByProduct.get(meta.productId) ?? 0) + qty);
+      if (meta.variantTitle) {
+        const k = `${meta.productId}::${meta.variantTitle}`;
+        const e = qtyByVariant.get(k);
+        if (e) e.quantity += qty;
+        else qtyByVariant.set(k, { product_id: meta.productId, variant_title: meta.variantTitle, quantity: qty });
+      }
+    }
     return {
       product_id: meta?.productId ?? null,
       name: meta?.name ?? `SKU ${it.sku}`,
@@ -202,6 +219,12 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     customer_email: addr.email,
     shipping_address: { ...addr.raw, source: "aboutyou", shop_country: shopCountry(order) } as never,
     items: edinioItems as never,
+    // Ce stoc a consumat comanda, ca anularea sau returul sa poata da INAPOI.
+    // Din `items` nu se poate deduce: combinatia nu apare acolo deloc.
+    stoc_rezervat: {
+      produse: [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity })),
+      variante: [...qtyByVariant.values()],
+    } as never,
     subtotal,
     total,
     vat_amount: vatAmount,
@@ -249,9 +272,50 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   // Unified inventory: reflect the marketplace sale in Edinio stock (only on a
   // genuinely new order, never when recovering/re-linking an existing one).
   if (isNew) {
-    const decrements = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
-    if (decrements.length > 0) {
-      try { await admin.rpc("decrement_stock_batch" as never, { p_items: decrements } as never); } catch { /* best-effort */ }
+    const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+    const variante = [...qtyByVariant.values()];
+    if (produse.length > 0 || variante.length > 0) {
+      // `{ error }`, nu `try/catch`: clientul Supabase nu arunca la eroare de SQL,
+      // deci vechiul `catch` nu prindea nimic si stocul ramanea neatins, in tacere.
+      const { data: rez, error } = await admin.rpc("consuma_stoc_marketplace" as never, {
+        p_produse: produse, p_variante: variante,
+      } as never);
+      if (error) {
+        await logError({
+          action: "aboutyou/orders", message: `Stocul NU s-a scazut pentru comanda de marketplace: ${error.message}`,
+          details: { produse, variante }, businessId: ctx.businessId, severity: "critical",
+        });
+      } else {
+        const raspuns = rez as { lipsa?: unknown[]; consumat?: unknown } | null;
+        /*
+         * `stoc_rezervat` se REscrie cu ce s-a consumat CU ADEVARAT.
+         *
+         * Pe marketplace se plafoneaza (vanzarea s-a facut deja, n-o putem
+         * refuza), deci „cerut" si „luat" chiar difera: o comanda de 2 dintr-o
+         * marime care avea 1 consuma 1. Scris cu cererea, anularea ar fi pus
+         * inapoi 2 — adica ar fi INVENTAT o bucata. Dovedit pe date sintetice
+         * inainte de reparatie: marimea revenea la 2 dintr-un stoc initial de 1.
+         */
+        if (raspuns?.consumat) {
+          const { error: eRez } = await admin.from("orders")
+            .update({ stoc_rezervat: raspuns.consumat } as never)
+            .eq("id", orderId);
+          if (eRez) {
+            await logError({
+              action: "aboutyou/orders", message: `stoc_rezervat NU s-a putut corecta: ${eRez.message}`,
+              details: { orderId }, businessId: ctx.businessId, severity: "critical",
+            });
+          }
+        }
+        const lipsa = raspuns?.lipsa ?? [];
+        if (Array.isArray(lipsa) && lipsa.length > 0) {
+          await logError({
+            action: "aboutyou/orders",
+            message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
+            details: { lipsa }, businessId: ctx.businessId, severity: "warning",
+          });
+        }
+      }
     }
   }
   return isNew ? "created" : "updated";

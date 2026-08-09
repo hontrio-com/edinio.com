@@ -10,6 +10,7 @@
 // plain decimals (Trendyol, unlike About You, does not use minor units).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logError } from "@/lib/error-logger";
 import type { Database } from "@/types/database.types";
 import type { TrendyolSyncContext } from "./sync";
 import { getOrders, isTrendyolError } from "./client";
@@ -68,18 +69,31 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
   // Resolve product ids from barcode (variant -> product) for names + stock.
   const lines = Array.isArray(pkg.lines) ? pkg.lines : [];
   const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean) as string[])];
-  const info = new Map<string, { productId: string | null }>();
+  const info = new Map<string, { productId: string | null; variantTitle: string | null }>();
   if (barcodes.length > 0) {
     const { data: vs } = await admin
-      .from("trendyol_variants").select("barcode, product_id").eq("business_id", ctx.businessId).in("barcode", barcodes);
-    for (const v of vs ?? []) info.set(v.barcode, { productId: v.product_id });
+      .from("trendyol_variants").select("barcode, product_id, variant_title" as never).eq("business_id", ctx.businessId).in("barcode", barcodes);
+    // `as never` pe `select`: `variant_title` e adaugata de migratia
+    // `2026-08-19-stoc-marketplace` si nu apare inca in tipurile generate.
+    for (const v of (vs ?? []) as unknown as { barcode: string; product_id: string | null; variant_title: string | null }[]) {
+      info.set(v.barcode, { productId: v.product_id, variantTitle: v.variant_title ?? null });
+    }
   }
 
   const qtyByProduct = new Map<string, number>();
+  // Si pe COMBINATIE, nu doar pe produs: vezi migratia `2026-08-19-stoc-marketplace`.
+  const qtyByVariant = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
   const edinioItems = lines.map((l) => {
     const pid = l.barcode ? info.get(l.barcode)?.productId ?? null : null;
     const qty = num(l.quantity) || 1;
     if (pid) qtyByProduct.set(pid, (qtyByProduct.get(pid) ?? 0) + qty);
+    const vt = l.barcode ? info.get(l.barcode)?.variantTitle ?? null : null;
+    if (pid && vt) {
+      const k = `${pid}::${vt}`;
+      const e = qtyByVariant.get(k);
+      if (e) e.quantity += qty;
+      else qtyByVariant.set(k, { product_id: pid, variant_title: vt, quantity: qty });
+    }
     const price = num(l.lineUnitPrice) || num(l.price);
     return { product_id: pid, name: l.productName ?? `Barcode ${l.barcode}`, barcode: l.barcode ?? null, price, quantity: qty };
   });
@@ -101,6 +115,19 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
     customer_email: cust.email,
     shipping_address: { ...cust.address, source: "trendyol" } as never,
     items: edinioItems as never,
+    /*
+     * CE STOC A CONSUMAT comanda, ca anularea sau returul sa poata da INAPOI.
+     *
+     * Comenzile de marketplace scadeau stoc si nu scriau nimic aici, deci
+     * `elibereaza_stoc_comanda` raporta „necunoscut" si nu punea nimic la loc —
+     * exact gaura pe care am inchis-o pentru comenzile din magazin. Din `items`
+     * nu se poate deduce: acolo `product_id` poate fi null, iar combinatia nu
+     * apare deloc.
+     */
+    stoc_rezervat: {
+      produse: [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity })),
+      variante: [...qtyByVariant.values()],
+    } as never,
     subtotal,
     total: round2(total),
     vat_amount: vatAmount,
@@ -137,9 +164,60 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
   } as never, { onConflict: "business_id,shipment_package_id" });
 
   if (isNew) {
-    const decrements = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
-    if (decrements.length > 0) {
-      try { await admin.rpc("decrement_stock_batch" as never, { p_items: decrements } as never); } catch { /* best-effort */ }
+    const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+    const variante = [...qtyByVariant.values()];
+    if (produse.length > 0 || variante.length > 0) {
+      /*
+       * ⚠ `{ error }`, NU `try/catch`.
+       *
+       * Aici era `try { await admin.rpc(...) } catch { /* best-effort *\/ }`, si
+       * `catch` nu prindea NIMIC: clientul Supabase nu arunca la eroare de SQL,
+       * intoarce `{ error }`. Deci comanda se crea, stocul ramanea neatins, si
+       * nimic nu se vedea nicaieri.
+       *
+       * NU se refuza nimic: vanzarea s-a facut deja pe marketplace, iar clientul
+       * are confirmarea lor. Se scade cat se poate SI SE RAPORTEAZA ce n-a
+       * incaput — plafonarea e purtarea corecta aici, tacerea nu era.
+       */
+      const { data: rez, error } = await admin.rpc("consuma_stoc_marketplace" as never, {
+        p_produse: produse, p_variante: variante,
+      } as never);
+      if (error) {
+        await logError({
+          action: "trendyol/orders", message: `Stocul NU s-a scazut pentru comanda de marketplace: ${error.message}`,
+          details: { orderId, produse, variante }, businessId: ctx.businessId, severity: "critical",
+        });
+      } else {
+        const raspuns = rez as { lipsa?: unknown[]; consumat?: unknown } | null;
+        /*
+         * `stoc_rezervat` se REscrie cu ce s-a consumat CU ADEVARAT.
+         *
+         * Pe marketplace se plafoneaza (vanzarea s-a facut deja, n-o putem
+         * refuza), deci „cerut" si „luat" chiar difera: o comanda de 2 dintr-o
+         * marime care avea 1 consuma 1. Scris cu cererea, anularea ar fi pus
+         * inapoi 2 — adica ar fi INVENTAT o bucata. Dovedit pe date sintetice
+         * inainte de reparatie: marimea revenea la 2 dintr-un stoc initial de 1.
+         */
+        if (raspuns?.consumat) {
+          const { error: eRez } = await admin.from("orders")
+            .update({ stoc_rezervat: raspuns.consumat } as never)
+            .eq("id", orderId);
+          if (eRez) {
+            await logError({
+              action: "trendyol/orders", message: `stoc_rezervat NU s-a putut corecta: ${eRez.message}`,
+              details: { orderId }, businessId: ctx.businessId, severity: "critical",
+            });
+          }
+        }
+        const lipsa = raspuns?.lipsa ?? [];
+        if (Array.isArray(lipsa) && lipsa.length > 0) {
+          await logError({
+            action: "trendyol/orders",
+            message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
+            details: { orderId, lipsa }, businessId: ctx.businessId, severity: "warning",
+          });
+        }
+      }
     }
   }
   return isNew ? "created" : "updated";

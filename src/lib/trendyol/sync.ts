@@ -271,6 +271,19 @@ export async function ensureListingFromMapping(
     await admin.from("trendyol_variants").insert(slots.map((s) => ({
       listing_id: listingId, business_id: ctx.businessId, product_id: product.id,
       barcode: s.barcode.trim(), stock_code: null, attributes: [] as unknown as never,
+      /*
+       * Titlul combinatiei se PASTREAZA, nu se mai arunca.
+       *
+       * `deriveVariantSlots` il stia dintotdeauna (`label`), dar aici se scria doar
+       * barcode-ul — si atunci, la o comanda venita de pe Trendyol, se putea scadea
+       * doar stocul de PRODUS. Pe un produs cu marimi, scaderea aia se sterge la
+       * prima editare de variante, fiindca declansatorul recalculeaza coloana din
+       * suma combinatiilor. Adica vanzarea de pe marketplace dispare din stoc.
+       *
+       * `null` pentru produsele fara variante (`key === "default"`): acolo nu
+       * exista nicio combinatie de scazut, iar stocul de produs e cel adevarat.
+       */
+      variant_title: s.key === "default" ? null : s.label,
       quantity: null, list_price: null, sale_price: null, vat_rate: null, enabled: true,
     })) as never);
   }

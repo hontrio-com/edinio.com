@@ -1673,6 +1673,49 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.incheie_operatie_externa(p_id uuid, p_business_id uuid, p_stare text, p_referinta_externa text DEFAULT NULL::text, p_detalii jsonb DEFAULT NULL::jsonb, p_eroare text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_ex public.operatii_externe%rowtype;
+begin
+  if p_stare not in ('reusit', 'esuat', 'necunoscut') then
+    return jsonb_build_object('gasit', false, 'motiv', 'stare nevalida');
+  end if;
+
+  update public.operatii_externe o
+     set stare             = p_stare,
+         referinta_externa = coalesce(p_referinta_externa, o.referinta_externa),
+         detalii           = coalesce(p_detalii, o.detalii),
+         ultima_eroare     = case when p_stare = 'reusit' then null
+                                  else coalesce(p_eroare, o.ultima_eroare) end,
+         actualizat_la     = now()
+   where o.id          = p_id
+     and o.business_id = p_business_id
+     and o.stare in ('in_curs', 'necunoscut')
+  returning o.* into v_ex;
+
+  if found then
+    return jsonb_build_object('gasit', true, 'stare', v_ex.stare,
+                              'referinta_externa', v_ex.referinta_externa);
+  end if;
+
+  select * into v_ex from public.operatii_externe where id = p_id;
+  if not found then
+    return jsonb_build_object('gasit', false);
+  end if;
+  if v_ex.business_id is distinct from p_business_id then
+    return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
+  end if;
+  return jsonb_build_object('gasit', true, 'deja', true, 'stare', v_ex.stare,
+                            'referinta_externa', v_ex.referinta_externa);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.increment_discount_uses(p_discount_id uuid)
  RETURNS void
  LANGUAGE plpgsql
@@ -1762,6 +1805,36 @@ begin
     'update public.store_settings set %I = coalesce(%I, ''{}''::jsonb) || $1, updated_at = now() where business_id = $2',
     p_column, p_column
   ) using p_patch, p_business_id;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.marcheaza_operatie_anulata(p_business_id uuid, p_cheie text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_ex public.operatii_externe%rowtype;
+begin
+  if p_business_id is null or coalesce(btrim(p_cheie), '') = '' then
+    return jsonb_build_object('gasit', false, 'motiv', 'argumente lipsa');
+  end if;
+
+  update public.operatii_externe o
+     set stare         = 'anulat',
+         actualizat_la = now()
+   where o.business_id = p_business_id
+     and o.cheie       = p_cheie
+     and o.stare in ('reusit', 'necunoscut')
+  returning o.* into v_ex;
+
+  if not found then
+    return jsonb_build_object('gasit', false);
+  end if;
+
+  return jsonb_build_object('gasit', true, 'referinta_externa', v_ex.referinta_externa);
 end;
 $function$
 ;
@@ -2572,6 +2645,76 @@ begin
   end loop;
 
   return jsonb_build_object('ok', true);
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_biz    uuid;
+  v_numar  text;
+  v_id     uuid;
+  v_ex     public.operatii_externe%rowtype;
+begin
+  if p_business_id is null then
+    return jsonb_build_object('rezervat', false, 'motiv', 'fara magazin');
+  end if;
+  if coalesce(btrim(p_cheie), '') = '' then
+    return jsonb_build_object('rezervat', false, 'motiv', 'fara cheie');
+  end if;
+
+  if p_order_id is not null then
+    select o.business_id, o.order_number into v_biz, v_numar
+      from public.orders o
+     where o.id = p_order_id;
+
+    if not found then
+      return jsonb_build_object('rezervat', false, 'motiv', 'comanda negasita');
+    end if;
+    if v_biz is distinct from p_business_id then
+      return jsonb_build_object('rezervat', false, 'motiv', 'alt magazin');
+    end if;
+  end if;
+
+  insert into public.operatii_externe
+    (business_id, order_id, order_number, fel, furnizor, cheie, incercari)
+  values
+    (p_business_id, p_order_id, v_numar, p_fel, p_furnizor, p_cheie, 1)
+  on conflict (business_id, cheie) where stare in ('in_curs', 'reusit', 'necunoscut')
+  do nothing
+  returning id into v_id;
+
+  if v_id is not null then
+    return jsonb_build_object('rezervat', true, 'id', v_id);
+  end if;
+
+  update public.operatii_externe o
+     set incercari     = o.incercari + 1,
+         actualizat_la = now()
+   where o.business_id = p_business_id
+     and o.cheie       = p_cheie
+     and o.stare in ('in_curs', 'reusit', 'necunoscut')
+  returning o.* into v_ex;
+
+  if not found then
+    return jsonb_build_object('rezervat', false, 'motiv', 'cursa');
+  end if;
+
+  return jsonb_build_object(
+    'rezervat',          false,
+    'motiv',             v_ex.stare,
+    'id',                v_ex.id,
+    'referinta_externa', v_ex.referinta_externa,
+    'detalii',           v_ex.detalii,
+    'incercari',         v_ex.incercari,
+    'ultima_eroare',     v_ex.ultima_eroare,
+    'creat_la',          v_ex.creat_la
+  );
 end;
 $function$
 ;
@@ -3562,6 +3705,22 @@ create table if not exists public.olx_sync_queue (
   created_at timestamp with time zone default now() not null,
   revendicat_pana timestamp with time zone);
 
+create table if not exists public.operatii_externe (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  order_id uuid,
+  order_number text,
+  fel text not null,
+  furnizor text not null,
+  cheie text not null,
+  stare text default 'in_curs'::text not null,
+  referinta_externa text,
+  detalii jsonb,
+  incercari integer default 0 not null,
+  ultima_eroare text,
+  creat_la timestamp with time zone default now() not null,
+  actualizat_la timestamp with time zone default now() not null);
+
 create table if not exists public.orders (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -3961,6 +4120,7 @@ alter table public.notifications add constraint notifications_pkey PRIMARY KEY (
 alter table public.offers add constraint offers_pkey PRIMARY KEY (id);
 alter table public.olx_adverts add constraint olx_adverts_pkey PRIMARY KEY (id);
 alter table public.olx_sync_queue add constraint olx_sync_queue_pkey PRIMARY KEY (id);
+alter table public.operatii_externe add constraint operatii_externe_pkey PRIMARY KEY (id);
 alter table public.orders add constraint orders_pkey PRIMARY KEY (id);
 alter table public.page_form_submissions add constraint page_form_submissions_pkey PRIMARY KEY (id);
 alter table public.platform_settings add constraint platform_settings_pkey PRIMARY KEY (key);
@@ -4015,6 +4175,9 @@ alter table public.discounts add constraint discounts_type_check CHECK ((type = 
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
+alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.site_analytics add constraint site_analytics_device_check CHECK ((device = ANY (ARRAY['mobile'::text, 'tablet'::text, 'desktop'::text])));
@@ -4087,6 +4250,8 @@ alter table public.olx_adverts add constraint olx_adverts_business_id_fkey FOREI
 alter table public.olx_adverts add constraint olx_adverts_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.olx_sync_queue add constraint olx_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.olx_sync_queue add constraint olx_sync_queue_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+alter table public.operatii_externe add constraint operatii_externe_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.operatii_externe add constraint operatii_externe_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.orders add constraint orders_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.orders add constraint orders_discount_id_fkey FOREIGN KEY (discount_id) REFERENCES discounts(id) ON DELETE SET NULL;
 alter table public.page_form_submissions add constraint page_form_submissions_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -4227,6 +4392,9 @@ CREATE INDEX notice_sms_log_business_created_idx ON public.notice_sms_log USING 
 CREATE INDEX notice_sms_log_provider_id_idx ON public.notice_sms_log USING btree (provider_id) WHERE (provider_id IS NOT NULL);
 CREATE INDEX offers_business_active_idx ON public.offers USING btree (business_id, is_active);
 CREATE INDEX offers_business_type_idx ON public.offers USING btree (business_id, type);
+CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btree (creat_la) WHERE (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text]));
+CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (business_id, cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
+CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);
 CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_status, status, created_at) WHERE (discount_code IS NOT NULL);
 CREATE INDEX page_form_submissions_business_idx ON public.page_form_submissions USING btree (business_id, created_at DESC);
 CREATE INDEX product_import_rows_cursor_idx ON public.product_import_rows USING btree (import_id, status, row_index);
@@ -4376,6 +4544,7 @@ alter table public.notifications enable row level security;
 alter table public.offers enable row level security;
 alter table public.olx_adverts enable row level security;
 alter table public.olx_sync_queue enable row level security;
+alter table public.operatii_externe enable row level security;
 alter table public.orders enable row level security;
 alter table public.page_form_submissions enable row level security;
 alter table public.platform_settings enable row level security;
@@ -5417,6 +5586,13 @@ grant SELECT on table public.olx_sync_queue to service_role;
 grant TRIGGER on table public.olx_sync_queue to service_role;
 grant TRUNCATE on table public.olx_sync_queue to service_role;
 grant UPDATE on table public.olx_sync_queue to service_role;
+grant DELETE on table public.operatii_externe to service_role;
+grant INSERT on table public.operatii_externe to service_role;
+grant REFERENCES on table public.operatii_externe to service_role;
+grant SELECT on table public.operatii_externe to service_role;
+grant TRIGGER on table public.operatii_externe to service_role;
+grant TRUNCATE on table public.operatii_externe to service_role;
+grant UPDATE on table public.operatii_externe to service_role;
 grant DELETE on table public.orders to anon;
 grant INSERT on table public.orders to anon;
 grant REFERENCES on table public.orders to anon;
@@ -6040,6 +6216,7 @@ grant execute on function public.handle_updated_at() to service_role;
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to anon;
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to authenticated;
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to service_role;
+grant execute on function public.incheie_operatie_externa(p_id uuid, p_business_id uuid, p_stare text, p_referinta_externa text, p_detalii jsonb, p_eroare text) to service_role;
 grant execute on function public.increment_discount_uses(p_discount_id uuid) to service_role;
 grant execute on function public.increment_offer_stats(p_offer_id uuid, p_impressions integer, p_conversions integer, p_revenue numeric) to service_role;
 grant execute on function public.increment_referral_balance(p_user_id uuid, p_amount integer) to service_role;
@@ -6048,6 +6225,7 @@ grant execute on function public.is_admin() to anon;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_admin() to service_role;
 grant execute on function public.jsonb_merge_config(p_business_id uuid, p_column text, p_patch jsonb) to service_role;
+grant execute on function public.marcheaza_operatie_anulata(p_business_id uuid, p_cheie text) to service_role;
 grant execute on function public.mark_payout_complete(p_user_id uuid, p_amount integer) to service_role;
 grant execute on function public.next_order_number(p_business_id uuid) to service_role;
 grant execute on function public.normalize_phone(raw text) to anon;
@@ -6084,6 +6262,7 @@ grant execute on function public.revendica_din_coada(p_coada text, p_limita inte
 grant execute on function public.revendica_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.revendica_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
+grant execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text) to service_role;
 grant execute on function public.scade_variante_raportat(p_items jsonb) to service_role;
 grant execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) to service_role;
 grant execute on function public.semnatura_cuvant(w text) to anon;

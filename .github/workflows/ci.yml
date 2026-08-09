@@ -172,6 +172,10 @@ jobs:
       # Baseline-ul se aplica PE SECTIUNI, si nu din pedanterie: logurile unui job
       # se citesc doar cu drepturi de admin, dar NUMELE pasului cazut se vede din
       # API oricui. Cu o singura aplicare, „a picat" e tot ce afli.
+      # ⚠ `set check_function_bodies = off` din antetul baseline-ului NU se mostenește
+      # intre pasi: `SET` e pe SESIUNE, iar fiecare `psql -f` deschide alta. Fara
+      # `-c` pe fiecare pas, functiile care se refera la tabele inca inexistente pica
+      # — desi fisierul intreg, aplicat dintr-o bucata, ar fi mers.
       - name: Taie baseline-ul pe sectiuni
         run: |
           set -euo pipefail
@@ -181,39 +185,39 @@ jobs:
 
       - name: 1 extensii, tipuri, secvente
         env: { PGPASSWORD: proba }
-        run: for f in /tmp/sect/00.sql /tmp/sect/01.sql /tmp/sect/02.sql /tmp/sect/03.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"; done
+        run: for f in /tmp/sect/00.sql /tmp/sect/01.sql /tmp/sect/02.sql /tmp/sect/03.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f "$f"; done
 
       - name: 2 functii
         env: { PGPASSWORD: proba }
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/04.sql
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/04.sql
 
       - name: 3 tabele
         env: { PGPASSWORD: proba }
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/05.sql
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/05.sql
 
       - name: 4 constrangeri
         env: { PGPASSWORD: proba }
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/06.sql
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/06.sql
 
       - name: 5 indexuri
         env: { PGPASSWORD: proba }
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/07.sql
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/07.sql
 
       - name: 6 vederi
         env: { PGPASSWORD: proba }
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/08.sql
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/08.sql
 
       - name: 7 declansatoare
         env: { PGPASSWORD: proba }
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/09.sql
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/09.sql
 
       - name: 8 RLS si politici
         env: { PGPASSWORD: proba }
-        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/10.sql
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/10.sql
 
       - name: 9 granturi
         env: { PGPASSWORD: proba }
-        run: for f in /tmp/sect/11.sql /tmp/sect/12.sql /tmp/sect/13.sql /tmp/sect/14.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"; done
+        run: for f in /tmp/sect/11.sql /tmp/sect/12.sql /tmp/sect/13.sql /tmp/sect/14.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f "$f"; done
 
       # O aplicare fara eroare nu inseamna ca a construit ceva: `create table if
       # not exists` peste un fisier gol „reuseste" la fel de linistit. Se NUMARA.

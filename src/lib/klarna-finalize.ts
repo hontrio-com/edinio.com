@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
@@ -65,16 +66,13 @@ export async function finalizeKlarnaOrder(
     return { status: "failed", error: cap.error || "Plata a fost autorizata dar nu a putut fi incasata." };
   }
 
-  const { error } = await admin.from("orders")
-    .update({ payment_status: "paid", status: "confirmed", klarna_order_id: klarnaOrderId, updated_at: new Date().toISOString() })
-    .eq("id", order.id)
-    .neq("payment_status", "paid");
-  if (!error) {
-    void maybeMarkMailchimpOrderPaid(order.id);
-    void maybeMarkBrevoOrderPaid(order.id);
-    // Plata confirmata declanseaza si facturarea automata, daca magazinul o are
-    // pe „Platita" sau pe „Comanda confirmata". Vezi `invoice-on-payment.ts`.
-    factureazaDupaPlata(order.business_id, order.id, "confirmed", "paid");
-  }
+  // Vezi `finalizare-plata.ts`: aceleasi doua gauri ca la Revolut — `confirmed`
+  // neconditionat si `paid` raportat chiar cand baza n-a scris.
+  const r = await finalizeazaPlataComenzii(
+    admin,
+    { id: order.id, businessId: order.business_id },
+    { klarna_order_id: klarnaOrderId },
+  );
+  if (r.fel === "esuat") return { status: "failed", error: r.error };
   return { status: "paid" };
 }

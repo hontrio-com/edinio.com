@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { poateAvansaLaConfirmat } from "@/lib/order-progress";
@@ -59,31 +60,11 @@ export async function finalizeStripeOrder(
     console.warn("[stripe] amount mismatch:", { orderId: order.id, asteptat, incasat: session.amount_total });
   }
 
-  const patch: Record<string, unknown> = {
-    payment_status: "paid",
-    updated_at: new Date().toISOString(),
-  };
-  if (poateAvansaLaConfirmat(order.status)) patch.status = "confirmed";
-
-  // `select` ne spune daca linia CHIAR s-a schimbat acum. Fara el, o re-livrare
-  // de webhook ar retrimite sincronizarile si ar reincerca factura pentru o
-  // comanda deja platita.
-  const { data: schimbate, error } = await admin
-    .from("orders")
-    .update(patch)
-    .eq("id", order.id)
-    .neq("payment_status", "paid")
-    .select("id");
-
-  if (error) {
-    console.error("[stripe] mark paid failed:", { orderId: order.id, error });
-    return { status: "failed", error: "Plata a reusit dar nu am putut actualiza comanda." };
-  }
-  if (!schimbate || schimbate.length === 0) return { status: "paid" };
-
-  void maybeMarkMailchimpOrderPaid(order.id);
-  void maybeMarkBrevoOrderPaid(order.id);
-  factureazaDupaPlata(order.businessId, order.id, (patch.status as string) ?? order.status ?? "", "paid");
+  // Aceeasi regula ca la toate celelalte procesatoare: vezi `finalizare-plata.ts`.
+  // Purtarea de aici a fost modelul — verificarea `error`, `.select()` pentru
+  // idempotenta si avansarea doar din `pending` — doar ca acum e intr-un loc.
+  const r = await finalizeazaPlataComenzii(admin, { id: order.id, businessId: order.businessId });
+  if (r.fel === "esuat") return { status: "failed", error: r.error };
   return { status: "paid" };
 }
 

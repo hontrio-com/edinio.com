@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
@@ -64,13 +65,15 @@ export async function GET(request: NextRequest) {
     const amountOk = status.amount === expected;
     const currencyOk = !status.currency || status.currency === IPAY_CURRENCY.RON;
     if (amountOk && currencyOk) {
-      await admin.from("orders")
-        .update({ payment_status: "paid", status: "confirmed", updated_at: new Date().toISOString() })
-        .eq("id", order.id)
-        .neq("payment_status", "paid");
-      void maybeMarkMailchimpOrderPaid(order.id);
-      void maybeMarkBrevoOrderPaid(order.id);
-      factureazaDupaPlata(order.business_id as string, order.id, "confirmed", "paid");
+      /*
+       * Aici se ignora COMPLET rezultatul scrierii si se redirecta la „succes".
+       * iPay incasase, clientul vedea pagina de multumire, iar comanda ramanea
+       * neplatita in panou. Acum, daca baza n-a confirmat, omul afla — pe pagina
+       * de esec, cu indemnul sa ia legatura cu magazinul, nu cu o pagina de succes
+       * mincinoasa.
+       */
+      const r = await finalizeazaPlataComenzii(admin, { id: order.id, businessId: order.business_id as string });
+      if (r.fel === "esuat") return fail(slug, r.error, order.id);
       return NextResponse.redirect(successUrl);
     }
     console.error("[ipay/return] amount/currency mismatch:", { orderId: order.id, expected, got: status.amount, currency: status.currency });

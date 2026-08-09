@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { ipayGetOrderStatus, resolveIpayStatus, ipayReady, toBani, IPAY_CURRENCY, type IPayConfig } from "@/lib/ipay";
@@ -61,17 +62,8 @@ export async function GET(req: NextRequest) {
       const amountOk = status.amount === toBani(Number(o.total));
       const currencyOk = !status.currency || status.currency === IPAY_CURRENCY.RON;
       if (resolved.paid && amountOk && currencyOk) {
-        const { error } = await admin
-          .from("orders")
-          .update({ payment_status: "paid", status: "confirmed", updated_at: new Date().toISOString() })
-          .eq("id", o.id)
-          .neq("payment_status", "paid");
-        if (!error) {
-          paid++;
-          void maybeMarkMailchimpOrderPaid(o.id);
-          void maybeMarkBrevoOrderPaid(o.id);
-          factureazaDupaPlata(o.business_id, o.id, "confirmed", "paid");
-        }
+        const r = await finalizeazaPlataComenzii(admin, { id: o.id, businessId: o.business_id });
+        if (r.fel === "platita-acum") paid++;
       }
     } catch (e) {
       console.error("[ipay-reconcile] poll failed for order", o.id, e);

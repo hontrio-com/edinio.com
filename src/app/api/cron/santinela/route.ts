@@ -214,6 +214,17 @@ export async function GET(req: NextRequest) {
           admin.from("catalog_rezumat_murdar").select("business_id", { count: "exact", head: true }),
           admin.from("catalog_cuvinte_murdar").select("business_id", { count: "exact", head: true }),
         ]);
+        /*
+         * `error` VERIFICAT, nu doar `count`.
+         *
+         * La o citire picata, `count` e `null`, iar `?? 0` il preface in zero —
+         * adica „cozile sunt goale", adica sanatos. Santinela ar fi raportat verde
+         * tocmai cand baza nu raspunde. O santinela trebuie sa fie mai stricta
+         * decat sistemul pe care il verifica, nu mai iertatoare.
+         */
+        for (const [nume, r] of [["proiectie", pr], ["rezumat", rez], ["vocabular", cuv]] as const) {
+          if (r.error) return `citirea cozii ${nume} a esuat: ${r.error.message}`;
+        }
         const vechi: string[] = [];
         if ((pr.count ?? 0) > 5000) vechi.push(`proiectie ${pr.count}`);
         if ((rez.count ?? 0) > 200) vechi.push(`rezumat ${rez.count}`);
@@ -251,5 +262,19 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: cazute.length === 0, magazin: slug, rezultate });
+  /*
+   * ⚠ COD DE STARE ADEVARAT, nu 200 cu `ok: false`.
+   *
+   * Pana acum santinela raspundea 200 chiar cand toate cele sapte probe cadeau.
+   * Un monitor extern — sau chiar pagina de stare a Vercel — se uita la codul de
+   * stare, nu la corpul JSON: ar fi vazut verde in timp ce inauntru scria ca
+   * magazinul nu randeaza niciun produs.
+   *
+   * Adica santinela facuta impotriva raspunsurilor „200, dar continutul e gresit"
+   * era ea insasi un raspuns 200 cu continutul gresit.
+   */
+  return NextResponse.json(
+    { ok: cazute.length === 0, magazin: slug, rezultate },
+    { status: cazute.length === 0 ? 200 : 503 },
+  );
 }

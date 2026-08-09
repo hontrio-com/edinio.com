@@ -64,7 +64,7 @@ export async function logError(params: LogErrorParams) {
      * memorie, deci per instanta.
      */
     const detalii = JSON.stringify(params.details ?? {});
-    await supabase.from("error_logs").insert({
+    const { error } = await supabase.from("error_logs").insert({
       action: String(params.action).slice(0, 120),
       message: String(params.message ?? "").slice(0, MAX_MESAJ),
       details: (detalii.length > MAX_DETALII
@@ -75,7 +75,30 @@ export async function logError(params: LogErrorParams) {
       business_id: params.businessId ?? null,
       severity: params.severity ?? "error",
     });
-  } catch {
-    // Silent fail — logging should never break the app
+
+    /*
+     * ⚠ JURNALUL CARE NU STIE CA N-A SCRIS.
+     *
+     * `try/catch` de aici parea sa acopere totul. Nu acoperea nimic: clientul
+     * Supabase NU ARUNCA la eroare de SQL — intoarce `{ error }`. Deci un insert
+     * respins (constrangere, drepturi, conexiune) trecea prin `catch` fara sa-l
+     * atinga, iar functia se incheia linistita.
+     *
+     * Adica exact jurnalul pe care se sprijina toate „acum se vede" din platforma
+     * putea sa nu scrie nimic si sa nu spuna nimanui. Ironia e completa: unealta
+     * facuta impotriva esecurilor tacute esua tacut.
+     *
+     * `console.error` e ultima treapta care mai exista cand baza nu raspunde: nu
+     * se vede in `/admin/logs`, dar se vede in logurile Vercel. Mai departe de
+     * atat n-avem unde cobori — si tocmai de asta nu se ARUNCA: o eroare aici ar
+     * rupe calea de eroare a apelantului, adica ar strica ce incerca sa raporteze.
+     */
+    if (error) {
+      console.error(`[error-logger] jurnalul NU s-a scris (${params.action}):`, error.message);
+    }
+  } catch (e) {
+    // Ramane pentru ce chiar arunca: client neconfigurat, retea cazuta la nivel
+    // de fetch. Logarea n-are voie sa rupa aplicatia, dar are voie sa tipe.
+    console.error("[error-logger] exceptie la jurnalizare:", e instanceof Error ? e.message : e);
   }
 }

@@ -1693,8 +1693,8 @@ begin
          ultima_eroare     = case when p_stare = 'reusit' then null
                                   else coalesce(p_eroare, o.ultima_eroare) end,
          actualizat_la     = now()
-   where o.id          = p_id
-     and o.business_id = p_business_id
+   where o.id = p_id
+     and o.business_id is not distinct from p_business_id
      and o.stare in ('in_curs', 'necunoscut')
   returning o.* into v_ex;
 
@@ -1818,14 +1818,14 @@ AS $function$
 declare
   v_ex public.operatii_externe%rowtype;
 begin
-  if p_business_id is null or coalesce(btrim(p_cheie), '') = '' then
+  if coalesce(btrim(p_cheie), '') = '' then
     return jsonb_build_object('gasit', false, 'motiv', 'argumente lipsa');
   end if;
 
   update public.operatii_externe o
      set stare         = 'anulat',
          actualizat_la = now()
-   where o.business_id = p_business_id
+   where o.business_id is not distinct from p_business_id
      and o.cheie       = p_cheie
      and o.stare in ('reusit', 'necunoscut')
   returning o.* into v_ex;
@@ -2660,12 +2660,14 @@ declare
   v_numar  text;
   v_id     uuid;
   v_ex     public.operatii_externe%rowtype;
+  v_nul constant uuid := '00000000-0000-0000-0000-000000000000';
 begin
-  if p_business_id is null then
-    return jsonb_build_object('rezervat', false, 'motiv', 'fara magazin');
-  end if;
   if coalesce(btrim(p_cheie), '') = '' then
     return jsonb_build_object('rezervat', false, 'motiv', 'fara cheie');
+  end if;
+
+  if p_business_id is null and p_order_id is not null then
+    return jsonb_build_object('rezervat', false, 'motiv', 'comanda fara magazin');
   end if;
 
   if p_order_id is not null then
@@ -2685,7 +2687,8 @@ begin
     (business_id, order_id, order_number, fel, furnizor, cheie, incercari)
   values
     (p_business_id, p_order_id, v_numar, p_fel, p_furnizor, p_cheie, 1)
-  on conflict (business_id, cheie) where stare in ('in_curs', 'reusit', 'necunoscut')
+  on conflict (coalesce(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie)
+    where stare in ('in_curs', 'reusit', 'necunoscut')
   do nothing
   returning id into v_id;
 
@@ -2696,8 +2699,8 @@ begin
   update public.operatii_externe o
      set incercari     = o.incercari + 1,
          actualizat_la = now()
-   where o.business_id = p_business_id
-     and o.cheie       = p_cheie
+   where coalesce(o.business_id, v_nul) = coalesce(p_business_id, v_nul)
+     and o.cheie = p_cheie
      and o.stare in ('in_curs', 'reusit', 'necunoscut')
   returning o.* into v_ex;
 
@@ -3707,7 +3710,7 @@ create table if not exists public.olx_sync_queue (
 
 create table if not exists public.operatii_externe (
   id uuid default gen_random_uuid() not null,
-  business_id uuid not null,
+  business_id uuid,
   order_id uuid,
   order_number text,
   fel text not null,
@@ -3796,7 +3799,8 @@ create table if not exists public.orders (
   stoc_rezervat jsonb,
   stoc_eliberat_la timestamp with time zone,
   stoc_marketplace_la timestamp with time zone,
-  ipay_order_number text);
+  ipay_order_number text,
+  netopia_ntp_id text);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -4176,8 +4180,8 @@ alter table public.discounts add constraint discounts_type_check CHECK ((type = 
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
-alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'proba'::text])));
-alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
@@ -4394,7 +4398,7 @@ CREATE INDEX notice_sms_log_provider_id_idx ON public.notice_sms_log USING btree
 CREATE INDEX offers_business_active_idx ON public.offers USING btree (business_id, is_active);
 CREATE INDEX offers_business_type_idx ON public.offers USING btree (business_id, type);
 CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btree (creat_la) WHERE (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text]));
-CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (business_id, cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
+CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
 CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);
 CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_status, status, created_at) WHERE (discount_code IS NOT NULL);
 CREATE INDEX page_form_submissions_business_idx ON public.page_form_submissions USING btree (business_id, created_at DESC);

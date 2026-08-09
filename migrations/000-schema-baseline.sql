@@ -5916,8 +5916,7 @@ grant SELECT (updated_at) on table public.users_profile to authenticated;
 grant UPDATE (updated_at) on table public.users_profile to authenticated;
 
 -- ── GRANTURI PE FUNCTII ───────────────────────────────────
-grant execute on function privat.cripteaza(p_val text) to anon;
-grant execute on function privat.cripteaza(p_val text) to authenticated;
+grant execute on function privat.cheie_integrari() to service_role;
 grant execute on function privat.cripteaza(p_val text) to service_role;
 grant execute on function privat.cripteaza_config(p_cfg jsonb, p_cai text[]) to anon;
 grant execute on function privat.cripteaza_config(p_cfg jsonb, p_cai text[]) to authenticated;
@@ -5925,8 +5924,6 @@ grant execute on function privat.cripteaza_config(p_cfg jsonb, p_cai text[]) to 
 grant execute on function privat.cripteaza_rand(p_rand jsonb) to anon;
 grant execute on function privat.cripteaza_rand(p_rand jsonb) to authenticated;
 grant execute on function privat.cripteaza_rand(p_rand jsonb) to service_role;
-grant execute on function privat.decripteaza(p_val text) to anon;
-grant execute on function privat.decripteaza(p_val text) to authenticated;
 grant execute on function privat.decripteaza(p_val text) to service_role;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to anon;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to authenticated;

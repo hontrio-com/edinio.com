@@ -17,6 +17,44 @@ export function radacinaMagazin(basePath: string): string {
 }
 
 /**
+ * Radacina magazinului, PASTRAND filtrele din adresa.
+ *
+ * ═══ DE CE EXISTA ═══
+ *
+ * `/{slug}/magazin` face `redirect(radacinaMagazin(basePath))` pentru magazinele
+ * care au produsele chiar pe pagina principala — corect ca destinatie, dar
+ * redirectarea ARUNCA sirul de interogare. Adica omul care ajunge pe
+ * `/{slug}/magazin?q=geaca&page=3` — dintr-un link vechi, dintr-un rezultat de
+ * cautare, dintr-o adresa trimisa de cineva — aterizeaza pe pagina 1, fara nicio
+ * cautare, si fara sa i se spuna nimic.
+ *
+ * Gasit de santinela pe 09.08.2026 („pagina 2 arata aceleasi produse ca pagina 1",
+ * magazinul nordic-outlet-bucovina): proba cerea `/magazin` si `/magazin?page=2`,
+ * amandoua ajungeau pe aceeasi pagina 1. Paginarea in sine era intreaga — se
+ * pierdea pe drum.
+ *
+ * `?preview=1` se pastreaza si el: fara asta, proprietarul care isi vede magazinul
+ * nepublicat ar fi fost scos din previzualizare de fiecare redirectare.
+ */
+export function radacinaMagazinCuFiltre(
+  basePath: string,
+  sp: Record<string, string | string[] | undefined>,
+): string {
+  const radacina = radacinaMagazin(basePath);
+  const q = new URLSearchParams();
+  for (const [cheie, valoare] of Object.entries(sp)) {
+    if (valoare === undefined) continue;
+    // Un parametru repetat (`?cat=a&cat=b`) ajunge ca tablou; se pastreaza toate
+    // aparitiile, altfel filtrarea pe mai multe valori s-ar pierde tacut.
+    for (const v of Array.isArray(valoare) ? valoare : [valoare]) {
+      if (v !== "") q.append(cheie, v);
+    }
+  }
+  const sir = q.toString();
+  return sir ? `${radacina}?${sir}` : radacina;
+}
+
+/**
  * Adresa de filtrare pe categorie, pornind de la RADACINA CATALOGULUI.
  *
  * Primul argument nu mai e `basePath`, ci `catalogRoot` din contextul de chrome:

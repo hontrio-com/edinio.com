@@ -17,7 +17,7 @@ import { cautaPeServer, sortareLaCautare } from "@/lib/storefront/catalog/cauta-
 import { numeSubarbore } from "@/lib/storefront/catalog/subarbore";
 import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
-import { radacinaMagazin, slugCategorie } from "@/lib/storefront/category-href";
+import { radacinaMagazinCuFiltre, slugCategorie } from "@/lib/storefront/category-href";
 import { SEGMENT_MAGAZIN, shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { isNonProductionHost } from "@/lib/storefront/host";
@@ -225,15 +225,15 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    * ocolit toate trei. Se verifica INAINTEA gate-ului de design.
    */
   if (parseStoreMode((storeSettings?.page_content as Json) ?? null).mode === "one_product") {
-    redirect(radacinaMagazin(basePath));
+    redirect(radacinaMagazinCuFiltre(basePath, sp));
   }
 
   // Magazinul are produsele pe pagina principala: aici n-are ce cauta nimeni.
   // Redirect, nu 404 — un link vechi trebuie sa duca in magazin, nu intr-o
   // pagina de eroare.
-  if (!shopOnPage(resolved.design)) redirect(radacinaMagazin(basePath));
+  if (!shopOnPage(resolved.design)) redirect(radacinaMagazinCuFiltre(basePath, sp));
 
-  if (!business.is_published && !isOwner) redirect(radacinaMagazin(basePath));
+  if (!business.is_published && !isOwner) redirect(radacinaMagazinCuFiltre(basePath, sp));
 
   // Magazin suspendat sau abonament expirat: pagina principala arata deja
   // „suspendat", dar de aici se putea cumpara mai departe. Aceeasi verificare ca

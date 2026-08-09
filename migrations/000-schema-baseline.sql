@@ -1334,7 +1334,7 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb)
+CREATE OR REPLACE FUNCTION public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -1343,25 +1343,31 @@ AS $function$
 declare
   v_biz uuid;
   v_rez jsonb;
+  v_status text;
 begin
-  /*
-   * Modificarea comenzii SI inregistrarea stocului consumat, intr-o tranzactie.
-   *
-   * Erau doua scrieri separate: `UPDATE orders` cu liniile si totalurile noi, apoi
-   * `adauga_stoc_rezervat`. Daca a doua pica, prima ramanea: stocul era scazut,
-   * comanda avea liniile noi, dar `stoc_rezervat` ramanea CEL VECHI — iar la
-   * anulare liniile adaugate nu se mai puteau da inapoi. Si se raspundea
-   * `success: true`, deci nimeni n-avea de unde sa stie.
-   *
-   * Calculele (preturi, TVA, taxa de ramburs, transport) RAMAN in aplicatie: aici
-   * doar se scrie ce a hotarat ea. Mutate in SQL, ar fi fost a doua implementare a
-   * regimului de preturi — exact ce am petrecut o zi sa desfacem in alta parte.
-   */
-  select business_id, stoc_rezervat into v_biz, v_rez
+  select business_id, stoc_rezervat, status into v_biz, v_rez, v_status
     from public.orders where id = p_order_id for update;
   if not found then return jsonb_build_object('gasit', false); end if;
   if p_business_id is not null and v_biz is distinct from p_business_id then
     return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
+  end if;
+
+  /*
+   * ═══ STATUSUL SE VERIFICA SUB LACAT ═══
+   *
+   * Comerciantul citeste comanda, ii vede statusul, rezerva stocul pentru liniile
+   * noi — si abia apoi ajunge aici. Intre citire si scriere, altcineva (panoul,
+   * un lot, un webhook de marketplace) poate ANULA comanda si elibera stocul ei.
+   * Fara verificarea de aici, editarea se aplica peste o comanda deja anulata si
+   * ii adauga stoc rezervat proaspat — pe care anularea, deja intamplata, nu-l mai
+   * elibereaza niciodata.
+   *
+   * Greu de declansat, dar real. `null` = apelantul nu are asteptari (nu se
+   * foloseste azi; exista ca sa nu forteze o migratie daca apare un caz).
+   */
+  if p_status_asteptat is not null and v_status is distinct from p_status_asteptat then
+    return jsonb_build_object('gasit', false, 'motiv', 'status schimbat',
+                              'status_curent', v_status, 'asteptat', p_status_asteptat);
   end if;
 
   update public.orders set
@@ -1377,14 +1383,6 @@ begin
     vat_rate         = coalesce((p_patch->>'vat_rate')::numeric, vat_rate),
     total            = coalesce((p_patch->>'total')::numeric, total),
     updated_at       = now(),
-    /*
-     * `stoc_rezervat` se contopeste AICI, in aceeasi instructiune.
-     *
-     * `null` ramane `null`: o comanda dinainte de coloana, scrisa acum doar cu
-     * liniile adaugate, ar parea ca atat a consumat — iar eliberarea ar raporta
-     * „eliberat" dupa ce a dat inapoi o farama. Mai bine „necunoscut", care se
-     * vede in loguri.
-     */
     stoc_rezervat = case when stoc_rezervat is null then null else jsonb_build_object(
       'produse',  coalesce(stoc_rezervat->'produse',  '[]'::jsonb) || coalesce(p_produse,  '[]'::jsonb),
       'variante', coalesce(stoc_rezervat->'variante', '[]'::jsonb) || coalesce(p_variante, '[]'::jsonb)) end
@@ -6028,7 +6026,7 @@ grant execute on function public.customers_summary(bid uuid) to service_role;
 grant execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) to service_role;
 grant execute on function public.decrement_stock_batch(p_items jsonb) to service_role;
 grant execute on function public.decrement_variant_stock_batch(p_items jsonb) to service_role;
-grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb) to service_role;
+grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text) to service_role;
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;

@@ -369,7 +369,7 @@ async function buildOrderNumber(supabase: SupabaseClient, businessId: string): P
      * de ce. Un numar de comanda ghicit nu e un numar de comanda.
      */
     if (error || typeof counter !== "number") {
-      logError({
+      await logError({
         action: "nextOrderNumber",
         message: error?.message ?? "contorul n-a intors un numar",
         details: { businessId, raspuns: counter },
@@ -631,7 +631,7 @@ async function revendicaStocul(
    * checkout-ul chiar e oprit si trebuie umblat la baza, nu la cod.
    */
   if (error) {
-    logError({
+    await logError({
       action: "revendicaStocul", message: error.message,
       details: { code: error.code, hint: error.hint, produse: decrements.length, variante: variante.length },
       severity: "critical",
@@ -639,7 +639,7 @@ async function revendicaStocul(
   }
   const verdict = interpreteazaRevendicarea(data, error);
   if (verdict.fel === "esuat" && !error) {
-    logError({ action: "revendicaStocul", message: "raspuns de forma neasteptata", details: { produse: decrements.length, raspuns: data }, severity: "critical" });
+    await logError({ action: "revendicaStocul", message: "raspuns de forma neasteptata", details: { produse: decrements.length, raspuns: data }, severity: "critical" });
   }
   return verdict;
 }
@@ -673,7 +673,7 @@ async function elibereazaStocul(
   if (error) {
     // Marfa ramane rezervata pentru o comanda care nu exista. Se repara de mana,
     // deci trebuie sa se vada: fara jurnal, stocul scade in gol si nimeni nu stie.
-    logError({ action: "elibereazaStocul", message: error.message, details: { code: error.code, produse: decrements.length, variante: variante.length }, severity: "critical" });
+    await logError({ action: "elibereazaStocul", message: error.message, details: { code: error.code, produse: decrements.length, variante: variante.length }, severity: "critical" });
   }
 }
 
@@ -1243,7 +1243,7 @@ export async function placeOrder(data: {
      */
     const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use" as never, { p_discount_id: validDiscountId } as never);
     if (eCupon) {
-      logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
+      await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
       return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
     }
     if (revendicat !== true) {
@@ -1352,7 +1352,7 @@ export async function placeOrder(data: {
     // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
-    logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
+    await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 
@@ -1739,7 +1739,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   } as never);
 
   if (error) {
-    logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id, severity: "critical" });
+    await logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id, severity: "critical" });
     return { error: "Eroare la actualizare." };
   }
 
@@ -1755,7 +1755,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
    * SMS-uri catre client despre o schimbare care poate n-a avut loc.
    */
   if (!t || t.gasit !== true) {
-    logError({ action: "updateOrder", message: t?.gasit === false ? "comanda a disparut intre verificare si scriere" : "raspuns de forma neasteptata la tranzitie", details: { orderId, raspuns: t }, businessId: order.business_id, userId: user.id, severity: "critical" });
+    await logError({ action: "updateOrder", message: t?.gasit === false ? "comanda a disparut intre verificare si scriere" : "raspuns de forma neasteptata la tranzitie", details: { orderId, raspuns: t }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la actualizare." };
   }
 
@@ -2364,14 +2364,30 @@ export async function updateOrderDetails(orderId: string, data: {
     },
     p_produse: stoc.fel === "revendicat" ? decrements : [],
     p_variante: stoc.fel === "revendicat" ? stocRezervat([], plan.adaugate).variante : [],
+    /*
+     * Statusul pe care l-am VAZUT cand am citit comanda.
+     *
+     * Intre citirea de mai sus si scrierea de aici incap cateva dus-intorsuri, iar
+     * in ele altcineva (panoul, un lot, un webhook de marketplace) poate ANULA
+     * comanda si elibera stocul ei. Fara asta, editarea s-ar aplica peste o comanda
+     * deja anulata si i-ar adauga stoc rezervat proaspat — pe care anularea, deja
+     * intamplata, nu-l mai elibereaza niciodata.
+     */
+    p_status_asteptat: order.status,
   } as never);
 
-  const rezEd = ed as { gasit?: boolean; stoc_cunoscut?: boolean } | null;
+  const rezEd = ed as { gasit?: boolean; stoc_cunoscut?: boolean; motiv?: string; status_curent?: string } | null;
+  if (rezEd?.motiv === "status schimbat") {
+    // Nu e o eroare de sistem, e o cursa pierduta: cineva a mutat comanda intre
+    // timp. Stocul rezervat se da inapoi si omul afla ce s-a intamplat.
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
+    return { error: `Comanda a fost mutata intre timp (acum e „${rezEd.status_curent}"). Reincarca pagina si incearca din nou.` };
+  }
   if (error || rezEd?.gasit !== true) {
     // Comanda n-a fost salvata, deci stocul rezervat pentru liniile adaugate se
     // da inapoi — altfel marfa ramane scazuta pentru linii care nu exista.
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
-    logError({ action: "updateOrderDetails", message: error?.message ?? "editarea n-a raspuns valid", details: { code: error?.code, orderId, raspuns: rezEd }, businessId: order.business_id, userId: user.id, severity: "critical" });
+    await logError({ action: "updateOrderDetails", message: error?.message ?? "editarea n-a raspuns valid", details: { code: error?.code, orderId, raspuns: rezEd }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la salvarea modificarilor." };
   }
   if (rezEd.stoc_cunoscut === false && stoc.fel === "revendicat") {
@@ -2432,7 +2448,7 @@ export async function deleteOrder(orderId: string) {
   const { data: sters, error } = await createAdminClient()
     .rpc("sterge_comanda" as never, { p_order_id: orderId, p_business_id: order.business_id } as never);
   if (error) {
-    logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, businessId: order.business_id, userId: user.id, severity: "critical" });
+    await logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la stergerea comenzii." };
   }
   if ((sters as { gasit?: boolean } | null)?.gasit !== true) {
@@ -2983,7 +2999,7 @@ export async function placeCartOrder(data: {
      */
     const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use" as never, { p_discount_id: validDiscountId } as never);
     if (eCupon) {
-      logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
+      await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
       return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
     }
     if (revendicat !== true) {
@@ -3090,7 +3106,7 @@ export async function placeCartOrder(data: {
     // rezervat. Vezi `placeOrder`.
     if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
-    logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
+    await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 

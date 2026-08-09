@@ -26,8 +26,10 @@ const SITEMAP_URL_LIMIT = 50000;
  * intorcea zero produse fara sa dea eroare. 503 inseamna „mai incearca".
  * `no-store`, ca o sclipire de o secunda sa nu stea in cache o ora pe CDN.
  */
-function indisponibil(cine: string, e: unknown): Response {
-  logError({
+async function indisponibil(cine: string, e: unknown): Promise<Response> {
+  // `await`, nu fire-and-forget: raspunsul pleaca imediat dupa, iar in serverless
+  // functia poate fi inghetata inainte ca inserarea sa ajunga in baza.
+  await logError({
     action: cine,
     message: e instanceof Error ? e.message : "citirea a esuat",
     severity: "critical",
@@ -42,7 +44,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   try {
     return await construieste(req, ctx);
   } catch (e) {
-    return indisponibil("slugSitemap", e);
+    return await indisponibil("slugSitemap", e);
   }
 }
 

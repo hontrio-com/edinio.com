@@ -212,7 +212,7 @@ export async function submitReturnRequest(input: {
     refund_iban: refundIban,
   });
   if (error) {
-    logError({ action: "submitReturnRequest", message: error.message, details: { businessId: input.businessId }, severity: "critical" });
+    await logError({ action: "submitReturnRequest", message: error.message, details: { businessId: input.businessId }, severity: "critical" });
     return { error: "Eroare la trimiterea cererii. Incearca din nou." };
   }
 

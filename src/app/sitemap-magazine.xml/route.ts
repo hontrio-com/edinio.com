@@ -49,8 +49,9 @@ function xmlSafe(s: string): string {
  * deci o sclipire de o secunda din baza ar fi tinut indexul gol de saizeci de ori
  * mai mult decat a durat defectiunea.
  */
-function indisponibil(e: unknown): Response {
-  logError({
+async function indisponibil(e: unknown): Promise<Response> {
+  // `await`: vezi nota din celelalte doua sitemapuri.
+  await logError({
     action: "sitemapIndex",
     message: e instanceof Error ? e.message : "citirea a esuat",
     severity: "critical",
@@ -65,7 +66,7 @@ export async function GET() {
   try {
     return await construieste();
   } catch (e) {
-    return indisponibil(e);
+    return await indisponibil(e);
   }
 }
 

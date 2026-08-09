@@ -103,7 +103,7 @@ export async function createBusiness(data: {
     if (bizError.code === "23505") {
       return { error: "Aceasta adresa de magazin este deja folosita. Alege alta." };
     }
-    logError({ action: "createBusiness", message: bizError.message, details: { code: bizError.code, hint: bizError.hint, slug }, userId: user.id, severity: "critical" });
+    await logError({ action: "createBusiness", message: bizError.message, details: { code: bizError.code, hint: bizError.hint, slug }, userId: user.id, severity: "critical" });
     return { error: "Nu am putut crea magazinul. Incearca din nou." };
   }
 
@@ -148,7 +148,7 @@ export async function createBusiness(data: {
     .eq("id", user.id);
 
   if (profileError) {
-    logError({
+    await logError({
       action: "createBusiness.profileUpdate",
       message: profileError.message,
       details: { code: profileError.code },

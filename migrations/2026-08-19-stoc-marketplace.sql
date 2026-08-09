@@ -273,3 +273,26 @@ revoke all on function public.consuma_stoc_comanda_marketplace(uuid, uuid, jsonb
 grant execute on function public.consuma_stoc_comanda_marketplace(uuid, uuid, jsonb, jsonb) to service_role;
 
 notify pgrst, 'reload schema';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- EDITAREA COMENZII: statusul asteptat se verifica SUB LACAT
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Comerciantul citeste comanda, ii vede statusul, rezerva stocul pentru liniile
+-- noi — si abia apoi ajunge la scriere. Intre citire si scriere incap cateva
+-- dus-intorsuri, iar in ele altcineva (panoul, un lot, un webhook de marketplace)
+-- poate ANULA comanda si elibera stocul ei.
+--
+-- Fara verificare, editarea se aplica peste o comanda deja anulata si ii adauga
+-- stoc rezervat proaspat — pe care anularea, deja intamplata, nu-l mai elibereaza
+-- niciodata. Greu de declansat, dar real.
+--
+-- Verificat, in tranzactie anulata:
+--   cu asteptarea VECHE    -> {"gasit": false, "motiv": "status schimbat", ...}
+--                             si totalul RAMANE neschimbat
+--   cu asteptarea CORECTA  -> {"gasit": true}, totalul se schimba
+--
+-- Semnatura veche (5 argumente) e stearsa: altfel ar fi ramas o cale fara
+-- verificare, exact ca la `aplica_tranzitia_comenzii` fara limita de magazin.
+-- Corpul final, ca in productie, e in `migrations/000-schema-baseline.sql`.
+drop function if exists public.editeaza_comanda_atomic(uuid, uuid, jsonb, jsonb, jsonb);

@@ -409,7 +409,7 @@ export async function bulkUpdateOrderStatus(
       // numara separat si NU intra in „actualizate": un lot care raporteaza mai
       // mult decat a facut e mai rau decat unul care raporteaza un esec.
       cazute.push(id);
-      logError({ action: "bulkUpdateOrderStatus", message: eT?.message ?? "tranzitie fara raspuns valid", details: { orderId: id, status, raspuns: r }, businessId, userId: g.userId, severity: "critical" });
+      await logError({ action: "bulkUpdateOrderStatus", message: eT?.message ?? "tranzitie fara raspuns valid", details: { orderId: id, status, raspuns: r }, businessId, userId: g.userId, severity: "critical" });
       continue;
     }
     reusite.push({ id, payment_status: r.plata_veche ?? "" });

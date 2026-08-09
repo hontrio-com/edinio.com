@@ -1277,6 +1277,67 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_biz uuid;
+  v_rez jsonb;
+begin
+  /*
+   * Modificarea comenzii SI inregistrarea stocului consumat, intr-o tranzactie.
+   *
+   * Erau doua scrieri separate: `UPDATE orders` cu liniile si totalurile noi, apoi
+   * `adauga_stoc_rezervat`. Daca a doua pica, prima ramanea: stocul era scazut,
+   * comanda avea liniile noi, dar `stoc_rezervat` ramanea CEL VECHI — iar la
+   * anulare liniile adaugate nu se mai puteau da inapoi. Si se raspundea
+   * `success: true`, deci nimeni n-avea de unde sa stie.
+   *
+   * Calculele (preturi, TVA, taxa de ramburs, transport) RAMAN in aplicatie: aici
+   * doar se scrie ce a hotarat ea. Mutate in SQL, ar fi fost a doua implementare a
+   * regimului de preturi — exact ce am petrecut o zi sa desfacem in alta parte.
+   */
+  select business_id, stoc_rezervat into v_biz, v_rez
+    from public.orders where id = p_order_id for update;
+  if not found then return jsonb_build_object('gasit', false); end if;
+  if p_business_id is not null and v_biz is distinct from p_business_id then
+    return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
+  end if;
+
+  update public.orders set
+    customer_name    = coalesce(p_patch->>'customer_name', customer_name),
+    customer_phone   = coalesce(p_patch->>'customer_phone', customer_phone),
+    customer_email   = case when p_patch ? 'customer_email' then nullif(p_patch->>'customer_email','') else customer_email end,
+    shipping_address = coalesce(p_patch->'shipping_address', shipping_address),
+    items            = coalesce(p_patch->'items', items),
+    subtotal         = coalesce((p_patch->>'subtotal')::numeric, subtotal),
+    shipping_cost    = coalesce((p_patch->>'shipping_cost')::numeric, shipping_cost),
+    cod_fee_amount   = coalesce((p_patch->>'cod_fee_amount')::numeric, cod_fee_amount),
+    vat_amount       = coalesce((p_patch->>'vat_amount')::numeric, vat_amount),
+    vat_rate         = coalesce((p_patch->>'vat_rate')::numeric, vat_rate),
+    total            = coalesce((p_patch->>'total')::numeric, total),
+    updated_at       = now(),
+    /*
+     * `stoc_rezervat` se contopeste AICI, in aceeasi instructiune.
+     *
+     * `null` ramane `null`: o comanda dinainte de coloana, scrisa acum doar cu
+     * liniile adaugate, ar parea ca atat a consumat — iar eliberarea ar raporta
+     * „eliberat" dupa ce a dat inapoi o farama. Mai bine „necunoscut", care se
+     * vede in loguri.
+     */
+    stoc_rezervat = case when stoc_rezervat is null then null else jsonb_build_object(
+      'produse',  coalesce(stoc_rezervat->'produse',  '[]'::jsonb) || coalesce(p_produse,  '[]'::jsonb),
+      'variante', coalesce(stoc_rezervat->'variante', '[]'::jsonb) || coalesce(p_variante, '[]'::jsonb)) end
+  where id = p_order_id;
+
+  return jsonb_build_object('gasit', true, 'stoc_cunoscut', v_rez is not null);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.elibereaza_stoc_batch(p_items jsonb)
  RETURNS void
  LANGUAGE plpgsql
@@ -5853,6 +5914,7 @@ grant execute on function public.customers_summary(bid uuid) to service_role;
 grant execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) to service_role;
 grant execute on function public.decrement_stock_batch(p_items jsonb) to service_role;
 grant execute on function public.decrement_variant_stock_batch(p_items jsonb) to service_role;
+grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;

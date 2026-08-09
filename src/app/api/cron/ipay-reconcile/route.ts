@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logError } from "@/lib/error-logger";
 import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   // Pages expire well within a few days; only reconcile recent pending iPay orders.
   const since = new Date(Date.now() - 3 * 86400000).toISOString();
-  const { data: orders } = await admin
+  const { data: orders, error: eOrders } = await admin
     .from("orders")
     .select("id, business_id, total, ipay_order_id")
     .eq("payment_status", "unpaid")
@@ -38,15 +39,36 @@ export async function GET(req: NextRequest) {
     .gte("created_at", since)
     .limit(500);
 
+  /*
+   * ═══ PLASA DE SIGURANTA NU ARE VOIE SA TACA ═══
+   *
+   * `const { data: orders } = ...` fara `error`: la o citire picata `orders` e
+   * `null`, iar ramura de mai jos raspundea `{ ok: true, checked: 0 }` — o rulare
+   * perfect sanatoasa la vedere, care n-a verificat nicio plata.
+   *
+   * Ironia e completa: cronul asta exista TOCMAI fiindca alte mecanisme pot rata
+   * o plata. Daca rateaza el insusi, in tacere, nu mai apara pe nimeni.
+   */
+  if (eOrders) {
+    await logError({ action: "ipay-reconcile", message: eOrders.message, severity: "critical" });
+    return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
+  }
+
   if (!orders || orders.length === 0) {
     return NextResponse.json({ ok: true, checked: 0, paid: 0 });
   }
 
   const bizIds = [...new Set(orders.map((o) => o.business_id))];
-  const { data: settingsRows } = await admin
+  const { data: settingsRows, error: eCfg } = await admin
     .from("store_settings")
     .select("business_id, ipay_config")
     .in("business_id", bizIds);
+  // Fara configuratii, TOATE comenzile ar fi sarite — adica exact zero munca,
+  // raportata ca reusita. Aceeasi tacere ca la citirea comenzilor.
+  if (eCfg) {
+    await logError({ action: "ipay-reconcile", message: `configuratiile nu s-au putut citi: ${eCfg.message}`, severity: "critical" });
+    return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
+  }
   const cfgMap = new Map((settingsRows ?? []).map((r) => [r.business_id, r.ipay_config as IPayConfig | null]));
 
   let checked = 0;

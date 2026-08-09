@@ -954,6 +954,63 @@ begin
 end; $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_biz uuid;
+  v_deja timestamptz;
+  v_r jsonb;
+begin
+  /*
+   * Consumul de stoc al unei comenzi de marketplace, INTR-O SINGURA TRANZACTIE cu
+   * inregistrarea lui.
+   *
+   * ═══ CE REPARA ═══
+   *
+   * Erau trei pasi separati: insert comanda -> insert rand lateral -> consum stoc
+   * -> scriere `stoc_rezervat`. Iar `isNew` se hotara dupa INSERAREA COMENZII
+   * (unicitate pe `order_number`), nu dupa consum.
+   *
+   * Deci daca consumul pica — o eroare de doua secunde —, sincronizarea urmatoare
+   * gasea comanda deja creata, punea `isNew = false` si SAREA blocul de stoc. Pe
+   * vecie. Exact tiparul „s-a intamplat o data, apoi idempotenta impiedica
+   * repararea".
+   *
+   * Acum marcajul e `stoc_marketplace_la`, pus in ACEEASI instructiune cu
+   * scrierea consumului. Cat timp e NULL, consumul se reincearca la fiecare
+   * sincronizare — deci greseala se repara singura. Odata pus, nu se mai repeta.
+   *
+   * Si `stoc_rezervat` primeste CE S-A CONSUMAT, nu ce s-a cerut: pe marketplace
+   * se plafoneaza, deci cele doua chiar difera, iar anularea ar da inapoi mai mult
+   * decat s-a luat.
+   */
+  select business_id, stoc_marketplace_la into v_biz, v_deja
+    from public.orders where id = p_order_id for update;
+  if not found then return jsonb_build_object('gasit', false); end if;
+  if p_business_id is not null and v_biz is distinct from p_business_id then
+    return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
+  end if;
+  if v_deja is not null then
+    return jsonb_build_object('gasit', true, 'deja', true);
+  end if;
+
+  v_r := public.consuma_stoc_marketplace(p_produse, p_variante);
+
+  update public.orders
+     set stoc_rezervat = v_r->'consumat',
+         stoc_marketplace_la = now(),
+         updated_at = now()
+   where id = p_order_id;
+
+  return jsonb_build_object('gasit', true, 'deja', false, 'lipsa', coalesce(v_r->'lipsa','[]'::jsonb));
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3579,7 +3636,8 @@ create table if not exists public.orders (
   discount_released_at timestamp with time zone,
   klarna_session_id text,
   stoc_rezervat jsonb,
-  stoc_eliberat_la timestamp with time zone);
+  stoc_eliberat_la timestamp with time zone,
+  stoc_marketplace_la timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -5954,6 +6012,7 @@ grant execute on function public.catalog_scrie_rezumat(p_randuri jsonb) to servi
 grant execute on function public.catalog_verifica(p_esantion integer) to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) to service_role;
+grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) to service_role;
 grant execute on function public.curata_limite() to service_role;

@@ -19,6 +19,7 @@ import type { TrendyolSyncContext } from "./sync";
 import { updatePackage, updateTrackingDetails, isTrendyolError } from "./client";
 import { edinioStatusForTrendyol } from "./webhooks";
 import { TRENDYOL_CARRIERS, curieriVitrina } from "./types";
+import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 
 type Db = SupabaseClient<Database>;
 
@@ -90,10 +91,16 @@ export async function setPackageStatus(
   const now = new Date().toISOString();
   await admin.from("trendyol_orders")
     .update({ status, last_synced_at: now, updated_at: now } as never).eq("id", side.id);
+  /*
+   * AL TREILEA loc care scria direct statusul, si cel mai usor de ratat: aici
+   * comerciantul schimba starea DIN Edinio catre Trendyol (expediere, anulare).
+   * O anulare pornita de aici lasa marfa consumata, exact ca celelalte doua.
+   */
   if (side.order_id) {
-    await admin.from("orders")
-      .update({ status: edinioStatusForTrendyol(status), updated_at: now } as never)
-      .eq("id", side.order_id).eq("business_id", ctx.businessId);
+    await tranzitieComandaMarketplace(admin, {
+      orderId: side.order_id, businessId: ctx.businessId,
+      status: edinioStatusForTrendyol(status), sursa: "trendyol",
+    });
   }
   return { ok: true, status };
 }

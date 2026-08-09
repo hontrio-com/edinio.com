@@ -5,6 +5,7 @@ import {
 } from "@/lib/klarna";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { logError } from "@/lib/error-logger";
 
 /**
  * Starts a Klarna payment: creates a payment session + a Hosted Payment Page for
@@ -90,11 +91,25 @@ export async function POST(request: NextRequest) {
    * ieftina putea refolosi acelasi sid cu `orderId` schimbat, ca sa marcheze
    * platita o comanda scumpa.
    */
-  await admin
-    .from("orders")
-    .update({ klarna_session_id: session.data.session_id })
-    .eq("id", orderId)
-    .eq("business_id", businessId);
+  /*
+   * ⚠ LEGATURA CU PLATA SE VERIFICA INAINTE SA TRIMITEM OMUL LA PLATA.
+   *
+   * Procesatorul a creat plata; daca scrierea de aici pica, clientul plateste si
+   * noi ramanem fara id-ul dupa care legam plata de comanda. La Klarna e si mai
+   * grav: verificarea din callback („sesiunea e chiar a acestei comenzi?") se
+   * sprijina pe campul asta.
+   */
+  {
+    const { error } = await admin
+      .from("orders")
+      .update({ klarna_session_id: session.data.session_id })
+      .eq("id", orderId)
+      .eq("business_id", businessId);
+    if (error) {
+      await logError({ action: "klarna/start", message: `sesiunea Klarna nu s-a putut salva: ${error.message}`, details: { orderId }, businessId, severity: "critical" });
+      return NextResponse.json({ error: "Nu am putut pregati plata. Reincearca peste cateva momente." }, { status: 503 });
+    }
+  }
 
   const q = `orderId=${encodeURIComponent(orderId)}&businessId=${encodeURIComponent(businessId)}`;
   const failUrl = `${baseUrl}/${slug}/confirm?status=esuat&orderId=${encodeURIComponent(orderId)}`;

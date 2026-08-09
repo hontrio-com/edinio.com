@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { logError } from "@/lib/error-logger";
 
 export async function POST(request: NextRequest) {
   /*
@@ -125,10 +126,24 @@ export async function POST(request: NextRequest) {
     { stripeAccount: stripeConfig.account_id }
   );
 
-  await admin
-    .from("orders")
-    .update({ stripe_session_id: session.id })
-    .eq("id", orderId);
+  /*
+   * ⚠ LEGATURA CU PLATA SE VERIFICA INAINTE SA TRIMITEM OMUL LA PLATA.
+   *
+   * Procesatorul a creat plata; daca scrierea de aici pica, clientul plateste si
+   * noi ramanem fara id-ul dupa care legam plata de comanda. La Klarna e si mai
+   * grav: verificarea din callback („sesiunea e chiar a acestei comenzi?") se
+   * sprijina pe campul asta.
+   */
+  {
+    const { error } = await admin
+      .from("orders")
+      .update({ stripe_session_id: session.id })
+      .eq("id", orderId);
+    if (error) {
+      await logError({ action: "stripe/order-checkout", message: `sesiunea Stripe nu s-a putut salva: ${error.message}`, details: { orderId }, severity: "critical" });
+      return NextResponse.json({ error: "Nu am putut pregati plata. Reincearca peste cateva momente." }, { status: 503 });
+    }
+  }
 
   return NextResponse.json({ url: session.url });
 }

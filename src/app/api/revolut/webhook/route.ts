@@ -70,6 +70,21 @@ export async function POST(request: NextRequest) {
 
   if (!order || order.payment_status === "paid") return ok();
 
-  await finalizeRevolutOrder(admin, cfg, { id: order.id, businessId, total: Number(order.total) || 0 }, event.order_id);
+  /*
+   * ⚠ REZULTATUL SE VERIFICA, si la esec se raspunde 5xx.
+   *
+   * Aici se raspundea `200 { received: true }` orice s-ar fi intamplat. Deci:
+   * Revolut spune „platit" -> scrierea in baza pica -> noi confirmam primirea ->
+   * Revolut considera notificarea livrata si NU o mai repeta. Plata ramanea
+   * definitiv `paid` la ei si `unpaid` la noi, iar pentru Revolut nu exista niciun
+   * cron de reconciliere care s-o prinda mai tarziu.
+   *
+   * De cand `finalizeazaPlataComenzii` e idempotenta, ne permitem sa cerem o
+   * reincercare: o a doua livrare a aceleiasi notificari nu face rau.
+   */
+  const r = await finalizeRevolutOrder(admin, cfg, { id: order.id, businessId, total: Number(order.total) || 0 }, event.order_id);
+  if (r.status === "failed") {
+    return NextResponse.json({ received: false, error: r.error ?? "eroare interna" }, { status: 503 });
+  }
   return ok();
 }

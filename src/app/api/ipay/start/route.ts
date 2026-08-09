@@ -5,6 +5,7 @@ import {
 } from "@/lib/ipay";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { logError } from "@/lib/error-logger";
 
 export async function POST(request: NextRequest) {
   /*
@@ -92,7 +93,24 @@ export async function POST(request: NextRequest) {
   }
 
   // Persist the iPay order id for this attempt so the return route + cron can poll it.
-  await admin.from("orders").update({ ipay_order_id: result.orderId }).eq("id", orderId);
+  /*
+   * ⚠ LEGATURA CU PLATA SE VERIFICA INAINTE SA TRIMITEM OMUL LA PLATA.
+   *
+   * Scrierea asta era `await ...update(...)` cu rezultatul aruncat. Adica:
+   * procesatorul a creat plata -> scrierea in baza a picat -> clientul primeste
+   * link-ul si plateste -> iar noi nu mai avem id-ul dupa care sa legam plata de
+   * comanda. Returul si reconcilierea se sprijina exact pe el.
+   *
+   * Mai bine o initiere refuzata, pe care clientul o reincearca imediat, decat o
+   * plata facuta pe care n-o mai putem potrivi cu nimic.
+   */
+  {
+    const { error } = await admin.from("orders").update({ ipay_order_id: result.orderId }).eq("id", orderId);
+    if (error) {
+      await logError({ action: "ipay/start", message: `id-ul iPay nu s-a putut salva: ${error.message}`, details: { orderId, ipayOrderId: result.orderId }, severity: "critical" });
+      return NextResponse.json({ error: "Nu am putut pregati plata. Reincearca peste cateva momente." }, { status: 503 });
+    }
+  }
 
   return NextResponse.json({ redirectUrl: result.formUrl });
 }

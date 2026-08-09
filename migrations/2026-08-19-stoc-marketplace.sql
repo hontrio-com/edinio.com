@@ -203,3 +203,73 @@ revoke all on function public.editeaza_comanda_atomic(uuid, uuid, jsonb, jsonb, 
 grant execute on function public.editeaza_comanda_atomic(uuid, uuid, jsonb, jsonb, jsonb) to service_role;
 
 notify pgrst, 'reload schema';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- CONSUMUL DE STOC AL UNEI COMENZI DE MARKETPLACE: idempotent SI reparabil
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Erau trei pasi separati: insert comanda -> insert rand lateral -> consum stoc ->
+-- scriere `stoc_rezervat`. Iar `isNew` se hotara dupa INSERAREA COMENZII
+-- (unicitate pe `order_number`), NU dupa consum.
+--
+-- Deci un consum picat — o eroare de doua secunde — lasa comanda creata, iar
+-- sincronizarea urmatoare punea `isNew = false` si SAREA blocul de stoc. Pe vecie.
+-- Exact tiparul „s-a intamplat o data, apoi idempotenta impiedica repararea".
+--
+-- Marcajul `orders.stoc_marketplace_la` se pune in ACEEASI instructiune cu
+-- scrierea consumului: cat timp e NULL, consumul se reincearca la fiecare
+-- sincronizare (deci greseala se repara singura); odata pus, nu se mai repeta.
+--
+-- Verificat pe date sintetice, in tranzactie anulata:
+--   ingest picat        -> M ramane 3 (neatins)
+--   sincronizarea urmatoare -> M devine 1, `stoc_rezervat` scris cu consumul REAL
+--   a treia sincronizare    -> {"deja": true}, M ramane 1
+--   din alt magazin         -> {"gasit": false, "motiv": "alt magazin"}
+alter table public.orders add column if not exists stoc_marketplace_la timestamptz;
+
+comment on column public.orders.stoc_marketplace_la is
+  'Cand s-a consumat stocul pentru o comanda de marketplace. NULL = inca nu; marcajul face consumul idempotent SI reparabil la sincronizarea urmatoare.';
+
+create or replace function public.consuma_stoc_comanda_marketplace(
+  p_order_id    uuid,
+  p_business_id uuid,
+  p_produse     jsonb,
+  p_variante    jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path to 'public', 'pg_temp'
+as $$
+declare
+  v_biz uuid;
+  v_deja timestamptz;
+  v_r jsonb;
+begin
+  select business_id, stoc_marketplace_la into v_biz, v_deja
+    from public.orders where id = p_order_id for update;
+  if not found then return jsonb_build_object('gasit', false); end if;
+  if p_business_id is not null and v_biz is distinct from p_business_id then
+    return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
+  end if;
+  if v_deja is not null then
+    return jsonb_build_object('gasit', true, 'deja', true);
+  end if;
+
+  v_r := public.consuma_stoc_marketplace(p_produse, p_variante);
+
+  -- `stoc_rezervat` primeste CE S-A CONSUMAT, nu ce s-a cerut: pe marketplace se
+  -- plafoneaza, deci cele doua chiar difera, iar anularea ar da inapoi mai mult.
+  update public.orders
+     set stoc_rezervat = v_r->'consumat',
+         stoc_marketplace_la = now(),
+         updated_at = now()
+   where id = p_order_id;
+
+  return jsonb_build_object('gasit', true, 'deja', false, 'lipsa', coalesce(v_r->'lipsa','[]'::jsonb));
+end;
+$$;
+
+revoke all on function public.consuma_stoc_comanda_marketplace(uuid, uuid, jsonb, jsonb) from public, anon, authenticated;
+grant execute on function public.consuma_stoc_comanda_marketplace(uuid, uuid, jsonb, jsonb) to service_role;
+
+notify pgrst, 'reload schema';

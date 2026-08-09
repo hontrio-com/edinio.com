@@ -35,9 +35,21 @@ async function handle(request: NextRequest) {
   // Nothing to do: unknown order, already paid, or Klarna not configured.
   if (!order || order.payment_status === "paid") return ok();
 
-  // Sesiunea trebuie sa fie CHIAR a acestei comenzi. Vezi /api/klarna/start.
-  if (order.klarna_session_id && order.klarna_session_id !== sid) {
-    console.error("[klarna/callback] sid nu apartine comenzii", { orderId, sid });
+  /*
+   * ⚠ REGULA E INVERSATA: LIPSA sesiunii stocate OPRESTE finalizarea.
+   *
+   * Era `if (order.klarna_session_id && ...)` — adica verificarea se facea DOAR
+   * daca exista o sesiune stocata. Iar `/api/klarna/start` scria `klarna_session_id`
+   * fara sa verifice rezultatul: la o scriere picata campul ramanea NULL, si atunci
+   * verificarea se SAREA cu totul. Adica exact cazul in care nu stim a cui e
+   * sesiunea era cazul in care nu mai intrebam.
+   *
+   * Acum: fara sesiune stocata nu se finalizeaza nimic. Comanda ramane neplatita
+   * si se rezolva prin retur sau de mana — nepotrivirea unei plati e mai ieftina
+   * decat confirmarea uneia straine.
+   */
+  if (!order.klarna_session_id || order.klarna_session_id !== sid) {
+    console.error("[klarna/callback] sesiune lipsa sau straina comenzii", { orderId, sid, stocat: order.klarna_session_id });
     return ok();
   }
   const cfg = settings?.klarna_config as KlarnaConfig | null;
@@ -51,7 +63,11 @@ async function handle(request: NextRequest) {
   const confirmationUrl = `${baseUrl}/${slug}/confirm?orderId=${order.id}`;
   const input = toKlarnaOrderInput(order, settings?.prices_include_vat ?? true);
 
-  await finalizeKlarnaOrder(admin, cfg!, input, hpp.data.authorization_token, confirmationUrl);
+  // Ca la Revolut: un esec de baza NU se confirma cu 200, ca sa poata fi reincercat.
+  const r = await finalizeKlarnaOrder(admin, cfg!, input, hpp.data.authorization_token, confirmationUrl);
+  if (r.status === "failed") {
+    return NextResponse.json({ received: false, error: r.error ?? "eroare interna" }, { status: 503 });
+  }
   return ok();
 }
 

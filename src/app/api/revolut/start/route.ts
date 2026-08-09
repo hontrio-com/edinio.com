@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createOrder, revolutReady, toMinor, type RevolutConfig } from "@/lib/revolut";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { logError } from "@/lib/error-logger";
 
 /**
  * Starts a Revolut payment: creates a Merchant order (capture_mode=automatic) and
@@ -86,7 +87,24 @@ export async function POST(request: NextRequest) {
   }
 
   // Persist the Revolut order id so the return + webhook can look this order up.
-  await admin.from("orders").update({ revolut_order_id: created.data.id }).eq("id", order.id);
+  /*
+   * ⚠ LEGATURA CU PLATA SE VERIFICA INAINTE SA TRIMITEM OMUL LA PLATA.
+   *
+   * Scrierea asta era `await ...update(...)` cu rezultatul aruncat. Adica:
+   * procesatorul a creat plata -> scrierea in baza a picat -> clientul primeste
+   * link-ul si plateste -> iar noi nu mai avem id-ul dupa care sa legam plata de
+   * comanda. Returul si reconcilierea se sprijina exact pe el.
+   *
+   * Mai bine o initiere refuzata, pe care clientul o reincearca imediat, decat o
+   * plata facuta pe care n-o mai putem potrivi cu nimic.
+   */
+  {
+    const { error } = await admin.from("orders").update({ revolut_order_id: created.data.id }).eq("id", order.id);
+    if (error) {
+      await logError({ action: "revolut/start", message: `id-ul Revolut nu s-a putut salva: ${error.message}`, details: { orderId: order.id }, severity: "critical" });
+      return NextResponse.json({ error: "Nu am putut pregati plata. Reincearca peste cateva momente." }, { status: 503 });
+    }
+  }
 
   return NextResponse.json({ redirectUrl: created.data.checkout_url });
 }

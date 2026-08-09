@@ -20,6 +20,7 @@ import type { AboutYouSyncContext } from "./sync";
 import { getOrders, isAboutYouError } from "./client";
 import { cancelOrderItems, returnOrderItems } from "./client";
 import type { AboutYouOrder, AboutYouOrderStatus } from "./types";
+import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 
 type Db = SupabaseClient<Database>;
 
@@ -131,11 +132,15 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     await admin.from("aboutyou_orders")
       .update({ items: ayItems as never, status: order.status ?? "open", last_synced_at: now, updated_at: now } as never)
       .eq("id", ex.id);
-    // Reflect terminal marketplace states (cancelled/returned) onto the order.
+    /*
+     * Starile terminale trec prin motorul comun: o anulare sau un retur trebuie sa
+     * ELIBEREZE stocul, nu doar sa schimbe eticheta. Vezi `tranzitie-marketplace`.
+     */
     if (ex.order_id && (order.status === "cancelled" || order.status === "returned")) {
-      await admin.from("orders")
-        .update({ status: edinioStatusFor(order.status), updated_at: now } as never)
-        .eq("id", ex.order_id).eq("business_id", ctx.businessId);
+      await tranzitieComandaMarketplace(admin, {
+        orderId: ex.order_id, businessId: ctx.businessId,
+        status: edinioStatusFor(order.status), sursa: "aboutyou",
+      });
     }
     return "updated";
   }
@@ -145,8 +150,20 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   const skus = [...new Set(items.map((it) => it.sku).filter(Boolean))];
   const info = new Map<string, { productId: string | null; name: string; variantTitle: string | null }>();
   if (skus.length > 0) {
-    const { data: vs } = await admin
+    const { data: vs, error: eVar } = await admin
       .from("aboutyou_variants").select("sku, product_id, variant_title" as never).eq("business_id", ctx.businessId).in("sku", skus);
+    /*
+     * „Nu exista mapare" si „n-am putut CITI maparea" sunt doua lucruri diferite.
+     * Fara verificare, o citire picata dadea harta goala -> `product_id` null ->
+     * comanda intra fara sa scada stoc, si nu se mai repara niciodata.
+     */
+    if (eVar) {
+      await logError({
+        action: "aboutyou/orders", message: `maparea SKU nu s-a putut citi: ${eVar.message}`,
+        details: { ayNumber }, businessId: ctx.businessId, severity: "critical",
+      });
+      return "skipped";
+    }
     // `as never` pe select: coloana vine din migratia `2026-08-19-stoc-marketplace`
     // si nu apare inca in tipurile generate.
     const randuri = (vs ?? []) as unknown as { sku: string; product_id: string | null; variant_title: string | null }[];
@@ -219,12 +236,10 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     customer_email: addr.email,
     shipping_address: { ...addr.raw, source: "aboutyou", shop_country: shopCountry(order) } as never,
     items: edinioItems as never,
-    // Ce stoc a consumat comanda, ca anularea sau returul sa poata da INAPOI.
-    // Din `items` nu se poate deduce: combinatia nu apare acolo deloc.
-    stoc_rezervat: {
-      produse: [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity })),
-      variante: [...qtyByVariant.values()],
-    } as never,
+    /*
+     * `stoc_rezervat` NU se scrie aici — il scrie
+     * `consuma_stoc_comanda_marketplace`, cu ce s-a luat CU ADEVARAT. Vezi Trendyol.
+     */
     subtotal,
     total,
     vat_amount: vatAmount,
@@ -271,53 +286,34 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
 
   // Unified inventory: reflect the marketplace sale in Edinio stock (only on a
   // genuinely new order, never when recovering/re-linking an existing one).
-  if (isNew) {
-    const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
-    const variante = [...qtyByVariant.values()];
-    if (produse.length > 0 || variante.length > 0) {
-      // `{ error }`, nu `try/catch`: clientul Supabase nu arunca la eroare de SQL,
-      // deci vechiul `catch` nu prindea nimic si stocul ramanea neatins, in tacere.
-      const { data: rez, error } = await admin.rpc("consuma_stoc_marketplace" as never, {
-        p_produse: produse, p_variante: variante,
-      } as never);
-      if (error) {
-        await logError({
-          action: "aboutyou/orders", message: `Stocul NU s-a scazut pentru comanda de marketplace: ${error.message}`,
-          details: { produse, variante }, businessId: ctx.businessId, severity: "critical",
-        });
-      } else {
-        const raspuns = rez as { lipsa?: unknown[]; consumat?: unknown } | null;
-        /*
-         * `stoc_rezervat` se REscrie cu ce s-a consumat CU ADEVARAT.
-         *
-         * Pe marketplace se plafoneaza (vanzarea s-a facut deja, n-o putem
-         * refuza), deci „cerut" si „luat" chiar difera: o comanda de 2 dintr-o
-         * marime care avea 1 consuma 1. Scris cu cererea, anularea ar fi pus
-         * inapoi 2 — adica ar fi INVENTAT o bucata. Dovedit pe date sintetice
-         * inainte de reparatie: marimea revenea la 2 dintr-un stoc initial de 1.
-         */
-        if (raspuns?.consumat) {
-          const { error: eRez } = await admin.from("orders")
-            .update({ stoc_rezervat: raspuns.consumat } as never)
-            .eq("id", orderId);
-          if (eRez) {
-            await logError({
-              action: "aboutyou/orders", message: `stoc_rezervat NU s-a putut corecta: ${eRez.message}`,
-              details: { orderId }, businessId: ctx.businessId, severity: "critical",
-            });
-          }
-        }
-        const lipsa = raspuns?.lipsa ?? [];
-        if (Array.isArray(lipsa) && lipsa.length > 0) {
-          await logError({
-            action: "aboutyou/orders",
-            message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
-            details: { lipsa }, businessId: ctx.businessId, severity: "warning",
-          });
-        }
-      }
+  /*
+   * Consumul se cheama INDIFERENT de `isNew`: `isNew` se hotaraste dupa inserarea
+   * comenzii, nu dupa consum, deci un consum picat o data nu s-ar mai fi reincercat
+   * niciodata. RPC-ul e idempotent prin `stoc_marketplace_la`, deci chemarea pe
+   * ambele ramuri REPARA si comenzile ramase din urma.
+   */
+  const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+  const variante = [...qtyByVariant.values()];
+  if (produse.length > 0 || variante.length > 0) {
+    const { data: rez, error } = await admin.rpc("consuma_stoc_comanda_marketplace" as never, {
+      p_order_id: orderId, p_business_id: ctx.businessId,
+      p_produse: produse, p_variante: variante,
+    } as never);
+    const r = rez as { gasit?: boolean; deja?: boolean; lipsa?: unknown[] } | null;
+    if (error || r?.gasit !== true) {
+      await logError({
+        action: "aboutyou/orders", message: error?.message ?? "consumul de stoc n-a raspuns valid",
+        details: { orderId, raspuns: r }, businessId: ctx.businessId, severity: "critical",
+      });
+    } else if (!r.deja && Array.isArray(r.lipsa) && r.lipsa.length > 0) {
+      await logError({
+        action: "aboutyou/orders",
+        message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
+        details: { orderId, lipsa: r.lipsa }, businessId: ctx.businessId, severity: "warning",
+      });
     }
   }
+
   return isNew ? "created" : "updated";
 }
 

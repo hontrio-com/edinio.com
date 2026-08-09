@@ -12,11 +12,11 @@
  * Un tabel care ne pune lângă concurenți nominalizați intră sub reguli: fiecare
  * afirmație trebuie să fie verificabilă și să compare ACEEAȘI caracteristică la
  * toate platformele. De aceea valorile sunt descriptive („Prin aplicații", „Prin
- * pluginuri"), nu judecăți — și de aceea nota de la sfârșit există și rămâne:
- * ea spune exact ce înseamnă „X" și îngustează afirmația la ce se poate susține.
+ * pluginuri"), nu judecăți: descriu CUM se face lucrul pe fiecare platformă, nu
+ * cât de bună e platforma. Dacă cineva adaugă un rând, regula e aceeași.
  *
- * Dacă cineva adaugă un rând, regula e aceeași: se descrie cum se face lucrul pe
- * fiecare platformă, nu cât de bună e platforma.
+ * ⚠ Nota care lămurea rândul cu „X" a fost SCOASĂ la cererea clientului — vezi
+ * la sfârșitul fișierului ce scria și ce anume susținea.
  */
 
 export const COMPARISON_EYEBROW = "Comparație";
@@ -41,6 +41,78 @@ export const COMPARISON_US = "Edinio";
 export const COMPARISON_RIVALS = ["Shopify", "WooCommerce", "OpenCart", "Wix"] as const;
 
 export type ComparisonRival = (typeof COMPARISON_RIVALS)[number];
+
+/**
+ * Siglele platformelor, din `public/platforme/`.
+ *
+ * ═══ SE EGALIZEAZĂ PE SUPRAFAȚĂ, NU PE ÎNĂLȚIME ═══
+ *
+ * Aceeași regulă ca la siglele de integrări (`logos.ts`), și din același motiv:
+ * la înălțime egală, un cuvânt lung pare de câteva ori mai mare decât un semn
+ * pătrat. Shopify are raportul 0,88 (aproape pătrat), Wix 2,48 (wordmark lat) —
+ * puse la aceeași înălțime, Wix ar domina rândul fără să însemne nimic.
+ *
+ * Deci înălțimea se calculează: `h = √(arie / raport)`.
+ *
+ * ═══ TOATE NUMERELE SUNT MĂSURATE, NU CITITE DIN ANTET ═══
+ *
+ * `ratio` vine din `viewBox`, nu din atributele `width`/`height`: la Shopify și
+ * WooCommerce cele două sunt declarate cu valori de zece ori mai mari, iar la
+ * siglele de rețele sociale două din trei aveau chiar RAPOARTE diferite între
+ * ele. Verificat aici cu `getBBox()` în browser: conturul real al fiecărui desen
+ * umple cutia (0,96-1,00), deci nu e nevoie de corecție de margini goale.
+ *
+ * ═══ DE CE NU SE EGALIZEAZĂ ARIA VOPSITĂ ═══
+ *
+ * S-a măsurat și cât din cutie e CHIAR vopsit, desenând fiecare siglă pe o pânză
+ * și numărând pixelii opaci: Shopify 0,71 · WooCommerce 0,83 · OpenCart 0,79 ·
+ * Wix 0,44. (OpenCart iese 0,79, adică exact π/4 — confirmă că e un disc plin.)
+ *
+ * Egalizate după cerneală, semnele dense s-ar micșora și wordmark-urile s-ar
+ * umfla: Wix ajungea vizibil cel mai mare din rând. Probat una lângă alta în
+ * browser, la fel și un compromis pe radicalul cernelii. Cea care se citește ca
+ * „toate la fel" e aria CUTIEI — de aceea `ink` e 1 peste tot și nu s-a păstrat
+ * corecția de disc pentru OpenCart, care îl făcea și mai mare.
+ *
+ * Când lipsește fișierul, `src` rămâne gol și se scrie doar numele platformei.
+ */
+/** Aria țintă în antetul de tabel (desktop). */
+export const ARIE_SIGLA = 900;
+/** Aria țintă lângă numele platformei, în cardurile de pe telefon. */
+export const ARIE_SIGLA_MICA = 330;
+
+export interface PlatformLogo {
+  /** Calea din `public/`. Gol = nu avem fișierul, se scrie doar numele. */
+  src: string;
+  /** Lățime / înălțime, măsurat pe `viewBox`. */
+  ratio: number;
+  /**
+   * Corecție OPTICĂ, aplicată peste socoteala de arie. 1 = neatinsă.
+   *
+   * Aria egală duce foarte aproape, dar nu până la capăt: un disc plin și
+   * saturat trage mai greu decât un semn cu goluri, iar un wordmark subțire pare
+   * mai mic decât e. Numerele de mai jos NU sunt din burtă — cele cinci sigle au
+   * fost puse una lângă alta, mărite de trei ori, fără corecție și cu ea, și s-a
+   * ales rândul care se citește ca o familie.
+   *
+   * Dacă se schimbă un fișier, se reface proba. Corecția e legată de DESENUL
+   * acela, nu de platformă.
+   */
+  optic: number;
+}
+
+/** Sigla noastră, ca să stea în același rând cu ale celorlalți. */
+export const EDINIO_LOGO: PlatformLogo = { src: "/logo.png", ratio: 284 / 289, optic: 1 };
+
+export const PLATFORM_LOGOS: Record<ComparisonRival, PlatformLogo> = {
+  Shopify: { src: "/platforme/shopify.svg", ratio: 256 / 292, optic: 1 },
+  // Semn + cuvânt, cu goluri între litere: puțin mai mare ca să țină pasul.
+  WooCommerce: { src: "/platforme/woocommerce.svg", ratio: 256 / 153, optic: 1.05 },
+  // Disc plin și saturat — cea mai grea formă din rând. Se micșorează.
+  OpenCart: { src: "/platforme/opencart.svg", ratio: 2500 / 2500, optic: 0.92 },
+  // Wordmark subțire și lat: la arie egală arată scund.
+  Wix: { src: "/platforme/wix.svg", ratio: 311 / 125.2, optic: 1.1 },
+};
 
 export interface ComparisonRow {
   /** Criteriul, exact ca în PDF. */
@@ -89,11 +161,17 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   },
 ];
 
-/**
- * Nota de sub tabel.
+/*
+ * ⚠ NOTA DE SUB TABEL A FOST SCOASĂ, la cererea clientului (2026-08-09).
  *
- * NU e un detaliu de subsol care se poate tăia dacă strânge locul: e chiar
- * lămurirea care face rândul cu „X" o afirmație susținută, nu una absolută.
+ * Textul era: „Notă: X indică faptul că mentenanța și asistența gratuită, în
+ * forma inclusă de Edinio, nu sunt incluse ca beneficiu echivalent în
+ * comparație." — adică exact lămurirea care îngusta rândul cu „X" de la o
+ * afirmație absolută la una susținută.
+ *
+ * Rămâne scrisă aici, nu ștearsă din istorie, ca să se știe ce anume s-a scos
+ * dacă vreodată cineva întreabă pe ce se sprijină rândul acela.
+ *
+ * Fără ea, „X" trebuie să-și ducă singur înțelesul, deci nu se mai desenează ca
+ * literă, ci ca semn de „neinclus" — vezi `Comparison.tsx`.
  */
-export const COMPARISON_NOTE =
-  "Notă: X indică faptul că mentenanța și asistența gratuită, în forma inclusă de Edinio, nu sunt incluse ca beneficiu echivalent în comparație.";

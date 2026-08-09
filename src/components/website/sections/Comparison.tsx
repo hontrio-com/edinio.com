@@ -1,11 +1,16 @@
+import Image from "next/image";
 import {
+  ARIE_SIGLA,
+  ARIE_SIGLA_MICA,
   COMPARISON_EYEBROW,
   COMPARISON_LEAD,
-  COMPARISON_NOTE,
   COMPARISON_RIVALS,
   COMPARISON_ROWS,
   COMPARISON_TITLE,
   COMPARISON_US,
+  EDINIO_LOGO,
+  PLATFORM_LOGOS,
+  type PlatformLogo,
 } from "@/lib/website/comparison";
 import { SectionEyebrow } from "./SectionEyebrow";
 
@@ -18,46 +23,95 @@ import { SectionEyebrow } from "./SectionEyebrow";
  *
  * Aceeași coloană de 720px, aceeași etichetă (13px, semibold, 0.18em), același
  * titlu (32/44px) și aceeași descriere (16/18px) ca la „Problema" și „Soluția".
- * Nu e copiere din lene: capetele astea se citesc ca o serie doar fiindcă sunt
- * identice. Când se schimbă unul, se schimbă toate.
+ * Capetele astea se citesc ca o serie doar fiindcă sunt identice. Când se
+ * schimbă unul, se schimbă toate. Eticheta e gri: verdele e al secțiunii
+ * Integrări, iar dacă ar fi și aici n-ar mai însemna nimic acolo.
  *
- * Eticheta e `SectionEyebrow`, deci gri. Verdele e rezervat secțiunii Integrări
- * — dacă ar fi verde și aici, n-ar mai însemna nimic acolo.
+ * ═══ FUNDAL ALB, PLACĂ ALBĂ ═══
+ *
+ * ⚠ S-a încercat o dată inversarea — suprafață gri, coloana noastră albă și
+ * ridicată din ea — ca răspuns la „e mult prea simplă". A fost RESPINSĂ: „îmi
+ * plăcea cu fundalul alb și design-ul ăla". Deci nu se mai reia.
+ *
+ * Ce lipsea nu era contrastul de suprafață, ci CONȚINUTUL: siglele platformelor.
+ * Un rând de nume scrise mărunt se citește ca o listă; siglele se recunosc
+ * înainte de primul cuvânt. Restul e ierarhie de mărimi, nu ornament — niciun
+ * degrade, nicio textură, nicio transparență, ca la casetele de la Integrări,
+ * unde patru asemenea tratamente au fost respinse rând pe rând.
  *
  * ═══ UN SINGUR TABEL ÎN PAGINĂ, NU DOUĂ DESENE ═══
  *
  * Cerința a fost „perfect responsive și pe mobil, să se înțeleagă exact tot".
- * Răspunsul obișnuit — un tabel care se derulează pe orizontală — pică exact la
- * partea a doua: pe un ecran de 390px se văd două coloane din șase, iar cine nu
- * ghicește că se poate trage lateral crede că a citit tot.
- *
- * Al doilea răspuns obișnuit — un tabel pentru desktop și o listă de carduri
- * pentru telefon, amândouă în pagină, ascunse pe rând — costă dublu: aceleași
- * texte în două locuri (deci se despart la prima corectură) și conținut citit de
- * două ori de cititoarele de ecran, dacă ascunderea nu e făcută perfect.
+ * Derularea pe orizontală pică exact la partea a doua: pe 390px se văd două
+ * coloane din șase, iar cine nu ghicește că se poate trage lateral crede că a
+ * citit tot. Iar două desene în pagină (tabel + carduri, ascunse pe rând) costă
+ * dublu: aceleași texte în două locuri, deci se despart la prima corectură, și
+ * conținut citit de două ori de cititoarele de ecran.
  *
  * Aici e UN SINGUR `<table>`, semantic corect, care își schimbă doar `display`:
- *   - de la `lg` în sus e tabel adevărat, cu antet de coloane;
- *   - sub `lg` fiecare RÂND devine un card: criteriul e titlul, iar fiecare
- *     celulă devine un rând „platformă → valoare".
+ * de la `lg` în sus e tabel; sub `lg` fiecare RÂND devine un card, cu criteriul
+ * ca titlu și câte un rând „platformă → valoare". Pe telefon platforma se arată
+ * cu SIGLĂ ȘI NUME (cerut): sigla se recunoaște, numele o confirmă.
  *
- * Numele platformei din interiorul celulei apare doar pe ecrane mici (`lg:hidden`)
- * și e `aria-hidden`: pe desktop rolul lui îl are `<th>`-ul din antet, iar
- * legătura celulă-antet o face oricum tabelul. Fără el, pe telefon ar rămâne o
- * coloană de valori fără să se știe a cui e fiecare.
+ * Numele din celulă e `aria-hidden` pe toate lățimile: pe desktop rolul lui îl
+ * are antetul, iar legătura celulă-antet o face oricum tabelul.
  *
- * ═══ DE CE `lg`, ȘI NU `md` ═══
- *
- * Șase coloane la 768px lasă ~100px de coloană, iar „Necesită configurare" și
- * „Aplicații / parteneri" se rup în trei rânduri fiecare — tabelul devine un
- * zid. La 1024px sunt ~138px de coloană, unde textele stau pe cel mult două
- * rânduri. Deci tableta primește tot cardurile, și e mai bine așa.
+ * Pragul e `lg`, nu `md`: șase coloane la 768px lasă ~100px de coloană, iar
+ * „Necesită configurare" se rupe în trei rânduri. Tableta primește tot carduri.
  */
 
 /* Verdele pentru TEXT. Verdele de brand (#1AB554) are pe alb 2,6:1, sub pragul
    de citibilitate; #12874A e același ton dus la 4,6:1. Aceeași constantă și
    același motiv ca în `IntegrationsBenzi.tsx` și `TrustedProduct.tsx`. */
 const GREEN_TEXT = "#12874A";
+
+/**
+ * Înălțimea siglei: aceeași suprafață pentru toate, plus corecția optică.
+ *
+ * Aria singură duce foarte aproape; ultimul pas îl face ochiul. Vezi
+ * `comparison.ts` pentru cum s-au ales cele două numere care nu sunt 1.
+ */
+function inaltimeSigla(logo: PlatformLogo, arie: number): number {
+  return Math.round(Math.sqrt(arie / logo.ratio) * logo.optic);
+}
+
+/**
+ * Lățimea locașului în care stă sigla, în cardurile de pe telefon.
+ *
+ * ⚠ Fără el, marginea stângă a NUMELOR iese zimțată: siglele au lățimi foarte
+ * diferite (Wix e un wordmark de ~32px, Shopify un semn de ~17px), iar dacă
+ * numele vine imediat după siglă, fiecare rând începe în alt loc. Într-o listă
+ * de patru rânduri asta se vede imediat și arată a scăpare.
+ *
+ * Cu locașul, semnul se centrează în el și numele pornesc toate de la aceeași
+ * linie. Lățimea e cea mai mare siglă la aria mică, plus puțin aer.
+ */
+const LOCAS_SIGLA = 34;
+
+function Sigla({ logo, nume, arie }: { logo: PlatformLogo; nume: string; arie: number }) {
+  if (!logo.src) return null;
+  const h = inaltimeSigla(logo, arie);
+  return (
+    <Image
+      src={logo.src}
+      alt=""
+      width={Math.round(h * logo.ratio)}
+      height={h}
+      /*
+        `unoptimized`: loader-ul proiectului lasă neatinse imaginile locale (prin
+        el trece doar ce e pe R2), iar fără asta Next se plânge că loader-ul nu
+        implementează `width`. Sunt fișiere de câțiva kiloocteți.
+
+        `alt` gol, dinadins: numele platformei e scris alături sau stă în antetul
+        coloanei. Repetat în `alt`, cititoarele de ecran l-ar spune de două ori.
+      */
+      unoptimized
+      style={{ height: h, width: "auto" }}
+      className="max-w-full shrink-0 object-contain"
+      aria-hidden={nume ? "true" : undefined}
+    />
+  );
+}
 
 export function Comparison() {
   return (
@@ -83,11 +137,13 @@ export function Comparison() {
           Placa albă pe pagina albă se deosebește DOAR prin umbră — aceeași
           rețetă de patru straturi ca la casetele de sigle, scoasă în
           `--umbra-placa` ca sursa de lumină să rămână una singură în tot site-ul.
-          Vezi comentariul de la `.caseta-sigla` din globals.css pentru ce face
-          fiecare strat și de ce niciunul nu poate lipsi.
+          Vezi comentariul de la `.caseta-sigla` din globals.css.
 
-          `overflow-hidden` ca fundalul coloanei Edinio să fie tăiat de colțuri;
-          fără el, tenta iese în afara plăcii sus și jos.
+          `overflow-hidden` ca tenta coloanei Edinio să fie tăiată de colțuri.
+          E în regulă aici fiindcă nimic dinăuntru nu are umbră proprie: coloana
+          se deosebește prin tentă, nu prin ridicare. (Dacă vreodată capătă una,
+          placa are nevoie de padding cât întinderea ei — vezi capcana de la
+          benzile de sigle, unde `overflow-hidden` reteza umbra casetelor.)
         */}
         <div className="placa mt-14 overflow-hidden rounded-[16px] lg:mt-20">
           <table className="block w-full lg:table lg:table-fixed lg:border-collapse">
@@ -98,26 +154,27 @@ export function Comparison() {
 
             <thead className="hidden lg:table-header-group">
               <tr>
-                <th
-                  scope="col"
-                  className="w-[26%] border-b border-hairline px-5 py-4 text-left text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-3"
-                >
-                  Criteriu
-                </th>
-                <th
-                  scope="col"
-                  className="border-b border-hairline bg-tint px-4 py-4 text-left text-[14px] font-bold tracking-[-0.01em]"
-                  style={{ color: GREEN_TEXT }}
-                >
-                  {COMPARISON_US}
+                {/* Colțul gol al tabelului: nu are ce antet să poarte. */}
+                <td className="w-[26%] border-b border-hairline" />
+                <th scope="col" className="border-b border-hairline bg-tint px-4 pb-4 pt-5 align-bottom">
+                  <span className="flex flex-col items-center gap-2">
+                    <Sigla logo={EDINIO_LOGO} nume={COMPARISON_US} arie={ARIE_SIGLA} />
+                    <span
+                      className="text-[14px] font-bold tracking-[-0.01em]"
+                      style={{ color: GREEN_TEXT }}
+                    >
+                      {COMPARISON_US}
+                    </span>
+                  </span>
                 </th>
                 {COMPARISON_RIVALS.map((rival) => (
-                  <th
-                    key={rival}
-                    scope="col"
-                    className="border-b border-hairline px-4 py-4 text-left text-[14px] font-semibold tracking-[-0.01em] text-ink"
-                  >
-                    {rival}
+                  <th key={rival} scope="col" className="border-b border-hairline px-4 pb-4 pt-5 align-bottom">
+                    <span className="flex flex-col items-center gap-2">
+                      <Sigla logo={PLATFORM_LOGOS[rival]} nume={rival} arie={ARIE_SIGLA} />
+                      <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">
+                        {rival}
+                      </span>
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -126,7 +183,7 @@ export function Comparison() {
             <tbody className="block lg:table-row-group">
               {COMPARISON_ROWS.map((row) => (
                 /*
-                  Pe ecrane mici rândul e un card: `border-t` desparte cardurile
+                  Pe ecrane mici rândul e un card: linia de sus desparte cardurile
                   între ele (primul n-are, ca să nu dubleze marginea plăcii), iar
                   pe desktop redevine linia obișnuită dintre rânduri.
                 */
@@ -136,23 +193,31 @@ export function Comparison() {
                 >
                   <th
                     scope="row"
-                    className="block px-5 pb-3 pt-5 text-left text-[15px] font-semibold leading-[1.35] tracking-[-0.02em] text-ink lg:table-cell lg:px-5 lg:py-4 lg:text-[14px] lg:font-medium lg:leading-[1.45] lg:tracking-normal lg:text-ink-2"
+                    className="block px-5 pb-3 pt-5 text-left text-[15px] font-semibold leading-[1.35] tracking-[-0.02em] text-ink lg:table-cell lg:px-5 lg:py-5 lg:pe-6 lg:text-[14.5px] lg:leading-[1.45]"
                   >
                     {row.criteriu}
                   </th>
 
                   {/*
-                    Edinio primul, și pe telefon, și pe desktop: e coloana
-                    pentru care există tabelul. Tenta `tint` e o suprafață din
-                    INTERIORUL plăcii, singurul loc unde mai are voie să apară
-                    după trecerea site-ului pe fundal alb.
+                    Edinio primul, și pe telefon, și pe desktop: e coloana pentru
+                    care există tabelul. Tenta `tint` e o suprafață din INTERIORUL
+                    plăcii, singurul loc unde mai are voie să apară după trecerea
+                    site-ului pe fundal alb.
                   */}
-                  <td className="flex items-baseline justify-between gap-4 bg-tint px-5 py-2.5 lg:table-cell lg:px-4 lg:py-4 lg:align-top">
-                    <span className="text-[13px] font-medium text-ink-2 lg:hidden" aria-hidden="true">
-                      {COMPARISON_US}
+                  <td className="flex items-center justify-between gap-4 bg-tint px-5 py-3 lg:table-cell lg:px-4 lg:py-5 lg:text-center lg:align-middle">
+                    <span className="flex items-center gap-2.5 lg:hidden">
+                      <span
+                        className="flex shrink-0 items-center justify-center"
+                        style={{ width: LOCAS_SIGLA }}
+                      >
+                        <Sigla logo={EDINIO_LOGO} nume={COMPARISON_US} arie={ARIE_SIGLA_MICA} />
+                      </span>
+                      <span className="text-[13px] font-semibold text-ink" aria-hidden="true">
+                        {COMPARISON_US}
+                      </span>
                     </span>
                     <span
-                      className="text-right text-[14px] font-semibold leading-[1.4] lg:text-left lg:text-[14px]"
+                      className="text-right text-[14.5px] font-bold leading-[1.35] lg:text-center lg:text-[15px]"
                       style={{ color: GREEN_TEXT }}
                     >
                       {row.edinio}
@@ -162,24 +227,24 @@ export function Comparison() {
                   {row.rivali.map((valoare, i) => (
                     <td
                       key={COMPARISON_RIVALS[i]}
-                      className="flex items-baseline justify-between gap-4 px-5 py-2.5 last:pb-5 lg:table-cell lg:px-4 lg:py-4 lg:align-top lg:last:pb-4"
+                      className="flex items-center justify-between gap-4 px-5 py-3 last:pb-5 lg:table-cell lg:px-4 lg:py-5 lg:text-center lg:align-middle lg:last:pb-5"
                     >
-                      <span className="text-[13px] font-medium text-ink-2 lg:hidden" aria-hidden="true">
-                        {COMPARISON_RIVALS[i]}
+                      <span className="flex items-center gap-2.5 lg:hidden">
+                        <span
+                          className="flex shrink-0 items-center justify-center"
+                          style={{ width: LOCAS_SIGLA }}
+                        >
+                          <Sigla
+                            logo={PLATFORM_LOGOS[COMPARISON_RIVALS[i]]}
+                            nume={COMPARISON_RIVALS[i]}
+                            arie={ARIE_SIGLA_MICA}
+                          />
+                        </span>
+                        <span className="text-[13px] font-medium text-ink-2" aria-hidden="true">
+                          {COMPARISON_RIVALS[i]}
+                        </span>
                       </span>
-                      {/*
-                        Absența e mai ștearsă decât o descriere, dar NU e roșie.
-                        Roșul ar face din tabel o acuzație, iar afirmațiile astea
-                        trebuie să rămână descrieri verificabile — vezi nota de
-                        sub tabel și comentariul din `comparison.ts`.
-                      */}
-                      <span
-                        className={`text-right text-[13.5px] leading-[1.4] lg:text-left ${
-                          valoare === "X" || valoare === "Nu" ? "text-ink-3" : "text-ink-2"
-                        }`}
-                      >
-                        {valoare}
-                      </span>
+                      <Valoare valoare={valoare} />
                     </td>
                   ))}
                 </tr>
@@ -187,18 +252,52 @@ export function Comparison() {
             </tbody>
           </table>
         </div>
-
-        {/*
-          Nota se aliniază la STÂNGA plăcii, nu pe axa capului de secțiune.
-          E o notă de subsol a tabelului, nu o a doua descriere — legată de el
-          prin margine, se citește ca atare. Într-o casetă centrată de lățime
-          fixă părea centrată doar cât timp textul o umplea; la prima corectură
-          care o scurta, ar fi ieșit un rând plutind strâmb sub tabel.
-        */}
-        <p className="mt-5 text-[12.5px] leading-[1.55] text-ink-3">
-          {COMPARISON_NOTE}
-        </p>
       </div>
     </section>
+  );
+}
+
+/**
+ * Valoarea unui concurent.
+ *
+ * ═══ DE CE „X" NU SE MAI SCRIE CA LITERĂ ═══
+ *
+ * În tabelul primit, „X" înseamnă „neinclus", iar înțelesul îl dădea o notă de
+ * sub tabel. Nota a fost scoasă la cererea clientului — deci litera rămânea
+ * singură și ambiguă: pe un rând de bifat, un „X" se citește la fel de ușor ca
+ * „da, marcat". Se desenează acum ca semn de închidere, care nu se poate citi
+ * greșit, și își păstrează numele pentru cititoarele de ecran.
+ *
+ * ⚠ Semnul NU e roșu, și „Nu" nu e roșu. Un tabel roșu devine o acuzație, iar
+ * afirmațiile astea sunt publicitate comparativă: trebuie să rămână descrieri
+ * verificabile. Absența se arată prin GREUTATE mai mică, nu prin culoare.
+ */
+function Valoare({ valoare }: { valoare: string }) {
+  if (valoare === "X") {
+    return (
+      <span className="inline-flex items-center lg:justify-center">
+        <span className="sr-only">Neinclus</span>
+        <svg
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+          className="h-[15px] w-[15px] text-ink-3"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        >
+          <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`text-right text-[13.5px] leading-[1.4] lg:text-center ${
+        valoare === "Nu" ? "text-ink-3" : "text-ink-2"
+      }`}
+    >
+      {valoare}
+    </span>
   );
 }

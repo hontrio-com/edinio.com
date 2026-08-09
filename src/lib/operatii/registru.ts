@@ -48,6 +48,7 @@ export type FelOperatie =
   | "awb" | "anulare_awb" | "ridicare"
   | "factura" | "proforma" | "storno" | "anulare_document"
   | "plata" | "incasare" | "rambursare"
+  | "publicare" | "retragere" | "expediere"
   | "proba";
 
 /** Care furnizor. Trebuie sa ramana in pas cu `operatii_externe_furnizor_check`. */
@@ -55,6 +56,7 @@ export type FurnizorOperatie =
   | "cargus" | "sameday" | "fancourier" | "dpd" | "woot" | "colete"
   | "smartbill" | "oblio" | "fgo"
   | "stripe" | "netopia" | "ipay" | "klarna" | "revolut"
+  | "trendyol" | "aboutyou" | "olx" | "gmc"
   | "proba";
 
 /**
@@ -367,6 +369,9 @@ function numeOperatie(fel: FelOperatie): string {
     case "plata": return "Plata";
     case "incasare": return "Incasarea";
     case "rambursare": return "Rambursarea";
+    case "publicare": return "Publicarea pe marketplace";
+    case "retragere": return "Retragerea de pe marketplace";
+    case "expediere": return "Confirmarea expedierii";
     case "proba": return "Proba";
   }
 }
@@ -523,7 +528,8 @@ export async function operatiiAtarnate(
  */
 export async function deblocheazaOperatie(
   admin: SupabaseClient<Database>,
-  businessId: string,
+  /** `null` pentru operatiile platformei — vezi `CerereOperatie.businessId`. */
+  businessId: string | null,
   operatieId: string,
   motiv: string,
 ): Promise<{ ok: true; stabilizata: boolean } | { ok: false; mesaj: string }> {

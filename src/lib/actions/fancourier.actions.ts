@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
-import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
+import { eroareNesigura, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   createFanCourierAwb,
   deleteFanCourierAwb,
@@ -232,7 +232,18 @@ export async function createFanCourierPickupAction(
     },
     async () => {
       const idRidicare = await createFanCourierPickupOrder(config, input);
-      return { referinta: String(idRidicare ?? ""), valoare: { orderId: idRidicare } };
+      /*
+       * `createFanCourierPickupOrder` intoarce deliberat sir GOL cand raspunsul e
+       * 2xx dar fara id („an error-free 2xx counts as accepted even without one").
+       * Inchis ca `reusit` cu referinta goala, randul ar fi blocat ziua definitiv:
+       * anularea raspunde „nu exista o ridicare care sa poata fi anulata" (n-are
+       * `last_pickup_id`), deci nici slotul nu s-ar mai putea elibera vreodata.
+       * Ridicarea EXISTA la FAN, doar ca nu-i stim numarul — adica fix „nu stim".
+       */
+      if (!idRidicare) {
+        throw eroareNesigura("FAN Courier a acceptat ridicarea dar nu a returnat id-ul ei. Verifica in contul FAN inainte de a programa alta pe aceeasi zi.");
+      }
+      return { referinta: String(idRidicare), valoare: { orderId: idRidicare } };
     },
     verdictFurnizor,
   );
@@ -274,6 +285,10 @@ export async function cancelFanCourierPickupAction(
     return { error: "Nu exista o ridicare programata din platforma care sa poata fi anulata." };
   }
 
+  // Ziua pe care o elibereaza anularea trebuie citita INAINTE ca `last_pickup_date`
+  // sa fie golit: ea e chiar discriminantul cheii din registru.
+  const ziuaAnulata = config.last_pickup_date;
+
   try {
     await deleteFanCourierPickupOrder(config, config.last_pickup_id);
 
@@ -285,6 +300,26 @@ export async function cancelFanCourierPickupAction(
       } as unknown as import("@/types/database.types").Json,
       updated_at: new Date().toISOString(),
     }).eq("business_id", businessId);
+
+    /*
+     * Fara eliberare, reprogramarea pe ACEEASI zi ar fi primit `deja` si ar fi scris
+     * inapoi id-ul ridicarii STERSE — adica exact invierea pe care registrul o
+     * inchide in alte parti. Interfata chiar la asta indeamna: anulezi si programezi
+     * din nou, de obicei tot pentru azi.
+     */
+    if (ziuaAnulata) {
+      const eliberat = await marcheazaAnulata(
+        createAdminClient(), businessId, cheieOperatie("ridicare", "fancourier", ziuaAnulata));
+      if (!eliberat) {
+        await logError({
+          action: "fancourier.cancelPickup",
+          message: `Ridicare FAN anulata pentru ${ziuaAnulata}, dar slotul din registru NU s-a eliberat. O reprogramare pe aceeasi zi va fi refuzata.`,
+          details: { businessId, ziuaAnulata },
+          businessId,
+          severity: "critical",
+        });
+      }
+    }
 
     return { success: true };
   } catch (e) {

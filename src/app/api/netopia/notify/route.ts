@@ -130,20 +130,22 @@ export async function POST(request: NextRequest) {
     }
   } else if (newPaymentStatus) {
     /*
-     * ⚠ `.neq("payment_status", "paid")` LIPSEA, si era singura scriere de stare de
-     * plata din tot domeniul fara ea.
+     * ⚠ AICI NU SE PUNE `.neq("payment_status", "paid")`, SI E O DECIZIE.
      *
-     * Netopia repeta notificarile la orice raspuns non-zero, iar ele pot sosi si in
-     * alta ordine decat s-au produs. Un IPN de ESEC intarziat suprascria un `paid`
-     * marcat intre timp de un IPN de succes — comanda platita devenea „neplatita",
-     * cu banii incasati. Toate celelalte cai trec prin `finalizeazaPlataComenzii`,
-     * care are garda in chiar instructiunea de UPDATE; asta o ocolea.
+     * Am pus-o, crezand ca apar un `paid` de un IPN de esec intarziat. Nu exista
+     * asa ceva: `resolveNetopiaStatus` (src/lib/netopia.ts) intoarce `paymentStatus`
+     * in DOUA situatii — 3/5 => "paid" (tratat de ramura de deasupra) si 15 =>
+     * "refunded". Niciun status de esec nu produce vreun `paymentStatus`, deci
+     * ramura asta se atinge EXCLUSIV pentru rambursari.
+     *
+     * Iar o rambursare vine INTOTDEAUNA dupa o plata reusita, deci randul e chiar
+     * `paid` in acel moment: garda le-ar fi respins pe TOATE, tacut. Adica reparatia
+     * ar fi stricat singurul lucru pe care il face aceasta ramura.
      */
     const { error } = await admin
       .from("orders")
       .update({ payment_status: newPaymentStatus, updated_at: new Date().toISOString() })
-      .eq("id", orderId)
-      .neq("payment_status", "paid");
+      .eq("id", orderId);
     if (error) {
       await logError({
         action: "netopia/notify", message: error.message,

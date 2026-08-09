@@ -236,31 +236,27 @@ export async function requestCargusPickupAction(
   }
 
   /*
-   * Ridicarea e un efect extern fara comanda: cheama curierul la punctul de lucru.
-   * Doua apasari = curierul chemat de doua ori, si Cargus n-are anulare aici.
+   * ⚠ RIDICAREA CARGUS NU INTRA SUB REGISTRU, SI E O DECIZIE.
    *
-   * Discriminantul e FEREASTRA ceruta, nu ziua: doua apasari pe acelasi interval
-   * sunt un duplicat, dar o a doua ridicare pe alt interval e legitima si trebuie
-   * sa treaca. `orderId` ramane null — nu tine de nicio comanda.
+   * Am pus-o, cu cheia pe fereastra ceruta. Dar `validateCargusPickupOrder` nu
+   * „creeaza o ridicare noua": inchide (lanseaza) comanda DESCHISA de pe punctul de
+   * ridicare, adica AWB-urile existente in acel moment. E repetabila prin
+   * proiectare — dupa ce mai generezi AWB-uri, o a doua validare e chiar ce trebuie
+   * facut.
+   *
+   * Iar modalul porneste MEREU de la aceleasi valori implicite (azi, 10:00-17:00),
+   * deci cheia ar fi fost identica: a doua validare legitima din aceeasi zi ar fi
+   * fost inghitita, cu confirmare falsa, si AWB-urile noi ar fi ramas neridicate.
+   *
+   * Duplicatul real aici — doua apasari la rand, fara AWB-uri noi intre ele — e
+   * inofensiv: a doua validare inchide o comanda deja goala.
    */
-  const r = await cuRegistru(
-    admin,
-    {
-      businessId,
-      orderId: null,
-      fel: "ridicare",
-      furnizor: "cargus",
-      cheie: cheieOperatie("ridicare", "cargus", `${input.pickupStart}..${input.pickupEnd}`),
-    },
-    async () => {
-      const idRidicare = await validateCargusPickupOrder(config, input);
-      return { referinta: String(idRidicare), valoare: { orderId: idRidicare } };
-    },
-    verdictFurnizor,
-  );
-
-  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
-  return { orderId: r.fel === "facut" ? r.valoare.orderId : (r.referinta ?? "") };
+  try {
+    const orderId = await validateCargusPickupOrder(config, input);
+    return { orderId };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function deleteCargusAwbAction(

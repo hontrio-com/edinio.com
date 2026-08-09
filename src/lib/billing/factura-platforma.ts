@@ -57,8 +57,19 @@ function verdictPlatforma(e: unknown): Verdict {
   const m = e instanceof Error ? e.message : String(e);
   // Configurare lipsa: nu se trimite nimic nicaieri.
   if (m === "Smartbill not configured (missing env vars)") return "esuat";
-  // Status fara nicio explicatie de la ei — n-avem ce dovedi.
-  if (/^HTTP \d+$/.test(m)) return "necunoscut";
+  /*
+   * `HTTP <status>` se compune DOAR cand corpul n-are `errorText` — adica exact
+   * refuzurile de nivel transport: 401 (token rotit), 403, 404, 429. Acelea sunt
+   * refuzuri DOVEDITE: SmartBill n-a apucat sa proceseze nimic, iar reincercarea
+   * dupa reconfigurare trebuie sa ramana libera.
+   *
+   * 408 si 5xx raman „nu stim": acolo cererea a ajuns si documentul poate exista.
+   */
+  const stare = /^HTTP (\d+)$/.exec(m);
+  if (stare) {
+    const cod = Number(stare[1]);
+    return cod >= 400 && cod < 500 && cod !== 408 ? "esuat" : "necunoscut";
+  }
   // 200 fara serie/numar: nici ei nu spun ce a iesit.
   if (m.startsWith("Missing series/number in response:")) return "necunoscut";
   // `catch { return { error: String(err) } }` — retea cazuta, JSON stricat.

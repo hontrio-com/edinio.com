@@ -232,6 +232,57 @@ export async function GET(req: NextRequest) {
         return vechi.length ? `cozi in crestere: ${vechi.join(", ")}` : null;
       },
     },
+    {
+      nume: "nicio operatie externa atarnata de mult",
+      ruleaza: async () => {
+        /*
+         * O operatie ramasa `in_curs` sau `necunoscut` inseamna ca un AWB sau un
+         * document fiscal S-AR PUTEA sa existe la furnizor fara ca noi sa stim — si
+         * ca butonul care ar reface-o e blocat pana cand se uita un om.
+         *
+         * Panoul din pagina comenzii o arata comerciantului, dar numai daca acesta
+         * deschide chiar acea comanda. Santinela e singurul loc care se uita peste
+         * TOATE magazinele.
+         *
+         * ⚠ Pragul e de o ORA, mult peste cel de 3 minute din panou: aici nu ne
+         * intereseaza ce e in zbor sau ce tocmai s-a blocat si va fi rezolvat azi,
+         * ci ce a ramas uitat. O alarma la fiecare timeout ar fi zgomot.
+         */
+        const acumOOra = new Date(Date.now() - 3600_000).toISOString();
+        /*
+         * `count: "exact"` PE LANGA randuri, nu in locul lor.
+         *
+         * Prima forma numara `data.length` dupa `.limit(20)` — deci raporta „20
+         * operatii atarnate" si cand erau 500, adica exact cifra dupa care cineva ar
+         * judeca gravitatea. Plafonul ramane (nu vrem sa caram sute de randuri), dar
+         * numarul care ajunge in mesaj e cel adevarat.
+         */
+        const r = await admin
+          .from("operatii_externe")
+          .select("fel, furnizor, order_number, creat_la", { count: "exact" })
+          .in("stare", ["in_curs", "necunoscut"])
+          .lt("creat_la", acumOOra)
+          .order("creat_la", { ascending: true })
+          .limit(5);
+
+        // `error` verificat, nu doar lungimea: o citire picata ar da lista goala,
+        // adica „totul e in regula" tocmai cand nu putem sti.
+        if (r.error) return `citirea operatiilor externe a esuat: ${r.error.message}`;
+        const cate = r.count ?? 0;
+        if (cate === 0) return null;
+
+        const rezumat = (r.data ?? [])
+          .map((o) => `${o.fel}/${o.furnizor}${o.order_number ? ` pe ${o.order_number}` : " (platforma)"}`)
+          .join(", ");
+        /*
+         * Alarma se stinge cand cineva deblocheaza operatia — din pagina comenzii
+         * (comerciantul) sau din /admin/operatii (administratorul, si singurul drum
+         * pentru cele fara comanda). De aceea mesajul spune UNDE se rezolva: o alarma
+         * care nu se poate stinge devine zgomot in doua zile.
+         */
+        return `${cate} operatii externe atarnate de peste o ora (${rezumat}${cate > 5 ? " …" : ""}). Se rezolva din /admin/operatii.`;
+      },
+    },
   ];
 
   const rezultate: { nume: string; ok: boolean; motiv?: string }[] = [];

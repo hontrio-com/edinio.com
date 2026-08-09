@@ -176,6 +176,9 @@ function eticheta(op: OperatieAtarnata): string {
       : op.fel === "plata" ? "Plata"
       : op.fel === "incasare" ? "Incasarea"
       : op.fel === "rambursare" ? "Rambursarea"
+      : op.fel === "publicare" ? "Publicarea pe marketplace"
+      : op.fel === "retragere" ? "Retragerea de pe marketplace"
+      : op.fel === "expediere" ? "Confirmarea expedierii"
       : "Operatia";
   // `in_curs` si `necunoscut` nu inseamna acelasi lucru pentru cel care citeste:
   // primul e „a plecat si nu s-a mai auzit nimic", al doilea „a raspuns prost".

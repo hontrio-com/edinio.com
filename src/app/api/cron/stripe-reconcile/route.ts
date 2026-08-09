@@ -66,11 +66,39 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
   }
 
-  if (!orders || orders.length === 0) {
-    return NextResponse.json({ ok: true, checked: 0, paid: 0 });
+  /*
+   * ⚠ AICI ERA UN `return` CARE FACEA A DOUA TRECERE COD MORT.
+   *
+   * Cand prima interogare (comenzi CU `stripe_session_id`) nu gasea nimic — cazul
+   * normal — functia iesea, iar recuperarea comenzilor ORFANE de mai jos nu rula
+   * niciodata. Adica exact partea scrisa pentru cazul rar nu se executa tocmai in
+   * situatia obisnuita.
+   */
+  const { data: orfane, error: eOrfane } = await admin
+    .from("orders")
+    .select("id, business_id, total, status")
+    .eq("payment_status", "unpaid")
+    .eq("payment_method", "stripe")
+    .is("stripe_session_id", null)
+    .not("status", "in", "(cancelled,refunded)")
+    .gte("created_at", since)
+    .limit(200);
+
+  if (eOrfane) {
+    await logError({ action: "stripe-reconcile", message: `comenzile orfane nu s-au putut citi: ${eOrfane.message}`, severity: "critical" });
+    return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
   }
 
-  const bizIds = [...new Set(orders.map((o) => o.business_id))];
+  const listaOrdine = orders ?? [];
+  const listaOrfane = orfane ?? [];
+  if (listaOrdine.length === 0 && listaOrfane.length === 0) {
+    return NextResponse.json({ ok: true, checked: 0, paid: 0, recuperate: 0 });
+  }
+
+  // `bizIds` cuprinde AMANDOUA listele: altfel `cfgMap` n-ar contine tocmai
+  // magazinele care au DOAR comenzi orfane, adica exact cele pentru care s-a scris
+  // a doua trecere.
+  const bizIds = [...new Set([...listaOrdine, ...listaOrfane].map((o) => o.business_id))];
   const { data: settingsRows, error: eCfg } = await admin
     .from("store_settings")
     .select("business_id, stripe_config")
@@ -86,7 +114,7 @@ export async function GET(req: NextRequest) {
   let checked = 0;
   let paid = 0;
 
-  for (const o of orders) {
+  for (const o of listaOrdine) {
     const accountId = cfgMap.get(o.business_id);
     if (!accountId || !o.stripe_session_id) continue;
     checked++;
@@ -123,21 +151,9 @@ export async function GET(req: NextRequest) {
    * normal nu pleaca niciun apel in plus la Stripe.
    */
   let recuperate = 0;
-  const { data: orfane, error: eOrfane } = await admin
-    .from("orders")
-    .select("id, business_id, total, status")
-    .eq("payment_status", "unpaid")
-    .eq("payment_method", "stripe")
-    .is("stripe_session_id", null)
-    .not("status", "in", "(cancelled,refunded)")
-    .gte("created_at", since)
-    .limit(200);
-
-  if (eOrfane) {
-    await logError({ action: "stripe-reconcile", message: `comenzile orfane nu s-au putut citi: ${eOrfane.message}`, severity: "critical" });
-  } else if (orfane && orfane.length > 0) {
-    const dupaMagazin = new Map<string, typeof orfane>();
-    for (const o of orfane) {
+  if (listaOrfane.length > 0) {
+    const dupaMagazin = new Map<string, typeof listaOrfane>();
+    for (const o of listaOrfane) {
       const lista = dupaMagazin.get(o.business_id) ?? [];
       lista.push(o);
       dupaMagazin.set(o.business_id, lista);

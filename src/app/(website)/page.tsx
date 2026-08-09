@@ -6,7 +6,7 @@ import { Hero } from "@/components/website/sections/Hero";
 import { Problem } from "@/components/website/sections/Problem";
 import { Features } from "@/components/website/sections/Features";
 import { IntegrationsBenzi } from "@/components/website/sections/integrations/IntegrationsBenzi";
-import { DemoSection } from "@/components/website/DemoSection";
+import { Comparison } from "@/components/website/sections/Comparison";
 import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
 import { PlatformEvent } from "@/components/platform/PlatformEvent";
@@ -155,7 +155,7 @@ export default function LandingPage() {
       {/* A luat locul lui `HowItWorksSection`, stearsa odata cu asta. Ancora ei,
           `#cum-functioneaza`, nu era tintita de niciun link — verificat. */}
       <IntegrationsBenzi />
-      <DemoSection />
+      <Comparison />
       <PricingSection />
       <FAQSection />
 

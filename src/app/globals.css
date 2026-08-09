@@ -460,13 +460,31 @@
    pata. Socoteala: o umbra de culoarea #101428 (luminanta 21) la opacitatea
    efectiva `a` da peste alb 255 - 234a, deci pentru 237 trebuie a ≈ 0,08 chiar
    sub muchie. De acolo ies valorile de mai jos. */
-.caseta-sigla {
-  background-color: #FFFFFF;
-  box-shadow:
+/* Reteta sta intr-o variabila fiindca o folosesc DOUA lucruri: casetele de sigle
+   si placa tabelului de comparatie. Comentariul de mai sus cere explicit ca, daca
+   se schimba un strat, sa se schimbe toate — o sursa de lumina incoerenta intre
+   doua obiecte de pe aceeasi pagina e chiar ce le face sa para desenate, nu
+   asezate. Cu doua copii ale valorilor, regula aia ar fi tinut doar cat timp
+   cineva isi aminteste de a doua. */
+:root {
+  --umbra-placa:
     0 0 0 1px rgba(16, 20, 40, 0.06),
     0 2px 4px rgba(16, 20, 40, 0.08),
     0 10px 22px -8px rgba(16, 20, 40, 0.3),
     inset 0 -1px 0 rgba(16, 20, 40, 0.06);
+}
+
+.caseta-sigla {
+  background-color: #FFFFFF;
+  box-shadow: var(--umbra-placa);
+}
+
+/* Placa tabelului de comparatie. Aceeasi ridicare ca la casetele de sigle, din
+   acelasi motiv: pagina e alba, placa e alba, deci nu se poate deosebi prin
+   culoare. Vezi mai sus ce face fiecare dintre cele patru straturi. */
+.placa {
+  background-color: #FFFFFF;
+  box-shadow: var(--umbra-placa);
 }
 
 /* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────

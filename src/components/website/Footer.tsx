@@ -4,7 +4,14 @@ import { Logo } from "@/components/ui/Logo";
 
 const PRODUCT_LINKS = [
   { href: "/#functionalitati", label: "Funcționalități" },
-  { href: "/#demo", label: "Demo interactiv" },
+  /*
+    Ancora era `#demo`, iar demo-ul interactiv a fost inlocuit pe prima pagina cu
+    tabelul de comparatie (2026-08-09). Fara randul asta ar fi ramas un link de
+    meniu care nu duce nicaieri — aceeasi fundatura ca cele doua linkuri catre
+    `/migrare`. Eticheta e insa pusa de mine, nu de client: daca vrea alt cuvant,
+    aici se schimba.
+  */
+  { href: "/#comparatie", label: "Comparație" },
   { href: "/#preturi", label: "Prețuri" },
   { href: "/#faq", label: "Întrebări frecvente" },
 ];

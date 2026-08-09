@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logError } from "@/lib/error-logger";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -70,9 +71,25 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 1) Drain the sync queue, grouped by business ────────────────────────────────
-  const { data: queue } = await admin
-    .from("aboutyou_sync_queue").select("id, business_id, product_id, offer_id, op, attempts")
-    .order("created_at", { ascending: true }).limit(QUEUE_BATCH);
+  /*
+   * Randurile se REVENDICA, nu doar se citesc.
+   *
+   * Cronul asta porneste din minut in minut si face apeluri externe care pot
+   * dura. Cu un simplu `select ... limit N`, o rulare mai lunga de un minut si
+   * urmatoarea citesc ACELEASI randuri — si trimit de doua ori la marketplace.
+   *
+   * `revendica_din_coada` le incuie (`for update skip locked`) si le marcheaza cu
+   * un termen: al doilea lucrator primeste randurile URMATOARE, nu aceleasi. Vezi
+   * migratia `2026-08-19-lease-cozi-marketplace`.
+   */
+  const { data: revendicate, error: eCoada } = await admin.rpc("revendica_din_coada" as never, {
+    p_coada: "aboutyou_sync_queue", p_limita: QUEUE_BATCH,
+  } as never);
+  if (eCoada) {
+    await logError({ action: "aboutyou-sync", message: `coada nu s-a putut revendica: ${eCoada.message}`, severity: "critical" });
+    return NextResponse.json({ ok: false, error: "coada indisponibila" }, { status: 503 });
+  }
+  const queue = ((revendicate ?? []) as unknown as Record<string, unknown>[]) as unknown as AboutYouQueueItem[];
 
   const byBiz = new Map<string, AboutYouQueueItem[]>();
   for (const item of (queue ?? []) as AboutYouQueueItem[]) {

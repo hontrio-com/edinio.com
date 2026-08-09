@@ -2243,6 +2243,56 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.revendica_din_coada(p_coada text, p_limita integer DEFAULT 50, p_lease interval DEFAULT '00:05:00'::interval)
+ RETURNS SETOF jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_permise constant text[] := array[
+    'gmc_sync_queue', 'olx_sync_queue', 'trendyol_sync_queue', 'aboutyou_sync_queue'];
+begin
+  /*
+   * Ia randuri din coada SI LE INCUIE, ca doua rulari sa nu apuce aceleasi.
+   *
+   * Cele patru cronuri de marketplace pornesc din minut in minut si fac apeluri
+   * externe (Google, OLX, Trendyol, About You), care pot dura. Tiparul de pana
+   * acum era: SELECT primele N -> apel extern -> DELETE. Daca o rulare depaseste
+   * un minut, urmatoarea CITESTE ACELEASI randuri si trimite a doua oara.
+   *
+   * `for update skip locked` face ca al doilea lucrator sa treaca peste ce e
+   * incuiat, in loc sa astepte — deci ia randurile URMATOARE si munca merge in
+   * paralel, corect, fara sa se calce.
+   *
+   * `revendicat_pana` e a doua plasa: daca un lucrator moare la mijloc (limita de
+   * timp a functiei), lacatul lui dispare odata cu tranzactia, dar marcajul
+   * ramane si tine randul deoparte cinci minute. Fara el, un rand mereu picat ar
+   * fi reluat de fiecare rulare, la nesfarsit.
+   *
+   * Numele tabelei se compune dinamic, deci trece printr-o lista PERMISA. Cu una
+   * interzisa, o coada noua ar fi fost acceptata din prima zi fara sa se uite
+   * nimeni la ea.
+   */
+  if not (p_coada = any(v_permise)) then
+    raise exception 'coada necunoscuta: %', p_coada;
+  end if;
+
+  return query execute format($f$
+    update public.%I q
+       set revendicat_pana = now() + $1
+     where q.id in (
+       select c.id from public.%I c
+        where c.revendicat_pana is null or c.revendicat_pana < now()
+        order by c.created_at
+        limit $2
+        for update skip locked)
+    returning to_jsonb(q.*)
+  $f$, p_coada, p_coada) using p_lease, p_limita;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.revendica_stoc_batch(p_items jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3036,7 +3086,8 @@ create table if not exists public.aboutyou_sync_queue (
   op text default 'upsert'::text not null,
   attempts integer default 0 not null,
   last_error text,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  revendicat_pana timestamp with time zone);
 
 create table if not exists public.aboutyou_variants (
   id uuid default gen_random_uuid() not null,
@@ -3329,7 +3380,8 @@ create table if not exists public.gmc_sync_queue (
   offer_id text not null,
   op text default 'upsert'::text not null,
   attempts integer default 0 not null,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  revendicat_pana timestamp with time zone);
 
 create table if not exists public.invoices (
   id uuid default gen_random_uuid() not null,
@@ -3451,7 +3503,8 @@ create table if not exists public.olx_sync_queue (
   op text default 'upsert'::text not null,
   attempts integer default 0 not null,
   last_error text,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  revendicat_pana timestamp with time zone);
 
 create table if not exists public.orders (
   id uuid default gen_random_uuid() not null,
@@ -3758,7 +3811,8 @@ create table if not exists public.trendyol_sync_queue (
   op text default 'upsert'::text not null,
   attempts integer default 0 not null,
   last_error text,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  revendicat_pana timestamp with time zone);
 
 create table if not exists public.trendyol_variants (
   id uuid default gen_random_uuid() not null,
@@ -4047,6 +4101,7 @@ CREATE INDEX idx_aboutyou_listings_stale_status ON public.aboutyou_listings USIN
 CREATE INDEX idx_aboutyou_orders_business_status ON public.aboutyou_orders USING btree (business_id, status);
 CREATE INDEX idx_aboutyou_orders_order ON public.aboutyou_orders USING btree (order_id);
 CREATE INDEX idx_aboutyou_queue_created ON public.aboutyou_sync_queue USING btree (created_at);
+CREATE INDEX idx_aboutyou_queue_revendicat ON public.aboutyou_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX idx_aboutyou_sync_queue_product ON public.aboutyou_sync_queue USING btree (product_id);
 CREATE INDEX idx_aboutyou_variants_business_sku ON public.aboutyou_variants USING btree (business_id, sku);
 CREATE INDEX idx_aboutyou_variants_listing ON public.aboutyou_variants USING btree (listing_id);
@@ -4066,6 +4121,7 @@ CREATE INDEX idx_email_automations_user ON public.email_automations USING btree 
 CREATE INDEX idx_error_logs_action ON public.error_logs USING btree (action);
 CREATE INDEX idx_error_logs_created_at ON public.error_logs USING btree (created_at DESC);
 CREATE INDEX idx_error_logs_severity ON public.error_logs USING btree (severity);
+CREATE INDEX idx_gmc_queue_revendicat ON public.gmc_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX idx_invoices_user_id ON public.invoices USING btree (user_id);
 CREATE INDEX idx_notifications_user_id ON public.notifications USING btree (user_id);
 CREATE INDEX idx_notifications_user_unread ON public.notifications USING btree (user_id, is_read) WHERE (is_read = false);
@@ -4073,6 +4129,7 @@ CREATE INDEX idx_olx_adverts_business_status ON public.olx_adverts USING btree (
 CREATE INDEX idx_olx_adverts_stale_status ON public.olx_adverts USING btree (last_status_at NULLS FIRST);
 CREATE INDEX idx_olx_adverts_valid_to ON public.olx_adverts USING btree (valid_to);
 CREATE INDEX idx_olx_queue_created ON public.olx_sync_queue USING btree (created_at);
+CREATE INDEX idx_olx_queue_revendicat ON public.olx_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX idx_orders_business_created ON public.orders USING btree (business_id, created_at DESC);
 CREATE INDEX idx_orders_business_id ON public.orders USING btree (business_id);
 CREATE INDEX idx_orders_business_normphone ON public.orders USING btree (business_id, normalize_phone(customer_phone));
@@ -4100,6 +4157,7 @@ CREATE INDEX idx_trendyol_orders_business_status ON public.trendyol_orders USING
 CREATE INDEX idx_trendyol_orders_order ON public.trendyol_orders USING btree (order_id);
 CREATE INDEX idx_trendyol_queue_created ON public.trendyol_sync_queue USING btree (created_at);
 CREATE INDEX idx_trendyol_queue_product ON public.trendyol_sync_queue USING btree (product_id);
+CREATE INDEX idx_trendyol_queue_revendicat ON public.trendyol_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX idx_trendyol_variants_business_barcode ON public.trendyol_variants USING btree (business_id, barcode);
 CREATE INDEX idx_trendyol_variants_listing ON public.trendyol_variants USING btree (listing_id);
 CREATE INDEX idx_trendyol_variants_product ON public.trendyol_variants USING btree (product_id);
@@ -5967,6 +6025,7 @@ grant execute on function public.repretuieste_pachetele_cu(p_component_id uuid) 
 grant execute on function public.reserve_payout_balance(p_user_id uuid, p_amount integer) to service_role;
 grant execute on function public.reseteaza_limita(p_cheie text) to service_role;
 grant execute on function public.restaureaza_variante_batch(p_items jsonb) to service_role;
+grant execute on function public.revendica_din_coada(p_coada text, p_limita integer, p_lease interval) to service_role;
 grant execute on function public.revendica_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.revendica_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;

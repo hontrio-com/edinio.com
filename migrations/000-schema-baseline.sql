@@ -1472,9 +1472,6 @@ CREATE OR REPLACE FUNCTION public.genereaza_schema_baseline()
  SET statement_timeout TO '120s'
 AS $function$
 declare
-  -- AMANDOUA schemele aplicatiei. `privat` nu e optionala: acolo stau tabelul
-  -- REAL `store_settings` (cel criptat) si functiile de criptare pe care le
-  -- cheama vederea din `public`. Fara ea, baseline-ul nici nu se poate aplica.
   c_scheme constant text[] := array['public', 'privat'];
   o text := '';
   p text;
@@ -1487,18 +1484,14 @@ begin
          || E'set check_function_bodies = off;\n\n'
          || E'create schema if not exists privat;\n\n';
 
-  select coalesce(string_agg(format('create extension if not exists %I with schema %I;',
-           e.extname, n.nspname), E'\n' order by e.extname), '')
-    into p from pg_extension e join pg_namespace n on n.oid = e.extnamespace
-   where e.extname <> 'plpgsql';
+  select coalesce(string_agg(format('create extension if not exists %I with schema %I;', e.extname, n.nspname), E'\n' order by e.extname), '')
+    into p from pg_extension e join pg_namespace n on n.oid = e.extnamespace where e.extname <> 'plpgsql';
   o := o || E'-- ── EXTENSII ──────────────────────────────────────────────\n' || p || E'\n\n';
 
   select coalesce(string_agg(format('create type %I.%I as enum (%s);', n.nspname, t.typname, vals), E'\n' order by n.nspname, t.typname), '')
-    into p
-  from pg_type t join pg_namespace n on n.oid = t.typnamespace
-  cross join lateral (select string_agg(quote_literal(e.enumlabel), ', ' order by e.enumsortorder) as vals
-                        from pg_enum e where e.enumtypid = t.oid) v
-  where n.nspname = any(c_scheme) and t.typtype = 'e';
+    into p from pg_type t join pg_namespace n on n.oid = t.typnamespace
+    cross join lateral (select string_agg(quote_literal(e.enumlabel), ', ' order by e.enumsortorder) as vals from pg_enum e where e.enumtypid = t.oid) v
+   where n.nspname = any(c_scheme) and t.typtype = 'e';
   o := o || E'-- ── TIPURI ────────────────────────────────────────────────\n' || p || E'\n\n';
 
   select coalesce(string_agg(format('create sequence if not exists %I.%I;', schemaname, sequencename), E'\n' order by schemaname, sequencename), '')
@@ -1518,10 +1511,26 @@ begin
       cross join lateral (
         select string_agg(
                  format('%I %s%s%s', a.attname, format_type(a.atttypid, a.atttypmod),
-                        case when a.attidentity <> '' then ' generated ' ||
+                        case
+                          /*
+                           * COLOANELE GENERATE, nu `default`.
+                           *
+                           * `pg_attrdef` tine si expresia unei coloane generate, iar
+                           * forma dintai o scria ca `default <expresie>`. Doua urmari,
+                           * amandoua rele: pe o baza goala nici nu se aplica (un
+                           * `default` nu poate citi alta coloana), iar daca s-ar fi
+                           * aplicat ar fi iesit o coloana OBISNUITA cu valoare
+                           * initiala — care nu se recalculeaza niciodata.
+                           * `customers.key` e cheia de dedublare a clientilor: ca
+                           * `default`, n-ar mai urmari schimbarea telefonului sau a
+                           * emailului. Gasit de proba de restaurare pe baza goala.
+                           */
+                          when a.attgenerated = 's'
+                            then ' generated always as (' || pg_get_expr(ad.adbin, ad.adrelid) || ') stored'
+                          when a.attidentity <> '' then ' generated ' ||
                              case a.attidentity when 'a' then 'always' else 'by default' end || ' as identity'
-                             when ad.adbin is not null then ' default ' || pg_get_expr(ad.adbin, ad.adrelid)
-                             else '' end,
+                          when ad.adbin is not null then ' default ' || pg_get_expr(ad.adbin, ad.adrelid)
+                          else '' end,
                         case when a.attnotnull then ' not null' else '' end),
                  E',\n  ' order by a.attnum) as cols
           from pg_attribute a
@@ -1531,8 +1540,8 @@ begin
   ) t;
   o := o || E'-- ── TABELE ────────────────────────────────────────────────\n' || p || E'\n\n';
 
-  select coalesce(string_agg(format('alter table %I.%I add constraint %I %s;', n.nspname, r.relname, c.conname, pg_get_constraintdef(c.oid)),
-           E'\n' order by case c.contype when 'p' then 0 when 'u' then 1 when 'c' then 2 else 3 end, n.nspname, r.relname, c.conname), '')
+  select coalesce(string_agg(format('alter table %I.%I add constraint %I %s;', n.nspname, r.relname, c.conname, pg_get_constraintdef(c.oid)), E'\n'
+           order by case c.contype when 'p' then 0 when 'u' then 1 when 'c' then 2 else 3 end, n.nspname, r.relname, c.conname), '')
     into p from pg_constraint c join pg_class r on r.oid = c.conrelid join pg_namespace n on n.oid = r.relnamespace
    where n.nspname = any(c_scheme) and r.relkind = 'r';
   o := o || E'-- ── CONSTRANGERI ──────────────────────────────────────────\n' || p || E'\n\n';
@@ -1544,11 +1553,9 @@ begin
   o := o || E'-- ── INDEXURI ──────────────────────────────────────────────\n' || p || E'\n\n';
 
   select coalesce(string_agg(format('create or replace view %I.%I%s as%s%s', schemaname, viewname,
-           case when viewname = 'store_settings' then ' with (security_invoker = true)' else '' end,
-           E'\n', definition), E'\n\n' order by schemaname, viewname), '')
+           case when viewname = 'store_settings' then ' with (security_invoker = true)' else '' end, E'\n', definition), E'\n\n' order by schemaname, viewname), '')
     into p from pg_views where schemaname = any(c_scheme);
-  o := o || E'-- ── VEDERI ────────────────────────────────────────────────\n'
-         || E'-- ATENTIE: `security_invoker` pe store_settings NU e optional.\n' || p || E'\n\n';
+  o := o || E'-- ── VEDERI ────────────────────────────────────────────────\n-- ATENTIE: `security_invoker` pe store_settings NU e optional.\n' || p || E'\n\n';
 
   select coalesce(string_agg(pg_get_triggerdef(t.oid) || ';', E'\n' order by n.nspname, c.relname, t.tgname), '')
     into p from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
@@ -1561,8 +1568,7 @@ begin
   o := o || E'-- ── RLS ───────────────────────────────────────────────────\n' || p || E'\n\n';
 
   select coalesce(string_agg(format('create policy %I on %I.%I as %s for %s to %s%s%s;',
-           pol.policyname, pol.schemaname, pol.tablename, pol.permissive, pol.cmd,
-           array_to_string(pol.roles, ', '),
+           pol.policyname, pol.schemaname, pol.tablename, pol.permissive, pol.cmd, array_to_string(pol.roles, ', '),
            case when pol.qual is null then '' else ' using (' || pol.qual || ')' end,
            case when pol.with_check is null then '' else ' with check (' || pol.with_check || ')' end),
            E'\n' order by pol.schemaname, pol.tablename, pol.policyname), '')
@@ -1570,11 +1576,8 @@ begin
   o := o || p || E'\n\n';
 
   select coalesce(string_agg(format('grant usage on schema %I to %I;', nspname, r), E'\n' order by nspname, r), '')
-    into p
-  from pg_namespace n
-  cross join lateral (select unnest(array['anon','authenticated','service_role']) as r) g
-  where n.nspname = any(c_scheme)
-    and has_schema_privilege(g.r, n.oid, 'USAGE');
+    into p from pg_namespace n cross join lateral (select unnest(array['anon','authenticated','service_role']) as r) g
+   where n.nspname = any(c_scheme) and has_schema_privilege(g.r, n.oid, 'USAGE');
   o := o || E'-- ── ACCES LA SCHEME ───────────────────────────────────────\n' || p || E'\n\n';
 
   select coalesce(string_agg(format('grant %s on table %I.%I to %I;', privilege_type, table_schema, table_name, grantee),
@@ -1593,8 +1596,7 @@ begin
   o := o || E'-- ── GRANTURI PE COLOANA (RLS verifica RANDURI, nu COLOANE) ─\n' || p || E'\n\n';
 
   select coalesce(string_agg(format('grant execute on function %I.%I(%s) to %I;',
-           n.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid), a.grantee),
-           E'\n' order by n.nspname, pr.proname, a.grantee), '')
+           n.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid), a.grantee), E'\n' order by n.nspname, pr.proname, a.grantee), '')
     into p from pg_proc pr join pg_namespace n on n.oid = pr.pronamespace
     cross join lateral aclexplode(coalesce(pr.proacl, acldefault('f', pr.proowner))) x
     cross join lateral (select pg_get_userbyid(x.grantee) as grantee) a
@@ -1602,7 +1604,6 @@ begin
      and a.grantee in ('anon', 'authenticated', 'service_role');
   o := o || E'-- ── GRANTURI PE FUNCTII ───────────────────────────────────\n' || p || E'\n\n'
          || E'notify pgrst, ''reload schema'';\n';
-
   return o;
 end;
 $function$
@@ -3240,7 +3241,7 @@ create table if not exists public.catalog_cuvant (
   business_id uuid not null,
   cuvant text not null,
   cate integer default 0 not null,
-  semnatura text default semnatura_cuvant(cuvant));
+  semnatura text generated always as (semnatura_cuvant(cuvant)) stored);
 
 create table if not exists public.catalog_cuvinte_murdar (
   business_id uuid not null,
@@ -3333,11 +3334,11 @@ create table if not exists public.customers (
   postcode text,
   source text default 'import'::text not null,
   external_id text,
-  key text default COALESCE(NULLIF(normalize_phone(phone), ''::text),
+  key text generated always as (COALESCE(NULLIF(normalize_phone(phone), ''::text),
 CASE
     WHEN (NULLIF(lower(TRIM(BOTH FROM COALESCE(email, ''::text))), ''::text) IS NOT NULL) THEN ('email:'::text || lower(TRIM(BOTH FROM email)))
     ELSE NULL::text
-END) not null,
+END)) stored not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null);
 

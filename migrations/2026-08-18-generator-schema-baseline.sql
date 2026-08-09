@@ -83,10 +83,30 @@ begin
       cross join lateral (
         select string_agg(
                  format('%I %s%s%s', a.attname, format_type(a.atttypid, a.atttypmod),
-                        case when a.attidentity <> '' then ' generated ' ||
+                        case
+                          /*
+                           * ⚠ COLOANELE GENERATE, nu `default`.
+                           *
+                           * `pg_attrdef` tine si expresia unei coloane generate, iar
+                           * forma dintai o scria ca `default <expresie>`. Doua urmari,
+                           * amandoua rele: pe o baza goala nici nu se aplica (un
+                           * `default` nu poate citi alta coloana), iar daca s-ar fi
+                           * aplicat ar fi iesit o coloana OBISNUITA cu valoare
+                           * initiala — care nu se recalculeaza niciodata.
+                           * `customers.key` e cheia de dedublare a clientilor: ca
+                           * `default` n-ar mai fi urmarit schimbarea telefonului sau
+                           * a emailului.
+                           *
+                           * Gasit de proba de restaurare pe baza goala, la prima ei
+                           * rulare adevarata. Exact rostul ei: baseline-ul „arata
+                           * bine" si era gresit.
+                           */
+                          when a.attgenerated = 's'
+                            then ' generated always as (' || pg_get_expr(ad.adbin, ad.adrelid) || ') stored'
+                          when a.attidentity <> '' then ' generated ' ||
                              case a.attidentity when 'a' then 'always' else 'by default' end || ' as identity'
-                             when ad.adbin is not null then ' default ' || pg_get_expr(ad.adbin, ad.adrelid)
-                             else '' end,
+                          when ad.adbin is not null then ' default ' || pg_get_expr(ad.adbin, ad.adrelid)
+                          else '' end,
                         case when a.attnotnull then ' not null' else '' end),
                  E',\n  ' order by a.attnum) as cols
           from pg_attribute a

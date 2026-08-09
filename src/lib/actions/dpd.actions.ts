@@ -287,12 +287,37 @@ export async function requestDpdPickupAction(
     return { error: "Nu exista AWB-uri DPD generate in ultimele 24 de ore. Genereaza AWB-urile inainte de a chema curierul." };
   }
 
-  try {
-    await requestDpdCourierPickup(config, ids);
-    return { count: ids.length };
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
+  /*
+   * Discriminantul e CHIAR SETUL de AWB-uri cerute, nu ziua.
+   *
+   * Doua apasari cu aceleasi colete = curierul chemat de doua ori pentru aceeasi
+   * marfa, adica duplicatul. Dar daca intre timp s-au mai generat AWB-uri, setul e
+   * altul si a doua chemare e legitima — o cheie pe zi ar fi blocat-o, si tocmai
+   * marfa noua ar fi ramas neridicata.
+   *
+   * Se hasheaza fiindca lista poate fi lunga; sortata, ca ordinea sa nu conteze.
+   */
+  const { createHash } = await import("node:crypto");
+  const amprenta = createHash("sha1").update([...ids].sort().join(",")).digest("hex").slice(0, 16);
+
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId: null,
+      fel: "ridicare",
+      furnizor: "dpd",
+      cheie: cheieOperatie("ridicare", "dpd", amprenta),
+    },
+    async () => {
+      await requestDpdCourierPickup(config, ids);
+      return { referinta: amprenta, detalii: { colete: ids.length }, valoare: { count: ids.length } };
+    },
+    verdictFurnizor,
+  );
+
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  return { count: r.fel === "facut" ? r.valoare.count : ids.length };
 }
 
 export async function cancelDpdShipmentAction(

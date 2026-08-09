@@ -210,23 +210,57 @@ export async function createFanCourierPickupAction(
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config } = ctx;
 
-  try {
-    const orderId = await createFanCourierPickupOrder(config, input);
+  /*
+   * ⚠ AICI DUPLICATUL ERA MAI RAU DECAT LA CEILALTI.
+   *
+   * Nu exista nicio garda pe server (doar `hasActivePickup` in modal), iar scrierea
+   * de mai jos SUPRASCRIE `last_pickup_id`. Deci a doua apasare chema FAN a doua
+   * oara SI facea prima ridicare NEANULABILA — `cancelFanCourierPickupAction`
+   * raspunde „Nu exista o ridicare programata care sa poata fi anulata" fara acel id.
+   *
+   * Discriminantul e ZIUA ceruta: doua apasari pe aceeasi zi sunt duplicat, o
+   * ridicare pentru alta zi e legitima.
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId: null,
+      fel: "ridicare",
+      furnizor: "fancourier",
+      cheie: cheieOperatie("ridicare", "fancourier", input.pickupDate),
+    },
+    async () => {
+      const idRidicare = await createFanCourierPickupOrder(config, input);
+      return { referinta: String(idRidicare ?? ""), valoare: { orderId: idRidicare } };
+    },
+    verdictFurnizor,
+  );
 
-    // Remember the last pickup so the UI can warn about duplicates / allow cancel.
-    await supabase.from("store_settings").update({
-      fan_courier_config: {
-        ...config,
-        last_pickup_date: input.pickupDate,
-        last_pickup_id: orderId || null,
-      } as unknown as import("@/types/database.types").Json,
-      updated_at: new Date().toISOString(),
-    }).eq("business_id", businessId);
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  const idRidicare = r.fel === "facut" ? r.valoare.orderId : (r.referinta ?? "");
 
-    return { orderId };
-  } catch (e) {
-    return { error: (e as Error).message };
+  // Remember the last pickup so the UI can warn about duplicates / allow cancel.
+  const { error: eScriere } = await supabase.from("store_settings").update({
+    fan_courier_config: {
+      ...config,
+      last_pickup_date: input.pickupDate,
+      last_pickup_id: idRidicare || null,
+    } as unknown as import("@/types/database.types").Json,
+    updated_at: new Date().toISOString(),
+  }).eq("business_id", businessId);
+
+  if (eScriere) {
+    await logError({
+      action: "fancourier.pickup",
+      message: `Ridicare FAN ceruta (${idRidicare || "fara id"}), dar configul NU s-a actualizat: ${eScriere.message}. Ridicarea nu va putea fi anulata din panou.`,
+      details: { businessId, pickupDate: input.pickupDate },
+      businessId,
+      severity: "critical",
+    });
   }
+
+  return { orderId: idRidicare };
 }
 
 export async function cancelFanCourierPickupAction(

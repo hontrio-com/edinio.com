@@ -1675,6 +1675,7 @@ export type Database = {
           internal_notes: string | null
           ipay_order_id: string | null
           ipay_order_number: string | null
+          netopia_ntp_id: string | null
           items: Json
           klarna_order_id: string | null
           klarna_session_id: string | null
@@ -1749,6 +1750,7 @@ export type Database = {
           internal_notes?: string | null
           ipay_order_id?: string | null
           ipay_order_number?: string | null
+          netopia_ntp_id?: string | null
           items: Json
           klarna_order_id?: string | null
           klarna_session_id?: string | null
@@ -1823,6 +1825,7 @@ export type Database = {
           internal_notes?: string | null
           ipay_order_id?: string | null
           ipay_order_number?: string | null
+          netopia_ntp_id?: string | null
           items?: Json
           klarna_order_id?: string | null
           klarna_session_id?: string | null
@@ -3204,9 +3207,9 @@ export type Database = {
       proba_stoc: { Args: Record<PropertyKey, never>; Returns: Json }
       revendica_din_coada: { Args: { p_coada: string; p_limita?: number; p_lease?: unknown }; Returns: Json[] }
       revendica_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: Json }
-      rezerva_operatie_externa: { Args: { p_business_id: string; p_order_id: string | null; p_fel: string; p_furnizor: string; p_cheie: string }; Returns: Json }
-      incheie_operatie_externa: { Args: { p_id: string; p_business_id: string; p_stare: string; p_referinta_externa?: string | null; p_detalii?: Json; p_eroare?: string | null }; Returns: Json }
-      marcheaza_operatie_anulata: { Args: { p_business_id: string; p_cheie: string }; Returns: Json }
+      rezerva_operatie_externa: { Args: { p_business_id: string | null; p_order_id: string | null; p_fel: string; p_furnizor: string; p_cheie: string }; Returns: Json }
+      incheie_operatie_externa: { Args: { p_id: string; p_business_id: string | null; p_stare: string; p_referinta_externa?: string | null; p_detalii?: Json; p_eroare?: string | null }; Returns: Json }
+      marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
       scrie_variante_daca_neschimbat: { Args: { p_business: string; p_product: string; p_asteptat: Json; p_nou: Json }; Returns: string }
       site_analytics_breakdown_zile: { Args: { bid: string; p_zile: number }; Returns: unknown }
       sterge_comanda: { Args: { p_order_id: string; p_business_id?: string }; Returns: Json }

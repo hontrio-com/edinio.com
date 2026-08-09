@@ -3,6 +3,7 @@ import { logError } from "@/lib/error-logger";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
+import { getStripe } from "@/lib/stripe";
 
 /**
  * Plasa de siguranta pentru platile cu cardul prin Stripe: prinde comenzile in
@@ -105,6 +106,104 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[stripe-reconcile] checked ${checked}, marked paid ${paid}`);
-  return NextResponse.json({ ok: true, checked, paid });
+  /*
+   * ═══ A DOUA TRECERE: COMENZILE CARE SI-AU PIERDUT LEGATURA ═══
+   *
+   * Interogarea de mai sus filtreaza pe `stripe_session_id` NENUL — adica exact
+   * legatura care se poate pierde. Daca scrierea de la `/api/stripe/order-checkout`
+   * pica dupa ce Stripe a creat sesiunea, comanda iese din raza cronului PENTRU
+   * TOTDEAUNA, si tocmai el era plasa de siguranta.
+   *
+   * De cand sesiunile trimit `payment_intent_data.metadata = { orderId, businessId }`,
+   * plata se poate gasi si fara sesiune: se cauta PaymentIntent-urile REUSITE ale
+   * contului conectat, dupa metadata. Nu merge pentru platile de dinaintea acelei
+   * schimbari — acolo metadata era doar pe sesiune, iar sesiunile nu se pot cauta.
+   *
+   * Se cauta DOAR pentru magazinele care chiar au comenzi orfane, deci in mod
+   * normal nu pleaca niciun apel in plus la Stripe.
+   */
+  let recuperate = 0;
+  const { data: orfane, error: eOrfane } = await admin
+    .from("orders")
+    .select("id, business_id, total, status")
+    .eq("payment_status", "unpaid")
+    .eq("payment_method", "stripe")
+    .is("stripe_session_id", null)
+    .not("status", "in", "(cancelled,refunded)")
+    .gte("created_at", since)
+    .limit(200);
+
+  if (eOrfane) {
+    await logError({ action: "stripe-reconcile", message: `comenzile orfane nu s-au putut citi: ${eOrfane.message}`, severity: "critical" });
+  } else if (orfane && orfane.length > 0) {
+    const dupaMagazin = new Map<string, typeof orfane>();
+    for (const o of orfane) {
+      const lista = dupaMagazin.get(o.business_id) ?? [];
+      lista.push(o);
+      dupaMagazin.set(o.business_id, lista);
+    }
+
+    for (const [businessId, lista] of dupaMagazin) {
+      const accountId = cfgMap.get(businessId);
+      if (!accountId) continue;
+      const dupaId = new Map(lista.map((o) => [o.id, o]));
+      try {
+        const gasite = await getStripe().paymentIntents.search(
+          { query: `status:'succeeded' AND metadata['businessId']:'${businessId}'`, limit: 100 },
+          { stripeAccount: accountId },
+        );
+        for (const pi of gasite.data) {
+          const orderId = pi.metadata?.orderId;
+          const o = orderId ? dupaId.get(orderId) : undefined;
+          if (!o) continue;
+
+          // Sesiunea se regaseste din PaymentIntent, ca marcarea platii sa treaca
+          // prin ACEEASI cale ca toate celelalte (`finalizeStripeOrder`), nu printr-o
+          // a doua implementare care s-ar putea departa de ea.
+          const sesiuni = await getStripe().checkout.sessions.list(
+            { payment_intent: pi.id, limit: 1 },
+            { stripeAccount: accountId },
+          );
+          const sessionId = sesiuni.data[0]?.id;
+          if (!sessionId) continue;
+
+          // Legatura pierduta se scrie la loc INAINTE de marcare: chiar daca pasul
+          // urmator pica, urmatoarea rulare o prinde pe calea obisnuita.
+          const { error: eLegatura } = await admin
+            .from("orders").update({ stripe_session_id: sessionId }).eq("id", o.id);
+          if (eLegatura) {
+            await logError({
+              action: "stripe-reconcile",
+              message: `Plata gasita pentru comanda ${o.id} (${pi.id}), dar legatura NU s-a putut scrie: ${eLegatura.message}`,
+              details: { orderId: o.id, paymentIntent: pi.id, sessionId },
+              businessId,
+              severity: "critical",
+            });
+            continue;
+          }
+
+          const result = await finalizeStripeOrder(
+            admin, accountId,
+            { id: o.id, businessId, total: Number(o.total) || 0, status: o.status as string | null },
+            sessionId,
+          );
+          if (result.status === "paid") {
+            recuperate++;
+            await logError({
+              action: "stripe-reconcile",
+              message: `Comanda ${o.id} avea plata incasata la Stripe dar isi pierduse legatura. Recuperata dupa metadata.`,
+              details: { orderId: o.id, paymentIntent: pi.id, sessionId },
+              businessId,
+              severity: "warning",
+            });
+          }
+        }
+      } catch (e) {
+        console.error("[stripe-reconcile] cautarea dupa metadata a esuat pentru magazinul", businessId, e);
+      }
+    }
+  }
+
+  console.log(`[stripe-reconcile] checked ${checked}, marked paid ${paid}, recuperate ${recuperate}`);
+  return NextResponse.json({ ok: true, checked, paid, recuperate });
 }

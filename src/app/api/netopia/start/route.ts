@@ -4,6 +4,7 @@ import { startNetopiaPayment, type NetopiaConfig } from "@/lib/netopia";
 import { signNetopiaIpn } from "@/lib/netopia-ipn";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { logError } from "@/lib/error-logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -105,6 +106,32 @@ export async function POST(request: NextRequest) {
       console.error("[netopia/start] Payment start failed:", result.error);
       // 502: upstream (Netopia) refused/failed — distinct from our own 500 below.
       return NextResponse.json({ error: result.error }, { status: 502 });
+    }
+
+    /*
+     * `ntpID` se pastreaza, nu se mai arunca.
+     *
+     * E singurul lucru dupa care s-ar putea interoga Netopia pentru o comanda
+     * anume. Fara el, Netopia ramane procesatorul FARA nicio plasa: daca IPN-ul nu
+     * ajunge, plata se pierde tacut si nimic n-o mai gaseste.
+     *
+     * Scrierea e best-effort si NU opreste plata: legatura principala vine oricum
+     * din IPN, care intoarce `order.orderID` — chiar id-ul comenzii noastre. Spre
+     * deosebire de Stripe/iPay, aici un esec de scriere nu orbeste nimic ACUM, deci
+     * n-are rost sa refuzam clientului plata pentru el.
+     */
+    if (result.ntpID) {
+      const { error } = await admin
+        .from("orders").update({ netopia_ntp_id: result.ntpID }).eq("id", orderId);
+      if (error) {
+        await logError({
+          action: "netopia/start",
+          message: `ntpID-ul Netopia nu s-a putut salva: ${error.message}`,
+          details: { orderId, ntpID: result.ntpID },
+          businessId,
+          severity: "warning",
+        });
+      }
     }
 
     return NextResponse.json({ redirectUrl: result.redirectUrl });

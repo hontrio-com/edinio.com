@@ -79,7 +79,13 @@ export type { Verdict } from "@/lib/operatii/eroare-furnizor";
 import type { Verdict } from "@/lib/operatii/eroare-furnizor";
 
 export interface CerereOperatie {
-  businessId: string;
+  /**
+   * Magazinul, sau `null` pentru operatiile PLATFORMEI (abonamente, domenii) —
+   * acelea nu apartin niciunui magazin. Vezi migrations/2026-08-24: indexul unic e
+   * pe expresie cu `coalesce`, tocmai ca `NULL != NULL` sa nu deschida o gaura
+   * tacuta exact acolo unde se emit documentele fiscale ale platformei.
+   */
+  businessId: string | null;
   /** `null` pentru operatii care nu tin de o comanda (ridicare de la curier). */
   orderId: string | null;
   fel: FelOperatie;
@@ -175,7 +181,7 @@ export async function cuRegistru<T>(
         action: "cuRegistru.slotVechi",
         message: `Registrul avea ${cerere.fel} ${cerere.furnizor} ca reusita (${r1.referinta}), dar comanda nu o mai poarta — probabil o anulare a carei eliberare s-a pierdut. Eliberez si reiau.`,
         details: { cheie: cerere.cheie, orderId: cerere.orderId, referinta: r1.referinta },
-        businessId: cerere.businessId,
+        businessId: cerere.businessId ?? undefined,
         severity: "warning",
       });
       await marcheazaAnulata(admin, cerere.businessId, cerere.cheie);
@@ -227,7 +233,7 @@ async function incearca<T>(
       action: "cuRegistru.rezerva",
       message: `Registrul de operatii externe nu a raspuns; ${cerere.fel} ${cerere.furnizor} NU a fost trimis: ${eRez?.message ?? "raspuns gol"}`,
       details: { cheie: cerere.cheie, orderId: cerere.orderId, code: eRez?.code },
-      businessId: cerere.businessId,
+      businessId: cerere.businessId ?? undefined,
       severity: "critical",
     });
     return {
@@ -312,7 +318,7 @@ async function incheie(
           ? `${cerere.fel} ${cerere.furnizor} A REUSIT la furnizor (${referinta}), dar registrul nu s-a putut incheia. Operatia ramane in curs si va bloca o a doua incercare.`
           : `${cerere.fel} ${cerere.furnizor} s-a incheiat cu ${stare}, dar registrul nu a inregistrat.`,
       details: { operatieId, cheie: cerere.cheie, orderId: cerere.orderId, referinta, code: error?.code },
-      businessId: cerere.businessId,
+      businessId: cerere.businessId ?? undefined,
       severity: "critical",
     });
   }
@@ -394,7 +400,7 @@ export const nuStim = (): Verdict => "necunoscut";
  */
 export async function marcheazaAnulata(
   admin: SupabaseClient<Database>,
-  businessId: string,
+  businessId: string | null,
   cheie: string,
 ): Promise<boolean> {
   const { data, error } = await admin.rpc("marcheaza_operatie_anulata", {

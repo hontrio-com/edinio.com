@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
-import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
-import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { resolveNetopiaStatus, type NetopiaIpnPayload } from "@/lib/netopia";
 import { verifyNetopiaIpn } from "@/lib/netopia-ipn";
 
@@ -132,10 +129,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ errorCode: 1, errorMessage: "Payment update failed" }, { status: 500 });
     }
   } else if (newPaymentStatus) {
+    /*
+     * ⚠ `.neq("payment_status", "paid")` LIPSEA, si era singura scriere de stare de
+     * plata din tot domeniul fara ea.
+     *
+     * Netopia repeta notificarile la orice raspuns non-zero, iar ele pot sosi si in
+     * alta ordine decat s-au produs. Un IPN de ESEC intarziat suprascria un `paid`
+     * marcat intre timp de un IPN de succes — comanda platita devenea „neplatita",
+     * cu banii incasati. Toate celelalte cai trec prin `finalizeazaPlataComenzii`,
+     * care are garda in chiar instructiunea de UPDATE; asta o ocolea.
+     */
     const { error } = await admin
       .from("orders")
       .update({ payment_status: newPaymentStatus, updated_at: new Date().toISOString() })
-      .eq("id", orderId);
+      .eq("id", orderId)
+      .neq("payment_status", "paid");
     if (error) {
       await logError({
         action: "netopia/notify", message: error.message,

@@ -7,7 +7,7 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
-import { cheieOperatie, cuRegistru } from "@/lib/operatii/registru";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
@@ -638,7 +638,27 @@ export async function generateOblioProforma(
     if ("error" in data) return { error: data.error };
     // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).
     const { collect: _collect, spvExtern: _spv, ...proformaData } = data;
-    const result = await createOblioDoc(token, "proforma", proformaData as OblioInvoiceData);
+    // `idempotencyKey` din `buildInvoiceData` contine seria proformei, deci nu se
+    // ciocneste cu factura. Registrul adauga oprirea inainte de apel si adoptarea.
+    const r = await cuRegistru(
+      createAdminClient(),
+      { businessId, orderId, fel: "proforma", furnizor: "oblio", cheie: cheieOperatie("proforma", "oblio", orderId) },
+      async () => {
+        const rezultat = await createOblioDoc(token, "proforma", proformaData as OblioInvoiceData);
+        return {
+          referinta: rezultat.number,
+          detalii: { serie: rezultat.seriesName, link: rezultat.link ?? null },
+          valoare: rezultat,
+        };
+      },
+      verdictFurnizor,
+    );
+
+    if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+    const dPr = r.fel === "deja" ? (r.detalii as { serie?: string; link?: string | null } | null) : null;
+    const result = r.fel === "facut"
+      ? r.valoare
+      : { number: r.referinta ?? "", seriesName: dPr?.serie ?? "", link: dPr?.link ?? null };
 
     await supabase.from("orders").update({
       oblio_proforma_number: result.number,
@@ -807,8 +827,24 @@ export async function cancelOblioProforma(
     await supabase.from("orders").update({
       oblio_proforma_number: null,
       oblio_proforma_series: null,
+      // `oblio_proforma_link` ramanea pe loc, deci randul pastra un link catre un
+      // document ANULAT. Se goleste odata cu numarul.
+      oblio_proforma_link: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    // Fara eliberare, o proforma noua ar fi „adoptat" chiar pe cea anulata.
+    const eliberat = await marcheazaAnulata(
+      createAdminClient(), businessId, cheieOperatie("proforma", "oblio", orderId));
+    if (!eliberat) {
+      await logError({
+        action: "oblio.cancelProforma",
+        message: "Proforma Oblio anulata, dar slotul din registru NU s-a eliberat. Urmatoarea proforma pe aceasta comanda va fi refuzata.",
+        details: { orderId, businessId, proforma: orderData.oblio_proforma_number },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     return { success: true };
   } catch (e) {

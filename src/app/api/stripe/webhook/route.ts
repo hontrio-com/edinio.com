@@ -2,7 +2,8 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js";
-import { createSmartbillInvoice } from "@/lib/smartbill";
+import { emiteFacturaPlatforma } from "@/lib/billing/factura-platforma";
+import type { Database } from "@/types/database.types";
 import type Stripe from "stripe";
 
 function capitalize(s: string) {
@@ -107,7 +108,10 @@ async function emitSubscriptionInvoice(
   let sbNumber: string | null = null;
   let sbError: string | null = null;
 
-  const sbResult = await createSmartbillInvoice(
+  const sbResult = await emiteFacturaPlatforma(
+    admin as unknown as SupabaseClient<Database>,
+    stripeInvoiceId,
+    existingInvoice?.id ?? null,
     {
       name: clientName,
       email: userEmail,
@@ -123,12 +127,15 @@ async function emitSubscriptionInvoice(
     },
   );
 
-  if (sbResult.error) {
-    sbError = sbResult.error;
+  if (sbResult.fel === "eroare") {
+    sbError = sbResult.mesaj;
     console.error("[webhook] Smartbill failed:", sbError, "| invoice:", stripeInvoiceId);
   } else {
-    sbSeries = sbResult.series ?? null;
-    sbNumber = sbResult.number ?? null;
+    // `adoptata` inseamna ca documentul exista de la o incercare anterioara si NU
+    // s-a mai chemat SmartBill. Se scrie la fel: scrierea e chiar recuperarea
+    // legaturii pierdute.
+    sbSeries = sbResult.series || null;
+    sbNumber = sbResult.number || null;
   }
 
   if (existingInvoice) {
@@ -207,7 +214,10 @@ async function emitDomainOrderInvoice(admin: SupabaseClient, o: DomainInvoiceMet
   let sbNumber: string | null = null;
   let sbError: string | null = null;
 
-  const sbResult = await createSmartbillInvoice(
+  const sbResult = await emiteFacturaPlatforma(
+    admin as unknown as SupabaseClient<Database>,
+    o.paymentIntentId,
+    existingInvoice?.id ?? null,
     {
       name: clientName,
       email: userEmail,
@@ -223,12 +233,12 @@ async function emitDomainOrderInvoice(admin: SupabaseClient, o: DomainInvoiceMet
     },
   );
 
-  if (sbResult.error) {
-    sbError = sbResult.error;
+  if (sbResult.fel === "eroare") {
+    sbError = sbResult.mesaj;
     console.error("[webhook] domain Smartbill failed:", sbError);
   } else {
-    sbSeries = sbResult.series ?? null;
-    sbNumber = sbResult.number ?? null;
+    sbSeries = sbResult.series || null;
+    sbNumber = sbResult.number || null;
   }
 
   if (existingInvoice) {

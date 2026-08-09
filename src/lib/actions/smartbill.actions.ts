@@ -453,6 +453,12 @@ const verdictEmitereSmartbill = verdictSmartbill(
  */
 const verdictStornoSmartbill = verdictSmartbill("Eroare de retea la stornarea facturii.");
 
+/** Proforma are propriul sir de retea (src/lib/smartbill.ts:374). */
+const verdictProformaSmartbill = verdictSmartbill(
+  "Eroare de retea la crearea proformei.",
+  "SmartBill nu a returnat numarul documentului.",
+);
+
 /**
  * `createMerchantInvoice`, dar sub registru.
  *
@@ -696,8 +702,32 @@ export async function generateOrderEstimate(
   // Proforma nu se storneaza, deci nu inlocuieste vreun document desfiintat.
   const params = await buildInvoiceParams({ supabase, businessId }, config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate, { poateEmite: true });
   if ("error" in params) return params;
-  const result = await createMerchantEstimate(config, params);
-  if ("error" in result) return result;
+  /*
+   * Proforma NU e document fiscal, deci un duplicat nu ajunge la ANAF — dar lasa un
+   * orfan in contul SmartBill, iar `convertEstimateToInvoice` nu-l mai gaseste:
+   * randul comenzii nu-i stie numarul. Cheia n-are slot, fiindca proforma nu se
+   * storneaza (vezi comentariul de mai sus).
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    { businessId, orderId, fel: "proforma", furnizor: "smartbill", cheie: cheieOperatie("proforma", "smartbill", orderId) },
+    async () => {
+      const rezultat = await createMerchantEstimate(config, params);
+      if ("error" in rezultat) throw new Error(rezultat.error);
+      return {
+        referinta: rezultat.number,
+        detalii: { serie: rezultat.series, url: rezultat.documentUrl ?? null },
+        valoare: rezultat,
+      };
+    },
+    verdictProformaSmartbill,
+  );
+
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  const dP = r.fel === "deja" ? (r.detalii as { serie?: string; url?: string | null } | null) : null;
+  const result = r.fel === "facut"
+    ? r.valoare
+    : { number: r.referinta ?? "", series: dP?.serie ?? "", documentUrl: dP?.url ?? undefined };
 
   await supabase.from("orders").update({
     smartbill_estimate_number: result.number,

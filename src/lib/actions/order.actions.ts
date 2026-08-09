@@ -2333,58 +2333,53 @@ export async function updateOrderDetails(orderId: string, data: {
   const stoc = await revendicaStocul(admin, decrements, plan.adaugate);
   if (stoc.fel !== "revendicat") return { error: stoc.error };
 
-  const { error } = await supabase.from("orders").update({
-    customer_name: name,
-    customer_phone: phone,
-    customer_email: data.customer_email?.trim() || null,
-    shipping_address: newShip,
-    items: plan.items,
-    subtotal: newSubtotal,
-    shipping_cost: newShipping,
-    cod_fee_amount: codFee,
-    vat_amount: vatAmount,
-    // Cota, nu doar suma. Fara ea, o comanda cu `vat_rate = 0` primea un
-    // `vat_amount > 0` peste o cota ramasa zero, iar SmartBill o citea in
-    // continuare ca „istorica". Aceeasi expresie ca la plasare.
-    vat_rate: vatCfg.vat_enabled ? vatCfg.vat_rate : 0,
-    total: newTotal,
-    updated_at: new Date().toISOString(),
-  } as never).eq("id", orderId);
+  /*
+   * ═══ MODIFICAREA SI REZERVAREA, INTR-O SINGURA TRANZACTIE ═══
+   *
+   * Erau doua scrieri: `UPDATE orders` cu liniile si totalurile noi, apoi
+   * `adauga_stoc_rezervat`. Daca a doua pica, prima ramanea — stocul scazut,
+   * liniile noi pe comanda, dar `stoc_rezervat` CEL VECHI, deci la anulare
+   * liniile adaugate nu se mai puteau da inapoi. Si se raspundea `success: true`.
+   *
+   * Calculele raman in aplicatie; functia scrie doar ce a hotarat ea.
+   */
+  const { data: ed, error } = await admin.rpc("editeaza_comanda_atomic" as never, {
+    p_order_id: orderId,
+    p_business_id: order.business_id,
+    p_patch: {
+      customer_name: name,
+      customer_phone: phone,
+      customer_email: data.customer_email?.trim() || "",
+      shipping_address: newShip,
+      items: plan.items,
+      subtotal: newSubtotal,
+      shipping_cost: newShipping,
+      cod_fee_amount: codFee,
+      vat_amount: vatAmount,
+      // Cota, nu doar suma. Fara ea, o comanda cu `vat_rate = 0` primea un
+      // `vat_amount > 0` peste o cota ramasa zero, iar SmartBill o citea in
+      // continuare ca „istorica". Aceeasi expresie ca la plasare.
+      vat_rate: vatCfg.vat_enabled ? vatCfg.vat_rate : 0,
+      total: newTotal,
+    },
+    p_produse: stoc.fel === "revendicat" ? decrements : [],
+    p_variante: stoc.fel === "revendicat" ? stocRezervat([], plan.adaugate).variante : [],
+  } as never);
 
-  if (error) {
+  const rezEd = ed as { gasit?: boolean; stoc_cunoscut?: boolean } | null;
+  if (error || rezEd?.gasit !== true) {
     // Comanda n-a fost salvata, deci stocul rezervat pentru liniile adaugate se
     // da inapoi — altfel marfa ramane scazuta pentru linii care nu exista.
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
-    logError({ action: "updateOrderDetails", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
+    logError({ action: "updateOrderDetails", message: error?.message ?? "editarea n-a raspuns valid", details: { code: error?.code, orderId, raspuns: rezEd }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la salvarea modificarilor." };
   }
-
-  /*
-   * CE S-A MAI CONSUMAT SE ADAUGA LA `stoc_rezervat`.
-   *
-   * Calea asta scadea stocul pentru liniile adaugate si nu atingea deloc coloana.
-   * Deci o comanda editata si apoi anulata dadea inapoi doar cantitatile de la
-   * plasare, iar liniile adaugate ramaneau consumate pentru totdeauna — aceeasi
-   * gaura ca pe calea cosului, doar pe a treia cale, si negasita de niciun audit.
-   *
-   * Adaugarea se face in baza (`adauga_stoc_rezervat`), nu aici: citita si scrisa
-   * din aplicatie, doua editari in aceeasi clipa si una dintre ele dispare.
-   *
-   * Numai cand revendicarea a REUSIT: pe ramura veche stocul se scade mai jos, iar
-   * daca nici aia n-a rulat n-are ce sa fie dat inapoi.
-   */
-  if (stoc.fel === "revendicat" && (decrements.length > 0 || plan.adaugate.length > 0)) {
-    const { error: eRez } = await admin.rpc("adauga_stoc_rezervat" as never, {
-      p_order_id: orderId,
-      p_produse: decrements,
-      p_variante: stocRezervat([], plan.adaugate).variante,
-    } as never);
-    if (eRez) {
-      // Marfa e scazuta, dar comanda nu stie de ea: la anulare nu se va da inapoi.
-      // Se repara de mana, deci trebuie sa se vada.
-      logError({ action: "updateOrderDetails.stocRezervat", message: eRez.message, details: { code: eRez.code, orderId }, businessId: order.business_id, userId: user.id, severity: "critical" });
-    }
+  if (rezEd.stoc_cunoscut === false && stoc.fel === "revendicat") {
+    // Comanda e dinainte de coloana `stoc_rezervat`: stocul s-a scazut, dar la
+    // anulare nu se va putea da inapoi automat. Se vede, se corecteaza de mana.
+    logError({ action: "updateOrderDetails.stocRezervat", message: "Comanda e dinainte de inregistrarea stocului rezervat; liniile adaugate NU se vor da inapoi automat la anulare.", details: { orderId }, businessId: order.business_id, userId: user.id, severity: "warning" });
   }
+
 
   // Google Merchant availability sync for the added items (mirrors placeOrder).
   // Stocul de produs SI cel de marime sunt deja scazute de revendicare.

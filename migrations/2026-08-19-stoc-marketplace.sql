@@ -136,3 +136,70 @@ revoke all on function public.consuma_stoc_marketplace(jsonb, jsonb) from public
 grant execute on function public.consuma_stoc_marketplace(jsonb, jsonb) to service_role;
 
 notify pgrst, 'reload schema';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- EDITAREA COMENZII: modificarea SI rezervarea, intr-o singura tranzactie
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Erau doua scrieri: `UPDATE orders` cu liniile si totalurile noi, apoi
+-- `adauga_stoc_rezervat`. Daca a doua pica, prima ramanea — stocul scazut,
+-- liniile noi pe comanda, dar `stoc_rezervat` CEL VECHI, deci la anulare liniile
+-- adaugate nu se mai puteau da inapoi. Si se raspundea `success: true`, deci
+-- nimeni n-avea de unde sa stie.
+--
+-- Calculele (preturi, TVA, taxa de ramburs, transport) RAMAN in aplicatie: aici
+-- doar se scrie ce a hotarat ea. Mutate in SQL, ar fi fost a doua implementare a
+-- regimului de preturi — exact ce a costat o zi sa se desfaca in alta parte.
+create or replace function public.editeaza_comanda_atomic(
+  p_order_id    uuid,
+  p_business_id uuid,
+  p_patch       jsonb,
+  p_produse     jsonb,
+  p_variante    jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path to 'public', 'pg_temp'
+as $$
+declare
+  v_biz uuid;
+  v_rez jsonb;
+begin
+  select business_id, stoc_rezervat into v_biz, v_rez
+    from public.orders where id = p_order_id for update;
+  if not found then return jsonb_build_object('gasit', false); end if;
+  -- Limita de magazin, ca la celelalte: actiunile de server se pot chema cu orice
+  -- argumente, printr-un POST direct.
+  if p_business_id is not null and v_biz is distinct from p_business_id then
+    return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
+  end if;
+
+  update public.orders set
+    customer_name    = coalesce(p_patch->>'customer_name', customer_name),
+    customer_phone   = coalesce(p_patch->>'customer_phone', customer_phone),
+    customer_email   = case when p_patch ? 'customer_email' then nullif(p_patch->>'customer_email','') else customer_email end,
+    shipping_address = coalesce(p_patch->'shipping_address', shipping_address),
+    items            = coalesce(p_patch->'items', items),
+    subtotal         = coalesce((p_patch->>'subtotal')::numeric, subtotal),
+    shipping_cost    = coalesce((p_patch->>'shipping_cost')::numeric, shipping_cost),
+    cod_fee_amount   = coalesce((p_patch->>'cod_fee_amount')::numeric, cod_fee_amount),
+    vat_amount       = coalesce((p_patch->>'vat_amount')::numeric, vat_amount),
+    vat_rate         = coalesce((p_patch->>'vat_rate')::numeric, vat_rate),
+    total            = coalesce((p_patch->>'total')::numeric, total),
+    updated_at       = now(),
+    -- `null` ramane `null`: o comanda dinainte de coloana, scrisa acum doar cu
+    -- liniile adaugate, ar parea ca atat a consumat, iar eliberarea ar raporta
+    -- „eliberat" dupa ce a dat inapoi o farama.
+    stoc_rezervat = case when stoc_rezervat is null then null else jsonb_build_object(
+      'produse',  coalesce(stoc_rezervat->'produse',  '[]'::jsonb) || coalesce(p_produse,  '[]'::jsonb),
+      'variante', coalesce(stoc_rezervat->'variante', '[]'::jsonb) || coalesce(p_variante, '[]'::jsonb)) end
+  where id = p_order_id;
+
+  return jsonb_build_object('gasit', true, 'stoc_cunoscut', v_rez is not null);
+end;
+$$;
+
+revoke all on function public.editeaza_comanda_atomic(uuid, uuid, jsonb, jsonb, jsonb) from public, anon, authenticated;
+grant execute on function public.editeaza_comanda_atomic(uuid, uuid, jsonb, jsonb, jsonb) to service_role;
+
+notify pgrst, 'reload schema';

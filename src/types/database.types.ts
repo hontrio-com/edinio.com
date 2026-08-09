@@ -1674,6 +1674,7 @@ export type Database = {
           id: string
           internal_notes: string | null
           ipay_order_id: string | null
+          ipay_order_number: string | null
           items: Json
           klarna_order_id: string | null
           klarna_session_id: string | null
@@ -1747,6 +1748,7 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           ipay_order_id?: string | null
+          ipay_order_number?: string | null
           items: Json
           klarna_order_id?: string | null
           klarna_session_id?: string | null
@@ -1820,6 +1822,7 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           ipay_order_id?: string | null
+          ipay_order_number?: string | null
           items?: Json
           klarna_order_id?: string | null
           klarna_session_id?: string | null

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import {
-  ipayRegister, ipayReady, toBani, buildOrderBundle, ipayOrderNumber, type IPayConfig,
+  ipayRegister, ipayReady, toBani, buildOrderBundle,
+  ipayOrderNumber, urmatoareaIncercareIpay,
+  type IPayConfig,
 } from "@/lib/ipay";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
@@ -67,7 +69,36 @@ export async function POST(request: NextRequest) {
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com";
-  const orderNumber = ipayOrderNumber(order.order_number as string);
+
+  /*
+   * ⚠ REFERINTA SE SCRIE INAINTE DE APEL, NU DUPA.
+   *
+   * `orderNumber` e ce trimitem NOI bancii. Banca deduplica dupa el si permite
+   * interogarea dupa el (`getOrderStatusExtended.do`) — dar numai daca il stim.
+   * Salvat abia dupa `register.do`, s-ar pierde exact in cazul pe care il inchidem:
+   * plata creata, scrierea picata, si nicio cale de a mai gasi plata.
+   *
+   * Incercarea creste fata de ultima folosita: iPay cere un numar NOU per tentativa,
+   * altfel o plata expirata ar bloca-o pe urmatoarea cu errorCode 1.
+   */
+  const orderNumber = ipayOrderNumber(
+    order.order_number as string,
+    urmatoareaIncercareIpay((order as { ipay_order_number?: string | null }).ipay_order_number),
+    businessId,
+  );
+  {
+    const { error } = await admin
+      .from("orders").update({ ipay_order_number: orderNumber }).eq("id", orderId);
+    if (error) {
+      await logError({
+        action: "ipay/start",
+        message: `referinta iPay nu s-a putut salva INAINTE de apel: ${error.message}`,
+        details: { orderId, orderNumber },
+        severity: "critical",
+      });
+      return NextResponse.json({ error: "Nu am putut pregati plata. Reincearca peste cateva momente." }, { status: 503 });
+    }
+  }
   const returnUrl = `${baseUrl}/api/ipay/return?orderId=${encodeURIComponent(orderId)}&businessId=${encodeURIComponent(businessId)}`;
 
   const addr = (order.shipping_address ?? {}) as { address?: string; city?: string; county?: string };

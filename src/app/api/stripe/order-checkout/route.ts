@@ -122,7 +122,42 @@ export async function POST(request: NextRequest) {
       success_url: `${origin}/api/stripe/return?orderId=${orderId}&businessId=${businessId}`,
       cancel_url: `${origin}/${slug}`,
       metadata: { orderId, businessId },
+      /*
+       * `metadata` si pe PaymentIntent, nu doar pe sesiune.
+       *
+       * Sesiunile de checkout NU se pot cauta dupa metadata, dar PaymentIntent-urile
+       * DA (`paymentIntents.search`). Fara asta, singura legatura ramane
+       * `stripe_session_id` de pe comanda — adica exact ce se pierde in scenariul pe
+       * care il inchidem, si atunci nimic nu mai poate gasi plata.
+       */
+      payment_intent_data: { metadata: { orderId, businessId } },
     },
+    /*
+     * ⚠ AICI **NU** SE PUNE `idempotencyKey`, SI E O DECIZIE, NU O SCAPARE.
+     *
+     * Pare cel mai ieftin castig cu putinta — Stripe e singurul furnizor cu
+     * idempotenta nativa pe POST-uri. Am pus-o (`order:<id>:<suma>`) si am scos-o,
+     * fiindca pe CALEA ASTA face rau, din trei motive independente:
+     *
+     *   1. Stripe memoreaza sub cheie si raspunsul de EROARE, si il rejoaca. O
+     *      prima incercare picata (4xx de la contul conectat, card decline pe
+     *      configurare) ar bloca plata comenzii pentru ~24 de ore: fiecare
+     *      reincercare ar primi inapoi acelasi esec, fara sa mai ajunga la Stripe.
+     *   2. Corpul cererii NU e determinist pentru un (orderId, suma) fix:
+     *      `customer_email`, `success_url` si `slug` se pot schimba intre incercari
+     *      (comanda editata, magazin redenumit). Stripe respinge o a doua cerere cu
+     *      aceeasi cheie si alt corp — 400 `idempotency_error` — deci in loc sa
+     *      refoloseasca, ar PICA.
+     *   3. Cheia traieste mai mult decat sesiunea pe care o memoreaza. O sesiune
+     *      Checkout expira la 24h fix; rezultatul cheii se curata „dupa cel putin
+     *      24 de ore", asincron. In fereastra dintre ele, Stripe ar rejuca un URL de
+     *      checkout MORT, iar clientul n-ar mai putea plati deloc.
+     *
+     * Duplicatul pe care ar fi trebuit sa-l inchida e deja inchis, si mai bine, de
+     * refolosirea sesiunii de mai sus (liniile 80-93): ea verifica `status === "open"`
+     * SI `amount_total === asteptat`, deci nu serveste nici sesiuni moarte, nici
+     * totalul vechi al unei comenzi editate.
+     */
     { stripeAccount: stripeConfig.account_id }
   );
 

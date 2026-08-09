@@ -32,10 +32,22 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 3 * 86400000).toISOString();
   const { data: orders, error: eOrders } = await admin
     .from("orders")
-    .select("id, business_id, total, ipay_order_id")
+    .select("id, business_id, total, ipay_order_id, ipay_order_number")
     .eq("payment_status", "unpaid")
     .eq("status", "pending")
-    .not("ipay_order_id", "is", null)
+    /*
+     * ⚠ FILTRUL ERA CHIAR PE LEGATURA CARE SE POATE PIERDE.
+     *
+     * `ipay_order_id` e UUID-ul BANCII, primit DUPA `register.do`. Daca scrierea
+     * lui pica, plata exista si comanda iesea din raza cronului pentru totdeauna —
+     * adica plasa de siguranta nu acoperea tocmai cazul pentru care exista.
+     *
+     * `ipay_order_number` e referinta NOASTRA, scrisa INAINTE de apel. Cu ea,
+     * comanda ramane vizibila si se poate intreba `getOrderStatusExtended.do` dupa
+     * `orderNumber` — ramura care exista de mult in `ipayGetOrderStatus` si pe care
+     * nu o chema nimeni.
+     */
+    .or("ipay_order_id.not.is.null,ipay_order_number.not.is.null")
     .gte("created_at", since)
     .limit(500);
 
@@ -76,10 +88,14 @@ export async function GET(req: NextRequest) {
 
   for (const o of orders) {
     const cfg = cfgMap.get(o.business_id);
-    if (!ipayReady(cfg) || !o.ipay_order_id) continue;
+    // Se intreaba dupa id-ul bancii cand il avem; altfel dupa referinta noastra.
+    const dupa = o.ipay_order_id
+      ? { orderId: o.ipay_order_id }
+      : (o.ipay_order_number ? { orderNumber: o.ipay_order_number } : null);
+    if (!ipayReady(cfg) || !dupa) continue;
     checked++;
     try {
-      const status = await ipayGetOrderStatus(cfg!, { orderId: o.ipay_order_id });
+      const status = await ipayGetOrderStatus(cfg!, dupa);
       const resolved = resolveIpayStatus(status.orderStatus);
       const amountOk = status.amount === toBani(Number(o.total));
       const currencyOk = !status.currency || status.currency === IPAY_CURRENCY.RON;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cheieOperatie, cuRegistru, eAtarnata, nuStim, PRAG_ATARNATA_MS, type Verdict } from "./registru";
 import { eroareCuStatus, eroareNesigura, eroareRefuz, verdictFurnizor } from "./eroare-furnizor";
+import { ipayOrderNumber, urmatoareaIncercareIpay } from "@/lib/ipay";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -299,6 +300,62 @@ test("`necunoscut` se arata imediat: apelul s-a incheiat deja", () => {
 test("data necitibila se arata, nu se ascunde", () => {
   // Mai bine un chenar in plus decat o operatie blocanta invizibila.
   assert.equal(eAtarnata({ stare: "in_curs", creatLa: "nu e o data" }, Date.now()), true);
+});
+
+// ─── Referinta iPay ──────────────────────────────────────────────────────────
+
+test("referinta iPay e DETERMINISTA: aceeasi comanda, aceeasi incercare -> acelasi numar", () => {
+  /*
+   * Forma dinainte lipea `Date.now()+Math.random()`, deci fiecare apasare producea
+   * alt numar — si anula chiar dedublarea pe care banca o face dupa el.
+   */
+  assert.equal(ipayOrderNumber("#0042", 0), ipayOrderNumber("#0042", 0));
+  assert.equal(ipayOrderNumber("#0042", 0), "0042-0");
+});
+
+test("incercarile dau numere DIFERITE: iPay cere unul nou per tentativa", () => {
+  assert.notEqual(ipayOrderNumber("#0042", 0), ipayOrderNumber("#0042", 1));
+  assert.equal(ipayOrderNumber("#0042", 2), "0042-2");
+});
+
+test("caracterele interzise de iPay se scot din baza, nu si cratima incercarii", () => {
+  // `%`, `+`, `\r`, `\n` sunt interzise explicit de iPay.
+  assert.equal(ipayOrderNumber("AB%C+1\r\n", 3), "ABC1-3");
+});
+
+test("doua magazine cu ACELASI cont iPay nu se mai ciocnesc", () => {
+  /*
+   * `order_number` e unic doar per magazin (UNIQUE (business_id, order_number)) si
+   * contorul reporneste de la #0001. Banca deduplica pe CONTUL de comerciant, iar
+   * doi proprietari pot avea acelasi cont configurat pe doua magazine.
+   */
+  const a = ipayOrderNumber("#0001", 0, "11111111-aaaa-4aaa-8aaa-111111111111");
+  const b = ipayOrderNumber("#0001", 0, "22222222-bbbb-4bbb-8bbb-222222222222");
+  assert.notEqual(a, b);
+  // Fara businessId ramane forma simpla, ca sa nu apara o cratima goala.
+  assert.equal(ipayOrderNumber("#0001", 0), "0001-0");
+});
+
+test("se respecta limita bancii de 32 de caractere", () => {
+  // Documentatia BT: `orderNumber String(32)`. Forma dinainte taia la 99.
+  const lung = "X".repeat(200);
+  for (const n of [0, 1, 42]) {
+    const v = ipayOrderNumber(lung, n, "11111111-aaaa-4aaa-8aaa-111111111111");
+    assert.ok(v.length <= 32, `${v} are ${v.length} caractere`);
+    assert.ok(v.endsWith(`-${n}`), v);
+  }
+  // Si tot raman DIFERITE intre incercari: taierea nu are voie sa manance sufixul,
+  // altfel a doua plata legitima ar lua errorCode 1.
+  assert.notEqual(ipayOrderNumber(lung, 0, "biz"), ipayOrderNumber(lung, 1, "biz"));
+});
+
+test("urmatoarea incercare se citeste din numarul folosit ultima data", () => {
+  assert.equal(urmatoareaIncercareIpay(null), 0, "prima plata incepe de la 0");
+  assert.equal(urmatoareaIncercareIpay("0042-0"), 1);
+  assert.equal(urmatoareaIncercareIpay("0042-7"), 8);
+  // Numerele VECHI, din forma cu ceas, n-au sufix: se reia de la 0, iar banca le
+  // vede ca alt numar oricum.
+  assert.equal(urmatoareaIncercareIpay("0042xk3f9a1"), 0);
 });
 
 // ─── Verdictul furnizorului ──────────────────────────────────────────────────

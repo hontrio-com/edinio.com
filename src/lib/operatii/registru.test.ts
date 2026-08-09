@@ -191,6 +191,86 @@ test("o incheiere inghitita (`deja`) NU se raporteaza ca reusita", async () => {
   assert.deepEqual(jurnal, ["rezerva_operatie_externa", "incheie_operatie_externa"]);
 });
 
+// ─── Garda impotriva invierii unui document mort ─────────────────────────────
+
+/** Client fals care raspunde diferit la rezervari succesive. */
+function clientCuSecventa(rezervari: Raspuns[]): { admin: SupabaseClient<Database>; apeluri: string[] } {
+  const apeluri: string[] = [];
+  let i = 0;
+  const admin = {
+    rpc: async (nume: string) => {
+      apeluri.push(nume);
+      if (nume === "rezerva_operatie_externa") return rezervari[Math.min(i++, rezervari.length - 1)];
+      return { data: { gasit: true, stare: "reusit" }, error: null };
+    },
+  } as unknown as SupabaseClient<Database>;
+  return { admin, apeluri };
+}
+
+test("`deja` cu legatura MOARTA: elibereaza si reia, nu invie AWB-ul anulat", async () => {
+  /*
+   * Scenariul: AWB creat, apoi anulat — dar `marcheazaAnulata` a picat, deci randul
+   * a ramas `reusit`. Fara garda, emiterea urmatoare ar fi scris pe comanda chiar
+   * AWB-ul ANULAT: transport inexistent, marfa care nu pleaca.
+   */
+  const { admin, apeluri } = clientCuSecventa([
+    { data: { rezervat: false, motiv: "reusit", referinta_externa: "AWB-MORT" }, error: null },
+    { data: { rezervat: true, id: "op2" }, error: null },
+  ]);
+  let chemat = 0;
+
+  const r = await cuRegistru(admin, CERERE, async () => {
+    chemat++;
+    return { referinta: "AWB-NOU", valoare: { n: 1 } };
+  }, nuStim, async () => false); // comanda NU mai poarta AWB-ul
+
+  assert.equal(r.fel, "facut", "n-a reluat rezervarea dupa eliberare");
+  if (r.fel === "facut") assert.equal(r.referinta, "AWB-NOU");
+  assert.equal(chemat, 1, "furnizorul trebuia chemat exact o data, la reluare");
+  assert.ok(apeluri.includes("marcheaza_operatie_anulata"), "slotul vechi nu a fost eliberat");
+});
+
+test("`deja` cu legatura VIE: se adopta, fara sa se cheme furnizorul", async () => {
+  const { admin, apeluri } = clientCuSecventa([
+    { data: { rezervat: false, motiv: "reusit", referinta_externa: "AWB-VIU" }, error: null },
+  ]);
+  let chemat = 0;
+
+  const r = await cuRegistru(admin, CERERE, async () => {
+    chemat++;
+    return { referinta: "AWB-NOU", valoare: { n: 1 } };
+  }, nuStim, async () => true); // comanda chiar poarta AWB-ul
+
+  assert.equal(r.fel, "deja");
+  if (r.fel === "deja") assert.equal(r.referinta, "AWB-VIU");
+  assert.equal(chemat, 0);
+  assert.ok(!apeluri.includes("marcheaza_operatie_anulata"), "a eliberat un slot inca viu");
+});
+
+test("reluarea se face O SINGURA data, ca sa nu apara o bucla", async () => {
+  // Daca si a doua rezervare intoarce `deja`, apelantul primeste raspunsul stabil.
+  const { admin } = clientCuSecventa([
+    { data: { rezervat: false, motiv: "reusit", referinta_externa: "AWB-X" }, error: null },
+  ]);
+  let chemat = 0;
+
+  const r = await cuRegistru(admin, CERERE, async () => {
+    chemat++;
+    return { referinta: "AWB-NOU", valoare: { n: 1 } };
+  }, nuStim, async () => false);
+
+  assert.equal(r.fel, "deja");
+  assert.equal(chemat, 0);
+});
+
+test("fara garda, purtarea ramane cea de dinainte: se adopta orbeste", async () => {
+  const { admin } = clientCuSecventa([
+    { data: { rezervat: false, motiv: "reusit", referinta_externa: "AWB-VECHI" }, error: null },
+  ]);
+  const r = await cuRegistru(admin, CERERE, async () => ({ referinta: "X", valoare: 1 }), nuStim);
+  assert.equal(r.fel, "deja");
+});
+
 // ─── Pragul de „atarnata" ────────────────────────────────────────────────────
 
 test("o operatie PROASPAT in zbor nu se arata ca atarnata", () => {

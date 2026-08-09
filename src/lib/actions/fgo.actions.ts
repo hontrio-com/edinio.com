@@ -5,14 +5,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { cheieDocument, slotFacturare } from "@/lib/billing/refacturare";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiFgo, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
 
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import {
@@ -396,29 +396,57 @@ export async function generateFgoInvoice(
     // nimic pe ele.
     const parte = invoiceParty(order, { ...addr, address: addr?.address ?? addr?.street ?? null });
 
-    const result = await createFgoInvoice(
-      config,
-      parte.name,
+    /*
+     * fGO are `IdExtern` -> 409, deci duplicatul e blocat LA FURNIZOR — dar exact
+     * asta produce fundatura documentata mai jos (fgo.actions.ts, `cancelFgo...`):
+     * daca scrierea locala se pierde, factura exista, randul n-o stie, si orice
+     * reincercare ia 409 la nesfarsit. Registrul retine numarul si reface legatura
+     * fara sa mai cheme fGO. Aceeasi cheie cu slot ca la celelalte doua case.
+     */
+    const r = await cuRegistru(
+      createAdminClient(),
       {
-        judet: parte.county ?? undefined,
-        localitate: parte.city ?? undefined,
-        adresa: parte.address ?? undefined,
-        email: order.customer_email ?? undefined,
-        telefon: order.customer_phone,
-        tip: parte.isCompany ? "PJ" : "PF",
-        codUnic: parte.vatCode ?? undefined,
+        businessId, orderId, fel: "factura", furnizor: "fgo",
+        cheie: cheieOperatie("factura", "fgo", cheieDocument(orderId, slot)),
       },
-      items,
-      {
-        dueDate,
-        // fGO refuza cu 409 un al doilea document pe acelasi `IdExtern`, iar fara
-        // camp de mentiuni in model, sufixul cu numarul notei de credit e si
-        // singura urma pe document a facturii pe care o inlocuieste.
-        idExtern: order.order_number
-          ? cheieDocument(String(order.order_number), slot)
-          : undefined,
+      async () => {
+        const rezultat = await createFgoInvoice(
+          config,
+          parte.name,
+          {
+            judet: parte.county ?? undefined,
+            localitate: parte.city ?? undefined,
+            adresa: parte.address ?? undefined,
+            email: order.customer_email ?? undefined,
+            telefon: order.customer_phone,
+            tip: parte.isCompany ? "PJ" : "PF",
+            codUnic: parte.vatCode ?? undefined,
+          },
+          items,
+          {
+            dueDate,
+            // fGO refuza cu 409 un al doilea document pe acelasi `IdExtern`, iar fara
+            // camp de mentiuni in model, sufixul cu numarul notei de credit e si
+            // singura urma pe document a facturii pe care o inlocuieste.
+            idExtern: order.order_number
+              ? cheieDocument(String(order.order_number), slot)
+              : undefined,
+          },
+        );
+        return {
+          referinta: rezultat.Numar,
+          detalii: { serie: rezultat.Serie, link: rezultat.Link ?? null },
+          valoare: rezultat,
+        };
       },
+      verdictFurnizor,
     );
+
+    if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+    const dFgo = r.fel === "deja" ? (r.detalii as { serie?: string; link?: string | null } | null) : null;
+    const result = r.fel === "facut"
+      ? r.valoare
+      : { Numar: r.referinta ?? "", Serie: dFgo?.serie ?? "", Link: dFgo?.link ?? "" };
 
     await supabase.from("orders").update({
       fgo_invoice_number: result.Numar,
@@ -469,19 +497,65 @@ export async function stornoFgoInvoiceAction(
   }
   if (orderData.fgo_storno_number) return { error: "Factura fGO a fost deja stornata" };
 
-  try {
-    const result = await stornoFgoInvoice(config, orderData.fgo_invoice_number, orderData.fgo_invoice_series);
+  /*
+   * ⚠ De ce NU s-a adaugat `IdExtern` si aici.
+   *
+   * Emiterea are plasa la furnizor (`IdExtern` -> 409, fgo.actions.ts:417), iar
+   * `/factura/stornare` (src/lib/fgo.ts:190-207) trimite doar CodUnic, Hash, Numar,
+   * Serie si PlatformaUrl. Ar fi fost tentant sa-i strecor un `IdExtern` — dar nu
+   * exista nicio dovada ca endpoint-ul il accepta, si un camp necunoscut trimis
+   * unei integrari care merge poate fi respins cu totul. Se cere fGO in scris;
+   * pana atunci registrul local e singurul strat, si e de ajuns.
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId,
+      fel: "storno",
+      furnizor: "fgo",
+      // Legata de FACTURA anulata: dupa o reemitere legitima, factura noua are alt
+      // numar, deci si stornoul ei alta cheie.
+      cheie: cheieOperatie("storno", "fgo",
+        `${orderData.fgo_invoice_series}-${orderData.fgo_invoice_number}`),
+    },
+    async () => {
+      const rezultat = await stornoFgoInvoice(
+        config, orderData.fgo_invoice_number as string, orderData.fgo_invoice_series as string);
+      return {
+        referinta: rezultat.Numar,
+        detalii: { serie: rezultat.Serie },
+        valoare: rezultat,
+      };
+    },
+    // `fgoPost` marcheaza singur: 4xx refuz, 409 si 5xx nesigur, `Success:false` refuz.
+    verdictFurnizor,
+  );
 
-    await supabase.from("orders").update({
-      fgo_storno_number: result.Numar,
-      fgo_storno_series: result.Serie,
-      updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
 
-    return { number: result.Numar, series: result.Serie };
-  } catch (e) {
-    return { error: (e as Error).message };
+  const numar = r.fel === "facut" ? r.valoare.Numar : (r.referinta ?? "");
+  const serie = r.fel === "facut"
+    ? r.valoare.Serie
+    : ((r.detalii as { serie?: string } | null)?.serie ?? "");
+
+  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+    fgo_storno_number: numar,
+    fgo_storno_series: serie,
+    updated_at: new Date().toISOString(),
+  }).eq("id", orderId).select("id");
+
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "fgo.storno",
+      message: `Storno fGO emis (${serie} ${numar}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, factura: orderData.fgo_invoice_number, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
   }
+
+  return { number: numar, series: serie };
 }
 
 export async function cancelFgoInvoiceAction(
@@ -528,6 +602,33 @@ export async function cancelFgoInvoiceAction(
       fgo_invoice_link: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    /*
+     * Slotul din registru se elibereaza odata cu coloanele.
+     *
+     * De cand emiterea e cheiata pe `factura:fgo:cheieDocument(orderId, slot)`, iar
+     * dupa anulare `slotFacturare` intoarce `{poateEmite:true}` FARA `inlocuieste`,
+     * cheia urmatoarei emiteri e IDENTICA. Fara eliberare, ea ar primi `deja` si ar
+     * scrie inapoi pe comanda factura tocmai ANULATA.
+     *
+     * (Fundatura cu `IdExtern` descrisa mai sus ramane neschimbata — asta repara doar
+     * partea locala, ca registrul sa nu adauge un al doilea blocaj peste ea.)
+     */
+    const eliberat = await marcheazaAnulata(
+      createAdminClient(), businessId,
+      cheieOperatie("factura", "fgo", cheieDocument(orderId, slotFacturare({
+        casa: "fGO", factura: null, storno: orderData.fgo_storno_number,
+      }))),
+    );
+    if (!eliberat) {
+      await logError({
+        action: "fgo.cancelInvoice",
+        message: "Factura fGO anulata, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda ar putea readuce documentul anulat.",
+        details: { orderId, businessId, factura: orderData.fgo_invoice_number },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     return { success: true };
   } catch (e) {

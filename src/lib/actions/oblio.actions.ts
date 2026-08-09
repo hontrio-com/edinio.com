@@ -7,11 +7,11 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru } from "@/lib/operatii/registru";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiOblio, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
 
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { baniiAuIntrat, tipIncasareOblio } from "@/lib/billing/incasare";
@@ -508,7 +508,35 @@ export async function generateOblioInvoice(
     const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName, { supabase, businessId }, slot);
     // Comanda care nu se reconciliaza NU se factureaza. Vezi `reconcile.ts`.
     if ("error" in data) return { error: data.error };
-    const result = await createOblioDoc(token, "invoice", data);
+    /*
+     * Oblio ARE deja `idempotencyKey` la emitere (buildInvoiceData), deci a doua
+     * apasare intoarce ACELASI document si duplicatul e imposibil. Registrul adauga
+     * altceva: opreste al doilea apel inainte sa plece si, cand scrierea locala s-a
+     * pierdut, reface legatura din ce a retinut el — fara sa mai atinga furnizorul.
+     * Aceeasi cheie (cu slot) ca la SmartBill, ca reemiterea dupa storno sa treaca.
+     */
+    const r = await cuRegistru(
+      createAdminClient(),
+      {
+        businessId, orderId, fel: "factura", furnizor: "oblio",
+        cheie: cheieOperatie("factura", "oblio", cheieDocument(orderId, slot)),
+      },
+      async () => {
+        const rezultat = await createOblioDoc(token, "invoice", data);
+        return {
+          referinta: rezultat.number,
+          detalii: { serie: rezultat.seriesName, link: rezultat.link ?? null },
+          valoare: rezultat,
+        };
+      },
+      verdictFurnizor,
+    );
+
+    if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+    const dOb = r.fel === "deja" ? (r.detalii as { serie?: string; link?: string | null } | null) : null;
+    const result = r.fel === "facut"
+      ? r.valoare
+      : { number: r.referinta ?? "", seriesName: dOb?.serie ?? "", link: dOb?.link ?? null };
 
     await supabase.from("orders").update({
       oblio_invoice_number: result.number,
@@ -677,21 +705,75 @@ export async function stornoOblioInvoice(
       },
       mentions: `Storno comanda ${order.order_number}`,
       internalNote: `Storno comanda ${order.order_number}`,
+      /*
+       * ⚠ CHEIA DE IDEMPOTENTA LIPSEA CHIAR AICI.
+       *
+       * Emiterea obisnuita o primeste din `buildInvoiceData` (linia 369), dar
+       * `stornoData` e construit de mana si o omitea — deci storno-ul era singurul
+       * document Oblio fara plasa la furnizor, la o casa care ALTFEL o are peste
+       * tot. Iar o nota de credit dubla nu inseamna „bani pierduti": inseamna
+       * creditare dubla in contabilitate si in SPV.
+       *
+       * Cheia se leaga de FACTURA anulata, nu de comanda: dupa o reemitere
+       * legitima, factura noua are alt numar, deci si stornoul ei alta cheie.
+       */
+      idempotencyKey: `${config.cif}-storno-${orderData.oblio_invoice_series}-${orderData.oblio_invoice_number}`,
       // Stornul urmeaza factura in SPV: daca originala a fost trimisa, si creditul
       // trebuie trimis (e-Factura).
       ...(config.send_to_spv ? { spvExtern: 1 as const } : {}),
     };
 
-    const result = await createOblioDoc(token, "invoice", stornoData);
+    const r = await cuRegistru(
+      createAdminClient(),
+      {
+        businessId,
+        orderId,
+        fel: "storno",
+        furnizor: "oblio",
+        cheie: cheieOperatie("storno", "oblio",
+          `${orderData.oblio_invoice_series}-${orderData.oblio_invoice_number}`),
+      },
+      async () => {
+        const rezultat = await createOblioDoc(token, "invoice", stornoData);
+        return {
+          referinta: rezultat.number,
+          detalii: { serie: rezultat.seriesName, link: rezultat.link ?? null },
+          valoare: rezultat,
+        };
+      },
+      // `oblioReq` marcheaza singur refuzul (status 4xx in CORP, nu in HTTP).
+      verdictFurnizor,
+    );
 
-    await supabase.from("orders").update({
-      oblio_storno_number: result.number,
-      oblio_storno_series: result.seriesName,
-      oblio_storno_link: result.link ?? null,
+    if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+
+    const d = r.fel === "deja"
+      ? (r.detalii as { serie?: string; link?: string | null } | null)
+      : null;
+    const numar = r.fel === "facut" ? r.valoare.number : (r.referinta ?? "");
+    const serie = r.fel === "facut" ? r.valoare.seriesName : (d?.serie ?? "");
+    const link = r.fel === "facut" ? (r.valoare.link ?? null) : (d?.link ?? null);
+
+    const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+      oblio_storno_number: numar,
+      oblio_storno_series: serie,
+      oblio_storno_link: link,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).select("id");
 
-    return { number: result.number, series: result.seriesName };
+    // Nota de credit exista la Oblio. O eroare acum l-ar trimite pe om sa apese
+    // din nou; registrul a inregistrat deja operatia, deci a doua apasare o adopta.
+    if (eScriere || !randuri || randuri.length === 0) {
+      await logError({
+        action: "oblio.storno",
+        message: `Storno Oblio emis (${serie} ${numar}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, factura: orderData.oblio_invoice_number, code: eScriere?.code },
+        businessId,
+        severity: "critical",
+      });
+    }
+
+    return { number: numar, series: serie };
   } catch (e) {
     return { error: (e as Error).message };
   }

@@ -1,5 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { normalizeCountyName, normalizeLocalityName } from "@/lib/utils/ro-address";
+import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const BASE_URL = "https://api.fancourier.ro";
 
@@ -85,13 +86,13 @@ async function getFanCourierToken(username: string, password: string): Promise<s
   // Never log the response body here — it contains the auth token.
   if (!res.ok) {
     console.error("[fancourier] login failed: status=%d", res.status);
-    throw new Error(`FAN Courier login error: ${res.status} ${res.statusText} — ${text.slice(0, 200)}`);
+    throw eroareRefuz(`FAN Courier login error: ${res.status} ${res.statusText} — ${text.slice(0, 200)}`);
   }
   let data: Record<string, unknown>;
-  try { data = JSON.parse(text); } catch { throw new Error(`FAN Courier login: raspuns invalid — ${text.slice(0, 200)}`); }
+  try { data = JSON.parse(text); } catch { throw eroareRefuz(`FAN Courier login: raspuns invalid — ${text.slice(0, 200)}`); }
   const nested = data.data as Record<string, unknown> | undefined;
   const token = (nested?.token ?? data.token ?? data.access_token) as string | undefined;
-  if (!token || typeof token !== "string") throw new Error(`FAN Courier login: token absent din raspuns — ${text.slice(0, 200)}`);
+  if (!token || typeof token !== "string") throw eroareRefuz(`FAN Courier login: token absent din raspuns — ${text.slice(0, 200)}`);
 
   tokenCache.set(key, { token, expiresAt: Date.now() + TOKEN_TTL_MS });
   return token;
@@ -125,9 +126,11 @@ async function fanFetch(
 
 async function fanGet<T>(username: string, password: string, path: string): Promise<T> {
   const res = await fanFetch(username, password, path);
-  if (!res.ok) throw new Error(`FAN Courier GET ${path}: ${res.status} ${res.statusText}`);
+  // Citire pura: orice esec dovedeste ca nu s-a creat nimic, deci NU are voie sa
+  // blocheze o comanda. `getSenderBranch` cheama asta inainte de FIECARE AWB.
+  if (!res.ok) throw eroareRefuz(`FAN Courier GET ${path}: ${res.status} ${res.statusText}`);
   const data = await res.json() as { status: string; data?: T; message?: string };
-  if (data.status !== "success") throw new Error(data.message ?? `FAN Courier GET ${path} failed`);
+  if (data.status !== "success") throw eroareRefuz(data.message ?? `FAN Courier GET ${path} failed`);
   return data.data as T;
 }
 
@@ -188,13 +191,13 @@ function fanErrorDetail(parsed: unknown): string {
 async function getSenderBranch(config: FanCourierConfig): Promise<FanCourierBranch> {
   const branches = await getFanCourierBranches(config.username, config.password);
   if (branches.length === 0) {
-    throw new Error("FAN Courier: contul nu are niciun branch expeditor. Reconecteaza contul in Setari.");
+    throw eroareRefuz("FAN Courier: contul nu are niciun branch expeditor. Reconecteaza contul in Setari.");
   }
   // clientId in the AWB payload MUST be the sender branch — never fall back
   // silently to another branch, that would ship from the wrong pickup point.
   const match = branches.find((b) => Number(b.id) === Number(config.client_id));
   if (!match) {
-    throw new Error(
+    throw eroareRefuz(
       `FAN Courier: branch-ul expeditor salvat (ID ${config.client_id}) nu mai exista pe cont. Reconecteaza contul in Setari > Integrari > FAN Courier si alege branch-ul corect.`,
     );
   }
@@ -205,7 +208,7 @@ async function fanDelete(username: string, password: string, path: string): Prom
   const res = await fanFetch(username, password, path, { method: "DELETE" });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`FAN Courier DELETE ${path}: ${res.status} — ${text}`);
+    throw eroareCuStatus(`FAN Courier DELETE ${path}: ${res.status} — ${text}`, res.status);
   }
 }
 
@@ -240,27 +243,27 @@ export async function createFanCourierAwb(
 
   // API hard limits — fail here with a clear message instead of a cryptic FAN error.
   if (input.cod > FAN_MAX_COD) {
-    throw new Error(`FAN Courier: rambursul maxim acceptat este ${FAN_MAX_COD.toLocaleString("ro-RO")} lei. Imparte comanda sau incaseaza online.`);
+    throw eroareRefuz(`FAN Courier: rambursul maxim acceptat este ${FAN_MAX_COD.toLocaleString("ro-RO")} lei. Imparte comanda sau incaseaza online.`);
   }
   if (isFanbox) {
     if (input.weightKg > FANBOX_MAX_WEIGHT_KG) {
-      throw new Error(`FAN Courier: greutatea maxima pentru FANbox este ${FANBOX_MAX_WEIGHT_KG} kg.`);
+      throw eroareRefuz(`FAN Courier: greutatea maxima pentru FANbox este ${FANBOX_MAX_WEIGHT_KG} kg.`);
     }
     if (input.parcels > 1) {
-      throw new Error("FAN Courier: FANbox accepta un singur colet per AWB.");
+      throw eroareRefuz("FAN Courier: FANbox accepta un singur colet per AWB.");
     }
     if (!input.recipientEmail?.trim()) {
-      throw new Error("FAN Courier: emailul destinatarului este obligatoriu pentru livrarea la FANbox.");
+      throw eroareRefuz("FAN Courier: emailul destinatarului este obligatoriu pentru livrarea la FANbox.");
     }
     // Docs: "The package sizes ... are mandatory fields" for FANbox — the size
     // also decides the locker compartment, so refuse guessed dimensions.
     const dims = [input.length, input.width, input.height];
     if (!dims.every((d): d is number => typeof d === "number" && d > 0)) {
-      throw new Error("FAN Courier: dimensiunile coletului (L x l x H) sunt obligatorii pentru livrarea la FANbox.");
+      throw eroareRefuz("FAN Courier: dimensiunile coletului (L x l x H) sunt obligatorii pentru livrarea la FANbox.");
     }
     const sorted = [...(dims as number[])].sort((a, b) => a - b);
     if (sorted.some((d, i) => d > FANBOX_COMPARTMENT_CM[i])) {
-      throw new Error(`FAN Courier: coletul depaseste compartimentul FANbox (max ${FANBOX_COMPARTMENT_CM.join(" x ")} cm).`);
+      throw eroareRefuz(`FAN Courier: coletul depaseste compartimentul FANbox (max ${FANBOX_COMPARTMENT_CM.join(" x ")} cm).`);
     }
   }
 
@@ -272,7 +275,7 @@ export async function createFanCourierAwb(
   if (isFanbox) {
     fanboxPoint = await getFanCourierPickupPointById(config.username, config.password, input.fanboxId!);
     if (!fanboxPoint) {
-      throw new Error(`FAN Courier: lockerul ${input.fanboxId} nu a fost gasit in lista FANbox. Verifica selectia clientului.`);
+      throw eroareRefuz(`FAN Courier: lockerul ${input.fanboxId} nu a fost gasit in lista FANbox. Verifica selectia clientului.`);
     }
   }
 
@@ -374,14 +377,14 @@ export async function createFanCourierAwb(
   if (!res.ok) {
     let detail = "";
     try { detail = fanErrorDetail(JSON.parse(raw)); } catch { /* not JSON */ }
-    throw new Error(`FAN Courier: ${detail || `${res.status} — ${raw.slice(0, 300) || res.statusText}`}`);
+    throw eroareCuStatus(`FAN Courier: ${detail || `${res.status} — ${raw.slice(0, 300) || res.statusText}`}`, res.status);
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error(`FAN Courier: raspuns invalid — ${raw.slice(0, 200)}`);
+    throw eroareNesigura(`FAN Courier: raspuns invalid — ${raw.slice(0, 200)}`);
   }
 
   // Documented shape: { "response": [ { "awbNumber": 2228…, "errors": null } ] }.
@@ -393,7 +396,23 @@ export async function createFanCourierAwb(
   if (failed) {
     const detail = fanErrorDetail(parsed);
     console.error("[fancourier] intern-awb failed: %s", detail || raw.slice(0, 400));
-    throw new Error(detail ? `FAN Courier: ${detail}` : `FAN Courier: AWB nu a fost creat — ${raw.slice(0, 200)}`);
+    /*
+     * ⚠ AICI E CALEA DE ESEC OBISNUITA A LUI FAN, NU O EXCEPTIE.
+     *
+     * FAN raspunde HTTP 200 si pune motivul in `errors` per-expediere — localitate
+     * gresita, cod postal lipsa, serviciu neactivat, ramburs prea mare (le enumera
+     * chiar comentariul de la liniile 155-159). `!res.ok` a fost tratat mai sus,
+     * deci aici stim ca FAN a primit cererea, a inteles-o si a spus „nu", cu
+     * `awbNumber: null`.
+     *
+     * Marcata `eroareNesigura`, prima adresa gresita ar fi blocat comanda si i-ar
+     * fi cerut omului sa verifice in contul FAN un AWB care nu exista. Cand FAN ne
+     * DA motivul, e refuz dovedit si reincercarea dupa corectare ramane libera.
+     *
+     * Fara motiv insa nu putem sti ce a facut: acolo ramane „nu stim".
+     */
+    if (detail) throw eroareRefuz(`FAN Courier: ${detail}`);
+    throw eroareNesigura(`FAN Courier: AWB nu a fost creat — ${raw.slice(0, 200)}`);
   }
 
   return awbNumber;
@@ -443,14 +462,14 @@ export async function createFanCourierPickupOrder(
   };
   // Documented constraints: interval of at least 2 hours, no Sunday pickups.
   if (toMinutes(input.secondHour) - toMinutes(input.firstHour) < 120) {
-    throw new Error("FAN Courier: intervalul de ridicare trebuie sa fie de minim 2 ore.");
+    throw eroareRefuz("FAN Courier: intervalul de ridicare trebuie sa fie de minim 2 ore.");
   }
   const day = new Date(`${input.pickupDate}T12:00:00`);
   if (Number.isNaN(day.getTime())) {
-    throw new Error("FAN Courier: data de ridicare este invalida.");
+    throw eroareRefuz("FAN Courier: data de ridicare este invalida.");
   }
   if (day.getDay() === 0) {
-    throw new Error("FAN Courier: nu se fac ridicari duminica. Alege alta zi.");
+    throw eroareRefuz("FAN Courier: nu se fac ridicari duminica. Alege alta zi.");
   }
 
   const body = {
@@ -482,16 +501,16 @@ export async function createFanCourierPickupOrder(
 
   if (!res.ok) {
     const detail = parsed ? fanErrorDetail(parsed) : "";
-    throw new Error(`FAN Courier: ${detail || `${res.status} — ${raw.slice(0, 300) || res.statusText}`}`);
+    throw eroareCuStatus(`FAN Courier: ${detail || `${res.status} — ${raw.slice(0, 300) || res.statusText}`}`, res.status);
   }
 
   const rec = (parsed ?? {}) as Record<string, unknown>;
   if (typeof rec.status === "string" && rec.status !== "success") {
     const detail = fanErrorDetail(parsed) || (typeof rec.message === "string" ? rec.message : "");
-    throw new Error(`FAN Courier: ${detail || `comanda de ridicare a fost refuzata — ${raw.slice(0, 200)}`}`);
+    throw eroareNesigura(`FAN Courier: ${detail || `comanda de ridicare a fost refuzata — ${raw.slice(0, 200)}`}`);
   }
   const inlineErrors = fanErrorDetail(parsed);
-  if (inlineErrors) throw new Error(`FAN Courier: ${inlineErrors}`);
+  if (inlineErrors) throw eroareNesigura(`FAN Courier: ${inlineErrors}`);
 
   // The success payload shape is not documented — look for an order id in the
   // usual places; an error-free 2xx counts as accepted even without one.

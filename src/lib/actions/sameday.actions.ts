@@ -5,6 +5,9 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   createSamedayAwb,
   deleteSamedayAwb,
@@ -160,19 +163,42 @@ export async function createSamedayAwbAction(
         }
       : { ...input, lockerId: undefined };
 
-  try {
-    const awbNumber = await createSamedayAwb(config, enriched);
+  const r = await cuRegistru(
+    createAdminClient(),
+    { businessId, orderId, fel: "awb", furnizor: "sameday", cheie: cheieOperatie("awb", "sameday", orderId) },
+    async () => {
+      const awbNumber = await createSamedayAwb(config, enriched);
+      return { referinta: awbNumber, valoare: { awbNumber } };
+    },
+    verdictFurnizor,
+    // Pe `deja`: mai poarta comanda AWB-ul din registru? Daca nu, e urma unei
+    // anulari a carei eliberare s-a pierdut — se elibereaza si se reia.
+    async () => !!orderData.sameday_awb_number,
+  );
 
-    await supabase.from("orders").update({
-      sameday_awb_number: awbNumber,
-      updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  const awbNumber = r.fel === "facut" ? r.valoare.awbNumber : (r.referinta ?? "");
+
+  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+    sameday_awb_number: awbNumber,
+    updated_at: new Date().toISOString(),
+  }).eq("id", orderId).select("id");
+
+  // AWB-ul exista. O eroare acum l-ar trimite pe om sa apese din nou; registrul
+  // l-a inregistrat, deci a doua apasare il adopta si reface scrierea.
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "sameday.createAwb",
+      message: `AWB Sameday creat (${awbNumber}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
+  } else {
     void enqueueAboutYouShip(businessId, orderId);
-
-    return { awbNumber };
-  } catch (e) {
-    return { error: (e as Error).message };
   }
+
+  return { awbNumber };
 }
 
 export async function deleteSamedayAwbAction(
@@ -193,6 +219,18 @@ export async function deleteSamedayAwbAction(
       sameday_awb_number: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    // Fara eliberare, emiterea urmatoare ar adopta chiar AWB-ul sters.
+    const eliberat = await marcheazaAnulata(createAdminClient(), businessId, cheieOperatie("awb", "sameday", orderId));
+    if (!eliberat) {
+      await logError({
+        action: "sameday.deleteAwb",
+        message: "AWB Sameday sters, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda va fi refuzata.",
+        details: { orderId, businessId, awb: orderData.sameday_awb_number },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     return { success: true };
   } catch (e) {

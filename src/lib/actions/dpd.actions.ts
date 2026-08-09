@@ -198,6 +198,9 @@ export async function createDpdShipmentAction(
     // `dpdCall` (src/lib/dpd.ts:94) marcheaza singur refuzul, inclusiv cazul in
     // care DPD raspunde 200 cu `error` in corp — pe care statusul l-ar fi ratat.
     verdictFurnizor,
+    // Pe `deja`: mai poarta comanda expeditia din registru? Daca nu, e urma unei
+    // anulari a carei eliberare s-a pierdut — se elibereaza si se reia.
+    async () => !!orderData.dpd_shipment_id,
   );
 
   if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };

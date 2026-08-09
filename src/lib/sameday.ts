@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const PROD_URL = "https://api.sameday.ro";
 const SANDBOX_URL = "https://sameday-api.demo.zitec.com";
@@ -82,10 +83,10 @@ async function getSamedayToken(
     },
   });
 
-  if (!res.ok) throw new Error(`Sameday autentificare esuata: ${res.status} ${res.statusText}`);
+  if (!res.ok) throw eroareRefuz(`Sameday autentificare esuata: ${res.status} ${res.statusText}`);
 
   const data = await res.json() as { token?: string; expire_at?: string };
-  if (!data.token) throw new Error("Token Sameday invalid in raspuns");
+  if (!data.token) throw eroareRefuz("Token Sameday invalid in raspuns");
 
   // expire_at format: "2018-05-25 23:07" — cache with 1h buffer
   let expiresAt = Date.now() + 11 * 60 * 60 * 1000; // 11h default
@@ -112,7 +113,8 @@ async function samedayGet<T>(
   const res = await fetch(url.toString(), {
     headers: { "X-AUTH-TOKEN": token },
   });
-  if (!res.ok) throw new Error(`Sameday GET ${path}: ${res.status} ${res.statusText}`);
+  // Citire pura — vezi nota din fancourier.ts.
+  if (!res.ok) throw eroareRefuz(`Sameday GET ${path}: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
 
@@ -132,7 +134,7 @@ async function samedayPost<T>(
   });
 
   const text = await res.text();
-  if (!res.ok) throw new Error(`Sameday POST ${path}: ${res.status} — ${text}`);
+  if (!res.ok) throw eroareCuStatus(`Sameday POST ${path}: ${res.status} — ${text}`, res.status);
 
   return JSON.parse(text) as T;
 }
@@ -148,7 +150,7 @@ async function samedayDelete(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`Sameday DELETE ${path}: ${res.status} — ${text}`);
+    throw eroareCuStatus(`Sameday DELETE ${path}: ${res.status} — ${text}`, res.status);
   }
 }
 
@@ -303,7 +305,7 @@ export async function createSamedayAwb(
   }>("api/awb", token, config.sandbox, parts);
 
   if (!data.awbNumber) {
-    throw new Error(data.error ?? "AWB Sameday nu a fost returnat in raspuns");
+    throw eroareNesigura(data.error ?? "AWB Sameday nu a fost returnat in raspuns");
   }
 
   return data.awbNumber;

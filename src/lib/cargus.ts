@@ -1,5 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { stripDiacritics, normalizeCountyName, normalizeLocalityName } from "@/lib/utils/ro-address";
+import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 export type CargusConfig = {
   enabled: boolean;
@@ -95,16 +96,16 @@ async function getCargusToken(
     // almost always means the WebExpress username/password are wrong (or that
     // account has no API access enabled) — Cargus returns 500 instead of 401.
     if (res.status === 500) {
-      throw new Error(
+      throw eroareRefuz(
         "Autentificare Cargus esuata: utilizatorul sau parola contului WebExpress sunt incorecte, " +
         "sau contul nu are acces API activat. Subscription Key-ul este corect (a trecut de gateway)." +
         (detail ? ` Raspuns Cargus: ${detail.slice(0, 200)}` : ""),
       );
     }
-    throw new Error(`Cargus login error: ${res.status} ${res.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
+    throw eroareRefuz(`Cargus login error: ${res.status} ${res.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ""}`);
   }
   const token = (await res.json()) as string;
-  if (!token || typeof token !== "string") throw new Error("Token Cargus invalid");
+  if (!token || typeof token !== "string") throw eroareRefuz("Token Cargus invalid");
 
   tokenCache.set(key, { token, expiresAt: Date.now() + TOKEN_TTL_MS });
   return token;
@@ -125,7 +126,8 @@ async function cargusGet<T>(
       "Ocp-Apim-Trace": "true",
     },
   });
-  if (!res.ok) throw new Error(`Cargus GET ${path}: ${res.status} ${res.statusText}`);
+  // Citire pura — vezi nota din fancourier.ts.
+  if (!res.ok) throw eroareRefuz(`Cargus GET ${path}: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
 
@@ -167,7 +169,7 @@ async function cargusPost<T>(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`Cargus: ${cargusErrorDetail(text).slice(0, 300) || `${res.status} ${res.statusText}`}`);
+    throw eroareCuStatus(`Cargus: ${cargusErrorDetail(text).slice(0, 300) || `${res.status} ${res.statusText}`}`, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -188,7 +190,7 @@ async function cargusPut(
   });
   const text = await res.text().catch(() => "");
   if (!res.ok) {
-    throw new Error(`Cargus: ${cargusErrorDetail(text).slice(0, 300) || `${res.status} ${res.statusText}`}`);
+    throw eroareCuStatus(`Cargus: ${cargusErrorDetail(text).slice(0, 300) || `${res.status} ${res.statusText}`}`, res.status);
   }
   // The response is the order number — as a bare number, a JSON string, or empty.
   try {
@@ -214,7 +216,7 @@ async function cargusDelete(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(`Cargus DELETE ${path}: ${res.status} — ${text}`);
+    throw eroareCuStatus(`Cargus DELETE ${path}: ${res.status} — ${text}`, res.status);
   }
 }
 
@@ -359,7 +361,7 @@ export async function createCargusAwb(
   // The barcode may arrive as a JSON string or a bare number — coerce it.
   const barCode = await cargusPost<string | number>("Awbs", token, config.subscription_key, body);
   const code = String(barCode ?? "").trim();
-  if (!code || code === "null") throw new Error("AWB Cargus nu a fost returnat");
+  if (!code || code === "null") throw eroareNesigura("AWB Cargus nu a fost returnat");
   return code;
 }
 

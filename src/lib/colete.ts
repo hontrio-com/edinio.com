@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { eroareCuStatus, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const CO_AUTH = "https://auth.colete-online.ro/token";
 const CO_BASE_PROD = "https://api.colete-online.ro/v1";
@@ -101,9 +102,9 @@ export async function getCOToken(clientId: string, clientSecret: string): Promis
     cache: "no-store",
   });
 
-  if (!res.ok) throw new Error("Autentificare Colete Online esuata. Verifica credentialele API.");
+  if (!res.ok) throw eroareRefuz("Autentificare Colete Online esuata. Verifica credentialele API.");
   const data = await res.json() as { access_token?: string; token_type?: string; expires_in?: number; error?: string };
-  if (!data.access_token) throw new Error(data.error ?? "Autentificare Colete Online esuata.");
+  if (!data.access_token) throw eroareRefuz(data.error ?? "Autentificare Colete Online esuata.");
 
   const expiresIn = data.expires_in ?? 7199;
   tokenCache.set(cacheKey, {
@@ -133,7 +134,7 @@ async function coReq<T>(token: string, sandbox: boolean, method: string, path: s
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { message?: string; errors?: { message: string }[] };
     const msg = err.message ?? err.errors?.[0]?.message ?? `Eroare HTTP ${res.status}`;
-    throw new Error(msg);
+    throw eroareCuStatus(msg, res.status);
   }
   return res.json() as Promise<T>;
 }

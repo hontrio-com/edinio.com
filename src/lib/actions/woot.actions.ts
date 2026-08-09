@@ -308,6 +308,18 @@ export async function createWootAwb(
     // pe validare (diacriticele) poarta verdictul si iese `esuat`, ca reincercarea
     // dupa corectarea adresei sa ramana libera.
     verdictFurnizor,
+    /*
+     * Woot nu citeste comanda nicaieri mai sus, deci verificarea se face aici — si
+     * costa un dus-intors DOAR pe ramura `deja`, niciodata pe drumul fericit.
+     * Fara ea, o anulare a carei eliberare s-a pierdut ar face ca emiterea urmatoare
+     * sa scrie inapoi pe comanda AWB-ul ANULAT.
+     */
+    async () => {
+      const { data } = await admin
+        .from("orders").select("woot_order_id")
+        .eq("id", orderId).eq("business_id", businessId).maybeSingle();
+      return !!data?.woot_order_id;
+    },
   );
 
   if (r.fel === "blocat" || r.fel === "eroare") return { success: false, error: r.mesaj };

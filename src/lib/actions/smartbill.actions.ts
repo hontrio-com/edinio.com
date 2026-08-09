@@ -430,13 +430,28 @@ const campuriStornoGolite = {
  * Cazul „a returnat numar dar cu avertisment" nu ajunge aici deloc: wrapperul il
  * trateaza ca SUCCES (linia 306), tocmai ca sa nu arunce un document real.
  */
-function verdictEmitereSmartbill(e: unknown): Verdict {
-  const m = e instanceof Error ? e.message : String(e);
-  if (m === "Eroare de retea la crearea facturii.") return "necunoscut";
-  if (m === "SmartBill nu a returnat numarul documentului.") return "necunoscut";
-  if (/^Eroare SmartBill \(\d+\)$/.test(m)) return "necunoscut";
-  return "esuat";
+function verdictSmartbill(...siruriNesigure: string[]): (e: unknown) => Verdict {
+  return (e) => {
+    const m = e instanceof Error ? e.message : String(e);
+    if (siruriNesigure.includes(m)) return "necunoscut";
+    // Statusul fara explicatie de la ei: n-avem ce dovedi.
+    if (/^Eroare SmartBill \(\d+\)$/.test(m)) return "necunoscut";
+    return "esuat";
+  };
 }
+
+const verdictEmitereSmartbill = verdictSmartbill(
+  "Eroare de retea la crearea facturii.",
+  "SmartBill nu a returnat numarul documentului.",
+);
+
+/**
+ * Storno-ul are propriul sir de retea (`src/lib/smartbill.ts:413`) si propriul
+ * pericol: o nota de credit dubla nu e „bani pierduti", e creditare dubla in
+ * contabilitate si in SPV. Iar `/invoice/reverse` NU primeste nicio cheie de
+ * idempotenta, deci registrul e singurul strat.
+ */
+const verdictStornoSmartbill = verdictSmartbill("Eroare de retea la stornarea facturii.");
 
 /**
  * `createMerchantInvoice`, dar sub registru.
@@ -815,23 +830,65 @@ export async function stornoOrderInvoice(
   // Stornare reala (POST /invoice/reverse) — nu anulare. Daca SmartBill nu
   // returneaza numarul stornoului (exemplul oficial il are gol), pastram
   // referinta facturii originale ca marcaj "stornata".
-  const result = await reverseMerchantInvoice(config, {
-    cif: config.company_vat_code,
-    seriesName: order.smartbill_invoice_series as string,
-    number: order.smartbill_invoice_number as string,
-  });
+  //
+  // Cheia leaga stornoul de FACTURA anulata, nu de comanda: dupa o reemitere
+  // legitima, factura noua are alt numar, deci si stornoul ei alta cheie. Fara
+  // asta, a doua stornare de pe aceeasi comanda ar fi blocata pe vecie de prima.
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId,
+      fel: "storno",
+      furnizor: "smartbill",
+      cheie: cheieOperatie("storno", "smartbill",
+        `${order.smartbill_invoice_series}-${order.smartbill_invoice_number}`),
+    },
+    async () => {
+      const rezultat = await reverseMerchantInvoice(config, {
+        cif: config.company_vat_code,
+        seriesName: order.smartbill_invoice_series as string,
+        number: order.smartbill_invoice_number as string,
+      });
+      if ("error" in rezultat) throw new Error(rezultat.error);
+      return {
+        // Cand SmartBill nu intoarce numarul notei de credit, referinta ramane
+        // factura stornata — acelasi marcaj pe care il scrie si randul comenzii.
+        referinta: rezultat.stornoNumber ?? String(order.smartbill_invoice_number),
+        detalii: { serie: rezultat.stornoSeries ?? null, numar: rezultat.stornoNumber ?? null },
+        valoare: rezultat,
+      };
+    },
+    verdictStornoSmartbill,
+  );
 
-  if ("error" in result) return result;
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
 
-  await supabase.from("orders").update({
-    smartbill_storno_number: result.stornoNumber ?? order.smartbill_invoice_number,
-    smartbill_storno_series: result.stornoSeries ?? order.smartbill_invoice_series,
-  }).eq("id", orderId);
+  const d = r.fel === "deja"
+    ? (r.detalii as { serie?: string | null; numar?: string | null } | null)
+    : null;
+  const stornoNumber = r.fel === "facut" ? r.valoare.stornoNumber : (d?.numar ?? undefined);
+  const stornoSeries = r.fel === "facut" ? r.valoare.stornoSeries : (d?.serie ?? undefined);
 
-  return {
-    stornoNumber: result.stornoNumber,
-    stornoSeries: result.stornoSeries,
-  };
+  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+    smartbill_storno_number: stornoNumber ?? order.smartbill_invoice_number,
+    smartbill_storno_series: stornoSeries ?? order.smartbill_invoice_series,
+  }).eq("id", orderId).select("id");
+
+  // Nota de credit EXISTA la SmartBill. O eroare intoarsa acum l-ar trimite pe om
+  // sa apese din nou, iar registrul tocmai a inregistrat operatia, deci a doua
+  // apasare o adopta si reface scrierea.
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "smartbill.storno",
+      message: `Storno SmartBill emis (${stornoNumber ?? order.smartbill_invoice_number}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, factura: order.smartbill_invoice_number, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
+  }
+
+  return { stornoNumber, stornoSeries };
 }
 
 export async function resendSmartbillEmail(

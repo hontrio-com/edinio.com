@@ -5,6 +5,9 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   createFanCourierAwb,
   deleteFanCourierAwb,
@@ -125,19 +128,51 @@ export async function createFanCourierAwbAction(
   const orderData = order as typeof order & { fan_courier_awb_number?: string | null };
   if (orderData.fan_courier_awb_number) return { error: "AWB FAN Courier a fost deja creat" };
 
-  try {
-    const awbNumber = await createFanCourierAwb(config, input);
+  /*
+   * ⚠ FAN e, impreuna cu Woot, curierul cel mai expus: nu trimitem nicio referinta
+   * a noastra in payloadul `intern-awb`, deci un AWB creat si nesalvat local ramane
+   * complet ANONIM la ei — nu poate fi nici gasit, nici legat inapoi. Registrul
+   * local e singurul strat care poate opri a doua apasare.
+   *
+   * In plus, `fanFetch` reincearca AUTOMAT orice cerere pe 401, inclusiv POST-ul de
+   * creare: daca FAN raspunde 401 dupa ce a inregistrat AWB-ul, un singur apel poate
+   * produce DOUA. Rezervarea nu opreste asta (e in interiorul aceluiasi apel), dar
+   * macar a doua APASARE nu mai adauga o a treia.
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    { businessId, orderId, fel: "awb", furnizor: "fancourier", cheie: cheieOperatie("awb", "fancourier", orderId) },
+    async () => {
+      const awbNumber = await createFanCourierAwb(config, input);
+      return { referinta: awbNumber, valoare: { awbNumber } };
+    },
+    verdictFurnizor,
+    // Pe `deja`: mai poarta comanda AWB-ul din registru? Daca nu, e urma unei
+    // anulari a carei eliberare s-a pierdut — se elibereaza si se reia.
+    async () => !!orderData.fan_courier_awb_number,
+  );
 
-    await supabase.from("orders").update({
-      fan_courier_awb_number: awbNumber,
-      updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  const awbNumber = r.fel === "facut" ? r.valoare.awbNumber : (r.referinta ?? "");
+
+  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+    fan_courier_awb_number: awbNumber,
+    updated_at: new Date().toISOString(),
+  }).eq("id", orderId).select("id");
+
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "fancourier.createAwb",
+      message: `AWB FAN Courier creat (${awbNumber}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
+  } else {
     void enqueueAboutYouShip(businessId, orderId);
-
-    return { awbNumber };
-  } catch (e) {
-    return { error: (e as Error).message };
   }
+
+  return { awbNumber };
 }
 
 // ─── Pickup (courier order) actions ──────────────────────────────────────────
@@ -241,6 +276,18 @@ export async function deleteFanCourierAwbAction(
       fan_courier_awb_number: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    // Fara eliberare, emiterea urmatoare ar adopta chiar AWB-ul sters.
+    const eliberat = await marcheazaAnulata(createAdminClient(), businessId, cheieOperatie("awb", "fancourier", orderId));
+    if (!eliberat) {
+      await logError({
+        action: "fancourier.deleteAwb",
+        message: "AWB FAN Courier sters, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda va fi refuzata.",
+        details: { orderId, businessId, awb: orderData.fan_courier_awb_number },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     return { success: true };
   } catch (e) {

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 export type FgoConfig = {
   enabled: boolean;
@@ -61,13 +62,30 @@ async function fgoPost<T>(
     // (this order was already invoiced in fGO) or a numbering conflict from
     // concurrent issuance. Make it actionable instead of a bare status line.
     if (res.status === 409) {
-      throw new Error("fGO: factura pare deja emisa pentru aceasta comanda (verifica in contul fGO) sau conflict de numerotare. Reincearca.");
+      /*
+       * `eroareNesigura`, desi 409 e un 4xx: aici furnizorul nu spune „n-am facut
+       * nimic", ci exact pe dos — documentul EXISTA la el, doar ca noi nu-i stim
+       * numarul. E fundatura descrisa in fgo.actions.ts:518-524. Ca „refuz" ar fi
+       * lasat comerciantul sa reincerce la nesfarsit si sa ia 409 de fiecare data,
+       * fara nicio urma; ca „nu stim", operatia iese in panoul comenzii cu mesajul
+       * care ii spune sa se uite in contul fGO.
+       */
+      /*
+       * Mesajul NU mai spune „Reincearca." — de cand emiterea e sub registru,
+       * reincercarea chiar NU mai ajunge la fGO: operatia se inchide `necunoscut`,
+       * care blocheaza. Un indemn pe care sistemul il refuza e mai rau decat niciun
+       * indemn, fiindca il trimite pe om sa apese un buton care ii raspunde „nu".
+       */
+      throw eroareNesigura("fGO: factura pare deja emisa pentru aceasta comanda, sau e un conflict de numerotare. Verifica in contul fGO: daca factura exista, ia numarul de acolo; daca nu, deblocheaza operatia din pagina comenzii si emite din nou.");
     }
-    throw new Error(`fGO API error: ${res.status} ${res.statusText}`);
+    // 4xx = a inteles si a respins, nimic nu s-a emis. 5xx = a picat la el DUPA ce
+    // a primit cererea, deci documentul poate exista.
+    throw eroareCuStatus(`fGO API error: ${res.status} ${res.statusText}`, res.status);
   }
   const data = (await res.json()) as { Success: boolean; Message?: string } & T;
   if (!data.Success) {
-    throw new Error(data.Message || "Eroare necunoscuta fGO");
+    // 200 cu `Success: false` — cererea a ajuns, a fost inteleasa si respinsa.
+    throw eroareRefuz(data.Message || "Eroare necunoscuta fGO");
   }
   return data;
 }

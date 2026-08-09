@@ -5,6 +5,9 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   createCargusAwb,
   deleteCargusAwb,
@@ -150,24 +153,56 @@ export async function createCargusAwbAction(
     declaredValue: config.declared_value_enabled ? (Number(order.subtotal) || undefined) : undefined,
   };
 
-  try {
-    const barCode = await createCargusAwb(config, enriched);
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId,
+      fel: "awb",
+      furnizor: "cargus",
+      cheie: cheieOperatie("awb", "cargus", orderId),
+    },
+    async () => {
+      const barCode = await createCargusAwb(config, enriched);
+      const serviceName = enriched.pudoPointId
+        ? "Ship & Go"
+        : getCargusServiceId(enriched.totalWeightKg).name;
+      return { referinta: barCode, detalii: { serviciu: serviceName }, valoare: { barCode, serviceName } };
+    },
+    verdictFurnizor,
+    // Pe `deja`: mai poarta comanda AWB-ul din registru? Daca nu, e urma unei
+    // anulari a carei eliberare s-a pierdut — se elibereaza si se reia.
+    async () => !!orderData.cargus_awb_number,
+  );
 
-    const serviceName = enriched.pudoPointId
-      ? "Ship & Go"
-      : getCargusServiceId(enriched.totalWeightKg).name;
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
 
-    await supabase.from("orders").update({
-      cargus_awb_number: barCode,
-      cargus_service_name: serviceName,
-      updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+  const barCode = r.fel === "facut" ? r.valoare.barCode : (r.referinta ?? "");
+  const serviceName = r.fel === "facut"
+    ? r.valoare.serviceName
+    : ((r.detalii as { serviciu?: string } | null)?.serviciu ?? "");
+
+  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+    cargus_awb_number: barCode,
+    cargus_service_name: serviceName,
+    updated_at: new Date().toISOString(),
+  }).eq("id", orderId).select("id");
+
+  // AWB-ul exista si e platit: o eroare intoarsa acum l-ar trimite pe om sa apese
+  // din nou. Registrul l-a inregistrat, deci a doua apasare il adopta.
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "cargus.createAwb",
+      message: `AWB Cargus creat (${barCode}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
+  } else {
     void enqueueAboutYouShip(businessId, orderId);
-
-    return { barCode, serviceName };
-  } catch (e) {
-    return { error: (e as Error).message };
   }
+
+  return { barCode, serviceName };
 }
 
 // ─── Pickup (courier order validation) ───────────────────────────────────────
@@ -227,6 +262,19 @@ export async function deleteCargusAwbAction(
       cargus_service_name: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    // Slotul se elibereaza dupa confirmarea anularii: altfel emiterea urmatoare ar
+    // „adopta" chiar AWB-ul sters si l-ar scrie inapoi pe comanda.
+    const eliberat = await marcheazaAnulata(createAdminClient(), businessId, cheieOperatie("awb", "cargus", orderId));
+    if (!eliberat) {
+      await logError({
+        action: "cargus.deleteAwb",
+        message: "AWB Cargus sters, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda va fi refuzata.",
+        details: { orderId, businessId, awb: orderData.cargus_awb_number },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     return { success: true };
   } catch (e) {

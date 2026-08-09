@@ -146,6 +146,53 @@ export async function cuRegistru<T>(
   cerere: CerereOperatie,
   executa: () => Promise<RodOperatie<T>>,
   clasifica: (e: unknown) => Verdict,
+  /**
+   * „Mai e vie legatura pe care ar adopta-o?"
+   *
+   * ⚠ FARA ASTA, O ELIBERARE PICATA INVIE UN DOCUMENT MORT.
+   *
+   * Anularea unui AWB elibereaza slotul prin `marcheazaAnulata`. Dar acela e un al
+   * doilea dus-intors, si poate pica — caz in care randul ramane `reusit` desi la
+   * curier nu mai exista nimic. Urmatoarea emitere ar primi `deja` si ar scrie
+   * inapoi pe comanda AWB-ul ANULAT: transport inexistent, marfa care nu pleaca.
+   *
+   * Apelantul stie ce e pe comanda ACUM. Daca spune ca legatura nu mai exista,
+   * randul e vechi: se elibereaza aici si rezervarea se reia O SINGURA data.
+   * Asa greseala se repara singura la prima incercare de dupa, in loc sa astepte
+   * o interventie in baza.
+   *
+   * Se lasa nedat acolo unde adoptarea e mereu corecta (facturile: numarul lor nu
+   * se sterge de pe comanda decat printr-o reemitere, care are oricum alta cheie).
+   */
+  legaturaVie?: (referinta: string | null) => Promise<boolean>,
+): Promise<RezultatOperatie<T>> {
+  const r1 = await incearca(admin, cerere, executa, clasifica);
+
+  if (r1.fel === "deja" && legaturaVie) {
+    const vie = await legaturaVie(r1.referinta);
+    if (!vie) {
+      await logError({
+        action: "cuRegistru.slotVechi",
+        message: `Registrul avea ${cerere.fel} ${cerere.furnizor} ca reusita (${r1.referinta}), dar comanda nu o mai poarta — probabil o anulare a carei eliberare s-a pierdut. Eliberez si reiau.`,
+        details: { cheie: cerere.cheie, orderId: cerere.orderId, referinta: r1.referinta },
+        businessId: cerere.businessId,
+        severity: "warning",
+      });
+      await marcheazaAnulata(admin, cerere.businessId, cerere.cheie);
+      // O SINGURA reluare: daca nici acum nu se rezerva, altceva e in joc si
+      // apelantul primeste raspunsul stabil, nu o bucla.
+      return incearca(admin, cerere, executa, clasifica);
+    }
+  }
+
+  return r1;
+}
+
+async function incearca<T>(
+  admin: SupabaseClient<Database>,
+  cerere: CerereOperatie,
+  executa: () => Promise<RodOperatie<T>>,
+  clasifica: (e: unknown) => Verdict,
 ): Promise<RezultatOperatie<T>> {
   const { data: rez, error: eRez } = await admin.rpc("rezerva_operatie_externa", {
     p_business_id: cerere.businessId,

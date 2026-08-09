@@ -5,7 +5,10 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { eroareNesigura, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   getCOToken,
   getBalance,
@@ -29,13 +32,12 @@ function configExtras(config: COConfig, subtotal?: number): COOrderExtras {
   };
 }
 
-function adminClient() {
-  return createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
-}
+/*
+ * Clientul de sistem vine din `@/lib/supabase/admin`, nu se mai construieste aici.
+ * Cel local era `createClient(...)` FARA genericul `<Database>`, adica exact
+ * capcana din 19.08: `.rpc()` accepta orice nume de functie si orice argumente.
+ */
+const adminClient = createAdminClient;
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -184,26 +186,85 @@ export async function createCOAwb(
     const config = settings?.colete_config as COConfig | null;
     if (!config?.client_id || !config?.client_secret) return { error: "Colete Online nu este configurat" };
 
-    const token = await getCOToken(config.client_id, config.client_secret);
-    const result = await createCOOrder(token, config.sandbox ?? false, config.sender, receiver, parcels, repayment, serviceId, {
-      ...configExtras(config, Number(order.subtotal) || undefined),
-      openAtDelivery: options?.openAtDelivery,
-      saturday: options?.saturday,
-      clientReference: order.order_number, // shows up in COD payout reports
-    });
+    /*
+     * ⚠ Colete Online e cel mai prost caz din toti sase, si de aceea garda locala
+     * conteaza cel mai mult aici: NU are endpoint de anulare (vezi `detachCOAwb`,
+     * care doar dezleaga local), si nu se poate interoga dupa `clientReference`.
+     * Un al doilea AWB nu s-ar putea sterge din cod, ci doar de mana din contul lor.
+     *
+     * Pe deasupra, actiunea asta nici nu citea `colete_awb_number` inainte (citirea
+     * de mai sus aduce doar id, order_number, payment_method, payment_status,
+     * subtotal), deci pe server nu exista NICIO oprire — doar `hasAwb` din modal.
+     */
+    const r = await cuRegistru(
+      admin,
+      { businessId, orderId, fel: "awb", furnizor: "colete", cheie: cheieOperatie("awb", "colete", orderId) },
+      async () => {
+        const token = await getCOToken(config.client_id, config.client_secret);
+        const rezultat = await createCOOrder(token, config.sandbox ?? false, config.sender, receiver, parcels, repayment, serviceId, {
+          ...configExtras(config, Number(order.subtotal) || undefined),
+          openAtDelivery: options?.openAtDelivery,
+          saturday: options?.saturday,
+          clientReference: order.order_number, // shows up in COD payout reports
+        });
+        /*
+         * `coReq` intoarce `res.json() as Promise<T>` — un CAST, nu o verificare.
+         * Un 2xx fara `awb`/`uniqueId` ar fi inchis slotul cu referinta goala, deci
+         * comanda ar fi ramas fara AWB si fara nicio cale de a mai emite unul.
+         * Ceilalti cinci curieri au deja garda asta („AWB nu a fost returnat").
+         */
+        if (!rezultat?.uniqueId || !rezultat?.awb) {
+          throw eroareNesigura("Colete Online nu a returnat AWB-ul. Verifica in contul Colete Online inainte de a incerca din nou.");
+        }
+        return {
+          referinta: rezultat.uniqueId,
+          detalii: { awb: rezultat.awb, serviciu: serviceName },
+          valoare: rezultat,
+        };
+      },
+      verdictFurnizor,
+      // Colete n-are anulare la furnizor: omul o face din contul lui si apoi
+      // dezleaga aici. Daca eliberarea slotului s-a pierdut atunci, verificarea
+      // asta o repara la prima emitere de dupa.
+      async () => {
+        const { data } = await admin
+          .from("orders").select("colete_order_id")
+          .eq("id", orderId).eq("business_id", businessId).maybeSingle();
+        return !!data?.colete_order_id;
+      },
+    );
 
-    // Save to order
-    await admin.from("orders").update({
-      colete_order_id: result.uniqueId,
-      colete_awb_number: result.awb,
+    if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+
+    const d = r.fel === "deja" ? (r.detalii as { awb?: string } | null) : null;
+    const awb = r.fel === "facut" ? r.valoare.awb : (d?.awb ?? "");
+    const uniqueId = r.fel === "facut" ? r.valoare.uniqueId : (r.referinta ?? "");
+
+    const { error: eScriere, data: randuri } = await admin.from("orders").update({
+      colete_order_id: uniqueId,
+      colete_awb_number: awb,
       colete_service_name: serviceName,
-      tracking_number: result.awb,
+      tracking_number: awb,
       status: "processing",
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
-    void enqueueAboutYouShip(businessId, orderId);
+      // Filtrul de magazin lipsea din scrierea asta, desi clientul e de SISTEM
+      // (service role sare peste RLS). Citirea de mai sus il are, dar o scriere
+      // privilegiata nu trebuie sa atarne de ordinea randurilor de deasupra.
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
 
-    return { awb: result.awb, uniqueId: result.uniqueId };
+    if (eScriere || !randuri || randuri.length === 0) {
+      await logError({
+        action: "colete.createAwb",
+        message: `AWB Colete creat (${awb}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, uniqueId, code: eScriere?.code },
+        businessId,
+        severity: "critical",
+      });
+    } else {
+      void enqueueAboutYouShip(businessId, orderId);
+    }
+
+    return { awb, uniqueId };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -239,6 +300,23 @@ export async function detachCOAwb(businessId: string, orderId: string): Promise<
     updated_at: new Date().toISOString(),
   }).eq("id", orderId);
   if (error) return { error: "Eroare la actualizare." };
+
+  /*
+   * Dezlegarea E anularea, la Colete: furnizorul n-are endpoint de anulare, deci
+   * omul o face din contul lui si apoi apasa aici. Pentru registru inseamna acelasi
+   * lucru — slotul se elibereaza, altfel AWB-ul urmator ar fi refuzat, sau mai rau,
+   * ar fi „adoptat" chiar cel dezlegat.
+   */
+  const eliberat = await marcheazaAnulata(admin, businessId, cheieOperatie("awb", "colete", orderId));
+  if (!eliberat) {
+    await logError({
+      action: "colete.detachAwb",
+      message: "AWB Colete dezlegat, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda va fi refuzata.",
+      details: { orderId, businessId, awb: order.colete_awb_number },
+      businessId,
+      severity: "critical",
+    });
+  }
 
   revalidatePath(`/dashboard/orders/${orderId}`);
   return { success: true };

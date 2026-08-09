@@ -1,15 +1,14 @@
 import Image from "next/image";
 import {
   ARIE_SIGLA,
-  ARIE_SIGLA_MICA,
   COMPARISON_EYEBROW,
   COMPARISON_LEAD,
   COMPARISON_RIVALS,
   COMPARISON_ROWS,
   COMPARISON_TITLE,
   COMPARISON_US,
-  EDINIO_LOGO,
   PLATFORM_LOGOS,
+  type ComparisonRival,
   type PlatformLogo,
 } from "@/lib/website/comparison";
 import { SectionEyebrow } from "./SectionEyebrow";
@@ -50,11 +49,14 @@ import { SectionEyebrow } from "./SectionEyebrow";
  *
  * Aici e UN SINGUR `<table>`, semantic corect, care își schimbă doar `display`:
  * de la `lg` în sus e tabel; sub `lg` fiecare RÂND devine un card, cu criteriul
- * ca titlu și câte un rând „platformă → valoare". Pe telefon platforma se arată
- * cu SIGLĂ ȘI NUME (cerut): sigla se recunoaște, numele o confirmă.
+ * ca titlu și câte un rând „platformă → valoare".
  *
- * Numele din celulă e `aria-hidden` pe toate lățimile: pe desktop rolul lui îl
- * are antetul, iar legătura celulă-antet o face oricum tabelul.
+ * ⚠ Siglele apar DOAR pe desktop, în antetul coloanelor. Pe telefon rămân numai
+ * denumirile (cerut): acolo numele e oricum scris în fiecare rând, iar sigla nu
+ * adăuga nimic pe care el să nu-l spună.
+ *
+ * Numele din celulă e `aria-hidden`: pe desktop rolul lui îl are antetul, iar
+ * legătura celulă-antet o face oricum tabelul.
  *
  * Pragul e `lg`, nu `md`: șase coloane la 768px lasă ~100px de coloană, iar
  * „Necesită configurare" se rupe în trei rânduri. Tableta primește tot carduri.
@@ -75,40 +77,29 @@ function inaltimeSigla(logo: PlatformLogo, arie: number): number {
   return Math.round(Math.sqrt(arie / logo.ratio) * logo.optic);
 }
 
-/**
- * Lățimea locașului în care stă sigla, în cardurile de pe telefon.
- *
- * ⚠ Fără el, marginea stângă a NUMELOR iese zimțată: siglele au lățimi foarte
- * diferite (Wix e un wordmark de ~32px, Shopify un semn de ~17px), iar dacă
- * numele vine imediat după siglă, fiecare rând începe în alt loc. Într-o listă
- * de patru rânduri asta se vede imediat și arată a scăpare.
- *
- * Cu locașul, semnul se centrează în el și numele pornesc toate de la aceeași
- * linie. Lățimea e cea mai mare siglă la aria mică, plus puțin aer.
- */
-const LOCAS_SIGLA = 34;
-
-function Sigla({ logo, nume, arie }: { logo: PlatformLogo; nume: string; arie: number }) {
+function Sigla({ nume }: { nume: ComparisonRival }) {
+  const logo = PLATFORM_LOGOS[nume];
   if (!logo.src) return null;
-  const h = inaltimeSigla(logo, arie);
+  const h = inaltimeSigla(logo, ARIE_SIGLA);
   return (
     <Image
       src={logo.src}
+      /*
+        `alt` gol, dinadins: denumirea e scrisă chiar dedesubt, în același antet.
+        Repetată în `alt`, cititoarele de ecran ar spune platforma de două ori.
+      */
       alt=""
+      aria-hidden="true"
       width={Math.round(h * logo.ratio)}
       height={h}
       /*
         `unoptimized`: loader-ul proiectului lasă neatinse imaginile locale (prin
         el trece doar ce e pe R2), iar fără asta Next se plânge că loader-ul nu
         implementează `width`. Sunt fișiere de câțiva kiloocteți.
-
-        `alt` gol, dinadins: numele platformei e scris alături sau stă în antetul
-        coloanei. Repetat în `alt`, cititoarele de ecran l-ar spune de două ori.
       */
       unoptimized
       style={{ height: h, width: "auto" }}
       className="max-w-full shrink-0 object-contain"
-      aria-hidden={nume ? "true" : undefined}
     />
   );
 }
@@ -156,21 +147,24 @@ export function Comparison() {
               <tr>
                 {/* Colțul gol al tabelului: nu are ce antet să poarte. */}
                 <td className="w-[26%] border-b border-hairline" />
+                {/*
+                  Edinio: DOAR denumirea, fără siglă (cerut). Coloana se
+                  deosebește deja prin tentă și prin verde. `align-bottom` face
+                  ca numele nostru să cadă pe aceeași linie cu numele celorlalți,
+                  care au sigla deasupra lor.
+                */}
                 <th scope="col" className="border-b border-hairline bg-tint px-4 pb-4 pt-5 align-bottom">
-                  <span className="flex flex-col items-center gap-2">
-                    <Sigla logo={EDINIO_LOGO} nume={COMPARISON_US} arie={ARIE_SIGLA} />
-                    <span
-                      className="text-[14px] font-bold tracking-[-0.01em]"
-                      style={{ color: GREEN_TEXT }}
-                    >
-                      {COMPARISON_US}
-                    </span>
+                  <span
+                    className="text-[14px] font-bold tracking-[-0.01em]"
+                    style={{ color: GREEN_TEXT }}
+                  >
+                    {COMPARISON_US}
                   </span>
                 </th>
                 {COMPARISON_RIVALS.map((rival) => (
                   <th key={rival} scope="col" className="border-b border-hairline px-4 pb-4 pt-5 align-bottom">
                     <span className="flex flex-col items-center gap-2">
-                      <Sigla logo={PLATFORM_LOGOS[rival]} nume={rival} arie={ARIE_SIGLA} />
+                      <Sigla nume={rival} />
                       <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">
                         {rival}
                       </span>
@@ -205,16 +199,8 @@ export function Comparison() {
                     site-ului pe fundal alb.
                   */}
                   <td className="flex items-center justify-between gap-4 bg-tint px-5 py-3 lg:table-cell lg:px-4 lg:py-5 lg:text-center lg:align-middle">
-                    <span className="flex items-center gap-2.5 lg:hidden">
-                      <span
-                        className="flex shrink-0 items-center justify-center"
-                        style={{ width: LOCAS_SIGLA }}
-                      >
-                        <Sigla logo={EDINIO_LOGO} nume={COMPARISON_US} arie={ARIE_SIGLA_MICA} />
-                      </span>
-                      <span className="text-[13px] font-semibold text-ink" aria-hidden="true">
-                        {COMPARISON_US}
-                      </span>
+                    <span className="text-[13px] font-semibold text-ink lg:hidden" aria-hidden="true">
+                      {COMPARISON_US}
                     </span>
                     <span
                       className="text-right text-[14.5px] font-bold leading-[1.35] lg:text-center lg:text-[15px]"
@@ -229,20 +215,8 @@ export function Comparison() {
                       key={COMPARISON_RIVALS[i]}
                       className="flex items-center justify-between gap-4 px-5 py-3 last:pb-5 lg:table-cell lg:px-4 lg:py-5 lg:text-center lg:align-middle lg:last:pb-5"
                     >
-                      <span className="flex items-center gap-2.5 lg:hidden">
-                        <span
-                          className="flex shrink-0 items-center justify-center"
-                          style={{ width: LOCAS_SIGLA }}
-                        >
-                          <Sigla
-                            logo={PLATFORM_LOGOS[COMPARISON_RIVALS[i]]}
-                            nume={COMPARISON_RIVALS[i]}
-                            arie={ARIE_SIGLA_MICA}
-                          />
-                        </span>
-                        <span className="text-[13px] font-medium text-ink-2" aria-hidden="true">
-                          {COMPARISON_RIVALS[i]}
-                        </span>
+                      <span className="text-[13px] font-medium text-ink-2 lg:hidden" aria-hidden="true">
+                        {COMPARISON_RIVALS[i]}
                       </span>
                       <Valoare valoare={valoare} />
                     </td>

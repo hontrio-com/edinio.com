@@ -76,10 +76,15 @@ export type ComparisonRival = (typeof COMPARISON_RIVALS)[number];
  *
  * Când lipsește fișierul, `src` rămâne gol și se scrie doar numele platformei.
  */
-/** Aria țintă în antetul de tabel (desktop). */
+/**
+ * Aria țintă a siglelor, în antetul de tabel.
+ *
+ * ⚠ Siglele apar DOAR pe desktop (cerut 2026-08-09). Pe telefon, unde rândul e
+ * „platformă → valoare", rămân numai denumirile: acolo sigla nu adăuga nimic pe
+ * care numele să nu-l spună, dar cerea un locaș de lățime fixă ca marginea
+ * stângă a numelor să nu iasă zimțată. Mai puține piese, același înțeles.
+ */
 export const ARIE_SIGLA = 900;
-/** Aria țintă lângă numele platformei, în cardurile de pe telefon. */
-export const ARIE_SIGLA_MICA = 330;
 
 export interface PlatformLogo {
   /** Calea din `public/`. Gol = nu avem fișierul, se scrie doar numele. */
@@ -101,8 +106,13 @@ export interface PlatformLogo {
   optic: number;
 }
 
-/** Sigla noastră, ca să stea în același rând cu ale celorlalți. */
-export const EDINIO_LOGO: PlatformLogo = { src: "/logo.png", ratio: 284 / 289, optic: 1 };
+/*
+ * ⚠ EDINIO NU ARE SIGLĂ ÎN TABEL, cerut explicit (2026-08-09): doar denumirea.
+ *
+ * Coloana noastră se deosebește deja prin tentă și prin verde; o siglă în plus
+ * n-ar mai fi spus nimic nou, iar sigla noastră lângă patru sigle străine face
+ * rândul să pară o listă de parteneri, nu o comparație.
+ */
 
 export const PLATFORM_LOGOS: Record<ComparisonRival, PlatformLogo> = {
   Shopify: { src: "/platforme/shopify.svg", ratio: 256 / 292, optic: 1 },

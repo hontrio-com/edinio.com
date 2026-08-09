@@ -164,13 +164,56 @@ jobs:
           # Daca filtrul n-a lasat nimic, mai bine cade acum decat sa „treaca" pe gol.
           grep -q 'create table' /tmp/baseline-portabil.sql
 
-      - name: Preludiu + baseline
+      - name: Preludiu
         env:
           PGPASSWORD: proba
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f migrations/000-prelude-platforma.sql
+
+      # Baseline-ul se aplica PE SECTIUNI, si nu din pedanterie: logurile unui job
+      # se citesc doar cu drepturi de admin, dar NUMELE pasului cazut se vede din
+      # API oricui. Cu o singura aplicare, „a picat" e tot ce afli.
+      - name: Taie baseline-ul pe sectiuni
         run: |
           set -euo pipefail
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1             -f migrations/000-prelude-platforma.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1             -f /tmp/baseline-portabil.sql
+          mkdir -p /tmp/sect
+          awk '/^-- ── /{n++} {print > sprintf("/tmp/sect/%02d.sql", n+0)}' /tmp/baseline-portabil.sql
+          ls -1 /tmp/sect | wc -l
+
+      - name: 1 extensii, tipuri, secvente
+        env: { PGPASSWORD: proba }
+        run: for f in /tmp/sect/00.sql /tmp/sect/01.sql /tmp/sect/02.sql /tmp/sect/03.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"; done
+
+      - name: 2 functii
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/04.sql
+
+      - name: 3 tabele
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/05.sql
+
+      - name: 4 constrangeri
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/06.sql
+
+      - name: 5 indexuri
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/07.sql
+
+      - name: 6 vederi
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/08.sql
+
+      - name: 7 declansatoare
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/09.sql
+
+      - name: 8 RLS si politici
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tmp/sect/10.sql
+
+      - name: 9 granturi
+        env: { PGPASSWORD: proba }
+        run: for f in /tmp/sect/11.sql /tmp/sect/12.sql /tmp/sect/13.sql /tmp/sect/14.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"; done
 
       # O aplicare fara eroare nu inseamna ca a construit ceva: `create table if
       # not exists` peste un fisier gol „reuseste" la fel de linistit. Se NUMARA.

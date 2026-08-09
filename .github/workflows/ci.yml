@@ -75,7 +75,54 @@ jobs:
       - name: Instaleaza (npm ci)
         id: instalare_stricta
         continue-on-error: true
-        run: npm ci || (sleep 20 && npm ci)
+        # Iesirea se PASTREAZA, nu doar se afiseaza. Vezi pasul de diagnostic.
+        run: |
+          set -o pipefail
+          npm ci --loglevel verbose 2>&1 | tee /tmp/npm-ci-1.log             || (sleep 20 && npm ci --loglevel verbose 2>&1 | tee /tmp/npm-ci-2.log)
+
+      # ── Ce a picat, citibil FARA drepturi de admin pe repo ─────────────────
+      #
+      # `npm ci` pica pe Linux nedeterminist de saptamani, si toate ipotezele
+      # ieftine au fost excluse cu probe (lockfile nesincronizat, lockfile stricat,
+      # dependinte optionale, pachete legate de platforma, scripturi de instalare,
+      # cache). Ce lipsea era chiar CAUZA din log — iar logurile unui job se pot
+      # citi doar cu drepturi de admin, si API-ul raspunde 403.
+      #
+      # Deci logul iese pe DOUA cai care nu cer nimic: ultimele randuri intra in
+      # rezumatul rularii, iar logul intreg pleaca drept artefact descarcabil.
+      # Fara asta, urmatoarea cadere e la fel de oarba ca toate cele dinainte.
+      - name: Ce a picat la npm ci
+        if: steps.instalare_stricta.outcome == 'failure'
+        # ⚠ `continue-on-error`: pasii astia stau INTRE `npm ci` picat si instalarea
+        # de rezerva. Fara el, o cadere a diagnosticului (o comanda lipsa pe runner,
+        # artefact care nu se poate incarca) ar opri jobul chiar inainte de pasul
+        # care il salveaza — diagnosticul ar deveni cauza avariei pe care o descrie.
+        continue-on-error: true
+        run: |
+          {
+            echo "### Cauza caderii \`npm ci\`"
+            echo
+            echo "Node: $(node -v) · npm: $(npm -v) · runner: $(uname -srm)"
+            echo "Spatiu: $(df -h . | tail -1)"
+            echo
+            echo '```'
+            for f in /tmp/npm-ci-1.log /tmp/npm-ci-2.log; do
+              [ -f "$f" ] || continue
+              echo "── $f (ultimele 60 de randuri)"
+              tail -60 "$f"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pastreaza logul npm ci
+        if: steps.instalare_stricta.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-ci-log
+          path: /tmp/npm-ci-*.log
+          if-no-files-found: warn
+          retention-days: 14
 
       # Daca pasul asta apare ca rulat, `npm ci` inca nu merge — arborele instalat
       # poate diferi de lockfile, si typecheck/teste/build masoara altceva decat
@@ -144,6 +191,27 @@ jobs:
             exit 0
           fi
           bash scripts/schema-baseline.sh --check
+
+  # ── Deriva TIPURILOR fata de schema din Git ─────────────────────────────────
+  #
+  # Job separat, si fara niciun secret: compara `src/types/database.types.ts` cu
+  # `migrations/000-schema-baseline.sql`. Nu cere deriva ZERO — cere doar sa nu
+  # CREASCA fata de pragul comis. Asta e diferenta dintre o poarta care se poate
+  # trece si una care se ignora.
+  #
+  # Motivul e ca peste 250 de locuri din cod foloseau `as never` ca sa compenseze
+  # tipuri ramase in urma, iar sub el TypeScript nu mai verifica nici numele
+  # tabelei, nici al coloanei, nici argumentele unui RPC.
+  tipuri:
+    name: tipurile DB nu raman in urma schemei
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/verifica-tipuri-db.mjs --check
 
   # ── Restaurare pe o baza GOALA ──────────────────────────────────────────────
   #

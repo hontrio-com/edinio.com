@@ -487,10 +487,13 @@ export async function operatiiAtarnate(
   businessId: string,
   orderId: string,
 ): Promise<OperatieAtarnata[]> {
-  // Tabelul nu e in tipurile generate (se scrie doar prin RPC), deci clientul se
-  // ingusteaza aici, la un singur apel, in loc sa se stinga verificarea pe tot.
-  const netipat = admin as unknown as SupabaseClient;
-  const { data, error } = await netipat
+  /*
+   * Clientul NU se mai ingusteaza aici: `operatii_externe` e acum in tipurile
+   * generate, deci si numele tabelei si al fiecarei coloane sunt verificate.
+   * Pana acum se scria `admin as unknown as SupabaseClient`, iar sub el
+   * `.select("coloana_inexistenta")` ar fi trecut nevazut.
+   */
+  const { data, error } = await admin
     .from("operatii_externe")
     .select("id, fel, furnizor, stare, cheie, incercari, ultima_eroare, creat_la")
     .eq("business_id", businessId)

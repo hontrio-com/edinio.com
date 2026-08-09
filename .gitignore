@@ -56,3 +56,7 @@ next-env.d.ts
 # Generatorul de baseline: NU e scratch, e unealta. CI-ul il ruleaza
 # (`schema-baseline.sh --check`), iar fara el jobul de deriva n-are ce executa.
 !/scripts/schema-baseline.sh
+# ⚠ Fara randurile astea, jobul de CI care le ruleaza cade la FIECARE push:
+# fisierele exista local, dar nu ajung niciodata in depozit.
+!/scripts/verifica-tipuri-db.mjs
+!/scripts/tipuri-db-prag.json

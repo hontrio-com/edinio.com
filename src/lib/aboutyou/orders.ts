@@ -414,46 +414,180 @@ export async function ingestOrderByNumber(admin: Db, ctx: AboutYouSyncContext, o
 const MAX_PAGINI_COMENZI = 40;
 const STATUSURI_DE_ADUS: AboutYouOrderStatus[] = ["open", "shipped", "cancelled", "returned", "mixed"];
 
-export async function pollOrders(admin: Db, ctx: AboutYouSyncContext, since?: string): Promise<{ ingested: number; ok: boolean }> {
+/**
+ * Momentul comenzii, in milisecunde, sau `null` daca nu se poate citi.
+ *
+ * Cursorul se construieste NUMAI din campul dupa care se si filtreaza fereastra
+ * (`orders_from` merge pe `created_at`). Pe alt camp ar sari comenzi.
+ */
+function candFacuta(order: AboutYouOrder): number | null {
+  const c = (order as unknown as Record<string, unknown>).created_at;
+  if (typeof c !== "string") return null;
+  const t = Date.parse(c);
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Sursa paginilor, injectabila ca sa se poata proba bucla fara reteaua About You. */
+export type AducePaginaAy = (p: { status: AboutYouOrderStatus; page: number; since?: string }) =>
+  Promise<{ items: AboutYouOrder[]; pages?: number } | { eroare: true }>;
+
+export async function pollOrders(
+  admin: Db, ctx: AboutYouSyncContext, since?: string,
+  deps?: {
+    aduPagina?: AducePaginaAy;
+    ingereaza?: (o: AboutYouOrder) => Promise<"created" | "updated" | "skipped">;
+  },
+): Promise<{ ingested: number; ok: boolean; cursorMs?: number }> {
   let ingested = 0;
   let ok = true;
+  /*
+   * ═══ CURSORUL, CU O DEOSEBIRE FATA DE TRENDYOL ═══
+   *
+   * Acolo cerem noi sortarea (`orderByDirection: ASC`) si ne putem baza pe ea.
+   * Aici API-ul About You NU are parametru de sortare, deci ordinea paginilor e
+   * o presupunere — iar un cursor construit peste o ordine gresita ar SARI
+   * comenzi, adica exact ce vrem sa inchidem.
+   *
+   * Asa ca ordinea se VERIFICA la rulare: cat timp comenzile chiar vin crescator
+   * dupa `created_at`, cursorul creste odata cu ele; la prima comanda mai veche
+   * decat precedenta, cursorul se anuleaza si nu se mai foloseste deloc. Atunci
+   * fereastra ramane pe loc si se striga — blocaj, dar zgomotos, in loc de
+   * pierdere tacuta. Nicio presupunere despre API nu ramane netestata.
+   */
+  let cursorMs: number | undefined;
+  let cursorValid = true;
+  let ultimul = -Infinity;
 
   for (const status of STATUSURI_DE_ADUS) {
+    /*
+     * Fiecare status e o serie proprie, deci ordinea se urmareste de la capat —
+     * altfel a doua serie ar parea „mai veche" si ar anula cursorul degeaba.
+     * Cursorul retinut e MINIMUL peste statusuri: e singurul punct pana la care
+     * s-a citit tot, pe toate seriile.
+     */
+    ultimul = -Infinity;
+    let cursorStatus: number | undefined;
+    /*
+     * ⚠ DOUA CAUZE DIFERITE, DOUA STEAGURI DIFERITE.
+     *
+     * `cazutStatus` = ceva ce trebuia citit n-a mers (pagina cu eroare, comanda
+     *   care a aruncat). Asta blocheaza ORICE avans, pe orice status.
+     * `ordineBuna` = comenzile chiar vin crescator dupa `created_at`. Asta
+     *   conteaza NUMAI pe un status trunchiat, fiindca doar acolo cursorul lui e
+     *   folosit. Pe un status citit COMPLET, ordinea nu constrange nimic.
+     *
+     * Amestecate intr-un singur steag, o singura comanda fara `created_at` intr-un
+     * status complet stergea cursorul statusului trunchiat — si atunci marcajul nu
+     * se mai scria DELOC. Mai rau decat inainte: fereastra ramanea „tot istoricul",
+     * deci nici comenzile NOI nu mai intrau, iar cronul recitea la infinit aceleasi
+     * pagini. Reprodus pe bucla reala inainte de reparatie.
+     */
+    let ordineBuna = true;
+    let cazutStatus = false;
+    let trunchiat = false;
+
     for (let page = 1; page <= MAX_PAGINI_COMENZI; page++) {
-      const res = await getOrders(ctx.auth, { order_status: status, orders_from: since, page, per_page: 50 });
-      if (isAboutYouError(res)) { ok = false; break; }
-      const orders = res.data?.items ?? [];
+      const pagina = deps?.aduPagina
+        ? await deps.aduPagina({ status, page, since })
+        : await (async () => {
+          const res = await getOrders(ctx.auth, { order_status: status, orders_from: since, page, per_page: 50 });
+          if (isAboutYouError(res)) return { eroare: true as const };
+          return { items: res.data?.items ?? [], pages: Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1) };
+        })();
+      if ("eroare" in pagina) { ok = false; cazutStatus = true; break; }
+      const orders = pagina.items;
       if (orders.length === 0) break;
       for (const o of orders) {
+        let cazut = false;
         try {
-          if ((await ingestOrder(admin, ctx, o)) === "created") ingested++;
+          const rez = deps?.ingereaza ? await deps.ingereaza(o) : await ingestOrder(admin, ctx, o);
+          if (rez === "created") ingested++;
         } catch {
           // O comanda care nu s-a putut salva nu are voie sa mute fereastra.
           ok = false;
+          cazut = true;
+        }
+        // Cursorul se opreste la prima comanda nereusita si nu mai porneste.
+        if (cazut) cazutStatus = true;
+        if (!cazutStatus && ordineBuna) {
+          const t = candFacuta(o);
+          if (t == null || t < ultimul) ordineBuna = false;
+          else { ultimul = t; cursorStatus = t; }
         }
       }
-      const total = Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1);
+      const total = Number(pagina.pages ?? 1);
       if (page >= total) break;
       if (page === MAX_PAGINI_COMENZI && total > MAX_PAGINI_COMENZI) {
         /*
-         * Peste 2.000 de comenzi intr-o fereastra: NU se blocheaza marcajul,
-         * fiindca l-am bloca pentru totdeauna — fereastra ar ramane aceeasi si am
-         * reciti la nesfarsit aceleasi pagini. Raspunsul adevarat e un cursor,
-         * mutat la cea mai veche comanda chiar citita. Vezi nota din Trendyol.
+         * Peste 2.000 de comenzi intr-o fereastra.
          *
-         * Dar `console.warn` nu-l citeste nimeni. Acum se vede in `/admin/logs`.
+         * Pana acum marcajul sarea totusi la „acum", deci paginile necitite se
+         * pierdeau DEFINITIV. `ok = false` singur ar fi produs blocaj permanent —
+         * fereastra ramane aceeasi, deci la minutul urmator se citesc exact
+         * aceleasi pagini si se blocheaza iar.
+         *
+         * Cu cursorul de mai sus, `ok = false` inseamna acum „nu sari la acum,
+         * muta marcajul pana unde am ajuns", deci progresul e garantat. Cand
+         * cursorul NU s-a putut construi (ordine neasteptata de la API, comanda
+         * fara `created_at`), ramane blocajul — dar zgomotos, cu randul de mai jos.
          */
+        ok = false;
+        trunchiat = true;
         await logError({
           action: "aboutyou/orders",
-          message: `Fereastra „${status}" are peste ${MAX_PAGINI_COMENZI} pagini: cele mai vechi comenzi NU au fost citite. Se cere trecerea pe cursor.`,
-          details: { status, total }, businessId: ctx.businessId, severity: "critical",
+          message: ordineBuna && !cazutStatus && cursorStatus != null
+            ? `Fereastra „${status}" are peste ${MAX_PAGINI_COMENZI} pagini: restul se preia la rularile urmatoare, de la cursor.`
+            : `Fereastra „${status}" are peste ${MAX_PAGINI_COMENZI} pagini SI nu s-a putut construi un cursor (ordinea comenzilor nu e crescatoare dupa created_at): fereastra ramane pe loc.`,
+          details: { status, total, cursorStatus, ordineBuna, cazutStatus },
+          businessId: ctx.businessId, severity: "critical",
         });
+      }
+    }
+    /*
+     * ═══ CE CONSTRANGE CURSORUL GENERAL, SI CE NU ═══
+     *
+     * Un status care s-a citit COMPLET nu constrange nimic: pe seria lui am luat
+     * tot ce era in fereastra, deci marcajul poate trece peste el oricat.
+     *
+     * Doar un status TRUNCHIAT constrange, si atunci pana la ultima lui comanda
+     * citita — de aceea cursorul general e MINIMUL peste statusurile trunchiate.
+     *
+     * ⚠ Prima forma anula cursorul cand un status n-avea `cursorStatus`. Testul a
+     * prins-o imediat: patru din cele cinci statusuri sunt de obicei GOALE, iar
+     * „gol" inseamna „citit tot", nu „n-am putut citi". Cursorul iesea intotdeauna
+     * `undefined` si mecanismul era, iar, cod mort.
+     */
+    if (cazutStatus) {
+      // Ceva ce trebuia citit n-a mers: nu se avanseaza nicaieri.
+      cursorValid = false;
+      cursorMs = undefined;
+    } else if (trunchiat && cursorValid) {
+      if (!ordineBuna || cursorStatus == null) {
+        cursorValid = false;
+        cursorMs = undefined;
+      } else {
+        cursorMs = cursorMs == null ? cursorStatus : Math.min(cursorMs, cursorStatus);
       }
     }
     // Un status cazut NU-i mai opreste pe ceilalti: inainte, un esec pe „open"
     // insemna ca anularile si retururile nu se mai cereau deloc in tura aceea.
   }
-  return { ingested, ok };
+
+  /*
+   * Cursorul trebuie sa CREASCA peste marcajul curent, altfel fereastra urmatoare
+   * ar fi identica si s-ar reciti la nesfarsit acelasi lot.
+   */
+  const marcajMs = since ? Date.parse(since) : NaN;
+  if (cursorMs != null && Number.isFinite(marcajMs) && cursorMs <= marcajMs) {
+    await logError({
+      action: "aboutyou/orders",
+      message: "Cursorul de sincronizare nu a avansat peste marcajul curent; fereastra ramane pe loc.",
+      details: { cursorMs, marcajMs }, businessId: ctx.businessId, severity: "critical",
+    });
+    cursorMs = undefined;
+  }
+
+  return { ingested, ok, cursorMs: cursorValid ? cursorMs : undefined };
 }
 
 /*

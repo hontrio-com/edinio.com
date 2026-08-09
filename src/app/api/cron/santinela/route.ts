@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 
@@ -62,7 +63,13 @@ const numara = (text: string, tipar: RegExp) => (text.match(tipar) ?? []).length
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const admin = createClient(
+  /*
+   * ⚠ `<Database>` nu e decorativ. Fara generic, `.from()` accepta ORICE nume de
+   * tabela si `.rpc()` orice argumente — verificat: un nume de functie inexistent
+   * si un parametru gresit trec amandoua nevazute. Santinela e chiar locul unde
+   * o proba care nu poate esua nu apara pe nimeni.
+   */
+  const admin = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },

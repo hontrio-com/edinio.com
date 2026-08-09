@@ -17,6 +17,8 @@ import { getOrders, isTrendyolError } from "./client";
 import { edinioStatusForTrendyol } from "./webhooks";
 import type { TrendyolShipmentPackage } from "./types";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+// Regula marcajului e comuna cu About You, deci sta in `lib/marketplace`.
+export { marcajUrmator } from "@/lib/marketplace/marcaj";
 
 type Db = SupabaseClient<Database>;
 
@@ -343,8 +345,16 @@ export function fereastraComenzi(sinceMs: number | undefined, acum = Date.now())
 
 // Poll recent shipment packages for one business (cron safety net). `sinceMs` is a
 // unix-millisecond timestamp (Trendyol uses GMT+3 epoch millis).
+/** Sursa paginilor, injectabila ca sa se poata proba bucla fara reteaua Trendyol. */
+export type AducePagina = (p: { startDate: number; endDate: number; page: number }) =>
+  Promise<{ content: TrendyolShipmentPackage[]; totalPages?: number } | { eroare: true }>;
+
 export async function pollPackages(
   admin: Db, ctx: TrendyolSyncContext, sinceMs?: number,
+  deps?: {
+    aduPagina?: AducePagina;
+    ingereaza?: (pkg: TrendyolShipmentPackage) => Promise<"created" | "updated" | "skipped" | "failed">;
+  },
 ): Promise<{ ingested: number; ok: boolean; cursorMs?: number }> {
   let ingested = 0;
   let ok = true;
@@ -386,12 +396,18 @@ export async function pollPackages(
      * cea mai veche comanda citita" e corecta doar cu ASC, unde ce s-a citit e
      * chiar prefixul cel mai vechi si marcajul are voie sa treaca peste el.
      */
-    const res = await getOrders(ctx.auth, { startDate, endDate, page, size: 100, orderByField: "PackageLastModifiedDate", orderByDirection: "ASC" });
-    if (isTrendyolError(res)) { ok = false; break; }
-    const content = res.data?.content ?? [];
+    const pagina = deps?.aduPagina
+      ? await deps.aduPagina({ startDate, endDate, page })
+      : await (async () => {
+        const res = await getOrders(ctx.auth, { startDate, endDate, page, size: 100, orderByField: "PackageLastModifiedDate", orderByDirection: "ASC" });
+        if (isTrendyolError(res)) return { eroare: true as const };
+        return { content: res.data?.content ?? [], totalPages: res.data?.totalPages };
+      })();
+    if ("eroare" in pagina) { ok = false; break; }
+    const content = pagina.content;
     if (content.length === 0) break;
     for (const pkg of content) {
-      const r = await ingestPackage(admin, ctx, pkg);
+      const r = deps?.ingereaza ? await deps.ingereaza(pkg) : await ingestPackage(admin, ctx, pkg);
       if (r === "created") ingested++;
       // Un pachet nereusit opreste avansarea marcajului pentru TOATA fereastra:
       // altfel el singur s-ar pierde, iar restul ar parea in regula.
@@ -414,7 +430,7 @@ export async function pollPackages(
         if (Number.isFinite(t) && t > 0) cursorMs = cursorMs == null ? t : Math.max(cursorMs, t);
       }
     }
-    const totalPages = Number(res.data?.totalPages ?? 1);
+    const totalPages = Number(pagina.totalPages ?? 1);
     if (page + 1 >= totalPages) break;
     if (page + 1 >= MAX_PAGINI) maiSuntPagini = totalPages > MAX_PAGINI;
   }

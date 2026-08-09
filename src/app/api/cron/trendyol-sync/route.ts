@@ -7,7 +7,7 @@ import {
   loadTrendyolContext, processQueueItem, pollOpenBatches, reconcileStatuses, reconcileInventory, pause,
   type TrendyolQueueItem, type TrendyolSyncContext,
 } from "@/lib/trendyol/sync";
-import { pollPackages } from "@/lib/trendyol/orders";
+import { marcajUrmator, pollPackages } from "@/lib/trendyol/orders";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import type { TrendyolConfig } from "@/lib/trendyol/types";
 
@@ -162,34 +162,12 @@ export async function GET(req: NextRequest) {
     const r = await pollPackages(admin, ctx, sinceMs);
     ingested += r.ingested;
     /*
-     * Trei purtari, nu doua:
-     *   * citire completa si curata -> marcajul trece la „acum";
-     *   * citire partiala (trunchiere sau un pachet cazut) DAR cu cursor -> marcajul
-     *     trece exact pana la ultima comanda dusa la capat, deci progresul e
-     *     garantat si nimic nu se sare;
-     *   * fara cursor -> nu se misca nimic, ca sa nu se piarda fereastra.
+     * Regula sta in `marcajUrmator`, nu aici, fiindca are trei capcane si toate
+     * trei au fost calcate deja o data. Acolo e si probata.
      */
-    if (r.ok) {
-      await patchConfig(admin, businessId, { orders_synced_at: new Date(runStart).toISOString() });
-    } else if (r.cursorMs != null) {
-      /*
-       * ⚠ CURSORUL SE SCRIE COMPENSAT CU SUPRAPUNEREA, altfel poate sta pe loc.
-       *
-       * La citire se scade `ORDERS_OVERLAP_MS` din marcaj (randul de mai sus), ca
-       * sa nu se piarda nimic in cusatura dintre doua rulari. Dar cursorul e
-       * EXACT: stim precis pana unde am ajuns. Scris nemodificat, fereastra
-       * urmatoare ar porni cu cinci minute inaintea lui — iar daca cele 500 de
-       * comenzi citite incap in mai putin de cinci minute (adica exact rafala care
-       * produce trunchierea), fereastra urmatoare ar fi ACEEASI si s-ar reciti la
-       * nesfarsit aceleasi pagini.
-       *
-       * Adunand suprapunerea aici, scaderea de la citire o anuleaza si fereastra
-       * urmatoare porneste fix de la ultima comanda dusa la capat: progres
-       * garantat, fara sa se sara nimic.
-       */
-      await patchConfig(admin, businessId, {
-        orders_synced_at: new Date(r.cursorMs + ORDERS_OVERLAP_MS).toISOString(),
-      });
+    const marcaj = marcajUrmator(r, { runStartMs: runStart, overlapMs: ORDERS_OVERLAP_MS });
+    if (marcaj != null) {
+      await patchConfig(admin, businessId, { orders_synced_at: new Date(marcaj).toISOString() });
     }
     await pause(PACE_MS);
   }

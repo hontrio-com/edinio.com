@@ -305,6 +305,7 @@ export type Database = {
           offer_id: string
           op: string
           product_id: string | null
+          revendicat_pana: string | null
         }
         Insert: {
           attempts?: number
@@ -315,6 +316,7 @@ export type Database = {
           offer_id: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Update: {
           attempts?: number
@@ -325,6 +327,7 @@ export type Database = {
           offer_id?: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Relationships: [
           {
@@ -529,6 +532,33 @@ export type Database = {
           },
         ]
       }
+      business_daily_stats: {
+        Row: {
+          business_id: string
+          device: string
+          event_type: string
+          nr: number
+          source: string
+          zi: string
+        }
+        Insert: {
+          business_id: string
+          device?: string
+          event_type: string
+          nr: number
+          source?: string
+          zi: string
+        }
+        Update: {
+          business_id?: string
+          device?: string
+          event_type?: string
+          nr?: number
+          source?: string
+          zi?: string
+        }
+        Relationships: []
+      }
       businesses: {
         Row: {
           address: string | null
@@ -637,6 +667,211 @@ export type Database = {
           user_id?: string
           website?: string | null
           whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      catalog_cuvant: {
+        Row: {
+          business_id: string
+          cate: number
+          cuvant: string
+          semnatura: string | null
+        }
+        Insert: {
+          business_id: string
+          cate?: number
+          cuvant: string
+        }
+        Update: {
+          business_id?: string
+          cate?: number
+          cuvant?: string
+        }
+        Relationships: []
+      }
+      catalog_cuvinte_murdar: {
+        Row: {
+          business_id: string
+          marcat_la: string
+        }
+        Insert: {
+          business_id: string
+          marcat_la?: string
+        }
+        Update: {
+          business_id?: string
+          marcat_la?: string
+        }
+        Relationships: []
+      }
+      catalog_index_cuvant: {
+        Row: {
+          business_id: string
+          cuvant: string
+          product_id: string
+        }
+        Insert: {
+          business_id: string
+          cuvant: string
+          product_id: string
+        }
+        Update: {
+          business_id?: string
+          cuvant?: string
+          product_id?: string
+        }
+        Relationships: []
+      }
+      catalog_murdar: {
+        Row: {
+          business_id: string
+          marcat_la: string
+          product_id: string
+        }
+        Insert: {
+          business_id: string
+          marcat_la?: string
+          product_id: string
+        }
+        Update: {
+          business_id?: string
+          marcat_la?: string
+          product_id?: string
+        }
+        Relationships: []
+      }
+      catalog_produs: {
+        Row: {
+          are_imagine: boolean
+          business_id: string
+          category: string | null
+          cauta_norm: string
+          compare_at_price: number | null
+          creat: string
+          descriere_scurta: string
+          fara_oferta: boolean
+          fara_stoc: boolean
+          fatete: string[]
+          has_range: boolean
+          is_bundle: boolean
+          is_featured: boolean
+          name: string
+          optiuni: Json | null
+          price: number
+          price_max: number
+          price_min: number
+          prima_imagine: string | null
+          product_id: string
+          proiectat_la: string | null
+          slug: string | null
+          sort_order: number
+          stock_quantity: number | null
+          track_inventory: boolean
+        }
+        Insert: {
+          are_imagine?: boolean
+          business_id: string
+          category?: string | null
+          cauta_norm?: string
+          compare_at_price?: number | null
+          creat: string
+          descriere_scurta?: string
+          fara_oferta?: boolean
+          fara_stoc?: boolean
+          fatete?: string[]
+          has_range?: boolean
+          is_bundle?: boolean
+          is_featured?: boolean
+          name: string
+          optiuni?: Json | null
+          price: number
+          price_max: number
+          price_min: number
+          prima_imagine?: string | null
+          product_id: string
+          proiectat_la?: string | null
+          slug?: string | null
+          sort_order?: number
+          stock_quantity?: number | null
+          track_inventory?: boolean
+        }
+        Update: {
+          are_imagine?: boolean
+          business_id?: string
+          category?: string | null
+          cauta_norm?: string
+          compare_at_price?: number | null
+          creat?: string
+          descriere_scurta?: string
+          fara_oferta?: boolean
+          fara_stoc?: boolean
+          fatete?: string[]
+          has_range?: boolean
+          is_bundle?: boolean
+          is_featured?: boolean
+          name?: string
+          optiuni?: Json | null
+          price?: number
+          price_max?: number
+          price_min?: number
+          prima_imagine?: string | null
+          product_id?: string
+          proiectat_la?: string | null
+          slug?: string | null
+          sort_order?: number
+          stock_quantity?: number | null
+          track_inventory?: boolean
+        }
+        Relationships: []
+      }
+      catalog_rezumat: {
+        Row: {
+          business_id: string
+          calculat_la: string
+          categorii: string[]
+          fara_imagini: boolean
+          fara_stoc_ascuns: boolean
+          fatete: Json
+          price_max: number
+          price_min: number
+          total: number
+        }
+        Insert: {
+          business_id: string
+          calculat_la?: string
+          categorii?: string[]
+          fara_imagini: boolean
+          fara_stoc_ascuns: boolean
+          fatete?: Json
+          price_max: number
+          price_min: number
+          total: number
+        }
+        Update: {
+          business_id?: string
+          calculat_la?: string
+          categorii?: string[]
+          fara_imagini?: boolean
+          fara_stoc_ascuns?: boolean
+          fatete?: Json
+          price_max?: number
+          price_min?: number
+          total?: number
+        }
+        Relationships: []
+      }
+      catalog_rezumat_murdar: {
+        Row: {
+          business_id: string
+          marcat_la: string
+        }
+        Insert: {
+          business_id: string
+          marcat_la?: string
+        }
+        Update: {
+          business_id?: string
+          marcat_la?: string
         }
         Relationships: []
       }
@@ -764,7 +999,6 @@ export type Database = {
           email?: string | null
           external_id?: string | null
           id?: string
-          key?: string
           name?: string
           phone?: string | null
           postcode?: string | null
@@ -780,7 +1014,6 @@ export type Database = {
           email?: string | null
           external_id?: string | null
           id?: string
-          key?: string
           name?: string
           phone?: string | null
           postcode?: string | null
@@ -861,6 +1094,7 @@ export type Database = {
           period: number
           price_per_year: number
           status: string
+          stripe_session_id: string | null
           tld: string
           total_price: number
           updated_at: string
@@ -876,6 +1110,7 @@ export type Database = {
           period?: number
           price_per_year?: number
           status?: string
+          stripe_session_id?: string | null
           tld: string
           total_price?: number
           updated_at?: string
@@ -891,6 +1126,7 @@ export type Database = {
           period?: number
           price_per_year?: number
           status?: string
+          stripe_session_id?: string | null
           tld?: string
           total_price?: number
           updated_at?: string
@@ -1132,6 +1368,7 @@ export type Database = {
           offer_id: string
           op: string
           product_id: string | null
+          revendicat_pana: string | null
         }
         Insert: {
           attempts?: number
@@ -1141,6 +1378,7 @@ export type Database = {
           offer_id: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Update: {
           attempts?: number
@@ -1150,6 +1388,7 @@ export type Database = {
           offer_id?: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Relationships: [
           {
@@ -1607,6 +1846,7 @@ export type Database = {
           offer_id: string
           op: string
           product_id: string | null
+          revendicat_pana: string | null
         }
         Insert: {
           attempts?: number
@@ -1617,6 +1857,7 @@ export type Database = {
           offer_id: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Update: {
           attempts?: number
@@ -1627,6 +1868,7 @@ export type Database = {
           offer_id?: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Relationships: [
           {
@@ -1644,6 +1886,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      operatii_externe: {
+        Row: {
+          actualizat_la: string
+          business_id: string | null
+          cheie: string
+          creat_la: string
+          detalii: Json | null
+          fel: string
+          furnizor: string
+          id: string
+          incercari: number
+          order_id: string | null
+          order_number: string | null
+          referinta_externa: string | null
+          stare: string
+          ultima_eroare: string | null
+        }
+        Insert: {
+          actualizat_la?: string
+          business_id?: string | null
+          cheie: string
+          creat_la?: string
+          detalii?: Json | null
+          fel: string
+          furnizor: string
+          id?: string
+          incercari?: number
+          order_id?: string | null
+          order_number?: string | null
+          referinta_externa?: string | null
+          stare?: string
+          ultima_eroare?: string | null
+        }
+        Update: {
+          actualizat_la?: string
+          business_id?: string | null
+          cheie?: string
+          creat_la?: string
+          detalii?: Json | null
+          fel?: string
+          furnizor?: string
+          id?: string
+          incercari?: number
+          order_id?: string | null
+          order_number?: string | null
+          referinta_externa?: string | null
+          stare?: string
+          ultima_eroare?: string | null
+        }
+        Relationships: []
       }
       orders: {
         Row: {
@@ -1983,7 +2276,6 @@ export type Database = {
           import_id: string
           parsed: Json | null
           product_id: string | null
-          raw: Json | null
           row_index: number
           status: string
         }
@@ -1996,7 +2288,6 @@ export type Database = {
           import_id: string
           parsed?: Json | null
           product_id?: string | null
-          raw?: Json | null
           row_index: number
           status?: string
         }
@@ -2009,7 +2300,6 @@ export type Database = {
           import_id?: string
           parsed?: Json | null
           product_id?: string | null
-          raw?: Json | null
           row_index?: number
           status?: string
         }
@@ -2705,6 +2995,24 @@ export type Database = {
           },
         ]
       }
+      stripe_events: {
+        Row: {
+          created_at: string
+          event_id: string
+          type: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          type?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          type?: string | null
+        }
+        Relationships: []
+      }
       support_messages: {
         Row: {
           attachments: Json
@@ -2982,6 +3290,7 @@ export type Database = {
           offer_id: string
           op: string
           product_id: string | null
+          revendicat_pana: string | null
         }
         Insert: {
           attempts?: number
@@ -2992,6 +3301,7 @@ export type Database = {
           offer_id: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Update: {
           attempts?: number
@@ -3002,6 +3312,7 @@ export type Database = {
           offer_id?: string
           op?: string
           product_id?: string | null
+          revendicat_pana?: string | null
         }
         Relationships: [
           {

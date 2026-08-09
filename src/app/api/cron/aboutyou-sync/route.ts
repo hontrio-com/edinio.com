@@ -11,6 +11,7 @@ import { pollOrders } from "@/lib/aboutyou/orders";
 // Mutata in `lib/marketplace/rotatie` ca s-o poata folosi si cronul Trendyol,
 // care taia inca cu `.slice()`.
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
+import { marcajUrmator } from "@/lib/marketplace/marcaj";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 import type { Json } from "@/types/database.types";
 
@@ -208,9 +209,16 @@ export async function GET(req: NextRequest) {
       : marcaj;
     const pr = await pollOrders(admin, ctx, since);
     ordersIngested += pr.ingested;
-    // Only advance the watermark when the poll actually completed, so a transient
-    // failure doesn't skip an unfetched window of orders.
-    if (pr.ok) await patchConfig(admin, businessId, { orders_synced_at: now });
+    /*
+     * Aceeasi regula ca la Trendyol, si din aceleasi motive — vezi `marcajUrmator`:
+     * citire completa -> „acum"; citire partiala DAR cu cursor -> exact pana la
+     * ultima comanda dusa la capat, compensat cu suprapunerea care se scade la
+     * citire; fara cursor -> nu se misca nimic (blocaj, dar strigat in loguri).
+     */
+    const marcajNou = marcajUrmator(pr, { runStartMs: Date.parse(now), overlapMs: ORDERS_OVERLAP_MS });
+    if (marcajNou != null) {
+      await patchConfig(admin, businessId, { orders_synced_at: new Date(marcajNou).toISOString() });
+    }
     await pause(PACE_MS);
   }
 

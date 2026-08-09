@@ -37,7 +37,13 @@ export default function PreturiPage() {
         </div>
       </div>
 
-      <PricingSection />
+      {/*
+        Fara antet: pagina are deja `<h1>Preturi</h1>` cu descrierea lui chiar
+        deasupra. Cu antetul sectiunii pornit, ieseau trei blocuri de text unul
+        sub altul — titlu de pagina, eticheta, titlu de sectiune — inainte de
+        primul pret.
+      */}
+      <PricingSection cuAntet={false} />
       <FAQSection />
 
       {/* CTA */}

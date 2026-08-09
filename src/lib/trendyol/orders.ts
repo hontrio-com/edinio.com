@@ -42,13 +42,121 @@ function parseCustomer(pkg: TrendyolShipmentPackage): { name: string; phone: str
   return { name, phone, email, address: a };
 }
 
-export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: TrendyolShipmentPackage): Promise<"created" | "updated" | "skipped"> {
+/**
+ * Consuma stocul comenzii, o singura data, si spune daca a reusit.
+ *
+ * Chemat de AMANDOUA ramurile — si la comanda noua, si la una care exista deja.
+ * A doua chemare e tocmai reparatia: `consuma_stoc_comanda_marketplace` e
+ * idempotenta prin marcajul `stoc_marketplace_la`, deci daca prima incercare a
+ * picat, sincronizarea urmatoare o duce la capat; daca a reusit, a doua nu face
+ * nimic (`deja: true`).
+ *
+ * Se cheama SI cu liste goale (pachet deja anulat, sau fara produse mapate):
+ * atunci marcheaza „n-a consumat nimic" si nu se mai reincearca la infinit.
+ */
+async function consumaStoculComenzii(
+  admin: Db, ctx: TrendyolSyncContext, orderId: string,
+  qtyByProduct: Map<string, number>,
+  qtyByVariant: Map<string, { product_id: string; variant_title: string; quantity: number }>,
+): Promise<"ok" | "failed"> {
+  const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+  const variante = [...qtyByVariant.values()];
+  const { data: rez, error } = await admin.rpc("consuma_stoc_comanda_marketplace", {
+    p_order_id: orderId, p_business_id: ctx.businessId,
+    p_produse: produse, p_variante: variante,
+  });
+  const r = rez as { gasit?: boolean; deja?: boolean; lipsa?: unknown[] } | null;
+  if (error || r?.gasit !== true) {
+    await logError({
+      action: "trendyol/orders", message: error?.message ?? "consumul de stoc n-a raspuns valid",
+      details: { orderId, raspuns: r }, businessId: ctx.businessId, severity: "critical",
+    });
+    return "failed";
+  }
+  if (!r.deja && Array.isArray(r.lipsa) && r.lipsa.length > 0) {
+    await logError({
+      action: "trendyol/orders",
+      message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
+      details: { orderId, lipsa: r.lipsa }, businessId: ctx.businessId, severity: "warning",
+    });
+  }
+  return "ok";
+}
+
+export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: TrendyolShipmentPackage): Promise<"created" | "updated" | "skipped" | "failed"> {
   const packageId = pkg.shipmentPackageId != null ? String(pkg.shipmentPackageId) : undefined;
   if (!packageId) return "skipped";
   const now = new Date().toISOString();
   const sideLines = toSideLines(pkg);
   const edinioStatus = edinioStatusForTrendyol(pkg.status ?? pkg.shipmentPackageStatus);
   const tracking = pkg.cargoTrackingNumber != null ? String(pkg.cargoTrackingNumber) : null;
+
+  // Resolve product ids from barcode (variant -> product) for names + stock.
+  const lines = Array.isArray(pkg.lines) ? pkg.lines : [];
+  const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean) as string[])];
+  const info = new Map<string, { productId: string | null; variantTitle: string | null }>();
+  if (barcodes.length > 0) {
+    const { data: vs, error: eVar } = await admin
+      .from("trendyol_variants").select("barcode, product_id, variant_title" as never).eq("business_id", ctx.businessId).in("barcode", barcodes);
+    /*
+     * „Nu exista mapare" si „n-am putut CITI maparea" sunt doua lucruri diferite.
+     *
+     * Fara verificare, o citire picata dadea o harta goala -> `product_id` null ->
+     * comanda intra, stocul nu se scade, iar randul lateral scris facea ca
+     * sincronizarea urmatoare sa nu mai incerce. Un incident de doua secunde
+     * devenea permanent. Se iese INAINTE sa se scrie ceva.
+     */
+    if (eVar) {
+      await logError({
+        action: "trendyol/orders", message: `maparea codurilor de bare nu s-a putut citi: ${eVar.message}`,
+        details: { packageId }, businessId: ctx.businessId, severity: "critical",
+      });
+      /*
+       * „failed", NU „skipped".
+       *
+       * `pollPackages` nu socotea `skipped` drept esec, deci marcajul de timp
+       * avansa peste o comanda pe care n-am reusit s-o citim — si dupa ce iesea
+       * din fereastra, se pierdea definitiv. Comentariul spunea corect ca „nu
+       * exista mapare" si „n-am putut citi maparea" sunt lucruri diferite;
+       * fluxul de control nu-l respecta.
+       */
+      return "failed";
+    }
+    // `as never` pe `select`: `variant_title` e adaugata de migratia
+    // `2026-08-19-stoc-marketplace` si nu apare inca in tipurile generate.
+    for (const v of (vs ?? []) as unknown as { barcode: string; product_id: string | null; variant_title: string | null }[]) {
+      info.set(v.barcode, { productId: v.product_id, variantTitle: v.variant_title ?? null });
+    }
+  }
+
+  /*
+   * ⚠ UN PACHET DEJA ANULAT NU CONSUMA STOC.
+   *
+   * Daca Edinio vede pentru prima data un pachet care e deja `Cancelled`,
+   * `Returned` sau `Unsupplied`, comanda se NASTE anulata — deci nu va exista
+   * nicio tranzitie `activ -> anulat` care sa elibereze mai tarziu. Consumat la
+   * nastere, stocul ramanea scazut pe vecie.
+   *
+   * About You facea deja asta, filtrand liniile anulate. Trendyol nu.
+   */
+  const terminal = edinioStatus === "cancelled" || edinioStatus === "refunded";
+  const qtyByProduct = new Map<string, number>();
+  // Si pe COMBINATIE, nu doar pe produs: vezi migratia `2026-08-19-stoc-marketplace`.
+  const qtyByVariant = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
+  const edinioItems = lines.map((l) => {
+    const pid = l.barcode ? info.get(l.barcode)?.productId ?? null : null;
+    const qty = num(l.quantity) || 1;
+    if (pid && !terminal) qtyByProduct.set(pid, (qtyByProduct.get(pid) ?? 0) + qty);
+    const vt = l.barcode ? info.get(l.barcode)?.variantTitle ?? null : null;
+    if (pid && vt && !terminal) {
+      const k = `${pid}::${vt}`;
+      const e = qtyByVariant.get(k);
+      if (e) e.quantity += qty;
+      else qtyByVariant.set(k, { product_id: pid, variant_title: vt, quantity: qty });
+    }
+    const price = num(l.lineUnitPrice) || num(l.price);
+    return { product_id: pid, name: l.productName ?? `Barcode ${l.barcode}`, barcode: l.barcode ?? null, price, quantity: qty };
+  });
 
   const { data: existing } = await admin
     .from("trendyol_orders").select("id, order_id")
@@ -72,55 +180,24 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
         campuriSuplimentare: { tracking_number: tracking },
       });
     }
+    /*
+     * ⚠ RANDUL LATERAL EXISTA NU INSEAMNA CA INGESTUL S-A TERMINAT.
+     *
+     * Aici se intorcea „updated" imediat, deci nu se mai ajungea NICIODATA la
+     * consumul de stoc. Iar consumul e tocmai partea care poate pica singura: un
+     * timeout de doua secunde lasa `stoc_marketplace_la` NULL, si sincronizarea
+     * urmatoare intra pe ramura asta si se intoarce. Functia din baza era
+     * reparabila; apelantul sarea peste reparatie.
+     *
+     * Starea „ingest complet" nu e „exista rand lateral", ci
+     * „exista comanda SI `stoc_marketplace_la` nu e NULL".
+     */
+    if (ex.order_id) {
+      const r = await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
+      if (r === "failed") return "failed";
+    }
     return "updated";
   }
-
-  // Resolve product ids from barcode (variant -> product) for names + stock.
-  const lines = Array.isArray(pkg.lines) ? pkg.lines : [];
-  const barcodes = [...new Set(lines.map((l) => l.barcode).filter(Boolean) as string[])];
-  const info = new Map<string, { productId: string | null; variantTitle: string | null }>();
-  if (barcodes.length > 0) {
-    const { data: vs, error: eVar } = await admin
-      .from("trendyol_variants").select("barcode, product_id, variant_title" as never).eq("business_id", ctx.businessId).in("barcode", barcodes);
-    /*
-     * „Nu exista mapare" si „n-am putut CITI maparea" sunt doua lucruri diferite.
-     *
-     * Fara verificare, o citire picata dadea o harta goala -> `product_id` null ->
-     * comanda intra, stocul nu se scade, iar randul lateral scris facea ca
-     * sincronizarea urmatoare sa nu mai incerce. Un incident de doua secunde
-     * devenea permanent. Se iese INAINTE sa se scrie ceva.
-     */
-    if (eVar) {
-      await logError({
-        action: "trendyol/orders", message: `maparea codurilor de bare nu s-a putut citi: ${eVar.message}`,
-        details: { packageId }, businessId: ctx.businessId, severity: "critical",
-      });
-      return "skipped";
-    }
-    // `as never` pe `select`: `variant_title` e adaugata de migratia
-    // `2026-08-19-stoc-marketplace` si nu apare inca in tipurile generate.
-    for (const v of (vs ?? []) as unknown as { barcode: string; product_id: string | null; variant_title: string | null }[]) {
-      info.set(v.barcode, { productId: v.product_id, variantTitle: v.variant_title ?? null });
-    }
-  }
-
-  const qtyByProduct = new Map<string, number>();
-  // Si pe COMBINATIE, nu doar pe produs: vezi migratia `2026-08-19-stoc-marketplace`.
-  const qtyByVariant = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
-  const edinioItems = lines.map((l) => {
-    const pid = l.barcode ? info.get(l.barcode)?.productId ?? null : null;
-    const qty = num(l.quantity) || 1;
-    if (pid) qtyByProduct.set(pid, (qtyByProduct.get(pid) ?? 0) + qty);
-    const vt = l.barcode ? info.get(l.barcode)?.variantTitle ?? null : null;
-    if (pid && vt) {
-      const k = `${pid}::${vt}`;
-      const e = qtyByVariant.get(k);
-      if (e) e.quantity += qty;
-      else qtyByVariant.set(k, { product_id: pid, variant_title: vt, quantity: qty });
-    }
-    const price = num(l.lineUnitPrice) || num(l.price);
-    return { product_id: pid, name: l.productName ?? `Barcode ${l.barcode}`, barcode: l.barcode ?? null, price, quantity: qty };
-  });
 
   const total = num(pkg.packageTotalPrice) || num(pkg.totalPrice) || edinioItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const vatAmount = round2(lines.reduce((s, l) => {
@@ -182,37 +259,10 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
     last_synced_at: now,
   } as never, { onConflict: "business_id,shipment_package_id" });
 
-  /*
-   * Consumul se cheama INDIFERENT de `isNew`, si asta e tot rostul.
-   *
-   * `isNew` se hotaraste dupa inserarea comenzii (unicitate pe `order_number`), nu
-   * dupa consumul stocului. Deci un consum picat o data lasa comanda creata, iar
-   * sincronizarea urmatoare punea `isNew = false` si SAREA blocul — pe vecie.
-   *
-   * `consuma_stoc_comanda_marketplace` e idempotenta prin marcajul
-   * `stoc_marketplace_la`: cat timp e NULL se reincearca, odata pus nu se repeta.
-   * Chemata pe ambele ramuri, REPARA si comenzile ramase din urma.
-   */
-  const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
-  const variante = [...qtyByVariant.values()];
-  if (produse.length > 0 || variante.length > 0) {
-    const { data: rez, error } = await admin.rpc("consuma_stoc_comanda_marketplace", {
-      p_order_id: orderId, p_business_id: ctx.businessId,
-      p_produse: produse, p_variante: variante,
-    });
-    const r = rez as { gasit?: boolean; deja?: boolean; lipsa?: unknown[] } | null;
-    if (error || r?.gasit !== true) {
-      await logError({
-        action: "trendyol/orders", message: error?.message ?? "consumul de stoc n-a raspuns valid",
-        details: { orderId, raspuns: r }, businessId: ctx.businessId, severity: "critical",
-      });
-    } else if (!r.deja && Array.isArray(r.lipsa) && r.lipsa.length > 0) {
-      await logError({
-        action: "trendyol/orders",
-        message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
-        details: { orderId, lipsa: r.lipsa }, businessId: ctx.businessId, severity: "warning",
-      });
-    }
+  // Aceeasi cale ca pe ramura „exista deja": un singur loc care consuma si
+  // raporteaza. Un esec aici NU se raporteaza ca reusita — vezi `pollPackages`.
+  if ((await consumaStoculComenzii(admin, ctx, orderId, qtyByProduct, qtyByVariant)) === "failed") {
+    return "failed";
   }
 
   return isNew ? "created" : "updated";
@@ -249,16 +299,65 @@ export async function pollPackages(admin: Db, ctx: TrendyolSyncContext, sinceMs?
   let ingested = 0;
   let ok = true;
   const { startDate, endDate } = fereastraComenzi(sinceMs);
-  for (let page = 0; page < 5; page++) {
+  /*
+   * ⚠ `ok` INSEAMNA „AM CITIT TOT", nu „n-a explodat nimic".
+   *
+   * Apelantul muta marcajul de timp inainte numai daca `ok`. Pana acum `ok`
+   * ramanea `true` in doua cazuri in care NU citisem tot:
+   *
+   *   * plafonul de 5 pagini: la `totalPages = 8` ieseam din bucla linistiti, iar
+   *     paginile 6-8 nu erau citite NICIODATA — dupa ce ieseau din fereastra
+   *     (pana la 14 zile), comenzile alea se pierdeau definitiv. La 50 de comenzi
+   *     pe zi, 14 zile inseamna 700, adica peste plafon;
+   *   * un pachet care pica la ingest intorcea `skipped`, care nu era socotit
+   *     esec.
+   *
+   * Plafonul nu se ridica la un numar mai mare — asta doar muta pragul. Se
+   * RAPORTEAZA ca n-am terminat, iar fereastra ramane pe loc pana terminam.
+   */
+  const MAX_PAGINI = 5;
+  let maiSuntPagini = false;
+  for (let page = 0; page < MAX_PAGINI; page++) {
     const res = await getOrders(ctx.auth, { startDate, endDate, page, size: 100, orderByField: "PackageLastModifiedDate", orderByDirection: "DESC" });
     if (isTrendyolError(res)) { ok = false; break; }
     const content = res.data?.content ?? [];
     if (content.length === 0) break;
     for (const pkg of content) {
-      if ((await ingestPackage(admin, ctx, pkg)) === "created") ingested++;
+      const r = await ingestPackage(admin, ctx, pkg);
+      if (r === "created") ingested++;
+      // Un pachet nereusit opreste avansarea marcajului pentru TOATA fereastra:
+      // altfel el singur s-ar pierde, iar restul ar parea in regula.
+      if (r === "failed") ok = false;
     }
     const totalPages = Number(res.data?.totalPages ?? 1);
     if (page + 1 >= totalPages) break;
+    if (page + 1 >= MAX_PAGINI) maiSuntPagini = totalPages > MAX_PAGINI;
+  }
+  if (maiSuntPagini) {
+    /*
+     * ⚠ AICI NU SE BLOCHEAZA MARCAJUL, SI E O ALEGERE, NU O SCAPARE.
+     *
+     * Prima mea forma punea `ok = false`. Suna corect — „nu avansa peste ce n-ai
+     * citit" — dar produce un BLOCAJ PERMANENT: fereastra ramane aceeasi, deci la
+     * rularea urmatoare citim exact aceleasi cinci pagini, gasim iar surplus, si
+     * blocam iar. Sincronizarea s-ar opri cu totul, la nesfarsit. Am fi schimbat
+     * „poate pierdem comenzi vechi" pe „sigur nu mai sincronizam nimic".
+     *
+     * Raspunsul adevarat nu e nici plafon mai mare (doar muta pragul), ci un
+     * CURSOR: marcajul sa se mute la cea mai veche comanda CHIAR CITITA, nu la
+     * „acum" — atunci fereastra urmatoare le prinde pe cele ramase, si progresul e
+     * garantat. Cere schimbarea locului unde se scrie marcajul, deci se face
+     * separat.
+     *
+     * Pana atunci, cel putin se VEDE: `critical` in `/admin/logs`, nu un
+     * `console.warn` pe care nu-l citeste nimeni. Masurat azi: 12 comenzi Trendyol
+     * in toata baza, deci pragul de 500 e departe.
+     */
+    await logError({
+      action: "trendyol/orders",
+      message: `Fereastra de sincronizare are peste ${MAX_PAGINI} pagini (${MAX_PAGINI * 100} comenzi): cele mai vechi NU au fost citite. Se cere trecerea pe cursor.`,
+      businessId: ctx.businessId, severity: "critical",
+    });
   }
   return { ingested, ok };
 }

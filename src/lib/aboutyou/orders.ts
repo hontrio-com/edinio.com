@@ -116,6 +116,45 @@ function toAyItems(order: AboutYouOrder) {
   }));
 }
 
+/**
+ * Consuma stocul comenzii, o singura data, si ARUNCA daca n-a reusit.
+ *
+ * Chemat de AMANDOUA ramurile — si la comanda noua, si la una existenta. A doua
+ * chemare e reparatia: `consuma_stoc_comanda_marketplace` e idempotenta prin
+ * marcajul `stoc_marketplace_la`, deci o prima incercare picata se duce la capat
+ * la sincronizarea urmatoare, iar una reusita nu se repeta (`deja: true`).
+ *
+ * Arunca fiindca `pollOrders` prinde si pune `ok = false`: un ingest neterminat
+ * NU are voie sa mute fereastra.
+ */
+async function consumaStoculComenzii(
+  admin: Db, ctx: AboutYouSyncContext, orderId: string,
+  qtyByProduct: Map<string, number>,
+  qtyByVariant: Map<string, { product_id: string; variant_title: string; quantity: number }>,
+): Promise<void> {
+  const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+  const variante = [...qtyByVariant.values()];
+  const { data: rez, error } = await admin.rpc("consuma_stoc_comanda_marketplace", {
+    p_order_id: orderId, p_business_id: ctx.businessId,
+    p_produse: produse, p_variante: variante,
+  });
+  const r = rez as { gasit?: boolean; deja?: boolean; lipsa?: unknown[] } | null;
+  if (error || r?.gasit !== true) {
+    await logError({
+      action: "aboutyou/orders", message: error?.message ?? "consumul de stoc n-a raspuns valid",
+      details: { orderId, raspuns: r }, businessId: ctx.businessId, severity: "critical",
+    });
+    throw new Error(error?.message ?? "consumul de stoc n-a raspuns valid");
+  }
+  if (!r.deja && Array.isArray(r.lipsa) && r.lipsa.length > 0) {
+    await logError({
+      action: "aboutyou/orders",
+      message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
+      details: { orderId, lipsa: r.lipsa }, businessId: ctx.businessId, severity: "warning",
+    });
+  }
+}
+
 export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: AboutYouOrder): Promise<"created" | "updated" | "skipped"> {
   const ayNumber = typeof order.order_number === "string" ? order.order_number : undefined;
   if (!ayNumber) return "skipped";
@@ -124,27 +163,6 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
 
   // Idempotency: an already-ingested order only refreshes its side-row (item
   // statuses + tracking); it is never recreated.
-  const { data: existing } = await admin
-    .from("aboutyou_orders").select("id, order_id")
-    .eq("business_id", ctx.businessId).eq("aboutyou_order_number", ayNumber).maybeSingle();
-  if (existing) {
-    const ex = existing as { id: string; order_id: string | null };
-    await admin.from("aboutyou_orders")
-      .update({ items: ayItems as never, status: order.status ?? "open", last_synced_at: now, updated_at: now } as never)
-      .eq("id", ex.id);
-    /*
-     * Starile terminale trec prin motorul comun: o anulare sau un retur trebuie sa
-     * ELIBEREZE stocul, nu doar sa schimbe eticheta. Vezi `tranzitie-marketplace`.
-     */
-    if (ex.order_id && (order.status === "cancelled" || order.status === "returned")) {
-      await tranzitieComandaMarketplace(admin, {
-        orderId: ex.order_id, businessId: ctx.businessId,
-        status: edinioStatusFor(order.status), sursa: "aboutyou",
-      });
-    }
-    return "updated";
-  }
-
   // Resolve product names from SKU (variant -> product) for a readable order.
   const items = Array.isArray(order.order_items) ? order.order_items : [];
   const skus = [...new Set(items.map((it) => it.sku).filter(Boolean))];
@@ -162,7 +180,17 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
         action: "aboutyou/orders", message: `maparea SKU nu s-a putut citi: ${eVar.message}`,
         details: { ayNumber }, businessId: ctx.businessId, severity: "critical",
       });
-      return "skipped";
+      /*
+       * ARUNCA, nu „skipped".
+       *
+       * `pollOrders` prinde exceptiile si pune `ok = false`, deci fereastra NU
+       * avanseaza — dar `skipped` nu era socotit esec, iar marcajul trecea peste o
+       * comanda pe care n-am reusit s-o citim. Dupa ce iesea din fereastra, se
+       * pierdea definitiv. Comentariul de mai sus spunea corect ca „nu exista
+       * mapare" si „n-am putut citi maparea" sunt lucruri diferite; fluxul nu-l
+       * respecta.
+       */
+      throw new Error(`maparea SKU nu s-a putut citi: ${eVar.message}`);
     }
     // `as never` pe select: coloana vine din migratia `2026-08-19-stoc-marketplace`
     // si nu apare inca in tipurile generate.
@@ -219,6 +247,37 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   });
 
   const subtotal = money(activeItems.reduce((s, it) => s + num(it.price_without_tax), 0));
+  const { data: existing } = await admin
+    .from("aboutyou_orders").select("id, order_id")
+    .eq("business_id", ctx.businessId).eq("aboutyou_order_number", ayNumber).maybeSingle();
+  if (existing) {
+    const ex = existing as { id: string; order_id: string | null };
+    await admin.from("aboutyou_orders")
+      .update({ items: ayItems as never, status: order.status ?? "open", last_synced_at: now, updated_at: now } as never)
+      .eq("id", ex.id);
+    /*
+     * Starile terminale trec prin motorul comun: o anulare sau un retur trebuie sa
+     * ELIBEREZE stocul, nu doar sa schimbe eticheta. Vezi `tranzitie-marketplace`.
+     */
+    if (ex.order_id && (order.status === "cancelled" || order.status === "returned")) {
+      await tranzitieComandaMarketplace(admin, {
+        orderId: ex.order_id, businessId: ctx.businessId,
+        status: edinioStatusFor(order.status), sursa: "aboutyou",
+      });
+    }
+    /*
+     * ⚠ RANDUL LATERAL EXISTA NU INSEAMNA CA INGESTUL S-A TERMINAT.
+     *
+     * Se intorcea „updated" imediat, deci nu se mai ajungea niciodata la consumul
+     * de stoc — iar tocmai consumul poate pica singur. Functia din baza e
+     * reparabila prin marcajul `stoc_marketplace_la`; apelantul sarea reparatia.
+     */
+    if (ex.order_id) {
+      await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
+    }
+    return "updated";
+  }
+
   const total = money(activeItems.reduce((s, it) => s + num(it.price_with_tax), 0));
   const vatAmount = Math.round((total - subtotal) * 100) / 100;
   const addr = parseAddress(order);
@@ -286,33 +345,8 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
 
   // Unified inventory: reflect the marketplace sale in Edinio stock (only on a
   // genuinely new order, never when recovering/re-linking an existing one).
-  /*
-   * Consumul se cheama INDIFERENT de `isNew`: `isNew` se hotaraste dupa inserarea
-   * comenzii, nu dupa consum, deci un consum picat o data nu s-ar mai fi reincercat
-   * niciodata. RPC-ul e idempotent prin `stoc_marketplace_la`, deci chemarea pe
-   * ambele ramuri REPARA si comenzile ramase din urma.
-   */
-  const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
-  const variante = [...qtyByVariant.values()];
-  if (produse.length > 0 || variante.length > 0) {
-    const { data: rez, error } = await admin.rpc("consuma_stoc_comanda_marketplace", {
-      p_order_id: orderId, p_business_id: ctx.businessId,
-      p_produse: produse, p_variante: variante,
-    });
-    const r = rez as { gasit?: boolean; deja?: boolean; lipsa?: unknown[] } | null;
-    if (error || r?.gasit !== true) {
-      await logError({
-        action: "aboutyou/orders", message: error?.message ?? "consumul de stoc n-a raspuns valid",
-        details: { orderId, raspuns: r }, businessId: ctx.businessId, severity: "critical",
-      });
-    } else if (!r.deja && Array.isArray(r.lipsa) && r.lipsa.length > 0) {
-      await logError({
-        action: "aboutyou/orders",
-        message: "Comanda de marketplace a cerut mai mult stoc decat exista; s-a scazut cat s-a putut.",
-        details: { orderId, lipsa: r.lipsa }, businessId: ctx.businessId, severity: "warning",
-      });
-    }
-  }
+  // Acelasi drum ca pe ramura „exista deja": un singur loc care consuma.
+  await consumaStoculComenzii(admin, ctx, orderId, qtyByProduct, qtyByVariant);
 
   return isNew ? "created" : "updated";
 }
@@ -377,9 +411,19 @@ export async function pollOrders(admin: Db, ctx: AboutYouSyncContext, since?: st
       const total = Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1);
       if (page >= total) break;
       if (page === MAX_PAGINI_COMENZI && total > MAX_PAGINI_COMENZI) {
-        // Peste 2000 de comenzi intr-o fereastra: nu blocam filigranul (l-am
-        // bloca pentru totdeauna), dar lasam urma in jurnal.
-        console.warn("[aboutyou] fereastra de comenzi depaseste plafonul de pagini", { status, total });
+        /*
+         * Peste 2.000 de comenzi intr-o fereastra: NU se blocheaza marcajul,
+         * fiindca l-am bloca pentru totdeauna — fereastra ar ramane aceeasi si am
+         * reciti la nesfarsit aceleasi pagini. Raspunsul adevarat e un cursor,
+         * mutat la cea mai veche comanda chiar citita. Vezi nota din Trendyol.
+         *
+         * Dar `console.warn` nu-l citeste nimeni. Acum se vede in `/admin/logs`.
+         */
+        await logError({
+          action: "aboutyou/orders",
+          message: `Fereastra „${status}" are peste ${MAX_PAGINI_COMENZI} pagini: cele mai vechi comenzi NU au fost citite. Se cere trecerea pe cursor.`,
+          details: { status, total }, businessId: ctx.businessId, severity: "critical",
+        });
       }
     }
     // Un status cazut NU-i mai opreste pe ceilalti: inainte, un esec pe „open"

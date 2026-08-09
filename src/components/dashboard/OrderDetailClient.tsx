@@ -34,6 +34,7 @@ import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
+import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -794,6 +795,14 @@ export function OrderDetailClient({
           <span className="sm:hidden">Editeaza</span>
         </button>
       </div>
+
+      {/*
+        Operatiile externe ramase atarnate. Nu se vede nimic in cazul normal —
+        componenta intoarce `null` cand lista e goala. Sta SUS, inaintea celor doua
+        coloane: cand exista, e primul lucru care trebuie citit, fiindca explica de
+        ce un buton de AWB sau de factura refuza sa mai faca ceva.
+      */}
+      <OperatiiAtarnate businessId={businessId} orderId={order.id as string} />
 
       {/* ── Two-column operational area (single column on mobile) ── */}
       <div className="flex flex-col lg:flex-row lg:gap-5 lg:items-start gap-5">

@@ -7,14 +7,12 @@ import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { baniiAuIntrat } from "@/lib/billing/incasare";
-import { mentiuneRefacturare, slotFacturare, type SlotFacturare } from "@/lib/billing/refacturare";
+import { cheieDocument, mentiuneRefacturare, slotFacturare, type SlotFacturare } from "@/lib/billing/refacturare";
+import { cheieOperatie, cuRegistru, type Verdict } from "@/lib/operatii/registru";
 import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiSmartbill, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
-
 import { isCardPaymentMethod, PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodType } from "@/lib/payment-methods";
 import {
   getMerchantSeries,
@@ -403,6 +401,107 @@ const campuriStornoGolite = {
   smartbill_storno_series: null,
 } as const;
 
+// ─── Emiterea sub registrul de operatii externe ──────────────────────────────
+
+/**
+ * A REFUZAT SmartBill, sau doar n-a raspuns?
+ *
+ * SmartBill e singura casa FARA cheie de idempotenta pe `/invoice` (Oblio are
+ * `idempotencyKey`, fGO are `IdExtern` -> 409). Deci aici a doua apasare chiar
+ * emite al doilea document fiscal, si clasificarea asta e tot ce sta intre noi si
+ * o creditare dubla la ANAF. De aceea e derivata din wrapper, nu din cap.
+ *
+ * `createMerchantInvoice` (src/lib/smartbill.ts:286-322) are exact patru iesiri de
+ * eroare, si doar UNA dovedeste ca SmartBill a refuzat:
+ *
+ *   1. `"Eroare de retea la crearea facturii."` — `catch` pe tot blocul, deci
+ *      prinde si `fetch` picat, si `res.json()` pe un raspuns care nu e JSON (un
+ *      502 cu pagina HTML arata exact asa). Documentul poate exista. NECUNOSCUT.
+ *   2. `"Eroare SmartBill (<status>)"` — se compune DOAR cand nu exista nici
+ *      `errorText`, nici `message`. Adica un raspuns fara explicatie de la ei:
+ *      n-avem ce dovedi. NECUNOSCUT.
+ *   3. `"SmartBill nu a returnat numarul documentului."` — 200 fara numar.
+ *      Comentariul lor de la linia 318 arata ca nici ei nu stiu ce inseamna.
+ *      NECUNOSCUT.
+ *   4. orice alt text = `errorText` sau `message` VENIT DE LA EI, deci cererea a
+ *      ajuns, a fost inteleasa si respinsa. Nimic nu s-a creat. ESUAT, iar
+ *      reincercarea dupa corectarea datelor e libera.
+ *
+ * Cazul „a returnat numar dar cu avertisment" nu ajunge aici deloc: wrapperul il
+ * trateaza ca SUCCES (linia 306), tocmai ca sa nu arunce un document real.
+ */
+function verdictEmitereSmartbill(e: unknown): Verdict {
+  const m = e instanceof Error ? e.message : String(e);
+  if (m === "Eroare de retea la crearea facturii.") return "necunoscut";
+  if (m === "SmartBill nu a returnat numarul documentului.") return "necunoscut";
+  if (/^Eroare SmartBill \(\d+\)$/.test(m)) return "necunoscut";
+  return "esuat";
+}
+
+/**
+ * `createMerchantInvoice`, dar sub registru.
+ *
+ * Intoarce EXACT aceeasi forma ca apelul pe care il inlocuieste, ca tot ce urmeaza
+ * dupa el la apelanti sa ramana neatins — inclusiv scrierea coloanelor, jurnalul
+ * de refacturare si emailul. Pe drumul fericit purtarea e bit-identica: o singura
+ * rezervare in plus inainte si o incheiere dupa.
+ *
+ * Cheia foloseste `orderId`, nu `order_number`: e garantat unic si nenul. Slotul
+ * intra prin `cheieDocument`, deci o reemitere legitima dupa storno primeste alta
+ * cheie si NU e blocata de documentul desfiintat.
+ */
+async function emiteFacturaSubRegistru(
+  businessId: string,
+  orderId: string,
+  slot: SlotFacturare,
+  config: SmartbillConfig,
+  params: MerchantInvoiceParams,
+): Promise<{ number: string; series: string; documentUrl?: string } | { error: string }> {
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId,
+      fel: "factura",
+      furnizor: "smartbill",
+      cheie: cheieOperatie("factura", "smartbill", cheieDocument(orderId, slot)),
+    },
+    async () => {
+      const rezultat = await createMerchantInvoice(config, params);
+      // `createMerchantInvoice` nu arunca, intoarce `{error}`. Registrul lucreaza
+      // cu exceptii, deci convertim aici — si tot aici se pastreaza textul exact
+      // pe care il citeste `verdictEmitereSmartbill`.
+      if ("error" in rezultat) throw new Error(rezultat.error);
+      return {
+        referinta: rezultat.number,
+        detalii: { serie: rezultat.series, url: rezultat.documentUrl ?? null },
+        valoare: rezultat,
+      };
+    },
+    verdictEmitereSmartbill,
+  );
+
+  switch (r.fel) {
+    case "facut":
+      return r.valoare;
+    case "deja": {
+      // Documentul exista deja de la o incercare anterioara care si-a pierdut
+      // scrierea locala. NU se mai cheama SmartBill: se reface legatura din ce a
+      // retinut registrul. Exact „reluarea RECUPEREAZA legatura in loc s-o refaca".
+      const d = (r.detalii ?? {}) as { serie?: string; url?: string | null };
+      return {
+        number: r.referinta ?? "",
+        series: d.serie ?? "",
+        ...(d.url ? { documentUrl: d.url } : {}),
+      };
+    }
+    case "blocat":
+      return { error: r.mesaj };
+    case "eroare":
+      return { error: r.mesaj };
+  }
+}
+
 /** Urma locala a perechii desfiintate, cand emiterea a fost o reemitere. */
 async function jurnalRefacturare(
   businessId: string,
@@ -544,7 +643,7 @@ export async function generateOrderInvoice(
   // Comanda care nu se reconciliaza NU se factureaza: mesajul spune numerele si
   // pasul urmator, si ajunge in interfata.
   if ("error" in params) return params;
-  const result = await createMerchantInvoice(config, params);
+  const result = await emiteFacturaSubRegistru(businessId, orderId, slot, config, params);
   if ("error" in result) return result;
 
   await supabase.from("orders").update({
@@ -675,7 +774,11 @@ export async function convertEstimateToInvoice(
     ...paymentAtIssue(config, order),
   };
 
-  const result = await createMerchantInvoice(config, params);
+  // Aceeasi cheie ca la emiterea directa, si asta e intentionat: cele doua drumuri
+  // produc ACELASI document fiscal pe aceeasi comanda. Daca unul e in curs, celalalt
+  // trebuie sa se opreasca — altfel „Factura" si „Factureaza proforma" apasate
+  // aproape simultan emit doua documente.
+  const result = await emiteFacturaSubRegistru(businessId, orderId, slot, config, params);
   if ("error" in result) return result;
 
   await supabase.from("orders").update({
@@ -870,7 +973,7 @@ export async function maybeAutoGenerateInvoice(
       });
       return false;
     }
-    const result = await createMerchantInvoice(config, params);
+    const result = await emiteFacturaSubRegistru(businessId, orderId, slot, config, params);
     if ("error" in result) return false;
 
     await supabase.from("orders").update({

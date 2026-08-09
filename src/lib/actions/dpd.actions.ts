@@ -15,6 +15,9 @@ import {
   type DpdShipmentInput,
 } from "@/lib/dpd";
 import { euCountryByIso2 } from "@/lib/eu-countries";
+import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 
 // ─── Config actions ───────────────────────────────────────────────────────────
 
@@ -154,34 +157,85 @@ export async function createDpdShipmentAction(
       : {}),
   };
 
-  try {
-    if (eu) {
-      if (!config.international_enabled) return { error: "Livrarea internationala DPD nu este activata." };
-      const postCode = (shipping.postal_code ?? "").trim();
-      if (!postCode) return { error: "Comanda nu are cod postal pentru expedierea internationala." };
-      const result = await createDpdIntlShipment(config, { ...enriched, pickupOfficeId: undefined, countryId: eu.dpdCountryId, postCode });
-      await supabase.from("orders").update({
-        dpd_shipment_id: result.shipmentId,
-        dpd_awb_number: result.barcode,
-        updated_at: new Date().toISOString(),
-      }).eq("id", orderId);
-      void enqueueAboutYouShip(businessId, orderId);
-      return result;
+  // Verificarile care nu ating DPD raman INAINTEA rezervarii: o comanda fara cod
+  // postal n-are de ce sa ocupe un slot in registru.
+  if (eu) {
+    if (!config.international_enabled) return { error: "Livrarea internationala DPD nu este activata." };
+    if (!(shipping.postal_code ?? "").trim()) {
+      return { error: "Comanda nu are cod postal pentru expedierea internationala." };
     }
-
-    const result = await createDpdShipment(config, enriched);
-
-    await supabase.from("orders").update({
-      dpd_shipment_id: result.shipmentId,
-      dpd_awb_number: result.barcode,
-      updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
-    void enqueueAboutYouShip(businessId, orderId);
-
-    return result;
-  } catch (e) {
-    return { error: (e as Error).message };
   }
+
+  /*
+   * O SINGURA cheie pentru amandoua ramurile, si asta e intentionat: intern sau
+   * international, rezultatul e acelasi lucru — UN transport pe comanda asta. Doua
+   * chei ar fi lasat o comanda sa capete si un AWB intern, si unul international.
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId,
+      fel: "awb",
+      furnizor: "dpd",
+      cheie: cheieOperatie("awb", "dpd", orderId),
+    },
+    async () => {
+      const result = eu
+        ? await createDpdIntlShipment(config, {
+            ...enriched,
+            pickupOfficeId: undefined,
+            countryId: eu.dpdCountryId,
+            postCode: (shipping.postal_code ?? "").trim(),
+          })
+        : await createDpdShipment(config, enriched);
+      return {
+        referinta: result.barcode,
+        detalii: { shipmentId: result.shipmentId, international: !!eu },
+        valoare: result,
+      };
+    },
+    // `dpdCall` (src/lib/dpd.ts:94) marcheaza singur refuzul, inclusiv cazul in
+    // care DPD raspunde 200 cu `error` in corp — pe care statusul l-ar fi ratat.
+    verdictFurnizor,
+  );
+
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+
+  // Pe `deja`, transportul exista de la o incercare careia i s-a pierdut scrierea:
+  // se reface legatura din registru, fara sa mai fie chemat DPD.
+  const result =
+    r.fel === "facut"
+      ? r.valoare
+      : {
+          shipmentId: Number((r.detalii as { shipmentId?: number } | null)?.shipmentId ?? 0),
+          barcode: r.referinta ?? "",
+        };
+
+  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+    dpd_shipment_id: result.shipmentId,
+    dpd_awb_number: result.barcode,
+    updated_at: new Date().toISOString(),
+  }).eq("id", orderId).select("id");
+
+  /*
+   * Coletul EXISTA la DPD. Un esec de scriere nu mai are voie sa se intoarca la om
+   * ca eroare — l-ar trimite sa apese din nou. Registrul retine deja operatia, deci
+   * a doua apasare o adopta si reface scrierea.
+   */
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "dpd.createShipment",
+      message: `AWB DPD creat (${result.barcode}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, shipmentId: result.shipmentId, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
+  } else {
+    void enqueueAboutYouShip(businessId, orderId);
+  }
+
+  return result;
 }
 
 // ─── Courier pickup ───────────────────────────────────────────────────────────
@@ -260,6 +314,23 @@ export async function cancelDpdShipmentAction(
       dpd_awb_number: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId);
+
+    /*
+     * Slotul din registru se elibereaza DUPA confirmarea anularii, ca la Woot.
+     * Fara asta, randul ar ramane `reusit` si emiterea urmatoare ar readuce pe
+     * comanda chiar AWB-ul anulat — cele doua coloane de mai sus se golesc tocmai
+     * ca sa se poata face altul.
+     */
+    const eliberat = await marcheazaAnulata(createAdminClient(), businessId, cheieOperatie("awb", "dpd", orderId));
+    if (!eliberat) {
+      await logError({
+        action: "dpd.cancelShipment",
+        message: "Expeditie DPD anulata, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda va fi refuzata.",
+        details: { orderId, businessId, shipmentId: orderData.dpd_shipment_id },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     return { success: true };
   } catch (e) {

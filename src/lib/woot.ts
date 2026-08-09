@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { eroareCuStatus, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const WOOT_BASE = "https://ws.woot.ro/latest";
 
@@ -112,9 +113,13 @@ export async function getWootToken(public_key: string, secret_key: string): Prom
     cache: "no-store",
   });
 
-  if (!res.ok) throw new Error("Autentificare Woot esuata. Verifica cheile API.");
+  // `eroareRefuz`, nu `Error` simplu: autentificarea se face INAINTE de orice
+  // POST /orders, deci un esec aici dovedeste ca la Woot NU s-a creat nimic si
+  // reincercarea (dupa corectarea cheilor) trebuie sa ramana libera. Fara marcaj,
+  // registrul ar fi presupus „poate s-a facut" si ar fi blocat comanda definitiv.
+  if (!res.ok) throw eroareRefuz("Autentificare Woot esuata. Verifica cheile API.");
   const data = await res.json() as { success: boolean; token: string; expire: number };
-  if (!data.success || !data.token) throw new Error("Autentificare Woot esuata.");
+  if (!data.success || !data.token) throw eroareRefuz("Autentificare Woot esuata.");
 
   tokenCache.set(public_key, { token: data.token, expiresAt: Date.now() + data.expire * 1000 });
   return data.token;
@@ -181,7 +186,11 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
         corp: raw.slice(0, 500),
       });
     }
-    throw new Error(detail ? `Woot: ${detail}` : `Woot API error ${res.status}`);
+    // Mesajul ramane EXACT cel de dinainte; statusul calatoreste pe langa el, ca
+    // registrul de operatii externe sa poata deosebi un refuz (400 pe diacritice,
+    // cazul de mai sus) de o cadere in care AWB-ul poate sa fi fost totusi creat.
+    // Vezi src/lib/operatii/eroare-furnizor.ts.
+    throw eroareCuStatus(detail ? `Woot: ${detail}` : `Woot API error ${res.status}`, res.status);
   }
 
   return res.json() as Promise<T>;

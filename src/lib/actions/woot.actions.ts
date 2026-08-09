@@ -4,7 +4,10 @@ import { pastreazaSecretele } from "@/lib/integrari/secrete";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { eroareRefuz, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { stripDiacritics } from "@/lib/utils/ro-address";
 import { greutatePentruCurier } from "@/lib/shipping/awb-weight";
 import {
@@ -13,13 +16,15 @@ import {
   type WootConfig, type WootParcel, type WootPriceResult, type WootLocation,
 } from "@/lib/woot";
 
-function adminClient() {
-  return createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+/*
+ * Clientul de sistem vine acum din `@/lib/supabase/admin`, nu se mai construieste
+ * aici. Cel local era `createClient(...)` FARA genericul `<Database>` — adica
+ * exact capcana din 19.08: `.rpc()` accepta orice nume de functie si orice
+ * argumente, iar `.from()` orice coloana, fara ca `tsc` sa spuna nimic. Cel comun
+ * intoarce `SupabaseClient<Database>` si, in plus, cade zgomotos daca lipseste
+ * cheia de serviciu, in loc sa fabrice un client care esueaza la prima cerere.
+ */
+const adminClient = createAdminClient;
 
 async function checkAccess(businessId: string): Promise<boolean> {
   const supabase = await createClient();
@@ -239,47 +244,123 @@ export async function createWootAwb(
     return { success: false, error: "Woot nu este configurat" };
   }
 
-  try {
-    const token = await getWootToken(config.public_key, config.secret_key);
-    const insurance = await resolveInsurance(config, businessId, orderId);
-    const result = await createOrder(token, {
-      service_id: serviceId,
-      sender: buildSender(config, senderLocationId),
-      receiver: {
-        company: 0,
-        ...receiverPentruWoot(receiver),
-        phone: wootPhone(receiver.phone),
-        ...(receiverLocationId ? { location_id: receiverLocationId } : {}),
-      },
-      parcels: coletePentruWoot(parcels),
-      repayment: repayment && repayment > 0 ? repayment : undefined,
-      insurance,
-      options,
+  const admin = adminClient();
+
+  /*
+   * ⚠ AICI ERA CEL MAI DESCHIS SIT DIN TOT PROIECTUL.
+   *
+   * `createWootAwb` nu citea DELOC comanda inainte de a chema Woot: singura oprire
+   * era `hasAwb` din WootAwbModal.tsx:109, adica o proprietate SSR in browser. Doua
+   * file deschise, un dublu-click, sau un POST direct catre actiune (vezi
+   * manifestul global de actiuni) produceau doua AWB-uri REALE. La Woot AWB-ul se
+   * plateste din creditul contului, deci al doilea inseamna bani luati de doua ori
+   * — iar anularea cere `woot_order_id`, exact ce se pierdea.
+   *
+   * Woot nu ofera nici camp de referinta a clientului, nici interogare dupa ea
+   * (cautat in `createOrder`: parametrii nu contin nimic de acest fel), deci
+   * furnizorul NU ne poate ajuta sa recuperam legatura. Registrul local e singurul
+   * strat care poate opri a doua apasare.
+   */
+  const r = await cuRegistru(
+    admin,
+    {
+      businessId,
+      orderId,
+      fel: "awb",
+      furnizor: "woot",
+      cheie: cheieOperatie("awb", "woot", orderId),
+    },
+    async () => {
+      const token = await getWootToken(config.public_key, config.secret_key);
+      const insurance = await resolveInsurance(config, businessId, orderId);
+      const result = await createOrder(token, {
+        service_id: serviceId,
+        sender: buildSender(config, senderLocationId),
+        receiver: {
+          company: 0,
+          ...receiverPentruWoot(receiver),
+          phone: wootPhone(receiver.phone),
+          ...(receiverLocationId ? { location_id: receiverLocationId } : {}),
+        },
+        parcels: coletePentruWoot(parcels),
+        repayment: repayment && repayment > 0 ? repayment : undefined,
+        insurance,
+        options,
+      });
+
+      /*
+       * `success: false` pe un raspuns HTTP reusit = Woot a primit cererea si a
+       * spus explicit „nu". Nu vine cu `order_id`, deci nu exista niciun colet de
+       * lamurit. `eroareRefuz` tine reincercarea libera; fara marcaj, registrul ar
+       * fi presupus „poate s-a facut" si ar fi blocat comanda definitiv.
+       */
+      if (!result.success) throw eroareRefuz("Creare AWB esuata");
+
+      return {
+        // `order_id` e referinta care conteaza: fara ea AWB-ul nu se poate anula.
+        referinta: String(result.order_id),
+        detalii: { awb: result.awb_number ?? null, serviciu: serviceName },
+        valoare: result,
+      };
+    },
+    // `wootReq` (src/lib/woot.ts:136-185) arunca fara `try/catch` peste `fetch`,
+    // deci o cadere de retea vine ca `TypeError` gol si iese `necunoscut`. Un 400
+    // pe validare (diacriticele) poarta verdictul si iese `esuat`, ca reincercarea
+    // dupa corectarea adresei sa ramana libera.
+    verdictFurnizor,
+  );
+
+  if (r.fel === "blocat" || r.fel === "eroare") return { success: false, error: r.mesaj };
+
+  /*
+   * `facut` si `deja` scriu la fel, si nu din lene: pe `deja` AWB-ul exista de la o
+   * incercare anterioara careia i s-a pierdut scrierea, iar scrierea de mai jos e
+   * chiar recuperarea legaturii. E idempotenta, deci nu strica nimic sa se repete.
+   */
+  const detalii = (r.fel === "facut" ? r.valoare : null) as { awb_number?: string | null; order_id?: number } | null;
+  const dinRegistru = (r.fel === "deja" ? (r.detalii as { awb?: string | null } | null) : null);
+  const awbNumber = detalii?.awb_number ?? dinRegistru?.awb ?? "";
+  const wootOrderId = r.fel === "facut" ? detalii?.order_id : Number(r.referinta) || undefined;
+
+  const { error: eScriere, data: randuri } = await admin
+    .from("orders")
+    .update({
+      woot_order_id: r.fel === "facut" ? String(detalii?.order_id ?? "") : String(r.referinta ?? ""),
+      woot_awb_number: awbNumber,
+      woot_service_name: serviceName,
+      tracking_number: awbNumber || undefined,
+      status: "processing",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId)
+    .eq("business_id", businessId)
+    .select("id");
+
+  /*
+   * Scrierea se VERIFICA acum — dar esecul ei NU mai devine eroare catre om.
+   *
+   * AWB-ul exista si e platit. „Intoarce eroare" l-ar impinge sa apese din nou, si
+   * chiar asta cream. Registrul retine deja operatia ca reusita, cu `order_id`-ul
+   * de la Woot, deci a doua apasare o va ADOPTA in loc s-o refaca — si scrierea de
+   * mai sus se reface atunci singura.
+   */
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "woot.createAwb",
+      message: `AWB Woot creat (order_id ${r.fel === "facut" ? detalii?.order_id : r.referinta}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, awbNumber, code: eScriere?.code },
+      businessId,
+      severity: "critical",
     });
-
-    if (!result.success) throw new Error("Creare AWB esuata");
-
-    const admin = adminClient();
-    await admin
-      .from("orders")
-      .update({
-        woot_order_id: String(result.order_id),
-        woot_awb_number: result.awb_number ?? "",
-        woot_service_name: serviceName,
-        tracking_number: result.awb_number ?? undefined,
-        status: "processing",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", orderId)
-      .eq("business_id", businessId);
+  } else {
+    // Doar cand comanda chiar poarta AWB-ul are sens sa anuntam expedierea mai
+    // departe: altfel About You ar primi o expediere fara numar.
     void enqueueAboutYouShip(businessId, orderId);
-
-    revalidatePath("/dashboard/orders");
-    revalidatePath(`/dashboard/orders/${orderId}`);
-    return { success: true, awbNumber: result.awb_number ?? undefined, wootOrderId: result.order_id };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
   }
+
+  revalidatePath("/dashboard/orders");
+  revalidatePath(`/dashboard/orders/${orderId}`);
+  return { success: true, awbNumber: awbNumber || undefined, wootOrderId };
 }
 
 export async function cancelWootAwb(
@@ -307,6 +388,27 @@ export async function cancelWootAwb(
       })
       .eq("id", orderId)
       .eq("business_id", businessId);
+
+    /*
+     * Slotul din registru se elibereaza DUPA ce Woot a confirmat anularea.
+     *
+     * Fara asta, randul ramanea `reusit` si urmatoarea emitere ar fi „adoptat" chiar
+     * AWB-ul tocmai anulat, scriindu-l inapoi pe comanda. Cele trei linii de mai sus
+     * golesc coloanele tocmai ca sa se poata emite altul — registrul trebuie sa
+     * spuna acelasi lucru.
+     */
+    const eliberat = await marcheazaAnulata(admin, businessId, cheieOperatie("awb", "woot", orderId));
+    if (!eliberat) {
+      // Nu e eroare pentru comerciant (AWB-ul CHIAR s-a anulat), dar urmatoarea
+      // emitere va fi blocata, deci trebuie sa se vada.
+      await logError({
+        action: "woot.cancelAwb",
+        message: "AWB Woot anulat, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda va fi refuzata.",
+        details: { orderId, businessId, wootOrderId },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     revalidatePath("/dashboard/orders");
     return { success: true };
